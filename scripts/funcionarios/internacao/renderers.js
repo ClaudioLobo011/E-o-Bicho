@@ -109,6 +109,16 @@ function normalizeExecucaoItems(list, fallbackDate) {
     .filter(Boolean);
 }
 
+function isExecucaoConcluida(item) {
+  const status = String(item?.status || '').toLowerCase();
+  return status.includes('conclu') || status.includes('finaliz') || status.includes('realiz');
+}
+
+function isExecucaoSobDemanda(item) {
+  const status = String(item?.status || '').toLowerCase();
+  return status.includes('sob demanda') || status.includes('necess');
+}
+
 function formatExecucaoProgramadaLabel(item) {
   if (!item || typeof item !== 'object') return '—';
   if (item.programadoLabel) return String(item.programadoLabel).trim() || '—';
@@ -166,11 +176,15 @@ function ensureOverlayOnTop(modal) {
   }
 }
 
-function openExecucaoModal(paciente, hourLabel, items = []) {
+function openExecucaoModal(paciente, hourLabel, items = [], options = {}) {
   if (!paciente) return;
 
   const existing = document.getElementById('internacao-exec-modal');
   if (existing) existing.remove();
+
+  const quandoNecessarios = Array.isArray(options.quandoNecessarios) ? options.quandoNecessarios : [];
+  const selectedDate = options.selectedDate || '';
+  const selectedHour = options.selectedHour || hourLabel;
 
   const nome = paciente.nome || paciente.pet?.nome || 'Paciente';
   const boxLabel =
@@ -246,6 +260,34 @@ function openExecucaoModal(paciente, hourLabel, items = []) {
         .join('')
     : '<p class="rounded-2xl border border-dashed border-gray-200 bg-white px-4 py-6 text-center text-sm text-gray-500">Nenhum procedimento registrado para este horário.</p>';
 
+  const quandoNecessarioMarkup = quandoNecessarios.length
+    ? quandoNecessarios
+        .map((item, index) => {
+          const responsavel = item.responsavel || 'Equipe a definir';
+          const status = item.status || 'Sob demanda';
+          const programado = formatExecucaoProgramadaLabel(item);
+          return `
+            <button
+              type="button"
+              class="group w-full rounded-lg border border-primary/30 bg-primary/5 p-3 text-left transition hover:border-primary/60 hover:bg-white focus:outline-none focus:ring-2 focus:ring-primary/30"
+              data-quando-necessario-item
+              data-quando-necessario-index="${index}"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <p class="text-sm font-semibold text-gray-900">${escapeHtml(item.descricao || 'Procedimento')}</p>
+                  <p class="text-xs text-gray-500">Responsável: ${escapeHtml(responsavel)}</p>
+                  <p class="text-xs text-gray-400">Status: ${escapeHtml(status)} · Referência: ${escapeHtml(programado)}</p>
+                </div>
+                <span class="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-primary ring-1 ring-primary/40">Concluir</span>
+              </div>
+              <p class="mt-1 text-[11px] font-semibold uppercase tracking-wide text-primary opacity-0 transition group-hover:opacity-100">Registrar horário e observação</p>
+            </button>
+          `;
+        })
+        .join('')
+    : '';
+
   overlay.innerHTML = `
     <div class="w-full max-w-3xl rounded-2xl bg-white p-6 shadow-xl">
       <div class="border-b border-gray-100 pb-4">
@@ -262,6 +304,19 @@ function openExecucaoModal(paciente, hourLabel, items = []) {
         </div>
       </div>
       <div class="mt-4 space-y-3">${procedimentosMarkup}</div>
+      ${
+        quandoNecessarioMarkup
+          ? `<div class="mt-5 rounded-xl border border-dashed border-primary/30 bg-primary/5 p-4">
+              <div class="flex items-start justify-between gap-2">
+                <div>
+                  <p class="text-[11px] font-semibold uppercase tracking-wide text-primary">Quando necessário</p>
+                  <p class="text-xs text-gray-600">Selecione para concluir em qualquer horário.</p>
+                </div>
+              </div>
+              <div class="mt-3 space-y-2">${quandoNecessarioMarkup}</div>
+            </div>`
+          : ''
+      }
       <div class="mt-6 flex flex-wrap items-center justify-end gap-2 sm:flex-nowrap">
         ${actionButtons}
         <button type="button" class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50" data-close-modal>
@@ -289,10 +344,24 @@ function openExecucaoModal(paciente, hourLabel, items = []) {
     });
   });
 
+  overlay.querySelectorAll('[data-quando-necessario-item]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const index = Number(btn.dataset.quandoNecessarioIndex);
+      if (!Number.isFinite(index)) return;
+      const current = quandoNecessarios[index];
+      if (!current) return;
+      openExecucaoDetalheModal(paciente, current, {
+        defaultDate: selectedDate,
+        defaultHour: selectedHour,
+        forceStatus: 'Concluída',
+      });
+    });
+  });
+
   document.body.appendChild(overlay);
 }
 
-function openExecucaoDetalheModal(paciente, item) {
+function openExecucaoDetalheModal(paciente, item, options = {}) {
   if (!paciente || !item) return;
 
   const existing = document.getElementById('internacao-exec-detalhe-modal');
@@ -396,6 +465,8 @@ function openExecucaoDetalheModal(paciente, item) {
   });
 
   const form = overlay.querySelector('[data-execucao-form]');
+  const { defaultDate, defaultHour, forceStatus } = options || {};
+
   if (form) {
     const descricaoField = form.querySelector('[data-execucao-descricao]');
     const statusField = form.querySelector('[data-execucao-status]');
@@ -423,6 +494,16 @@ function openExecucaoDetalheModal(paciente, item) {
     }
     if (obsField) {
       obsField.value = item.observacoes || '';
+    }
+
+    if (statusField && forceStatus) {
+      statusField.value = forceStatus;
+    }
+    if (dataField && defaultDate) {
+      dataField.value = defaultDate;
+    }
+    if (horaField && defaultHour) {
+      horaField.value = defaultHour;
     }
 
     const setError = (message) => {
@@ -534,7 +615,11 @@ function attachExecucaoModalHandlers(root, pacientes = [], selectedDate = '') {
       const items = (paciente.execucoes || []).filter(
         (acao) => acao.hourKey === hour && (!selectedDate || acao.dayKey === selectedDate),
       );
-      openExecucaoModal(paciente, `${hour}:00`, items);
+      openExecucaoModal(paciente, `${hour}:00`, items, {
+        quandoNecessarios: paciente.quandoNecessarios || [],
+        selectedDate,
+        selectedHour: `${hour}:00`,
+      });
     });
   });
 }
@@ -691,8 +776,12 @@ export function renderMapaExecucao(root, dataset, state = {}) {
 
   const pacientes = filtrados.map((registro) => {
     const nome = registro.pet?.nome || (registro.codigo ? `Registro #${registro.codigo}` : 'Paciente');
-    const execucoesDoDia = normalizeExecucaoItems(registro.execucoes).filter(
+    const execucoesNormalizadas = normalizeExecucaoItems(registro.execucoes);
+    const execucoesDoDia = execucoesNormalizadas.filter(
       (item) => item.dayKey === selectedDate,
+    );
+    const quandoNecessarios = execucoesNormalizadas.filter(
+      (item) => isExecucaoSobDemanda(item) && !isExecucaoConcluida(item),
     );
     return {
       key: registro.filterKey || registro.id || nome,
@@ -702,6 +791,7 @@ export function renderMapaExecucao(root, dataset, state = {}) {
       servicoLabel: registro.queixa || registro.diagnostico || 'Internação em andamento',
       equipeLabel: registro.veterinario || 'Equipe em definição',
       execucoes: execucoesDoDia,
+      quandoNecessarios,
     };
   });
 
