@@ -114,9 +114,30 @@ function isExecucaoConcluida(item) {
   return status.includes('conclu') || status.includes('finaliz') || status.includes('realiz');
 }
 
+function hasNecessarioFlag(value) {
+  if (!value) return false;
+  return String(value)
+    .normalize('NFD')
+    .replace(/[^\w\s]/g, '')
+    .toLowerCase()
+    .includes('necess');
+}
+
 function isExecucaoSobDemanda(item) {
+  if (!item || typeof item !== 'object') return false;
+
   const status = String(item?.status || '').toLowerCase();
-  return status.includes('sob demanda') || status.includes('necess');
+  if (status.includes('sob demanda') || status.includes('necess')) return true;
+
+  return [
+    item.frequencia,
+    item.freq,
+    item.tipoFrequencia,
+    item.prescricaoFrequencia,
+    item.prescricaoTipo,
+    item.programadoLabel,
+    item.tipo,
+  ].some((value) => hasNecessarioFlag(value));
 }
 
 function formatExecucaoProgramadaLabel(item) {
