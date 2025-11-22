@@ -1243,9 +1243,10 @@ router.post('/registros/:id/prescricoes/:prescricaoId/interromper', async (req, 
 
     record.execucoes = Array.isArray(record.execucoes) ? record.execucoes : [];
     const matcher = buildPrescricaoMatcher(prescricaoId, prescricao);
+    const interrupcaoSobDemanda = normalizeKey(prescricao?.frequencia) === 'necessario';
     const removidos = removeExecucoesFromPrescricao(record, prescricaoId, {
       pendingOnly: true,
-      agendadaOnly: true,
+      agendadaOnly: !interrupcaoSobDemanda,
       prescricao,
       matcher,
     });
@@ -1257,8 +1258,8 @@ router.post('/registros/:id/prescricoes/:prescricaoId/interromper', async (req, 
     record.historico = Array.isArray(record.historico) ? record.historico : [];
     const resumoPrescricao = sanitizeText(prescricao.descricao) || sanitizeText(prescricao.resumo) || 'Prescrição';
     const detalhes = removidos
-      ? `${removidos} execução(ões) agendada(s) removida(s).`
-      : 'Nenhuma execução agendada foi encontrada.';
+      ? `${removidos} execução(ões) pendente(s) removida(s).`
+      : 'Nenhuma execução pendente foi encontrada.';
     const detalhesPrescricao = 'Prescrição removida da aba de Prescrição Médica.';
     const detalhesExecucoesConcluidas = execucoesRestantes
       ? `${execucoesRestantes} execução(ões) concluída(s) permanecem no mapa de execução.`
