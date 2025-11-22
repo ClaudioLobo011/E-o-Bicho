@@ -505,6 +505,7 @@ function openExecucaoDetalheModal(paciente, item, options = {}) {
     const obsField = form.querySelector('[data-execucao-observacoes]');
     const errorBox = form.querySelector('[data-execucao-error]');
     const submitBtn = form.querySelector('[data-execucao-submit]');
+    const lockConcluida = isExecucaoConcluida(item) && !options.allowConcluidaEdicao;
 
     if (descricaoField) {
       descricaoField.value = item.descricao || item.resumo || 'Procedimento registrado.';
@@ -557,6 +558,34 @@ function openExecucaoDetalheModal(paciente, item, options = {}) {
       submitBtn.textContent = isLoading ? 'Salvando...' : submitBtn.dataset.defaultLabel;
     };
 
+    if (lockConcluida) {
+      if (statusField) {
+        statusField.disabled = true;
+        statusField.classList.add('cursor-not-allowed', 'bg-gray-100', 'text-gray-500');
+      }
+      if (dataField) {
+        dataField.readOnly = true;
+        dataField.classList.add('cursor-not-allowed', 'bg-gray-50', 'text-gray-500');
+      }
+      if (horaField) {
+        horaField.readOnly = true;
+        horaField.classList.add('cursor-not-allowed', 'bg-gray-50', 'text-gray-500');
+      }
+      if (obsField) {
+        obsField.readOnly = true;
+        obsField.classList.add('cursor-not-allowed', 'bg-gray-50', 'text-gray-500');
+      }
+      form.querySelectorAll('[data-execucao-now]').forEach((btn) => {
+        btn.disabled = true;
+        btn.classList.add('opacity-60', 'cursor-not-allowed');
+      });
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Concluída';
+        submitBtn.classList.add('cursor-not-allowed', 'opacity-60');
+      }
+    }
+
     const fillNow = () => {
       const now = new Date();
       const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
@@ -581,6 +610,10 @@ function openExecucaoDetalheModal(paciente, item, options = {}) {
 
     form.addEventListener('submit', (event) => {
       event.preventDefault();
+      if (lockConcluida) {
+        setError('Procedimentos concluídos não podem ser editados.');
+        return;
+      }
       setError('');
       const recordId = paciente.recordId || paciente.id || '';
       if (!recordId) {
