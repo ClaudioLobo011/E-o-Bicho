@@ -377,6 +377,33 @@ function normalizeExecucaoStatusKey(status) {
   return key;
 }
 
+function hasNecessarioFlag(value) {
+  if (!value) return false;
+  return String(value)
+    .normalize('NFD')
+    .replace(/[^\w\s]/g, '')
+    .toLowerCase()
+    .includes('necess');
+}
+
+function isExecucaoSobDemanda(item) {
+  if (!item || typeof item !== 'object') return false;
+
+  const status = String(item?.status || '').toLowerCase();
+  if (status.includes('sob demanda') || status.includes('necess')) return true;
+
+  return [
+    item.frequencia,
+    item.freq,
+    item.tipoFrequencia,
+    item.prescricaoFrequencia,
+    item.prescricaoTipo,
+    item.programadoLabel,
+    item.tipo,
+    item.resumo,
+  ].some((value) => hasNecessarioFlag(value));
+}
+
 function buildExecucaoProgramadoLabel(programadoEm, programadoData, programadoHora, fallbackHora) {
   if (programadoEm) {
     return formatDateTimeLabel(programadoEm);
@@ -424,8 +451,9 @@ function normalizeExecucaoItem(raw) {
     if (value === undefined || value === null) return '';
     return String(value).trim();
   };
-  const horario = toText(raw.horario);
-  const hourKey = horario ? horario.slice(0, 2).padStart(2, '0') : '';
+  const horario = toText(raw.horario) || toText(raw.programadoHora) || toText(raw.realizadoHora);
+  const sobDemanda = Boolean(raw.sobDemanda) || isExecucaoSobDemanda(raw);
+  const hourKey = horario ? horario.slice(0, 2).padStart(2, '0') : sobDemanda ? '00' : '';
   const id = toText(raw.id) || toText(raw._id) || `${horario || 'exec'}-${Math.random().toString(36).slice(2, 8)}`;
   const descricao = toText(raw.descricao);
   const responsavel = toText(raw.responsavel);
@@ -447,6 +475,7 @@ function normalizeExecucaoItem(raw) {
     id,
     horario,
     hourKey,
+    sobDemanda,
     descricao,
     responsavel,
     status,
@@ -468,7 +497,7 @@ function normalizeExecucaoItem(raw) {
 
 function normalizeExecucoes(list) {
   if (!Array.isArray(list)) return [];
-  return list.map(normalizeExecucaoItem).filter((item) => item && item.hourKey);
+  return list.map(normalizeExecucaoItem).filter((item) => item && (item.hourKey || item.sobDemanda));
 }
 
 function getLocalDateInputValue(dateInput = new Date()) {
