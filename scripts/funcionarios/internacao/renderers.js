@@ -126,6 +126,8 @@ function hasNecessarioFlag(value) {
 function isExecucaoSobDemanda(item) {
   if (!item || typeof item !== 'object') return false;
 
+  if (item.sobDemanda === true || item.sobDemanda === 'true') return true;
+
   const status = String(item?.status || '').toLowerCase();
   if (status.includes('sob demanda') || status.includes('necess')) return true;
 
@@ -136,6 +138,7 @@ function isExecucaoSobDemanda(item) {
     item.prescricaoFrequencia,
     item.prescricaoTipo,
     item.programadoLabel,
+    item.resumo,
     item.tipo,
   ].some((value) => hasNecessarioFlag(value));
 }
