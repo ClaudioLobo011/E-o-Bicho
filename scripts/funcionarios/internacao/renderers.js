@@ -114,6 +114,11 @@ function isExecucaoConcluida(item) {
   return status.includes('conclu') || status.includes('finaliz') || status.includes('realiz');
 }
 
+function isExecucaoInterrompida(item) {
+  const status = String(item?.status || '').toLowerCase();
+  return status.includes('interromp');
+}
+
 function hasNecessarioFlag(value) {
   if (!value) return false;
   return String(value)
@@ -805,10 +810,12 @@ export function renderMapaExecucao(root, dataset, state = {}) {
     const nome = registro.pet?.nome || (registro.codigo ? `Registro #${registro.codigo}` : 'Paciente');
     const execucoesNormalizadas = normalizeExecucaoItems(registro.execucoes);
     const execucoesDoDia = execucoesNormalizadas.filter(
-      (item) => item.dayKey === selectedDate && !isExecucaoSobDemanda(item),
+      (item) =>
+        item.dayKey === selectedDate &&
+        (!isExecucaoSobDemanda(item) || (isExecucaoConcluida(item) && !isExecucaoInterrompida(item))),
     );
     const quandoNecessarios = Array.isArray(registro.execucoes)
-      ? registro.execucoes.filter((item) => isExecucaoSobDemanda(item))
+      ? registro.execucoes.filter((item) => isExecucaoSobDemanda(item) && !isExecucaoInterrompida(item))
       : [];
     return {
       key: registro.filterKey || registro.id || nome,
