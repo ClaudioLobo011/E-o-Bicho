@@ -282,7 +282,7 @@ function openExecucaoModal(paciente, hourLabel, items = [], options = {}) {
               <p class="text-sm font-semibold text-gray-900">${escapeHtml(item.descricao || 'Procedimento')}</p>
               <p class="text-xs text-gray-500">Responsável: ${escapeHtml(responsavel)}</p>
               <p class="text-xs text-gray-400">Status: ${escapeHtml(status)} · Programado: ${escapeHtml(programado)}</p>
-              <p class="mt-1 text-[11px] font-semibold uppercase tracking-wide text-primary opacity-0 transition group-hover:opacity-100">Clique para atualizar</p>
+              <p class="mt-1 text-[11px] font-semibold uppercase tracking-wide text-primary opacity-0 transition group-hover:opacity-100">Detalhes</p>
             </button>
           `;
         })
