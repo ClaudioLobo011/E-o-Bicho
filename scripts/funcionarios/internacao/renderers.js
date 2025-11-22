@@ -273,15 +273,14 @@ function openExecucaoModal(paciente, hourLabel, items = [], options = {}) {
               data-quando-necessario-item
               data-quando-necessario-index="${index}"
             >
-              <div class="flex items-start justify-between gap-3">
+              <div class="flex flex-col gap-1">
                 <div>
                   <p class="text-sm font-semibold text-gray-900">${escapeHtml(item.descricao || 'Procedimento')}</p>
                   <p class="text-xs text-gray-500">Responsável: ${escapeHtml(responsavel)}</p>
                   <p class="text-xs text-gray-400">Status: ${escapeHtml(status)} · Referência: ${escapeHtml(programado)}</p>
                 </div>
-                <span class="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-primary ring-1 ring-primary/40">Concluir</span>
+                <p class="text-[11px] font-semibold uppercase tracking-wide text-primary">Registrar horário e observação</p>
               </div>
-              <p class="mt-1 text-[11px] font-semibold uppercase tracking-wide text-primary opacity-0 transition group-hover:opacity-100">Registrar horário e observação</p>
             </button>
           `;
         })
