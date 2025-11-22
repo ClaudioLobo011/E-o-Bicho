@@ -351,8 +351,6 @@ function openExecucaoModal(paciente, hourLabel, items = [], options = {}) {
       const current = quandoNecessarios[index];
       if (!current) return;
       openExecucaoDetalheModal(paciente, current, {
-        defaultDate: selectedDate,
-        defaultHour: selectedHour,
         forceStatus: 'Concluída',
       });
     });
@@ -778,7 +776,7 @@ export function renderMapaExecucao(root, dataset, state = {}) {
     const nome = registro.pet?.nome || (registro.codigo ? `Registro #${registro.codigo}` : 'Paciente');
     const execucoesNormalizadas = normalizeExecucaoItems(registro.execucoes);
     const execucoesDoDia = execucoesNormalizadas.filter(
-      (item) => item.dayKey === selectedDate,
+      (item) => item.dayKey === selectedDate && !isExecucaoSobDemanda(item),
     );
     const quandoNecessarios = execucoesNormalizadas.filter(
       (item) => isExecucaoSobDemanda(item) && !isExecucaoConcluida(item),
