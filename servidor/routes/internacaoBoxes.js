@@ -1389,6 +1389,9 @@ router.post('/registros/:id/execucoes/:execucaoId/concluir', async (req, res) =>
     }
 
     const payload = buildExecucaoConclusaoPayload(req.body);
+    const originalStatusKey = normalizeKey(execucao.status);
+    const execucaoSobDemanda =
+      originalStatusKey.includes('sobdemanda') || originalStatusKey.includes('necess');
     if (!payload.realizadoData || !payload.realizadoHora) {
       return res.status(400).json({ message: 'Informe data e hora de realização do procedimento.' });
     }
@@ -1397,6 +1400,9 @@ router.post('/registros/:id/execucoes/:execucaoId/concluir', async (req, res) =>
     const finalStatus = statusKey && statusKey.includes('agend') ? 'Agendada' : payload.status || 'Concluída';
 
     execucao.status = finalStatus || 'Concluída';
+    if (execucaoSobDemanda && payload.realizadoHora) {
+      execucao.horario = payload.realizadoHora;
+    }
     execucao.realizadoData = payload.realizadoData;
     execucao.realizadoHora = payload.realizadoHora;
     execucao.realizadoEm = combineDateAndTimeParts(payload.realizadoData, payload.realizadoHora);
