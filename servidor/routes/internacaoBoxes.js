@@ -29,6 +29,15 @@ const normalizeKey = (value) =>
     .replace(/[^\p{L}\p{N}]/gu, '')
     .toLowerCase();
 
+const hasNecessarioFlag = (value) => {
+  if (value === undefined || value === null) return false;
+  const normalized = sanitizeText(value)
+    .normalize('NFD')
+    .replace(/[^\p{L}\p{N}\s]/gu, '')
+    .toLowerCase();
+  return normalized.includes('necess');
+};
+
 const isExecucaoConcluida = (status) => {
   const key = normalizeKey(status);
   if (!key) return false;
@@ -1391,7 +1400,18 @@ router.post('/registros/:id/execucoes/:execucaoId/concluir', async (req, res) =>
     const payload = buildExecucaoConclusaoPayload(req.body);
     const originalStatusKey = normalizeKey(execucao.status);
     const execucaoSobDemanda =
-      originalStatusKey.includes('sobdemanda') || originalStatusKey.includes('necess');
+      originalStatusKey.includes('sobdemanda') ||
+      originalStatusKey.includes('necess') ||
+      execucao.sobDemanda === true ||
+      String(execucao.sobDemanda).toLowerCase() === 'true' ||
+      hasNecessarioFlag(execucao.frequencia) ||
+      hasNecessarioFlag(execucao.freq) ||
+      hasNecessarioFlag(execucao.tipoFrequencia) ||
+      hasNecessarioFlag(execucao.prescricaoFrequencia) ||
+      hasNecessarioFlag(execucao.prescricaoTipo) ||
+      hasNecessarioFlag(execucao.programadoLabel) ||
+      hasNecessarioFlag(execucao.resumo) ||
+      hasNecessarioFlag(execucao.tipo);
     if (!payload.realizadoData || !payload.realizadoHora) {
       return res.status(400).json({ message: 'Informe data e hora de realização do procedimento.' });
     }
