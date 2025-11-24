@@ -29,15 +29,20 @@ const API_CONFIG = (() => {
   };
 
   const resolveServerUrl = () => {
-    const manual = normalizeUrl(getLocalOverride()) || normalizeUrl(getGlobalOverride());
-    if (manual) return manual;
-
-    if (typeof window !== 'undefined') {
-      const hostname = window.location.hostname;
-      const isLocalhost = ['localhost', '127.0.0.1', '::1'].includes(hostname);
-      if (isLocalhost) return LOCAL_SERVER_URL;
+    if (typeof window === 'undefined') {
+      return DEFAULT_RENDER_SERVER_URL;
     }
 
+    const hostname = window.location.hostname;
+    const isLocalhost = ['localhost', '127.0.0.1', '::1'].includes(hostname);
+
+    if (isLocalhost) {
+      const manual = normalizeUrl(getLocalOverride()) || normalizeUrl(getGlobalOverride());
+      return manual || LOCAL_SERVER_URL;
+    }
+
+    // Em produção sempre usamos o servidor da Render para evitar requisições
+    // indevidas para o localhost (que causam bloqueios de CORS).
     return DEFAULT_RENDER_SERVER_URL;
   };
 
