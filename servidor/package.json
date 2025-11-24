@@ -2,8 +2,9 @@
   "name": "servidor",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
+    "start": "node server.js",
     "test": "node --test services/__tests__/**/*.test.js",
     "data:import": "node seeder.js",
     "data:destroy": "node seeder.js -d",
