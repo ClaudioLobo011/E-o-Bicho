@@ -4,6 +4,7 @@
   "description": "",
   "main": "server.js",
   "scripts": {
+    "build": "echo \"Nenhum passo de build necessário para a API\"",
     "start": "node server.js",
     "test": "node --test services/__tests__/**/*.test.js",
     "data:import": "node seeder.js",
