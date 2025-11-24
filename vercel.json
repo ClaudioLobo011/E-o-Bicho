@@ -5,6 +5,10 @@
     { "src": "index.html", "use": "@vercel/static" },
     { "src": "pages/**", "use": "@vercel/static" },
     { "src": "public/**", "use": "@vercel/static" },
-    { "src": "src/output.css", "use": "@vercel/static" }
+    { "src": "src/**", "use": "@vercel/static" },
+    { "src": "components/**", "use": "@vercel/static" },
+    { "src": "scripts/**", "use": "@vercel/static" },
+    { "src": "data/**", "use": "@vercel/static" },
+    { "src": "nfeschema_v400.zip", "use": "@vercel/static" }
   ]
 }
