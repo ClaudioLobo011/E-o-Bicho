@@ -1,6 +1,60 @@
-const API_CONFIG = {
-  SERVER_URL: 'http://localhost:3000', // Endere��o base do servidor backend
-  BASE_URL: 'http://localhost:3000/api', // Endere��o para a API
-  ADMIN_EMAIL: 'claudio.lobo@lobosti.com.br'
-};
+const API_CONFIG = (() => {
+  const DEFAULT_RENDER_SERVER_URL = 'https://e-o-bicho.onrender.com';
+  const LOCAL_SERVER_URL = 'http://localhost:3000';
 
+  const normalizeUrl = (url) => {
+    if (typeof url !== 'string') return '';
+    return url.trim().replace(/\/+$/, '');
+  };
+
+  const getLocalOverride = () => {
+    try {
+      const value = localStorage.getItem('apiServerOverride');
+      return typeof value === 'string' ? value.trim() : '';
+    } catch (_err) {
+      return '';
+    }
+  };
+
+  const getGlobalOverride = () => {
+    if (typeof window === 'undefined') return '';
+    const candidates = [
+      window.API_SERVER_URL,
+      window.API_BASE_URL,
+      window?.API_CONFIG?.SERVER_URL,
+      window?.API_CONFIG?.BASE_URL?.replace(/\/?api$/, ''),
+    ];
+    const found = candidates.find((value) => typeof value === 'string' && value.trim());
+    return found ? found.trim() : '';
+  };
+
+  const resolveServerUrl = () => {
+    if (typeof window === 'undefined') {
+      return DEFAULT_RENDER_SERVER_URL;
+    }
+
+    const hostname = window.location.hostname;
+    const isLocalhost = ['localhost', '127.0.0.1', '::1'].includes(hostname);
+
+    if (isLocalhost) {
+      const manual = normalizeUrl(getLocalOverride()) || normalizeUrl(getGlobalOverride());
+      return manual || LOCAL_SERVER_URL;
+    }
+
+    // Em produção sempre usamos o servidor da Render para evitar requisições
+    // indevidas para o localhost (que causam bloqueios de CORS).
+    return DEFAULT_RENDER_SERVER_URL;
+  };
+
+  const serverUrl = normalizeUrl(resolveServerUrl()) || DEFAULT_RENDER_SERVER_URL;
+
+  return {
+    SERVER_URL: serverUrl,
+    BASE_URL: `${serverUrl}/api`,
+    ADMIN_EMAIL: 'claudio.lobo@lobosti.com.br',
+  };
+})();
+
+if (typeof globalThis !== 'undefined') {
+  globalThis.API_CONFIG = API_CONFIG;
+}
