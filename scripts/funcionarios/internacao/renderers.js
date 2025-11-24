@@ -114,6 +114,11 @@ function isExecucaoConcluida(item) {
   return status.includes('conclu') || status.includes('finaliz') || status.includes('realiz');
 }
 
+function isExecucaoInterrompida(item) {
+  const status = String(item?.status || '').toLowerCase();
+  return status.includes('interromp');
+}
+
 function hasNecessarioFlag(value) {
   if (!value) return false;
   return String(value)
@@ -126,6 +131,8 @@ function hasNecessarioFlag(value) {
 function isExecucaoSobDemanda(item) {
   if (!item || typeof item !== 'object') return false;
 
+  if (item.sobDemanda === true || item.sobDemanda === 'true') return true;
+
   const status = String(item?.status || '').toLowerCase();
   if (status.includes('sob demanda') || status.includes('necess')) return true;
 
@@ -136,6 +143,7 @@ function isExecucaoSobDemanda(item) {
     item.prescricaoFrequencia,
     item.prescricaoTipo,
     item.programadoLabel,
+    item.resumo,
     item.tipo,
   ].some((value) => hasNecessarioFlag(value));
 }
@@ -274,7 +282,7 @@ function openExecucaoModal(paciente, hourLabel, items = [], options = {}) {
               <p class="text-sm font-semibold text-gray-900">${escapeHtml(item.descricao || 'Procedimento')}</p>
               <p class="text-xs text-gray-500">Responsável: ${escapeHtml(responsavel)}</p>
               <p class="text-xs text-gray-400">Status: ${escapeHtml(status)} · Programado: ${escapeHtml(programado)}</p>
-              <p class="mt-1 text-[11px] font-semibold uppercase tracking-wide text-primary opacity-0 transition group-hover:opacity-100">Clique para atualizar</p>
+              <p class="mt-1 text-[11px] font-semibold uppercase tracking-wide text-primary opacity-0 transition group-hover:opacity-100">Detalhes</p>
             </button>
           `;
         })
@@ -373,6 +381,8 @@ function openExecucaoModal(paciente, hourLabel, items = [], options = {}) {
       openExecucaoDetalheModal(paciente, current, {
         forceStatus: 'Concluída',
         clearRealizado: true,
+        defaultDate: selectedDate,
+        defaultHour: selectedHour,
       });
     });
   });
@@ -495,6 +505,7 @@ function openExecucaoDetalheModal(paciente, item, options = {}) {
     const obsField = form.querySelector('[data-execucao-observacoes]');
     const errorBox = form.querySelector('[data-execucao-error]');
     const submitBtn = form.querySelector('[data-execucao-submit]');
+    const lockConcluida = isExecucaoConcluida(item) && !options.allowConcluidaEdicao;
 
     if (descricaoField) {
       descricaoField.value = item.descricao || item.resumo || 'Procedimento registrado.';
@@ -547,6 +558,34 @@ function openExecucaoDetalheModal(paciente, item, options = {}) {
       submitBtn.textContent = isLoading ? 'Salvando...' : submitBtn.dataset.defaultLabel;
     };
 
+    if (lockConcluida) {
+      if (statusField) {
+        statusField.disabled = true;
+        statusField.classList.add('cursor-not-allowed', 'bg-gray-100', 'text-gray-500');
+      }
+      if (dataField) {
+        dataField.readOnly = true;
+        dataField.classList.add('cursor-not-allowed', 'bg-gray-50', 'text-gray-500');
+      }
+      if (horaField) {
+        horaField.readOnly = true;
+        horaField.classList.add('cursor-not-allowed', 'bg-gray-50', 'text-gray-500');
+      }
+      if (obsField) {
+        obsField.readOnly = true;
+        obsField.classList.add('cursor-not-allowed', 'bg-gray-50', 'text-gray-500');
+      }
+      form.querySelectorAll('[data-execucao-now]').forEach((btn) => {
+        btn.disabled = true;
+        btn.classList.add('opacity-60', 'cursor-not-allowed');
+      });
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Concluída';
+        submitBtn.classList.add('cursor-not-allowed', 'opacity-60');
+      }
+    }
+
     const fillNow = () => {
       const now = new Date();
       const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
@@ -571,6 +610,10 @@ function openExecucaoDetalheModal(paciente, item, options = {}) {
 
     form.addEventListener('submit', (event) => {
       event.preventDefault();
+      if (lockConcluida) {
+        setError('Procedimentos concluídos não podem ser editados.');
+        return;
+      }
       setError('');
       const recordId = paciente.recordId || paciente.id || '';
       if (!recordId) {
@@ -802,10 +845,14 @@ export function renderMapaExecucao(root, dataset, state = {}) {
     const nome = registro.pet?.nome || (registro.codigo ? `Registro #${registro.codigo}` : 'Paciente');
     const execucoesNormalizadas = normalizeExecucaoItems(registro.execucoes);
     const execucoesDoDia = execucoesNormalizadas.filter(
-      (item) => item.dayKey === selectedDate && !isExecucaoSobDemanda(item),
+      (item) =>
+        item.dayKey === selectedDate &&
+        (!isExecucaoSobDemanda(item) || (isExecucaoConcluida(item) && !isExecucaoInterrompida(item))),
     );
     const quandoNecessarios = Array.isArray(registro.execucoes)
-      ? registro.execucoes.filter((item) => isExecucaoSobDemanda(item))
+      ? registro.execucoes.filter(
+          (item) => isExecucaoSobDemanda(item) && !isExecucaoInterrompida(item) && !isExecucaoConcluida(item),
+        )
       : [];
     return {
       key: registro.filterKey || registro.id || nome,
