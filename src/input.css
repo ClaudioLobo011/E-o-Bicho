@@ -143,10 +143,8 @@
     /* Estilos para um carrossel 2D com deslize lateral e espaçamento CORRIGIDO */
     #carousel {
         position: relative;
-        height: clamp(18rem, 35vw, 22rem);
-        overflow: hidden;
-        max-width: 1200px;
-        margin: 0 auto;
+        height: 22rem; /* altura ligeiramente maior */
+        overflow: hidden; 
     }
 
     .carousel-container {
@@ -161,10 +159,10 @@
         left: 0;
         right: 0;
         margin: auto;
-        width: 82%;
+        width: 80%;
         height: 100%;
         opacity: 0;
-        transition: transform 0.5s ease-in-out,
+        transition: transform 0.5s ease-in-out, 
                     opacity 0.5s ease-in-out;
     }
 
@@ -207,73 +205,6 @@
     }
     #prev, #next {
         z-index: 20;
-    }
-
-    /* Ajustes responsivos para preservar o layout em telas menores */
-    @media (max-width: 1024px) {
-        #carousel {
-            height: clamp(14rem, 42vw, 18rem);
-            padding: 0 1rem;
-        }
-
-        .slide {
-            width: 88%;
-        }
-
-        .slide.slide-anterior {
-            transform: translateX(-94%);
-        }
-
-        .slide.slide-proximo {
-            transform: translateX(94%);
-        }
-
-        .slide.slide-escondido-esquerda {
-            transform: translateX(-190%);
-        }
-
-        .slide.slide-escondido-direita {
-            transform: translateX(190%);
-        }
-    }
-
-    @media (max-width: 640px) {
-        #carousel {
-            height: clamp(11rem, 58vw, 15rem);
-        }
-
-        .carousel-container {
-            border-radius: 1rem;
-        }
-
-        .slide {
-            width: 100%;
-            padding: 0 0.5rem;
-        }
-
-        .slide.slide-anterior {
-            transform: translateX(-105%);
-        }
-
-        .slide.slide-proximo {
-            transform: translateX(105%);
-        }
-
-        .slide.slide-escondido-esquerda {
-            transform: translateX(-210%);
-        }
-
-        .slide.slide-escondido-direita {
-            transform: translateX(210%);
-        }
-
-        #prev, #next {
-            top: auto;
-            bottom: 1rem;
-            transform: none;
-            width: 2.75rem;
-            height: 2.75rem;
-        }
     }
 
     /* Animação para a barra de preenchimento */
