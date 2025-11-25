@@ -5442,10 +5442,11 @@
   .banner-viewport-inner {
     width: 100%;
     max-width: none;
-    padding-inline: clamp(10px, 2vw, 24px);
+    padding-inline: clamp(6px, 1.25vw, 18px);
   }
   #carousel {
-    --carousel-peek: clamp(14px, 6vw, 72px);
+    --carousel-peek: clamp(36px, 8vw, 160px);
+    --carousel-slide-width: min(1140px, 88vw);
     position: relative;
     width: 100%;
     margin: 0 auto;
@@ -5454,7 +5455,7 @@
     overflow: visible;
     background: linear-gradient(180deg, #f8f9fb 0%, #eef2f7 100%);
     box-shadow: 0 20px 40px -18px rgba(0, 0, 0, 0.25);
-    padding-inline: clamp(6px, 1vw, 12px);
+    padding-inline: clamp(2px, 0.6vw, 10px);
   }
   .carousel-container {
     position: relative;
@@ -5471,10 +5472,10 @@
     position: absolute;
     top: 50%;
     left: 50%;
-    width: 86%;
+    width: var(--carousel-slide-width);
     height: 92%;
     opacity: 0;
-    transform: translate(-50%, -50%) translateX(220%) scale(0.92);
+    transform: translate(-50%, -50%) translateX(calc(200% - var(--carousel-peek))) scale(0.92);
     transition: transform 0.65s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.65s ease, filter 0.6s ease;
     transform-origin: center;
     filter: saturate(0.92);
@@ -5489,22 +5490,22 @@
     box-shadow: 0 16px 36px -22px rgba(0, 0, 0, 0.35);
   }
   #carousel .slide.slide-anterior {
-    transform: translate(-50%, -50%) translateX(-132%) scale(0.9);
-    opacity: 0.9;
+    transform: translate(-50%, -50%) translateX(calc(-100% + var(--carousel-peek))) scale(0.9);
+    opacity: 0.85;
     z-index: 7;
   }
   #carousel .slide.slide-proximo {
-    transform: translate(-50%, -50%) translateX(132%) scale(0.9);
-    opacity: 0.9;
+    transform: translate(-50%, -50%) translateX(calc(100% - var(--carousel-peek))) scale(0.9);
+    opacity: 0.85;
     z-index: 7;
   }
   #carousel .slide.slide-escondido-esquerda {
-    transform: translate(-50%, -50%) translateX(-260%) scale(0.86);
+    transform: translate(-50%, -50%) translateX(calc(-200% + var(--carousel-peek))) scale(0.86);
     opacity: 0;
     z-index: 1;
   }
   #carousel .slide.slide-escondido-direita {
-    transform: translate(-50%, -50%) translateX(260%) scale(0.86);
+    transform: translate(-50%, -50%) translateX(calc(200% - var(--carousel-peek))) scale(0.86);
     opacity: 0;
     z-index: 1;
   }
