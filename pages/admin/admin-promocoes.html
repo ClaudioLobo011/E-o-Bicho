@@ -102,15 +102,23 @@
 
                             <form id="banner-upload-form" class="mt-4 border-b pb-6">
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700">Ficheiro de Imagem</label>
+                                    <div class="space-y-2 p-4 border rounded-lg bg-white/70">
+                                        <h4 class="font-semibold text-gray-800">Tela maior</h4>
+                                        <p class="text-xs text-gray-500">Imagem usada em desktops e tablets.</p>
                                         <input type="file" name="bannerImage" id="bannerImage" required class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20">
                                     </div>
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700">Link do Botão (opcional)</label>
-                                        <input type="text" name="link" id="banner-link" placeholder="/pages/search.html?category=Ofertas" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
+                                    <div class="space-y-2 p-4 border rounded-lg bg-white/70">
+                                        <h4 class="font-semibold text-gray-800">Tela menor</h4>
+                    
+                                        <p class="text-xs text-gray-500">Imagem otimizada para telemóveis.</p>
+                                        <input type="file" name="bannerImageMobile" id="bannerImageMobile" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20">
+                                        <p class="text-xs text-gray-500">Opcional: se não enviar, usaremos a imagem maior como fallback.</p>
                                     </div>
-                                    </div>
+                                </div>
+                                <div class="mt-4">
+                                    <label class="block text-sm font-medium text-gray-700">Link do Botão (opcional)</label>
+                                    <input type="text" name="link" id="banner-link" placeholder="/pages/search.html?category=Ofertas" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
+                                </div>
                                 <button type="submit" class="mt-4 bg-primary text-white font-bold py-2 px-6 rounded-lg hover:bg-secondary">Enviar Banner</button>
                             </form>
 

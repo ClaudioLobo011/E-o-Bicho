@@ -446,21 +446,200 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==================================================
     const bannerUploadForm = document.getElementById('banner-upload-form');
     const bannerList = document.getElementById('banner-list');
+    const BANNER_SETTINGS_KEY = 'bannerDisplaySettings';
+    let cachedBanners = [];
+
+    const loadBannerSettings = () => {
+        try {
+            return JSON.parse(localStorage.getItem(BANNER_SETTINGS_KEY)) || {};
+        } catch (error) {
+            console.error('Erro ao ler ajustes de banner:', error);
+            return {};
+        }
+    };
+
+    const saveBannerSettings = (settings) => {
+        localStorage.setItem(BANNER_SETTINGS_KEY, JSON.stringify(settings));
+    };
+
+    const resolveFitMode = (fitMode, scaleX, scaleY) => {
+        if (fitMode === 'cover' && (scaleX < 1 || scaleY < 1)) {
+            return 'contain';
+        }
+        return fitMode;
+    };
+
+    const applyPreviewStyles = (imgEl, settings) => {
+        if (!imgEl) return;
+        const {
+            fitMode = 'cover',
+            positionX = 50,
+            positionY = 50,
+            zoom = 100,
+            widthScale = 100,
+            heightScale = 100
+        } = settings;
+        const baseScale = Math.max(50, zoom) / 100;
+        const scaleX = baseScale * (widthScale / 100);
+        const scaleY = baseScale * (heightScale / 100);
+        const effectiveFit = resolveFitMode(fitMode, scaleX, scaleY);
+        imgEl.style.objectFit = effectiveFit;
+        imgEl.style.objectPosition = `${positionX}% ${positionY}%`;
+        imgEl.style.transform = `scale(${scaleX}, ${scaleY})`;
+        imgEl.style.transformOrigin = `${positionX}% ${positionY}%`;
+    };
+
+    const openBannerPreviewModal = (banner) => {
+        const settings = loadBannerSettings()[banner._id] || {
+            fitMode: 'cover',
+            positionX: 50,
+            positionY: 50,
+            zoom: 100,
+            widthScale: 100,
+            heightScale: 100
+        };
+
+        const overlay = document.createElement('div');
+        overlay.className = 'fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4';
+
+        overlay.innerHTML = `
+            <div class="bg-white rounded-lg shadow-xl max-w-5xl w-full">
+                <div class="p-4 border-b flex items-center justify-between">
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-800">Pré-visualização do Banner</h3>
+                        <p class="text-sm text-gray-500">Ajuste o enquadramento para o espaço do carrossel da página inicial. Em "Preencher", reduza zoom ou largura/altura para visualizar a imagem inteira sem cortes.</p>
+                    </div>
+                    <button class="text-gray-500 hover:text-gray-700" id="close-banner-preview">&times;</button>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div class="relative w-full overflow-hidden bg-gray-100 rounded-lg" style="padding-top: 42%;">
+                        <img src="${API_CONFIG.SERVER_URL}${banner.imageUrl}" alt="Pré-visualização do banner" class="absolute inset-0 w-full h-full transition-transform duration-200" id="banner-preview-img">
+                        <div class="absolute inset-2 border-2 border-white/60 rounded-lg pointer-events-none"></div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <label class="text-sm text-gray-700 flex flex-col space-y-2">
+                            <span>Modo de ajuste</span>
+                            <select id="fit-mode-select" class="border rounded-md p-2">
+                                <option value="cover" ${settings.fitMode === 'cover' ? 'selected' : ''}>Preencher (cortar bordas)</option>
+                                <option value="contain" ${settings.fitMode === 'contain' ? 'selected' : ''}>Conter (pode mostrar faixas)</option>
+                            </select>
+                        </label>
+                        <label class="text-sm text-gray-700 flex flex-col space-y-2">
+                            <span>Zoom (<span id="zoom-value">${settings.zoom}%</span>)</span>
+                            <input type="range" id="zoom-range" min="50" max="160" value="${settings.zoom}" class="w-full">
+                        </label>
+                        <label class="text-sm text-gray-700 flex flex-col space-y-2">
+                            <span>Largura exibida (<span id="width-scale-value">${settings.widthScale}%</span>)</span>
+                            <input type="range" id="width-scale-range" min="70" max="150" value="${settings.widthScale}" class="w-full">
+                        </label>
+                        <label class="text-sm text-gray-700 flex flex-col space-y-2">
+                            <span>Altura exibida (<span id="height-scale-value">${settings.heightScale}%</span>)</span>
+                            <input type="range" id="height-scale-range" min="70" max="150" value="${settings.heightScale}" class="w-full">
+                        </label>
+                        <label class="text-sm text-gray-700 flex flex-col space-y-2">
+                            <span>Posição Horizontal (<span id="pos-x-value">${settings.positionX}%</span>)</span>
+                            <input type="range" id="pos-x-range" min="0" max="100" value="${settings.positionX}" class="w-full">
+                        </label>
+                        <label class="text-sm text-gray-700 flex flex-col space-y-2">
+                            <span>Posição Vertical (<span id="pos-y-value">${settings.positionY}%</span>)</span>
+                            <input type="range" id="pos-y-range" min="0" max="100" value="${settings.positionY}" class="w-full">
+                        </label>
+                    </div>
+                </div>
+                <div class="p-4 bg-gray-50 border-t flex justify-end space-x-3">
+                    <button class="bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300" id="cancel-banner-preview">Cancelar</button>
+                    <button class="bg-primary text-white font-bold py-2 px-4 rounded-lg hover:bg-secondary" id="save-banner-preview">Aplicar ajustes</button>
+                </div>
+            </div>
+        `;
+
+        const previewImg = overlay.querySelector('#banner-preview-img');
+        applyPreviewStyles(previewImg, settings);
+
+        const fitSelect = overlay.querySelector('#fit-mode-select');
+        const zoomRange = overlay.querySelector('#zoom-range');
+        const widthScaleRange = overlay.querySelector('#width-scale-range');
+        const heightScaleRange = overlay.querySelector('#height-scale-range');
+        const posXRange = overlay.querySelector('#pos-x-range');
+        const posYRange = overlay.querySelector('#pos-y-range');
+        const zoomValue = overlay.querySelector('#zoom-value');
+        const widthScaleValue = overlay.querySelector('#width-scale-value');
+        const heightScaleValue = overlay.querySelector('#height-scale-value');
+        const posXValue = overlay.querySelector('#pos-x-value');
+        const posYValue = overlay.querySelector('#pos-y-value');
+
+        const syncPreview = () => {
+            const newSettings = {
+                fitMode: fitSelect.value,
+                zoom: parseInt(zoomRange.value, 10),
+                widthScale: parseInt(widthScaleRange.value, 10),
+                heightScale: parseInt(heightScaleRange.value, 10),
+                positionX: parseInt(posXRange.value, 10),
+                positionY: parseInt(posYRange.value, 10)
+            };
+            applyPreviewStyles(previewImg, newSettings);
+            zoomValue.textContent = `${newSettings.zoom}%`;
+            widthScaleValue.textContent = `${newSettings.widthScale}%`;
+            heightScaleValue.textContent = `${newSettings.heightScale}%`;
+            posXValue.textContent = `${newSettings.positionX}%`;
+            posYValue.textContent = `${newSettings.positionY}%`;
+        };
+
+        [fitSelect, zoomRange, widthScaleRange, heightScaleRange, posXRange, posYRange].forEach(input => {
+            input.addEventListener('input', syncPreview);
+        });
+
+        overlay.querySelector('#cancel-banner-preview').addEventListener('click', () => {
+            overlay.remove();
+        });
+
+        overlay.querySelector('#close-banner-preview').addEventListener('click', () => {
+            overlay.remove();
+        });
+
+        overlay.querySelector('#save-banner-preview').addEventListener('click', () => {
+            const settingsMap = loadBannerSettings();
+            settingsMap[banner._id] = {
+                fitMode: fitSelect.value,
+                zoom: parseInt(zoomRange.value, 10),
+                widthScale: parseInt(widthScaleRange.value, 10),
+                heightScale: parseInt(heightScaleRange.value, 10),
+                positionX: parseInt(posXRange.value, 10),
+                positionY: parseInt(posYRange.value, 10)
+            };
+            saveBannerSettings(settingsMap);
+            overlay.remove();
+            showModal({ title: 'Ajustes gravados', message: 'Os ajustes foram guardados localmente e serão aplicados na página inicial.', confirmText: 'Ok' });
+        });
+
+        document.body.appendChild(overlay);
+    };
 
     async function loadBanners() {
         try {
             const response = await fetch(`${API_CONFIG.BASE_URL}/banners`);
             const banners = await response.json();
+            cachedBanners = banners;
             bannerList.innerHTML = '';
             banners.forEach(banner => {
                 const li = document.createElement('li');
                 li.className = 'flex items-center justify-between p-2 border rounded-md bg-gray-50 cursor-grab';
                 li.dataset.id = banner._id;
                 li.innerHTML = `
-                    <div class="flex items-center">
-                        <i class="fas fa-grip-vertical mr-3 text-gray-400"></i>
-                        <img src="${API_CONFIG.SERVER_URL}${banner.imageUrl}" class="w-24 h-12 object-cover rounded-md mr-4">
-                        <span class="text-sm font-medium">${banner.link}</span>
+                    <div class="flex items-center w-full space-x-3">
+                        <i class="fas fa-grip-vertical text-gray-400"></i>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 flex-1">
+                            <div class="flex items-center space-x-2 p-2 bg-white rounded border border-gray-100">
+                                <span class="text-[11px] uppercase tracking-wide text-gray-500">Tela maior</span>
+                                <img src="${API_CONFIG.SERVER_URL}${banner.imageUrl}" class="w-24 h-12 object-cover rounded-md">
+                            </div>
+                            <div class="flex items-center space-x-2 p-2 bg-white rounded border border-gray-100">
+                                <span class="text-[11px] uppercase tracking-wide text-gray-500">Tela menor</span>
+                                <img src="${banner.mobileImageUrl ? `${API_CONFIG.SERVER_URL}${banner.mobileImageUrl}` : `${API_CONFIG.SERVER_URL}${banner.imageUrl}`}" class="w-24 h-12 object-cover rounded-md ${banner.mobileImageUrl ? '' : 'opacity-70'}">
+                            </div>
+                        </div>
+                        <span class="text-sm font-medium whitespace-nowrap">${banner.link}</span>
                     </div>
                     <button class="remove-banner-btn text-red-500 hover:text-red-700" data-id="${banner._id}">&times;</button>
                 `;
@@ -498,6 +677,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const token = loggedInUser?.token;
             await fetch(`${API_CONFIG.BASE_URL}/banners/${bannerId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
             loadBanners();
+            return;
+        }
+
+        const li = e.target.closest('li[data-id]');
+        if (!li) return;
+        const banner = cachedBanners.find(item => item._id === li.dataset.id);
+        if (banner) {
+            openBannerPreviewModal(banner);
         }
     });
 

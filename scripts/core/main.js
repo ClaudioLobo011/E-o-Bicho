@@ -829,6 +829,39 @@ function initializeAdminHeaderSearch() {
   });
 }
 
+const BANNER_SETTINGS_KEY = 'bannerDisplaySettings';
+
+const getBannerDisplaySettings = () => {
+    try {
+        return JSON.parse(localStorage.getItem(BANNER_SETTINGS_KEY)) || {};
+    } catch (error) {
+        console.warn('Não foi possível ler ajustes de banner salvos localmente.', error);
+        return {};
+    }
+};
+
+const resolveFitMode = (fitMode, scaleX, scaleY) => {
+    if (fitMode === 'cover' && (scaleX < 1 || scaleY < 1)) {
+        return 'contain';
+    }
+    return fitMode;
+};
+
+const applyBannerStyles = (imgElement, bannerId, settingsMap = null) => {
+    const settings = (settingsMap || getBannerDisplaySettings())[bannerId];
+    if (!imgElement || !settings) return;
+
+    const { fitMode = 'cover', positionX = 50, positionY = 50, zoom = 100, widthScale = 100, heightScale = 100 } = settings;
+    const baseScale = Math.max(50, zoom) / 100;
+    const scaleX = baseScale * (widthScale / 100);
+    const scaleY = baseScale * (heightScale / 100);
+    const effectiveFit = resolveFitMode(fitMode, scaleX, scaleY);
+    imgElement.style.objectFit = effectiveFit;
+    imgElement.style.objectPosition = `${positionX}% ${positionY}%`;
+    imgElement.style.transform = `scale(${scaleX}, ${scaleY})`;
+    imgElement.style.transformOrigin = `${positionX}% ${positionY}%`;
+};
+
 async function initializeCarousel() {
     const carousel = document.querySelector('#carousel');
     if (!carousel) return;
@@ -846,16 +879,24 @@ async function initializeCarousel() {
     try {
         const response = await fetch(`${API_CONFIG.BASE_URL}/banners`);
         const banners = await response.json();
+        const displaySettings = getBannerDisplaySettings();
 
         carouselContainer.innerHTML = ''; // Limpa o container de slides
         banners.forEach(banner => {
             const slide = document.createElement('div');
-            slide.className = 'slide flex-shrink-0';
+            slide.className = 'slide w-full h-full';
+            const desktopSrc = `${API_CONFIG.SERVER_URL}${banner.imageUrl}`;
+            const mobileSrc = banner.mobileImageUrl ? `${API_CONFIG.SERVER_URL}${banner.mobileImageUrl}` : '';
             slide.innerHTML = `
-                <a href="${banner.link}" class="block w-full h-full rounded-lg overflow-hidden">
-                    <img src="${API_CONFIG.SERVER_URL}${banner.imageUrl}" alt="${banner.title || 'Banner Promocional'}" class="w-full h-full object-cover">
+                <a href="${banner.link}" class="block w-full h-full">
+                    <picture class="block w-full h-full">
+                        ${mobileSrc ? `<source media="(max-width: 768px)" srcset="${mobileSrc}">` : ''}
+                        <img src="${desktopSrc}" alt="${banner.title || 'Banner Promocional'}" class="w-full h-full object-cover" loading="lazy" decoding="async">
+                    </picture>
                 </a>
             `;
+            const img = slide.querySelector('img');
+            applyBannerStyles(img, banner._id, displaySettings);
             carouselContainer.appendChild(slide);
         });
 
@@ -904,7 +945,7 @@ async function initializeCarousel() {
                 const progressBar = indicator.querySelector('.progress');
                 const barBg = indicator.querySelector('.bar-bg');
                 const dot = indicator.querySelector('.dot');
-                indicator.style.display = 'block'; // Garante que o indicador é visível
+                indicator.style.display = 'flex'; // Garante que o indicador é visível
                 const isActive = i === currentIndex;
                 indicator.classList.toggle('active', isActive);
 
@@ -957,6 +998,16 @@ async function initializeCarousel() {
         stopAutoPlay();
         movePrev();
         startAutoPlay();
+    });
+
+    indicators.forEach((indicator, index) => {
+        indicator.addEventListener('click', () => {
+            if (index >= N) return;
+            stopAutoPlay();
+            currentIndex = index;
+            updateCarouselState();
+            startAutoPlay();
+        });
     });
     
     // Inicia o carrossel

@@ -384,6 +384,9 @@
   .inset-0 {
     inset: calc(var(--spacing) * 0);
   }
+  .inset-2 {
+    inset: calc(var(--spacing) * 2);
+  }
   .inset-x-0 {
     inset-inline: calc(var(--spacing) * 0);
   }
@@ -1880,6 +1883,12 @@
   }
   .border-transparent {
     border-color: transparent;
+  }
+  .border-white\/60 {
+    border-color: color-mix(in srgb, #fff 60%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      border-color: color-mix(in oklab, var(--color-white) 60%, transparent);
+    }
   }
   .border-yellow-200 {
     border-color: var(--color-yellow-200);
@@ -5418,72 +5427,135 @@
   #category-nav.hide {
     transform: translateY(-100%);
   }
-  .slide {
-    height: calc(5/6 * 100%);
-    opacity: 60%;
-    transition-property: all;
-    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
-    transition-duration: var(--tw-duration, var(--default-transition-duration));
-    --tw-duration: 500ms;
-    transition-duration: 500ms;
-    --tw-ease: var(--ease-in-out);
-    transition-timing-function: var(--ease-in-out);
-  }
-  .slide.is-active {
-    height: 100%;
-    opacity: 100%;
-  }
-  .no-transition {
-    transition: none !important;
-  }
   #carousel {
+    --carousel-peek: clamp(14px, 6vw, 64px);
     position: relative;
-    height: 22rem;
+    width: 100%;
+    max-width: 1320px;
+    margin: 0 auto;
+    height: clamp(220px, 30vw, 440px);
+    border-radius: 1.25rem;
     overflow: hidden;
+    background: linear-gradient(180deg, #f8f9fb 0%, #eef2f7 100%);
+    box-shadow: 0 20px 40px -18px rgba(0, 0, 0, 0.25);
+    padding-inline: clamp(6px, 1.5vw, 16px);
   }
   .carousel-container {
     position: relative;
     width: 100%;
     height: 100%;
+    overflow: visible;
   }
-  .slide {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    margin: auto;
-    width: 80%;
+  #carousel picture, #carousel img {
+    width: 100%;
     height: 100%;
-    opacity: 0;
-    transition: transform 0.5s ease-in-out, opacity 0.5s ease-in-out;
+    display: block;
   }
-  .slide.slide-ativo {
-    transform: translateX(0);
+  #carousel .slide {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 78%;
+    height: 92%;
+    opacity: 0;
+    transform: translate(-50%, -50%) translateX(160%) scale(0.9);
+    transition: transform 0.65s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.65s ease, filter 0.6s ease;
+    transform-origin: center;
+    filter: saturate(0.92);
+    border-radius: 1rem;
+    overflow: hidden;
+  }
+  #carousel .slide.slide-ativo {
+    transform: translate(-50%, -50%) translateX(-50%) scale(1);
     opacity: 1;
     z-index: 10;
+    filter: saturate(1);
+    box-shadow: 0 16px 36px -22px rgba(0, 0, 0, 0.35);
   }
-  .slide.slide-anterior {
-    transform: translateX(-102%);
-    opacity: 1;
-    z-index: 5;
+  #carousel .slide.slide-anterior {
+    transform: translate(-50%, -50%) translateX(-122%) scale(0.94);
+    opacity: 0.97;
+    z-index: 6;
   }
-  .slide.slide-proximo {
-    transform: translateX(102%);
-    opacity: 1;
-    z-index: 5;
+  #carousel .slide.slide-proximo {
+    transform: translate(-50%, -50%) translateX(22%) scale(0.94);
+    opacity: 0.97;
+    z-index: 6;
   }
-  .slide.slide-escondido-esquerda {
-    transform: translateX(-210%);
+  #carousel .slide.slide-escondido-esquerda {
+    transform: translate(-50%, -50%) translateX(-248%) scale(0.86);
     opacity: 0;
     z-index: 1;
   }
-  .slide.slide-escondido-direita {
-    transform: translateX(210%);
+  #carousel .slide.slide-escondido-direita {
+    transform: translate(-50%, -50%) translateX(192%) scale(0.86);
     opacity: 0;
     z-index: 1;
   }
-  #prev, #next {
+  .carousel-nav {
+    color: var(--color-white);
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 46px;
+    height: 46px;
+    border-radius: 9999px;
+    background: rgba(0, 0, 0, 0.4);
+    display: grid;
+    place-items: center;
     z-index: 20;
+    transition: background-color 0.2s ease, transform 0.2s ease;
+  }
+  .carousel-nav:hover {
+    background: rgba(0, 0, 0, 0.55);
+    transform: translateY(-50%) scale(1.05);
+  }
+  #carousel-indicators {
+    z-index: 15;
+    padding: 0.35rem 0.75rem;
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(8px);
+    border-radius: 9999px;
+    box-shadow: 0 10px 26px -16px rgba(0, 0, 0, 0.3);
+  }
+  #carousel-indicators .indicator {
+    cursor: pointer;
+  }
+  @media (max-width: 1024px) {
+    #carousel {
+      height: clamp(200px, 38vw, 360px);
+      border-radius: 1rem;
+      --carousel-peek: clamp(10px, 5vw, 36px);
+    }
+  }
+  @media (max-width: 640px) {
+    #carousel {
+      height: clamp(170px, 58vw, 240px);
+      border-radius: 0.875rem;
+      padding-inline: 0;
+    }
+    .carousel-nav {
+      width: 40px;
+      height: 40px;
+      font-size: 0.9rem;
+    }
+    #carousel .slide {
+      width: 100%;
+      height: 100%;
+      top: 0;
+      transform: translateX(120%) scale(0.92);
+    }
+    #carousel .slide.slide-ativo {
+      transform: translateX(0) scale(1);
+    }
+    #carousel .slide.slide-anterior {
+      transform: translateX(-120%) scale(0.92);
+      opacity: 0;
+    }
+    #carousel .slide.slide-proximo {
+      transform: translateX(120%) scale(0.92);
+      opacity: 0;
+    }
   }
   @keyframes fillIndicator {
     from {
