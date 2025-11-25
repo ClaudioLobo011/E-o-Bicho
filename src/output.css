@@ -456,6 +456,9 @@
   .bottom-3 {
     bottom: calc(var(--spacing) * 3);
   }
+  .bottom-5 {
+    bottom: calc(var(--spacing) * 5);
+  }
   .left-0 {
     left: calc(var(--spacing) * 0);
   }
@@ -5363,14 +5366,6 @@
   }
   @keyframes fillIndicator {
     from {
-      width: 0;
-    }
-    to {
-      width: 40px;
-    }
-  }
-  @keyframes indicatorFill {
-    from {
       width: 0%;
     }
     to {
@@ -5382,44 +5377,52 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 10px;
-    height: 10px;
+    width: 44px;
+    height: 12px;
+    cursor: pointer;
   }
   .indicator .dot {
     display: block;
-    width: 10px;
-    height: 10px;
+    width: 8px;
+    height: 8px;
     border-radius: 9999px;
-    background: #d1d5db;
+    background: #cbd5e1;
+    box-shadow: 0 8px 18px -12px rgba(0, 0, 0, 0.6);
+    transition: transform 0.25s ease, background 0.25s ease;
   }
-  .indicator .pill {
+  .indicator .bar-bg {
     display: none;
-    width: 28px;
-    height: 10px;
+    width: 100%;
+    height: 6px;
     border-radius: 9999px;
-    background: #ffffff;
-    border: 1px solid #1f2937;
+    background: transparent;
     overflow: hidden;
+    position: relative;
   }
-  .indicator .fill {
-    display: block;
+  .indicator .progress {
+    position: absolute;
+    inset: 0;
     width: 0%;
     height: 100%;
-    background: var(--color-primary);
+    border-radius: inherit;
+    background: linear-gradient(90deg, #fbbf24 0%, #2563eb 100%);
     transform-origin: left center;
   }
   .indicator.active {
-    width: 28px;
-    height: 10px;
+    width: 44px;
   }
   .indicator.active .dot {
-    display: none !important;
+    display: none;
   }
-  .indicator.active .pill {
+  .indicator.active .bar-bg {
     display: block;
   }
-  .indicator.active .fill {
-    animation: indicatorFill 5s linear forwards;
+  .indicator.active .progress {
+    animation: fillIndicator 5s linear forwards;
+  }
+  .indicator:hover .dot {
+    background: #94a3b8;
+    transform: translateY(-1px);
   }
   html, body {
     overflow-x: hidden;
@@ -5434,35 +5437,34 @@
     right: 50%;
     margin-left: -50vw;
     margin-right: -50vw;
-    padding: clamp(8px, 1.8vw, 20px) 0;
-    background: linear-gradient(180deg, #f7f8fb 0%, #eef1f6 100%);
+    padding: clamp(10px, 2vw, 22px) 0;
+    background: linear-gradient(180deg, #f9fbff 0%, #eef3ff 100%);
     display: flex;
     justify-content: center;
   }
   .banner-viewport-inner {
     width: 100%;
-    max-width: none;
-    padding-inline: clamp(6px, 1.25vw, 18px);
+    max-width: 1480px;
+    padding-inline: clamp(10px, 1.5vw, 26px);
   }
   #carousel {
-    --carousel-peek: clamp(44px, 5vw, 78px);
-    --carousel-gap: clamp(10px, 1.75vw, 22px);
-    --carousel-guard: clamp(72px, 11vw, 186px);
-    --carousel-slide-width: min(1360px, calc(100vw - (var(--carousel-guard) * 2)));
-    --carousel-aspect-ratio: 1360 / 440;
-    --carousel-min-height: 240px;
-    --carousel-max-height: 460px;
-    --carousel-height: clamp(var(--carousel-min-height), 32vw, var(--carousel-max-height));
+    --carousel-peek: clamp(26px, 3.4vw, 52px);
+    --carousel-gap: clamp(12px, 1.5vw, 20px);
+    --carousel-guard: clamp(24px, 7vw, 160px);
+    --carousel-slide-width: min(1400px, calc(100vw - (var(--carousel-guard) * 2)));
+    --carousel-aspect-ratio: 1440 / 520;
+    --carousel-min-height: 260px;
+    --carousel-max-height: 520px;
+    --carousel-height: clamp(var(--carousel-min-height), 34vw, var(--carousel-max-height));
     position: relative;
     width: 100%;
     margin: 0 auto;
     height: var(--carousel-height);
     aspect-ratio: var(--carousel-aspect-ratio);
-    border-radius: 1.25rem;
+    border-radius: 1.5rem;
     overflow: visible;
-    background: linear-gradient(180deg, #f8f9fb 0%, #eef2f7 100%);
-    box-shadow: 0 20px 40px -18px rgba(0, 0, 0, 0.25);
-    padding-inline: clamp(2px, 0.6vw, 10px);
+    background: linear-gradient(180deg, #fdfefe 0%, #eef2f7 100%);
+    box-shadow: 0 18px 44px -26px rgba(0, 0, 0, 0.35);
   }
   .carousel-container {
     position: relative;
@@ -5479,10 +5481,10 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(180deg, #0f1624 0%, #0b101b 100%);
+    background: #f8fafc;
   }
   #carousel .slide img {
-    object-fit: contain;
+    object-fit: cover;
     object-position: center;
     max-width: 100%;
     max-height: 100%;
@@ -5492,14 +5494,15 @@
     top: 50%;
     left: 50%;
     width: var(--carousel-slide-width);
-    height: 92%;
+    height: 94%;
     opacity: 0;
-    transform: translate(-50%, -50%) translateX(calc(200% - var(--carousel-peek))) scale(0.92);
+    transform: translate(-50%, -50%) translateX(calc(200% - var(--carousel-peek))) scale(0.94);
     transition: transform 0.65s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.65s ease, filter 0.6s ease;
     transform-origin: center;
-    filter: saturate(0.92);
-    border-radius: 1rem;
+    filter: saturate(0.94);
+    border-radius: 1.25rem;
     overflow: hidden;
+    box-shadow: 0 16px 38px -28px rgba(0, 0, 0, 0.4);
   }
   #carousel .slide.slide-ativo {
     transform: translate(-50%, -50%) scale(1);
@@ -5529,62 +5532,48 @@
     z-index: 1;
   }
   .carousel-nav {
-    color: var(--color-white);
+    color: var(--color-primary);
     position: absolute;
-    top: 0;
-    height: 100%;
-    transform: none;
-    width: clamp(72px, calc((100vw - var(--carousel-slide-width)) / 2 + 68px), 220px);
-    border-radius: 0;
+    top: 50%;
+    height: clamp(46px, 4vw, 56px);
+    width: clamp(46px, 4vw, 56px);
+    border-radius: 9999px;
     display: flex;
     align-items: center;
+    justify-content: center;
     z-index: 20;
-    transition: transform 0.2s ease;
-    padding-inline: clamp(12px, 2vw, 32px);
-    isolation: isolate;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 12px 28px -18px rgba(0, 0, 0, 0.35);
+    transform: translateY(-50%);
   }
   .carousel-nav::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    opacity: 0.58;
-    transition: opacity 0.25s ease;
-    z-index: -1;
+    display: none;
   }
   .carousel-nav i {
-    font-size: 1.1rem;
-    filter: drop-shadow(0 4px 10px rgba(0,0,0,0.35));
+    font-size: 1.05rem;
+    filter: none;
   }
   .carousel-nav:hover {
-    transform: translateY(-1px);
-  }
-  .carousel-nav:hover::before {
-    opacity: 0.75;
+    transform: translateY(-50%) scale(1.03);
+    box-shadow: 0 16px 32px -18px rgba(0, 0, 0, 0.35);
+    background: #ffffff;
   }
   .carousel-nav-prev {
-    left: 0;
-    justify-content: flex-start;
-  }
-  .carousel-nav-prev::before {
-    background: linear-gradient(90deg, rgba(0, 0, 0, 0.55) 0%, rgba(0, 0, 0, 0) 88%);
+    left: clamp(10px, 2vw, 32px);
   }
   .carousel-nav-next {
-    right: 0;
-    justify-content: flex-end;
-  }
-  .carousel-nav-next::before {
-    background: linear-gradient(270deg, rgba(0, 0, 0, 0.55) 0%, rgba(0, 0, 0, 0) 88%);
+    right: clamp(10px, 2vw, 32px);
   }
   #carousel-indicators {
     z-index: 15;
-    padding: 0.35rem 0.75rem;
-    background: rgba(255, 255, 255, 0.72);
-    backdrop-filter: blur(8px);
+    padding: 0.5rem 0.9rem;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid #e5e7eb;
+    backdrop-filter: blur(10px);
     border-radius: 9999px;
-    box-shadow: 0 10px 26px -16px rgba(0, 0, 0, 0.3);
-  }
-  #carousel-indicators .indicator {
-    cursor: pointer;
+    box-shadow: 0 14px 28px -18px rgba(0, 0, 0, 0.35);
   }
   @media (max-width: 1024px) {
     .banner-viewport {
@@ -5599,20 +5588,18 @@
       padding-inline: 1.25rem;
     }
     #carousel {
-      --carousel-min-height: 200px;
-      --carousel-max-height: 360px;
-      border-radius: 1rem;
-      --carousel-peek: clamp(10px, 5vw, 36px);
+      --carousel-min-height: 220px;
+      --carousel-max-height: 420px;
+      --carousel-guard: clamp(14px, 6vw, 120px);
+      border-radius: 1.25rem;
+      --carousel-peek: clamp(16px, 5vw, 38px);
     }
     .carousel-nav {
-      width: 46px;
-      height: 46px;
-      top: 50%;
-      transform: translateY(-50%);
-      border-radius: 9999px;
-      background: rgba(0, 0, 0, 0.4);
-      justify-content: center;
-      padding: 0;
+      width: 44px;
+      height: 44px;
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid #e5e7eb;
+      box-shadow: 0 10px 22px -14px rgba(0, 0, 0, 0.3);
     }
     .carousel-nav::before {
       display: none;
@@ -5620,40 +5607,43 @@
   }
   @media (max-width: 640px) {
     #carousel {
-      --carousel-min-height: 170px;
-      --carousel-max-height: 240px;
+      --carousel-min-height: 190px;
+      --carousel-max-height: 320px;
+      --carousel-peek: clamp(12px, 5vw, 22px);
+      --carousel-gap: clamp(8px, 2.5vw, 14px);
       border-radius: 0.875rem;
       padding-inline: 0;
     }
     .carousel-nav {
       width: 40px;
       height: 40px;
+      box-shadow: 0 8px 16px -12px rgba(0, 0, 0, 0.28);
       font-size: 0.9rem;
     }
     #carousel .slide {
-      width: 100%;
-      height: 100%;
-      top: 0;
-      transform: translateX(120%) scale(0.92);
+      width: calc(100% - (var(--carousel-peek) * 2));
+      height: 95%;
+      top: 50%;
+      transform: translate(-50%, -50%) translateX(calc(200% - var(--carousel-peek))) scale(0.92);
     }
     #carousel .slide.slide-ativo {
-      transform: translateX(0) scale(1);
+      transform: translate(-50%, -50%) scale(1);
     }
     #carousel .slide.slide-anterior {
-      transform: translateX(-120%) scale(0.92);
-      opacity: 0;
+      transform: translate(-50%, -50%) translateX(calc(-100% + var(--carousel-peek) + var(--carousel-gap))) scale(0.9);
+      opacity: 0.9;
     }
     #carousel .slide.slide-proximo {
-      transform: translateX(120%) scale(0.92);
-      opacity: 0;
+      transform: translate(-50%, -50%) translateX(calc(100% - var(--carousel-peek) - var(--carousel-gap))) scale(0.9);
+      opacity: 0.9;
     }
   }
   @keyframes fillIndicator {
     from {
-      width: 0;
+      width: 0%;
     }
     to {
-      width: 40px;
+      width: 100%;
     }
   }
   .indicator .progress, .indicator .bar-bg {
