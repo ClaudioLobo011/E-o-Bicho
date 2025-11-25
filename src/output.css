@@ -5438,7 +5438,7 @@
   }
   #carousel {
     position: relative;
-    height: clamp(18rem, 35vw, 22rem);
+    height: clamp(16rem, 32vw, 20rem);
     overflow: hidden;
     width: 100%;
   }
