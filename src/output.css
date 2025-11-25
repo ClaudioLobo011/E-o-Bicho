@@ -5448,10 +5448,15 @@
     --carousel-peek: clamp(32px, 6vw, 120px);
     --carousel-guard: clamp(88px, 12vw, 180px);
     --carousel-slide-width: min(1160px, calc(100vw - (var(--carousel-guard) * 2)));
+    --carousel-aspect-ratio: 1360 / 440;
+    --carousel-min-height: 220px;
+    --carousel-max-height: 460px;
+    --carousel-height: clamp(var(--carousel-min-height), 30vw, var(--carousel-max-height));
     position: relative;
     width: 100%;
     margin: 0 auto;
-    height: clamp(220px, 30vw, 460px);
+    height: var(--carousel-height);
+    aspect-ratio: var(--carousel-aspect-ratio);
     border-radius: 1.25rem;
     overflow: visible;
     background: linear-gradient(180deg, #f8f9fb 0%, #eef2f7 100%);
@@ -5593,7 +5598,8 @@
       padding-inline: 1.25rem;
     }
     #carousel {
-      height: clamp(200px, 38vw, 360px);
+      --carousel-min-height: 200px;
+      --carousel-max-height: 360px;
       border-radius: 1rem;
       --carousel-peek: clamp(10px, 5vw, 36px);
     }
@@ -5613,7 +5619,8 @@
   }
   @media (max-width: 640px) {
     #carousel {
-      height: clamp(170px, 58vw, 240px);
+      --carousel-min-height: 170px;
+      --carousel-max-height: 240px;
       border-radius: 0.875rem;
       padding-inline: 0;
     }

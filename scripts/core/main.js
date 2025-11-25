@@ -870,6 +870,7 @@ async function initializeCarousel() {
     const indicators = Array.from(document.querySelectorAll('.indicator')); // Convertido para Array
     const prevButton = document.getElementById('prev');
     const nextButton = document.getElementById('next');
+    let bannerAspectRatio = null;
 
     if (!carouselContainer || !prevButton || !nextButton) {
         console.warn('Elementos essenciais do carrossel (container, botões) não encontrados.');
@@ -897,6 +898,26 @@ async function initializeCarousel() {
             `;
             const img = slide.querySelector('img');
             applyBannerStyles(img, banner._id, displaySettings);
+            const setAspectFromImage = () => {
+                if (!img?.naturalWidth || !img?.naturalHeight) return;
+                bannerAspectRatio = img.naturalWidth / img.naturalHeight;
+                carousel.style.setProperty('--carousel-aspect-ratio', `${img.naturalWidth} / ${img.naturalHeight}`);
+
+                const styles = getComputedStyle(carousel);
+                const minHeight = parseFloat(styles.getPropertyValue('--carousel-min-height')) || 0;
+                const maxHeight = parseFloat(styles.getPropertyValue('--carousel-max-height')) || Number.POSITIVE_INFINITY;
+                const targetHeight = carousel.clientWidth ? carousel.clientWidth / bannerAspectRatio : 0;
+                if (targetHeight > 0) {
+                    const boundedHeight = Math.min(Math.max(targetHeight, minHeight), maxHeight);
+                    carousel.style.setProperty('--carousel-height', `${boundedHeight}px`);
+                }
+            };
+
+            if (img?.complete && img.naturalWidth && img.naturalHeight) {
+                setAspectFromImage();
+            } else if (img) {
+                img.addEventListener('load', setAspectFromImage, { once: true });
+            }
             carouselContainer.appendChild(slide);
         });
 
@@ -905,6 +926,18 @@ async function initializeCarousel() {
         carouselContainer.innerHTML = '<p class="text-center text-white font-semibold">Não foi possível carregar os banners no momento.</p>';
         return; // Interrompe a execução se não conseguir carregar os banners
     }
+
+    const updateHeightOnResize = () => {
+        if (!bannerAspectRatio) return;
+        const styles = getComputedStyle(carousel);
+        const minHeight = parseFloat(styles.getPropertyValue('--carousel-min-height')) || 0;
+        const maxHeight = parseFloat(styles.getPropertyValue('--carousel-max-height')) || Number.POSITIVE_INFINITY;
+        const targetHeight = carousel.clientWidth ? carousel.clientWidth / bannerAspectRatio : 0;
+        if (targetHeight > 0) {
+            const boundedHeight = Math.min(Math.max(targetHeight, minHeight), maxHeight);
+            carousel.style.setProperty('--carousel-height', `${boundedHeight}px`);
+        }
+    };
 
     const slides = Array.from(carousel.querySelectorAll('.slide'));
 
@@ -987,6 +1020,8 @@ async function initializeCarousel() {
     function stopAutoPlay() {
         clearInterval(autoPlayInterval);
     }
+
+    window.addEventListener('resize', updateHeightOnResize);
 
     nextButton.addEventListener('click', () => {
         stopAutoPlay();
