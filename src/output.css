@@ -384,6 +384,9 @@
   .inset-0 {
     inset: calc(var(--spacing) * 0);
   }
+  .inset-2 {
+    inset: calc(var(--spacing) * 2);
+  }
   .inset-x-0 {
     inset-inline: calc(var(--spacing) * 0);
   }
@@ -1880,6 +1883,12 @@
   }
   .border-transparent {
     border-color: transparent;
+  }
+  .border-white\/60 {
+    border-color: color-mix(in srgb, #fff 60%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      border-color: color-mix(in oklab, var(--color-white) 60%, transparent);
+    }
   }
   .border-yellow-200 {
     border-color: var(--color-yellow-200);
@@ -5418,72 +5427,104 @@
   #category-nav.hide {
     transform: translateY(-100%);
   }
-  .slide {
-    height: calc(5/6 * 100%);
-    opacity: 60%;
-    transition-property: all;
-    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
-    transition-duration: var(--tw-duration, var(--default-transition-duration));
-    --tw-duration: 500ms;
-    transition-duration: 500ms;
-    --tw-ease: var(--ease-in-out);
-    transition-timing-function: var(--ease-in-out);
-  }
-  .slide.is-active {
-    height: 100%;
-    opacity: 100%;
-  }
-  .no-transition {
-    transition: none !important;
-  }
   #carousel {
     position: relative;
-    height: 22rem;
+    width: 100%;
+    max-width: 1320px;
+    margin: 0 auto;
+    height: clamp(220px, 30vw, 440px);
+    border-radius: 1.25rem;
     overflow: hidden;
+    background: linear-gradient(180deg, #f8f9fb 0%, #eef2f7 100%);
+    box-shadow: 0 20px 40px -18px rgba(0, 0, 0, 0.25);
   }
   .carousel-container {
     position: relative;
     width: 100%;
     height: 100%;
   }
-  .slide {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    margin: auto;
-    width: 80%;
+  #carousel picture, #carousel img {
+    width: 100%;
     height: 100%;
-    opacity: 0;
-    transition: transform 0.5s ease-in-out, opacity 0.5s ease-in-out;
+    display: block;
   }
-  .slide.slide-ativo {
+  #carousel .slide {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transform: translateX(100%);
+    transition: transform 0.6s ease, opacity 0.6s ease;
+  }
+  #carousel .slide.slide-ativo {
     transform: translateX(0);
     opacity: 1;
     z-index: 10;
   }
-  .slide.slide-anterior {
-    transform: translateX(-102%);
+  #carousel .slide.slide-anterior {
+    transform: translateX(-100%);
     opacity: 1;
     z-index: 5;
   }
-  .slide.slide-proximo {
-    transform: translateX(102%);
+  #carousel .slide.slide-proximo {
+    transform: translateX(100%);
     opacity: 1;
     z-index: 5;
   }
-  .slide.slide-escondido-esquerda {
-    transform: translateX(-210%);
+  #carousel .slide.slide-escondido-esquerda {
+    transform: translateX(-120%);
     opacity: 0;
     z-index: 1;
   }
-  .slide.slide-escondido-direita {
-    transform: translateX(210%);
+  #carousel .slide.slide-escondido-direita {
+    transform: translateX(120%);
     opacity: 0;
     z-index: 1;
   }
-  #prev, #next {
+  .carousel-nav {
+    color: var(--color-white);
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 46px;
+    height: 46px;
+    border-radius: 9999px;
+    background: rgba(0, 0, 0, 0.4);
+    display: grid;
+    place-items: center;
     z-index: 20;
+    transition: background-color 0.2s ease, transform 0.2s ease;
+  }
+  .carousel-nav:hover {
+    background: rgba(0, 0, 0, 0.55);
+    transform: translateY(-50%) scale(1.05);
+  }
+  #carousel-indicators {
+    z-index: 15;
+    padding: 0.35rem 0.75rem;
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(8px);
+    border-radius: 9999px;
+    box-shadow: 0 10px 26px -16px rgba(0, 0, 0, 0.3);
+  }
+  #carousel-indicators .indicator {
+    cursor: pointer;
+  }
+  @media (max-width: 1024px) {
+    #carousel {
+      height: clamp(200px, 38vw, 360px);
+      border-radius: 1rem;
+    }
+  }
+  @media (max-width: 640px) {
+    #carousel {
+      height: clamp(170px, 58vw, 240px);
+      border-radius: 0.875rem;
+    }
+    .carousel-nav {
+      width: 40px;
+      height: 40px;
+      font-size: 0.9rem;
+    }
   }
   @keyframes fillIndicator {
     from {

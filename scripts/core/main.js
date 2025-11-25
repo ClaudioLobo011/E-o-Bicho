@@ -884,14 +884,14 @@ async function initializeCarousel() {
         carouselContainer.innerHTML = ''; // Limpa o container de slides
         banners.forEach(banner => {
             const slide = document.createElement('div');
-            slide.className = 'slide flex-shrink-0';
+            slide.className = 'slide w-full h-full';
             const desktopSrc = `${API_CONFIG.SERVER_URL}${banner.imageUrl}`;
             const mobileSrc = banner.mobileImageUrl ? `${API_CONFIG.SERVER_URL}${banner.mobileImageUrl}` : '';
             slide.innerHTML = `
-                <a href="${banner.link}" class="block w-full h-full rounded-lg overflow-hidden">
+                <a href="${banner.link}" class="block w-full h-full">
                     <picture class="block w-full h-full">
                         ${mobileSrc ? `<source media="(max-width: 768px)" srcset="${mobileSrc}">` : ''}
-                        <img src="${desktopSrc}" alt="${banner.title || 'Banner Promocional'}" class="w-full h-full object-cover">
+                        <img src="${desktopSrc}" alt="${banner.title || 'Banner Promocional'}" class="w-full h-full object-cover" loading="lazy" decoding="async">
                     </picture>
                 </a>
             `;
@@ -945,7 +945,7 @@ async function initializeCarousel() {
                 const progressBar = indicator.querySelector('.progress');
                 const barBg = indicator.querySelector('.bar-bg');
                 const dot = indicator.querySelector('.dot');
-                indicator.style.display = 'block'; // Garante que o indicador é visível
+                indicator.style.display = 'flex'; // Garante que o indicador é visível
                 const isActive = i === currentIndex;
                 indicator.classList.toggle('active', isActive);
 
@@ -998,6 +998,16 @@ async function initializeCarousel() {
         stopAutoPlay();
         movePrev();
         startAutoPlay();
+    });
+
+    indicators.forEach((indicator, index) => {
+        indicator.addEventListener('click', () => {
+            if (index >= N) return;
+            stopAutoPlay();
+            currentIndex = index;
+            updateCarouselState();
+            startAutoPlay();
+        });
     });
     
     // Inicia o carrossel
