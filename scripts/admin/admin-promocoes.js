@@ -585,10 +585,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 li.className = 'flex items-center justify-between p-2 border rounded-md bg-gray-50 cursor-grab';
                 li.dataset.id = banner._id;
                 li.innerHTML = `
-                    <div class="flex items-center">
-                        <i class="fas fa-grip-vertical mr-3 text-gray-400"></i>
-                        <img src="${API_CONFIG.SERVER_URL}${banner.imageUrl}" class="w-24 h-12 object-cover rounded-md mr-4">
-                        <span class="text-sm font-medium">${banner.link}</span>
+                    <div class="flex items-center w-full space-x-3">
+                        <i class="fas fa-grip-vertical text-gray-400"></i>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 flex-1">
+                            <div class="flex items-center space-x-2 p-2 bg-white rounded border border-gray-100">
+                                <span class="text-[11px] uppercase tracking-wide text-gray-500">Tela maior</span>
+                                <img src="${API_CONFIG.SERVER_URL}${banner.imageUrl}" class="w-24 h-12 object-cover rounded-md">
+                            </div>
+                            <div class="flex items-center space-x-2 p-2 bg-white rounded border border-gray-100">
+                                <span class="text-[11px] uppercase tracking-wide text-gray-500">Tela menor</span>
+                                <img src="${banner.mobileImageUrl ? `${API_CONFIG.SERVER_URL}${banner.mobileImageUrl}` : `${API_CONFIG.SERVER_URL}${banner.imageUrl}`}" class="w-24 h-12 object-cover rounded-md ${banner.mobileImageUrl ? '' : 'opacity-70'}">
+                            </div>
+                        </div>
+                        <span class="text-sm font-medium whitespace-nowrap">${banner.link}</span>
                     </div>
                     <button class="remove-banner-btn text-red-500 hover:text-red-700" data-id="${banner._id}">&times;</button>
                 `;

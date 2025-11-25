@@ -36,15 +36,22 @@ router.post(
     '/',
     requireAuth,
     authorizeRoles('admin', 'admin_master'),
-    upload.single('bannerImage'),
+    upload.fields([
+        { name: 'bannerImage', maxCount: 1 },
+        { name: 'bannerImageMobile', maxCount: 1 }
+    ]),
     async (req, res) => {
         try {
-            if (!req.file) {
+            const desktopImage = req.files?.bannerImage?.[0];
+            const mobileImage = req.files?.bannerImageMobile?.[0];
+
+            if (!desktopImage) {
                 return res.status(400).json({ message: 'Nenhum ficheiro de imagem enviado.' });
             }
             const { title, subtitle, buttonText, link } = req.body;
             const newBanner = new Banner({
-                imageUrl: `/uploads/banners/${req.file.filename}`,
+                imageUrl: `/uploads/banners/${desktopImage.filename}`,
+                mobileImageUrl: mobileImage ? `/uploads/banners/${mobileImage.filename}` : '',
                 title,
                 subtitle,
                 buttonText,

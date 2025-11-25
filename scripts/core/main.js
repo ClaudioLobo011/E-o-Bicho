@@ -875,9 +875,14 @@ async function initializeCarousel() {
         banners.forEach(banner => {
             const slide = document.createElement('div');
             slide.className = 'slide flex-shrink-0';
+            const desktopSrc = `${API_CONFIG.SERVER_URL}${banner.imageUrl}`;
+            const mobileSrc = banner.mobileImageUrl ? `${API_CONFIG.SERVER_URL}${banner.mobileImageUrl}` : '';
             slide.innerHTML = `
                 <a href="${banner.link}" class="block w-full h-full rounded-lg overflow-hidden">
-                    <img src="${API_CONFIG.SERVER_URL}${banner.imageUrl}" alt="${banner.title || 'Banner Promocional'}" class="w-full h-full object-cover">
+                    <picture class="block w-full h-full">
+                        ${mobileSrc ? `<source media="(max-width: 768px)" srcset="${mobileSrc}">` : ''}
+                        <img src="${desktopSrc}" alt="${banner.title || 'Banner Promocional'}" class="w-full h-full object-cover">
+                    </picture>
                 </a>
             `;
             const img = slide.querySelector('img');

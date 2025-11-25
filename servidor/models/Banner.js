@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 
 const bannerSchema = new mongoose.Schema({
     imageUrl: { type: String, required: true },
+    mobileImageUrl: { type: String, default: '' },
     title: { type: String, default: '' },
     subtitle: { type: String, default: '' },
     buttonText: { type: String, default: '' },
