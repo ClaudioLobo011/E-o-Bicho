@@ -5445,8 +5445,9 @@
     padding-inline: clamp(6px, 1.25vw, 18px);
   }
   #carousel {
-    --carousel-peek: clamp(36px, 8vw, 160px);
-    --carousel-slide-width: min(1140px, 88vw);
+    --carousel-peek: clamp(32px, 6vw, 120px);
+    --carousel-guard: clamp(88px, 12vw, 180px);
+    --carousel-slide-width: min(1160px, calc(100vw - (var(--carousel-guard) * 2)));
     position: relative;
     width: 100%;
     margin: 0 auto;
@@ -5515,7 +5516,7 @@
     top: 0;
     height: 100%;
     transform: none;
-    width: clamp(72px, (100vw - 1160px) / 2 + 88px, 240px);
+    width: clamp(72px, calc((100vw - var(--carousel-slide-width)) / 2 + 78px), 240px);
     border-radius: 0;
     display: flex;
     align-items: center;
