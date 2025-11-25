@@ -141,14 +141,14 @@
     }
 
     /* Estilos para um carrossel 2D com deslize lateral e espaçamento CORRIGIDO */
-    #carousel {
-        position: relative;
-        height: clamp(18rem, 35vw, 22rem);
-        overflow: hidden;
-        width: 100%;
-        margin: 0 auto;
-        padding-inline: clamp(0.75rem, 3vw, 3.5rem);
-    }
+      #carousel {
+          position: relative;
+          height: clamp(18rem, 35vw, 22rem);
+          overflow: hidden;
+          width: 100%;
+          margin: 0 auto;
+          padding-inline: clamp(0.5rem, 2.5vw, 2.75rem);
+      }
 
     .carousel-container {
         position: relative;
@@ -156,18 +156,18 @@
         height: 100%;
     }
 
-    .slide {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        margin: auto;
-        width: 82%;
-        height: 100%;
-        opacity: 0;
-        transition: transform 0.5s ease-in-out,
-                    opacity 0.5s ease-in-out;
-    }
+      .slide {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          margin: auto;
+          width: 88%;
+          height: 100%;
+          opacity: 0;
+          transition: transform 0.5s ease-in-out,
+                      opacity 0.5s ease-in-out;
+      }
 
     .slide.slide-ativo {
         transform: translateX(0);
@@ -175,68 +175,68 @@
         z-index: 10;
     }
 
-    /* ########## INÍCIO DA CORREÇÃO DE ESPAÇAMENTO ########## */
+      /* ########## INÍCIO DA CORREÇÃO DE ESPAÇAMENTO ########## */
 
-    /* Estado: Anterior (visível à esquerda, com espaçamento) */
-    .slide.slide-anterior {
-        /* Valor aumentado para garantir o espaçamento */
-        transform: translateX(-102%);
-        opacity: 1;
-        z-index: 5;
-    }
+      /* Estado: Anterior (visível à esquerda, com espaçamento) */
+      .slide.slide-anterior {
+          /* Valor aumentado para garantir o espaçamento */
+          transform: translateX(-95%);
+          opacity: 1;
+          z-index: 5;
+      }
 
-    /* Estado: Próximo (visível à direita, com espaçamento) */
-    .slide.slide-proximo {
-        /* Valor aumentado para garantir o espaçamento */
-        transform: translateX(102%);
-        opacity: 1;
-        z-index: 5;
-    }
+      /* Estado: Próximo (visível à direita, com espaçamento) */
+      .slide.slide-proximo {
+          /* Valor aumentado para garantir o espaçamento */
+          transform: translateX(95%);
+          opacity: 1;
+          z-index: 5;
+      }
 
-    /* Posição dos slides escondidos ajustada para a nova distância */
-    .slide.slide-escondido-esquerda {
-        transform: translateX(-210%);
-        opacity: 0;
-        z-index: 1;
-    }
+      /* Posição dos slides escondidos ajustada para a nova distância */
+      .slide.slide-escondido-esquerda {
+          transform: translateX(-190%);
+          opacity: 0;
+          z-index: 1;
+      }
 
-    /* Posição dos slides escondidos ajustada para a nova distância */
-    .slide.slide-escondido-direita {
-        transform: translateX(210%);
-        opacity: 0;
-        z-index: 1;
-    }
+      /* Posição dos slides escondidos ajustada para a nova distância */
+      .slide.slide-escondido-direita {
+          transform: translateX(190%);
+          opacity: 0;
+          z-index: 1;
+      }
     #prev, #next {
         z-index: 20;
     }
 
-    /* Ajustes responsivos para preservar o layout em telas menores */
-    @media (max-width: 1024px) {
-        #carousel {
-            height: clamp(14rem, 42vw, 18rem);
-            padding-inline: 1rem;
-        }
+      /* Ajustes responsivos para preservar o layout em telas menores */
+      @media (max-width: 1024px) {
+          #carousel {
+              height: clamp(14rem, 42vw, 18rem);
+              padding-inline: 1rem;
+          }
 
-        .slide {
-            width: 88%;
-        }
+          .slide {
+              width: 92%;
+          }
 
-        .slide.slide-anterior {
-            transform: translateX(-94%);
-        }
+          .slide.slide-anterior {
+              transform: translateX(-98%);
+          }
 
-        .slide.slide-proximo {
-            transform: translateX(94%);
-        }
+          .slide.slide-proximo {
+              transform: translateX(98%);
+          }
 
-        .slide.slide-escondido-esquerda {
-            transform: translateX(-190%);
-        }
+          .slide.slide-escondido-esquerda {
+              transform: translateX(-196%);
+          }
 
-        .slide.slide-escondido-direita {
-            transform: translateX(190%);
-        }
-    }
+          .slide.slide-escondido-direita {
+              transform: translateX(196%);
+          }
+      }
 
     @media (max-width: 640px) {
         #carousel {

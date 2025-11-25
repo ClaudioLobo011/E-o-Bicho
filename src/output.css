@@ -5442,7 +5442,7 @@
     overflow: hidden;
     width: 100%;
     margin: 0 auto;
-    padding-inline: clamp(0.75rem, 3vw, 3.5rem);
+    padding-inline: clamp(0.5rem, 2.5vw, 2.75rem);
   }
   .carousel-container {
     position: relative;
@@ -5455,7 +5455,7 @@
     left: 0;
     right: 0;
     margin: auto;
-    width: 82%;
+    width: 88%;
     height: 100%;
     opacity: 0;
     transition: transform 0.5s ease-in-out, opacity 0.5s ease-in-out;
@@ -5466,22 +5466,22 @@
     z-index: 10;
   }
   .slide.slide-anterior {
-    transform: translateX(-102%);
+    transform: translateX(-95%);
     opacity: 1;
     z-index: 5;
   }
   .slide.slide-proximo {
-    transform: translateX(102%);
+    transform: translateX(95%);
     opacity: 1;
     z-index: 5;
   }
   .slide.slide-escondido-esquerda {
-    transform: translateX(-210%);
+    transform: translateX(-190%);
     opacity: 0;
     z-index: 1;
   }
   .slide.slide-escondido-direita {
-    transform: translateX(210%);
+    transform: translateX(190%);
     opacity: 0;
     z-index: 1;
   }
@@ -5494,19 +5494,19 @@
       padding-inline: 1rem;
     }
     .slide {
-      width: 88%;
+      width: 92%;
     }
     .slide.slide-anterior {
-      transform: translateX(-94%);
+      transform: translateX(-98%);
     }
     .slide.slide-proximo {
-      transform: translateX(94%);
+      transform: translateX(98%);
     }
     .slide.slide-escondido-esquerda {
-      transform: translateX(-190%);
+      transform: translateX(-196%);
     }
     .slide.slide-escondido-direita {
-      transform: translateX(190%);
+      transform: translateX(196%);
     }
   }
   @media (max-width: 640px) {
