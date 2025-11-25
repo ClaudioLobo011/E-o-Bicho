@@ -5438,9 +5438,8 @@
   }
   #carousel {
     position: relative;
-    height: clamp(16rem, 32vw, 20rem);
+    height: 22rem;
     overflow: hidden;
-    width: 100%;
   }
   .carousel-container {
     position: relative;
@@ -5453,7 +5452,7 @@
     left: 0;
     right: 0;
     margin: auto;
-    width: 100%;
+    width: 80%;
     height: 100%;
     opacity: 0;
     transition: transform 0.5s ease-in-out, opacity 0.5s ease-in-out;
@@ -5464,79 +5463,27 @@
     z-index: 10;
   }
   .slide.slide-anterior {
-    transform: translateX(-100%);
+    transform: translateX(-102%);
     opacity: 1;
     z-index: 5;
   }
   .slide.slide-proximo {
-    transform: translateX(100%);
+    transform: translateX(102%);
     opacity: 1;
     z-index: 5;
   }
   .slide.slide-escondido-esquerda {
-    transform: translateX(-200%);
+    transform: translateX(-210%);
     opacity: 0;
     z-index: 1;
   }
   .slide.slide-escondido-direita {
-    transform: translateX(200%);
+    transform: translateX(210%);
     opacity: 0;
     z-index: 1;
   }
   #prev, #next {
     z-index: 20;
-  }
-  @media (max-width: 1024px) {
-    #carousel {
-      height: clamp(14rem, 42vw, 18rem);
-      padding: 0 1rem;
-    }
-    .slide {
-      width: 88%;
-    }
-    .slide.slide-anterior {
-      transform: translateX(-94%);
-    }
-    .slide.slide-proximo {
-      transform: translateX(94%);
-    }
-    .slide.slide-escondido-esquerda {
-      transform: translateX(-190%);
-    }
-    .slide.slide-escondido-direita {
-      transform: translateX(190%);
-    }
-  }
-  @media (max-width: 640px) {
-    #carousel {
-      height: clamp(11rem, 58vw, 15rem);
-    }
-    .carousel-container {
-      border-radius: 1rem;
-    }
-    .slide {
-      width: 100%;
-      padding: 0 0.5rem;
-    }
-    .slide.slide-anterior {
-      transform: translateX(-105%);
-    }
-    .slide.slide-proximo {
-      transform: translateX(105%);
-    }
-    .slide.slide-escondido-esquerda {
-      transform: translateX(-210%);
-    }
-    .slide.slide-escondido-direita {
-      transform: translateX(210%);
-    }
-    #prev, #next {
-      top: auto;
-      bottom: 1rem;
-      transform: none;
-      width: 2.75rem;
-      height: 2.75rem;
-    }
   }
   @keyframes fillIndicator {
     from {
