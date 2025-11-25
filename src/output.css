@@ -5440,8 +5440,7 @@
     position: relative;
     height: clamp(18rem, 35vw, 22rem);
     overflow: hidden;
-    max-width: 1200px;
-    margin: 0 auto;
+    width: 100%;
   }
   .carousel-container {
     position: relative;
@@ -5454,7 +5453,7 @@
     left: 0;
     right: 0;
     margin: auto;
-    width: 82%;
+    width: 100%;
     height: 100%;
     opacity: 0;
     transition: transform 0.5s ease-in-out, opacity 0.5s ease-in-out;
@@ -5465,22 +5464,22 @@
     z-index: 10;
   }
   .slide.slide-anterior {
-    transform: translateX(-102%);
+    transform: translateX(-100%);
     opacity: 1;
     z-index: 5;
   }
   .slide.slide-proximo {
-    transform: translateX(102%);
+    transform: translateX(100%);
     opacity: 1;
     z-index: 5;
   }
   .slide.slide-escondido-esquerda {
-    transform: translateX(-210%);
+    transform: translateX(-200%);
     opacity: 0;
     z-index: 1;
   }
   .slide.slide-escondido-direita {
-    transform: translateX(210%);
+    transform: translateX(200%);
     opacity: 0;
     z-index: 1;
   }
