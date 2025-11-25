@@ -853,7 +853,7 @@ async function initializeCarousel() {
             slide.className = 'slide flex-shrink-0';
             slide.innerHTML = `
                 <a href="${banner.link}" class="block w-full h-full rounded-lg overflow-hidden">
-                    <img src="${API_CONFIG.SERVER_URL}${banner.imageUrl}" alt="${banner.title || 'Banner Promocional'}" class="w-full h-full object-contain">
+                    <img src="${API_CONFIG.SERVER_URL}${banner.imageUrl}" alt="${banner.title || 'Banner Promocional'}" class="w-full h-full object-cover">
                 </a>
             `;
             carouselContainer.appendChild(slide);
