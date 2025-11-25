@@ -829,6 +829,29 @@ function initializeAdminHeaderSearch() {
   });
 }
 
+const BANNER_SETTINGS_KEY = 'bannerDisplaySettings';
+
+const getBannerDisplaySettings = () => {
+    try {
+        return JSON.parse(localStorage.getItem(BANNER_SETTINGS_KEY)) || {};
+    } catch (error) {
+        console.warn('Não foi possível ler ajustes de banner salvos localmente.', error);
+        return {};
+    }
+};
+
+const applyBannerStyles = (imgElement, bannerId, settingsMap = null) => {
+    const settings = (settingsMap || getBannerDisplaySettings())[bannerId];
+    if (!imgElement || !settings) return;
+
+    const { fitMode = 'cover', positionX = 50, positionY = 50, zoom = 100 } = settings;
+    const scale = Math.max(50, zoom) / 100;
+    imgElement.style.objectFit = fitMode;
+    imgElement.style.objectPosition = `${positionX}% ${positionY}%`;
+    imgElement.style.transform = `scale(${scale})`;
+    imgElement.style.transformOrigin = `${positionX}% ${positionY}%`;
+};
+
 async function initializeCarousel() {
     const carousel = document.querySelector('#carousel');
     if (!carousel) return;
@@ -846,6 +869,7 @@ async function initializeCarousel() {
     try {
         const response = await fetch(`${API_CONFIG.BASE_URL}/banners`);
         const banners = await response.json();
+        const displaySettings = getBannerDisplaySettings();
 
         carouselContainer.innerHTML = ''; // Limpa o container de slides
         banners.forEach(banner => {
@@ -856,6 +880,8 @@ async function initializeCarousel() {
                     <img src="${API_CONFIG.SERVER_URL}${banner.imageUrl}" alt="${banner.title || 'Banner Promocional'}" class="w-full h-full object-cover">
                 </a>
             `;
+            const img = slide.querySelector('img');
+            applyBannerStyles(img, banner._id, displaySettings);
             carouselContainer.appendChild(slide);
         });
 
