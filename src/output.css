@@ -5473,7 +5473,7 @@
     width: 78%;
     height: 92%;
     opacity: 0;
-    transform: translate(-50%, -50%) translateX(160%) scale(0.9);
+    transform: translate(-50%, -50%) translateX(200%) scale(0.9);
     transition: transform 0.65s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.65s ease, filter 0.6s ease;
     transform-origin: center;
     filter: saturate(0.92);
@@ -5481,29 +5481,29 @@
     overflow: hidden;
   }
   #carousel .slide.slide-ativo {
-    transform: translate(-50%, -50%) translateX(-50%) scale(1);
+    transform: translate(-50%, -50%) scale(1);
     opacity: 1;
     z-index: 10;
     filter: saturate(1);
     box-shadow: 0 16px 36px -22px rgba(0, 0, 0, 0.35);
   }
   #carousel .slide.slide-anterior {
-    transform: translate(-50%, -50%) translateX(-122%) scale(0.94);
-    opacity: 0.97;
-    z-index: 6;
+    transform: translate(-50%, -50%) translateX(-92%) scale(0.94);
+    opacity: 0.98;
+    z-index: 7;
   }
   #carousel .slide.slide-proximo {
-    transform: translate(-50%, -50%) translateX(22%) scale(0.94);
-    opacity: 0.97;
-    z-index: 6;
+    transform: translate(-50%, -50%) translateX(92%) scale(0.94);
+    opacity: 0.98;
+    z-index: 7;
   }
   #carousel .slide.slide-escondido-esquerda {
-    transform: translate(-50%, -50%) translateX(-248%) scale(0.86);
+    transform: translate(-50%, -50%) translateX(-208%) scale(0.86);
     opacity: 0;
     z-index: 1;
   }
   #carousel .slide.slide-escondido-direita {
-    transform: translate(-50%, -50%) translateX(192%) scale(0.86);
+    transform: translate(-50%, -50%) translateX(208%) scale(0.86);
     opacity: 0;
     z-index: 1;
   }
