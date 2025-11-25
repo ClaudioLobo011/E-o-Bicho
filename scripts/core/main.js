@@ -891,7 +891,7 @@ async function initializeCarousel() {
                 <a href="${banner.link}" class="block w-full h-full">
                     <picture class="block w-full h-full">
                         ${mobileSrc ? `<source media="(max-width: 768px)" srcset="${mobileSrc}">` : ''}
-                        <img src="${desktopSrc}" alt="${banner.title || 'Banner Promocional'}" class="w-full h-full object-cover" loading="lazy" decoding="async">
+                        <img src="${desktopSrc}" alt="${banner.title || 'Banner Promocional'}" class="w-full h-full object-contain" loading="lazy" decoding="async">
                     </picture>
                 </a>
             `;
