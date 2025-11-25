@@ -840,6 +840,13 @@ const getBannerDisplaySettings = () => {
     }
 };
 
+const resolveFitMode = (fitMode, scaleX, scaleY) => {
+    if (fitMode === 'cover' && (scaleX < 1 || scaleY < 1)) {
+        return 'contain';
+    }
+    return fitMode;
+};
+
 const applyBannerStyles = (imgElement, bannerId, settingsMap = null) => {
     const settings = (settingsMap || getBannerDisplaySettings())[bannerId];
     if (!imgElement || !settings) return;
@@ -848,7 +855,8 @@ const applyBannerStyles = (imgElement, bannerId, settingsMap = null) => {
     const baseScale = Math.max(50, zoom) / 100;
     const scaleX = baseScale * (widthScale / 100);
     const scaleY = baseScale * (heightScale / 100);
-    imgElement.style.objectFit = fitMode;
+    const effectiveFit = resolveFitMode(fitMode, scaleX, scaleY);
+    imgElement.style.objectFit = effectiveFit;
     imgElement.style.objectPosition = `${positionX}% ${positionY}%`;
     imgElement.style.transform = `scale(${scaleX}, ${scaleY})`;
     imgElement.style.transformOrigin = `${positionX}% ${positionY}%`;

@@ -462,6 +462,13 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem(BANNER_SETTINGS_KEY, JSON.stringify(settings));
     };
 
+    const resolveFitMode = (fitMode, scaleX, scaleY) => {
+        if (fitMode === 'cover' && (scaleX < 1 || scaleY < 1)) {
+            return 'contain';
+        }
+        return fitMode;
+    };
+
     const applyPreviewStyles = (imgEl, settings) => {
         if (!imgEl) return;
         const {
@@ -475,7 +482,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const baseScale = Math.max(50, zoom) / 100;
         const scaleX = baseScale * (widthScale / 100);
         const scaleY = baseScale * (heightScale / 100);
-        imgEl.style.objectFit = fitMode;
+        const effectiveFit = resolveFitMode(fitMode, scaleX, scaleY);
+        imgEl.style.objectFit = effectiveFit;
         imgEl.style.objectPosition = `${positionX}% ${positionY}%`;
         imgEl.style.transform = `scale(${scaleX}, ${scaleY})`;
         imgEl.style.transformOrigin = `${positionX}% ${positionY}%`;
@@ -499,7 +507,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="p-4 border-b flex items-center justify-between">
                     <div>
                         <h3 class="text-lg font-semibold text-gray-800">Pré-visualização do Banner</h3>
-                        <p class="text-sm text-gray-500">Ajuste o enquadramento para o espaço do carrossel da página inicial.</p>
+                        <p class="text-sm text-gray-500">Ajuste o enquadramento para o espaço do carrossel da página inicial. Em "Preencher", reduza zoom ou largura/altura para visualizar a imagem inteira sem cortes.</p>
                     </div>
                     <button class="text-gray-500 hover:text-gray-700" id="close-banner-preview">&times;</button>
                 </div>
@@ -519,7 +527,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         </label>
                         <label class="text-sm text-gray-700 flex flex-col space-y-2">
                             <span>Zoom (<span id="zoom-value">${settings.zoom}%</span>)</span>
-                            <input type="range" id="zoom-range" min="80" max="160" value="${settings.zoom}" class="w-full">
+                            <input type="range" id="zoom-range" min="50" max="160" value="${settings.zoom}" class="w-full">
                         </label>
                         <label class="text-sm text-gray-700 flex flex-col space-y-2">
                             <span>Largura exibida (<span id="width-scale-value">${settings.widthScale}%</span>)</span>
