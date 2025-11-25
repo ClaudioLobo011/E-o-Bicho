@@ -152,13 +152,14 @@
 
     /* Carrossel principal - alinhado com a experiência responsiva do site da Petz */
     #carousel {
-        --carousel-peek: clamp(32px, 6vw, 120px);
-        --carousel-guard: clamp(88px, 12vw, 180px);
-        --carousel-slide-width: min(1160px, calc(100vw - (var(--carousel-guard) * 2)));
+        --carousel-peek: clamp(44px, 5vw, 78px);
+        --carousel-gap: clamp(10px, 1.75vw, 22px);
+        --carousel-guard: clamp(72px, 11vw, 186px);
+        --carousel-slide-width: min(1360px, calc(100vw - (var(--carousel-guard) * 2)));
         --carousel-aspect-ratio: 1360 / 440;
-        --carousel-min-height: 220px;
+        --carousel-min-height: 240px;
         --carousel-max-height: 460px;
-        --carousel-height: clamp(var(--carousel-min-height), 30vw, var(--carousel-max-height));
+        --carousel-height: clamp(var(--carousel-min-height), 32vw, var(--carousel-max-height));
         position: relative;
         width: 100%;
         margin: 0 auto;
@@ -223,25 +224,25 @@
     }
 
     #carousel .slide.slide-anterior {
-        transform: translate(-50%, -50%) translateX(calc(-100% + var(--carousel-peek))) scale(0.9);
+        transform: translate(-50%, -50%) translateX(calc(-100% + var(--carousel-peek) + var(--carousel-gap))) scale(0.9);
         opacity: 0.85;
         z-index: 7;
     }
 
     #carousel .slide.slide-proximo {
-        transform: translate(-50%, -50%) translateX(calc(100% - var(--carousel-peek))) scale(0.9);
+        transform: translate(-50%, -50%) translateX(calc(100% - var(--carousel-peek) - var(--carousel-gap))) scale(0.9);
         opacity: 0.85;
         z-index: 7;
     }
 
     #carousel .slide.slide-escondido-esquerda {
-        transform: translate(-50%, -50%) translateX(calc(-200% + var(--carousel-peek))) scale(0.86);
+        transform: translate(-50%, -50%) translateX(calc(-200% + var(--carousel-peek) + var(--carousel-gap))) scale(0.86);
         opacity: 0;
         z-index: 1;
     }
 
     #carousel .slide.slide-escondido-direita {
-        transform: translate(-50%, -50%) translateX(calc(200% - var(--carousel-peek))) scale(0.86);
+        transform: translate(-50%, -50%) translateX(calc(200% - var(--carousel-peek) - var(--carousel-gap))) scale(0.86);
         opacity: 0;
         z-index: 1;
     }
@@ -252,7 +253,7 @@
         top: 0;
         height: 100%;
         transform: none;
-        width: clamp(72px, calc((100vw - var(--carousel-slide-width)) / 2 + 78px), 240px);
+        width: clamp(72px, calc((100vw - var(--carousel-slide-width)) / 2 + 68px), 220px);
         border-radius: 0;
         display: flex;
         align-items: center;

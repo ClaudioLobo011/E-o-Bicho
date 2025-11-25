@@ -904,9 +904,11 @@ async function initializeCarousel() {
                 carousel.style.setProperty('--carousel-aspect-ratio', `${img.naturalWidth} / ${img.naturalHeight}`);
 
                 const styles = getComputedStyle(carousel);
+                const slideWidth = parseFloat(styles.getPropertyValue('--carousel-slide-width')) || carousel.clientWidth;
                 const minHeight = parseFloat(styles.getPropertyValue('--carousel-min-height')) || 0;
                 const maxHeight = parseFloat(styles.getPropertyValue('--carousel-max-height')) || Number.POSITIVE_INFINITY;
-                const targetHeight = carousel.clientWidth ? carousel.clientWidth / bannerAspectRatio : 0;
+                const baseWidth = Math.min(carousel.clientWidth, slideWidth);
+                const targetHeight = baseWidth ? baseWidth / bannerAspectRatio : 0;
                 if (targetHeight > 0) {
                     const boundedHeight = Math.min(Math.max(targetHeight, minHeight), maxHeight);
                     carousel.style.setProperty('--carousel-height', `${boundedHeight}px`);
@@ -930,9 +932,11 @@ async function initializeCarousel() {
     const updateHeightOnResize = () => {
         if (!bannerAspectRatio) return;
         const styles = getComputedStyle(carousel);
+        const slideWidth = parseFloat(styles.getPropertyValue('--carousel-slide-width')) || carousel.clientWidth;
         const minHeight = parseFloat(styles.getPropertyValue('--carousel-min-height')) || 0;
         const maxHeight = parseFloat(styles.getPropertyValue('--carousel-max-height')) || Number.POSITIVE_INFINITY;
-        const targetHeight = carousel.clientWidth ? carousel.clientWidth / bannerAspectRatio : 0;
+        const baseWidth = Math.min(carousel.clientWidth, slideWidth);
+        const targetHeight = baseWidth ? baseWidth / bannerAspectRatio : 0;
         if (targetHeight > 0) {
             const boundedHeight = Math.min(Math.max(targetHeight, minHeight), maxHeight);
             carousel.style.setProperty('--carousel-height', `${boundedHeight}px`);
