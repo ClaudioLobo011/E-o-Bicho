@@ -464,16 +464,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const applyPreviewStyles = (imgEl, settings) => {
         if (!imgEl) return;
-        const { fitMode = 'cover', positionX = 50, positionY = 50, zoom = 100 } = settings;
-        const scale = Math.max(50, zoom) / 100;
+        const {
+            fitMode = 'cover',
+            positionX = 50,
+            positionY = 50,
+            zoom = 100,
+            widthScale = 100,
+            heightScale = 100
+        } = settings;
+        const baseScale = Math.max(50, zoom) / 100;
+        const scaleX = baseScale * (widthScale / 100);
+        const scaleY = baseScale * (heightScale / 100);
         imgEl.style.objectFit = fitMode;
         imgEl.style.objectPosition = `${positionX}% ${positionY}%`;
-        imgEl.style.transform = `scale(${scale})`;
+        imgEl.style.transform = `scale(${scaleX}, ${scaleY})`;
         imgEl.style.transformOrigin = `${positionX}% ${positionY}%`;
     };
 
     const openBannerPreviewModal = (banner) => {
-        const settings = loadBannerSettings()[banner._id] || { fitMode: 'cover', positionX: 50, positionY: 50, zoom: 100 };
+        const settings = loadBannerSettings()[banner._id] || {
+            fitMode: 'cover',
+            positionX: 50,
+            positionY: 50,
+            zoom: 100,
+            widthScale: 100,
+            heightScale: 100
+        };
 
         const overlay = document.createElement('div');
         overlay.className = 'fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4';
@@ -506,6 +522,14 @@ document.addEventListener('DOMContentLoaded', () => {
                             <input type="range" id="zoom-range" min="80" max="160" value="${settings.zoom}" class="w-full">
                         </label>
                         <label class="text-sm text-gray-700 flex flex-col space-y-2">
+                            <span>Largura exibida (<span id="width-scale-value">${settings.widthScale}%</span>)</span>
+                            <input type="range" id="width-scale-range" min="70" max="150" value="${settings.widthScale}" class="w-full">
+                        </label>
+                        <label class="text-sm text-gray-700 flex flex-col space-y-2">
+                            <span>Altura exibida (<span id="height-scale-value">${settings.heightScale}%</span>)</span>
+                            <input type="range" id="height-scale-range" min="70" max="150" value="${settings.heightScale}" class="w-full">
+                        </label>
+                        <label class="text-sm text-gray-700 flex flex-col space-y-2">
                             <span>Posição Horizontal (<span id="pos-x-value">${settings.positionX}%</span>)</span>
                             <input type="range" id="pos-x-range" min="0" max="100" value="${settings.positionX}" class="w-full">
                         </label>
@@ -527,9 +551,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const fitSelect = overlay.querySelector('#fit-mode-select');
         const zoomRange = overlay.querySelector('#zoom-range');
+        const widthScaleRange = overlay.querySelector('#width-scale-range');
+        const heightScaleRange = overlay.querySelector('#height-scale-range');
         const posXRange = overlay.querySelector('#pos-x-range');
         const posYRange = overlay.querySelector('#pos-y-range');
         const zoomValue = overlay.querySelector('#zoom-value');
+        const widthScaleValue = overlay.querySelector('#width-scale-value');
+        const heightScaleValue = overlay.querySelector('#height-scale-value');
         const posXValue = overlay.querySelector('#pos-x-value');
         const posYValue = overlay.querySelector('#pos-y-value');
 
@@ -537,16 +565,20 @@ document.addEventListener('DOMContentLoaded', () => {
             const newSettings = {
                 fitMode: fitSelect.value,
                 zoom: parseInt(zoomRange.value, 10),
+                widthScale: parseInt(widthScaleRange.value, 10),
+                heightScale: parseInt(heightScaleRange.value, 10),
                 positionX: parseInt(posXRange.value, 10),
                 positionY: parseInt(posYRange.value, 10)
             };
             applyPreviewStyles(previewImg, newSettings);
             zoomValue.textContent = `${newSettings.zoom}%`;
+            widthScaleValue.textContent = `${newSettings.widthScale}%`;
+            heightScaleValue.textContent = `${newSettings.heightScale}%`;
             posXValue.textContent = `${newSettings.positionX}%`;
             posYValue.textContent = `${newSettings.positionY}%`;
         };
 
-        [fitSelect, zoomRange, posXRange, posYRange].forEach(input => {
+        [fitSelect, zoomRange, widthScaleRange, heightScaleRange, posXRange, posYRange].forEach(input => {
             input.addEventListener('input', syncPreview);
         });
 
@@ -563,6 +595,8 @@ document.addEventListener('DOMContentLoaded', () => {
             settingsMap[banner._id] = {
                 fitMode: fitSelect.value,
                 zoom: parseInt(zoomRange.value, 10),
+                widthScale: parseInt(widthScaleRange.value, 10),
+                heightScale: parseInt(heightScaleRange.value, 10),
                 positionX: parseInt(posXRange.value, 10),
                 positionY: parseInt(posYRange.value, 10)
             };

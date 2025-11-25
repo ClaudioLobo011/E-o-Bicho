@@ -844,11 +844,13 @@ const applyBannerStyles = (imgElement, bannerId, settingsMap = null) => {
     const settings = (settingsMap || getBannerDisplaySettings())[bannerId];
     if (!imgElement || !settings) return;
 
-    const { fitMode = 'cover', positionX = 50, positionY = 50, zoom = 100 } = settings;
-    const scale = Math.max(50, zoom) / 100;
+    const { fitMode = 'cover', positionX = 50, positionY = 50, zoom = 100, widthScale = 100, heightScale = 100 } = settings;
+    const baseScale = Math.max(50, zoom) / 100;
+    const scaleX = baseScale * (widthScale / 100);
+    const scaleY = baseScale * (heightScale / 100);
     imgElement.style.objectFit = fitMode;
     imgElement.style.objectPosition = `${positionX}% ${positionY}%`;
-    imgElement.style.transform = `scale(${scale})`;
+    imgElement.style.transform = `scale(${scaleX}, ${scaleY})`;
     imgElement.style.transformOrigin = `${positionX}% ${positionY}%`;
 };
 
