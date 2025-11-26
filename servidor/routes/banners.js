@@ -19,6 +19,11 @@ const bannerFolderSegments = bannerFolderEnv
     .filter(Boolean);
 const bannerDrivePath = bannerFolderSegments.length ? bannerFolderSegments : ['banners'];
 
+function buildDriveViewLink(fileId) {
+    const trimmedId = typeof fileId === 'string' ? fileId.trim() : '';
+    return trimmedId ? `https://drive.google.com/uc?id=${trimmedId}&export=view` : '';
+}
+
 function buildBannerFileName(originalName) {
     const ext = path.extname(originalName || '').toLowerCase();
     return `banner-${Date.now()}${ext || '.png'}`;
@@ -41,8 +46,15 @@ const upload = multer({ storage: storage });
 // ROTA: GET /api/banners - Busca todos os banners ordenados (pública)
 router.get('/', async (req, res) => {
     try {
-        const banners = await Banner.find({}).sort({ order: 1 });
-        res.json(banners);
+        const banners = await Banner.find({}).sort({ order: 1 }).lean();
+
+        const bannersWithUrls = banners.map(banner => ({
+            ...banner,
+            imageUrl: banner.imageUrl || buildDriveViewLink(banner.imageDriveFileId),
+            mobileImageUrl: banner.mobileImageUrl || buildDriveViewLink(banner.mobileImageDriveFileId)
+        }));
+
+        res.json(bannersWithUrls);
     } catch (error) {
         console.error('Erro ao buscar banners:', error);
         res.status(500).json({ message: 'Erro ao buscar banners.' });
@@ -82,8 +94,8 @@ router.post(
                     name: desktopName,
                     folderPath: bannerDrivePath,
                 });
-                desktopImageUrl = desktopUpload?.webContentLink || desktopUpload?.webViewLink || '';
                 desktopDriveFileId = desktopUpload?.id || '';
+                desktopImageUrl = buildDriveViewLink(desktopDriveFileId) || desktopUpload?.webContentLink || desktopUpload?.webViewLink || '';
                 desktopDrivePath = `/${bannerDrivePath.join('/')}/${desktopName}`;
 
                 if (mobileImage) {
@@ -93,8 +105,8 @@ router.post(
                         name: mobileName,
                         folderPath: bannerDrivePath,
                     });
-                    mobileImageUrl = mobileUpload?.webContentLink || mobileUpload?.webViewLink || '';
                     mobileDriveFileId = mobileUpload?.id || '';
+                    mobileImageUrl = buildDriveViewLink(mobileDriveFileId) || mobileUpload?.webContentLink || mobileUpload?.webViewLink || '';
                     mobileDrivePath = `/${bannerDrivePath.join('/')}/${mobileName}`;
                 }
             } else {
