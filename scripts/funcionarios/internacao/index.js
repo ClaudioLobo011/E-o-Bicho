@@ -249,6 +249,7 @@ const parametroModal = {
   errorEl: null,
   state: null,
   render: null,
+  dataset: null,
 };
 
 const moverBoxModal = {
@@ -5496,6 +5497,60 @@ function updateSyncInfo(dataset) {
   el.textContent = `${texto} · ${fichaAtualizada}`;
 }
 
+function normalizeParametroConfig(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const nome = String(raw.nome || '').trim();
+  const ordem = Number.parseInt(raw.ordem, 10);
+  if (!nome || !Number.isFinite(ordem)) return null;
+  const opcoes = Array.isArray(raw.opcoes)
+    ? raw.opcoes.map((item) => String(item || '').trim()).filter(Boolean)
+    : [];
+  return {
+    id: String(raw.id || raw._id || `${nome}-${ordem}`),
+    nome,
+    ordem,
+    opcoes,
+    createdAt: raw.createdAt || null,
+    updatedAt: raw.updatedAt || null,
+  };
+}
+
+async function fetchParametrosConfig(dataset, state = {}, { quiet = false, onUpdate } = {}) {
+  if (state) {
+    state.parametrosLoading = true;
+    state.parametrosError = '';
+  }
+  if (typeof onUpdate === 'function') onUpdate();
+
+  try {
+    const data = await requestJson('/internacao/parametros');
+    const normalized = Array.isArray(data) ? data.map(normalizeParametroConfig).filter(Boolean) : [];
+    const sorted = [...normalized].sort((a, b) => (Number(a.ordem) || 0) - (Number(b.ordem) || 0));
+    if (dataset) dataset.parametrosConfig = sorted;
+    if (state) {
+      state.parametrosConfig = sorted;
+      state.parametrosLoading = false;
+      state.parametrosError = '';
+    }
+    if (typeof onUpdate === 'function') onUpdate();
+    return sorted;
+  } catch (error) {
+    console.error('internacao: falha ao carregar parâmetros clínicos', error);
+    if (state) {
+      state.parametrosError = error.message || 'Não foi possível carregar os parâmetros clínicos.';
+      state.parametrosLoading = false;
+    }
+    if (typeof onUpdate === 'function') onUpdate();
+    if (!quiet) {
+      showToastMessage(
+        state?.parametrosError || 'Não foi possível carregar os parâmetros clínicos.',
+        'warning',
+      );
+    }
+    return Array.isArray(state?.parametrosConfig) ? state.parametrosConfig : [];
+  }
+}
+
 async function fetchInternacoesData(dataset, state = {}, { quiet = false, onUpdate } = {}) {
   if (state) {
     state.internacoesLoading = true;
@@ -5607,6 +5662,15 @@ function setParametroModalError(message) {
   parametroModal.errorEl.classList.toggle('hidden', !text);
 }
 
+function setParametroModalLoading(isLoading) {
+  if (!parametroModal.submitBtn) return;
+  parametroModal.submitBtn.disabled = isLoading;
+  parametroModal.submitBtn.classList.toggle('opacity-50', isLoading);
+  parametroModal.submitBtn.innerHTML = isLoading
+    ? '<i class="fas fa-spinner animate-spin"></i><span> Salvando...</span>'
+    : 'Salvar parâmetro';
+}
+
 function renderParametroModalTags() {
   if (!parametroModal.optionsList) return;
   if (!parametroModal.options.length) {
@@ -5633,6 +5697,7 @@ function resetParametroModal() {
   parametroModal.options = [];
   renderParametroModalTags();
   setParametroModalError('');
+  setParametroModalLoading(false);
   if (parametroModal.nameInput) parametroModal.nameInput.focus();
 }
 
@@ -5642,6 +5707,7 @@ function closeParametroModal() {
   parametroModal.overlay.setAttribute('aria-hidden', 'true');
   parametroModal.state = null;
   parametroModal.render = null;
+  parametroModal.dataset = null;
 }
 
 function handleParametroModalSubmit(event) {
@@ -5681,23 +5747,34 @@ function handleParametroModalSubmit(event) {
     return;
   }
 
-  const novo = {
-    id: `param-${Date.now()}`,
-    nome,
-    ordem,
-    opcoes: [...parametroModal.options],
-  };
+  setParametroModalError('');
+  setParametroModalLoading(true);
 
-  parametroModal.state.parametrosConfig = [...existentes, novo].sort(
-    (a, b) => (Number(a.ordem) || 0) - (Number(b.ordem) || 0),
-  );
-
-  if (typeof parametroModal.render === 'function') {
-    parametroModal.render();
-  }
-
-  showToastMessage('Parâmetro adicionado com sucesso!', 'success');
-  closeParametroModal();
+  requestJson('/internacao/parametros', {
+    method: 'POST',
+    body: {
+      nome,
+      ordem,
+      opcoes: [...parametroModal.options],
+    },
+  })
+    .then(async () => {
+      if (parametroModal.dataset || parametroModal.state) {
+        await fetchParametrosConfig(parametroModal.dataset, parametroModal.state, {
+          quiet: true,
+          onUpdate: parametroModal.render,
+        });
+      }
+      showToastMessage('Parâmetro adicionado com sucesso!', 'success');
+      closeParametroModal();
+    })
+    .catch((error) => {
+      console.error('internacao: falha ao salvar parâmetro clínico', error);
+      setParametroModalError(error.message || 'Não foi possível salvar o parâmetro clínico.');
+    })
+    .finally(() => {
+      setParametroModalLoading(false);
+    });
 }
 
 function ensureParametroModal() {
@@ -5813,10 +5890,11 @@ function ensureParametroModal() {
   return parametroModal.overlay;
 }
 
-function openParametroModal(state, render) {
+function openParametroModal(state, render, dataset) {
   ensureParametroModal();
   parametroModal.state = state || null;
   parametroModal.render = typeof render === 'function' ? render : null;
+  parametroModal.dataset = dataset || null;
   resetParametroModal();
   parametroModal.overlay.classList.remove('hidden');
   parametroModal.overlay.setAttribute('aria-hidden', 'false');
@@ -5826,18 +5904,26 @@ function openParametroModal(state, render) {
   });
 }
 
-function setupParametrosPage(state, render) {
+function setupParametrosPage(dataset, state, render) {
   ensureParametroModal();
-  if (!Array.isArray(state.parametrosConfig) || !state.parametrosConfig.length) {
-    state.parametrosConfig = getInitialParametrosConfig();
-  }
+
+  const loadParametros = () => fetchParametrosConfig(dataset, state, { onUpdate: render });
 
   document.addEventListener('click', (event) => {
     const trigger = event.target.closest('[data-open-parametro-modal]');
-    if (!trigger) return;
-    event.preventDefault();
-    openParametroModal(state, render);
+    if (trigger) {
+      event.preventDefault();
+      openParametroModal(state, render, dataset);
+      return;
+    }
+
+    if (event.target.closest('[data-parametros-retry]')) {
+      event.preventDefault();
+      loadParametros();
+    }
   });
+
+  loadParametros();
 }
 
 function setupBoxesPage(dataset, state, render) {
@@ -5984,7 +6070,9 @@ document.addEventListener('DOMContentLoaded', () => {
     internacoes: Array.isArray(dataset.internacoes) ? [...dataset.internacoes] : [],
     internacoesLoading: false,
     internacoesError: '',
-    parametrosConfig: getInitialParametrosConfig(),
+    parametrosConfig: [],
+    parametrosLoading: false,
+    parametrosError: '',
     refreshInternacoes: null,
     refreshBoxes: null,
     render: null,
@@ -6025,7 +6113,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupMapaPage(dataset, state, render, fetchInternacoes);
   }
   if (view === 'parametros') {
-    setupParametrosPage(state, render);
+    setupParametrosPage(dataset, state, render);
   }
   if (view === 'boxes') {
     setupBoxesPage(dataset, state, render);

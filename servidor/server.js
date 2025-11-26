@@ -65,6 +65,7 @@ const routes = [
   { path: '/api/accounting-accounts', file: './routes/accountingAccounts' },
   { path: '/api/suppliers', file: './routes/suppliers' },
   { path: '/api/internacao', file: './routes/internacaoBoxes' },
+  { path: '/api/internacao/parametros', file: './routes/internacaoParametros' },
   { path: '/api/purchase/nfe/drafts', file: './routes/purchaseNfeDrafts' },
   { path: '/api/accounts-payable', file: './routes/accountsPayable' },
   { path: '/api/accounts-receivable', file: './routes/accountsReceivable' },

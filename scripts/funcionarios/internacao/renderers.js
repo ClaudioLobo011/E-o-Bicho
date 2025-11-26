@@ -1021,12 +1021,36 @@ export function renderHistoricoInternacoes(root, dataset, { petId } = {}) {
   `;
 }
 
-export function renderParametrosClinicos(root, dataset, { petId, parametrosConfig = [] } = {}) {
+export function renderParametrosClinicos(
+  root,
+  dataset,
+  { petId, parametrosConfig = [], parametrosLoading = false, parametrosError = '' } = {},
+) {
   const pacientes = filterPacientes(dataset, petId);
   const configList = Array.isArray(parametrosConfig) ? parametrosConfig : [];
 
-  const configuracoes = configList.length
-    ? `
+  let configuracoes = '';
+  if (parametrosError) {
+    configuracoes = `
+      <div class="rounded-xl border border-amber-100 bg-amber-50 px-4 py-4 text-sm text-amber-800">
+        <p class="font-semibold">${escapeHtml(parametrosError)}</p>
+        <button type="button" class="mt-2 inline-flex items-center gap-2 rounded-lg border border-amber-200 px-3 py-1 text-xs font-semibold text-amber-800 transition hover:bg-amber-100" data-parametros-retry>
+          <i class="fas fa-rotate-right"></i>
+          Tentar novamente
+        </button>
+      </div>
+    `;
+  } else if (parametrosLoading) {
+    configuracoes = `
+      <div class="flex items-center gap-3 rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-4 text-sm text-gray-500">
+        <span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <i class="fas fa-spinner animate-spin"></i>
+        </span>
+        Carregando parâmetros clínicos...
+      </div>
+    `;
+  } else if (configList.length) {
+    configuracoes = `
       <div class="divide-y divide-gray-100" data-parametros-list>
         ${configList
           .map(
@@ -1053,12 +1077,14 @@ export function renderParametrosClinicos(root, dataset, { petId, parametrosConfi
           )
           .join('')}
       </div>
-    `
-    : `
+    `;
+  } else {
+    configuracoes = `
       <div class="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center text-sm text-gray-500">
         Nenhum parâmetro cadastrado até o momento. Utilize o botão “Adicionar Parametro” para criar o primeiro.
       </div>
     `;
+  }
 
   const blocos = pacientes.map((pet) => `
     <article class="rounded-2xl border border-gray-100 px-5 py-5 shadow-sm">
