@@ -4351,7 +4351,7 @@ function buildPrescricaoResumo(values = {}) {
   const medViaDetails = getOptionDetails(PRESCRICAO_MED_VIA_OPTIONS, values.medVia);
   const inicioISO = combineDateAndTime(dataInicio, horaInicio);
   const inicioLabel = inicioISO ? formatDateTimeLabel(inicioISO) : '';
-  const descricaoLabel = descricao ? ' · ' + descricao : '';
+  const resumoBase = descricao || tipoDetails.label || 'Procedimento';
   let resumo = '';
   if (freqDetails.value === 'recorrente') {
     const intervalo = aCadaValor && intervaloDetails.label
@@ -4360,13 +4360,13 @@ function buildPrescricaoResumo(values = {}) {
     const periodo = porValor && periodoDetails.label
       ? porValor + ' ' + periodoDetails.label.toLowerCase()
       : 'período informado';
-    resumo = (tipoDetails.label || 'Procedimento') + descricaoLabel + ' recorrente a cada ' + intervalo + ' por ' + periodo +
+    resumo = resumoBase + ' a cada ' + intervalo + ' por ' + periodo +
       (inicioLabel ? ', iniciando em ' + inicioLabel : '') + '.';
   } else if (freqDetails.value === 'necessario') {
-    resumo = (tipoDetails.label || 'Procedimento') + descricaoLabel + ' quando necessário' +
+    resumo = resumoBase + ' quando necessário' +
       (inicioLabel ? ', referência ' + inicioLabel : '') + '.';
   } else {
-    resumo = (tipoDetails.label || 'Procedimento') + descricaoLabel + ' aplicado apenas uma vez' +
+    resumo = resumoBase + ' aplicado apenas uma vez' +
       (inicioLabel ? ' em ' + inicioLabel : '') + '.';
   }
   if (shouldShowMedicamentoDetails(values)) {
