@@ -6,18 +6,36 @@ const path = require('path');
 const fs = require('fs');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
+const {
+    uploadBufferToDrive,
+    isDriveConfigured,
+    deleteFile,
+} = require('../utils/googleDrive');
 
-// Configuração do Multer para upload de imagens dos banners
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        const dir = 'public/uploads/banners';
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        cb(null, dir);
-    },
-    filename: (req, file, cb) => {
-        cb(null, `banner-${Date.now()}${path.extname(file.originalname)}`);
-    }
-});
+const bannerFolderEnv = process.env.BANNER_DRIVE_FOLDER_PATH || process.env.BANNER_DRIVE_FOLDER || 'banners';
+const bannerFolderSegments = bannerFolderEnv
+    .split('/')
+    .map(segment => segment.trim())
+    .filter(Boolean);
+const bannerDrivePath = bannerFolderSegments.length ? bannerFolderSegments : ['banners'];
+
+function buildBannerFileName(originalName) {
+    const ext = path.extname(originalName || '').toLowerCase();
+    return `banner-${Date.now()}${ext || '.png'}`;
+}
+
+const storage = isDriveConfigured()
+    ? multer.memoryStorage()
+    : multer.diskStorage({
+        destination: (req, file, cb) => {
+            const dir = 'public/uploads/banners';
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            cb(null, dir);
+        },
+        filename: (req, file, cb) => {
+            cb(null, buildBannerFileName(file.originalname));
+        }
+    });
 const upload = multer({ storage: storage });
 
 // ROTA: GET /api/banners - Busca todos os banners ordenados (pública)
@@ -49,9 +67,48 @@ router.post(
                 return res.status(400).json({ message: 'Nenhum ficheiro de imagem enviado.' });
             }
             const { title, subtitle, buttonText, link } = req.body;
+
+            let desktopImageUrl = '';
+            let mobileImageUrl = '';
+            let desktopDriveFileId = '';
+            let mobileDriveFileId = '';
+            let desktopDrivePath = '';
+            let mobileDrivePath = '';
+
+            if (isDriveConfigured()) {
+                const desktopName = buildBannerFileName(desktopImage.originalname);
+                const desktopUpload = await uploadBufferToDrive(desktopImage.buffer, {
+                    mimeType: desktopImage.mimetype,
+                    name: desktopName,
+                    folderPath: bannerDrivePath,
+                });
+                desktopImageUrl = desktopUpload?.webContentLink || desktopUpload?.webViewLink || '';
+                desktopDriveFileId = desktopUpload?.id || '';
+                desktopDrivePath = `/${bannerDrivePath.join('/')}/${desktopName}`;
+
+                if (mobileImage) {
+                    const mobileName = buildBannerFileName(mobileImage.originalname);
+                    const mobileUpload = await uploadBufferToDrive(mobileImage.buffer, {
+                        mimeType: mobileImage.mimetype,
+                        name: mobileName,
+                        folderPath: bannerDrivePath,
+                    });
+                    mobileImageUrl = mobileUpload?.webContentLink || mobileUpload?.webViewLink || '';
+                    mobileDriveFileId = mobileUpload?.id || '';
+                    mobileDrivePath = `/${bannerDrivePath.join('/')}/${mobileName}`;
+                }
+            } else {
+                desktopImageUrl = `/uploads/banners/${desktopImage.filename}`;
+                mobileImageUrl = mobileImage ? `/uploads/banners/${mobileImage.filename}` : '';
+            }
+
             const newBanner = new Banner({
-                imageUrl: `/uploads/banners/${desktopImage.filename}`,
-                mobileImageUrl: mobileImage ? `/uploads/banners/${mobileImage.filename}` : '',
+                imageUrl: desktopImageUrl,
+                imageDriveFileId: desktopDriveFileId,
+                imageDrivePath: desktopDrivePath,
+                mobileImageUrl: mobileImageUrl,
+                mobileImageDriveFileId: mobileDriveFileId,
+                mobileImageDrivePath: mobileDrivePath,
                 title,
                 subtitle,
                 buttonText,
@@ -69,7 +126,20 @@ router.post(
 // ROTA: DELETE /api/banners/:id - Apaga um banner (apenas admin/admin_master)
 router.delete('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
     try {
+        const banner = await Banner.findById(req.params.id);
+        if (!banner) {
+            return res.status(404).json({ message: 'Banner não encontrado.' });
+        }
+
         await Banner.findByIdAndDelete(req.params.id);
+
+        if (isDriveConfigured()) {
+            const driveIds = [banner.imageDriveFileId, banner.mobileImageDriveFileId]
+                .map(value => (typeof value === 'string' ? value.trim() : ''))
+                .filter(Boolean);
+            await Promise.allSettled(driveIds.map(id => deleteFile(id)));
+        }
+
         res.json({ message: 'Banner apagado com sucesso.' });
     } catch (error) {
         console.error('Erro ao apagar banner:', error);
