@@ -516,6 +516,19 @@ const formatHistoricoItem = (entry) => {
   };
 };
 
+const formatRelatorioMedicoItem = (entry) => {
+  if (!entry) return null;
+  const plain = typeof entry.toObject === 'function' ? entry.toObject() : entry;
+  const identifier = plain._id || plain.id || plain.criadoEm || Date.now();
+  return {
+    id: String(identifier).trim(),
+    resumo: sanitizeText(plain.resumo),
+    descricao: sanitizeText(plain.descricao),
+    criadoPor: sanitizeText(plain.criadoPor, { fallback: 'Sistema' }),
+    criadoEm: plain.criadoEm || plain.createdAt || null,
+  };
+};
+
 const buildRegistroPayload = (body = {}) => ({
   petId: sanitizeText(body.petId),
   petNome: sanitizeText(body.petNome),
@@ -661,6 +674,16 @@ const formatRegistro = (doc) => {
           return bTime - aTime;
         })
     : [];
+  const relatoriosMedicos = Array.isArray(plain.relatoriosMedicos)
+    ? plain.relatoriosMedicos
+        .map(formatRelatorioMedicoItem)
+        .filter(Boolean)
+        .sort((a, b) => {
+          const aTime = new Date(a.criadoEm || 0).getTime();
+          const bTime = new Date(b.criadoEm || 0).getTime();
+          return bTime - aTime;
+        })
+    : [];
   const petPesoAtualizadoEm = toIsoStringSafe(plain.petPesoAtualizadoEm);
   const execucoes = Array.isArray(plain.execucoes)
     ? plain.execucoes.map(formatExecucaoItem).filter(Boolean)
@@ -720,6 +743,7 @@ const formatRegistro = (doc) => {
     createdAt: plain.createdAt || null,
     updatedAt: plain.updatedAt || null,
     historico,
+    relatoriosMedicos,
     execucoes,
     prescricoes,
   };
@@ -937,6 +961,69 @@ router.post('/registros/:id/ocorrencias', async (req, res) => {
       return res.status(400).json({ message: 'Revise as informações preenchidas antes de salvar a ocorrência.' });
     }
     return res.status(500).json({ message: 'Não foi possível salvar a ocorrência.' });
+  }
+});
+
+router.post('/registros/:id/relatorios-medicos', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: 'Informe o registro que deseja atualizar.' });
+    }
+
+    const record = await InternacaoRegistro.findById(id);
+    if (!record) {
+      return res.status(404).json({ message: 'Internação não encontrada.' });
+    }
+
+    const payload = {
+      resumo: sanitizeText(req.body?.resumo),
+      descricao: sanitizeText(req.body?.descricao),
+    };
+
+    if (!payload.resumo) {
+      return res.status(400).json({ message: 'Informe um resumo para o relatório.' });
+    }
+
+    if (!payload.descricao) {
+      return res.status(400).json({ message: 'Descreva o relatório médico antes de salvar.' });
+    }
+
+    const autor = req.user?.email || 'Sistema';
+    const criadoEm = new Date();
+    const historicoDescricao = `${payload.resumo}${payload.descricao ? ` — ${payload.descricao}` : ''}`;
+
+    record.historico = Array.isArray(record.historico) ? record.historico : [];
+    record.historico.unshift({
+      tipo: 'Relatório médico',
+      descricao: historicoDescricao,
+      criadoPor: autor,
+      criadoEm,
+    });
+
+    record.relatoriosMedicos = Array.isArray(record.relatoriosMedicos) ? record.relatoriosMedicos : [];
+    record.relatoriosMedicos.unshift({
+      resumo: payload.resumo,
+      descricao: payload.descricao,
+      criadoPor: autor,
+      criadoEm,
+    });
+
+    await record.save();
+
+    const updated = await InternacaoRegistro.findById(record._id).lean();
+    const formatted = formatRegistro(updated);
+    if (!formatted) {
+      return res.status(500).json({ message: 'Não foi possível salvar o relatório médico.' });
+    }
+
+    return res.status(201).json(formatted);
+  } catch (error) {
+    console.error('internacao: falha ao salvar relatório médico', error);
+    if (error?.name === 'ValidationError') {
+      return res.status(400).json({ message: 'Revise as informações preenchidas antes de salvar o relatório.' });
+    }
+    return res.status(500).json({ message: 'Não foi possível registrar o relatório médico.' });
   }
 });
 

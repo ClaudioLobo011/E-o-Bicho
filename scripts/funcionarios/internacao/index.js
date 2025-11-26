@@ -208,6 +208,25 @@ const ocorrenciaModal = {
   petInfo: null,
 };
 
+const relatorioMedicoModal = {
+  overlay: null,
+  dialog: null,
+  form: null,
+  submitBtn: null,
+  errorEl: null,
+  petSummaryEl: null,
+  petSummaryNameEl: null,
+  petSummaryMetaEl: null,
+  petSummaryTutorEl: null,
+  dataset: null,
+  state: null,
+  onSuccess: null,
+  onClose: null,
+  record: null,
+  recordId: null,
+  petInfo: null,
+};
+
 const moverBoxModal = {
   overlay: null,
   dialog: null,
@@ -872,6 +891,25 @@ function normalizeHistoricoEntry(entry) {
   };
 }
 
+function normalizeRelatorioMedicoEntry(entry) {
+  if (!entry || typeof entry !== 'object') return null;
+  const toText = (value) => {
+    if (value === undefined || value === null) return '';
+    return String(value).trim();
+  };
+  const baseId = toText(entry.id) || toText(entry._id) || toText(entry.criadoEm);
+  const resumo = toText(entry.resumo);
+  const descricao = toText(entry.descricao);
+  if (!resumo && !descricao) return null;
+  return {
+    id: baseId || `relatorio-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    resumo,
+    descricao,
+    criadoPor: toText(entry.criadoPor) || 'Sistema',
+    criadoEm: entry.criadoEm || entry.createdAt || '',
+  };
+}
+
 function normalizePrescricaoItem(entry) {
   if (!entry || typeof entry !== 'object') return null;
   const toText = (value) => {
@@ -969,6 +1007,9 @@ function normalizeInternacaoRecord(raw) {
   const historico = Array.isArray(raw.historico)
     ? raw.historico.map(normalizeHistoricoEntry).filter(Boolean)
     : [];
+  const relatoriosMedicos = Array.isArray(raw.relatoriosMedicos)
+    ? raw.relatoriosMedicos.map(normalizeRelatorioMedicoEntry).filter(Boolean)
+    : [];
   const situacaoCodigo = toText(raw.situacaoCodigo);
   const canceladoFlag = Boolean(raw.cancelado) || normalizeActionKey(situacaoCodigo) === 'cancelado';
   const ultimoPesoHistorico = historico.find((entry) =>
@@ -1023,6 +1064,7 @@ function normalizeInternacaoRecord(raw) {
     observacoes: toText(raw.observacoes),
     alergias: normalizeTagList(raw.alergias),
     execucoes,
+    relatoriosMedicos,
     cancelado: canceladoFlag,
     canceladoResponsavel: toText(raw.canceladoResponsavel),
     canceladoData: toText(raw.canceladoData),
@@ -1897,6 +1939,291 @@ async function handleOcorrenciaModalSubmit(event) {
     setOcorrenciaModalError(error.message || 'Não foi possível registrar a ocorrência.');
   } finally {
     setOcorrenciaModalLoading(false);
+  }
+}
+
+function setRelatorioMedicoModalError(message) {
+  if (!relatorioMedicoModal.errorEl) return;
+  const text = String(message || '').trim();
+  relatorioMedicoModal.errorEl.textContent = text;
+  relatorioMedicoModal.errorEl.classList.toggle('hidden', !text);
+}
+
+function setRelatorioMedicoModalLoading(isLoading) {
+  if (!relatorioMedicoModal.submitBtn) return;
+  if (!relatorioMedicoModal.submitBtn.dataset.defaultLabel) {
+    relatorioMedicoModal.submitBtn.dataset.defaultLabel = relatorioMedicoModal.submitBtn.textContent.trim();
+  }
+  relatorioMedicoModal.submitBtn.disabled = !!isLoading;
+  relatorioMedicoModal.submitBtn.classList.toggle('opacity-60', !!isLoading);
+  relatorioMedicoModal.submitBtn.textContent = isLoading
+    ? 'Salvando...'
+    : relatorioMedicoModal.submitBtn.dataset.defaultLabel;
+}
+
+function resetRelatorioMedicoModalForm() {
+  if (relatorioMedicoModal.form) {
+    relatorioMedicoModal.form.reset();
+  }
+}
+
+function setRelatorioMedicoModalPetInfo(info) {
+  const normalized = normalizePetInfo(info);
+  relatorioMedicoModal.petInfo = normalized;
+  if (!relatorioMedicoModal.petSummaryEl) return;
+  const hasInfo = !!normalized;
+  relatorioMedicoModal.petSummaryEl.classList.toggle('hidden', !hasInfo);
+  const petName = normalized?.petNome || 'Paciente';
+  const meta = normalized
+    ? [normalized.petEspecie, normalized.petRaca, normalized.petPeso || normalized.petIdade].filter(Boolean).join(' · ')
+    : '';
+  const tutorNome = normalized?.tutorNome || '';
+  const tutorContato = [normalized?.tutorDocumento, normalized?.tutorContato]
+    .filter(Boolean)
+    .join(' · ');
+  const tutorLabel = tutorNome && tutorContato ? `${tutorNome} · ${tutorContato}` : tutorNome || tutorContato || 'Tutor não informado';
+
+  if (relatorioMedicoModal.petSummaryNameEl) relatorioMedicoModal.petSummaryNameEl.textContent = hasInfo ? petName : 'Paciente';
+  if (relatorioMedicoModal.petSummaryMetaEl) relatorioMedicoModal.petSummaryMetaEl.textContent = meta || '—';
+  if (relatorioMedicoModal.petSummaryTutorEl) relatorioMedicoModal.petSummaryTutorEl.textContent = tutorLabel;
+}
+
+function fillRelatorioMedicoModalForm(record) {
+  if (!relatorioMedicoModal.form) return;
+  const resumoField = relatorioMedicoModal.form.querySelector('input[name="relatorioResumo"]');
+  const descricaoField = relatorioMedicoModal.form.querySelector('textarea[name="relatorioDescricao"]');
+  if (resumoField) resumoField.value = '';
+  if (descricaoField) descricaoField.value = '';
+  if (record && resumoField && record.resumo) {
+    resumoField.value = record.resumo;
+  }
+  if (record && descricaoField && record.descricao) {
+    descricaoField.value = record.descricao;
+  }
+}
+
+function closeRelatorioMedicoModal() {
+  const onClose = relatorioMedicoModal.onClose;
+  if (!relatorioMedicoModal.overlay) return;
+  relatorioMedicoModal.overlay.classList.add('hidden');
+  relatorioMedicoModal.overlay.dataset.modalOpen = 'false';
+  if (relatorioMedicoModal.dialog) {
+    relatorioMedicoModal.dialog.classList.add('opacity-0', 'scale-95');
+  }
+  relatorioMedicoModal.record = null;
+  relatorioMedicoModal.recordId = null;
+  relatorioMedicoModal.dataset = null;
+  relatorioMedicoModal.state = null;
+  relatorioMedicoModal.onSuccess = null;
+  relatorioMedicoModal.petInfo = null;
+  relatorioMedicoModal.onClose = null;
+
+  if (typeof onClose === 'function') {
+    try {
+      onClose();
+    } catch (error) {
+      console.warn('internacao: falha ao acionar callback de fechamento do relatório médico', error);
+    }
+  }
+}
+
+function ensureRelatorioMedicoModal() {
+  if (relatorioMedicoModal.overlay) return relatorioMedicoModal.overlay;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'internacao-relatorio-modal fixed inset-0 z-[1004] hidden';
+  overlay.innerHTML = `
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-modal></div>
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
+      <div class="relative flex w-full max-w-3xl transform-gpu flex-col overflow-hidden rounded-2xl bg-white text-[12px] leading-[1.35] shadow-2xl ring-1 ring-black/10 opacity-0 scale-95 transition-all duration-200" role="dialog" aria-modal="true" aria-labelledby="relatorio-medico-modal-title" data-relatorio-dialog tabindex="-1">
+        <header class="flex flex-col gap-2.5 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <span class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+              <i class="fas fa-file-medical"></i>
+              Relatório médico
+            </span>
+            <h2 id="relatorio-medico-modal-title" class="mt-1.5 text-lg font-semibold text-gray-900">Registrar relatório médico</h2>
+            <p class="text-[11px] text-gray-600">Descreva de forma objetiva para auxiliar na evolução do paciente.</p>
+          </div>
+          <button type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-gray-600" data-close-modal>
+            <span class="sr-only">Fechar</span>
+            <i class="fas fa-times"></i>
+          </button>
+        </header>
+
+        <div class="max-h-[calc(90vh-100px)] overflow-y-auto px-4 py-3">
+          <div class="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-[11px] text-gray-600" data-relatorio-summary>
+            <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div class="flex flex-col">
+                <span class="text-[13px] font-semibold text-gray-900" data-relatorio-summary-name>—</span>
+                <span class="text-[10px] text-gray-400" data-relatorio-summary-meta>—</span>
+              </div>
+              <span class="text-[11px] text-gray-500" data-relatorio-summary-tutor>—</span>
+            </div>
+          </div>
+
+          <form class="mt-3 space-y-3" novalidate>
+            <div>
+              <label class="text-[11px] font-semibold text-gray-700">Resumo*</label>
+              <input type="text" name="relatorioResumo" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Síntese do relatório para exibição rápida" />
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold text-gray-700">Descrição*</label>
+              <textarea name="relatorioDescricao" rows="4" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Detalhe o caso para o médico"></textarea>
+            </div>
+            <p class="hidden rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[11px] text-red-700" data-relatorio-error></p>
+            <div class="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end sm:gap-3">
+              <button type="button" class="inline-flex items-center justify-center rounded-lg border border-gray-200 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-600 transition hover:border-gray-300 hover:text-gray-800" data-close-modal>Cancelar</button>
+              <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-primary px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-primary/90" data-relatorio-submit>Salvar</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  relatorioMedicoModal.overlay = overlay;
+  relatorioMedicoModal.dialog = overlay.querySelector('[data-relatorio-dialog]');
+  relatorioMedicoModal.form = overlay.querySelector('form');
+  relatorioMedicoModal.submitBtn = overlay.querySelector('[data-relatorio-submit]');
+  relatorioMedicoModal.errorEl = overlay.querySelector('[data-relatorio-error]');
+  relatorioMedicoModal.petSummaryEl = overlay.querySelector('[data-relatorio-summary]');
+  relatorioMedicoModal.petSummaryNameEl = overlay.querySelector('[data-relatorio-summary-name]');
+  relatorioMedicoModal.petSummaryMetaEl = overlay.querySelector('[data-relatorio-summary-meta]');
+  relatorioMedicoModal.petSummaryTutorEl = overlay.querySelector('[data-relatorio-summary-tutor]');
+
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) {
+      closeRelatorioMedicoModal();
+      return;
+    }
+    const closeTrigger = event.target.closest('[data-close-modal]');
+    if (closeTrigger) {
+      event.preventDefault();
+      closeRelatorioMedicoModal();
+    }
+  });
+
+  overlay.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !overlay.classList.contains('hidden')) {
+      event.preventDefault();
+      closeRelatorioMedicoModal();
+    }
+  });
+
+  if (relatorioMedicoModal.form) {
+    relatorioMedicoModal.form.addEventListener('submit', handleRelatorioMedicoModalSubmit);
+  }
+
+  setRelatorioMedicoModalPetInfo(null);
+
+  return overlay;
+}
+
+function openRelatorioMedicoModal(record, options = {}) {
+  if (!record) return;
+  ensureRelatorioMedicoModal();
+  const datasetRef = options.dataset || relatorioMedicoModal.dataset || getDataset();
+  const stateRef = options.state || relatorioMedicoModal.state || {};
+  const successHandler =
+    typeof options.onSuccess === 'function'
+      ? options.onSuccess
+      : typeof stateRef?.refreshInternacoes === 'function'
+        ? stateRef.refreshInternacoes
+        : null;
+  const recordId = record.id || '';
+  if (!recordId) {
+    showToastMessage('Não foi possível identificar essa internação para registrar o relatório.', 'warning');
+    return;
+  }
+
+  relatorioMedicoModal.dataset = datasetRef || null;
+  relatorioMedicoModal.state = stateRef || null;
+  relatorioMedicoModal.onSuccess = successHandler || null;
+  relatorioMedicoModal.onClose = typeof options.onClose === 'function' ? options.onClose : null;
+  relatorioMedicoModal.record = record;
+  relatorioMedicoModal.recordId = recordId;
+
+  setRelatorioMedicoModalError('');
+  setRelatorioMedicoModalLoading(false);
+  resetRelatorioMedicoModalForm();
+  const petInfo = getPetInfoFromInternacaoRecord(record);
+  setRelatorioMedicoModalPetInfo(petInfo);
+  fillRelatorioMedicoModalForm(record);
+
+  relatorioMedicoModal.overlay.classList.remove('hidden');
+  relatorioMedicoModal.overlay.dataset.modalOpen = 'true';
+  if (relatorioMedicoModal.dialog) {
+    requestAnimationFrame(() => {
+      relatorioMedicoModal.dialog.classList.remove('opacity-0', 'scale-95');
+      relatorioMedicoModal.dialog.focus();
+    });
+  }
+}
+
+async function handleRelatorioMedicoModalSubmit(event) {
+  event.preventDefault();
+  if (!relatorioMedicoModal.form) return;
+  setRelatorioMedicoModalError('');
+  const recordId = relatorioMedicoModal.recordId;
+  if (!recordId) {
+    setRelatorioMedicoModalError('Não foi possível identificar a internação selecionada.');
+    return;
+  }
+
+  const formData = new FormData(relatorioMedicoModal.form);
+  const payload = {
+    resumo: (formData.get('relatorioResumo') || '').toString().trim(),
+    descricao: (formData.get('relatorioDescricao') || '').toString().trim(),
+  };
+
+  if (!payload.resumo) {
+    setRelatorioMedicoModalError('Preencha um resumo para o relatório.');
+    return;
+  }
+  if (!payload.descricao) {
+    setRelatorioMedicoModalError('Descreva o relatório antes de salvar.');
+    return;
+  }
+
+  setRelatorioMedicoModalLoading(true);
+  const datasetRef = relatorioMedicoModal.dataset || getDataset();
+  const stateRef = relatorioMedicoModal.state || {};
+  try {
+    const updatedRecord = await requestJson(`/internacao/registros/${encodeURIComponent(recordId)}/relatorios-medicos`, {
+      method: 'POST',
+      body: payload,
+    });
+    const normalized = normalizeInternacaoRecord(updatedRecord);
+    if (normalized) {
+      applyInternacaoRecordUpdate(normalized, datasetRef, stateRef);
+      const fichaRecord = fichaInternacaoModal.record;
+      if (fichaRecord) {
+        const sameRecord =
+          fichaRecord.id === normalized.id ||
+          fichaRecord.filterKey === normalized.filterKey ||
+          (normalized.codigo !== null && fichaRecord.codigo === normalized.codigo);
+        if (sameRecord) {
+          fichaInternacaoModal.record = normalized;
+          fillFichaInternacaoModal(normalized);
+        }
+      }
+    }
+
+    showToastMessage('Relatório médico registrado com sucesso.', 'success');
+    const successCallback = relatorioMedicoModal.onSuccess;
+    closeRelatorioMedicoModal();
+
+    if (typeof successCallback === 'function') {
+      successCallback();
+    }
+  } catch (error) {
+    console.error('internacao: falha ao salvar relatório médico', error);
+    setRelatorioMedicoModalError(error.message || 'Não foi possível registrar o relatório.');
+  } finally {
+    setRelatorioMedicoModalLoading(false);
   }
 }
 
@@ -3729,6 +4056,33 @@ function ensureFichaInternacaoModal() {
 
         closeFichaInternacaoModal();
         openOcorrenciaModal(record, {
+          dataset,
+          state,
+          onSuccess: state.refreshInternacoes,
+          onClose: reopenFicha,
+        });
+      } else if (actionType === 'relatorio medico') {
+        const record = fichaInternacaoModal.record;
+        const dataset = fichaInternacaoModal.dataset || getDataset();
+        const state = fichaInternacaoModal.state || {};
+        if (!record) {
+          showToastMessage('Abra uma ficha de internação válida antes de registrar o relatório médico.', 'warning');
+          return;
+        }
+
+        const reopenFicha = () => {
+          const updatedRecord =
+            state?.internacoes?.find(
+              (item) =>
+                item.id === record.id ||
+                item.filterKey === record.filterKey ||
+                (record.codigo !== null && item.codigo === record.codigo),
+            ) || record;
+          openFichaInternacaoModal(updatedRecord, { dataset, state });
+        };
+
+        closeFichaInternacaoModal();
+        openRelatorioMedicoModal(record, {
           dataset,
           state,
           onSuccess: state.refreshInternacoes,

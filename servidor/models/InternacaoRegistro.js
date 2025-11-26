@@ -73,6 +73,14 @@ const internacaoRegistroSchema = new mongoose.Schema(
         criadoEm: { type: Date, default: Date.now },
       },
     ],
+    relatoriosMedicos: [
+      {
+        resumo: { type: String, trim: true },
+        descricao: { type: String, trim: true },
+        criadoPor: { type: String, trim: true },
+        criadoEm: { type: Date, default: Date.now },
+      },
+    ],
     historico: [
       {
         tipo: { type: String, trim: true },
