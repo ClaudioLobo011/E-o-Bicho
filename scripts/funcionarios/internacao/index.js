@@ -646,6 +646,41 @@ function getPetInfoFromInternacaoRecord(record) {
   });
 }
 
+function pickLatestTimestamp(values = []) {
+  const validDates = values
+    .map((value) => {
+      if (!value) return null;
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return null;
+      return date.getTime();
+    })
+    .filter((time) => time !== null);
+
+  if (!validDates.length) return '';
+  const latest = Math.max(...validDates);
+  const date = new Date(latest);
+  return Number.isNaN(date.getTime()) ? '' : date.toISOString();
+}
+
+function resolvePetInfoForPrescricao(record, dataset) {
+  const recordInfo = getPetInfoFromInternacaoRecord(record);
+  const datasetInfo = getPetInfoFromDataset(dataset, recordInfo?.petId);
+  const mergedInfo = mergePetInfo(recordInfo, datasetInfo);
+
+  const pesoAtualizadoEm = pickLatestTimestamp([
+    datasetInfo?.petPesoAtualizadoEm,
+    recordInfo?.petPesoAtualizadoEm,
+    getLatestPesoHistoricoTimestamp(record),
+  ]);
+
+  if (!pesoAtualizadoEm) return mergedInfo;
+
+  return {
+    ...mergedInfo,
+    petPesoAtualizadoEm: pesoAtualizadoEm,
+  };
+}
+
 function getPetInfoFromParams(params) {
   if (!(params instanceof URLSearchParams)) return null;
   const payload = {};
@@ -4782,7 +4817,8 @@ function openPrescricaoModal(record, options = {}) {
   prescricaoModal.record = record;
   setPrescricaoModalError('');
   resetPrescricaoModalForm();
-  setPrescricaoModalPetInfo(getPetInfoFromInternacaoRecord(record));
+  const petInfo = resolvePetInfoForPrescricao(record, prescricaoModal.dataset);
+  setPrescricaoModalPetInfo(petInfo);
   if (options.initialValues) {
     fillPrescricaoForm(options.initialValues);
   }
