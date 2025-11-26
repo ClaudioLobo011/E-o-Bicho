@@ -886,8 +886,14 @@ async function initializeCarousel() {
         banners.forEach(banner => {
             const slide = document.createElement('div');
             slide.className = 'slide w-full h-full';
-            const desktopSrc = `${API_CONFIG.SERVER_URL}${banner.imageUrl}`;
-            const mobileSrc = banner.mobileImageUrl ? `${API_CONFIG.SERVER_URL}${banner.mobileImageUrl}` : '';
+            const resolveImageSrc = (url) => {
+                if (!url) return '';
+                const isAbsolute = /^https?:\/\//i.test(url);
+                return isAbsolute ? url : `${API_CONFIG.SERVER_URL}${url}`;
+            };
+
+            const desktopSrc = resolveImageSrc(banner.imageUrl);
+            const mobileSrc = resolveImageSrc(banner.mobileImageUrl);
             slide.innerHTML = `
                 <a href="${banner.link}" class="block w-full h-full">
                     <picture class="block w-full h-full">
