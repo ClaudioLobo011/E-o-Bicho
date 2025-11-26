@@ -5831,7 +5831,22 @@ function handleParametroModalSubmit(event) {
 }
 
 function ensureParametroModal() {
-  if (parametroModal.overlay) return parametroModal.overlay;
+  if (parametroModal.overlay) {
+    const stillInDom = document.body?.contains(parametroModal.overlay);
+    if (stillInDom) return parametroModal.overlay;
+    // Se o placeholder foi recriado (ex.: loadComponents), precisamos limpar referências antigas
+    parametroModal.overlay = null;
+    parametroModal.dialog = null;
+    parametroModal.form = null;
+    parametroModal.nameInput = null;
+    parametroModal.orderInput = null;
+    parametroModal.optionInput = null;
+    parametroModal.optionsList = null;
+    parametroModal.submitBtn = null;
+    parametroModal.errorEl = null;
+    parametroModal.titleEl = null;
+    parametroModal.subtitleEl = null;
+  }
   let placeholder = document.getElementById('modal-placeholder');
   if (!placeholder) {
     placeholder = document.createElement('div');
