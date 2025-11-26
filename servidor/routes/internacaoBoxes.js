@@ -29,6 +29,18 @@ const normalizeKey = (value) =>
     .replace(/[^\p{L}\p{N}]/gu, '')
     .toLowerCase();
 
+const toIsoStringSafe = (value) => {
+  if (!value) return null;
+  try {
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toISOString();
+  } catch (error) {
+    console.warn('internacao: falha ao normalizar data', value, error);
+    return null;
+  }
+};
+
 const hasNecessarioFlag = (value) => {
   if (value === undefined || value === null) return false;
   const normalized = sanitizeText(value)
@@ -649,6 +661,7 @@ const formatRegistro = (doc) => {
           return bTime - aTime;
         })
     : [];
+  const petPesoAtualizadoEm = toIsoStringSafe(plain.petPesoAtualizadoEm);
   const execucoes = Array.isArray(plain.execucoes)
     ? plain.execucoes.map(formatExecucaoItem).filter(Boolean)
     : [];
@@ -670,6 +683,7 @@ const formatRegistro = (doc) => {
     petEspecie: sanitizeText(plain.petEspecie),
     petRaca: sanitizeText(plain.petRaca),
     petPeso: sanitizeText(plain.petPeso),
+    petPesoAtualizadoEm,
     petIdade: sanitizeText(plain.petIdade),
     tutorNome: sanitizeText(plain.tutorNome),
     tutorDocumento: sanitizeText(plain.tutorDocumento),

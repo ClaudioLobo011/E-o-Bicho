@@ -8,6 +8,7 @@ const internacaoRegistroSchema = new mongoose.Schema(
     petEspecie: { type: String, trim: true },
     petRaca: { type: String, trim: true },
     petPeso: { type: String, trim: true },
+    petPesoAtualizadoEm: { type: Date },
     petIdade: { type: String, trim: true },
     tutorNome: { type: String, trim: true },
     tutorDocumento: { type: String, trim: true },

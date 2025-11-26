@@ -3699,6 +3699,8 @@ function ensureFichaInternacaoModal() {
           onSuccess: state.refreshInternacoes,
           onClose: reopenFicha,
         });
+      } else if (actionType === 'peso') {
+        await handleFichaPesoAction();
       } else {
         showToastMessage('Funcionalidade em desenvolvimento.', 'info');
       }
@@ -3759,6 +3761,75 @@ async function handleFichaEditarAction() {
     state,
     mode: 'edit',
     record,
+  });
+}
+
+async function handleFichaPesoAction() {
+  const record = fichaInternacaoModal.record;
+  if (!record) {
+    showToastMessage('Abra uma ficha de internação válida antes de ajustar o peso.', 'warning');
+    return;
+  }
+
+  const dataset = fichaInternacaoModal.dataset || getDataset();
+  const state = fichaInternacaoModal.state || {};
+  const petId = record.pet?.id || record.petId || record.filterKey;
+
+  if (!petId) {
+    showToastMessage('Não foi possível identificar o pet para registrar o peso.', 'warning');
+    return;
+  }
+
+  const petMatch = (dataset?.pacientes || []).find((pet) => pet.id === petId || pet.id === record.filterKey);
+  const tutorId = petMatch?.tutor?.id || petMatch?.tutor?._id || petMatch?.tutorId;
+
+  let pesoModule;
+  let coreModule;
+  try {
+    [pesoModule, coreModule] = await Promise.all([
+      import('../vet/ficha-clinica/pesos.js'),
+      import('../vet/ficha-clinica/core.js'),
+    ]);
+  } catch (error) {
+    console.error('internacao: falha ao carregar modal de peso', error);
+    showToastMessage('Não foi possível abrir o modal de peso.', 'error');
+    return;
+  }
+
+  const coreState = coreModule?.state || {};
+  coreState.selectedPetId = petId;
+  coreState.selectedCliente = tutorId
+    ? { _id: tutorId }
+    : { _id: record.tutor?.documento || record.tutorDocumento || record.tutor?.nome || record.tutorNome || petId };
+  coreState.agendaContext = null;
+
+  const reopenFicha = async () => {
+    const refreshPromise = typeof state.refreshInternacoes === 'function'
+      ? state.refreshInternacoes()
+      : null;
+    try {
+      if (refreshPromise?.then) {
+        await refreshPromise;
+      }
+    } catch (error) {
+      console.warn('internacao: falha ao atualizar lista após ajuste de peso', error);
+    }
+
+    const updatedRecord = Array.isArray(state?.internacoes)
+      ? state.internacoes.find(
+          (item) =>
+            item.id === record.id ||
+            item.filterKey === record.filterKey ||
+            (record.codigo !== null && item.codigo === record.codigo),
+        ) || record
+      : record;
+    openFichaInternacaoModal(updatedRecord, { dataset, state });
+  };
+
+  closeFichaInternacaoModal();
+  pesoModule.openPesoModal({
+    context: { internacaoId: record.id || record._id, internacaoCodigo: record.codigo || null },
+    onClose: reopenFicha,
   });
 }
 

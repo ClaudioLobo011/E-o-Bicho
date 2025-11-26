@@ -17,6 +17,7 @@ const VetRecipe = require('../models/VetRecipe');
 const VetRecipeRecord = require('../models/VetRecipeRecord');
 const PetWeight = require('../models/PetWeight');
 const VetClinicHistory = require('../models/VetClinicHistory');
+const InternacaoRegistro = require('../models/InternacaoRegistro');
 const {
   isDriveConfigured,
   getDriveFolderId,
@@ -138,6 +139,35 @@ function toIsoDate(value) {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   return date.toISOString();
+}
+
+async function registerInternacaoPesoUpdate({ internacaoId, pesoValue, author }) {
+  const targetId = normalizeObjectId(internacaoId);
+  if (!targetId) return null;
+
+  const record = await InternacaoRegistro.findById(targetId);
+  if (!record) return null;
+
+  const now = new Date();
+  const descricaoParts = [];
+  const previousPeso = toStringSafe(record.petPeso);
+  if (previousPeso) {
+    descricaoParts.push(`Peso anterior: ${previousPeso} Kg.`);
+  }
+  descricaoParts.push(`Peso atualizado para ${pesoValue} Kg.`);
+
+  record.petPeso = String(pesoValue);
+  record.petPesoAtualizadoEm = now;
+  record.historico = Array.isArray(record.historico) ? record.historico : [];
+  record.historico.unshift({
+    tipo: 'Peso',
+    descricao: descricaoParts.join(' '),
+    criadoPor: author || 'Sistema',
+    criadoEm: now,
+  });
+
+  await record.save();
+  return record;
 }
 
 function hasSignedFileData(file) {
@@ -758,19 +788,37 @@ function formatPetWeightEntry(doc) {
 
 router.get('/vet/pesos', authMiddleware, requireStaff, async (req, res) => {
   try {
-    const clienteId = normalizeObjectId(req.query.clienteId);
-    const petId = normalizeObjectId(req.query.petId);
+    let clienteId = normalizeObjectId(req.query.clienteId);
+    let petId = normalizeObjectId(req.query.petId);
+    const internacaoId = normalizeObjectId(req.query.internacaoId);
 
-    if (!(clienteId && petId)) {
+    if (!(clienteId && petId) && !internacaoId) {
       return res.status(400).json({ message: 'clienteId e petId sÃ£o obrigatÃ³rios.' });
     }
 
-    const petDoc = await Pet.findById(petId)
-      .select('owner peso createdAt updatedAt')
-      .lean();
+    let internacaoRegistro = null;
+    if (internacaoId) {
+      internacaoRegistro = await InternacaoRegistro.findById(internacaoId);
+      if (!internacaoRegistro) {
+        return res.status(404).json({ message: 'Internação não encontrada.' });
+      }
+      if (!petId) {
+        petId = normalizeObjectId(internacaoRegistro.petId);
+      }
+    }
+
+    const petDoc = petId
+      ? await Pet.findById(petId)
+          .select('owner peso createdAt updatedAt')
+          .lean()
+      : null;
 
     if (!petDoc) {
       return res.status(404).json({ message: 'Pet nÃ£o encontrado.' });
+    }
+
+    if (!clienteId) {
+      clienteId = normalizeObjectId(petDoc.owner);
     }
 
     if (clienteId && toStringSafe(petDoc.owner) !== clienteId) {
@@ -817,11 +865,12 @@ router.get('/vet/pesos', authMiddleware, requireStaff, async (req, res) => {
 
 router.post('/vet/pesos', authMiddleware, requireStaff, async (req, res) => {
   try {
-    const clienteId = normalizeObjectId(req.body.clienteId);
-    const petId = normalizeObjectId(req.body.petId);
+    let clienteId = normalizeObjectId(req.body.clienteId);
+    let petId = normalizeObjectId(req.body.petId);
+    const internacaoId = normalizeObjectId(req.body.internacaoId);
     const pesoValue = parseWeight(req.body.peso);
 
-    if (!(clienteId && petId)) {
+    if (!(clienteId && petId) && !internacaoId) {
       return res.status(400).json({ message: 'clienteId e petId são obrigatórios.' });
     }
 
@@ -829,9 +878,24 @@ router.post('/vet/pesos', authMiddleware, requireStaff, async (req, res) => {
       return res.status(400).json({ message: 'Informe um peso válido.' });
     }
 
-    const petDoc = await Pet.findById(petId).select('owner peso createdAt updatedAt');
+    let internacaoRegistro = null;
+    if (internacaoId) {
+      internacaoRegistro = await InternacaoRegistro.findById(internacaoId);
+      if (!internacaoRegistro) {
+        return res.status(404).json({ message: 'Internação não encontrada para vincular o peso.' });
+      }
+      if (!petId) {
+        petId = normalizeObjectId(internacaoRegistro.petId);
+      }
+    }
+
+    const petDoc = petId ? await Pet.findById(petId).select('owner peso createdAt updatedAt') : null;
     if (!petDoc) {
       return res.status(404).json({ message: 'Pet não encontrado.' });
+    }
+
+    if (!clienteId) {
+      clienteId = normalizeObjectId(petDoc.owner);
     }
 
     if (clienteId && toStringSafe(petDoc.owner) !== clienteId) {
@@ -899,6 +963,14 @@ router.post('/vet/pesos', authMiddleware, requireStaff, async (req, res) => {
     petDoc.peso = String(pesoValue);
     await petDoc.save();
 
+    if (internacaoRegistro) {
+      await registerInternacaoPesoUpdate({
+        internacaoId: internacaoRegistro._id,
+        pesoValue,
+        author: req.user?.email,
+      });
+    }
+
     const formatted = formatPetWeightEntry(created.toObject());
     return res.status(201).json(formatted);
   } catch (error) {
@@ -910,14 +982,15 @@ router.post('/vet/pesos', authMiddleware, requireStaff, async (req, res) => {
 router.put('/vet/pesos/:id', authMiddleware, requireStaff, async (req, res) => {
   try {
     const weightId = normalizeObjectId(req.params.id);
-    const clienteId = normalizeObjectId(req.body.clienteId);
-    const petId = normalizeObjectId(req.body.petId);
+    let clienteId = normalizeObjectId(req.body.clienteId);
+    let petId = normalizeObjectId(req.body.petId);
+    const internacaoId = normalizeObjectId(req.body.internacaoId);
     const pesoValue = parseWeight(req.body.peso);
 
     if (!weightId) {
       return res.status(400).json({ message: 'ID inválido.' });
     }
-    if (!(clienteId && petId)) {
+    if (!(clienteId && petId) && !internacaoId) {
       return res.status(400).json({ message: 'clienteId e petId são obrigatórios.' });
     }
     if (pesoValue === null || pesoValue <= 0) {
@@ -927,6 +1000,20 @@ router.put('/vet/pesos/:id', authMiddleware, requireStaff, async (req, res) => {
     const weightDoc = await PetWeight.findById(weightId);
     if (!weightDoc) {
       return res.status(404).json({ message: 'Registro de peso não encontrado.' });
+    }
+
+    let internacaoRegistro = null;
+    if (internacaoId) {
+      internacaoRegistro = await InternacaoRegistro.findById(internacaoId);
+      if (!internacaoRegistro) {
+        return res.status(404).json({ message: 'Internação não encontrada para vincular o peso.' });
+      }
+      if (!petId) {
+        petId = normalizeObjectId(internacaoRegistro.petId);
+      }
+      if (!clienteId) {
+        clienteId = normalizeObjectId(internacaoRegistro.tutorId);
+      }
     }
 
     if (toStringSafe(weightDoc.cliente) !== clienteId || toStringSafe(weightDoc.pet) !== petId) {
@@ -965,6 +1052,14 @@ router.put('/vet/pesos/:id', authMiddleware, requireStaff, async (req, res) => {
       const latestWeight = latest ? parseWeight(latest.peso) : null;
       petDoc.peso = latestWeight !== null ? String(latestWeight) : '';
       await petDoc.save();
+    }
+
+    if (internacaoRegistro) {
+      await registerInternacaoPesoUpdate({
+        internacaoId: internacaoRegistro._id,
+        pesoValue,
+        author: req.user?.email,
+      });
     }
 
     const formatted = formatPetWeightEntry(weightDoc.toObject());
