@@ -457,6 +457,9 @@ export async function loadPesosFromServer(options = {}) {
 
   try {
     const params = new URLSearchParams({ clienteId, petId });
+    if (pesoModal.context?.internacaoId) {
+      params.set('internacaoId', pesoModal.context.internacaoId);
+    }
     const resp = await api(`/func/vet/pesos?${params.toString()}`);
     const payload = await resp.json().catch(() => (resp.ok ? [] : {}));
     if (!resp.ok) {
@@ -529,6 +532,9 @@ export async function deletePeso(peso, options = {}) {
   }
 
   const params = new URLSearchParams({ clienteId, petId });
+  if (pesoModal.context?.internacaoId) {
+    params.set('internacaoId', pesoModal.context.internacaoId);
+  }
   const endpoint = `/func/vet/pesos/${encodeURIComponent(targetId)}?${params.toString()}`;
 
   try {
@@ -626,6 +632,16 @@ export function closePesoModal() {
     document.removeEventListener('keydown', pesoModal.keydownHandler);
     pesoModal.keydownHandler = null;
   }
+  const onClose = pesoModal.onClose;
+  pesoModal.context = null;
+  pesoModal.onClose = null;
+  if (typeof onClose === 'function') {
+    try {
+      onClose();
+    } catch (error) {
+      console.error('closePesoModal onClose callback', error);
+    }
+  }
 }
 
 export function openPesoModal(options = {}) {
@@ -635,7 +651,9 @@ export function openPesoModal(options = {}) {
 
   const modal = ensurePesoModal();
   setPesoModalSubmitting(false);
-  const { peso = null } = options || {};
+  const { peso = null, context = null, onClose = null } = options || {};
+  pesoModal.context = context || null;
+  pesoModal.onClose = typeof onClose === 'function' ? onClose : null;
   if (modal.form) {
     try { modal.form.reset(); } catch (_) { /* ignore */ }
   }
@@ -720,6 +738,7 @@ async function handlePesoSubmit(event) {
     clienteId,
     petId,
     peso: pesoValor,
+    ...(pesoModal.context?.internacaoId ? { internacaoId: pesoModal.context.internacaoId } : {}),
   };
 
   setPesoModalSubmitting(true);
@@ -777,6 +796,7 @@ async function submitPesoUpdate(pesoValor) {
     clienteId,
     petId,
     peso: pesoValor,
+    ...(pesoModal.context?.internacaoId ? { internacaoId: pesoModal.context.internacaoId } : {}),
   };
   if (record.isInitial) {
     payload.isInitial = true;

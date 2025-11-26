@@ -184,6 +184,44 @@ const cancelarModal = {
   dataset: null,
   state: null,
   onSuccess: null,
+  onClose: null,
+  record: null,
+  recordId: null,
+  petInfo: null,
+};
+
+const ocorrenciaModal = {
+  overlay: null,
+  dialog: null,
+  form: null,
+  submitBtn: null,
+  errorEl: null,
+  petSummaryEl: null,
+  petSummaryNameEl: null,
+  petSummaryMetaEl: null,
+  petSummaryTutorEl: null,
+  dataset: null,
+  state: null,
+  onSuccess: null,
+  record: null,
+  recordId: null,
+  petInfo: null,
+};
+
+const relatorioMedicoModal = {
+  overlay: null,
+  dialog: null,
+  form: null,
+  submitBtn: null,
+  errorEl: null,
+  petSummaryEl: null,
+  petSummaryNameEl: null,
+  petSummaryMetaEl: null,
+  petSummaryTutorEl: null,
+  dataset: null,
+  state: null,
+  onSuccess: null,
+  onClose: null,
   record: null,
   recordId: null,
   petInfo: null,
@@ -627,6 +665,41 @@ function getPetInfoFromInternacaoRecord(record) {
   });
 }
 
+function pickLatestTimestamp(values = []) {
+  const validDates = values
+    .map((value) => {
+      if (!value) return null;
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return null;
+      return date.getTime();
+    })
+    .filter((time) => time !== null);
+
+  if (!validDates.length) return '';
+  const latest = Math.max(...validDates);
+  const date = new Date(latest);
+  return Number.isNaN(date.getTime()) ? '' : date.toISOString();
+}
+
+function resolvePetInfoForPrescricao(record, dataset) {
+  const recordInfo = getPetInfoFromInternacaoRecord(record);
+  const datasetInfo = getPetInfoFromDataset(dataset, recordInfo?.petId);
+  const mergedInfo = mergePetInfo(recordInfo, datasetInfo);
+
+  const pesoAtualizadoEm = pickLatestTimestamp([
+    datasetInfo?.petPesoAtualizadoEm,
+    recordInfo?.petPesoAtualizadoEm,
+    getLatestPesoHistoricoTimestamp(record),
+  ]);
+
+  if (!pesoAtualizadoEm) return mergedInfo;
+
+  return {
+    ...mergedInfo,
+    petPesoAtualizadoEm: pesoAtualizadoEm,
+  };
+}
+
 function getPetInfoFromParams(params) {
   if (!(params instanceof URLSearchParams)) return null;
   const payload = {};
@@ -818,6 +891,25 @@ function normalizeHistoricoEntry(entry) {
   };
 }
 
+function normalizeRelatorioMedicoEntry(entry) {
+  if (!entry || typeof entry !== 'object') return null;
+  const toText = (value) => {
+    if (value === undefined || value === null) return '';
+    return String(value).trim();
+  };
+  const baseId = toText(entry.id) || toText(entry._id) || toText(entry.criadoEm);
+  const resumo = toText(entry.resumo);
+  const descricao = toText(entry.descricao);
+  if (!resumo && !descricao) return null;
+  return {
+    id: baseId || `relatorio-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    resumo,
+    descricao,
+    criadoPor: toText(entry.criadoPor) || 'Sistema',
+    criadoEm: entry.criadoEm || entry.createdAt || '',
+  };
+}
+
 function normalizePrescricaoItem(entry) {
   if (!entry || typeof entry !== 'object') return null;
   const toText = (value) => {
@@ -915,6 +1007,9 @@ function normalizeInternacaoRecord(raw) {
   const historico = Array.isArray(raw.historico)
     ? raw.historico.map(normalizeHistoricoEntry).filter(Boolean)
     : [];
+  const relatoriosMedicos = Array.isArray(raw.relatoriosMedicos)
+    ? raw.relatoriosMedicos.map(normalizeRelatorioMedicoEntry).filter(Boolean)
+    : [];
   const situacaoCodigo = toText(raw.situacaoCodigo);
   const canceladoFlag = Boolean(raw.cancelado) || normalizeActionKey(situacaoCodigo) === 'cancelado';
   const ultimoPesoHistorico = historico.find((entry) =>
@@ -969,6 +1064,7 @@ function normalizeInternacaoRecord(raw) {
     observacoes: toText(raw.observacoes),
     alergias: normalizeTagList(raw.alergias),
     execucoes,
+    relatoriosMedicos,
     cancelado: canceladoFlag,
     canceladoResponsavel: toText(raw.canceladoResponsavel),
     canceladoData: toText(raw.canceladoData),
@@ -1536,6 +1632,598 @@ async function handleObitoModalSubmit(event) {
     setObitoModalError(error.message || 'Não foi possível registrar o óbito.');
   } finally {
     setObitoModalLoading(false);
+  }
+}
+
+function setOcorrenciaModalError(message) {
+  if (!ocorrenciaModal.errorEl) return;
+  const text = String(message || '').trim();
+  ocorrenciaModal.errorEl.textContent = text;
+  ocorrenciaModal.errorEl.classList.toggle('hidden', !text);
+}
+
+function setOcorrenciaModalLoading(isLoading) {
+  if (!ocorrenciaModal.submitBtn) return;
+  if (!ocorrenciaModal.submitBtn.dataset.defaultLabel) {
+    ocorrenciaModal.submitBtn.dataset.defaultLabel = ocorrenciaModal.submitBtn.textContent.trim();
+  }
+  ocorrenciaModal.submitBtn.disabled = !!isLoading;
+  ocorrenciaModal.submitBtn.classList.toggle('opacity-60', !!isLoading);
+  ocorrenciaModal.submitBtn.textContent = isLoading
+    ? 'Salvando...'
+    : ocorrenciaModal.submitBtn.dataset.defaultLabel;
+}
+
+function resetOcorrenciaModalForm() {
+  if (ocorrenciaModal.form) {
+    ocorrenciaModal.form.reset();
+  }
+}
+
+function setOcorrenciaModalPetInfo(info) {
+  const normalized = normalizePetInfo(info);
+  ocorrenciaModal.petInfo = normalized;
+  if (!ocorrenciaModal.petSummaryEl) return;
+  const hasInfo = !!normalized;
+  ocorrenciaModal.petSummaryEl.classList.toggle('hidden', !hasInfo);
+  const petName = normalized?.petNome || 'Paciente';
+  const meta = normalized
+    ? [normalized.petEspecie, normalized.petRaca, normalized.petPeso || normalized.petIdade].filter(Boolean).join(' · ')
+    : '';
+  const tutorNome = normalized?.tutorNome || '';
+  const tutorContato = [normalized?.tutorDocumento, normalized?.tutorContato]
+    .filter(Boolean)
+    .join(' · ');
+  const tutorLabel = tutorNome && tutorContato ? `${tutorNome} · ${tutorContato}` : tutorNome || tutorContato || 'Tutor não informado';
+
+  if (ocorrenciaModal.petSummaryNameEl) ocorrenciaModal.petSummaryNameEl.textContent = hasInfo ? petName : 'Paciente';
+  if (ocorrenciaModal.petSummaryMetaEl) ocorrenciaModal.petSummaryMetaEl.textContent = meta || '—';
+  if (ocorrenciaModal.petSummaryTutorEl) ocorrenciaModal.petSummaryTutorEl.textContent = tutorLabel;
+}
+
+function fillOcorrenciaModalForm(record) {
+  if (!ocorrenciaModal.form) return;
+  const dateField = ocorrenciaModal.form.querySelector('input[name="ocorrenciaData"]');
+  const timeField = ocorrenciaModal.form.querySelector('input[name="ocorrenciaHora"]');
+  const resumoField = ocorrenciaModal.form.querySelector('input[name="ocorrenciaResumo"]');
+  const descricaoField = ocorrenciaModal.form.querySelector('textarea[name="ocorrenciaDescricao"]');
+  const now = new Date();
+  if (dateField) {
+    dateField.value = getLocalDateInputValue(now);
+  }
+  if (timeField) {
+    timeField.value = getLocalTimeInputValue(now);
+  }
+  if (resumoField) resumoField.value = '';
+  if (descricaoField) descricaoField.value = '';
+}
+
+function closeOcorrenciaModal() {
+  const onClose = ocorrenciaModal.onClose;
+  if (!ocorrenciaModal.overlay) return;
+  ocorrenciaModal.overlay.classList.add('hidden');
+  ocorrenciaModal.overlay.dataset.modalOpen = 'false';
+  if (ocorrenciaModal.dialog) {
+    ocorrenciaModal.dialog.classList.add('opacity-0', 'scale-95');
+  }
+  ocorrenciaModal.record = null;
+  ocorrenciaModal.recordId = null;
+  ocorrenciaModal.dataset = null;
+  ocorrenciaModal.state = null;
+  ocorrenciaModal.onSuccess = null;
+  ocorrenciaModal.petInfo = null;
+  ocorrenciaModal.onClose = null;
+
+  if (typeof onClose === 'function') {
+    try {
+      onClose();
+    } catch (error) {
+      console.warn('internacao: falha ao acionar callback de fechamento da ocorrência', error);
+    }
+  }
+}
+
+function ensureOcorrenciaModal() {
+  if (ocorrenciaModal.overlay) return ocorrenciaModal.overlay;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'internacao-ocorrencia-modal fixed inset-0 z-[1004] hidden';
+  overlay.innerHTML = `
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-modal></div>
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
+      <div class="relative flex w-full max-w-3xl transform-gpu flex-col overflow-hidden rounded-2xl bg-white text-[12px] leading-[1.35] shadow-2xl ring-1 ring-black/10 opacity-0 scale-95 transition-all duration-200" role="dialog" aria-modal="true" aria-labelledby="ocorrencia-modal-title" data-ocorrencia-dialog tabindex="-1">
+        <header class="flex flex-col gap-2.5 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <span class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+              <i class="fas fa-triangle-exclamation"></i>
+              Ocorrência
+            </span>
+            <h2 id="ocorrencia-modal-title" class="mt-1.5 text-lg font-semibold text-gray-900">Registrar ocorrência</h2>
+            <p class="mt-1 max-w-3xl text-[11px] text-gray-600">Registre rapidamente ocorrências que sejam relevantes relatar ao Veterinário para ajuda-lo na criação do relatório médico.</p>
+          </div>
+          <button type="button" class="inline-flex items-center justify-center rounded-full border border-gray-200 p-1.5 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700" data-close-modal>
+            <span class="sr-only">Fechar modal</span>
+            <i class="fas fa-xmark text-sm"></i>
+          </button>
+        </header>
+        <form class="flex max-h-[80vh] flex-col overflow-hidden" novalidate>
+          <div class="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+            <div class="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-[11px] text-gray-600" data-ocorrencia-summary>
+              <div class="flex flex-wrap items-center gap-2 text-gray-700">
+                <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Paciente</span>
+                <span class="text-[13px] font-semibold text-gray-900" data-ocorrencia-summary-name>—</span>
+                <span class="text-[10px] text-gray-400" data-ocorrencia-summary-meta>—</span>
+              </div>
+              <div class="mt-1 flex flex-wrap items-center gap-2 text-gray-600">
+                <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Tutor</span>
+                <span data-ocorrencia-summary-tutor>—</span>
+              </div>
+            </div>
+            <div class="grid gap-3 md:grid-cols-2">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Data*
+                <input type="date" name="ocorrenciaData" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
+              </label>
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Hora*
+                <input type="time" name="ocorrenciaHora" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
+              </label>
+            </div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Resumo*
+              <input type="text" name="ocorrenciaResumo" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Título rápido da ocorrência" />
+            </label>
+            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Descrição*
+              <textarea name="ocorrenciaDescricao" rows="4" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Detalhe o ocorrido para ajudar o veterinário na análise"></textarea>
+            </label>
+            <p class="hidden rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[11px] text-red-700" data-ocorrencia-error></p>
+          </div>
+          <footer class="flex flex-col gap-3 border-t border-gray-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <span class="text-[11px] text-gray-500">A ocorrência fica registrada no histórico da internação.</span>
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <button type="button" class="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-700 transition hover:bg-gray-50" data-close-modal>Cancelar</button>
+              <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-primary px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-primary/90" data-ocorrencia-submit>Salvar</button>
+            </div>
+          </footer>
+        </form>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  ocorrenciaModal.overlay = overlay;
+  ocorrenciaModal.dialog = overlay.querySelector('[data-ocorrencia-dialog]');
+  ocorrenciaModal.form = overlay.querySelector('form');
+  ocorrenciaModal.submitBtn = overlay.querySelector('[data-ocorrencia-submit]');
+  ocorrenciaModal.errorEl = overlay.querySelector('[data-ocorrencia-error]');
+  ocorrenciaModal.petSummaryEl = overlay.querySelector('[data-ocorrencia-summary]');
+  ocorrenciaModal.petSummaryNameEl = overlay.querySelector('[data-ocorrencia-summary-name]');
+  ocorrenciaModal.petSummaryMetaEl = overlay.querySelector('[data-ocorrencia-summary-meta]');
+  ocorrenciaModal.petSummaryTutorEl = overlay.querySelector('[data-ocorrencia-summary-tutor]');
+
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) {
+      closeOcorrenciaModal();
+      return;
+    }
+    const closeTrigger = event.target.closest('[data-close-modal]');
+    if (closeTrigger) {
+      event.preventDefault();
+      closeOcorrenciaModal();
+    }
+  });
+
+  overlay.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !overlay.classList.contains('hidden')) {
+      event.preventDefault();
+      closeOcorrenciaModal();
+    }
+  });
+
+  if (ocorrenciaModal.form) {
+    ocorrenciaModal.form.addEventListener('submit', handleOcorrenciaModalSubmit);
+  }
+
+  setOcorrenciaModalPetInfo(null);
+
+  return overlay;
+}
+
+function openOcorrenciaModal(record, options = {}) {
+  if (!record) return;
+  ensureOcorrenciaModal();
+  const datasetRef = options.dataset || ocorrenciaModal.dataset || getDataset();
+  const stateRef = options.state || ocorrenciaModal.state || {};
+  const successHandler =
+    typeof options.onSuccess === 'function'
+      ? options.onSuccess
+      : typeof stateRef?.refreshInternacoes === 'function'
+        ? stateRef.refreshInternacoes
+        : null;
+  const recordId = record.id || '';
+  if (!recordId) {
+    showToastMessage('Não foi possível identificar essa internação para registrar a ocorrência.', 'warning');
+    return;
+  }
+
+  ocorrenciaModal.dataset = datasetRef || null;
+  ocorrenciaModal.state = stateRef || null;
+  ocorrenciaModal.onSuccess = successHandler || null;
+  ocorrenciaModal.onClose = typeof options.onClose === 'function' ? options.onClose : null;
+  ocorrenciaModal.record = record;
+  ocorrenciaModal.recordId = recordId;
+
+  setOcorrenciaModalError('');
+  setOcorrenciaModalLoading(false);
+  resetOcorrenciaModalForm();
+  const petInfo = getPetInfoFromInternacaoRecord(record);
+  setOcorrenciaModalPetInfo(petInfo);
+  fillOcorrenciaModalForm(record);
+
+  ocorrenciaModal.overlay.classList.remove('hidden');
+  ocorrenciaModal.overlay.dataset.modalOpen = 'true';
+  if (ocorrenciaModal.dialog) {
+    requestAnimationFrame(() => {
+      ocorrenciaModal.dialog.classList.remove('opacity-0', 'scale-95');
+      ocorrenciaModal.dialog.focus();
+    });
+  }
+}
+
+async function handleOcorrenciaModalSubmit(event) {
+  event.preventDefault();
+  if (!ocorrenciaModal.form) return;
+  setOcorrenciaModalError('');
+  const recordId = ocorrenciaModal.recordId;
+  if (!recordId) {
+    setOcorrenciaModalError('Não foi possível identificar a internação selecionada.');
+    return;
+  }
+
+  const formData = new FormData(ocorrenciaModal.form);
+  const payload = {
+    data: (formData.get('ocorrenciaData') || '').toString().trim(),
+    hora: (formData.get('ocorrenciaHora') || '').toString().trim(),
+    resumo: (formData.get('ocorrenciaResumo') || '').toString().trim(),
+    descricao: (formData.get('ocorrenciaDescricao') || '').toString().trim(),
+  };
+
+  if (!payload.data) {
+    setOcorrenciaModalError('Informe a data da ocorrência.');
+    return;
+  }
+  if (!payload.hora) {
+    setOcorrenciaModalError('Informe o horário da ocorrência.');
+    return;
+  }
+  if (!payload.resumo) {
+    setOcorrenciaModalError('Preencha um resumo para a ocorrência.');
+    return;
+  }
+  if (!payload.descricao) {
+    setOcorrenciaModalError('Descreva a ocorrência antes de salvar.');
+    return;
+  }
+
+  setOcorrenciaModalLoading(true);
+  const datasetRef = ocorrenciaModal.dataset || getDataset();
+  const stateRef = ocorrenciaModal.state || {};
+  try {
+    const updatedRecord = await requestJson(`/internacao/registros/${encodeURIComponent(recordId)}/ocorrencias`, {
+      method: 'POST',
+      body: payload,
+    });
+    const normalized = normalizeInternacaoRecord(updatedRecord);
+    if (normalized) {
+      applyInternacaoRecordUpdate(normalized, datasetRef, stateRef);
+      const fichaRecord = fichaInternacaoModal.record;
+      if (fichaRecord) {
+        const sameRecord =
+          fichaRecord.id === normalized.id ||
+          fichaRecord.filterKey === normalized.filterKey ||
+          (normalized.codigo !== null && fichaRecord.codigo === normalized.codigo);
+        if (sameRecord) {
+          fichaInternacaoModal.record = normalized;
+          fillFichaInternacaoModal(normalized);
+        }
+      }
+    }
+
+    showToastMessage('Ocorrência registrada com sucesso.', 'success');
+    const successCallback = ocorrenciaModal.onSuccess;
+    closeOcorrenciaModal();
+
+    if (typeof successCallback === 'function') {
+      successCallback();
+    }
+  } catch (error) {
+    console.error('internacao: falha ao salvar ocorrência', error);
+    setOcorrenciaModalError(error.message || 'Não foi possível registrar a ocorrência.');
+  } finally {
+    setOcorrenciaModalLoading(false);
+  }
+}
+
+function setRelatorioMedicoModalError(message) {
+  if (!relatorioMedicoModal.errorEl) return;
+  const text = String(message || '').trim();
+  relatorioMedicoModal.errorEl.textContent = text;
+  relatorioMedicoModal.errorEl.classList.toggle('hidden', !text);
+}
+
+function setRelatorioMedicoModalLoading(isLoading) {
+  if (!relatorioMedicoModal.submitBtn) return;
+  if (!relatorioMedicoModal.submitBtn.dataset.defaultLabel) {
+    relatorioMedicoModal.submitBtn.dataset.defaultLabel = relatorioMedicoModal.submitBtn.textContent.trim();
+  }
+  relatorioMedicoModal.submitBtn.disabled = !!isLoading;
+  relatorioMedicoModal.submitBtn.classList.toggle('opacity-60', !!isLoading);
+  relatorioMedicoModal.submitBtn.textContent = isLoading
+    ? 'Salvando...'
+    : relatorioMedicoModal.submitBtn.dataset.defaultLabel;
+}
+
+function resetRelatorioMedicoModalForm() {
+  if (relatorioMedicoModal.form) {
+    relatorioMedicoModal.form.reset();
+  }
+}
+
+function setRelatorioMedicoModalPetInfo(info) {
+  const normalized = normalizePetInfo(info);
+  relatorioMedicoModal.petInfo = normalized;
+  if (!relatorioMedicoModal.petSummaryEl) return;
+  const hasInfo = !!normalized;
+  relatorioMedicoModal.petSummaryEl.classList.toggle('hidden', !hasInfo);
+  const petName = normalized?.petNome || 'Paciente';
+  const meta = normalized
+    ? [normalized.petEspecie, normalized.petRaca, normalized.petPeso || normalized.petIdade].filter(Boolean).join(' · ')
+    : '';
+  const tutorNome = normalized?.tutorNome || '';
+  const tutorContato = [normalized?.tutorDocumento, normalized?.tutorContato]
+    .filter(Boolean)
+    .join(' · ');
+  const tutorLabel = tutorNome && tutorContato ? `${tutorNome} · ${tutorContato}` : tutorNome || tutorContato || 'Tutor não informado';
+
+  if (relatorioMedicoModal.petSummaryNameEl) relatorioMedicoModal.petSummaryNameEl.textContent = hasInfo ? petName : 'Paciente';
+  if (relatorioMedicoModal.petSummaryMetaEl) relatorioMedicoModal.petSummaryMetaEl.textContent = meta || '—';
+  if (relatorioMedicoModal.petSummaryTutorEl) relatorioMedicoModal.petSummaryTutorEl.textContent = tutorLabel;
+}
+
+function fillRelatorioMedicoModalForm(record) {
+  if (!relatorioMedicoModal.form) return;
+  const resumoField = relatorioMedicoModal.form.querySelector('input[name="relatorioResumo"]');
+  const descricaoField = relatorioMedicoModal.form.querySelector('textarea[name="relatorioDescricao"]');
+  if (resumoField) resumoField.value = '';
+  if (descricaoField) descricaoField.value = '';
+  if (record && resumoField && record.resumo) {
+    resumoField.value = record.resumo;
+  }
+  if (record && descricaoField && record.descricao) {
+    descricaoField.value = record.descricao;
+  }
+}
+
+function closeRelatorioMedicoModal() {
+  const onClose = relatorioMedicoModal.onClose;
+  if (!relatorioMedicoModal.overlay) return;
+  relatorioMedicoModal.overlay.classList.add('hidden');
+  relatorioMedicoModal.overlay.dataset.modalOpen = 'false';
+  if (relatorioMedicoModal.dialog) {
+    relatorioMedicoModal.dialog.classList.add('opacity-0', 'scale-95');
+  }
+  relatorioMedicoModal.record = null;
+  relatorioMedicoModal.recordId = null;
+  relatorioMedicoModal.dataset = null;
+  relatorioMedicoModal.state = null;
+  relatorioMedicoModal.onSuccess = null;
+  relatorioMedicoModal.petInfo = null;
+  relatorioMedicoModal.onClose = null;
+
+  if (typeof onClose === 'function') {
+    try {
+      onClose();
+    } catch (error) {
+      console.warn('internacao: falha ao acionar callback de fechamento do relatório médico', error);
+    }
+  }
+}
+
+function ensureRelatorioMedicoModal() {
+  if (relatorioMedicoModal.overlay) return relatorioMedicoModal.overlay;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'internacao-relatorio-modal fixed inset-0 z-[1004] hidden';
+  overlay.innerHTML = `
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-modal></div>
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
+      <div class="relative flex w-full max-w-3xl transform-gpu flex-col overflow-hidden rounded-2xl bg-white text-[12px] leading-[1.35] shadow-2xl ring-1 ring-black/10 opacity-0 scale-95 transition-all duration-200" role="dialog" aria-modal="true" aria-labelledby="relatorio-medico-modal-title" data-relatorio-dialog tabindex="-1">
+        <header class="flex flex-col gap-2.5 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <span class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+              <i class="fas fa-file-medical"></i>
+              Relatório médico
+            </span>
+            <h2 id="relatorio-medico-modal-title" class="mt-1.5 text-lg font-semibold text-gray-900">Registrar relatório médico</h2>
+            <p class="text-[11px] text-gray-600">Descreva de forma objetiva para auxiliar na evolução do paciente.</p>
+          </div>
+          <button type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-gray-600" data-close-modal>
+            <span class="sr-only">Fechar</span>
+            <i class="fas fa-times"></i>
+          </button>
+        </header>
+
+        <div class="max-h-[calc(90vh-100px)] overflow-y-auto px-4 py-3">
+          <div class="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-[11px] text-gray-600" data-relatorio-summary>
+            <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div class="flex flex-col">
+                <span class="text-[13px] font-semibold text-gray-900" data-relatorio-summary-name>—</span>
+                <span class="text-[10px] text-gray-400" data-relatorio-summary-meta>—</span>
+              </div>
+              <span class="text-[11px] text-gray-500" data-relatorio-summary-tutor>—</span>
+            </div>
+          </div>
+
+          <form class="mt-3 space-y-3" novalidate>
+            <div>
+              <label class="text-[11px] font-semibold text-gray-700">Resumo*</label>
+              <input type="text" name="relatorioResumo" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Síntese do relatório para exibição rápida" />
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold text-gray-700">Descrição*</label>
+              <textarea name="relatorioDescricao" rows="4" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Detalhe o caso para o médico"></textarea>
+            </div>
+            <p class="hidden rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[11px] text-red-700" data-relatorio-error></p>
+            <div class="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end sm:gap-3">
+              <button type="button" class="inline-flex items-center justify-center rounded-lg border border-gray-200 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-600 transition hover:border-gray-300 hover:text-gray-800" data-close-modal>Cancelar</button>
+              <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-primary px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-primary/90" data-relatorio-submit>Salvar</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  relatorioMedicoModal.overlay = overlay;
+  relatorioMedicoModal.dialog = overlay.querySelector('[data-relatorio-dialog]');
+  relatorioMedicoModal.form = overlay.querySelector('form');
+  relatorioMedicoModal.submitBtn = overlay.querySelector('[data-relatorio-submit]');
+  relatorioMedicoModal.errorEl = overlay.querySelector('[data-relatorio-error]');
+  relatorioMedicoModal.petSummaryEl = overlay.querySelector('[data-relatorio-summary]');
+  relatorioMedicoModal.petSummaryNameEl = overlay.querySelector('[data-relatorio-summary-name]');
+  relatorioMedicoModal.petSummaryMetaEl = overlay.querySelector('[data-relatorio-summary-meta]');
+  relatorioMedicoModal.petSummaryTutorEl = overlay.querySelector('[data-relatorio-summary-tutor]');
+
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) {
+      closeRelatorioMedicoModal();
+      return;
+    }
+    const closeTrigger = event.target.closest('[data-close-modal]');
+    if (closeTrigger) {
+      event.preventDefault();
+      closeRelatorioMedicoModal();
+    }
+  });
+
+  overlay.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !overlay.classList.contains('hidden')) {
+      event.preventDefault();
+      closeRelatorioMedicoModal();
+    }
+  });
+
+  if (relatorioMedicoModal.form) {
+    relatorioMedicoModal.form.addEventListener('submit', handleRelatorioMedicoModalSubmit);
+  }
+
+  setRelatorioMedicoModalPetInfo(null);
+
+  return overlay;
+}
+
+function openRelatorioMedicoModal(record, options = {}) {
+  if (!record) return;
+  ensureRelatorioMedicoModal();
+  const datasetRef = options.dataset || relatorioMedicoModal.dataset || getDataset();
+  const stateRef = options.state || relatorioMedicoModal.state || {};
+  const successHandler =
+    typeof options.onSuccess === 'function'
+      ? options.onSuccess
+      : typeof stateRef?.refreshInternacoes === 'function'
+        ? stateRef.refreshInternacoes
+        : null;
+  const recordId = record.id || '';
+  if (!recordId) {
+    showToastMessage('Não foi possível identificar essa internação para registrar o relatório.', 'warning');
+    return;
+  }
+
+  relatorioMedicoModal.dataset = datasetRef || null;
+  relatorioMedicoModal.state = stateRef || null;
+  relatorioMedicoModal.onSuccess = successHandler || null;
+  relatorioMedicoModal.onClose = typeof options.onClose === 'function' ? options.onClose : null;
+  relatorioMedicoModal.record = record;
+  relatorioMedicoModal.recordId = recordId;
+
+  setRelatorioMedicoModalError('');
+  setRelatorioMedicoModalLoading(false);
+  resetRelatorioMedicoModalForm();
+  const petInfo = getPetInfoFromInternacaoRecord(record);
+  setRelatorioMedicoModalPetInfo(petInfo);
+  fillRelatorioMedicoModalForm(record);
+
+  relatorioMedicoModal.overlay.classList.remove('hidden');
+  relatorioMedicoModal.overlay.dataset.modalOpen = 'true';
+  if (relatorioMedicoModal.dialog) {
+    requestAnimationFrame(() => {
+      relatorioMedicoModal.dialog.classList.remove('opacity-0', 'scale-95');
+      relatorioMedicoModal.dialog.focus();
+    });
+  }
+}
+
+async function handleRelatorioMedicoModalSubmit(event) {
+  event.preventDefault();
+  if (!relatorioMedicoModal.form) return;
+  setRelatorioMedicoModalError('');
+  const recordId = relatorioMedicoModal.recordId;
+  if (!recordId) {
+    setRelatorioMedicoModalError('Não foi possível identificar a internação selecionada.');
+    return;
+  }
+
+  const formData = new FormData(relatorioMedicoModal.form);
+  const payload = {
+    resumo: (formData.get('relatorioResumo') || '').toString().trim(),
+    descricao: (formData.get('relatorioDescricao') || '').toString().trim(),
+  };
+
+  if (!payload.resumo) {
+    setRelatorioMedicoModalError('Preencha um resumo para o relatório.');
+    return;
+  }
+  if (!payload.descricao) {
+    setRelatorioMedicoModalError('Descreva o relatório antes de salvar.');
+    return;
+  }
+
+  setRelatorioMedicoModalLoading(true);
+  const datasetRef = relatorioMedicoModal.dataset || getDataset();
+  const stateRef = relatorioMedicoModal.state || {};
+  try {
+    const updatedRecord = await requestJson(`/internacao/registros/${encodeURIComponent(recordId)}/relatorios-medicos`, {
+      method: 'POST',
+      body: payload,
+    });
+    const normalized = normalizeInternacaoRecord(updatedRecord);
+    if (normalized) {
+      applyInternacaoRecordUpdate(normalized, datasetRef, stateRef);
+      const fichaRecord = fichaInternacaoModal.record;
+      if (fichaRecord) {
+        const sameRecord =
+          fichaRecord.id === normalized.id ||
+          fichaRecord.filterKey === normalized.filterKey ||
+          (normalized.codigo !== null && fichaRecord.codigo === normalized.codigo);
+        if (sameRecord) {
+          fichaInternacaoModal.record = normalized;
+          fillFichaInternacaoModal(normalized);
+        }
+      }
+    }
+
+    showToastMessage('Relatório médico registrado com sucesso.', 'success');
+    const successCallback = relatorioMedicoModal.onSuccess;
+    closeRelatorioMedicoModal();
+
+    if (typeof successCallback === 'function') {
+      successCallback();
+    }
+  } catch (error) {
+    console.error('internacao: falha ao salvar relatório médico', error);
+    setRelatorioMedicoModalError(error.message || 'Não foi possível registrar o relatório.');
+  } finally {
+    setRelatorioMedicoModalLoading(false);
   }
 }
 
@@ -3346,7 +4034,65 @@ function ensureFichaInternacaoModal() {
     const quickActionTrigger = event.target.closest('[data-ficha-hist-action]');
     if (quickActionTrigger) {
       event.preventDefault();
-      showToastMessage('Funcionalidade em desenvolvimento.', 'info');
+      const actionType = normalizeActionKey(quickActionTrigger.dataset.fichaHistAction);
+      if (actionType === 'ocorrencia') {
+        const record = fichaInternacaoModal.record;
+        const dataset = fichaInternacaoModal.dataset || getDataset();
+        const state = fichaInternacaoModal.state || {};
+        if (!record) {
+          showToastMessage('Abra uma ficha de internação válida antes de registrar a ocorrência.', 'warning');
+          return;
+        }
+        const reopenFicha = () => {
+          const updatedRecord =
+            state?.internacoes?.find(
+              (item) =>
+                item.id === record.id ||
+                item.filterKey === record.filterKey ||
+                (record.codigo !== null && item.codigo === record.codigo),
+            ) || record;
+          openFichaInternacaoModal(updatedRecord, { dataset, state });
+        };
+
+        closeFichaInternacaoModal();
+        openOcorrenciaModal(record, {
+          dataset,
+          state,
+          onSuccess: state.refreshInternacoes,
+          onClose: reopenFicha,
+        });
+      } else if (actionType === 'relatorio medico') {
+        const record = fichaInternacaoModal.record;
+        const dataset = fichaInternacaoModal.dataset || getDataset();
+        const state = fichaInternacaoModal.state || {};
+        if (!record) {
+          showToastMessage('Abra uma ficha de internação válida antes de registrar o relatório médico.', 'warning');
+          return;
+        }
+
+        const reopenFicha = () => {
+          const updatedRecord =
+            state?.internacoes?.find(
+              (item) =>
+                item.id === record.id ||
+                item.filterKey === record.filterKey ||
+                (record.codigo !== null && item.codigo === record.codigo),
+            ) || record;
+          openFichaInternacaoModal(updatedRecord, { dataset, state });
+        };
+
+        closeFichaInternacaoModal();
+        openRelatorioMedicoModal(record, {
+          dataset,
+          state,
+          onSuccess: state.refreshInternacoes,
+          onClose: reopenFicha,
+        });
+      } else if (actionType === 'peso') {
+        await handleFichaPesoAction();
+      } else {
+        showToastMessage('Funcionalidade em desenvolvimento.', 'info');
+      }
       return;
     }
     const prescricaoTrigger = event.target.closest('[data-ficha-prescricao-action]');
@@ -3404,6 +4150,75 @@ async function handleFichaEditarAction() {
     state,
     mode: 'edit',
     record,
+  });
+}
+
+async function handleFichaPesoAction() {
+  const record = fichaInternacaoModal.record;
+  if (!record) {
+    showToastMessage('Abra uma ficha de internação válida antes de ajustar o peso.', 'warning');
+    return;
+  }
+
+  const dataset = fichaInternacaoModal.dataset || getDataset();
+  const state = fichaInternacaoModal.state || {};
+  const petId = record.pet?.id || record.petId || record.filterKey;
+
+  if (!petId) {
+    showToastMessage('Não foi possível identificar o pet para registrar o peso.', 'warning');
+    return;
+  }
+
+  const petMatch = (dataset?.pacientes || []).find((pet) => pet.id === petId || pet.id === record.filterKey);
+  const tutorId = petMatch?.tutor?.id || petMatch?.tutor?._id || petMatch?.tutorId;
+
+  let pesoModule;
+  let coreModule;
+  try {
+    [pesoModule, coreModule] = await Promise.all([
+      import('../vet/ficha-clinica/pesos.js'),
+      import('../vet/ficha-clinica/core.js'),
+    ]);
+  } catch (error) {
+    console.error('internacao: falha ao carregar modal de peso', error);
+    showToastMessage('Não foi possível abrir o modal de peso.', 'error');
+    return;
+  }
+
+  const coreState = coreModule?.state || {};
+  coreState.selectedPetId = petId;
+  coreState.selectedCliente = tutorId
+    ? { _id: tutorId }
+    : { _id: record.tutor?.documento || record.tutorDocumento || record.tutor?.nome || record.tutorNome || petId };
+  coreState.agendaContext = null;
+
+  const reopenFicha = async () => {
+    const refreshPromise = typeof state.refreshInternacoes === 'function'
+      ? state.refreshInternacoes()
+      : null;
+    try {
+      if (refreshPromise?.then) {
+        await refreshPromise;
+      }
+    } catch (error) {
+      console.warn('internacao: falha ao atualizar lista após ajuste de peso', error);
+    }
+
+    const updatedRecord = Array.isArray(state?.internacoes)
+      ? state.internacoes.find(
+          (item) =>
+            item.id === record.id ||
+            item.filterKey === record.filterKey ||
+            (record.codigo !== null && item.codigo === record.codigo),
+        ) || record
+      : record;
+    openFichaInternacaoModal(updatedRecord, { dataset, state });
+  };
+
+  closeFichaInternacaoModal();
+  pesoModule.openPesoModal({
+    context: { internacaoId: record.id || record._id, internacaoCodigo: record.codigo || null },
+    onClose: reopenFicha,
   });
 }
 
@@ -3890,7 +4705,7 @@ function buildPrescricaoResumo(values = {}) {
   const medViaDetails = getOptionDetails(PRESCRICAO_MED_VIA_OPTIONS, values.medVia);
   const inicioISO = combineDateAndTime(dataInicio, horaInicio);
   const inicioLabel = inicioISO ? formatDateTimeLabel(inicioISO) : '';
-  const descricaoLabel = descricao ? ' · ' + descricao : '';
+  const resumoBase = descricao || tipoDetails.label || 'Procedimento';
   let resumo = '';
   if (freqDetails.value === 'recorrente') {
     const intervalo = aCadaValor && intervaloDetails.label
@@ -3899,13 +4714,13 @@ function buildPrescricaoResumo(values = {}) {
     const periodo = porValor && periodoDetails.label
       ? porValor + ' ' + periodoDetails.label.toLowerCase()
       : 'período informado';
-    resumo = (tipoDetails.label || 'Procedimento') + descricaoLabel + ' recorrente a cada ' + intervalo + ' por ' + periodo +
+    resumo = resumoBase + ' a cada ' + intervalo + ' por ' + periodo +
       (inicioLabel ? ', iniciando em ' + inicioLabel : '') + '.';
   } else if (freqDetails.value === 'necessario') {
-    resumo = (tipoDetails.label || 'Procedimento') + descricaoLabel + ' quando necessário' +
+    resumo = resumoBase + ' quando necessário' +
       (inicioLabel ? ', referência ' + inicioLabel : '') + '.';
   } else {
-    resumo = (tipoDetails.label || 'Procedimento') + descricaoLabel + ' aplicado apenas uma vez' +
+    resumo = resumoBase + ' aplicado apenas uma vez' +
       (inicioLabel ? ' em ' + inicioLabel : '') + '.';
   }
   if (shouldShowMedicamentoDetails(values)) {
@@ -4356,7 +5171,8 @@ function openPrescricaoModal(record, options = {}) {
   prescricaoModal.record = record;
   setPrescricaoModalError('');
   resetPrescricaoModalForm();
-  setPrescricaoModalPetInfo(getPetInfoFromInternacaoRecord(record));
+  const petInfo = resolvePetInfoForPrescricao(record, prescricaoModal.dataset);
+  setPrescricaoModalPetInfo(petInfo);
   if (options.initialValues) {
     fillPrescricaoForm(options.initialValues);
   }

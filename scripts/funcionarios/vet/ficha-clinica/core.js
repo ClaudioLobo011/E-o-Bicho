@@ -295,6 +295,8 @@ export const pesoModal = {
   mode: 'create',
   editingId: null,
   editingRecord: null,
+  context: null,
+  onClose: null,
 };
 
 export const STORAGE_KEYS = {
