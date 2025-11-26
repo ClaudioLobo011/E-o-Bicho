@@ -4,7 +4,11 @@ const mongoose = require('mongoose');
 
 const bannerSchema = new mongoose.Schema({
     imageUrl: { type: String, required: true },
+    imageDriveFileId: { type: String, default: '' },
+    imageDrivePath: { type: String, default: '' },
     mobileImageUrl: { type: String, default: '' },
+    mobileImageDriveFileId: { type: String, default: '' },
+    mobileImageDrivePath: { type: String, default: '' },
     title: { type: String, default: '' },
     subtitle: { type: String, default: '' },
     buttonText: { type: String, default: '' },
