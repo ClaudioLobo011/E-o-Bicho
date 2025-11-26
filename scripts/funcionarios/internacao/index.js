@@ -184,6 +184,7 @@ const cancelarModal = {
   dataset: null,
   state: null,
   onSuccess: null,
+  onClose: null,
   record: null,
   recordId: null,
   petInfo: null,
@@ -1621,6 +1622,7 @@ function fillOcorrenciaModalForm(record) {
 }
 
 function closeOcorrenciaModal() {
+  const onClose = ocorrenciaModal.onClose;
   if (!ocorrenciaModal.overlay) return;
   ocorrenciaModal.overlay.classList.add('hidden');
   ocorrenciaModal.overlay.dataset.modalOpen = 'false';
@@ -1633,6 +1635,15 @@ function closeOcorrenciaModal() {
   ocorrenciaModal.state = null;
   ocorrenciaModal.onSuccess = null;
   ocorrenciaModal.petInfo = null;
+  ocorrenciaModal.onClose = null;
+
+  if (typeof onClose === 'function') {
+    try {
+      onClose();
+    } catch (error) {
+      console.warn('internacao: falha ao acionar callback de fechamento da ocorrência', error);
+    }
+  }
 }
 
 function ensureOcorrenciaModal() {
@@ -1759,6 +1770,7 @@ function openOcorrenciaModal(record, options = {}) {
   ocorrenciaModal.dataset = datasetRef || null;
   ocorrenciaModal.state = stateRef || null;
   ocorrenciaModal.onSuccess = successHandler || null;
+  ocorrenciaModal.onClose = typeof options.onClose === 'function' ? options.onClose : null;
   ocorrenciaModal.record = record;
   ocorrenciaModal.recordId = recordId;
 
@@ -3665,7 +3677,28 @@ function ensureFichaInternacaoModal() {
         const record = fichaInternacaoModal.record;
         const dataset = fichaInternacaoModal.dataset || getDataset();
         const state = fichaInternacaoModal.state || {};
-        openOcorrenciaModal(record, { dataset, state, onSuccess: state.refreshInternacoes });
+        if (!record) {
+          showToastMessage('Abra uma ficha de internação válida antes de registrar a ocorrência.', 'warning');
+          return;
+        }
+        const reopenFicha = () => {
+          const updatedRecord =
+            state?.internacoes?.find(
+              (item) =>
+                item.id === record.id ||
+                item.filterKey === record.filterKey ||
+                (record.codigo !== null && item.codigo === record.codigo),
+            ) || record;
+          openFichaInternacaoModal(updatedRecord, { dataset, state });
+        };
+
+        closeFichaInternacaoModal();
+        openOcorrenciaModal(record, {
+          dataset,
+          state,
+          onSuccess: state.refreshInternacoes,
+          onClose: reopenFicha,
+        });
       } else {
         showToastMessage('Funcionalidade em desenvolvimento.', 'info');
       }
