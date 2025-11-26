@@ -868,6 +868,64 @@ router.put('/registros/:id', async (req, res) => {
   }
 });
 
+router.post('/registros/:id/ocorrencias', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: 'Informe o registro que deseja atualizar.' });
+    }
+
+    const record = await InternacaoRegistro.findById(id);
+    if (!record) {
+      return res.status(404).json({ message: 'Internação não encontrada.' });
+    }
+
+    const now = new Date();
+    const payload = {
+      data: sanitizeText(req.body?.data) || now.toISOString().slice(0, 10),
+      hora: sanitizeText(req.body?.hora) || now.toISOString().slice(11, 16),
+      resumo: sanitizeText(req.body?.resumo),
+      descricao: sanitizeText(req.body?.descricao),
+    };
+
+    if (!payload.resumo) {
+      return res.status(400).json({ message: 'Informe um resumo da ocorrência.' });
+    }
+    if (!payload.descricao) {
+      return res.status(400).json({ message: 'Descreva os detalhes da ocorrência.' });
+    }
+
+    const autor = req.user?.email || 'Sistema';
+    const criadoEmISO = combineDateAndTimeParts(payload.data, payload.hora);
+    const criadoEm = criadoEmISO ? new Date(criadoEmISO) : now;
+    const descricaoHistorico = payload.descricao ? `${payload.resumo} — ${payload.descricao}` : payload.resumo;
+
+    record.historico = Array.isArray(record.historico) ? record.historico : [];
+    record.historico.unshift({
+      tipo: 'Ocorrência',
+      descricao: descricaoHistorico,
+      criadoPor: autor,
+      criadoEm,
+    });
+
+    await record.save();
+
+    const updated = await InternacaoRegistro.findById(record._id).lean();
+    const formatted = formatRegistro(updated);
+    if (!formatted) {
+      return res.status(500).json({ message: 'Não foi possível registrar a ocorrência.' });
+    }
+
+    return res.status(201).json(formatted);
+  } catch (error) {
+    console.error('internacao: falha ao registrar ocorrência', error);
+    if (error?.name === 'ValidationError') {
+      return res.status(400).json({ message: 'Revise as informações preenchidas antes de salvar a ocorrência.' });
+    }
+    return res.status(500).json({ message: 'Não foi possível salvar a ocorrência.' });
+  }
+});
+
 router.post('/registros/:id/obito', async (req, res) => {
   try {
     const { id } = req.params;

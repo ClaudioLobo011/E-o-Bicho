@@ -189,6 +189,24 @@ const cancelarModal = {
   petInfo: null,
 };
 
+const ocorrenciaModal = {
+  overlay: null,
+  dialog: null,
+  form: null,
+  submitBtn: null,
+  errorEl: null,
+  petSummaryEl: null,
+  petSummaryNameEl: null,
+  petSummaryMetaEl: null,
+  petSummaryTutorEl: null,
+  dataset: null,
+  state: null,
+  onSuccess: null,
+  record: null,
+  recordId: null,
+  petInfo: null,
+};
+
 const moverBoxModal = {
   overlay: null,
   dialog: null,
@@ -1536,6 +1554,302 @@ async function handleObitoModalSubmit(event) {
     setObitoModalError(error.message || 'Não foi possível registrar o óbito.');
   } finally {
     setObitoModalLoading(false);
+  }
+}
+
+function setOcorrenciaModalError(message) {
+  if (!ocorrenciaModal.errorEl) return;
+  const text = String(message || '').trim();
+  ocorrenciaModal.errorEl.textContent = text;
+  ocorrenciaModal.errorEl.classList.toggle('hidden', !text);
+}
+
+function setOcorrenciaModalLoading(isLoading) {
+  if (!ocorrenciaModal.submitBtn) return;
+  if (!ocorrenciaModal.submitBtn.dataset.defaultLabel) {
+    ocorrenciaModal.submitBtn.dataset.defaultLabel = ocorrenciaModal.submitBtn.textContent.trim();
+  }
+  ocorrenciaModal.submitBtn.disabled = !!isLoading;
+  ocorrenciaModal.submitBtn.classList.toggle('opacity-60', !!isLoading);
+  ocorrenciaModal.submitBtn.textContent = isLoading
+    ? 'Salvando...'
+    : ocorrenciaModal.submitBtn.dataset.defaultLabel;
+}
+
+function resetOcorrenciaModalForm() {
+  if (ocorrenciaModal.form) {
+    ocorrenciaModal.form.reset();
+  }
+}
+
+function setOcorrenciaModalPetInfo(info) {
+  const normalized = normalizePetInfo(info);
+  ocorrenciaModal.petInfo = normalized;
+  if (!ocorrenciaModal.petSummaryEl) return;
+  const hasInfo = !!normalized;
+  ocorrenciaModal.petSummaryEl.classList.toggle('hidden', !hasInfo);
+  const petName = normalized?.petNome || 'Paciente';
+  const meta = normalized
+    ? [normalized.petEspecie, normalized.petRaca, normalized.petPeso || normalized.petIdade].filter(Boolean).join(' · ')
+    : '';
+  const tutorNome = normalized?.tutorNome || '';
+  const tutorContato = [normalized?.tutorDocumento, normalized?.tutorContato]
+    .filter(Boolean)
+    .join(' · ');
+  const tutorLabel = tutorNome && tutorContato ? `${tutorNome} · ${tutorContato}` : tutorNome || tutorContato || 'Tutor não informado';
+
+  if (ocorrenciaModal.petSummaryNameEl) ocorrenciaModal.petSummaryNameEl.textContent = hasInfo ? petName : 'Paciente';
+  if (ocorrenciaModal.petSummaryMetaEl) ocorrenciaModal.petSummaryMetaEl.textContent = meta || '—';
+  if (ocorrenciaModal.petSummaryTutorEl) ocorrenciaModal.petSummaryTutorEl.textContent = tutorLabel;
+}
+
+function fillOcorrenciaModalForm(record) {
+  if (!ocorrenciaModal.form) return;
+  const dateField = ocorrenciaModal.form.querySelector('input[name="ocorrenciaData"]');
+  const timeField = ocorrenciaModal.form.querySelector('input[name="ocorrenciaHora"]');
+  const resumoField = ocorrenciaModal.form.querySelector('input[name="ocorrenciaResumo"]');
+  const descricaoField = ocorrenciaModal.form.querySelector('textarea[name="ocorrenciaDescricao"]');
+  const now = new Date();
+  if (dateField) {
+    dateField.value = getLocalDateInputValue(now);
+  }
+  if (timeField) {
+    timeField.value = getLocalTimeInputValue(now);
+  }
+  if (resumoField) resumoField.value = '';
+  if (descricaoField) descricaoField.value = '';
+}
+
+function closeOcorrenciaModal() {
+  if (!ocorrenciaModal.overlay) return;
+  ocorrenciaModal.overlay.classList.add('hidden');
+  ocorrenciaModal.overlay.dataset.modalOpen = 'false';
+  if (ocorrenciaModal.dialog) {
+    ocorrenciaModal.dialog.classList.add('opacity-0', 'scale-95');
+  }
+  ocorrenciaModal.record = null;
+  ocorrenciaModal.recordId = null;
+  ocorrenciaModal.dataset = null;
+  ocorrenciaModal.state = null;
+  ocorrenciaModal.onSuccess = null;
+  ocorrenciaModal.petInfo = null;
+}
+
+function ensureOcorrenciaModal() {
+  if (ocorrenciaModal.overlay) return ocorrenciaModal.overlay;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'internacao-ocorrencia-modal fixed inset-0 z-[1004] hidden';
+  overlay.innerHTML = `
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-modal></div>
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
+      <div class="relative flex w-full max-w-3xl transform-gpu flex-col overflow-hidden rounded-2xl bg-white text-[12px] leading-[1.35] shadow-2xl ring-1 ring-black/10 opacity-0 scale-95 transition-all duration-200" role="dialog" aria-modal="true" aria-labelledby="ocorrencia-modal-title" data-ocorrencia-dialog tabindex="-1">
+        <header class="flex flex-col gap-2.5 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <span class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+              <i class="fas fa-triangle-exclamation"></i>
+              Ocorrência
+            </span>
+            <h2 id="ocorrencia-modal-title" class="mt-1.5 text-lg font-semibold text-gray-900">Registrar ocorrência</h2>
+            <p class="mt-1 max-w-3xl text-[11px] text-gray-600">Registre rapidamente ocorrências que sejam relevantes relatar ao Veterinário para ajuda-lo na criação do relatório médico.</p>
+          </div>
+          <button type="button" class="inline-flex items-center justify-center rounded-full border border-gray-200 p-1.5 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700" data-close-modal>
+            <span class="sr-only">Fechar modal</span>
+            <i class="fas fa-xmark text-sm"></i>
+          </button>
+        </header>
+        <form class="flex max-h-[80vh] flex-col overflow-hidden" novalidate>
+          <div class="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+            <div class="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-[11px] text-gray-600" data-ocorrencia-summary>
+              <div class="flex flex-wrap items-center gap-2 text-gray-700">
+                <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Paciente</span>
+                <span class="text-[13px] font-semibold text-gray-900" data-ocorrencia-summary-name>—</span>
+                <span class="text-[10px] text-gray-400" data-ocorrencia-summary-meta>—</span>
+              </div>
+              <div class="mt-1 flex flex-wrap items-center gap-2 text-gray-600">
+                <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Tutor</span>
+                <span data-ocorrencia-summary-tutor>—</span>
+              </div>
+            </div>
+            <div class="grid gap-3 md:grid-cols-2">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Data*
+                <input type="date" name="ocorrenciaData" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
+              </label>
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Hora*
+                <input type="time" name="ocorrenciaHora" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
+              </label>
+            </div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Resumo*
+              <input type="text" name="ocorrenciaResumo" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Título rápido da ocorrência" />
+            </label>
+            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Descrição*
+              <textarea name="ocorrenciaDescricao" rows="4" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Detalhe o ocorrido para ajudar o veterinário na análise"></textarea>
+            </label>
+            <p class="hidden rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[11px] text-red-700" data-ocorrencia-error></p>
+          </div>
+          <footer class="flex flex-col gap-3 border-t border-gray-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <span class="text-[11px] text-gray-500">A ocorrência fica registrada no histórico da internação.</span>
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <button type="button" class="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-700 transition hover:bg-gray-50" data-close-modal>Cancelar</button>
+              <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-primary px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-primary/90" data-ocorrencia-submit>Salvar</button>
+            </div>
+          </footer>
+        </form>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  ocorrenciaModal.overlay = overlay;
+  ocorrenciaModal.dialog = overlay.querySelector('[data-ocorrencia-dialog]');
+  ocorrenciaModal.form = overlay.querySelector('form');
+  ocorrenciaModal.submitBtn = overlay.querySelector('[data-ocorrencia-submit]');
+  ocorrenciaModal.errorEl = overlay.querySelector('[data-ocorrencia-error]');
+  ocorrenciaModal.petSummaryEl = overlay.querySelector('[data-ocorrencia-summary]');
+  ocorrenciaModal.petSummaryNameEl = overlay.querySelector('[data-ocorrencia-summary-name]');
+  ocorrenciaModal.petSummaryMetaEl = overlay.querySelector('[data-ocorrencia-summary-meta]');
+  ocorrenciaModal.petSummaryTutorEl = overlay.querySelector('[data-ocorrencia-summary-tutor]');
+
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) {
+      closeOcorrenciaModal();
+      return;
+    }
+    const closeTrigger = event.target.closest('[data-close-modal]');
+    if (closeTrigger) {
+      event.preventDefault();
+      closeOcorrenciaModal();
+    }
+  });
+
+  overlay.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !overlay.classList.contains('hidden')) {
+      event.preventDefault();
+      closeOcorrenciaModal();
+    }
+  });
+
+  if (ocorrenciaModal.form) {
+    ocorrenciaModal.form.addEventListener('submit', handleOcorrenciaModalSubmit);
+  }
+
+  setOcorrenciaModalPetInfo(null);
+
+  return overlay;
+}
+
+function openOcorrenciaModal(record, options = {}) {
+  if (!record) return;
+  ensureOcorrenciaModal();
+  const datasetRef = options.dataset || ocorrenciaModal.dataset || getDataset();
+  const stateRef = options.state || ocorrenciaModal.state || {};
+  const successHandler =
+    typeof options.onSuccess === 'function'
+      ? options.onSuccess
+      : typeof stateRef?.refreshInternacoes === 'function'
+        ? stateRef.refreshInternacoes
+        : null;
+  const recordId = record.id || '';
+  if (!recordId) {
+    showToastMessage('Não foi possível identificar essa internação para registrar a ocorrência.', 'warning');
+    return;
+  }
+
+  ocorrenciaModal.dataset = datasetRef || null;
+  ocorrenciaModal.state = stateRef || null;
+  ocorrenciaModal.onSuccess = successHandler || null;
+  ocorrenciaModal.record = record;
+  ocorrenciaModal.recordId = recordId;
+
+  setOcorrenciaModalError('');
+  setOcorrenciaModalLoading(false);
+  resetOcorrenciaModalForm();
+  const petInfo = getPetInfoFromInternacaoRecord(record);
+  setOcorrenciaModalPetInfo(petInfo);
+  fillOcorrenciaModalForm(record);
+
+  ocorrenciaModal.overlay.classList.remove('hidden');
+  ocorrenciaModal.overlay.dataset.modalOpen = 'true';
+  if (ocorrenciaModal.dialog) {
+    requestAnimationFrame(() => {
+      ocorrenciaModal.dialog.classList.remove('opacity-0', 'scale-95');
+      ocorrenciaModal.dialog.focus();
+    });
+  }
+}
+
+async function handleOcorrenciaModalSubmit(event) {
+  event.preventDefault();
+  if (!ocorrenciaModal.form) return;
+  setOcorrenciaModalError('');
+  const recordId = ocorrenciaModal.recordId;
+  if (!recordId) {
+    setOcorrenciaModalError('Não foi possível identificar a internação selecionada.');
+    return;
+  }
+
+  const formData = new FormData(ocorrenciaModal.form);
+  const payload = {
+    data: (formData.get('ocorrenciaData') || '').toString().trim(),
+    hora: (formData.get('ocorrenciaHora') || '').toString().trim(),
+    resumo: (formData.get('ocorrenciaResumo') || '').toString().trim(),
+    descricao: (formData.get('ocorrenciaDescricao') || '').toString().trim(),
+  };
+
+  if (!payload.data) {
+    setOcorrenciaModalError('Informe a data da ocorrência.');
+    return;
+  }
+  if (!payload.hora) {
+    setOcorrenciaModalError('Informe o horário da ocorrência.');
+    return;
+  }
+  if (!payload.resumo) {
+    setOcorrenciaModalError('Preencha um resumo para a ocorrência.');
+    return;
+  }
+  if (!payload.descricao) {
+    setOcorrenciaModalError('Descreva a ocorrência antes de salvar.');
+    return;
+  }
+
+  setOcorrenciaModalLoading(true);
+  const datasetRef = ocorrenciaModal.dataset || getDataset();
+  const stateRef = ocorrenciaModal.state || {};
+  try {
+    const updatedRecord = await requestJson(`/internacao/registros/${encodeURIComponent(recordId)}/ocorrencias`, {
+      method: 'POST',
+      body: payload,
+    });
+    const normalized = normalizeInternacaoRecord(updatedRecord);
+    if (normalized) {
+      applyInternacaoRecordUpdate(normalized, datasetRef, stateRef);
+      const fichaRecord = fichaInternacaoModal.record;
+      if (fichaRecord) {
+        const sameRecord =
+          fichaRecord.id === normalized.id ||
+          fichaRecord.filterKey === normalized.filterKey ||
+          (normalized.codigo !== null && fichaRecord.codigo === normalized.codigo);
+        if (sameRecord) {
+          fichaInternacaoModal.record = normalized;
+          fillFichaInternacaoModal(normalized);
+        }
+      }
+    }
+
+    showToastMessage('Ocorrência registrada com sucesso.', 'success');
+    const successCallback = ocorrenciaModal.onSuccess;
+    closeOcorrenciaModal();
+
+    if (typeof successCallback === 'function') {
+      successCallback();
+    }
+  } catch (error) {
+    console.error('internacao: falha ao salvar ocorrência', error);
+    setOcorrenciaModalError(error.message || 'Não foi possível registrar a ocorrência.');
+  } finally {
+    setOcorrenciaModalLoading(false);
   }
 }
 
@@ -3346,7 +3660,15 @@ function ensureFichaInternacaoModal() {
     const quickActionTrigger = event.target.closest('[data-ficha-hist-action]');
     if (quickActionTrigger) {
       event.preventDefault();
-      showToastMessage('Funcionalidade em desenvolvimento.', 'info');
+      const actionType = normalizeActionKey(quickActionTrigger.dataset.fichaHistAction);
+      if (actionType === 'ocorrencia') {
+        const record = fichaInternacaoModal.record;
+        const dataset = fichaInternacaoModal.dataset || getDataset();
+        const state = fichaInternacaoModal.state || {};
+        openOcorrenciaModal(record, { dataset, state, onSuccess: state.refreshInternacoes });
+      } else {
+        showToastMessage('Funcionalidade em desenvolvimento.', 'info');
+      }
       return;
     }
     const prescricaoTrigger = event.target.closest('[data-ficha-prescricao-action]');
