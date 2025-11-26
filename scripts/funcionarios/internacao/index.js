@@ -108,6 +108,15 @@ const PRESCRICAO_FLUID_VELOCIDADE_OPTIONS = [
   { value: 'mldia', label: 'ml/dia' },
 ];
 
+const PARAMETROS_CLINICOS_PADRAO = [
+  { id: 'param-temp', nome: 'Temperatura', ordem: 1, opcoes: ['ºC'] },
+  { id: 'param-fc', nome: 'Frequência cardíaca', ordem: 2, opcoes: ['bpm'] },
+  { id: 'param-fr', nome: 'Frequência respiratória', ordem: 3, opcoes: ['mrm'] },
+  { id: 'param-pa', nome: 'Pressão arterial', ordem: 4, opcoes: ['mmHg'] },
+  { id: 'param-dor', nome: 'Escore de dor', ordem: 5, opcoes: ['0 a 5'] },
+  { id: 'param-observacao', nome: 'Observação', ordem: 6, opcoes: ['Texto livre'] },
+];
+
 const EXECUCAO_STATUS_FINISHED = [
   'executado',
   'executada',
@@ -225,6 +234,26 @@ const relatorioMedicoModal = {
   record: null,
   recordId: null,
   petInfo: null,
+};
+
+const parametroModal = {
+  overlay: null,
+  dialog: null,
+  form: null,
+  nameInput: null,
+  orderInput: null,
+  optionInput: null,
+  optionsList: null,
+  options: [],
+  submitBtn: null,
+  errorEl: null,
+  state: null,
+  render: null,
+  dataset: null,
+  titleEl: null,
+  subtitleEl: null,
+  mode: 'create',
+  recordId: null,
 };
 
 const moverBoxModal = {
@@ -756,6 +785,13 @@ function showToastMessage(message, type = 'info') {
   } else {
     console.log(text);
   }
+}
+
+function getInitialParametrosConfig() {
+  return PARAMETROS_CLINICOS_PADRAO.map((item) => ({
+    ...item,
+    opcoes: Array.isArray(item.opcoes) ? [...item.opcoes] : [],
+  }));
 }
 
 function handleUnauthorizedRedirect() {
@@ -5465,6 +5501,69 @@ function updateSyncInfo(dataset) {
   el.textContent = `${texto} · ${fichaAtualizada}`;
 }
 
+function normalizeParametroConfig(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const nome = String(raw.nome || '').trim();
+  const ordemParsed = Number.parseInt(raw.ordem, 10);
+  if (!nome) return null;
+  const ordem = Number.isFinite(ordemParsed) ? ordemParsed : null;
+  const opcoes = Array.isArray(raw.opcoes)
+    ? raw.opcoes.map((item) => String(item || '').trim()).filter(Boolean)
+    : [];
+  return {
+    id: String(raw.id || raw._id || `${nome}-${ordem}`),
+    nome,
+    ordem,
+    opcoes,
+    createdAt: raw.createdAt || null,
+    updatedAt: raw.updatedAt || null,
+  };
+}
+
+async function fetchParametrosConfig(dataset, state = {}, { quiet = false, onUpdate } = {}) {
+  if (state) {
+    state.parametrosLoading = true;
+    state.parametrosError = '';
+  }
+  if (typeof onUpdate === 'function') onUpdate();
+
+  try {
+    const data = await requestJson('/internacao/parametros');
+    const normalized = Array.isArray(data) ? data.map(normalizeParametroConfig).filter(Boolean) : [];
+    const sorted = [...normalized].sort((a, b) => {
+      const ordemA = Number.isFinite(a?.ordem) ? Number(a.ordem) : null;
+      const ordemB = Number.isFinite(b?.ordem) ? Number(b.ordem) : null;
+
+      if (ordemA !== null && ordemB !== null) return ordemA - ordemB;
+      if (ordemA !== null) return -1;
+      if (ordemB !== null) return 1;
+      return a.nome.localeCompare(b.nome, 'pt-BR');
+    });
+    if (dataset) dataset.parametrosConfig = sorted;
+    if (state) {
+      state.parametrosConfig = sorted;
+      state.parametrosLoading = false;
+      state.parametrosError = '';
+    }
+    if (typeof onUpdate === 'function') onUpdate();
+    return sorted;
+  } catch (error) {
+    console.error('internacao: falha ao carregar parâmetros clínicos', error);
+    if (state) {
+      state.parametrosError = error.message || 'Não foi possível carregar os parâmetros clínicos.';
+      state.parametrosLoading = false;
+    }
+    if (typeof onUpdate === 'function') onUpdate();
+    if (!quiet) {
+      showToastMessage(
+        state?.parametrosError || 'Não foi possível carregar os parâmetros clínicos.',
+        'warning',
+      );
+    }
+    return Array.isArray(state?.parametrosConfig) ? state.parametrosConfig : [];
+  }
+}
+
 async function fetchInternacoesData(dataset, state = {}, { quiet = false, onUpdate } = {}) {
   if (state) {
     state.internacoesLoading = true;
@@ -5567,6 +5666,365 @@ async function fetchVeterinariosData(dataset, state = {}, { quiet = false } = {}
     }
     return [];
   }
+}
+
+function setParametroModalError(message) {
+  if (!parametroModal.errorEl) return;
+  const text = String(message || '').trim();
+  parametroModal.errorEl.textContent = text;
+  parametroModal.errorEl.classList.toggle('hidden', !text);
+}
+
+function setParametroModalLoading(isLoading) {
+  if (!parametroModal.submitBtn) return;
+  parametroModal.submitBtn.disabled = isLoading;
+  parametroModal.submitBtn.classList.toggle('opacity-50', isLoading);
+  parametroModal.submitBtn.innerHTML = isLoading
+    ? '<i class="fas fa-spinner animate-spin"></i><span> Salvando...</span>'
+    : parametroModal.mode === 'edit'
+      ? 'Salvar alterações'
+      : 'Salvar parâmetro';
+}
+
+function renderParametroModalTags() {
+  if (!parametroModal.optionsList) return;
+  if (!parametroModal.options.length) {
+    parametroModal.optionsList.innerHTML =
+      '<span class="text-[11px] text-gray-400">Nenhuma opção adicionada ainda.</span>';
+    return;
+  }
+  parametroModal.optionsList.innerHTML = parametroModal.options
+    .map(
+      (tag) => `
+        <span class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+          ${escapeHtml(tag)}
+          <button type="button" class="text-primary/70 hover:text-primary" data-remove-tag="${escapeHtml(tag)}" aria-label="Remover opção">
+            <i class="fas fa-xmark"></i>
+          </button>
+        </span>
+      `,
+    )
+    .join('');
+}
+
+function resetParametroModal(mode = 'create', record = null) {
+  if (parametroModal.form) parametroModal.form.reset();
+  parametroModal.options = [];
+  parametroModal.mode = mode;
+  parametroModal.recordId = record?.id || record?._id || null;
+  renderParametroModalTags();
+  setParametroModalError('');
+  setParametroModalLoading(false);
+
+  if (parametroModal.titleEl) {
+    parametroModal.titleEl.textContent = mode === 'edit' ? 'Editar parâmetro' : 'Adicionar parâmetro';
+  }
+
+  if (parametroModal.subtitleEl) {
+    parametroModal.subtitleEl.textContent =
+      mode === 'edit'
+        ? 'Atualize o nome, as opções de resposta ou a ordem de exibição deste parâmetro clínico.'
+        : 'Defina o nome, as opções de resposta e a ordem de exibição.';
+  }
+
+  if (parametroModal.submitBtn) {
+    parametroModal.submitBtn.textContent = mode === 'edit' ? 'Salvar alterações' : 'Salvar parâmetro';
+  }
+
+  if (record) {
+    if (parametroModal.nameInput) parametroModal.nameInput.value = record.nome || '';
+    if (parametroModal.orderInput) {
+      parametroModal.orderInput.value = Number.isFinite(record.ordem) ? String(record.ordem) : '';
+    }
+    if (Array.isArray(record.opcoes)) {
+      parametroModal.options = record.opcoes.filter(Boolean);
+    }
+    renderParametroModalTags();
+  }
+
+  if (parametroModal.nameInput) parametroModal.nameInput.focus();
+}
+
+function closeParametroModal() {
+  if (!parametroModal.overlay) return;
+  parametroModal.overlay.classList.add('hidden');
+  parametroModal.overlay.classList.remove('flex');
+  parametroModal.overlay.setAttribute('aria-hidden', 'true');
+  parametroModal.state = null;
+  parametroModal.render = null;
+  parametroModal.dataset = null;
+}
+
+function handleParametroModalSubmit(event) {
+  event.preventDefault();
+  if (!parametroModal.state) {
+    setParametroModalError('Não foi possível identificar o estado atual. Recarregue a página.');
+    return;
+  }
+
+  const nome = parametroModal.nameInput?.value?.trim();
+  if (!nome) {
+    setParametroModalError('Informe o nome do parâmetro clínico.');
+    parametroModal.nameInput?.focus();
+    return;
+  }
+
+  const ordemValue = parametroModal.orderInput?.value?.trim();
+  const ordem = ordemValue ? Number.parseInt(ordemValue, 10) : null;
+  if (ordemValue && (!Number.isInteger(ordem) || ordem < 1)) {
+    setParametroModalError('Defina a ordem utilizando um número inteiro (1, 2, 3...).');
+    parametroModal.orderInput?.focus();
+    return;
+  }
+
+  if (!parametroModal.options.length) {
+    setParametroModalError('Adicione pelo menos uma opção de resposta e pressione Enter.');
+    parametroModal.optionInput?.focus();
+    return;
+  }
+
+  const existentes = Array.isArray(parametroModal.state.parametrosConfig)
+    ? parametroModal.state.parametrosConfig
+    : [];
+  const conflito = ordem !== null
+    ? existentes.some((item) => item.id !== parametroModal.recordId && Number(item.ordem) === ordem)
+    : false;
+  if (conflito) {
+    setParametroModalError('Já existe um parâmetro com essa ordem. Escolha outro número.');
+    parametroModal.orderInput?.focus();
+    return;
+  }
+
+  setParametroModalError('');
+  setParametroModalLoading(true);
+
+  const isEdit = parametroModal.mode === 'edit' && parametroModal.recordId;
+
+  requestJson(isEdit ? `/internacao/parametros/${parametroModal.recordId}` : '/internacao/parametros', {
+    method: isEdit ? 'PUT' : 'POST',
+    body: {
+      nome,
+      ordem,
+      opcoes: [...parametroModal.options],
+    },
+  })
+    .then(async () => {
+      if (parametroModal.dataset || parametroModal.state) {
+        await fetchParametrosConfig(parametroModal.dataset, parametroModal.state, {
+          quiet: true,
+          onUpdate: parametroModal.render,
+        });
+      }
+      showToastMessage(
+        isEdit ? 'Parâmetro atualizado com sucesso!' : 'Parâmetro adicionado com sucesso!',
+        'success',
+      );
+      closeParametroModal();
+    })
+    .catch((error) => {
+      console.error('internacao: falha ao salvar parâmetro clínico', error);
+      setParametroModalError(error.message || 'Não foi possível salvar o parâmetro clínico.');
+    })
+    .finally(() => {
+      setParametroModalLoading(false);
+    });
+}
+
+function ensureParametroModal() {
+  if (parametroModal.overlay) return parametroModal.overlay;
+  let placeholder = document.getElementById('modal-placeholder');
+  if (!placeholder) {
+    placeholder = document.createElement('div');
+    placeholder.id = 'modal-placeholder';
+    document.body.appendChild(placeholder);
+  }
+
+  placeholder.insertAdjacentHTML(
+    'beforeend',
+    `
+      <div class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 px-4 py-8" data-parametro-modal aria-hidden="true">
+        <div class="w-full max-w-xl rounded-2xl bg-white shadow-xl outline-none ring-1 ring-black/5 transition" role="dialog" aria-modal="true">
+          <form class="space-y-5 p-6" data-parametro-form>
+            <header class="flex items-start justify-between gap-3">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-wide text-primary">Parâmetros clínicos</p>
+                <h2 class="text-xl font-bold text-gray-900" data-parametro-title>Adicionar parâmetro</h2>
+                <p class="text-sm text-gray-500" data-parametro-subtitle>
+                  Defina o nome, as opções de resposta e a ordem de exibição.
+                </p>
+              </div>
+              <button type="button" class="text-gray-400 transition hover:text-gray-600" data-parametro-close aria-label="Fechar">
+                <i class="fas fa-xmark text-lg"></i>
+              </button>
+            </header>
+
+            <div class="space-y-3">
+              <label class="block text-sm font-semibold text-gray-800">
+                Nome*
+                <input type="text" name="parametroNome" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-primary" placeholder="Ex.: Saturação" required>
+              </label>
+
+              <div>
+                <label class="block text-sm font-semibold text-gray-800">Opções de Resposta*</label>
+                <div class="mt-1 rounded-xl border border-gray-200 px-3 py-2 focus-within:border-primary focus-within:ring-1 focus-within:ring-primary">
+                  <div class="flex flex-wrap gap-2" data-parametro-tags></div>
+                  <input type="text" class="mt-2 w-full border-0 px-0 py-1 text-sm focus:outline-none" data-parametro-option placeholder="Digite uma opção e pressione Enter" />
+                </div>
+                <p class="mt-1 text-xs text-gray-500">Escreva a opção e aperte Enter para criar um tag. Você pode adicionar várias.</p>
+              </div>
+
+              <label class="block text-sm font-semibold text-gray-800">
+                Ordem
+                <input type="number" name="parametroOrdem" min="1" step="1" class="mt-1 w-32 rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-primary" placeholder="1, 2, 3">
+                <span class="mt-1 block text-xs text-gray-500">Deixe em branco para ordenar alfabeticamente.</span>
+              </label>
+            </div>
+
+            <p class="text-sm font-semibold text-red-600 hidden" data-parametro-error></p>
+
+            <div class="flex items-center justify-end gap-3">
+              <button type="button" class="inline-flex items-center justify-center rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50" data-parametro-close>
+                Cancelar
+              </button>
+              <button type="submit" class="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90" data-parametro-submit>
+                Salvar parâmetro
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    `,
+  );
+
+  parametroModal.overlay = placeholder.querySelector('[data-parametro-modal]');
+  parametroModal.dialog = placeholder.querySelector('[data-parametro-modal] [role="dialog"]');
+  parametroModal.form = placeholder.querySelector('[data-parametro-form]');
+  parametroModal.nameInput = placeholder.querySelector('input[name="parametroNome"]');
+  parametroModal.orderInput = placeholder.querySelector('input[name="parametroOrdem"]');
+  parametroModal.optionInput = placeholder.querySelector('[data-parametro-option]');
+  parametroModal.optionsList = placeholder.querySelector('[data-parametro-tags]');
+  parametroModal.submitBtn = parametroModal.form?.querySelector('[data-parametro-submit]') || null;
+  parametroModal.errorEl = placeholder.querySelector('[data-parametro-error]');
+  parametroModal.titleEl = placeholder.querySelector('[data-parametro-title]');
+  parametroModal.subtitleEl = placeholder.querySelector('[data-parametro-subtitle]');
+
+  const closeButtons = placeholder.querySelectorAll('[data-parametro-close]');
+  closeButtons.forEach((btn) => {
+    btn.addEventListener('click', (event) => {
+      event.preventDefault();
+      closeParametroModal();
+    });
+  });
+
+  if (parametroModal.optionInput) {
+    parametroModal.optionInput.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      const value = event.target.value.trim();
+      if (!value) return;
+      event.preventDefault();
+      if (!parametroModal.options.includes(value)) {
+        parametroModal.options.push(value);
+        renderParametroModalTags();
+      }
+      event.target.value = '';
+    });
+  }
+
+  if (parametroModal.optionsList) {
+    parametroModal.optionsList.addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-remove-tag]');
+      if (!btn) return;
+      const value = btn.dataset.removeTag;
+      parametroModal.options = parametroModal.options.filter((item) => item !== value);
+      renderParametroModalTags();
+    });
+  }
+
+  if (parametroModal.form) {
+    parametroModal.form.addEventListener('submit', handleParametroModalSubmit);
+  }
+
+  return parametroModal.overlay;
+}
+
+function openParametroModal(state, render, dataset, record = null) {
+  ensureParametroModal();
+  parametroModal.state = state || null;
+  parametroModal.render = typeof render === 'function' ? render : null;
+  parametroModal.dataset = dataset || null;
+  resetParametroModal(record ? 'edit' : 'create', record);
+  parametroModal.overlay.classList.remove('hidden');
+  parametroModal.overlay.classList.add('flex');
+  parametroModal.overlay.setAttribute('aria-hidden', 'false');
+  requestAnimationFrame(() => {
+    parametroModal.dialog?.classList.remove('opacity-0', 'scale-95');
+    parametroModal.nameInput?.focus();
+  });
+}
+
+function setupParametrosPage(dataset, state, render) {
+  ensureParametroModal();
+
+  const loadParametros = () => fetchParametrosConfig(dataset, state, { onUpdate: render });
+
+  const openBtn = document.querySelector('[data-open-parametro-modal]');
+  if (openBtn) {
+    openBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      openParametroModal(state, render, dataset);
+    });
+  }
+
+  document.addEventListener('click', (event) => {
+    const trigger = event.target.closest('[data-open-parametro-modal]');
+    if (trigger) {
+      event.preventDefault();
+      openParametroModal(state, render, dataset);
+      return;
+    }
+
+    const editBtn = event.target.closest('[data-parametro-edit]');
+    if (editBtn) {
+      event.preventDefault();
+      const recordId = editBtn.dataset.parametroEdit;
+      const registro = Array.isArray(state.parametrosConfig)
+        ? state.parametrosConfig.find((item) => item.id === recordId)
+        : null;
+      if (!registro) {
+        showToastMessage('Não foi possível localizar este parâmetro para edição.', 'warning');
+        return;
+      }
+      openParametroModal(state, render, dataset, registro);
+      return;
+    }
+
+    const deleteBtn = event.target.closest('[data-parametro-delete]');
+    if (deleteBtn) {
+      event.preventDefault();
+      const recordId = deleteBtn.dataset.parametroDelete;
+      if (!recordId) return;
+      const confirmed = window.confirm('Deseja realmente excluir este parâmetro clínico?');
+      if (!confirmed) return;
+
+      requestJson(`/internacao/parametros/${recordId}`, { method: 'DELETE' })
+        .then(async () => {
+          await fetchParametrosConfig(dataset, state, { quiet: true, onUpdate: render });
+          showToastMessage('Parâmetro excluído com sucesso.', 'success');
+        })
+        .catch((error) => {
+          console.error('internacao: falha ao excluir parâmetro', error);
+          showToastMessage(error.message || 'Não foi possível excluir o parâmetro clínico.', 'warning');
+        });
+      return;
+    }
+
+    if (event.target.closest('[data-parametros-retry]')) {
+      event.preventDefault();
+      loadParametros();
+    }
+  });
+
+  loadParametros();
 }
 
 function setupBoxesPage(dataset, state, render) {
@@ -5713,6 +6171,9 @@ document.addEventListener('DOMContentLoaded', () => {
     internacoes: Array.isArray(dataset.internacoes) ? [...dataset.internacoes] : [],
     internacoesLoading: false,
     internacoesError: '',
+    parametrosConfig: [],
+    parametrosLoading: false,
+    parametrosError: '',
     refreshInternacoes: null,
     refreshBoxes: null,
     render: null,
@@ -5751,6 +6212,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   if (view === 'mapa') {
     setupMapaPage(dataset, state, render, fetchInternacoes);
+  }
+  if (view === 'parametros') {
+    setupParametrosPage(dataset, state, render);
   }
   if (view === 'boxes') {
     setupBoxesPage(dataset, state, render);
