@@ -1021,12 +1021,44 @@ export function renderHistoricoInternacoes(root, dataset, { petId } = {}) {
   `;
 }
 
-export function renderParametrosClinicos(root, dataset, { petId } = {}) {
+export function renderParametrosClinicos(root, dataset, { petId, parametrosConfig = [] } = {}) {
   const pacientes = filterPacientes(dataset, petId);
-  if (!pacientes.length) {
-    root.innerHTML = buildEmptyState('Nenhum parâmetro clínico disponível.');
-    return;
-  }
+  const configList = Array.isArray(parametrosConfig) ? parametrosConfig : [];
+
+  const configuracoes = configList.length
+    ? `
+      <div class="divide-y divide-gray-100" data-parametros-list>
+        ${configList
+          .map(
+            (item) => `
+              <div class="flex flex-wrap items-start gap-3 py-3">
+                <div class="min-w-[200px] flex-1">
+                  <p class="text-sm font-semibold text-gray-900">${escapeHtml(item.nome || 'Parâmetro')}</p>
+                  <p class="text-xs text-gray-500">Ordem de exibição: ${escapeHtml(String(item.ordem || '—'))}</p>
+                </div>
+                <div class="flex flex-1 flex-wrap items-center gap-2 text-xs text-gray-600">
+                  ${(Array.isArray(item.opcoes) && item.opcoes.length
+                    ? item.opcoes
+                        .map(
+                          (opcao) =>
+                            `<span class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1 text-[11px] font-semibold text-gray-700">${escapeHtml(
+                              opcao,
+                            )}</span>`,
+                        )
+                        .join('')
+                    : '<span class="text-[11px] text-gray-400">Sem opções cadastradas</span>')}
+                </div>
+              </div>
+            `,
+          )
+          .join('')}
+      </div>
+    `
+    : `
+      <div class="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center text-sm text-gray-500">
+        Nenhum parâmetro cadastrado até o momento. Utilize o botão “Adicionar Parametro” para criar o primeiro.
+      </div>
+    `;
 
   const blocos = pacientes.map((pet) => `
     <article class="rounded-2xl border border-gray-100 px-5 py-5 shadow-sm">
@@ -1071,7 +1103,29 @@ export function renderParametrosClinicos(root, dataset, { petId } = {}) {
     </article>
   `).join('');
 
-  root.innerHTML = `<div class="space-y-5">${blocos}</div>`;
+  const pacientesContent = pacientes.length ? blocos : buildEmptyState('Nenhum parâmetro clínico disponível.');
+
+  root.innerHTML = `
+    <div class="space-y-5">
+      <article class="rounded-2xl border border-gray-100 px-5 py-5 shadow-sm">
+        <header class="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 pb-3">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Configuração</p>
+            <h2 class="text-lg font-semibold text-gray-900">Parâmetros cadastrados</h2>
+            <p class="text-sm text-gray-500">Revise os parâmetros disponíveis e suas opções de resposta.</p>
+          </div>
+          <div class="text-right text-xs text-gray-500">
+            <p>Ordem menor = aparece primeiro</p>
+            <p>Use o botão “Adicionar Parametro” para incluir novos.</p>
+          </div>
+        </header>
+        <div class="mt-4">
+          ${configuracoes}
+        </div>
+      </article>
+      ${pacientesContent}
+    </div>
+  `;
 }
 
 export function renderModelosPrescricao(root, dataset, { petId } = {}) {
