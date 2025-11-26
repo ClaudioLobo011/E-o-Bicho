@@ -447,6 +447,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const bannerUploadForm = document.getElementById('banner-upload-form');
     const bannerList = document.getElementById('banner-list');
     const BANNER_SETTINGS_KEY = 'bannerDisplaySettings';
+    const resolveImageSrc = (url) => {
+        if (!url) return '';
+        const isAbsolute = /^https?:\/\//i.test(url);
+        return isAbsolute ? url : `${API_CONFIG.SERVER_URL}${url}`;
+    };
     let cachedBanners = [];
 
     const loadBannerSettings = () => {
@@ -513,7 +518,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <div class="p-6 space-y-4">
                     <div class="relative w-full overflow-hidden bg-gray-100 rounded-lg" style="padding-top: 42%;">
-                        <img src="${API_CONFIG.SERVER_URL}${banner.imageUrl}" alt="Pré-visualização do banner" class="absolute inset-0 w-full h-full transition-transform duration-200" id="banner-preview-img">
+                        <img src="${resolveImageSrc(banner.imageUrl)}" alt="Pré-visualização do banner" class="absolute inset-0 w-full h-full transition-transform duration-200" id="banner-preview-img">
                         <div class="absolute inset-2 border-2 border-white/60 rounded-lg pointer-events-none"></div>
                     </div>
 
@@ -632,11 +637,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 flex-1">
                             <div class="flex items-center space-x-2 p-2 bg-white rounded border border-gray-100">
                                 <span class="text-[11px] uppercase tracking-wide text-gray-500">Tela maior</span>
-                                <img src="${API_CONFIG.SERVER_URL}${banner.imageUrl}" class="w-24 h-12 object-cover rounded-md">
+                                <img src="${resolveImageSrc(banner.imageUrl)}" class="w-24 h-12 object-cover rounded-md">
                             </div>
                             <div class="flex items-center space-x-2 p-2 bg-white rounded border border-gray-100">
                                 <span class="text-[11px] uppercase tracking-wide text-gray-500">Tela menor</span>
-                                <img src="${banner.mobileImageUrl ? `${API_CONFIG.SERVER_URL}${banner.mobileImageUrl}` : `${API_CONFIG.SERVER_URL}${banner.imageUrl}`}" class="w-24 h-12 object-cover rounded-md ${banner.mobileImageUrl ? '' : 'opacity-70'}">
+                                <img src="${resolveImageSrc(banner.mobileImageUrl || banner.imageUrl)}" class="w-24 h-12 object-cover rounded-md ${banner.mobileImageUrl ? '' : 'opacity-70'}">
                             </div>
                         </div>
                         <span class="text-sm font-medium whitespace-nowrap">${banner.link}</span>
