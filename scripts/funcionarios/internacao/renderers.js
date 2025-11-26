@@ -1141,8 +1141,6 @@ export function renderParametrosClinicos(
     </article>
   `).join('');
 
-  const pacientesContent = pacientes.length ? blocos : buildEmptyState('Nenhum parâmetro clínico disponível.');
-
   root.innerHTML = `
     <div class="space-y-5">
       <article class="rounded-2xl border border-gray-100 px-5 py-5 shadow-sm">
@@ -1161,7 +1159,7 @@ export function renderParametrosClinicos(
           ${configuracoes}
         </div>
       </article>
-      ${pacientesContent}
+      ${pacientes.length ? blocos : ''}
     </div>
   `;
 }
