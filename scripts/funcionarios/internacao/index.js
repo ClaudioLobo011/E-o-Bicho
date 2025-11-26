@@ -5965,6 +5965,14 @@ function setupParametrosPage(dataset, state, render) {
 
   const loadParametros = () => fetchParametrosConfig(dataset, state, { onUpdate: render });
 
+  const openBtn = document.querySelector('[data-open-parametro-modal]');
+  if (openBtn) {
+    openBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      openParametroModal(state, render, dataset);
+    });
+  }
+
   document.addEventListener('click', (event) => {
     const trigger = event.target.closest('[data-open-parametro-modal]');
     if (trigger) {
