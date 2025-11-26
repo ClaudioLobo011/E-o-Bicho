@@ -11,7 +11,6 @@ const internacaoParametroSchema = new mongoose.Schema(
   },
 );
 
-internacaoParametroSchema.index({ ordem: 1 }, { unique: true });
 internacaoParametroSchema.index({ nome: 1 });
 
 module.exports = mongoose.model('InternacaoParametro', internacaoParametroSchema);
