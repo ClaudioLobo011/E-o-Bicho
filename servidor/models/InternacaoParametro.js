@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const internacaoParametroSchema = new mongoose.Schema(
   {
     nome: { type: String, required: true, trim: true },
-    ordem: { type: Number, required: true, unique: true },
+    ordem: { type: Number, index: true, unique: true, sparse: true },
     opcoes: [{ type: String, trim: true }],
   },
   {

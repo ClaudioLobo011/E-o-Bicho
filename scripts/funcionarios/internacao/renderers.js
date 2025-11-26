@@ -1058,7 +1058,9 @@ export function renderParametrosClinicos(
               <div class="flex flex-wrap items-start gap-3 py-3">
                 <div class="min-w-[200px] flex-1">
                   <p class="text-sm font-semibold text-gray-900">${escapeHtml(item.nome || 'Parâmetro')}</p>
-                  <p class="text-xs text-gray-500">Ordem de exibição: ${escapeHtml(String(item.ordem || '—'))}</p>
+                  <p class="text-xs text-gray-500">
+                    ${item.ordem ? `Ordem de exibição: ${escapeHtml(String(item.ordem))}` : 'Ordenação alfabética'}
+                  </p>
                 </div>
                 <div class="flex flex-1 flex-wrap items-center gap-2 text-xs text-gray-600">
                   ${(Array.isArray(item.opcoes) && item.opcoes.length
@@ -1071,6 +1073,16 @@ export function renderParametrosClinicos(
                         )
                         .join('')
                     : '<span class="text-[11px] text-gray-400">Sem opções cadastradas</span>')}
+                </div>
+                <div class="flex items-center gap-2">
+                  <button type="button" class="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-700 transition hover:border-primary/30 hover:text-primary" data-parametro-edit="${escapeHtml(item.id || '')}">
+                    <i class="fas fa-pen"></i>
+                    Editar
+                  </button>
+                  <button type="button" class="inline-flex items-center gap-1 rounded-lg border border-red-200 px-3 py-1 text-xs font-semibold text-red-700 transition hover:bg-red-50" data-parametro-delete="${escapeHtml(item.id || '')}">
+                    <i class="fas fa-trash"></i>
+                    Excluir
+                  </button>
                 </div>
               </div>
             `,

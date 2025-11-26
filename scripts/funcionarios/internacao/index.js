@@ -250,6 +250,10 @@ const parametroModal = {
   state: null,
   render: null,
   dataset: null,
+  titleEl: null,
+  subtitleEl: null,
+  mode: 'create',
+  recordId: null,
 };
 
 const moverBoxModal = {
@@ -5500,8 +5504,9 @@ function updateSyncInfo(dataset) {
 function normalizeParametroConfig(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const nome = String(raw.nome || '').trim();
-  const ordem = Number.parseInt(raw.ordem, 10);
-  if (!nome || !Number.isFinite(ordem)) return null;
+  const ordemParsed = Number.parseInt(raw.ordem, 10);
+  if (!nome) return null;
+  const ordem = Number.isFinite(ordemParsed) ? ordemParsed : null;
   const opcoes = Array.isArray(raw.opcoes)
     ? raw.opcoes.map((item) => String(item || '').trim()).filter(Boolean)
     : [];
@@ -5525,7 +5530,15 @@ async function fetchParametrosConfig(dataset, state = {}, { quiet = false, onUpd
   try {
     const data = await requestJson('/internacao/parametros');
     const normalized = Array.isArray(data) ? data.map(normalizeParametroConfig).filter(Boolean) : [];
-    const sorted = [...normalized].sort((a, b) => (Number(a.ordem) || 0) - (Number(b.ordem) || 0));
+    const sorted = [...normalized].sort((a, b) => {
+      const ordemA = Number.isFinite(a?.ordem) ? Number(a.ordem) : null;
+      const ordemB = Number.isFinite(b?.ordem) ? Number(b.ordem) : null;
+
+      if (ordemA !== null && ordemB !== null) return ordemA - ordemB;
+      if (ordemA !== null) return -1;
+      if (ordemB !== null) return 1;
+      return a.nome.localeCompare(b.nome, 'pt-BR');
+    });
     if (dataset) dataset.parametrosConfig = sorted;
     if (state) {
       state.parametrosConfig = sorted;
@@ -5668,7 +5681,9 @@ function setParametroModalLoading(isLoading) {
   parametroModal.submitBtn.classList.toggle('opacity-50', isLoading);
   parametroModal.submitBtn.innerHTML = isLoading
     ? '<i class="fas fa-spinner animate-spin"></i><span> Salvando...</span>'
-    : 'Salvar parâmetro';
+    : parametroModal.mode === 'edit'
+      ? 'Salvar alterações'
+      : 'Salvar parâmetro';
 }
 
 function renderParametroModalTags() {
@@ -5692,12 +5707,41 @@ function renderParametroModalTags() {
     .join('');
 }
 
-function resetParametroModal() {
+function resetParametroModal(mode = 'create', record = null) {
   if (parametroModal.form) parametroModal.form.reset();
   parametroModal.options = [];
+  parametroModal.mode = mode;
+  parametroModal.recordId = record?.id || record?._id || null;
   renderParametroModalTags();
   setParametroModalError('');
   setParametroModalLoading(false);
+
+  if (parametroModal.titleEl) {
+    parametroModal.titleEl.textContent = mode === 'edit' ? 'Editar parâmetro' : 'Adicionar parâmetro';
+  }
+
+  if (parametroModal.subtitleEl) {
+    parametroModal.subtitleEl.textContent =
+      mode === 'edit'
+        ? 'Atualize o nome, as opções de resposta ou a ordem de exibição deste parâmetro clínico.'
+        : 'Defina o nome, as opções de resposta e a ordem de exibição.';
+  }
+
+  if (parametroModal.submitBtn) {
+    parametroModal.submitBtn.textContent = mode === 'edit' ? 'Salvar alterações' : 'Salvar parâmetro';
+  }
+
+  if (record) {
+    if (parametroModal.nameInput) parametroModal.nameInput.value = record.nome || '';
+    if (parametroModal.orderInput) {
+      parametroModal.orderInput.value = Number.isFinite(record.ordem) ? String(record.ordem) : '';
+    }
+    if (Array.isArray(record.opcoes)) {
+      parametroModal.options = record.opcoes.filter(Boolean);
+    }
+    renderParametroModalTags();
+  }
+
   if (parametroModal.nameInput) parametroModal.nameInput.focus();
 }
 
@@ -5724,8 +5768,9 @@ function handleParametroModalSubmit(event) {
     return;
   }
 
-  const ordem = Number.parseInt(parametroModal.orderInput?.value, 10);
-  if (!Number.isInteger(ordem) || ordem < 1) {
+  const ordemValue = parametroModal.orderInput?.value?.trim();
+  const ordem = ordemValue ? Number.parseInt(ordemValue, 10) : null;
+  if (ordemValue && (!Number.isInteger(ordem) || ordem < 1)) {
     setParametroModalError('Defina a ordem utilizando um número inteiro (1, 2, 3...).');
     parametroModal.orderInput?.focus();
     return;
@@ -5740,7 +5785,9 @@ function handleParametroModalSubmit(event) {
   const existentes = Array.isArray(parametroModal.state.parametrosConfig)
     ? parametroModal.state.parametrosConfig
     : [];
-  const conflito = existentes.some((item) => Number(item.ordem) === ordem);
+  const conflito = ordem !== null
+    ? existentes.some((item) => item.id !== parametroModal.recordId && Number(item.ordem) === ordem)
+    : false;
   if (conflito) {
     setParametroModalError('Já existe um parâmetro com essa ordem. Escolha outro número.');
     parametroModal.orderInput?.focus();
@@ -5750,8 +5797,10 @@ function handleParametroModalSubmit(event) {
   setParametroModalError('');
   setParametroModalLoading(true);
 
-  requestJson('/internacao/parametros', {
-    method: 'POST',
+  const isEdit = parametroModal.mode === 'edit' && parametroModal.recordId;
+
+  requestJson(isEdit ? `/internacao/parametros/${parametroModal.recordId}` : '/internacao/parametros', {
+    method: isEdit ? 'PUT' : 'POST',
     body: {
       nome,
       ordem,
@@ -5765,7 +5814,10 @@ function handleParametroModalSubmit(event) {
           onUpdate: parametroModal.render,
         });
       }
-      showToastMessage('Parâmetro adicionado com sucesso!', 'success');
+      showToastMessage(
+        isEdit ? 'Parâmetro atualizado com sucesso!' : 'Parâmetro adicionado com sucesso!',
+        'success',
+      );
       closeParametroModal();
     })
     .catch((error) => {
@@ -5795,8 +5847,10 @@ function ensureParametroModal() {
             <header class="flex items-start justify-between gap-3">
               <div>
                 <p class="text-xs font-semibold uppercase tracking-wide text-primary">Parâmetros clínicos</p>
-                <h2 class="text-xl font-bold text-gray-900">Adicionar parâmetro</h2>
-                <p class="text-sm text-gray-500">Defina o nome, as opções de resposta e a ordem de exibição.</p>
+                <h2 class="text-xl font-bold text-gray-900" data-parametro-title>Adicionar parâmetro</h2>
+                <p class="text-sm text-gray-500" data-parametro-subtitle>
+                  Defina o nome, as opções de resposta e a ordem de exibição.
+                </p>
               </div>
               <button type="button" class="text-gray-400 transition hover:text-gray-600" data-parametro-close aria-label="Fechar">
                 <i class="fas fa-xmark text-lg"></i>
@@ -5819,9 +5873,9 @@ function ensureParametroModal() {
               </div>
 
               <label class="block text-sm font-semibold text-gray-800">
-                Ordem*
-                <input type="number" name="parametroOrdem" min="1" step="1" class="mt-1 w-32 rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-primary" placeholder="1, 2, 3" required>
-                <span class="mt-1 block text-xs text-gray-500">A ordem define a posição em que o parâmetro aparecerá.</span>
+                Ordem
+                <input type="number" name="parametroOrdem" min="1" step="1" class="mt-1 w-32 rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-primary" placeholder="1, 2, 3">
+                <span class="mt-1 block text-xs text-gray-500">Deixe em branco para ordenar alfabeticamente.</span>
               </label>
             </div>
 
@@ -5831,7 +5885,7 @@ function ensureParametroModal() {
               <button type="button" class="inline-flex items-center justify-center rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50" data-parametro-close>
                 Cancelar
               </button>
-              <button type="submit" class="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90">
+              <button type="submit" class="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90" data-parametro-submit>
                 Salvar parâmetro
               </button>
             </div>
@@ -5848,8 +5902,10 @@ function ensureParametroModal() {
   parametroModal.orderInput = placeholder.querySelector('input[name="parametroOrdem"]');
   parametroModal.optionInput = placeholder.querySelector('[data-parametro-option]');
   parametroModal.optionsList = placeholder.querySelector('[data-parametro-tags]');
-  parametroModal.submitBtn = parametroModal.form?.querySelector('button[type="submit"]') || null;
+  parametroModal.submitBtn = parametroModal.form?.querySelector('[data-parametro-submit]') || null;
   parametroModal.errorEl = placeholder.querySelector('[data-parametro-error]');
+  parametroModal.titleEl = placeholder.querySelector('[data-parametro-title]');
+  parametroModal.subtitleEl = placeholder.querySelector('[data-parametro-subtitle]');
 
   const closeButtons = placeholder.querySelectorAll('[data-parametro-close]');
   closeButtons.forEach((btn) => {
@@ -5890,12 +5946,12 @@ function ensureParametroModal() {
   return parametroModal.overlay;
 }
 
-function openParametroModal(state, render, dataset) {
+function openParametroModal(state, render, dataset, record = null) {
   ensureParametroModal();
   parametroModal.state = state || null;
   parametroModal.render = typeof render === 'function' ? render : null;
   parametroModal.dataset = dataset || null;
-  resetParametroModal();
+  resetParametroModal(record ? 'edit' : 'create', record);
   parametroModal.overlay.classList.remove('hidden');
   parametroModal.overlay.setAttribute('aria-hidden', 'false');
   requestAnimationFrame(() => {
@@ -5914,6 +5970,41 @@ function setupParametrosPage(dataset, state, render) {
     if (trigger) {
       event.preventDefault();
       openParametroModal(state, render, dataset);
+      return;
+    }
+
+    const editBtn = event.target.closest('[data-parametro-edit]');
+    if (editBtn) {
+      event.preventDefault();
+      const recordId = editBtn.dataset.parametroEdit;
+      const registro = Array.isArray(state.parametrosConfig)
+        ? state.parametrosConfig.find((item) => item.id === recordId)
+        : null;
+      if (!registro) {
+        showToastMessage('Não foi possível localizar este parâmetro para edição.', 'warning');
+        return;
+      }
+      openParametroModal(state, render, dataset, registro);
+      return;
+    }
+
+    const deleteBtn = event.target.closest('[data-parametro-delete]');
+    if (deleteBtn) {
+      event.preventDefault();
+      const recordId = deleteBtn.dataset.parametroDelete;
+      if (!recordId) return;
+      const confirmed = window.confirm('Deseja realmente excluir este parâmetro clínico?');
+      if (!confirmed) return;
+
+      requestJson(`/internacao/parametros/${recordId}`, { method: 'DELETE' })
+        .then(async () => {
+          await fetchParametrosConfig(dataset, state, { quiet: true, onUpdate: render });
+          showToastMessage('Parâmetro excluído com sucesso.', 'success');
+        })
+        .catch((error) => {
+          console.error('internacao: falha ao excluir parâmetro', error);
+          showToastMessage(error.message || 'Não foi possível excluir o parâmetro clínico.', 'warning');
+        });
       return;
     }
 
