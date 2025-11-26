@@ -5748,6 +5748,7 @@ function resetParametroModal(mode = 'create', record = null) {
 function closeParametroModal() {
   if (!parametroModal.overlay) return;
   parametroModal.overlay.classList.add('hidden');
+  parametroModal.overlay.classList.remove('flex');
   parametroModal.overlay.setAttribute('aria-hidden', 'true');
   parametroModal.state = null;
   parametroModal.render = null;
@@ -5953,6 +5954,7 @@ function openParametroModal(state, render, dataset, record = null) {
   parametroModal.dataset = dataset || null;
   resetParametroModal(record ? 'edit' : 'create', record);
   parametroModal.overlay.classList.remove('hidden');
+  parametroModal.overlay.classList.add('flex');
   parametroModal.overlay.setAttribute('aria-hidden', 'false');
   requestAnimationFrame(() => {
     parametroModal.dialog?.classList.remove('opacity-0', 'scale-95');
