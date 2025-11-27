@@ -4209,19 +4209,17 @@ async function handleFichaEditarAction() {
   });
 }
 
-async function handleFichaPesoAction() {
-  const record = fichaInternacaoModal.record;
+async function openPesoModalFromInternacao(record, { dataset = getDataset(), state = {}, onClose = null } = {}) {
   if (!record) {
     showToastMessage('Abra uma ficha de internação válida antes de ajustar o peso.', 'warning');
+    if (typeof onClose === 'function') onClose();
     return;
   }
 
-  const dataset = fichaInternacaoModal.dataset || getDataset();
-  const state = fichaInternacaoModal.state || {};
   const petId = record.pet?.id || record.petId || record.filterKey;
-
   if (!petId) {
     showToastMessage('Não foi possível identificar o pet para registrar o peso.', 'warning');
+    if (typeof onClose === 'function') onClose();
     return;
   }
 
@@ -4238,6 +4236,7 @@ async function handleFichaPesoAction() {
   } catch (error) {
     console.error('internacao: falha ao carregar modal de peso', error);
     showToastMessage('Não foi possível abrir o modal de peso.', 'error');
+    if (typeof onClose === 'function') onClose();
     return;
   }
 
@@ -4247,6 +4246,19 @@ async function handleFichaPesoAction() {
     ? { _id: tutorId }
     : { _id: record.tutor?.documento || record.tutorDocumento || record.tutor?.nome || record.tutorNome || petId };
   coreState.agendaContext = null;
+
+  const closeHandler = typeof onClose === 'function' ? onClose : null;
+
+  pesoModule.openPesoModal({
+    context: { internacaoId: record.id || record._id, internacaoCodigo: record.codigo || null },
+    onClose: closeHandler,
+  });
+}
+
+async function handleFichaPesoAction() {
+  const record = fichaInternacaoModal.record;
+  const dataset = fichaInternacaoModal.dataset || getDataset();
+  const state = fichaInternacaoModal.state || {};
 
   const reopenFicha = async () => {
     const refreshPromise = typeof state.refreshInternacoes === 'function'
@@ -4263,19 +4275,16 @@ async function handleFichaPesoAction() {
     const updatedRecord = Array.isArray(state?.internacoes)
       ? state.internacoes.find(
           (item) =>
-            item.id === record.id ||
-            item.filterKey === record.filterKey ||
-            (record.codigo !== null && item.codigo === record.codigo),
+            item.id === record?.id ||
+            item.filterKey === record?.filterKey ||
+            (record?.codigo !== null && item.codigo === record?.codigo),
         ) || record
       : record;
     openFichaInternacaoModal(updatedRecord, { dataset, state });
   };
 
   closeFichaInternacaoModal();
-  pesoModule.openPesoModal({
-    context: { internacaoId: record.id || record._id, internacaoCodigo: record.codigo || null },
-    onClose: reopenFicha,
-  });
+  await openPesoModalFromInternacao(record, { dataset, state, onClose: reopenFicha });
 }
 
 async function handleFichaObitoAction() {
@@ -6540,8 +6549,49 @@ function setupMapaPage(dataset, state, render, fetchInternacoes) {
     });
   };
 
+  const handlePesoQuickAction = async (detail = {}) => {
+    const recordId = detail.recordId || '';
+    const petKey = detail.petKey || '';
+    const parentOverlay = detail.overlay || null;
+
+    const restoreOverlay = () => {
+      if (parentOverlay && document.body.contains(parentOverlay)) {
+        parentOverlay.classList.remove('hidden');
+        parentOverlay.classList.add('flex');
+        parentOverlay.setAttribute('aria-hidden', 'false');
+      }
+    };
+
+    let record = null;
+    if (recordId) {
+      record = state.internacoes.find((item) => item.id === recordId || item._id === recordId || item.filterKey === recordId);
+    }
+    if (!record && petKey) {
+      record = state.internacoes.find((item) => item.filterKey === petKey || item.id === petKey);
+    }
+
+    if (!record) {
+      showToastMessage('Não foi possível localizar o paciente para registrar o peso.', 'warning');
+      restoreOverlay();
+      return;
+    }
+
+    const onClose = () => {
+      restoreOverlay();
+      if (typeof state.refreshInternacoes === 'function') {
+        state.refreshInternacoes();
+      }
+    };
+
+    await openPesoModalFromInternacao(record, { dataset, state, onClose });
+  };
+
   window.addEventListener('internacao:execucao:parametros', (event) => {
     handleParametrosQuickAction(event?.detail || {});
+  });
+
+  window.addEventListener('internacao:execucao:peso', (event) => {
+    handlePesoQuickAction(event?.detail || {});
   });
 
   loadInternacoes();
