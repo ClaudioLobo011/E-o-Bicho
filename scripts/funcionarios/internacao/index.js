@@ -6471,6 +6471,44 @@ function setupAnimaisPage(dataset, state, render, fetchInternacoes) {
   loadInternacoes();
 }
 
+function setupHistoricoPage(dataset, state, render, fetchInternacoes) {
+  const root = document.querySelector('[data-internacao-root]');
+  const loadInternacoes = (options = {}) => {
+    if (typeof fetchInternacoes === 'function') {
+      return fetchInternacoes(options);
+    }
+    return Promise.resolve([]);
+  };
+
+  if (root) {
+    root.addEventListener('click', (event) => {
+      if (event.target.closest('[data-internacoes-retry]')) {
+        event.preventDefault();
+        loadInternacoes({ quiet: false });
+        return;
+      }
+      const fichaTrigger = event.target.closest('[data-open-ficha]');
+      if (fichaTrigger) {
+        event.preventDefault();
+        const recordId = fichaTrigger.dataset.recordId || '';
+        let registro = null;
+        if (recordId) {
+          registro = state.internacoes.find(
+            (item) => item.id === recordId || item.filterKey === recordId || String(item.codigo) === recordId,
+          );
+        }
+        if (!registro) {
+          showToastMessage('Não foi possível carregar os detalhes dessa internação.', 'warning');
+          return;
+        }
+        openFichaInternacaoModal(registro, { dataset, state });
+      }
+    });
+  }
+
+  loadInternacoes();
+}
+
 function setupMapaPage(dataset, state, render, fetchInternacoes) {
   const root = document.querySelector('[data-internacao-root]');
   const loadInternacoes = (options = {}) => {
@@ -6764,6 +6802,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (view === 'animais') {
     setupAnimaisPage(dataset, state, render, fetchInternacoes);
+  }
+  if (view === 'historico') {
+    setupHistoricoPage(dataset, state, render, fetchInternacoes);
   }
   if (view === 'mapa') {
     setupMapaPage(dataset, state, render, fetchInternacoes);

@@ -1,5 +1,11 @@
 import { internacaoDataset } from './data.js';
 
+function normalizeActionKey(value) {
+  if (!value) return '';
+  const normalized = typeof value.normalize === 'function' ? value.normalize('NFD') : value;
+  return normalized.replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -1053,54 +1059,110 @@ export function renderMapaExecucao(root, dataset, state = {}) {
   attachExecucaoModalHandlers(root, pacientes, selectedDate);
 }
 
-export function renderHistoricoInternacoes(root, dataset, { petId } = {}) {
-  const pacientes = filterPacientes(dataset, petId);
-  if (!pacientes.length) {
-    root.innerHTML = buildEmptyState('Nenhum histórico encontrado.');
+export function renderHistoricoInternacoes(root, dataset, state = {}) {
+  const petId = state?.petId || '';
+  const internacoes = Array.isArray(state?.internacoes) ? state.internacoes : [];
+
+  if (state?.internacoesLoading && !internacoes.length) {
+    root.innerHTML = buildEmptyState('Carregando histórico...');
     return;
   }
 
-  const linhas = pacientes.flatMap((pet) => {
-    const atuais = [{
-      periodo: `${formatDate(pet.internacao.admissao)} · ${formatDate(pet.internacao.previsaoAlta)}`,
-      motivo: pet.internacao.motivo,
-      resultado: pet.internacao.status,
-      responsavel: pet.internacao.equipeMedica,
-      pet,
-    }];
-    const previas = (pet.internacao.historico || []).map((item) => ({ ...item, pet }));
-    return [...atuais, ...previas];
+  if (state?.internacoesError) {
+    root.innerHTML = `
+      <div class="rounded-2xl border border-red-100 bg-red-50 px-6 py-8 text-center">
+        <p class="text-sm font-semibold text-red-700">${escapeHtml(state.internacoesError)}</p>
+        <button type="button" class="mt-4 inline-flex items-center justify-center rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-500" data-internacoes-retry>
+          Tentar novamente
+        </button>
+      </div>
+    `;
+    return;
+  }
+
+  const historicoConcluido = internacoes.filter((registro) => {
+    const situacaoKey = normalizeActionKey(registro?.situacao || registro?.situacaoCodigo);
+    const cancelado = registro?.cancelado || situacaoKey === 'cancelado';
+    const obito = registro?.obitoRegistrado || situacaoKey === 'obito';
+    const alta = situacaoKey.includes('alta');
+    return cancelado || obito || alta;
   });
 
-  root.innerHTML = `
-    <div class="overflow-x-auto rounded-2xl border border-gray-100">
-      <table class="min-w-full divide-y divide-gray-100 text-sm">
-        <thead class="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-          <tr>
-            <th class="px-4 py-3">Período</th>
-            <th class="px-4 py-3">Pet / Tutor</th>
-            <th class="px-4 py-3">Motivo</th>
-            <th class="px-4 py-3">Resultado / Status</th>
-            <th class="px-4 py-3">Responsável</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-gray-100 bg-white">
-          ${linhas.map((linha) => `
-            <tr>
-              <td class="px-4 py-3 text-gray-700">${linha.periodo}</td>
-              <td class="px-4 py-3">
-                <p class="font-semibold text-gray-900">${linha.pet.nome}</p>
-                <p class="text-xs text-gray-500">Tutor: ${linha.pet.tutor.nome}</p>
-              </td>
-              <td class="px-4 py-3 text-gray-700">${linha.motivo}</td>
-              <td class="px-4 py-3 text-gray-700">${linha.resultado}</td>
-              <td class="px-4 py-3 text-gray-700">${linha.responsavel}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>
-  `;
+  const filtrados = petId ? historicoConcluido.filter((registro) => registro.filterKey === petId) : historicoConcluido;
+
+  if (!filtrados.length) {
+    root.innerHTML = buildEmptyState('Nenhuma internação encerrada encontrada para o filtro aplicado.');
+    return;
+  }
+
+  const cardsContent = filtrados
+    .map((registro) => {
+      const meta = [registro.pet?.especie, registro.pet?.raca, registro.pet?.peso || registro.pet?.idade]
+        .filter(Boolean)
+        .join(' · ');
+      const admissao = formatDateTime(registro.admissao);
+      let altaPrevista = '—';
+      if (registro.altaPrevistaISO) {
+        altaPrevista = formatDateTime(registro.altaPrevistaISO);
+      } else if (registro.altaPrevistaData) {
+        const iso = `${registro.altaPrevistaData}T${registro.altaPrevistaHora || '00:00'}`;
+        altaPrevista = formatDateTime(iso);
+      }
+      const riscoClass = getRiscoBadgeClass(registro.riscoCodigo);
+      const tutorContato = [registro.tutor?.contato, registro.tutor?.documento].filter(Boolean).join(' · ');
+      const situacaoKey = normalizeActionKey(registro?.situacao || registro?.situacaoCodigo);
+      const statusLabel = registro.obitoRegistrado
+        ? 'Óbito'
+        : registro.cancelado || situacaoKey === 'cancelado'
+          ? 'Cancelada'
+          : registro.situacao || 'Alta registrada';
+      const statusTone = registro.obitoRegistrado
+        ? 'bg-red-50 text-red-700 ring-red-100'
+        : registro.cancelado || situacaoKey === 'cancelado'
+          ? 'bg-gray-100 text-gray-700 ring-gray-100'
+          : 'bg-emerald-50 text-emerald-700 ring-emerald-100';
+      const recordIdentifier = escapeHtml(registro.id || registro.filterKey || String(registro.codigo || ''));
+
+      return `
+        <article class="rounded-2xl border border-gray-100 px-5 py-5 shadow-sm">
+          <div class="flex flex-wrap items-start gap-4">
+            <div class="flex-1 space-y-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <h2 class="text-xl font-semibold text-gray-900">
+                  <button type="button" class="text-left font-semibold text-gray-900 transition hover:text-primary focus:outline-none" data-open-ficha data-record-id="${recordIdentifier}">
+                    ${escapeHtml(registro.pet?.nome || 'Paciente')}
+                  </button>
+                </h2>
+                <span class="rounded-full px-2 py-0.5 text-xs font-semibold ${statusTone}">Situação: ${escapeHtml(statusLabel)}</span>
+                ${registro.risco ? `<span class="rounded-full px-2 py-0.5 text-xs font-semibold ${riscoClass}">Risco: ${escapeHtml(registro.risco)}</span>` : ''}
+              </div>
+              <p class="text-sm text-gray-500">${meta ? escapeHtml(meta) : 'Sem detalhes do paciente'}</p>
+              <p class="text-sm text-gray-500">Tutor: <span class="font-medium text-gray-700">${escapeHtml(registro.tutor?.nome || '—')}</span></p>
+              ${tutorContato ? `<p class="text-xs text-gray-400">${escapeHtml(tutorContato)}</p>` : ''}
+            </div>
+            <div class="text-right text-sm text-gray-500 space-y-1">
+              <p>Código interno: <span class="font-semibold text-gray-900">${registro.codigo !== null && registro.codigo !== undefined ? `#${registro.codigo}` : '—'}</span></p>
+              <p>Admissão: <span class="font-semibold text-gray-900">${admissao}</span></p>
+              <p>Previsão de alta: <span class="font-semibold text-gray-900">${altaPrevista}</span></p>
+              <p>Box: <span class="font-semibold text-gray-900">${escapeHtml(registro.box || '—')}</span></p>
+            </div>
+          </div>
+          <div class="mt-4 grid gap-4 md:grid-cols-3">
+            <div class="rounded-xl bg-gray-50 p-3">
+              <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Equipe</p>
+              <p class="text-sm text-gray-500">Em desenvolvimento</p>
+            </div>
+            <div class="rounded-xl bg-gray-50 p-3 md:col-span-2">
+              <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Pendências da agenda</p>
+              <p class="text-sm text-gray-500">Em desenvolvimento</p>
+            </div>
+          </div>
+        </article>
+      `;
+    })
+    .join('');
+
+  root.innerHTML = `<div class="space-y-4">${cardsContent}</div>`;
 }
 
 export function renderParametrosClinicos(
