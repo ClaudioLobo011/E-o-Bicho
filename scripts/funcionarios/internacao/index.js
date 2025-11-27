@@ -4695,7 +4695,7 @@ function ensureExecucaoParametrosModal() {
             <p class="text-[11px] text-gray-500" data-execucao-parametros-summary-meta>—</p>
             <p class="text-[11px] text-gray-500" data-execucao-parametros-summary-tutor>—</p>
           </div>
-          <div class="flex flex-col items-center gap-3 sm:flex-row sm:justify-center sm:gap-6">
+          <div class="flex w-full flex-col items-center justify-center gap-3 sm:flex-row sm:gap-6">
             <div class="flex flex-col items-center">
               <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Data*</label>
               <input type="date" class="mt-1 w-36 rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-execucao-parametros-data required />
