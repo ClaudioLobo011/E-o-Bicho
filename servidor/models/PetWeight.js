@@ -23,6 +23,15 @@ const petWeightSchema = new Schema({
     ref: 'User',
     default: null,
   },
+  internacao: {
+    type: Schema.Types.ObjectId,
+    ref: 'InternacaoRegistro',
+    default: null,
+  },
+  registradoNaInternacao: {
+    type: Boolean,
+    default: false,
+  },
   isInitial: {
     type: Boolean,
     default: false,

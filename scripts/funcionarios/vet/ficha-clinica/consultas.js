@@ -3038,7 +3038,8 @@ export function updateConsultaAgendaCard() {
   const hasAnexos = anexos.length > 0;
   const isLoadingAnexos = !!state.anexosLoading;
   const pesos = Array.isArray(state.pesos) ? state.pesos : [];
-  const hasPesos = pesos.some((entry) => entry && !entry.isInitial);
+  const pesosVisiveis = pesos.filter((entry) => entry && !entry.isInitial && !entry.registradoNaInternacao);
+  const hasPesos = pesosVisiveis.length > 0;
   const isLoadingPesos = !!state.pesosLoading;
   const observacoes = Array.isArray(state.observacoes) ? state.observacoes : [];
   const hasObservacoes = observacoes.length > 0;
@@ -3378,11 +3379,21 @@ export function updateConsultaAgendaCard() {
       return bTime - aTime;
     });
 
-    const baselinePeso = orderedPesos.find((entry) => entry && entry.isInitial) || orderedPesos[orderedPesos.length - 1] || null;
-    const orderedVetPesos = orderedPesos.filter((entry) => entry && !entry.isInitial);
+    const orderedPesosVisiveis = [...pesosVisiveis];
+    orderedPesosVisiveis.sort((a, b) => {
+      const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return bTime - aTime;
+    });
 
-    orderedVetPesos.forEach((peso, index) => {
-      const previous = orderedVetPesos[index + 1] || null;
+    const baselinePeso =
+      orderedPesos.find((entry) => entry && entry.isInitial)
+      || orderedPesosVisiveis[orderedPesosVisiveis.length - 1]
+      || orderedPesos[orderedPesos.length - 1]
+      || null;
+
+    orderedPesosVisiveis.forEach((peso, index) => {
+      const previous = orderedPesosVisiveis[index + 1] || null;
       const card = createPesoCard(peso, baselinePeso, previous, { isLatest: index === 0 });
       if (card) pushRestCard(card);
     });

@@ -288,6 +288,18 @@ const formatPrescricaoItem = (entry) => {
   };
 };
 
+const sanitizeParametrosResposta = (input) => {
+  const list = Array.isArray(input) ? input : [];
+  return list
+    .map((item) => ({
+      id: sanitizeText(item?.parametroId || item?.id),
+      nome: sanitizeText(item?.parametroNome || item?.nome || item?.label || 'Parâmetro clínico'),
+      resposta: sanitizeText(item?.resposta),
+      observacao: sanitizeText(item?.observacao),
+    }))
+    .filter((item) => item.resposta || item.observacao || item.nome || item.id);
+};
+
 const parseNumberValue = (value) => {
   if (value === undefined || value === null) return null;
   const text = String(value).replace(',', '.').trim();
@@ -961,6 +973,97 @@ router.post('/registros/:id/ocorrencias', async (req, res) => {
       return res.status(400).json({ message: 'Revise as informações preenchidas antes de salvar a ocorrência.' });
     }
     return res.status(500).json({ message: 'Não foi possível salvar a ocorrência.' });
+  }
+});
+
+router.post('/registros/:id/parametros', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: 'Informe o registro que deseja atualizar.' });
+    }
+
+    const record = await InternacaoRegistro.findById(id);
+    if (!record) {
+      return res.status(404).json({ message: 'Internação não encontrada.' });
+    }
+
+    if (record.obitoRegistrado || normalizeKey(record.situacaoCodigo) === 'obito') {
+      return res.status(409).json({ message: 'Não é possível registrar parâmetros após o óbito.' });
+    }
+
+    if (record.cancelado || normalizeKey(record.situacaoCodigo) === 'cancelado') {
+      return res.status(409).json({ message: 'Essa internação está cancelada e não permite novos registros.' });
+    }
+
+    const payload = {
+      data: sanitizeText(req.body?.data),
+      hora: sanitizeText(req.body?.hora),
+      respostas: sanitizeParametrosResposta(req.body?.respostas),
+    };
+
+    if (!payload.data) {
+      return res.status(400).json({ message: 'Informe a data da coleta dos parâmetros clínicos.' });
+    }
+
+    if (!payload.hora) {
+      return res.status(400).json({ message: 'Informe a hora da coleta dos parâmetros clínicos.' });
+    }
+
+    if (!payload.respostas.length) {
+      return res.status(400).json({ message: 'Adicione pelo menos uma resposta ou observação para salvar.' });
+    }
+
+    const autor = req.user?.email || 'Sistema';
+    const programadoEm = combineDateAndTimeParts(payload.data, payload.hora);
+    const resumoRespostas = payload.respostas
+      .map((item) => {
+        const label = item.nome || item.id || 'Parâmetro';
+        const resposta = item.resposta || '—';
+        const obs = item.observacao ? ` (${item.observacao})` : '';
+        return `${label}: ${resposta}${obs}`;
+      })
+      .join(' | ');
+
+    record.execucoes = Array.isArray(record.execucoes) ? record.execucoes : [];
+    record.execucoes.unshift({
+      programadoData: payload.data,
+      programadoHora: payload.hora,
+      programadoEm,
+      horario: payload.hora,
+      descricao: 'Parâmetros clínicos',
+      responsavel: autor,
+      status: 'Concluída',
+      realizadoData: payload.data,
+      realizadoHora: payload.hora,
+      realizadoEm: programadoEm,
+      realizadoPor: autor,
+      observacoes: resumoRespostas,
+    });
+
+    record.historico = Array.isArray(record.historico) ? record.historico : [];
+    record.historico.unshift({
+      tipo: 'Parâmetros clínicos',
+      descricao: `Coleta registrada em ${payload.data} ${payload.hora}. ${resumoRespostas || 'Sem respostas registradas.'}`.trim(),
+      criadoPor: autor,
+      criadoEm: new Date(),
+    });
+
+    await record.save();
+
+    const updated = await InternacaoRegistro.findById(record._id).lean();
+    const formatted = formatRegistro(updated);
+    if (!formatted) {
+      return res.status(500).json({ message: 'Não foi possível atualizar o mapa de execução com os parâmetros clínicos.' });
+    }
+
+    return res.status(201).json(formatted);
+  } catch (error) {
+    console.error('internacao: falha ao registrar parâmetros clínicos', error);
+    if (error?.name === 'ValidationError') {
+      return res.status(400).json({ message: 'Revise as informações preenchidas antes de salvar a coleta.' });
+    }
+    return res.status(500).json({ message: 'Não foi possível salvar os parâmetros clínicos.' });
   }
 });
 

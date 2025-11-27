@@ -394,6 +394,51 @@ function openExecucaoModal(paciente, hourLabel, items = [], options = {}) {
         );
         return;
       }
+      if (actionKey === 'prescricao-medica') {
+        overlay.classList.add('hidden');
+        overlay.classList.remove('flex');
+        overlay.setAttribute('aria-hidden', 'true');
+        window.dispatchEvent(
+          new CustomEvent('internacao:execucao:prescricao', {
+            detail: {
+              recordId: btn.dataset.recordId || overlay.dataset.recordId || '',
+              petKey: btn.dataset.petKey || overlay.dataset.petKey || '',
+              overlay,
+            },
+          }),
+        );
+        return;
+      }
+      if (actionKey === 'ocorrencia') {
+        overlay.classList.add('hidden');
+        overlay.classList.remove('flex');
+        overlay.setAttribute('aria-hidden', 'true');
+        window.dispatchEvent(
+          new CustomEvent('internacao:execucao:ocorrencia', {
+            detail: {
+              recordId: btn.dataset.recordId || overlay.dataset.recordId || '',
+              petKey: btn.dataset.petKey || overlay.dataset.petKey || '',
+              overlay,
+            },
+          }),
+        );
+        return;
+      }
+      if (actionKey === 'peso') {
+        overlay.classList.add('hidden');
+        overlay.classList.remove('flex');
+        overlay.setAttribute('aria-hidden', 'true');
+        window.dispatchEvent(
+          new CustomEvent('internacao:execucao:peso', {
+            detail: {
+              recordId: btn.dataset.recordId || overlay.dataset.recordId || '',
+              petKey: btn.dataset.petKey || overlay.dataset.petKey || '',
+              overlay,
+            },
+          }),
+        );
+        return;
+      }
       closeModal();
     });
   });

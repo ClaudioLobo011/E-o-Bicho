@@ -44,7 +44,10 @@ function normalizePesoRecord(raw) {
     peso,
     isInitial: !!raw.isInitial,
     registradoPor: normalizeId(raw.registradoPor || raw.registradoPorId) || null,
+    internacaoId: normalizeId(raw.internacaoId || raw.internacao) || null,
+    registradoNaInternacao: !!raw.registradoNaInternacao,
     createdAt: toIsoOrNull(raw.createdAt || raw.created_at || raw.createdEm || raw.registradoEm) || null,
+    updatedAt: toIsoOrNull(raw.updatedAt || raw.updated_at || raw.atualizadoEm) || null,
   };
 }
 

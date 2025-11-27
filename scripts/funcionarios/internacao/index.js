@@ -286,6 +286,7 @@ const prescricaoModal = {
   state: null,
   record: null,
   petInfo: null,
+  onClose: null,
   resumoField: null,
   recorrenciaFields: null,
   recorrenciaTitleEl: null,
@@ -4209,19 +4210,17 @@ async function handleFichaEditarAction() {
   });
 }
 
-async function handleFichaPesoAction() {
-  const record = fichaInternacaoModal.record;
+async function openPesoModalFromInternacao(record, { dataset = getDataset(), state = {}, onClose = null } = {}) {
   if (!record) {
     showToastMessage('Abra uma ficha de internação válida antes de ajustar o peso.', 'warning');
+    if (typeof onClose === 'function') onClose();
     return;
   }
 
-  const dataset = fichaInternacaoModal.dataset || getDataset();
-  const state = fichaInternacaoModal.state || {};
   const petId = record.pet?.id || record.petId || record.filterKey;
-
   if (!petId) {
     showToastMessage('Não foi possível identificar o pet para registrar o peso.', 'warning');
+    if (typeof onClose === 'function') onClose();
     return;
   }
 
@@ -4238,6 +4237,7 @@ async function handleFichaPesoAction() {
   } catch (error) {
     console.error('internacao: falha ao carregar modal de peso', error);
     showToastMessage('Não foi possível abrir o modal de peso.', 'error');
+    if (typeof onClose === 'function') onClose();
     return;
   }
 
@@ -4247,6 +4247,19 @@ async function handleFichaPesoAction() {
     ? { _id: tutorId }
     : { _id: record.tutor?.documento || record.tutorDocumento || record.tutor?.nome || record.tutorNome || petId };
   coreState.agendaContext = null;
+
+  const closeHandler = typeof onClose === 'function' ? onClose : null;
+
+  pesoModule.openPesoModal({
+    context: { internacaoId: record.id || record._id, internacaoCodigo: record.codigo || null },
+    onClose: closeHandler,
+  });
+}
+
+async function handleFichaPesoAction() {
+  const record = fichaInternacaoModal.record;
+  const dataset = fichaInternacaoModal.dataset || getDataset();
+  const state = fichaInternacaoModal.state || {};
 
   const reopenFicha = async () => {
     const refreshPromise = typeof state.refreshInternacoes === 'function'
@@ -4263,19 +4276,16 @@ async function handleFichaPesoAction() {
     const updatedRecord = Array.isArray(state?.internacoes)
       ? state.internacoes.find(
           (item) =>
-            item.id === record.id ||
-            item.filterKey === record.filterKey ||
-            (record.codigo !== null && item.codigo === record.codigo),
+            item.id === record?.id ||
+            item.filterKey === record?.filterKey ||
+            (record?.codigo !== null && item.codigo === record?.codigo),
         ) || record
       : record;
     openFichaInternacaoModal(updatedRecord, { dataset, state });
   };
 
   closeFichaInternacaoModal();
-  pesoModule.openPesoModal({
-    context: { internacaoId: record.id || record._id, internacaoCodigo: record.codigo || null },
-    onClose: reopenFicha,
-  });
+  await openPesoModalFromInternacao(record, { dataset, state, onClose: reopenFicha });
 }
 
 async function handleFichaObitoAction() {
@@ -4578,7 +4588,7 @@ function renderExecucaoParametrosLista(config = []) {
   }
 
   execucaoParametrosModal.listaEl.innerHTML = `
-    <div class="grid grid-cols-[1.2fr_1fr_1fr] items-center gap-4 rounded-lg bg-gray-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+    <div class="grid items-center gap-4 rounded-lg bg-gray-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500" style="grid-template-columns: 1.2fr 1fr 1fr;">
       <span>Parâmetro clínico</span>
       <span>Resposta</span>
       <span>Observação</span>
@@ -4586,7 +4596,7 @@ function renderExecucaoParametrosLista(config = []) {
     ${items
       .map(
         (item, index) => `
-          <div class="grid grid-cols-[1.2fr_1fr_1fr] items-start gap-4 rounded-xl border border-gray-100 bg-white px-3 py-3" data-parametro-row data-parametro-id="${escapeHtml(item.id || String(index))}">
+          <div class="grid items-start gap-4 rounded-xl border border-gray-100 bg-white px-3 py-3" style="grid-template-columns: 1.2fr 1fr 1fr;" data-parametro-row data-parametro-id="${escapeHtml(item.id || String(index))}" data-parametro-nome="${escapeHtml(item.nome || 'Parâmetro clínico')}">
             <div class="space-y-1">
               <p class="text-sm font-semibold text-gray-900">${escapeHtml(item.nome || 'Parâmetro clínico')}</p>
               <p class="text-[11px] text-gray-500">${item.ordem ? `Ordem ${escapeHtml(String(item.ordem))}` : 'Ordenação alfabética'}</p>
@@ -4635,6 +4645,16 @@ function handleExecucaoParametrosSubmit(event) {
   setExecucaoParametrosError('');
   if (!execucaoParametrosModal.form) return;
 
+  const recordId =
+    execucaoParametrosModal.record?.id ||
+    execucaoParametrosModal.record?._id ||
+    execucaoParametrosModal.record?.codigo ||
+    '';
+  if (!recordId) {
+    setExecucaoParametrosError('Não foi possível identificar o paciente para salvar a coleta.');
+    return;
+  }
+
   const dataValue = execucaoParametrosModal.dataInput?.value?.trim();
   const horaValue = execucaoParametrosModal.horaInput?.value?.trim();
   if (!dataValue) {
@@ -4648,8 +4668,63 @@ function handleExecucaoParametrosSubmit(event) {
     return;
   }
 
-  closeExecucaoParametrosModal();
-  showToastMessage('Registro de parâmetros clínicos salvo (simulação).', 'success');
+  const respostas = Array.from(execucaoParametrosModal.listaEl?.querySelectorAll('[data-parametro-row]') || [])
+    .map((row) => {
+      const parametroId = row.dataset.parametroId || '';
+      const parametroNome = row.dataset.parametroNome || '';
+      const resposta = row.querySelector('[data-parametro-resposta]')?.value?.trim() || '';
+      const observacao = row.querySelector('[data-parametro-observacao]')?.value?.trim() || '';
+      return {
+        parametroId,
+        parametroNome,
+        resposta,
+        observacao,
+      };
+    })
+    .filter((item) => item.resposta || item.observacao || item.parametroNome);
+
+  if (!respostas.length) {
+    setExecucaoParametrosError('Informe ao menos uma resposta ou observação para salvar.');
+    return;
+  }
+
+  setExecucaoParametrosLoading(true);
+
+  requestJson(`/internacao/registros/${encodeURIComponent(recordId)}/parametros`, {
+    method: 'POST',
+    body: {
+      data: dataValue,
+      hora: horaValue,
+      respostas,
+    },
+  })
+    .then((updated) => {
+      const normalized = syncInternacaoRecordState(updated);
+      if (!normalized) {
+        throw new Error('Não foi possível atualizar a ficha após salvar a coleta.');
+      }
+      closeExecucaoParametrosModal();
+      showToastMessage('Parâmetros clínicos registrados no mapa de execução.', 'success');
+    })
+    .catch((error) => {
+      console.error('internacao: falha ao salvar parâmetros clínicos', error);
+      setExecucaoParametrosError(error.message || 'Não foi possível registrar a coleta.');
+    })
+    .finally(() => {
+      setExecucaoParametrosLoading(false);
+    });
+}
+
+function setExecucaoParametrosLoading(isLoading) {
+  if (!execucaoParametrosModal.submitBtn) return;
+  if (!execucaoParametrosModal.submitBtn.dataset.defaultLabel) {
+    execucaoParametrosModal.submitBtn.dataset.defaultLabel = execucaoParametrosModal.submitBtn.textContent.trim();
+  }
+  execucaoParametrosModal.submitBtn.disabled = !!isLoading;
+  execucaoParametrosModal.submitBtn.classList.toggle('opacity-60', !!isLoading);
+  execucaoParametrosModal.submitBtn.textContent = isLoading
+    ? 'Salvando...'
+    : execucaoParametrosModal.submitBtn.dataset.defaultLabel;
 }
 
 function ensureExecucaoParametrosModal() {
@@ -4695,15 +4770,15 @@ function ensureExecucaoParametrosModal() {
             <p class="text-[11px] text-gray-500" data-execucao-parametros-summary-meta>—</p>
             <p class="text-[11px] text-gray-500" data-execucao-parametros-summary-tutor>—</p>
           </div>
-          <div class="grid gap-3 sm:grid-cols-2">
-            <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Data*</label>
-            <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 sm:text-right">Hora*</label>
-            <div>
-              <input type="date" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-execucao-parametros-data required />
+          <div class="flex w-full flex-col items-center justify-center gap-3 sm:flex-row sm:gap-6">
+            <div class="flex flex-col items-center">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Data*</label>
+              <input type="date" class="mt-1 w-36 rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-execucao-parametros-data required />
             </div>
-            <div>
+            <div class="flex flex-col items-center">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Hora*</label>
               <div class="mt-1 flex items-center gap-2">
-                <input type="time" class="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-execucao-parametros-hora required />
+                <input type="time" class="w-24 rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-execucao-parametros-hora required />
                 <button type="button" class="rounded-lg border border-primary/30 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary transition hover:bg-primary/5" data-execucao-parametros-agora>Agora</button>
               </div>
             </div>
@@ -4713,7 +4788,7 @@ function ensureExecucaoParametrosModal() {
         </div>
         <div class="flex flex-col gap-2 border-t border-gray-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-end">
           <button type="button" class="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-700 transition hover:bg-gray-50" data-close-execucao-parametros>Cancelar</button>
-          <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-primary px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-primary/90">Salvar</button>
+          <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-primary px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-primary/90" data-execucao-parametros-submit>Salvar</button>
         </div>
       </form>
     </div>
@@ -4731,6 +4806,7 @@ function ensureExecucaoParametrosModal() {
   execucaoParametrosModal.agoraBtn = overlay.querySelector('[data-execucao-parametros-agora]');
   execucaoParametrosModal.listaEl = overlay.querySelector('[data-execucao-parametros-lista]');
   execucaoParametrosModal.errorEl = overlay.querySelector('[data-execucao-parametros-error]');
+  execucaoParametrosModal.submitBtn = overlay.querySelector('[data-execucao-parametros-submit]');
 
   overlay.addEventListener('click', (event) => {
     const closeTrigger = event.target.closest('[data-close-execucao-parametros]');
@@ -5219,6 +5295,7 @@ function closePrescricaoModal() {
   if (prescricaoModal.dialog) {
     prescricaoModal.dialog.classList.add('opacity-0', 'scale-95');
   }
+  const onClose = prescricaoModal.onClose;
   prescricaoModal.overlay.classList.add('hidden');
   prescricaoModal.overlay.classList.remove('flex');
   prescricaoModal.overlay.removeAttribute('data-modal-open');
@@ -5229,6 +5306,14 @@ function closePrescricaoModal() {
   prescricaoModal.dataset = null;
   prescricaoModal.state = null;
   prescricaoModal.record = null;
+  prescricaoModal.onClose = null;
+  if (typeof onClose === 'function') {
+    try {
+      onClose();
+    } catch (error) {
+      console.warn('internacao: falha ao executar callback de fechamento da prescrição', error);
+    }
+  }
 }
 
 function handlePrescricaoFormChange(event) {
@@ -5483,6 +5568,7 @@ function openPrescricaoModal(record, options = {}) {
   prescricaoModal.dataset = options.dataset || prescricaoModal.dataset || getDataset();
   prescricaoModal.state = options.state || prescricaoModal.state || {};
   prescricaoModal.record = record;
+  prescricaoModal.onClose = typeof options.onClose === 'function' ? options.onClose : null;
   setPrescricaoModalError('');
   resetPrescricaoModalForm();
   const petInfo = resolvePetInfoForPrescricao(record, prescricaoModal.dataset);
@@ -6474,8 +6560,147 @@ function setupMapaPage(dataset, state, render, fetchInternacoes) {
     });
   };
 
+  const handleOcorrenciaQuickAction = async (detail = {}) => {
+    const recordId = detail.recordId || '';
+    const petKey = detail.petKey || '';
+    const parentOverlay = detail.overlay || null;
+
+    const restoreOverlay = () => {
+      if (parentOverlay && document.body.contains(parentOverlay)) {
+        parentOverlay.classList.remove('hidden');
+        parentOverlay.classList.add('flex');
+        parentOverlay.setAttribute('aria-hidden', 'false');
+      }
+    };
+
+    let record = null;
+    if (recordId) {
+      record = state.internacoes.find(
+        (item) => item.id === recordId || item._id === recordId || item.filterKey === recordId,
+      );
+    }
+    if (!record && petKey) {
+      record = state.internacoes.find((item) => item.filterKey === petKey || item.id === petKey);
+    }
+
+    if (!record) {
+      showToastMessage('Não foi possível localizar o paciente para registrar a ocorrência.', 'warning');
+      restoreOverlay();
+      return;
+    }
+
+    const onClose = () => {
+      restoreOverlay();
+      if (typeof state.refreshInternacoes === 'function') {
+        state.refreshInternacoes();
+      }
+    };
+
+    openOcorrenciaModal(record, { dataset, state, onSuccess: state.refreshInternacoes, onClose });
+  };
+
+  const handlePesoQuickAction = async (detail = {}) => {
+    const recordId = detail.recordId || '';
+    const petKey = detail.petKey || '';
+    const parentOverlay = detail.overlay || null;
+
+    const restoreOverlay = () => {
+      if (parentOverlay && document.body.contains(parentOverlay)) {
+        parentOverlay.classList.remove('hidden');
+        parentOverlay.classList.add('flex');
+        parentOverlay.setAttribute('aria-hidden', 'false');
+      }
+    };
+
+    let record = null;
+    if (recordId) {
+      record = state.internacoes.find((item) => item.id === recordId || item._id === recordId || item.filterKey === recordId);
+    }
+    if (!record && petKey) {
+      record = state.internacoes.find((item) => item.filterKey === petKey || item.id === petKey);
+    }
+
+    if (!record) {
+      showToastMessage('Não foi possível localizar o paciente para registrar o peso.', 'warning');
+      restoreOverlay();
+      return;
+    }
+
+    const onClose = () => {
+      restoreOverlay();
+      if (typeof state.refreshInternacoes === 'function') {
+        state.refreshInternacoes();
+      }
+    };
+
+    await openPesoModalFromInternacao(record, { dataset, state, onClose });
+  };
+
+  const handlePrescricaoQuickAction = async (detail = {}) => {
+    const recordId = detail.recordId || '';
+    const petKey = detail.petKey || '';
+    const parentOverlay = detail.overlay || null;
+
+    const restoreOverlay = () => {
+      if (parentOverlay && document.body.contains(parentOverlay)) {
+        parentOverlay.classList.remove('hidden');
+        parentOverlay.classList.add('flex');
+        parentOverlay.setAttribute('aria-hidden', 'false');
+      }
+    };
+
+    let record = null;
+    if (recordId) {
+      record = state.internacoes.find((item) => item.id === recordId || item._id === recordId || item.filterKey === recordId);
+    }
+    if (!record && petKey) {
+      record = state.internacoes.find((item) => item.filterKey === petKey || item.id === petKey);
+    }
+
+    if (!record) {
+      showToastMessage('Não foi possível localizar o paciente para registrar a prescrição.', 'warning');
+      restoreOverlay();
+      return;
+    }
+
+    const hasObito = record.obitoRegistrado || normalizeActionKey(record.situacaoCodigo) === 'obito';
+    const isCancelado = record.cancelado || normalizeActionKey(record.situacaoCodigo) === 'cancelado';
+    if (hasObito) {
+      showToastMessage('Não é possível registrar prescrições após o óbito.', 'warning');
+      restoreOverlay();
+      return;
+    }
+    if (isCancelado) {
+      showToastMessage('Essa internação está cancelada e não permite novas prescrições.', 'info');
+      restoreOverlay();
+      return;
+    }
+
+    const onClose = () => {
+      restoreOverlay();
+      if (typeof state.refreshInternacoes === 'function') {
+        state.refreshInternacoes();
+      }
+    };
+
+    ensurePrescricaoModal();
+    openPrescricaoModal(record, { dataset, state, onClose });
+  };
+
   window.addEventListener('internacao:execucao:parametros', (event) => {
     handleParametrosQuickAction(event?.detail || {});
+  });
+
+  window.addEventListener('internacao:execucao:ocorrencia', (event) => {
+    handleOcorrenciaQuickAction(event?.detail || {});
+  });
+
+  window.addEventListener('internacao:execucao:peso', (event) => {
+    handlePesoQuickAction(event?.detail || {});
+  });
+
+  window.addEventListener('internacao:execucao:prescricao', (event) => {
+    handlePrescricaoQuickAction(event?.detail || {});
   });
 
   loadInternacoes();
