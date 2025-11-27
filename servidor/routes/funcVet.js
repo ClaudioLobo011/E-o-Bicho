@@ -780,6 +780,8 @@ function formatPetWeightEntry(doc) {
     petId: toStringSafe(doc.pet),
     peso: weightValue,
     registradoPor: doc.registradoPor ? toStringSafe(doc.registradoPor) : null,
+    internacaoId: doc.internacao ? toStringSafe(doc.internacao) : null,
+    registradoNaInternacao: !!doc.registradoNaInternacao,
     createdAt,
     updatedAt,
     isInitial: !!doc.isInitial,
@@ -825,7 +827,17 @@ router.get('/vet/pesos', authMiddleware, requireStaff, async (req, res) => {
       return res.status(400).json({ message: 'Pet nÃ£o pertence ao tutor informado.' });
     }
 
-    const docs = await PetWeight.find({ pet: petId })
+    const query = { pet: petId };
+    if (internacaoId) {
+      query.$or = [
+        { registradoNaInternacao: { $ne: true } },
+        { internacao: internacaoId },
+      ];
+    } else {
+      query.registradoNaInternacao = { $ne: true };
+    }
+
+    const docs = await PetWeight.find(query)
       .sort({ createdAt: -1 })
       .lean();
 
@@ -907,6 +919,11 @@ router.post('/vet/pesos', authMiddleware, requireStaff, async (req, res) => {
       pet: petId,
       peso: pesoValue,
     };
+
+    if (internacaoRegistro) {
+      payload.internacao = internacaoRegistro._id;
+      payload.registradoNaInternacao = true;
+    }
 
     const registeredBy = normalizeObjectId(req.user?.id || req.user?._id);
     if (registeredBy) {
@@ -1027,6 +1044,10 @@ router.put('/vet/pesos/:id', authMiddleware, requireStaff, async (req, res) => {
     weightDoc.isInitial = wantsInitialFlag;
     if (userId) {
       weightDoc.registradoPor = userId;
+    }
+    if (internacaoRegistro) {
+      weightDoc.internacao = internacaoRegistro._id;
+      weightDoc.registradoNaInternacao = true;
     }
     weightDoc.updatedAt = new Date();
     await weightDoc.save();
