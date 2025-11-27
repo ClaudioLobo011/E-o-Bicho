@@ -4578,7 +4578,7 @@ function renderExecucaoParametrosLista(config = []) {
   }
 
   execucaoParametrosModal.listaEl.innerHTML = `
-    <div class="hidden rounded-lg bg-gray-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500 md:grid md:grid-cols-[1.2fr_1fr_1fr] md:items-center md:gap-4">
+    <div class="grid grid-cols-[1.2fr_1fr_1fr] items-center gap-4 rounded-lg bg-gray-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
       <span>Parâmetro clínico</span>
       <span>Resposta</span>
       <span>Observação</span>
@@ -4586,13 +4586,12 @@ function renderExecucaoParametrosLista(config = []) {
     ${items
       .map(
         (item, index) => `
-          <div class="grid grid-cols-1 gap-3 rounded-xl border border-gray-100 bg-white px-3 py-3 md:grid-cols-[1.2fr_1fr_1fr] md:items-center md:gap-4" data-parametro-row data-parametro-id="${escapeHtml(item.id || String(index))}">
+          <div class="grid grid-cols-[1.2fr_1fr_1fr] items-start gap-4 rounded-xl border border-gray-100 bg-white px-3 py-3" data-parametro-row data-parametro-id="${escapeHtml(item.id || String(index))}">
             <div class="space-y-1">
               <p class="text-sm font-semibold text-gray-900">${escapeHtml(item.nome || 'Parâmetro clínico')}</p>
               <p class="text-[11px] text-gray-500">${item.ordem ? `Ordem ${escapeHtml(String(item.ordem))}` : 'Ordenação alfabética'}</p>
             </div>
             <div class="flex flex-col gap-1">
-              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 md:hidden">Resposta</label>
               <select class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-parametro-resposta>
                 <option value="">Selecione</option>
                 ${(Array.isArray(item.opcoes) ? item.opcoes : [])
@@ -4601,7 +4600,6 @@ function renderExecucaoParametrosLista(config = []) {
               </select>
             </div>
             <div class="flex flex-col gap-1">
-              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 md:hidden">Observação</label>
               <input type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Observação opcional" data-parametro-observacao />
             </div>
           </div>
