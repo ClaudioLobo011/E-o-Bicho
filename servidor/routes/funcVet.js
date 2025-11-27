@@ -828,14 +828,6 @@ router.get('/vet/pesos', authMiddleware, requireStaff, async (req, res) => {
     }
 
     const query = { pet: petId };
-    if (internacaoId) {
-      query.$or = [
-        { registradoNaInternacao: { $ne: true } },
-        { internacao: internacaoId },
-      ];
-    } else {
-      query.registradoNaInternacao = { $ne: true };
-    }
 
     const docs = await PetWeight.find(query)
       .sort({ createdAt: -1 })
