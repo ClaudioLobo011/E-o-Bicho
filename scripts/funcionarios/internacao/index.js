@@ -305,6 +305,26 @@ const prescricaoModal = {
   descricaoLabelEl: null,
 };
 
+const execucaoParametrosModal = {
+  overlay: null,
+  dialog: null,
+  form: null,
+  dataset: null,
+  state: null,
+  record: null,
+  parentOverlay: null,
+  onClose: null,
+  petSummaryEl: null,
+  petSummaryNameEl: null,
+  petSummaryMetaEl: null,
+  petSummaryTutorEl: null,
+  dataInput: null,
+  horaInput: null,
+  agoraBtn: null,
+  listaEl: null,
+  errorEl: null,
+};
+
 const boxesModal = {
   overlay: null,
   dialog: null,
@@ -4521,6 +4541,264 @@ function handleExecucaoSubmitEvent(event) {
   })();
 }
 
+function setExecucaoParametrosError(message) {
+  if (!execucaoParametrosModal.errorEl) return;
+  const text = String(message || '').trim();
+  execucaoParametrosModal.errorEl.textContent = text;
+  execucaoParametrosModal.errorEl.classList.toggle('hidden', !text);
+}
+
+function fillExecucaoParametrosPetSummary(record, dataset) {
+  if (!execucaoParametrosModal.petSummaryEl) return;
+  const petInfo = resolvePetInfoForPrescricao(record || {}, dataset);
+  const nome = petInfo?.petNome || 'Paciente';
+  const metaParts = [petInfo?.petEspecie, petInfo?.petRaca, petInfo?.petPeso, petInfo?.petIdade]
+    .filter(Boolean)
+    .map((value) => escapeHtml(String(value)));
+  const tutorParts = [petInfo?.tutorNome, petInfo?.tutorContato || petInfo?.tutorDocumento]
+    .filter(Boolean)
+    .map((value) => escapeHtml(String(value)));
+
+  execucaoParametrosModal.petSummaryEl.classList.toggle('hidden', false);
+  if (execucaoParametrosModal.petSummaryNameEl) execucaoParametrosModal.petSummaryNameEl.textContent = nome;
+  if (execucaoParametrosModal.petSummaryMetaEl)
+    execucaoParametrosModal.petSummaryMetaEl.textContent = metaParts.length ? metaParts.join(' · ') : '—';
+  if (execucaoParametrosModal.petSummaryTutorEl)
+    execucaoParametrosModal.petSummaryTutorEl.textContent = tutorParts.length ? tutorParts.join(' · ') : '—';
+}
+
+function renderExecucaoParametrosLista(config = []) {
+  if (!execucaoParametrosModal.listaEl) return;
+  const items = Array.isArray(config) && config.length ? config : PARAMETROS_CLINICOS_PADRAO;
+
+  if (!items.length) {
+    execucaoParametrosModal.listaEl.innerHTML =
+      '<p class="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-4 text-sm text-gray-600">Nenhum parâmetro cadastrado. Cadastre os parâmetros clínicos para realizar o registro.</p>';
+    return;
+  }
+
+  execucaoParametrosModal.listaEl.innerHTML = `
+    <div class="grid grid-cols-[1.2fr_1fr_1fr] items-center gap-4 rounded-lg bg-gray-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+      <span>Parâmetro clínico</span>
+      <span>Resposta</span>
+      <span>Observação</span>
+    </div>
+    ${items
+      .map(
+        (item, index) => `
+          <div class="grid grid-cols-[1.2fr_1fr_1fr] items-start gap-4 rounded-xl border border-gray-100 bg-white px-3 py-3" data-parametro-row data-parametro-id="${escapeHtml(item.id || String(index))}">
+            <div class="space-y-1">
+              <p class="text-sm font-semibold text-gray-900">${escapeHtml(item.nome || 'Parâmetro clínico')}</p>
+              <p class="text-[11px] text-gray-500">${item.ordem ? `Ordem ${escapeHtml(String(item.ordem))}` : 'Ordenação alfabética'}</p>
+            </div>
+            <div class="flex flex-col gap-1">
+              <select class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-parametro-resposta>
+                <option value="">Selecione</option>
+                ${(Array.isArray(item.opcoes) ? item.opcoes : [])
+                  .map((opcao) => `<option value="${escapeHtml(String(opcao))}">${escapeHtml(String(opcao))}</option>`)
+                  .join('')}
+              </select>
+            </div>
+            <div class="flex flex-col gap-1">
+              <input type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Observação opcional" data-parametro-observacao />
+            </div>
+          </div>
+        `,
+      )
+      .join('')}
+  `;
+}
+
+function closeExecucaoParametrosModal() {
+  if (!execucaoParametrosModal.overlay) return;
+  execucaoParametrosModal.overlay.classList.add('hidden');
+  execucaoParametrosModal.overlay.classList.remove('flex');
+  execucaoParametrosModal.overlay.setAttribute('aria-hidden', 'true');
+
+  if (execucaoParametrosModal.parentOverlay && document.body.contains(execucaoParametrosModal.parentOverlay)) {
+    execucaoParametrosModal.parentOverlay.classList.remove('hidden');
+    execucaoParametrosModal.parentOverlay.classList.add('flex');
+    execucaoParametrosModal.parentOverlay.setAttribute('aria-hidden', 'false');
+  }
+
+  if (typeof execucaoParametrosModal.onClose === 'function') {
+    execucaoParametrosModal.onClose();
+  }
+
+  execucaoParametrosModal.parentOverlay = null;
+  execucaoParametrosModal.onClose = null;
+  execucaoParametrosModal.record = null;
+}
+
+function handleExecucaoParametrosSubmit(event) {
+  event.preventDefault();
+  setExecucaoParametrosError('');
+  if (!execucaoParametrosModal.form) return;
+
+  const dataValue = execucaoParametrosModal.dataInput?.value?.trim();
+  const horaValue = execucaoParametrosModal.horaInput?.value?.trim();
+  if (!dataValue) {
+    setExecucaoParametrosError('Preencha a data do registro.');
+    execucaoParametrosModal.dataInput?.focus();
+    return;
+  }
+  if (!horaValue) {
+    setExecucaoParametrosError('Informe a hora do registro.');
+    execucaoParametrosModal.horaInput?.focus();
+    return;
+  }
+
+  closeExecucaoParametrosModal();
+  showToastMessage('Registro de parâmetros clínicos salvo (simulação).', 'success');
+}
+
+function ensureExecucaoParametrosModal() {
+  if (execucaoParametrosModal.overlay) {
+    const stillInDom = document.body?.contains(execucaoParametrosModal.overlay);
+    if (stillInDom) return execucaoParametrosModal.overlay;
+    execucaoParametrosModal.overlay = null;
+    execucaoParametrosModal.dialog = null;
+    execucaoParametrosModal.form = null;
+    execucaoParametrosModal.petSummaryEl = null;
+    execucaoParametrosModal.petSummaryNameEl = null;
+    execucaoParametrosModal.petSummaryMetaEl = null;
+    execucaoParametrosModal.petSummaryTutorEl = null;
+    execucaoParametrosModal.dataInput = null;
+    execucaoParametrosModal.horaInput = null;
+    execucaoParametrosModal.agoraBtn = null;
+    execucaoParametrosModal.listaEl = null;
+    execucaoParametrosModal.errorEl = null;
+  }
+
+  const placeholder = document.getElementById('modal-placeholder') || document.body;
+  const overlay = document.createElement('div');
+  overlay.className = 'fixed inset-0 z-[1100] hidden items-center justify-center';
+  overlay.innerHTML = `
+    <div class="absolute inset-0 bg-gray-900/60" data-close-execucao-parametros></div>
+    <div class="relative mx-auto flex w-full max-w-[1352px] transform-gpu flex-col overflow-hidden rounded-2xl bg-white text-[12px] leading-[1.4] text-gray-700 shadow-2xl ring-1 ring-black/10 opacity-0 scale-95 transition-all duration-200" role="dialog" aria-modal="true" aria-labelledby="execucao-parametros-title" data-execucao-parametros-dialog>
+      <header class="flex flex-col gap-2 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p class="text-[10px] font-semibold uppercase tracking-wide text-primary">Parâmetros clínicos</p>
+          <h2 id="execucao-parametros-title" class="text-lg font-semibold text-gray-900">Registrar coleta</h2>
+          <p class="text-[11px] text-gray-600">Preencha os dados de coleta e registre as respostas para cada parâmetro.</p>
+        </div>
+        <button type="button" class="inline-flex items-center justify-center rounded-full border border-gray-200 p-1.5 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700" data-close-execucao-parametros>
+          <span class="sr-only">Fechar</span>
+          <i class="fas fa-xmark text-sm"></i>
+        </button>
+      </header>
+      <form class="flex max-h-[80vh] flex-col" data-execucao-parametros-form>
+        <div class="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+          <div class="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2" data-execucao-parametros-summary>
+            <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Paciente</p>
+            <p class="text-[13px] font-semibold text-gray-900" data-execucao-parametros-summary-name>Paciente</p>
+            <p class="text-[11px] text-gray-500" data-execucao-parametros-summary-meta>—</p>
+            <p class="text-[11px] text-gray-500" data-execucao-parametros-summary-tutor>—</p>
+          </div>
+          <div class="grid gap-3 sm:grid-cols-2">
+            <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Data*</label>
+            <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 sm:text-right">Hora*</label>
+            <div>
+              <input type="date" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-execucao-parametros-data required />
+            </div>
+            <div>
+              <div class="mt-1 flex items-center gap-2">
+                <input type="time" class="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-execucao-parametros-hora required />
+                <button type="button" class="rounded-lg border border-primary/30 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary transition hover:bg-primary/5" data-execucao-parametros-agora>Agora</button>
+              </div>
+            </div>
+          </div>
+          <div class="space-y-2" data-execucao-parametros-lista></div>
+          <p class="hidden rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-[11px] text-red-700" data-execucao-parametros-error></p>
+        </div>
+        <div class="flex flex-col gap-2 border-t border-gray-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-end">
+          <button type="button" class="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-700 transition hover:bg-gray-50" data-close-execucao-parametros>Cancelar</button>
+          <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-primary px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-primary/90">Salvar</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  execucaoParametrosModal.overlay = overlay;
+  execucaoParametrosModal.dialog = overlay.querySelector('[data-execucao-parametros-dialog]');
+  execucaoParametrosModal.form = overlay.querySelector('[data-execucao-parametros-form]');
+  execucaoParametrosModal.petSummaryEl = overlay.querySelector('[data-execucao-parametros-summary]');
+  execucaoParametrosModal.petSummaryNameEl = overlay.querySelector('[data-execucao-parametros-summary-name]');
+  execucaoParametrosModal.petSummaryMetaEl = overlay.querySelector('[data-execucao-parametros-summary-meta]');
+  execucaoParametrosModal.petSummaryTutorEl = overlay.querySelector('[data-execucao-parametros-summary-tutor]');
+  execucaoParametrosModal.dataInput = overlay.querySelector('[data-execucao-parametros-data]');
+  execucaoParametrosModal.horaInput = overlay.querySelector('[data-execucao-parametros-hora]');
+  execucaoParametrosModal.agoraBtn = overlay.querySelector('[data-execucao-parametros-agora]');
+  execucaoParametrosModal.listaEl = overlay.querySelector('[data-execucao-parametros-lista]');
+  execucaoParametrosModal.errorEl = overlay.querySelector('[data-execucao-parametros-error]');
+
+  overlay.addEventListener('click', (event) => {
+    const closeTrigger = event.target.closest('[data-close-execucao-parametros]');
+    if (closeTrigger || event.target === overlay) {
+      closeExecucaoParametrosModal();
+    }
+  });
+
+  overlay.querySelectorAll('[data-close-execucao-parametros]').forEach((btn) => {
+    btn.addEventListener('click', closeExecucaoParametrosModal);
+  });
+
+  if (execucaoParametrosModal.form) {
+    execucaoParametrosModal.form.addEventListener('submit', handleExecucaoParametrosSubmit);
+  }
+
+  if (execucaoParametrosModal.agoraBtn) {
+    execucaoParametrosModal.agoraBtn.addEventListener('click', () => {
+      const now = new Date();
+      if (execucaoParametrosModal.dataInput) execucaoParametrosModal.dataInput.value = getLocalDateInputValue(now) || '';
+      if (execucaoParametrosModal.horaInput) execucaoParametrosModal.horaInput.value = getLocalTimeInputValue(now) || '';
+    });
+  }
+
+  placeholder.appendChild(overlay);
+  return overlay;
+}
+
+function openExecucaoParametrosModal(record, options = {}) {
+  ensureExecucaoParametrosModal();
+  execucaoParametrosModal.dataset = options.dataset || execucaoParametrosModal.dataset || null;
+  execucaoParametrosModal.state = options.state || execucaoParametrosModal.state || null;
+  execucaoParametrosModal.record = record || null;
+  execucaoParametrosModal.parentOverlay = options.parentOverlay || null;
+  execucaoParametrosModal.onClose = typeof options.onClose === 'function' ? options.onClose : null;
+
+  execucaoParametrosModal.form?.reset();
+
+  if (execucaoParametrosModal.parentOverlay) {
+    execucaoParametrosModal.parentOverlay.classList.add('hidden');
+    execucaoParametrosModal.parentOverlay.classList.remove('flex');
+    execucaoParametrosModal.parentOverlay.setAttribute('aria-hidden', 'true');
+  }
+
+  const now = new Date();
+  const dataPadrao = options.selectedDate || getLocalDateInputValue(now) || '';
+  const horaPadrao = options.selectedHour || getLocalTimeInputValue(now) || '';
+
+  if (execucaoParametrosModal.dataInput) execucaoParametrosModal.dataInput.value = dataPadrao;
+  if (execucaoParametrosModal.horaInput) execucaoParametrosModal.horaInput.value = horaPadrao;
+
+  fillExecucaoParametrosPetSummary(record, execucaoParametrosModal.dataset);
+
+  const configLista = Array.isArray(execucaoParametrosModal.state?.parametrosConfig)
+    ? execucaoParametrosModal.state.parametrosConfig
+    : execucaoParametrosModal.dataset?.parametrosConfig;
+  renderExecucaoParametrosLista(configLista || []);
+  setExecucaoParametrosError('');
+
+  execucaoParametrosModal.overlay.classList.remove('hidden');
+  execucaoParametrosModal.overlay.classList.add('flex');
+  execucaoParametrosModal.overlay.setAttribute('aria-hidden', 'false');
+  requestAnimationFrame(() => {
+    execucaoParametrosModal.dialog?.classList.remove('opacity-0', 'scale-95');
+    execucaoParametrosModal.dialog?.focus();
+  });
+}
+
 function setPrescricaoModalError(message) {
   if (!prescricaoModal.errorEl) return;
   const text = String(message || '').trim();
@@ -5831,7 +6109,22 @@ function handleParametroModalSubmit(event) {
 }
 
 function ensureParametroModal() {
-  if (parametroModal.overlay) return parametroModal.overlay;
+  if (parametroModal.overlay) {
+    const stillInDom = document.body?.contains(parametroModal.overlay);
+    if (stillInDom) return parametroModal.overlay;
+    // Se o placeholder foi recriado (ex.: loadComponents), precisamos limpar referências antigas
+    parametroModal.overlay = null;
+    parametroModal.dialog = null;
+    parametroModal.form = null;
+    parametroModal.nameInput = null;
+    parametroModal.orderInput = null;
+    parametroModal.optionInput = null;
+    parametroModal.optionsList = null;
+    parametroModal.submitBtn = null;
+    parametroModal.errorEl = null;
+    parametroModal.titleEl = null;
+    parametroModal.subtitleEl = null;
+  }
   let placeholder = document.getElementById('modal-placeholder');
   if (!placeholder) {
     placeholder = document.createElement('div');
@@ -6147,6 +6440,43 @@ function setupMapaPage(dataset, state, render, fetchInternacoes) {
       }
     });
   }
+
+  const handleParametrosQuickAction = async (detail = {}) => {
+    const recordId = detail.recordId || '';
+    const petKey = detail.petKey || '';
+    const selectedDate = detail.selectedDate || state.execucaoData || getLocalDateInputValue();
+    const selectedHour = detail.selectedHour || '';
+
+    if (!state.parametrosLoading && (!Array.isArray(state.parametrosConfig) || !state.parametrosConfig.length)) {
+      await fetchParametrosConfig(dataset, state, { quiet: true, onUpdate: render });
+    }
+
+    let record = null;
+    if (recordId) {
+      record = state.internacoes.find(
+        (item) => item.id === recordId || item._id === recordId || item.filterKey === recordId,
+      );
+    }
+    if (!record && petKey) {
+      record = state.internacoes.find((item) => item.filterKey === petKey || item.id === petKey);
+    }
+
+    if (!record) {
+      showToastMessage('Não foi possível localizar o paciente para registrar os parâmetros clínicos.', 'warning');
+    }
+
+    openExecucaoParametrosModal(record, {
+      dataset,
+      state,
+      selectedDate,
+      selectedHour,
+      parentOverlay: detail.overlay || null,
+    });
+  };
+
+  window.addEventListener('internacao:execucao:parametros', (event) => {
+    handleParametrosQuickAction(event?.detail || {});
+  });
 
   loadInternacoes();
 }

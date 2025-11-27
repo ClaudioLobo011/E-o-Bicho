@@ -234,18 +234,22 @@ function openExecucaoModal(paciente, hourLabel, items = [], options = {}) {
     {
       label: 'Prescrição Médica',
       icon: 'fa-file-medical',
+      key: 'prescricao-medica',
     },
     {
       label: 'Ocorrência',
       icon: 'fa-comment-medical',
+      key: 'ocorrencia',
     },
     {
       label: 'Peso',
       icon: 'fa-weight',
+      key: 'peso',
     },
     {
       label: 'Parâmetros Clínicos',
       icon: 'fa-heartbeat',
+      key: 'parametros-clinicos',
     },
   ]
     .map(
@@ -254,7 +258,11 @@ function openExecucaoModal(paciente, hourLabel, items = [], options = {}) {
           type="button"
           class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
           title="${action.label}"
-          data-quick-action
+          data-quick-action="${escapeHtml(action.key)}"
+          data-record-id="${escapeHtml(paciente.recordId || '')}"
+          data-pet-key="${escapeHtml(paciente.key || '')}"
+          data-selected-date="${escapeHtml(selectedDate || '')}"
+          data-selected-hour="${escapeHtml(selectedHour || '')}"
         >
           <i class="text-base fas ${action.icon}"></i>
           <span>${action.label}</span>
@@ -266,6 +274,10 @@ function openExecucaoModal(paciente, hourLabel, items = [], options = {}) {
   const overlay = document.createElement('div');
   overlay.id = 'internacao-exec-modal';
   overlay.className = 'fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 px-4 py-6';
+  overlay.dataset.recordId = paciente.recordId || '';
+  overlay.dataset.petKey = paciente.key || '';
+  overlay.dataset.selectedDate = selectedDate || '';
+  overlay.dataset.selectedHour = selectedHour || '';
   const procedimentosMarkup = items.length
     ? items
         .map((item, index) => {
@@ -360,6 +372,30 @@ function openExecucaoModal(paciente, hourLabel, items = [], options = {}) {
   });
   overlay.querySelectorAll('[data-close-modal]').forEach((btn) => {
     btn.addEventListener('click', closeModal);
+  });
+
+  overlay.querySelectorAll('[data-quick-action]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const actionKey = btn.dataset.quickAction || '';
+      if (actionKey === 'parametros-clinicos') {
+        overlay.classList.add('hidden');
+        overlay.classList.remove('flex');
+        overlay.setAttribute('aria-hidden', 'true');
+        window.dispatchEvent(
+          new CustomEvent('internacao:execucao:parametros', {
+            detail: {
+              recordId: btn.dataset.recordId || overlay.dataset.recordId || '',
+              petKey: btn.dataset.petKey || overlay.dataset.petKey || '',
+              selectedDate: btn.dataset.selectedDate || overlay.dataset.selectedDate || '',
+              selectedHour: btn.dataset.selectedHour || overlay.dataset.selectedHour || '',
+              overlay,
+            },
+          }),
+        );
+        return;
+      }
+      closeModal();
+    });
   });
 
   overlay.querySelectorAll('[data-execucao-item]').forEach((btn) => {
@@ -857,6 +893,7 @@ export function renderMapaExecucao(root, dataset, state = {}) {
     return {
       key: registro.filterKey || registro.id || nome,
       recordId: registro.id || registro._id || registro.filterKey || nome,
+      record: registro,
       nome,
       boxLabel: registro.box || 'Sem box definido',
       servicoLabel: registro.queixa || registro.diagnostico || 'Internação em andamento',
@@ -1141,8 +1178,6 @@ export function renderParametrosClinicos(
     </article>
   `).join('');
 
-  const pacientesContent = pacientes.length ? blocos : buildEmptyState('Nenhum parâmetro clínico disponível.');
-
   root.innerHTML = `
     <div class="space-y-5">
       <article class="rounded-2xl border border-gray-100 px-5 py-5 shadow-sm">
@@ -1161,7 +1196,7 @@ export function renderParametrosClinicos(
           ${configuracoes}
         </div>
       </article>
-      ${pacientesContent}
+      ${pacientes.length ? blocos : ''}
     </div>
   `;
 }
