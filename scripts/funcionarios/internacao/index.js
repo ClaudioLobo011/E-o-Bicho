@@ -4578,7 +4578,7 @@ function renderExecucaoParametrosLista(config = []) {
   }
 
   execucaoParametrosModal.listaEl.innerHTML = `
-    <div class="grid grid-cols-[1.2fr_1fr_1fr] items-center gap-4 rounded-lg bg-gray-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+    <div class="grid items-center gap-4 rounded-lg bg-gray-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500" style="grid-template-columns: 1.2fr 1fr 1fr;">
       <span>Parâmetro clínico</span>
       <span>Resposta</span>
       <span>Observação</span>
@@ -4586,7 +4586,7 @@ function renderExecucaoParametrosLista(config = []) {
     ${items
       .map(
         (item, index) => `
-          <div class="grid grid-cols-[1.2fr_1fr_1fr] items-start gap-4 rounded-xl border border-gray-100 bg-white px-3 py-3" data-parametro-row data-parametro-id="${escapeHtml(item.id || String(index))}">
+          <div class="grid items-start gap-4 rounded-xl border border-gray-100 bg-white px-3 py-3" style="grid-template-columns: 1.2fr 1fr 1fr;" data-parametro-row data-parametro-id="${escapeHtml(item.id || String(index))}">
             <div class="space-y-1">
               <p class="text-sm font-semibold text-gray-900">${escapeHtml(item.nome || 'Parâmetro clínico')}</p>
               <p class="text-[11px] text-gray-500">${item.ordem ? `Ordem ${escapeHtml(String(item.ordem))}` : 'Ordenação alfabética'}</p>
