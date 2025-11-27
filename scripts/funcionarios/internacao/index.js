@@ -6549,6 +6549,45 @@ function setupMapaPage(dataset, state, render, fetchInternacoes) {
     });
   };
 
+  const handleOcorrenciaQuickAction = async (detail = {}) => {
+    const recordId = detail.recordId || '';
+    const petKey = detail.petKey || '';
+    const parentOverlay = detail.overlay || null;
+
+    const restoreOverlay = () => {
+      if (parentOverlay && document.body.contains(parentOverlay)) {
+        parentOverlay.classList.remove('hidden');
+        parentOverlay.classList.add('flex');
+        parentOverlay.setAttribute('aria-hidden', 'false');
+      }
+    };
+
+    let record = null;
+    if (recordId) {
+      record = state.internacoes.find(
+        (item) => item.id === recordId || item._id === recordId || item.filterKey === recordId,
+      );
+    }
+    if (!record && petKey) {
+      record = state.internacoes.find((item) => item.filterKey === petKey || item.id === petKey);
+    }
+
+    if (!record) {
+      showToastMessage('Não foi possível localizar o paciente para registrar a ocorrência.', 'warning');
+      restoreOverlay();
+      return;
+    }
+
+    const onClose = () => {
+      restoreOverlay();
+      if (typeof state.refreshInternacoes === 'function') {
+        state.refreshInternacoes();
+      }
+    };
+
+    openOcorrenciaModal(record, { dataset, state, onSuccess: state.refreshInternacoes, onClose });
+  };
+
   const handlePesoQuickAction = async (detail = {}) => {
     const recordId = detail.recordId || '';
     const petKey = detail.petKey || '';
@@ -6588,6 +6627,10 @@ function setupMapaPage(dataset, state, render, fetchInternacoes) {
 
   window.addEventListener('internacao:execucao:parametros', (event) => {
     handleParametrosQuickAction(event?.detail || {});
+  });
+
+  window.addEventListener('internacao:execucao:ocorrencia', (event) => {
+    handleOcorrenciaQuickAction(event?.detail || {});
   });
 
   window.addEventListener('internacao:execucao:peso', (event) => {
