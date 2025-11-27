@@ -4695,15 +4695,15 @@ function ensureExecucaoParametrosModal() {
             <p class="text-[11px] text-gray-500" data-execucao-parametros-summary-meta>—</p>
             <p class="text-[11px] text-gray-500" data-execucao-parametros-summary-tutor>—</p>
           </div>
-          <div class="grid gap-3 sm:grid-cols-2">
-            <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Data*</label>
-            <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 sm:text-right">Hora*</label>
-            <div>
-              <input type="date" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-execucao-parametros-data required />
+          <div class="flex flex-col items-center gap-3 sm:flex-row sm:justify-center sm:gap-6">
+            <div class="flex flex-col items-center">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Data*</label>
+              <input type="date" class="mt-1 w-36 rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-execucao-parametros-data required />
             </div>
-            <div>
+            <div class="flex flex-col items-center">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Hora*</label>
               <div class="mt-1 flex items-center gap-2">
-                <input type="time" class="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-execucao-parametros-hora required />
+                <input type="time" class="w-24 rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-execucao-parametros-hora required />
                 <button type="button" class="rounded-lg border border-primary/30 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary transition hover:bg-primary/5" data-execucao-parametros-agora>Agora</button>
               </div>
             </div>
