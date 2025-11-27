@@ -286,6 +286,7 @@ const prescricaoModal = {
   state: null,
   record: null,
   petInfo: null,
+  onClose: null,
   resumoField: null,
   recorrenciaFields: null,
   recorrenciaTitleEl: null,
@@ -5294,6 +5295,7 @@ function closePrescricaoModal() {
   if (prescricaoModal.dialog) {
     prescricaoModal.dialog.classList.add('opacity-0', 'scale-95');
   }
+  const onClose = prescricaoModal.onClose;
   prescricaoModal.overlay.classList.add('hidden');
   prescricaoModal.overlay.classList.remove('flex');
   prescricaoModal.overlay.removeAttribute('data-modal-open');
@@ -5304,6 +5306,14 @@ function closePrescricaoModal() {
   prescricaoModal.dataset = null;
   prescricaoModal.state = null;
   prescricaoModal.record = null;
+  prescricaoModal.onClose = null;
+  if (typeof onClose === 'function') {
+    try {
+      onClose();
+    } catch (error) {
+      console.warn('internacao: falha ao executar callback de fechamento da prescrição', error);
+    }
+  }
 }
 
 function handlePrescricaoFormChange(event) {
@@ -5558,6 +5568,7 @@ function openPrescricaoModal(record, options = {}) {
   prescricaoModal.dataset = options.dataset || prescricaoModal.dataset || getDataset();
   prescricaoModal.state = options.state || prescricaoModal.state || {};
   prescricaoModal.record = record;
+  prescricaoModal.onClose = typeof options.onClose === 'function' ? options.onClose : null;
   setPrescricaoModalError('');
   resetPrescricaoModalForm();
   const petInfo = resolvePetInfoForPrescricao(record, prescricaoModal.dataset);
@@ -6625,6 +6636,57 @@ function setupMapaPage(dataset, state, render, fetchInternacoes) {
     await openPesoModalFromInternacao(record, { dataset, state, onClose });
   };
 
+  const handlePrescricaoQuickAction = async (detail = {}) => {
+    const recordId = detail.recordId || '';
+    const petKey = detail.petKey || '';
+    const parentOverlay = detail.overlay || null;
+
+    const restoreOverlay = () => {
+      if (parentOverlay && document.body.contains(parentOverlay)) {
+        parentOverlay.classList.remove('hidden');
+        parentOverlay.classList.add('flex');
+        parentOverlay.setAttribute('aria-hidden', 'false');
+      }
+    };
+
+    let record = null;
+    if (recordId) {
+      record = state.internacoes.find((item) => item.id === recordId || item._id === recordId || item.filterKey === recordId);
+    }
+    if (!record && petKey) {
+      record = state.internacoes.find((item) => item.filterKey === petKey || item.id === petKey);
+    }
+
+    if (!record) {
+      showToastMessage('Não foi possível localizar o paciente para registrar a prescrição.', 'warning');
+      restoreOverlay();
+      return;
+    }
+
+    const hasObito = record.obitoRegistrado || normalizeActionKey(record.situacaoCodigo) === 'obito';
+    const isCancelado = record.cancelado || normalizeActionKey(record.situacaoCodigo) === 'cancelado';
+    if (hasObito) {
+      showToastMessage('Não é possível registrar prescrições após o óbito.', 'warning');
+      restoreOverlay();
+      return;
+    }
+    if (isCancelado) {
+      showToastMessage('Essa internação está cancelada e não permite novas prescrições.', 'info');
+      restoreOverlay();
+      return;
+    }
+
+    const onClose = () => {
+      restoreOverlay();
+      if (typeof state.refreshInternacoes === 'function') {
+        state.refreshInternacoes();
+      }
+    };
+
+    ensurePrescricaoModal();
+    openPrescricaoModal(record, { dataset, state, onClose });
+  };
+
   window.addEventListener('internacao:execucao:parametros', (event) => {
     handleParametrosQuickAction(event?.detail || {});
   });
@@ -6635,6 +6697,10 @@ function setupMapaPage(dataset, state, render, fetchInternacoes) {
 
   window.addEventListener('internacao:execucao:peso', (event) => {
     handlePesoQuickAction(event?.detail || {});
+  });
+
+  window.addEventListener('internacao:execucao:prescricao', (event) => {
+    handlePrescricaoQuickAction(event?.detail || {});
   });
 
   loadInternacoes();
