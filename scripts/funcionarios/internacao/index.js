@@ -4586,7 +4586,7 @@ function renderExecucaoParametrosLista(config = []) {
     ${items
       .map(
         (item, index) => `
-          <div class="grid items-start gap-4 rounded-xl border border-gray-100 bg-white px-3 py-3" style="grid-template-columns: 1.2fr 1fr 1fr;" data-parametro-row data-parametro-id="${escapeHtml(item.id || String(index))}">
+          <div class="grid items-start gap-4 rounded-xl border border-gray-100 bg-white px-3 py-3" style="grid-template-columns: 1.2fr 1fr 1fr;" data-parametro-row data-parametro-id="${escapeHtml(item.id || String(index))}" data-parametro-nome="${escapeHtml(item.nome || 'Parâmetro clínico')}">
             <div class="space-y-1">
               <p class="text-sm font-semibold text-gray-900">${escapeHtml(item.nome || 'Parâmetro clínico')}</p>
               <p class="text-[11px] text-gray-500">${item.ordem ? `Ordem ${escapeHtml(String(item.ordem))}` : 'Ordenação alfabética'}</p>
@@ -4635,6 +4635,16 @@ function handleExecucaoParametrosSubmit(event) {
   setExecucaoParametrosError('');
   if (!execucaoParametrosModal.form) return;
 
+  const recordId =
+    execucaoParametrosModal.record?.id ||
+    execucaoParametrosModal.record?._id ||
+    execucaoParametrosModal.record?.codigo ||
+    '';
+  if (!recordId) {
+    setExecucaoParametrosError('Não foi possível identificar o paciente para salvar a coleta.');
+    return;
+  }
+
   const dataValue = execucaoParametrosModal.dataInput?.value?.trim();
   const horaValue = execucaoParametrosModal.horaInput?.value?.trim();
   if (!dataValue) {
@@ -4648,8 +4658,63 @@ function handleExecucaoParametrosSubmit(event) {
     return;
   }
 
-  closeExecucaoParametrosModal();
-  showToastMessage('Registro de parâmetros clínicos salvo (simulação).', 'success');
+  const respostas = Array.from(execucaoParametrosModal.listaEl?.querySelectorAll('[data-parametro-row]') || [])
+    .map((row) => {
+      const parametroId = row.dataset.parametroId || '';
+      const parametroNome = row.dataset.parametroNome || '';
+      const resposta = row.querySelector('[data-parametro-resposta]')?.value?.trim() || '';
+      const observacao = row.querySelector('[data-parametro-observacao]')?.value?.trim() || '';
+      return {
+        parametroId,
+        parametroNome,
+        resposta,
+        observacao,
+      };
+    })
+    .filter((item) => item.resposta || item.observacao || item.parametroNome);
+
+  if (!respostas.length) {
+    setExecucaoParametrosError('Informe ao menos uma resposta ou observação para salvar.');
+    return;
+  }
+
+  setExecucaoParametrosLoading(true);
+
+  requestJson(`/internacao/registros/${encodeURIComponent(recordId)}/parametros`, {
+    method: 'POST',
+    body: {
+      data: dataValue,
+      hora: horaValue,
+      respostas,
+    },
+  })
+    .then((updated) => {
+      const normalized = syncInternacaoRecordState(updated);
+      if (!normalized) {
+        throw new Error('Não foi possível atualizar a ficha após salvar a coleta.');
+      }
+      closeExecucaoParametrosModal();
+      showToastMessage('Parâmetros clínicos registrados no mapa de execução.', 'success');
+    })
+    .catch((error) => {
+      console.error('internacao: falha ao salvar parâmetros clínicos', error);
+      setExecucaoParametrosError(error.message || 'Não foi possível registrar a coleta.');
+    })
+    .finally(() => {
+      setExecucaoParametrosLoading(false);
+    });
+}
+
+function setExecucaoParametrosLoading(isLoading) {
+  if (!execucaoParametrosModal.submitBtn) return;
+  if (!execucaoParametrosModal.submitBtn.dataset.defaultLabel) {
+    execucaoParametrosModal.submitBtn.dataset.defaultLabel = execucaoParametrosModal.submitBtn.textContent.trim();
+  }
+  execucaoParametrosModal.submitBtn.disabled = !!isLoading;
+  execucaoParametrosModal.submitBtn.classList.toggle('opacity-60', !!isLoading);
+  execucaoParametrosModal.submitBtn.textContent = isLoading
+    ? 'Salvando...'
+    : execucaoParametrosModal.submitBtn.dataset.defaultLabel;
 }
 
 function ensureExecucaoParametrosModal() {
@@ -4713,7 +4778,7 @@ function ensureExecucaoParametrosModal() {
         </div>
         <div class="flex flex-col gap-2 border-t border-gray-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-end">
           <button type="button" class="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-700 transition hover:bg-gray-50" data-close-execucao-parametros>Cancelar</button>
-          <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-primary px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-primary/90">Salvar</button>
+          <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-primary px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-primary/90" data-execucao-parametros-submit>Salvar</button>
         </div>
       </form>
     </div>
@@ -4731,6 +4796,7 @@ function ensureExecucaoParametrosModal() {
   execucaoParametrosModal.agoraBtn = overlay.querySelector('[data-execucao-parametros-agora]');
   execucaoParametrosModal.listaEl = overlay.querySelector('[data-execucao-parametros-lista]');
   execucaoParametrosModal.errorEl = overlay.querySelector('[data-execucao-parametros-error]');
+  execucaoParametrosModal.submitBtn = overlay.querySelector('[data-execucao-parametros-submit]');
 
   overlay.addEventListener('click', (event) => {
     const closeTrigger = event.target.closest('[data-close-execucao-parametros]');
