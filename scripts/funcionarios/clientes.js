@@ -675,9 +675,10 @@
       state.tabAtual = tab;
       elements.tabButtons.forEach((btn) => {
         const isActive = btn.dataset.tab === tab;
-        btn.classList.toggle('bg-indigo-100', isActive);
-        btn.classList.toggle('text-indigo-700', isActive);
+        btn.classList.toggle('bg-primary/10', isActive);
+        btn.classList.toggle('text-primary', isActive);
         btn.classList.toggle('text-gray-600', !isActive);
+        btn.classList.toggle('hover:bg-gray-100', !isActive);
       });
       elements.tabPanels.forEach((panel) => {
         panel.classList.toggle('hidden', panel.dataset.tabPanel !== tab);
