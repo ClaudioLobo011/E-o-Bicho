@@ -722,7 +722,7 @@ router.get('/clientes', authMiddleware, requireStaff, async (req, res) => {
     const limit = Math.min(Math.max(parseInt(req.query.limit || '10', 10), 1), 50);
     const search = sanitizeString(req.query.search || req.query.q || '');
 
-    const filter = { role: 'cliente' };
+    const filter = {};
     if (search) {
       const regex = new RegExp(escapeRegex(search), 'i');
       const only = onlyDigits(search);
