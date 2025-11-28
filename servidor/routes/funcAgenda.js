@@ -105,6 +105,82 @@ function parseBooleanFlag(value) {
   return false;
 }
 
+function parseCodigoCliente(raw) {
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) {
+    return Math.trunc(raw);
+  }
+  if (typeof raw === 'string') {
+    const digits = raw.trim().replace(/\D/g, '');
+    if (!digits) return null;
+    const parsed = Number.parseInt(digits, 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+async function obterMaiorCodigoCliente() {
+  const candidatos = await User.find({ codigoCliente: { $exists: true } })
+    .select('codigoCliente')
+    .sort({ codigoCliente: -1 })
+    .limit(5)
+    .lean();
+
+  return candidatos.reduce((maior, doc) => {
+    const parsed = parseCodigoCliente(doc?.codigoCliente);
+    if (parsed && parsed > maior) return parsed;
+    return maior;
+  }, 0);
+}
+
+async function atribuirCodigosParaClientesSemCodigo() {
+  const semCodigo = await User.find({
+    $or: [
+      { codigoCliente: { $exists: false } },
+      { codigoCliente: null },
+      { codigoCliente: '' },
+    ],
+  })
+    .select('_id criadoEm codigoCliente')
+    .lean();
+
+  const comCodigoInvalido = await User.find({ codigoCliente: { $exists: true, $ne: null, $ne: '' } })
+    .select('_id criadoEm codigoCliente')
+    .lean();
+
+  const pendentes = [
+    ...semCodigo,
+    ...comCodigoInvalido.filter((doc) => !parseCodigoCliente(doc.codigoCliente)),
+  ].sort((a, b) => {
+    const aDate = a.criadoEm ? new Date(a.criadoEm).getTime() : 0;
+    const bDate = b.criadoEm ? new Date(b.criadoEm).getTime() : 0;
+    return aDate - bDate;
+  });
+
+  if (!pendentes.length) return;
+
+  let ultimoCodigo = await obterMaiorCodigoCliente();
+  const ops = pendentes.map((doc) => {
+    ultimoCodigo += 1;
+    return {
+      updateOne: {
+        filter: { _id: doc._id },
+        update: { $set: { codigoCliente: ultimoCodigo } },
+      },
+    };
+  });
+
+  if (ops.length) {
+    await User.bulkWrite(ops);
+  }
+}
+
+async function gerarCodigoClienteSequencial() {
+  const maior = await obterMaiorCodigoCliente();
+  return maior + 1;
+}
+
 async function buildClientePayload(body = {}, opts = {}) {
   const { isUpdate = false, currentUser = null } = opts;
   const tipoConta = normalizeTipoConta(body.tipoConta || currentUser?.tipoConta);
@@ -718,6 +794,8 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
 // ---------- CLIENTES (GERENCIAMENTO) ----------
 router.get('/clientes', authMiddleware, requireStaff, async (req, res) => {
   try {
+    await atribuirCodigosParaClientesSemCodigo();
+
     const page = Math.max(parseInt(req.query.page || '1', 10), 1);
     const limit = Math.min(Math.max(parseInt(req.query.limit || '10', 10), 1), 50);
     const search = sanitizeString(req.query.search || req.query.q || '');
@@ -748,7 +826,7 @@ router.get('/clientes', authMiddleware, requireStaff, async (req, res) => {
     const skip = (page - 1) * limit;
     const [items, total] = await Promise.all([
       User.find(filter)
-        .select('_id nomeCompleto nomeContato razaoSocial nomeFantasia email tipoConta cpf cnpj inscricaoEstadual celular telefone empresaPrincipal pais apelido role telefoneSecundario celularSecundario')
+        .select('_id nomeCompleto nomeContato razaoSocial nomeFantasia email tipoConta cpf cnpj inscricaoEstadual celular telefone empresaPrincipal pais apelido role telefoneSecundario celularSecundario codigoCliente')
         .sort({ criadoEm: -1 })
         .skip(skip)
         .limit(limit)
@@ -771,11 +849,12 @@ router.get('/clientes', authMiddleware, requireStaff, async (req, res) => {
       const empresaDoc = doc.empresaPrincipal ? empresaMap.get(String(doc.empresaPrincipal)) : null;
       const empresaNome = empresaDoc?.nomeFantasia || empresaDoc?.nome || empresaDoc?.razaoSocial || '';
       const documento = doc.cpf || doc.cnpj || doc.inscricaoEstadual || '';
+      const codigo = parseCodigoCliente(doc.codigoCliente) || null;
       return {
         _id: doc._id,
         nome: userDisplayName(doc),
         tipoConta: doc.tipoConta,
-        codigo: String(doc._id),
+        codigo: codigo ? String(codigo) : String(doc._id),
         email: doc.email || '',
         celular: doc.celular || '',
         telefone: doc.telefone || '',
@@ -816,10 +895,24 @@ router.post('/clientes', authMiddleware, requireStaff, async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     payload.senha = await bcrypt.hash(plainPassword, salt);
 
-    const created = await User.create(payload);
+    let created;
+    for (let tentativas = 0; tentativas < 3; tentativas += 1) {
+      try {
+        payload.codigoCliente = await gerarCodigoClienteSequencial();
+        created = await User.create(payload);
+        break;
+      } catch (creationErr) {
+        if (creationErr?.code === 11000 && creationErr?.keyPattern?.codigoCliente && tentativas < 2) {
+          continue;
+        }
+        throw creationErr;
+      }
+    }
+
     res.status(201).json({
       message: 'Cliente criado com sucesso.',
       id: created._id,
+      codigo: created.codigoCliente,
       senhaTemporaria: senhaGerada ? plainPassword : undefined,
     });
   } catch (err) {
@@ -837,6 +930,9 @@ router.post('/clientes', authMiddleware, requireStaff, async (req, res) => {
       }
       if (keys.includes('cnpj')) {
         return res.status(409).json({ message: 'Já existe um cliente com este CNPJ.' });
+      }
+      if (keys.includes('codigoCliente')) {
+        return res.status(409).json({ message: 'Código do cliente já está em uso, tente novamente.' });
       }
       return res.status(409).json({ message: 'Dados duplicados encontrados para este cliente.' });
     }
@@ -1144,6 +1240,8 @@ router.delete('/clientes/:id/pets/:petId', authMiddleware, requireStaff, async (
 // ---------- BUSCA CLIENTES ----------
 router.get('/clientes/buscar', authMiddleware, requireStaff, async (req, res) => {
   try {
+    await atribuirCodigosParaClientesSemCodigo();
+
     const q = String(req.query.q || '').trim();
     const limit = Math.min(parseInt(req.query.limit || '8', 10), 20);
     if (!q) return res.json([]);
@@ -1158,12 +1256,16 @@ router.get('/clientes/buscar', authMiddleware, requireStaff, async (req, res) =>
     }
 
     const users = await User.find({ $or: or })
-      .select('_id nomeCompleto nomeContato razaoSocial email cpf cnpj inscricaoEstadual celular tipoConta')
+      .select('_id nomeCompleto nomeContato razaoSocial email cpf cnpj inscricaoEstadual celular tipoConta codigoCliente')
       .limit(limit)
       .lean();
 
     res.json(users.map(u => ({
       _id: u._id,
+      codigo: (() => {
+        const parsed = parseCodigoCliente(u.codigoCliente);
+        return parsed ? String(parsed) : null;
+      })(),
       nome: userDisplayName(u),
       email: u.email,
       celular: u.celular || '',
@@ -1739,12 +1841,14 @@ router.post('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
 
 router.get('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
   try {
+    await atribuirCodigosParaClientesSemCodigo();
+
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: 'ID inválido.' });
     }
     const u = await User.findById(id)
-      .select('_id role tipoConta nomeCompleto nomeContato razaoSocial nomeFantasia email celular telefone celularSecundario telefoneSecundario cpf cnpj inscricaoEstadual genero dataNascimento rgNumero estadoIE isentoIE apelido pais empresaPrincipal empresas limiteCredito')
+      .select('_id role tipoConta nomeCompleto nomeContato razaoSocial nomeFantasia email celular telefone celularSecundario telefoneSecundario cpf cnpj inscricaoEstadual genero dataNascimento rgNumero estadoIE isentoIE apelido pais empresaPrincipal empresas limiteCredito codigoCliente')
       .lean();
     if (!u) {
       return res.status(404).json({ message: 'Cliente não encontrado.' });
@@ -1759,6 +1863,7 @@ router.get('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
     const inscricaoEstadual = typeof u.inscricaoEstadual === 'string' ? u.inscricaoEstadual : '';
     const documentoPrincipal = cpf || cnpj || inscricaoEstadual || '';
     const cpfCnpj = cpf || cnpj || '';
+    const codigo = parseCodigoCliente(u.codigoCliente) || null;
 
     const enderecosDocs = await UserAddress.find({ user: id })
       .sort({ isDefault: -1, updatedAt: -1 })
@@ -1783,7 +1888,7 @@ router.get('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
       _id: u._id,
       nome,
       tipoConta: u.tipoConta,
-      codigo: String(u._id),
+      codigo: codigo ? String(codigo) : String(u._id),
       apelido: u.apelido || '',
       pais: u.pais || 'Brasil',
       empresaPrincipal: empresa,
