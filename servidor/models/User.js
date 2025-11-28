@@ -33,7 +33,7 @@ const userSchema = new Schema({
   },
 
   // Dados adicionais comuns a todos os clientes
-  codigoCliente: { type: String, trim: true },
+  codigoCliente: { type: Number, unique: true, sparse: true, min: 1 },
   apelido: { type: String, trim: true },
   pais: { type: String, trim: true, default: 'Brasil' },
   celularSecundario: { type: String, trim: true },

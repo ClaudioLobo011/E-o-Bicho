@@ -209,6 +209,7 @@
         telefone2: document.getElementById('cliente-telefone2'),
       },
       pets: {
+        codigo: document.getElementById('pet-codigo'),
         nome: document.getElementById('pet-nome'),
         tipo: document.getElementById('pet-tipo'),
         porte: document.getElementById('pet-porte'),
@@ -804,9 +805,14 @@
         const peso = fixEncoding(pet.peso || '');
         const rga = fixEncoding(pet.rga || '');
         const microchip = fixEncoding(pet.microchip || '');
+        const codigo = (pet.codigo || pet.codigoPet || '').toString();
         const statusBadge = pet.obito
           ? '<span class="inline-flex items-center rounded bg-rose-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-rose-600">Óbito</span>'
           : '';
+        const codigoBadge = codigo
+          ? `<span class="inline-flex items-center rounded bg-amber-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-700">Código ${codigo}</span>`
+          : '';
+        const headerBadges = [codigoBadge, statusBadge].filter(Boolean).join(' ');
         const detalhes = [
           tipo ? `Tipo: ${tipo}` : '',
           raca ? `Raça: ${raca}` : '',
@@ -820,7 +826,7 @@
         ].filter(Boolean);
         card.innerHTML = `
           <div class="flex flex-col gap-1 text-sm text-gray-700">
-            <div class="text-base font-semibold text-gray-800 flex flex-wrap items-center gap-2">${nome || 'Sem nome'}${statusBadge ? ` ${statusBadge}` : ''}</div>
+            <div class="text-base font-semibold text-gray-800 flex flex-wrap items-center gap-2">${nome || 'Sem nome'}${headerBadges ? ` ${headerBadges}` : ''}</div>
             ${detalhes.map((linha) => `<div>${linha}</div>`).join('')}
           </div>
           <div class="mt-3 flex items-center gap-2">
@@ -1241,6 +1247,9 @@
       const pet = state.pets.find((item) => item._id === id);
       if (action === 'editar-pet' && pet) {
         state.petEditandoId = id;
+        if (elements.pets.codigo) {
+          elements.pets.codigo.value = (pet.codigo || pet.codigoPet || '').toString();
+        }
         elements.pets.nome.value = fixEncoding(pet.nome || '');
         setSelectValue(elements.pets.tipo, pet.tipo || '');
         await updateBreedOptions();
