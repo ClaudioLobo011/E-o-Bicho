@@ -120,6 +120,21 @@ function parseCodigoCliente(raw) {
   return null;
 }
 
+function parseCodigoPet(raw) {
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) {
+    return Math.trunc(raw);
+  }
+  if (typeof raw === 'string') {
+    const digits = raw.trim().replace(/\D/g, '');
+    if (!digits) return null;
+    const parsed = Number.parseInt(digits, 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
 async function obterMaiorCodigoCliente() {
   const candidatos = await User.find({ codigoCliente: { $exists: true } })
     .select('codigoCliente')
@@ -179,6 +194,101 @@ async function atribuirCodigosParaClientesSemCodigo() {
 async function gerarCodigoClienteSequencial() {
   const maior = await obterMaiorCodigoCliente();
   return maior + 1;
+}
+
+async function obterMaiorCodigoPet() {
+  const candidatos = await Pet.find({ codigoPet: { $exists: true } })
+    .select('codigoPet')
+    .sort({ codigoPet: -1 })
+    .limit(5)
+    .lean();
+
+  return candidatos.reduce((maior, doc) => {
+    const parsed = parseCodigoPet(doc?.codigoPet);
+    if (parsed && parsed > maior) return parsed;
+    return maior;
+  }, 0);
+}
+
+async function atribuirCodigosParaPetsSemCodigo(ownerId = null) {
+  const filter = ownerId ? { owner: ownerId } : {};
+
+  const semCodigo = await Pet.find({
+    $and: [
+      filter,
+      {
+        $or: [
+          { codigoPet: { $exists: false } },
+          { codigoPet: null },
+          { codigoPet: '' },
+        ],
+      },
+    ],
+  })
+    .select('_id createdAt codigoPet owner')
+    .lean();
+
+  const comCodigoInvalido = await Pet.find({
+    $and: [
+      filter,
+      { codigoPet: { $exists: true, $ne: null, $ne: '' } },
+    ],
+  })
+    .select('_id createdAt codigoPet owner')
+    .lean();
+
+  const pendentes = [
+    ...semCodigo,
+    ...comCodigoInvalido.filter((doc) => !parseCodigoPet(doc.codigoPet)),
+  ].sort((a, b) => {
+    const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return aDate - bDate;
+  });
+
+  if (!pendentes.length) return;
+
+  let ultimoCodigo = await obterMaiorCodigoPet();
+  const ops = pendentes.map((doc) => {
+    ultimoCodigo += 1;
+    return {
+      updateOne: {
+        filter: { _id: doc._id },
+        update: { $set: { codigoPet: ultimoCodigo } },
+      },
+    };
+  });
+
+  if (ops.length) {
+    await Pet.bulkWrite(ops);
+  }
+}
+
+async function gerarCodigoPetSequencial() {
+  const maior = await obterMaiorCodigoPet();
+  return maior + 1;
+}
+
+function mapPetDoc(doc) {
+  const plain = doc?.toObject ? doc.toObject() : doc;
+  const parsed = parseCodigoPet(plain?.codigoPet);
+  return {
+    _id: plain?._id,
+    nome: plain?.nome,
+    tipo: plain?.tipo,
+    raca: plain?.raca,
+    porte: plain?.porte,
+    sexo: plain?.sexo,
+    dataNascimento: plain?.dataNascimento,
+    microchip: plain?.microchip,
+    pelagemCor: plain?.pelagemCor,
+    rga: plain?.rga,
+    peso: plain?.peso,
+    obito: plain?.obito,
+    codigoPet: parsed || null,
+    codigo: parsed ? String(parsed) : null,
+    owner: plain?.owner,
+  };
 }
 
 async function buildClientePayload(body = {}, opts = {}) {
@@ -1166,8 +1276,27 @@ router.post('/clientes/:id/pets', authMiddleware, requireStaff, async (req, res)
       obito: parseBooleanFlag(req.body.obito),
     };
 
-    const created = await Pet.create(doc);
-    res.status(201).json(created);
+    let tentativas = 0;
+    let created = null;
+    do {
+      tentativas += 1;
+      try {
+        doc.codigoPet = await gerarCodigoPetSequencial();
+        created = await Pet.create(doc);
+      } catch (creationErr) {
+        if (creationErr?.code === 11000 && creationErr?.keyPattern?.codigoPet && tentativas < 3) {
+          created = null;
+          continue;
+        }
+        throw creationErr;
+      }
+    } while (!created && tentativas < 3);
+
+    if (!created) {
+      throw new Error('Não foi possível gerar o código do pet.');
+    }
+
+    res.status(201).json(mapPetDoc(created));
   } catch (err) {
     console.error('POST /func/clientes/:id/pets', err);
     res.status(400).json({ message: err?.message || 'Erro ao cadastrar pet.' });
@@ -1201,12 +1330,16 @@ router.put('/clientes/:id/pets/:petId', authMiddleware, requireStaff, async (req
       peso: sanitizeString(req.body.peso),
     };
 
+    if (!parseCodigoPet(pet.codigoPet)) {
+      update.codigoPet = await gerarCodigoPetSequencial();
+    }
+
     if (Object.prototype.hasOwnProperty.call(req.body, 'obito')) {
       update.obito = parseBooleanFlag(req.body.obito);
     }
 
     const updated = await Pet.findByIdAndUpdate(petId, update, { new: true });
-    res.json(updated);
+    res.json(mapPetDoc(updated));
   } catch (err) {
     console.error('PUT /func/clientes/:id/pets/:petId', err);
     res.status(400).json({ message: err?.message || 'Erro ao atualizar pet.' });
@@ -1283,6 +1416,7 @@ router.get('/clientes/:id/pets', authMiddleware, requireStaff, async (req, res) 
   try {
     const ownerId = req.params.id;
     if (!mongoose.Types.ObjectId.isValid(ownerId)) return res.json([]);
+    await atribuirCodigosParaPetsSemCodigo(ownerId);
     const includeDeceased = String(req.query.includeDeceased || '')
       .trim().toLowerCase();
     const includeFlag = ['1', 'true', 'sim'].includes(includeDeceased);
@@ -1291,10 +1425,10 @@ router.get('/clientes/:id/pets', authMiddleware, requireStaff, async (req, res) 
       filter.obito = { $ne: true };
     }
     const pets = await Pet.find(filter)
-      .select('_id nome tipo raca porte sexo dataNascimento peso microchip pelagemCor rga obito')
+      .select('_id nome tipo raca porte sexo dataNascimento peso microchip pelagemCor rga obito codigoPet owner')
       .sort({ nome: 1 })
       .lean();
-    res.json(pets);
+    res.json(pets.map(mapPetDoc));
   } catch (e) {
     console.error('GET /func/clientes/:id/pets', e);
     res.status(500).json({ message: 'Erro ao buscar pets' });
@@ -1930,11 +2064,21 @@ router.get('/pets/:id', authMiddleware, requireStaff, async (req, res) => {
       return res.status(400).json({ message: 'ID inválido.' });
     }
     const p = await Pet.findById(id)
-      .select('_id nome owner')
+      .select('_id nome owner codigoPet')
       .populate('owner', 'nomeCompleto nomeContato razaoSocial email')
       .lean();
     if (!p) {
       return res.status(404).json({ message: 'Pet não encontrado.' });
+    }
+    if (!parseCodigoPet(p.codigoPet)) {
+      await atribuirCodigosParaPetsSemCodigo();
+      const refreshed = await Pet.findById(id)
+        .select('_id nome owner codigoPet')
+        .populate('owner', 'nomeCompleto nomeContato razaoSocial email')
+        .lean();
+      if (refreshed) {
+        p.codigoPet = refreshed.codigoPet;
+      }
     }
     const clienteNome = p.owner
       ? (p.owner.nomeCompleto || p.owner.nomeContato || p.owner.razaoSocial || p.owner.email || '')
@@ -1942,6 +2086,10 @@ router.get('/pets/:id', authMiddleware, requireStaff, async (req, res) => {
     res.json({
       _id: p._id,
       nome: p.nome,
+      codigo: (() => {
+        const parsed = parseCodigoPet(p.codigoPet);
+        return parsed ? String(parsed) : null;
+      })(),
       clienteId: p.owner?._id || null,
       clienteNome
     });

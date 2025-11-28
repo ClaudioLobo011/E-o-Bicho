@@ -8,6 +8,7 @@ const petSchema = new Schema({
     ref: 'User', // Cria uma referência ao nosso modelo 'User'
     required: true
   },
+  codigoPet: { type: Number, unique: true, sparse: true, min: 1 },
   nome: { type: String, required: true },
   tipo: { type: String, required: true },
   raca: { type: String, required: true },
@@ -20,7 +21,5 @@ const petSchema = new Schema({
   peso: { type: String },
   obito: { type: Boolean, default: false },
 }, { timestamps: true }); // timestamps adiciona os campos createdAt e updatedAt automaticamente
-
-
-
+ 
 module.exports = mongoose.model('Pet', petSchema);
