@@ -782,6 +782,14 @@ export function renderAnimaisInternados(root, dataset, state = {}) {
   const petId = state?.petId || '';
   const internacoes = Array.isArray(state?.internacoes) ? state.internacoes : [];
 
+  const internacoesAtivas = internacoes.filter((registro) => {
+    const situacaoKey = normalizeActionKey(registro?.situacao || registro?.situacaoCodigo);
+    const cancelado = registro?.cancelado || situacaoKey === 'cancelado';
+    const obito = registro?.obitoRegistrado || situacaoKey === 'obito';
+    const alta = situacaoKey.includes('alta');
+    return !(cancelado || obito || alta);
+  });
+
   if (state?.internacoesLoading) {
     root.innerHTML = buildEmptyState('Carregando internações...');
     return;
@@ -799,20 +807,20 @@ export function renderAnimaisInternados(root, dataset, state = {}) {
     return;
   }
 
-  if (!internacoes.length) {
-    root.innerHTML = buildEmptyState('Nenhuma internação registrada até o momento.');
+  if (!internacoesAtivas.length) {
+    root.innerHTML = buildEmptyState('Nenhuma internação ativa no momento.');
     return;
   }
 
-  const total = internacoes.length;
-  const proximasAltas = internacoes.filter((registro) => {
+  const total = internacoesAtivas.length;
+  const proximasAltas = internacoesAtivas.filter((registro) => {
     if (!registro.altaPrevistaISO) return false;
     const alta = new Date(registro.altaPrevistaISO);
     if (Number.isNaN(alta.getTime())) return false;
     const diff = (alta - Date.now()) / (1000 * 60 * 60);
     return diff <= 48;
   }).length;
-  const isolamento = internacoes.filter((registro) => (registro.situacao || '').toLowerCase().includes('isolamento')).length;
+  const isolamento = internacoesAtivas.filter((registro) => (registro.situacao || '').toLowerCase().includes('isolamento')).length;
 
   const resumo = `
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -834,7 +842,9 @@ export function renderAnimaisInternados(root, dataset, state = {}) {
     </div>
   `;
 
-  const registrosFiltrados = petId ? internacoes.filter((registro) => registro.filterKey === petId) : internacoes;
+  const registrosFiltrados = petId
+    ? internacoesAtivas.filter((registro) => registro.filterKey === petId)
+    : internacoesAtivas;
 
   const cardsContent = registrosFiltrados.length
     ? registrosFiltrados
