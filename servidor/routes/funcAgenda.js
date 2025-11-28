@@ -359,7 +359,11 @@ async function buildClientePayload(body = {}, opts = {}) {
     payload.nomeFantasia = sanitizeString(body.nomeFantasia || currentUser?.nomeFantasia || '');
     payload.nomeContato = sanitizeString(body.nomeContato || currentUser?.nomeContato || '');
     const cnpj = sanitizeCnpj(body.cnpj || currentUser?.cnpj);
-    payload.cnpj = cnpj || '';
+    if (cnpj) {
+      payload.cnpj = cnpj;
+    } else if (!isUpdate) {
+      payload.cnpj = '';
+    }
     let inscricaoEstadual = sanitizeString(body.inscricaoEstadual || currentUser?.inscricaoEstadual || '');
     const isento = body.isentoIE === true || body.isentoIE === 'true' || body.isentoIE === 'on';
     if (isento) {
@@ -1057,6 +1061,14 @@ router.put('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
     await ensureClienteEhEditavel(current);
 
     const payload = await buildClientePayload(req.body, { isUpdate: true, currentUser: current });
+    const unsetPayload = {};
+
+    Object.keys(payload).forEach(key => {
+      if (typeof payload[key] === 'undefined') {
+        delete payload[key];
+      }
+    });
+
     if (payload.tipoConta === 'pessoa_juridica') {
       payload.nomeCompleto = '';
       payload.cpf = '';
@@ -1069,13 +1081,18 @@ router.put('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
       payload.razaoSocial = '';
       payload.nomeFantasia = '';
       payload.nomeContato = '';
-      payload.cnpj = '';
-      payload.inscricaoEstadual = '';
-      payload.estadoIE = '';
-      payload.isentoIE = false;
+      unsetPayload.cnpj = '';
+      unsetPayload.inscricaoEstadual = '';
+      unsetPayload.estadoIE = '';
+      unsetPayload.isentoIE = '';
     }
 
-    const updated = await User.findByIdAndUpdate(id, payload, { new: true, runValidators: true });
+    const updateQuery = { $set: payload };
+    if (Object.keys(unsetPayload).length > 0) {
+      updateQuery.$unset = unsetPayload;
+    }
+
+    const updated = await User.findByIdAndUpdate(id, updateQuery, { new: true, runValidators: true });
     if (!updated) {
       return res.status(404).json({ message: 'Cliente não encontrado.' });
     }
