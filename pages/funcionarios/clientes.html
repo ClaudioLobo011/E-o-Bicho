@@ -18,25 +18,21 @@
         <div id="admin-sidebar-placeholder"></div>
       </aside>
 
-      <section class="md:col-span-4 space-y-6">
-        <div class="bg-white rounded-lg shadow p-6">
-          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div class="flex items-center gap-3">
-              <span class="flex h-12 w-12 items-center justify-center rounded-full bg-indigo-50 text-indigo-600">
-                <i class="fas fa-user-plus text-xl"></i>
-              </span>
-              <div>
-                <h1 class="text-2xl font-bold text-gray-800">Cadastro de Cliente</h1>
-                <p class="text-gray-500">Gerencie os dados dos clientes da empresa.</p>
-              </div>
+      <section class="md:col-span-4 space-y-4">
+        <div class="rounded-2xl bg-white shadow ring-1 ring-black/5">
+          <header class="flex flex-col gap-4 border-b border-gray-100 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-wide text-primary">Clientes</p>
+              <h1 class="text-2xl font-bold text-gray-800">Cadastro de Cliente</h1>
+              <p class="text-sm text-gray-500">Gerencie os dados dos clientes da empresa.</p>
             </div>
-            <div class="flex items-center gap-2">
-              <button id="btn-novo-cliente" type="button" class="px-4 py-2 rounded border border-gray-300 text-gray-700 hover:bg-gray-50 transition">Novo Cliente</button>
-              <button form="cliente-form" id="btn-salvar-cliente" type="submit" class="px-4 py-2 rounded bg-indigo-600 text-white font-medium hover:bg-indigo-700 transition">Salvar</button>
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-3">
+              <button id="btn-novo-cliente" type="button" class="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 hover:shadow-sm">Novo Cliente</button>
+              <button form="cliente-form" id="btn-salvar-cliente" type="submit" class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 hover:shadow">Salvar</button>
             </div>
-          </div>
+          </header>
 
-          <form id="cliente-form" class="mt-6 space-y-6">
+          <form id="cliente-form" class="space-y-6 px-6 py-6">
             <input type="hidden" id="cliente-id" />
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -369,19 +365,20 @@
           </form>
         </div>
 
-        <div class="bg-white rounded-lg shadow p-6">
-          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+        <div class="rounded-2xl bg-white shadow ring-1 ring-black/5">
+          <header class="flex flex-col gap-4 border-b border-gray-100 px-6 py-5 md:flex-row md:items-center md:justify-between">
             <div>
+              <p class="text-xs font-semibold uppercase tracking-wide text-primary">Clientes</p>
               <h2 class="text-xl font-semibold text-gray-800">Clientes cadastrados</h2>
               <p class="text-sm text-gray-500">Todos os usuários cadastrados são exibidos nesta lista.</p>
             </div>
-            <div class="flex items-center gap-2">
-              <input id="cliente-busca" type="text" class="w-full md:w-64 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="Buscar por nome, documento ou email" />
-              <button id="btn-busca-cliente" type="button" class="px-3 py-2 rounded bg-gray-800 text-white hover:bg-gray-900 transition"><i class="fas fa-search"></i></button>
+            <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-2">
+              <input id="cliente-busca" type="text" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 md:w-64" placeholder="Buscar por nome, documento ou email" />
+              <button id="btn-busca-cliente" type="button" class="flex items-center justify-center rounded-xl bg-gray-800 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-gray-900 hover:shadow"><i class="fas fa-search"></i></button>
             </div>
-          </div>
+          </header>
 
-          <div class="overflow-x-auto">
+          <div class="overflow-x-auto px-6 py-4">
             <table class="min-w-full divide-y divide-gray-200 text-sm">
               <thead class="bg-gray-50">
                 <tr>
