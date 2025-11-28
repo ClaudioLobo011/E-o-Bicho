@@ -48,6 +48,42 @@ function buildPublicUrl(key) {
     return `https://${accountId}.r2.cloudflarestorage.com/${bucket}/${encodeURI(normalizedKey)}`;
 }
 
+function parseKeyFromPublicUrl(url) {
+    if (typeof url !== 'string') return null;
+
+    const trimmed = url.trim();
+    if (!trimmed) return null;
+
+    if (publicBaseUrl) {
+        const base = publicBaseUrl.replace(/\/$/, '');
+        if (trimmed.startsWith(base)) {
+            const remainder = trimmed.slice(base.length).replace(/^\/+/, '');
+            try {
+                return decodeURIComponent(remainder);
+            } catch (error) {
+                return remainder;
+            }
+        }
+    }
+
+    if (accountId && bucket) {
+        const base = `https://${accountId}.r2.cloudflarestorage.com`;
+        if (trimmed.startsWith(base)) {
+            const remainder = trimmed.slice(base.length).replace(/^\/+/, '');
+            if (remainder.startsWith(`${bucket}/`)) {
+                const keyPart = remainder.slice(bucket.length + 1);
+                try {
+                    return decodeURIComponent(keyPart);
+                } catch (error) {
+                    return keyPart;
+                }
+            }
+        }
+    }
+
+    return null;
+}
+
 async function uploadBufferToR2(buffer, { key, contentType }) {
     const client = getClient();
     if (!client) throw new Error('Cloudflare R2 não está configurado.');
@@ -85,4 +121,5 @@ module.exports = {
     uploadBufferToR2,
     deleteObjectFromR2,
     buildPublicUrl,
+    parseKeyFromPublicUrl,
 };
