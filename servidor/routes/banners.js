@@ -18,7 +18,7 @@ const {
     buildPublicUrl,
 } = require('../utils/cloudflareR2');
 
-const bannerFolderEnv = process.env.BANNER_DRIVE_FOLDER_PATH || process.env.BANNER_DRIVE_FOLDER || 'banners';
+const bannerFolderEnv = process.env.BANNER_DRIVE_FOLDER_PATH || process.env.BANNER_DRIVE_FOLDER || 'banner/imagem';
 const bannerFolderSegments = bannerFolderEnv
     .split('/')
     .map(segment => segment.trim())
@@ -58,13 +58,13 @@ router.get('/', async (req, res) => {
         const bannersWithUrls = banners.map(banner => ({
             ...banner,
             imageUrl:
+                buildPublicUrl(banner.imageR2Key) ||
                 banner.imageUrl ||
-                buildDriveViewLink(banner.imageDriveFileId) ||
-                buildPublicUrl(banner.imageR2Key),
+                buildDriveViewLink(banner.imageDriveFileId),
             mobileImageUrl:
+                buildPublicUrl(banner.mobileImageR2Key) ||
                 banner.mobileImageUrl ||
-                buildDriveViewLink(banner.mobileImageDriveFileId) ||
-                buildPublicUrl(banner.mobileImageR2Key)
+                buildDriveViewLink(banner.mobileImageDriveFileId)
         }));
 
         res.json(bannersWithUrls);

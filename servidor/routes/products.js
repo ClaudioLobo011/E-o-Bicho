@@ -20,6 +20,7 @@ const {
     buildProductImageFileName,
     buildProductImagePublicPath,
     buildProductImageStoragePath,
+    buildProductImageR2Key,
     ensureProductImageFolder,
     getProductImagesDriveFolderPath,
     moveFile,
@@ -33,6 +34,12 @@ const {
     isDriveConfigured,
     uploadBufferToDrive,
 } = require('../utils/googleDrive');
+const {
+    buildPublicUrl: buildR2PublicUrl,
+    deleteObjectFromR2,
+    isR2Configured,
+    uploadBufferToR2,
+} = require('../utils/cloudflareR2');
 
 const tempUploadDir = path.join(__dirname, '..', 'tmp', 'uploads', 'products');
 
@@ -1849,6 +1856,7 @@ router.post('/by-ids', requireAuth, async (req, res) => {
 router.post('/:id/upload', requireAuth, authorizeRoles('admin', 'admin_master'), upload.array('imagens', 10), async (req, res) => {
     const tempFiles = Array.isArray(req.files) ? req.files : [];
     const storedFiles = [];
+    const uploadedR2Keys = [];
     const uploadedDriveFiles = [];
 
     const cleanupTempUploads = async () => {
@@ -1870,9 +1878,9 @@ router.post('/:id/upload', requireAuth, authorizeRoles('admin', 'admin_master'),
             return res.status(404).send('Produto não encontrado');
         }
 
-        if (!isDriveConfigured()) {
+        if (!isDriveConfigured() && !isR2Configured()) {
             await cleanupTempUploads();
-            return res.status(500).json({ message: 'Armazenamento no Google Drive não está configurado.' });
+            return res.status(500).json({ message: 'Armazenamento externo não está configurado (Cloudflare ou Google Drive).' });
         }
 
         if (!tempFiles.length) {
@@ -1934,6 +1942,62 @@ router.post('/:id/upload', requireAuth, authorizeRoles('admin', 'admin_master'),
                 continue;
             }
 
+            const localPublicPath = buildProductImagePublicPath(barcodeSegment, newFilename);
+
+            if (isR2Configured()) {
+                const r2Key = buildProductImageR2Key(barcodeSegment, newFilename);
+                let r2UploadResult = null;
+                let r2ErrorMessage = '';
+
+                try {
+                    r2UploadResult = await uploadBufferToR2(fileBuffer, {
+                        key: r2Key,
+                        contentType: file.mimetype || 'application/octet-stream',
+                    });
+                } catch (r2Error) {
+                    r2ErrorMessage = r2Error?.message || 'Erro desconhecido ao enviar para o Cloudflare R2.';
+                    console.error('Falha ao enviar imagem de produto para o Cloudflare R2:', r2Error);
+                }
+
+                if (!r2UploadResult) {
+                    uploadResults.push({
+                        status: 'error',
+                        originalName: file?.originalname || '',
+                        message: r2ErrorMessage || 'Não foi possível concluir o upload para o Cloudflare R2.',
+                    });
+
+                    try {
+                        if (fs.existsSync(targetPath)) {
+                            await fs.promises.unlink(targetPath);
+                        }
+                    } catch (cleanupError) {
+                        console.warn('Falha ao remover arquivo local após erro no R2:', cleanupError);
+                    }
+                    try {
+                        if (file.path && fs.existsSync(file.path)) {
+                            await fs.promises.unlink(file.path);
+                        }
+                    } catch (cleanupError) {
+                        console.warn('Falha ao remover arquivo temporário após erro no R2:', cleanupError);
+                    }
+                    continue;
+                }
+
+                const resolvedKey = r2UploadResult?.key || r2Key;
+                const publicPath = r2UploadResult?.url || buildR2PublicUrl(resolvedKey);
+                storedFiles.push(targetPath);
+                uploadedR2Keys.push(resolvedKey);
+                newImagePaths.push(publicPath);
+                uploadResults.push({
+                    status: 'success',
+                    originalName: file?.originalname || '',
+                    storedFileName: newFilename,
+                    r2Key: resolvedKey,
+                    publicPath,
+                });
+                continue;
+            }
+
             let driveResult = null;
             let driveErrorMessage = '';
             try {
@@ -1977,8 +2041,7 @@ router.post('/:id/upload', requireAuth, authorizeRoles('admin', 'admin_master'),
             }
 
             storedFiles.push(targetPath);
-            const publicPath = buildProductImagePublicPath(barcodeSegment, newFilename);
-            newImagePaths.push(publicPath);
+            newImagePaths.push(localPublicPath);
             uploadResults.push({
                 status: 'success',
                 originalName: file?.originalname || '',
@@ -1988,7 +2051,7 @@ router.post('/:id/upload', requireAuth, authorizeRoles('admin', 'admin_master'),
                     webViewLink: driveResult?.webViewLink || null,
                     webContentLink: driveResult?.webContentLink || null,
                 },
-                publicPath,
+                publicPath: localPublicPath,
             });
         }
 
@@ -2031,6 +2094,9 @@ router.post('/:id/upload', requireAuth, authorizeRoles('admin', 'admin_master'),
             } catch (cleanupError) {
                 console.warn('Falha ao remover imagem armazenada após erro:', cleanupError);
             }
+        }
+        if (uploadedR2Keys.length) {
+            await Promise.allSettled(uploadedR2Keys.map((key) => deleteObjectFromR2(key)));
         }
         if (uploadedDriveFiles.length) {
             await Promise.allSettled(uploadedDriveFiles.map((fileId) => deleteDriveFile(fileId)));
