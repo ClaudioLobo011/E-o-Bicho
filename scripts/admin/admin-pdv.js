@@ -2330,20 +2330,56 @@
     );
   };
 
-  const getFinalPrice = (product) => {
+  const hasClubPromotion = (product) => {
     const base = getBasePrice(product);
-    if (!product) return base;
+    const clubPrice = safeNumber(product?.precoClube);
+    return clubPrice > 0 && clubPrice < base;
+  };
+
+  const getPromotionPricing = (product) => {
+    const basePrice = getBasePrice(product);
+    if (!product) {
+      return { basePrice, promoPrice: basePrice, hasPromotion: false, canApply: false };
+    }
+
     if (hasGeneralPromotion(product)) {
-      if (!canApplyGeneralPromotion()) {
-        return base;
-      }
-      const desconto = base * (safeNumber(product.promocao.porcentagem) / 100);
-      return Math.max(base - desconto, 0);
+      const desconto = basePrice * (safeNumber(product.promocao.porcentagem) / 100);
+      const promoPrice = Math.max(basePrice - desconto, 0);
+      return {
+        basePrice,
+        promoPrice,
+        hasPromotion: promoPrice < basePrice,
+        canApply: canApplyGeneralPromotion(),
+      };
     }
-    if (product?.precoClube && safeNumber(product.precoClube) > 0 && product.precoClube < base) {
-      return safeNumber(product.precoClube);
+
+    if (hasClubPromotion(product)) {
+      const promoPrice = safeNumber(product.precoClube);
+      return { basePrice, promoPrice, hasPromotion: true, canApply: true };
     }
-    return base;
+
+    return { basePrice, promoPrice: basePrice, hasPromotion: false, canApply: false };
+  };
+
+  const getFinalPrice = (product, usePromotion = true) => {
+    const pricing = getPromotionPricing(product);
+    if (!usePromotion || !pricing.hasPromotion) return pricing.basePrice;
+    if (!pricing.canApply) return pricing.basePrice;
+    return pricing.promoPrice;
+  };
+
+  const getItemPricing = (product, usePromotion = true) => {
+    const pricing = getPromotionPricing(product);
+    const promotionRequested = Boolean(usePromotion && pricing.hasPromotion);
+    const promotionActive = promotionRequested && pricing.canApply;
+    const valor = promotionActive ? pricing.promoPrice : pricing.basePrice;
+    return {
+      valor,
+      valorBase: pricing.basePrice,
+      valorPromocional: pricing.hasPromotion ? pricing.promoPrice : null,
+      hasPromotion: pricing.hasPromotion,
+      promotionActive,
+    };
   };
 
   const queryElements = () => {
@@ -3002,7 +3038,8 @@
     const name = product?.nome || product?.descricao || 'Produto sem nome';
     const code = getProductCode(product);
     const barcode = getProductBarcode(product);
-    const basePrice = getBasePrice(product);
+    const pricing = getPromotionPricing(product);
+    const basePrice = pricing.basePrice;
     const finalPrice = getFinalPrice(product);
     const generalPromo = hasGeneralPromotion(product);
     const showGeneralWarning = generalPromo && !canApplyGeneralPromotion();
@@ -3019,7 +3056,7 @@
       elements.selectedPrice.textContent = formatCurrency(finalPrice);
     }
     if (elements.selectedOriginalPrice) {
-      if (finalPrice < basePrice) {
+      if (pricing.hasPromotion && finalPrice < basePrice) {
         elements.selectedOriginalPrice.textContent = formatCurrency(basePrice);
         elements.selectedOriginalPrice.classList.remove('hidden');
       } else {
@@ -3032,7 +3069,7 @@
       } else {
         elements.selectedPromoBadge.textContent = 'Promoção ativa';
       }
-      elements.selectedPromoBadge.classList.toggle('hidden', !(finalPrice < basePrice));
+      elements.selectedPromoBadge.classList.toggle('hidden', !pricing.hasPromotion);
     }
     if (elements.selectedGeneralWarning) {
       elements.selectedGeneralWarning.classList.toggle('hidden', !showGeneralWarning);
@@ -3046,7 +3083,8 @@
   const updateItemTotals = () => {
     const product = state.selectedProduct;
     const quantidade = Math.max(1, Math.trunc(state.quantidade));
-    const unitPrice = product ? getFinalPrice(product) : 0;
+    const pricing = product ? getItemPricing(product) : { valor: 0 };
+    const unitPrice = pricing.valor;
     const total = unitPrice * quantidade;
     if (elements.itemValue) {
       elements.itemValue.textContent = formatCurrency(unitPrice);
@@ -3112,14 +3150,22 @@
         return {
           ...item,
           generalPromo: Boolean(item.generalPromo && state.vendaCliente),
+          valorBase: item.valorBase ?? item.valor,
+          valorPromocional: item.valorPromocional ?? null,
+          usePromotion: false,
         };
       }
       const snapshot = item.productSnapshot;
-      const valor = getFinalPrice(snapshot);
+      const wantsPromotion = item.usePromotion !== false;
+      const pricing = getItemPricing(snapshot, wantsPromotion);
+      const usePromotion = pricing.hasPromotion ? wantsPromotion : false;
       return {
         ...item,
-        valor,
-        subtotal: valor * item.quantidade,
+        valor: pricing.valor,
+        valorBase: pricing.valorBase,
+        valorPromocional: pricing.valorPromocional,
+        usePromotion,
+        subtotal: pricing.valor * item.quantidade,
         generalPromo: hasGeneralPromotion(snapshot),
         codigoInterno:
           item.codigoInterno ||
@@ -4621,8 +4667,36 @@
       li.className = 'flex items-start gap-3 py-3';
       const codigoInterno = item.codigoInterno || item.codigo || '—';
       const codigoBarras = item.codigoBarras || '—';
+      const basePrice = safeNumber(item.valorBase ?? item.valor);
+      const promoPrice =
+        item.valorPromocional != null ? safeNumber(item.valorPromocional) : basePrice;
+      const promotionAvailable = promoPrice < basePrice;
+      const promotionBlocked = Boolean(item.generalPromo && !state.vendaCliente);
+      const promotionEnabled = promotionAvailable && item.usePromotion !== false;
+      const promotionActive = promotionEnabled && !promotionBlocked;
       const generalNotice = !state.vendaCliente && item.generalPromo
         ? '<p class="text-[11px] text-amber-600">Vincule um cliente para aplicar a promoção geral.</p>'
+        : '';
+      const priceLine = promotionAvailable && promotionActive
+        ? `<p class="text-xs text-gray-500 flex flex-wrap items-center gap-2">`
+            + `<span>Qtde: ${item.quantidade} • Valor: ${formatCurrency(item.valor)}</span>`
+            + `<span class="text-[11px] text-gray-500 line-through">Cheio: ${formatCurrency(basePrice)}</span>`
+            + `</p>`
+        : `<p class="text-xs text-gray-500">Qtde: ${item.quantidade} • Valor: ${formatCurrency(item.valor)}</p>`;
+      const promotionInfo = promotionAvailable
+        ? `<p class="text-[11px] text-gray-500">${
+            promotionActive ? 'Usando valor promocional' : 'Usando valor cheio'
+          }${promotionBlocked ? ' • Vincule um cliente' : ''}</p>`
+        : '';
+      const promotionToggle = promotionAvailable
+        ? `<button type="button" class="pdv-item-promo-toggle inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold transition ${
+            promotionEnabled
+              ? 'border-primary bg-primary/10 text-primary'
+              : 'border-gray-200 bg-white text-gray-600 hover:border-primary hover:text-primary'
+          }" data-promo-index="${index}" role="switch" aria-checked="${promotionEnabled}" aria-label="Alternar promoção">`
+            + '<i class="fas fa-bolt text-[10px]"></i>'
+            + `<span>${promotionEnabled ? 'Promoção ligada' : 'Promoção desligada'}</span>`
+            + '</button>'
         : '';
       li.innerHTML = `
         <div class="flex-1 min-w-0 space-y-1">
@@ -4631,10 +4705,11 @@
             <span>Cód. Interno: ${codigoInterno}</span>
             <span>Barras: ${codigoBarras}</span>
           </p>
-          <p class="text-xs text-gray-500">Qtde: ${item.quantidade} • Valor: ${formatCurrency(item.valor)}</p>
+          ${priceLine}
           ${generalNotice}
         </div>
         <div class="flex flex-col items-end gap-2 text-right">
+          ${promotionToggle ? `<div class="flex flex-col items-end gap-1">${promotionToggle}${promotionInfo}</div>` : ''}
           <span class="text-sm font-semibold text-gray-700">${formatCurrency(item.subtotal)}</span>
           <button type="button" class="text-xs text-red-500 transition hover:text-red-600" data-remove-index="${index}" aria-label="Remover item">
             <i class="fas fa-times"></i>
@@ -14487,8 +14562,9 @@
   const appendProductToSale = (product, quantidade = 1) => {
     if (!product) return false;
     const quantidadeFinal = Math.max(1, Math.trunc(Number(quantidade) || 1));
-    const unitPrice = getFinalPrice(product);
-    const subtotal = unitPrice * quantidadeFinal;
+    const pricing = getItemPricing(product);
+    const usePromotion = pricing.hasPromotion;
+    const subtotal = pricing.valor * quantidadeFinal;
     const codigo = getProductCode(product);
     const codigoInterno = product?.codigoInterno || product?.codInterno || codigo;
     const codigoBarras = getProductBarcode(product);
@@ -14503,14 +14579,21 @@
     );
     if (existingIndex >= 0) {
       const current = state.itens[existingIndex];
+      const shouldUsePromotion =
+        current.usePromotion !== undefined ? current.usePromotion : usePromotion;
+      const currentPricing = getItemPricing(product, shouldUsePromotion);
       current.quantidade += quantidadeFinal;
-      current.valor = unitPrice;
+      current.valorBase = currentPricing.valorBase;
+      current.valorPromocional = currentPricing.valorPromocional;
+      current.usePromotion = currentPricing.hasPromotion ? shouldUsePromotion : false;
+      current.valor = currentPricing.valor;
       current.subtotal = current.quantidade * current.valor;
       current.codigoInterno = codigoInterno || current.codigoInterno;
       current.codigoBarras = codigoBarras || current.codigoBarras;
       current.generalPromo = generalPromo;
       current.productSnapshot = snapshot;
     } else {
+      const pricingToApply = getItemPricing(product, usePromotion);
       state.itens.push({
         id: product._id || product.id || codigo || String(Date.now()),
         codigo,
@@ -14518,7 +14601,10 @@
         codigoBarras,
         nome,
         quantidade: quantidadeFinal,
-        valor: unitPrice,
+        valorBase: pricingToApply.valorBase,
+        valorPromocional: pricingToApply.valorPromocional,
+        usePromotion: pricingToApply.hasPromotion ? usePromotion : false,
+        valor: pricingToApply.valor,
         subtotal,
         generalPromo,
         productSnapshot: snapshot,
@@ -14762,6 +14848,29 @@
   };
 
   const handleItemsListClick = (event) => {
+    const promoButton = event.target.closest('[data-promo-index]');
+    if (promoButton) {
+      const index = Number(promoButton.getAttribute('data-promo-index'));
+      if (!Number.isInteger(index) || index < 0 || index >= state.itens.length) return;
+      const item = state.itens[index];
+      if (!item) return;
+      const snapshot = item.productSnapshot || null;
+      const target = snapshot || item;
+      const nextUsePromotion = !(item.usePromotion !== false);
+      const pricing = getItemPricing(target, nextUsePromotion);
+      const usePromotion = pricing.hasPromotion ? nextUsePromotion : false;
+      state.itens[index] = {
+        ...item,
+        valor: pricing.valor,
+        valorBase: pricing.valorBase,
+        valorPromocional: pricing.valorPromocional,
+        subtotal: pricing.valor * item.quantidade,
+        usePromotion,
+        generalPromo: snapshot ? hasGeneralPromotion(snapshot) : Boolean(item.generalPromo),
+      };
+      renderItemsList();
+      return;
+    }
     const button = event.target.closest('[data-remove-index]');
     if (!button) return;
     const index = Number(button.getAttribute('data-remove-index'));
