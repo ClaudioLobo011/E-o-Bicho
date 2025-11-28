@@ -267,9 +267,6 @@ async function ensureClienteEhEditavel(user) {
   if (!user) {
     throw new Error('Cliente não encontrado.');
   }
-  if (user.role && user.role !== 'cliente') {
-    throw new Error('Este usuário não pode ser gerenciado como cliente.');
-  }
   return user;
 }
 
