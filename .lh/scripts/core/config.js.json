@@ -1,0 +1,18 @@
+{
+    "sourceFile": "scripts/core/config.js",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1764010030738,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1764010030738,
+            "name": "Commit-0",
+            "content": "const API_CONFIG = (() => {\r\n  const DEFAULT_RENDER_SERVER_URL = 'https://e-o-bicho.onrender.com';\r\n  const LOCAL_SERVER_URL = 'http://localhost:3000';\r\n\r\n  const normalizeUrl = (url) => {\r\n    if (typeof url !== 'string') return '';\r\n    return url.trim().replace(/\\/+$/, '');\r\n  };\r\n\r\n  const getLocalOverride = () => {\r\n    try {\r\n      const value = localStorage.getItem('apiServerOverride');\r\n      return typeof value === 'string' ? value.trim() : '';\r\n    } catch (_err) {\r\n      return '';\r\n    }\r\n  };\r\n\r\n  const getGlobalOverride = () => {\r\n    if (typeof window === 'undefined') return '';\r\n    const candidates = [\r\n      window.API_SERVER_URL,\r\n      window.API_BASE_URL,\r\n      window?.API_CONFIG?.SERVER_URL,\r\n      window?.API_CONFIG?.BASE_URL?.replace(/\\/?api$/, ''),\r\n    ];\r\n    const found = candidates.find((value) => typeof value === 'string' && value.trim());\r\n    return found ? found.trim() : '';\r\n  };\r\n\r\n  const resolveServerUrl = () => {\r\n    const manual = normalizeUrl(getLocalOverride()) || normalizeUrl(getGlobalOverride());\r\n    if (manual) return manual;\r\n\r\n    if (typeof window !== 'undefined') {\r\n      const hostname = window.location.hostname;\r\n      const isLocalhost = ['localhost', '127.0.0.1', '::1'].includes(hostname);\r\n      if (isLocalhost) return LOCAL_SERVER_URL;\r\n    }\r\n\r\n    return DEFAULT_RENDER_SERVER_URL;\r\n  };\r\n\r\n  const serverUrl = normalizeUrl(resolveServerUrl()) || DEFAULT_RENDER_SERVER_URL;\r\n\r\n  return {\r\n    SERVER_URL: serverUrl,\r\n    BASE_URL: `${serverUrl}/api`,\r\n    ADMIN_EMAIL: 'claudio.lobo@lobosti.com.br',\r\n  };\r\n})();\r\n\r\nif (typeof globalThis !== 'undefined') {\r\n  globalThis.API_CONFIG = API_CONFIG;\r\n}\r\n"
+        }
+    ]
+}
