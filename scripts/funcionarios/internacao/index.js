@@ -5827,11 +5827,19 @@ const VIEW_RENDERERS = {
   boxes: renderBoxes,
 };
 
+function isInternacaoAtiva(registro) {
+  const situacaoKey = normalizeActionKey(registro?.situacao || registro?.situacaoCodigo);
+  const cancelado = registro?.cancelado || situacaoKey === 'cancelado';
+  const obito = registro?.obitoRegistrado || situacaoKey === 'obito';
+  const alta = situacaoKey.includes('alta');
+  return !(cancelado || obito || alta);
+}
+
 function fillPetFilters(dataset, currentPetId, state = {}) {
   const baseOptions = [];
   if (Array.isArray(state?.internacoes) && state.internacoes.length) {
     const seen = new Set();
-    state.internacoes.forEach((registro) => {
+    state.internacoes.filter(isInternacaoAtiva).forEach((registro) => {
       const value = registro.filterKey;
       if (!value || seen.has(value)) return;
       seen.add(value);
@@ -5944,17 +5952,17 @@ async function fetchInternacoesData(dataset, state = {}, { quiet = false, onUpda
       return bTime - aTime;
     });
     if (dataset) dataset.internacoes = sorted;
-    if (state) {
-      state.internacoes = sorted;
-      state.internacoesLoading = false;
+  if (state) {
+    state.internacoes = sorted;
+    state.internacoesLoading = false;
+  }
+  if (state && state.petId) {
+    const availableKeys = new Set(sorted.filter(isInternacaoAtiva).map((item) => item.filterKey));
+    if (availableKeys.size && !availableKeys.has(state.petId)) {
+      state.petId = '';
     }
-    if (state && state.petId) {
-      const availableKeys = new Set(sorted.map((item) => item.filterKey));
-      if (availableKeys.size && !availableKeys.has(state.petId)) {
-        state.petId = '';
-      }
-    }
-    fillPetFilters(dataset, state?.petId, state);
+  }
+  fillPetFilters(dataset, state?.petId, state);
     if (typeof onUpdate === 'function') onUpdate();
     return sorted;
   } catch (error) {
