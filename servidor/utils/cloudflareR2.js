@@ -42,7 +42,10 @@ function buildPublicUrl(key) {
         const base = publicBaseUrl.replace(/\/$/, '');
         return `${base}/${encodeURI(normalizedKey)}`;
     }
-    return `https://${bucket}.${accountId}.r2.cloudflarestorage.com/${encodeURI(normalizedKey)}`;
+    // O domínio r2.cloudflarestorage.com funciona melhor usando o estilo de caminho
+    // (<account>/<bucket>/chave) para acesso público, evitando problemas de
+    // resolução em alguns navegadores e CDNs ao usar o bucket como subdomínio.
+    return `https://${accountId}.r2.cloudflarestorage.com/${bucket}/${encodeURI(normalizedKey)}`;
 }
 
 async function uploadBufferToR2(buffer, { key, contentType }) {
