@@ -28,7 +28,7 @@
             </div>
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-3">
               <button id="btn-novo-cliente" type="button" class="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 hover:shadow-sm">Novo Cliente</button>
-              <button form="cliente-form" id="btn-salvar-cliente" type="submit" class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 hover:shadow">Salvar</button>
+              <button form="cliente-form" id="btn-salvar-cliente" type="submit" class="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90 hover:shadow">Salvar</button>
             </div>
           </header>
 
@@ -38,22 +38,22 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label for="cliente-codigo" class="block text-sm font-medium text-gray-700">Código</label>
-                <input id="cliente-codigo" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 focus:border-indigo-500 focus:ring-indigo-500" placeholder="Gerado automaticamente" readonly />
+                <input id="cliente-codigo" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 focus:border-primary focus:ring-primary" placeholder="Gerado automaticamente" readonly />
               </div>
               <div>
                 <label for="cliente-tipo" class="block text-sm font-medium text-gray-700">Tipo</label>
-                <select id="cliente-tipo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                <select id="cliente-tipo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
                   <option value="pessoa_fisica">Pessoa Física</option>
                   <option value="pessoa_juridica">Pessoa Jurídica</option>
                 </select>
               </div>
               <div>
                 <label for="cliente-pais" class="block text-sm font-medium text-gray-700">País</label>
-                <input id="cliente-pais" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" value="Brasil" />
+                <input id="cliente-pais" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" value="Brasil" />
               </div>
               <div>
                 <label for="cliente-empresa" class="block text-sm font-medium text-gray-700">Empresa</label>
-                <select id="cliente-empresa" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                <select id="cliente-empresa" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
                   <option value="">Selecione uma empresa</option>
                 </select>
               </div>
@@ -62,27 +62,27 @@
             <div id="pf-fields" class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label for="cliente-nome" class="block text-sm font-medium text-gray-700">Nome completo <span class="text-red-500" aria-hidden="true">*</span></label>
-                <input id="cliente-nome" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" required aria-required="true" />
+                <input id="cliente-nome" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" required aria-required="true" />
               </div>
               <div>
                 <label for="cliente-apelido" class="block text-sm font-medium text-gray-700">Apelido</label>
-                <input id="cliente-apelido" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                <input id="cliente-apelido" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" />
               </div>
               <div>
                 <label for="cliente-cpf" class="block text-sm font-medium text-gray-700">CPF <span class="text-red-500" aria-hidden="true">*</span></label>
-                <input id="cliente-cpf" type="text" inputmode="numeric" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="000.000.000-00" required aria-required="true" />
+                <input id="cliente-cpf" type="text" inputmode="numeric" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" placeholder="000.000.000-00" required aria-required="true" />
               </div>
               <div>
                 <label for="cliente-rg" class="block text-sm font-medium text-gray-700">RG</label>
-                <input id="cliente-rg" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                <input id="cliente-rg" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" />
               </div>
               <div>
                 <label for="cliente-nascimento" class="block text-sm font-medium text-gray-700">Nascimento <span class="text-red-500" aria-hidden="true">*</span></label>
-                <input id="cliente-nascimento" type="date" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" required aria-required="true" />
+                <input id="cliente-nascimento" type="date" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" required aria-required="true" />
               </div>
               <div>
                 <label for="cliente-sexo" class="block text-sm font-medium text-gray-700">Sexo <span class="text-red-500" aria-hidden="true">*</span></label>
-                <select id="cliente-sexo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" required aria-required="true">
+                <select id="cliente-sexo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" required aria-required="true">
                   <option value="">Selecione</option>
                   <option value="masculino">Masculino</option>
                   <option value="feminino">Feminino</option>
@@ -95,27 +95,27 @@
             <div id="pj-fields" class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden">
               <div>
                 <label for="cliente-razao-social" class="block text-sm font-medium text-gray-700">Razão Social</label>
-                <input id="cliente-razao-social" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                <input id="cliente-razao-social" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" />
               </div>
               <div>
                 <label for="cliente-nome-fantasia" class="block text-sm font-medium text-gray-700">Nome Fantasia</label>
-                <input id="cliente-nome-fantasia" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                <input id="cliente-nome-fantasia" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" />
               </div>
               <div>
                 <label for="cliente-nome-contato" class="block text-sm font-medium text-gray-700">Nome do contato</label>
-                <input id="cliente-nome-contato" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                <input id="cliente-nome-contato" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" />
               </div>
               <div>
                 <label for="cliente-inscricao-estadual" class="block text-sm font-medium text-gray-700">Inscrição Estadual</label>
-                <input id="cliente-inscricao-estadual" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                <input id="cliente-inscricao-estadual" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" />
               </div>
               <div class="flex items-center gap-2 mt-2 md:mt-6">
-                <input id="cliente-isento-ie" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                <input id="cliente-isento-ie" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary" />
                 <label for="cliente-isento-ie" class="text-sm text-gray-700">Isento de IE</label>
               </div>
               <div>
                 <label for="cliente-estado-ie" class="block text-sm font-medium text-gray-700">Estado da IE</label>
-                <select id="cliente-estado-ie" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                <select id="cliente-estado-ie" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
                   <option value="">Selecione o estado</option>
                   <option value="AC">Acre</option>
                   <option value="AL">Alagoas</option>
@@ -150,7 +150,7 @@
 
             <div class="border-t pt-4">
               <div class="flex flex-wrap items-center gap-2 border-b pb-3">
-                <button type="button" class="tab-button px-4 py-2 rounded-md text-sm font-medium bg-indigo-100 text-indigo-700" data-tab="endereco">Endereço</button>
+                <button type="button" class="tab-button px-4 py-2 rounded-md text-sm font-medium bg-primary/10 text-primary" data-tab="endereco">Endereço</button>
                 <button type="button" class="tab-button px-4 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100" data-tab="contato">Contato</button>
                 <button type="button" class="tab-button px-4 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100" data-tab="pendencias">Pendências</button>
                 <button type="button" class="tab-button px-4 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100" data-tab="animais">Animais</button>
@@ -161,48 +161,48 @@
                   <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <label for="endereco-cep" class="block text-sm font-medium text-gray-700">CEP</label>
-                      <input id="endereco-cep" type="text" inputmode="numeric" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="00000-000" />
+                      <input id="endereco-cep" type="text" inputmode="numeric" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" placeholder="00000-000" />
                     </div>
                     <div>
                       <label for="endereco-logradouro" class="block text-sm font-medium text-gray-700">Logradouro</label>
-                      <input id="endereco-logradouro" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                      <input id="endereco-logradouro" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" />
                     </div>
                     <div>
                       <label for="endereco-numero" class="block text-sm font-medium text-gray-700">Número</label>
-                      <input id="endereco-numero" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                      <input id="endereco-numero" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" />
                     </div>
                     <div>
                       <label for="endereco-complemento" class="block text-sm font-medium text-gray-700">Complemento</label>
-                      <input id="endereco-complemento" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                      <input id="endereco-complemento" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" />
                     </div>
                     <div>
                       <label for="endereco-bairro" class="block text-sm font-medium text-gray-700">Bairro</label>
-                      <input id="endereco-bairro" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                      <input id="endereco-bairro" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" />
                     </div>
                     <div>
                       <label for="endereco-cidade" class="block text-sm font-medium text-gray-700">Cidade</label>
-                      <input id="endereco-cidade" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                      <input id="endereco-cidade" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" />
                     </div>
                     <div>
                       <label for="endereco-apelido" class="block text-sm font-medium text-gray-700">Apelido</label>
-                      <input id="endereco-apelido" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="Principal, Cobrança, etc." />
+                      <input id="endereco-apelido" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" placeholder="Principal, Cobrança, etc." />
                     </div>
                     <div>
                       <label for="endereco-cod-ibge" class="block text-sm font-medium text-gray-700">Cod. IBGE Município</label>
-                      <input id="endereco-cod-ibge" type="text" inputmode="numeric" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                      <input id="endereco-cod-ibge" type="text" inputmode="numeric" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" />
                     </div>
                     <div>
                       <label for="endereco-cod-uf" class="block text-sm font-medium text-gray-700">Cod. UF (IBGE/SEFAZ)</label>
-                      <input id="endereco-cod-uf" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                      <input id="endereco-cod-uf" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" />
                     </div>
                     <div>
                       <label for="endereco-pais" class="block text-sm font-medium text-gray-700">País</label>
-                      <input id="endereco-pais" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" value="Brasil" />
+                      <input id="endereco-pais" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" value="Brasil" />
                     </div>
                   </div>
 
                   <div class="mt-4 flex flex-wrap items-center gap-2">
-                    <button id="btn-endereco-salvar" type="button" class="px-4 py-2 rounded bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition">Salvar endereço</button>
+                    <button id="btn-endereco-salvar" type="button" class="px-4 py-2 rounded bg-primary text-white text-sm font-medium hover:bg-primary/90 transition">Salvar endereço</button>
                     <button id="btn-endereco-cancelar" type="button" class="px-4 py-2 rounded border border-gray-300 text-sm font-medium text-gray-600 hover:bg-gray-50 transition hidden">Cancelar</button>
                   </div>
 
@@ -217,23 +217,23 @@
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label for="cliente-email" class="block text-sm font-medium text-gray-700">Email</label>
-                      <input id="cliente-email" type="email" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                      <input id="cliente-email" type="email" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" />
                     </div>
                     <div>
                       <label for="cliente-celular" class="block text-sm font-medium text-gray-700">Celular</label>
-                      <input id="cliente-celular" type="text" inputmode="tel" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="(00) 00000-0000" />
+                      <input id="cliente-celular" type="text" inputmode="tel" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" placeholder="(00) 00000-0000" />
                     </div>
                     <div>
                       <label for="cliente-telefone" class="block text-sm font-medium text-gray-700">Telefone</label>
-                      <input id="cliente-telefone" type="text" inputmode="tel" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="(00) 0000-0000" />
+                      <input id="cliente-telefone" type="text" inputmode="tel" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" placeholder="(00) 0000-0000" />
                     </div>
                     <div>
                       <label for="cliente-celular2" class="block text-sm font-medium text-gray-700">Celular 2</label>
-                      <input id="cliente-celular2" type="text" inputmode="tel" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                      <input id="cliente-celular2" type="text" inputmode="tel" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" />
                     </div>
                     <div>
                       <label for="cliente-telefone2" class="block text-sm font-medium text-gray-700">Telefone 2</label>
-                      <input id="cliente-telefone2" type="text" inputmode="tel" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                      <input id="cliente-telefone2" type="text" inputmode="tel" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" />
                     </div>
                   </div>
                 </div>
@@ -253,7 +253,7 @@
                       <label for="pendencias-limite-credito" class="text-sm font-medium text-gray-600">Limite de crédito</label>
                       <div class="mt-2 flex rounded-md shadow-sm">
                         <span class="inline-flex items-center rounded-l-md border border-r-0 border-gray-300 bg-gray-50 px-3 text-sm text-gray-500">R$</span>
-                        <input id="pendencias-limite-credito" type="text" inputmode="decimal" class="-ml-px block w-full rounded-r-md border border-gray-300 py-2 pl-3 pr-3 text-base focus:border-indigo-500 focus:ring-indigo-500" placeholder="0,00" />
+                        <input id="pendencias-limite-credito" type="text" inputmode="decimal" class="-ml-px block w-full rounded-r-md border border-gray-300 py-2 pl-3 pr-3 text-base focus:border-primary focus:ring-primary" placeholder="0,00" />
                       </div>
                       <p class="mt-2 text-xs text-gray-500">Defina o limite de compras a prazo permitido para o cliente.</p>
                     </div>
@@ -276,15 +276,15 @@
                   <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
                       <label for="pet-codigo" class="block text-sm font-medium text-gray-700">Código</label>
-                      <input id="pet-codigo" type="text" class="mt-1 block w-full rounded-md border-gray-300 bg-gray-50 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="Gerado automaticamente" readonly />
+                      <input id="pet-codigo" type="text" class="mt-1 block w-full rounded-md border-gray-300 bg-gray-50 shadow-sm focus:border-primary focus:ring-primary" placeholder="Gerado automaticamente" readonly />
                     </div>
                     <div>
                       <label for="pet-nome" class="block text-sm font-medium text-gray-700">Nome do Pet</label>
-                      <input id="pet-nome" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                      <input id="pet-nome" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" />
                     </div>
                     <div>
                       <label for="pet-tipo" class="block text-sm font-medium text-gray-700">Tipo do Pet</label>
-                      <select id="pet-tipo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                      <select id="pet-tipo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
                         <option value="">Selecione</option>
                         <option value="cachorro">Cachorro</option>
                         <option value="gato">Gato</option>
@@ -298,7 +298,7 @@
                     </div>
                     <div>
                       <label for="pet-porte" class="block text-sm font-medium text-gray-700">Porte</label>
-                      <select id="pet-porte" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                      <select id="pet-porte" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
                         <option value="">Selecione</option>
                         <option value="Sem porte definido">Sem porte definido</option>
                         <option value="Mini">Mini</option>
@@ -310,23 +310,23 @@
                     </div>
                     <div>
                       <label for="pet-raca" class="block text-sm font-medium text-gray-700">Raça</label>
-                      <input id="pet-raca" type="text" class="awesomplete mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="Comece a digitar a raça..." />
+                      <input id="pet-raca" type="text" class="awesomplete mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" placeholder="Comece a digitar a raça..." />
                     </div>
                     <div>
                       <label for="pet-pelagem" class="block text-sm font-medium text-gray-700">Pelagem/Cor</label>
-                      <input id="pet-pelagem" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                      <input id="pet-pelagem" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" />
                     </div>
                     <div>
                       <label for="pet-nascimento" class="block text-sm font-medium text-gray-700">Nascimento</label>
-                      <input id="pet-nascimento" type="date" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                      <input id="pet-nascimento" type="date" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" />
                     </div>
                     <div>
                       <label for="pet-peso" class="block text-sm font-medium text-gray-700">Peso</label>
-                      <input id="pet-peso" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="Ex.: 8.5 kg" />
+                      <input id="pet-peso" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" placeholder="Ex.: 8.5 kg" />
                     </div>
                     <div>
                       <label for="pet-sexo" class="block text-sm font-medium text-gray-700">Sexo</label>
-                      <select id="pet-sexo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                      <select id="pet-sexo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
                         <option value="">Selecione</option>
                         <option value="macho">Macho</option>
                         <option value="femea">Fêmea</option>
@@ -334,15 +334,15 @@
                     </div>
                     <div>
                       <label for="pet-rga" class="block text-sm font-medium text-gray-700">RGA</label>
-                      <input id="pet-rga" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                      <input id="pet-rga" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" />
                     </div>
                     <div>
                       <label for="pet-microchip" class="block text-sm font-medium text-gray-700">Microchip</label>
-                      <input id="pet-microchip" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                      <input id="pet-microchip" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" />
                     </div>
                     <div class="md:col-span-2">
                       <div class="flex items-center gap-2 mt-2">
-                        <input id="pet-obito" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                        <input id="pet-obito" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary" />
                         <label for="pet-obito" class="text-sm font-medium text-gray-700">Óbito</label>
                       </div>
                       <p class="mt-1 text-xs text-gray-500">Ao marcar esta opção o pet não aparecerá mais nas demais telas.</p>
@@ -350,7 +350,7 @@
                   </div>
 
                   <div class="mt-4 flex flex-wrap items-center gap-2">
-                    <button id="btn-pet-salvar" type="button" class="px-4 py-2 rounded bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition">Adicionar pet</button>
+                    <button id="btn-pet-salvar" type="button" class="px-4 py-2 rounded bg-primary text-white text-sm font-medium hover:bg-primary/90 transition">Adicionar pet</button>
                     <button id="btn-pet-cancelar" type="button" class="px-4 py-2 rounded border border-gray-300 text-sm font-medium text-gray-600 hover:bg-gray-50 transition hidden">Cancelar edição</button>
                   </div>
 
@@ -373,7 +373,7 @@
               <p class="text-sm text-gray-500">Todos os usuários cadastrados são exibidos nesta lista.</p>
             </div>
             <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-2">
-              <input id="cliente-busca" type="text" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 md:w-64" placeholder="Buscar por nome, documento ou email" />
+              <input id="cliente-busca" type="text" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-primary focus:ring-primary md:w-64" placeholder="Buscar por nome, documento ou email" />
               <button id="btn-busca-cliente" type="button" class="flex items-center justify-center rounded-xl bg-gray-800 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-gray-900 hover:shadow"><i class="fas fa-search"></i></button>
             </div>
           </header>
