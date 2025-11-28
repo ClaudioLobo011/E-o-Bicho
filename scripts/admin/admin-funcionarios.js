@@ -126,6 +126,11 @@ document.addEventListener('DOMContentLoaded', () => {
     return String(value || '').replace(/\D/g, '');
   }
 
+  function normalizeCodigoCliente(value) {
+    const digits = onlyDigits(value).replace(/^0+/, '');
+    return digits ? String(Number.parseInt(digits, 10)) : '';
+  }
+
   function formatCEP(value = '') {
     const digits = onlyDigits(value).slice(0, 8);
     if (digits.length <= 5) return digits;
@@ -219,7 +224,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function setCodigoValue(value) {
     if (!inputCodigo) return;
-    if (value) {
+    const normalized = normalizeCodigoCliente(value);
+    if (normalized) {
+      inputCodigo.value = normalized;
+      inputCodigo.dataset.originalValue = normalized;
+      inputCodigo.dataset.hasValue = 'true';
+    } else if (value) {
       inputCodigo.value = value;
       inputCodigo.dataset.originalValue = value;
       inputCodigo.dataset.hasValue = 'true';
@@ -1246,7 +1256,9 @@ document.addEventListener('DOMContentLoaded', () => {
   function openModal(mode, data = null) {
     const opts = optionsForActor(ACTOR_ROLE);
     roleSelect.innerHTML = opts.map(v => `<option value="${v}">${ROLE_LABEL[v]}</option>`).join('');
-    const codigoValor = data?.codigo || data?.codigoFuncionario || data?.matricula || data?._id || '';
+    const codigoValor = normalizeCodigoCliente(
+      data?.codigoCliente ?? data?.codigo ?? data?.codigoFuncionario ?? data?.matricula,
+    );
     const dataCadastroValor = data?.dataCadastro || data?.criadoEm || data?.createdAt || '';
     const situacaoValor = data?.situacao || 'ativo';
     const sexoValor = normalizeSexoValue(data?.genero ?? data?.sexo);
@@ -1314,7 +1326,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       modalTitle.textContent = 'Editar Funcionário';
       inputId.value = data._id;
-      setCodigoValue(codigoValor);
+      setCodigoValue(codigoValor || data?._id || '');
       setDataCadastroValue(dataCadastroValor);
       inputNome.value = getNome(data);
       inputEmail.value = data.email || '';

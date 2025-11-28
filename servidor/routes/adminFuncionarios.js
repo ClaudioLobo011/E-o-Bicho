@@ -19,6 +19,14 @@ const RACA_COR_OPCOES = ['nao_informar', 'indigena', 'branco', 'preto', 'amarelo
 const DEFICIENCIA_OPCOES = ['nao_portador', 'fisica', 'auditiva', 'visual', 'intelectual', 'multipla'];
 const ESTADO_CIVIL_OPCOES = ['solteiro', 'casado', 'separado', 'viuvo'];
 
+function parseCodigoCliente(raw) {
+  if (raw === undefined || raw === null) return null;
+  const num = Number.parseInt(String(raw).replace(/\D/g, ''), 10);
+  if (!Number.isFinite(num)) return null;
+  if (num < 1) return null;
+  return num;
+}
+
 function escapeRegex(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -210,6 +218,8 @@ function normName(u) {
 function userToDTO(u) {
   return {
     _id: u._id,
+    codigo: parseCodigoCliente(u.codigoCliente) || null,
+    codigoCliente: parseCodigoCliente(u.codigoCliente) || null,
     email: u.email,
     role: u.role,
     tipoConta: u.tipoConta,
@@ -309,7 +319,7 @@ router.get('/', authMiddleware, requireAdmin, async (req, res) => {
     const users = await User
       .find(
         { role: { $in: ['admin_master', 'admin', 'funcionario'] } },
-        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero dataNascimento racaCor deficiencia estadoCivil situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios'
+        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero dataNascimento racaCor deficiencia estadoCivil situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios codigoCliente'
       )
       .lean();
 
@@ -359,7 +369,7 @@ router.get('/buscar-usuarios', authMiddleware, requireAdmin, async (req, res) =>
     const users = await User
       .find(
         filter,
-        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos genero dataNascimento racaCor deficiencia estadoCivil situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios'
+        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos genero dataNascimento racaCor deficiencia estadoCivil situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios codigoCliente'
       )
       .sort({ createdAt: -1 })
       .limit(lim)
@@ -394,7 +404,7 @@ router.post('/transformar', authMiddleware, requireAdmin, async (req, res) => {
 
     const ret = await User.findById(
       userId,
-      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero dataNascimento racaCor deficiencia estadoCivil rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios'
+      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero dataNascimento racaCor deficiencia estadoCivil rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios codigoCliente'
     ).lean();
     res.json({ message: 'Usuário transformado com sucesso.', funcionario: userToDTO(ret) });
   } catch (err) {
@@ -410,7 +420,7 @@ router.get('/:id', authMiddleware, requireAdmin, async (req, res) => {
   try {
     const u = await User.findById(
       req.params.id,
-      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero dataNascimento racaCor deficiencia estadoCivil rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios'
+      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero dataNascimento racaCor deficiencia estadoCivil rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios codigoCliente'
     ).lean();
     if (!u || !['admin_master', 'admin', 'funcionario'].includes(u.role)) {
       return res.status(404).json({ message: 'Funcionário não encontrado.' });
