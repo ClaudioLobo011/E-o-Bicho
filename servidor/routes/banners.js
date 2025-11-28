@@ -11,6 +11,12 @@ const {
     isDriveConfigured,
     deleteFile,
 } = require('../utils/googleDrive');
+const {
+    isR2Configured,
+    uploadBufferToR2,
+    deleteObjectFromR2,
+    buildPublicUrl,
+} = require('../utils/cloudflareR2');
 
 const bannerFolderEnv = process.env.BANNER_DRIVE_FOLDER_PATH || process.env.BANNER_DRIVE_FOLDER || 'banners';
 const bannerFolderSegments = bannerFolderEnv
@@ -29,7 +35,8 @@ function buildBannerFileName(originalName) {
     return `banner-${Date.now()}${ext || '.png'}`;
 }
 
-const storage = isDriveConfigured()
+const useMemoryStorage = isDriveConfigured() || isR2Configured();
+const storage = useMemoryStorage
     ? multer.memoryStorage()
     : multer.diskStorage({
         destination: (req, file, cb) => {
@@ -50,8 +57,14 @@ router.get('/', async (req, res) => {
 
         const bannersWithUrls = banners.map(banner => ({
             ...banner,
-            imageUrl: banner.imageUrl || buildDriveViewLink(banner.imageDriveFileId),
-            mobileImageUrl: banner.mobileImageUrl || buildDriveViewLink(banner.mobileImageDriveFileId)
+            imageUrl:
+                banner.imageUrl ||
+                buildDriveViewLink(banner.imageDriveFileId) ||
+                buildPublicUrl(banner.imageR2Key),
+            mobileImageUrl:
+                banner.mobileImageUrl ||
+                buildDriveViewLink(banner.mobileImageDriveFileId) ||
+                buildPublicUrl(banner.mobileImageR2Key)
         }));
 
         res.json(bannersWithUrls);
@@ -86,8 +99,30 @@ router.post(
             let mobileDriveFileId = '';
             let desktopDrivePath = '';
             let mobileDrivePath = '';
+            let desktopR2Key = '';
+            let mobileR2Key = '';
 
-            if (isDriveConfigured()) {
+            if (isR2Configured()) {
+                const desktopName = buildBannerFileName(desktopImage.originalname);
+                const desktopKey = [...bannerDrivePath, desktopName].join('/');
+                const desktopUpload = await uploadBufferToR2(desktopImage.buffer, {
+                    key: desktopKey,
+                    contentType: desktopImage.mimetype,
+                });
+                desktopR2Key = desktopUpload?.key || desktopKey;
+                desktopImageUrl = desktopUpload?.url || buildPublicUrl(desktopR2Key);
+
+                if (mobileImage) {
+                    const mobileName = buildBannerFileName(mobileImage.originalname);
+                    const mobileKey = [...bannerDrivePath, mobileName].join('/');
+                    const mobileUpload = await uploadBufferToR2(mobileImage.buffer, {
+                        key: mobileKey,
+                        contentType: mobileImage.mimetype,
+                    });
+                    mobileR2Key = mobileUpload?.key || mobileKey;
+                    mobileImageUrl = mobileUpload?.url || buildPublicUrl(mobileR2Key);
+                }
+            } else if (isDriveConfigured()) {
                 const desktopName = buildBannerFileName(desktopImage.originalname);
                 const desktopUpload = await uploadBufferToDrive(desktopImage.buffer, {
                     mimeType: desktopImage.mimetype,
@@ -121,6 +156,8 @@ router.post(
                 mobileImageUrl: mobileImageUrl,
                 mobileImageDriveFileId: mobileDriveFileId,
                 mobileImageDrivePath: mobileDrivePath,
+                imageR2Key: desktopR2Key,
+                mobileImageR2Key: mobileR2Key,
                 title,
                 subtitle,
                 buttonText,
@@ -145,7 +182,12 @@ router.delete('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), asyn
 
         await Banner.findByIdAndDelete(req.params.id);
 
-        if (isDriveConfigured()) {
+        if (isR2Configured()) {
+            const keysToDelete = [banner.imageR2Key, banner.mobileImageR2Key]
+                .map(value => (typeof value === 'string' ? value.trim() : ''))
+                .filter(Boolean);
+            await Promise.allSettled(keysToDelete.map(key => deleteObjectFromR2(key)));
+        } else if (isDriveConfigured()) {
             const driveIds = [banner.imageDriveFileId, banner.mobileImageDriveFileId]
                 .map(value => (typeof value === 'string' ? value.trim() : ''))
                 .filter(Boolean);
