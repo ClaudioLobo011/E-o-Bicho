@@ -10,6 +10,7 @@ const {
   getProductImagesDriveFolderPath,
   sanitizeBarcodeSegment,
 } = require('../utils/productImagePath');
+const { isR2Configured } = require('../utils/cloudflareR2');
 const {
   isDriveConfigured,
   listFilesInFolderByPath,
@@ -1090,7 +1091,52 @@ async function verifyAndLinkProductImages(options = {}) {
     });
   };
 
-  const driveAvailable = isDriveConfigured();
+  const r2Configured = typeof isR2Configured === 'function' ? isR2Configured() : false;
+
+  if (r2Configured) {
+    emitLog(
+      'As imagens de produtos agora são armazenadas no Cloudflare R2. Verificações em Google Drive ou pastas locais não são mais necessárias.',
+    );
+    safeNotify(callbacks.onStart, { totalProducts: 0 });
+    emitProgress();
+
+    return {
+      logs,
+      data: {
+        summary,
+        products: productsResult,
+        driveFolders: driveFoldersResult,
+        startedAt: startedAt.toISOString(),
+        finishedAt: new Date().toISOString(),
+        status: 'completed',
+        error: null,
+      },
+      meta,
+    };
+  }
+
+  const driveAvailable = false;
+
+  emitLog(
+    'Cloudflare R2 não está configurado. A verificação de imagens por Google Drive ou pastas locais foi desativada para evitar usos antigos.',
+    'error',
+  );
+
+  emitProgress();
+
+  return {
+    logs,
+    data: {
+      summary,
+      products: productsResult,
+      driveFolders: driveFoldersResult,
+      startedAt: startedAt.toISOString(),
+      finishedAt: new Date().toISOString(),
+      status: 'failed',
+      error: 'Configuração do Cloudflare R2 é obrigatória para processar imagens de produtos.',
+    },
+    meta,
+  };
 
   emitLog('Iniciando verificação das imagens vinculadas aos produtos.');
 

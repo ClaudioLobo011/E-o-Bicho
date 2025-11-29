@@ -4,13 +4,8 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const dotenv = require('dotenv');
-const fs = require('fs');
 const { verifyMailer } = require('./utils/mailer');
 const connectDB = require('./config/db');
-const {
-  getProductImagesRoot,
-  getProductImagesUrlPrefix,
-} = require('./utils/productImagePath');
 
 dotenv.config();
 connectDB();
@@ -30,15 +25,6 @@ app.use(express.json({ limit: BODY_PARSER_LIMIT }));
 app.use(express.urlencoded({ extended: true, limit: BODY_PARSER_LIMIT }));
 app.use(cors());
 app.use(express.static('public'));
-
-const productImagesRoot = getProductImagesRoot();
-const productImagesUrlPrefix = getProductImagesUrlPrefix();
-try {
-  fs.mkdirSync(productImagesRoot, { recursive: true });
-} catch (error) {
-  console.error('Não foi possível garantir a pasta de imagens de produtos:', error);
-}
-app.use(productImagesUrlPrefix, express.static(productImagesRoot));
 app.use('/api/funcionarios', require('./routes/adminFuncionarios'));
 
 
