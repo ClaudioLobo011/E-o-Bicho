@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const SearchTerm = require('../models/SearchTerm');
 const Product = require('../models/Product');
+const { applyProductImageUrls } = require('../utils/productImageUrl');
 
 function normalize(str) {
   return String(str || '')
@@ -65,7 +66,7 @@ router.get('/suggest', async (req, res) => {
       .limit(limit)
       .sort({ nome: 1 })
       .lean();
-    products.forEach(p => { if (!p.imagemPrincipal) p.imagemPrincipal = '/image/placeholder.png'; });
+    products.forEach(applyProductImageUrls);
 
     res.json({ terms: termList, products });
   } catch (e) {

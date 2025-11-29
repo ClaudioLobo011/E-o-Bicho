@@ -25,9 +25,9 @@ const {
     buildPublicUrl: buildR2PublicUrl,
     deleteObjectFromR2,
     isR2Configured,
-    parseKeyFromPublicUrl,
     uploadBufferToR2,
 } = require('../utils/cloudflareR2');
+const { applyProductImageUrls } = require('../utils/productImageUrl');
 
 const tempUploadDir = path.join(__dirname, '..', 'tmp', 'uploads', 'products');
 
@@ -858,7 +858,8 @@ router.get('/by-category', async (req, res) => {
             .sort({ nome: 1 })
             .lean();
 
-        products.forEach(p => { if (!p.imagemPrincipal) p.imagemPrincipal = '/image/placeholder.png'; });
+        products.forEach(applyProductImageUrls);
+
         res.json({ products, page: 1, pages: 1, total: products.length });
     } catch (error) {
         console.error("Erro ao buscar produtos por categoria:", error);
@@ -893,10 +894,8 @@ router.get('/', async (req, res) => {
 
         const total = await Product.countDocuments(query);
 
-        products.forEach(p => {
-            if (!p.imagemPrincipal) {
-                p.imagemPrincipal = '/image/placeholder.png';
-            }
+        products.forEach((p) => {
+            applyProductImageUrls(p);
 
             const fractionalStock = p?.fracionado?.ativo
                 ? Number(p?.fracionado?.estoqueEquivalente)
@@ -1212,7 +1211,7 @@ router.get('/:id', async (req, res) => {
             product.breadcrumbPath = [];
         }
 
-        res.json(product);
+        res.json(applyProductImageUrls(product));
     } catch (error) {
         console.error("Erro ao buscar produto por ID:", error);
         res.status(500).json({ message: 'Erro no servidor.' });
