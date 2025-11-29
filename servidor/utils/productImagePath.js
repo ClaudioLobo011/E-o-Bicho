@@ -4,6 +4,7 @@ const path = require('path');
 const DEFAULT_IMAGE_ROOT = path.join(__dirname, '..', 'public', 'uploads', 'Imagens');
 const DEFAULT_DRIVE_PATH = '/Compras/C_Produto/Imagens';
 const DEFAULT_URL_PREFIX = '/product-images';
+const DEFAULT_R2_BASE_PATH = 'produtos';
 const LEGACY_URL_PREFIX = '/uploads/products';
 const LEGACY_UPLOADS_DIR = path.join(__dirname, '..', 'public', 'uploads', 'products');
 const FALLBACK_BARCODE_SEGMENT = 'sem-codbarras';
@@ -135,6 +136,17 @@ function getProductImagesUrlPrefix() {
   return envPrefix || DEFAULT_URL_PREFIX;
 }
 
+function getProductImagesR2BasePath() {
+  const envValue = typeof process.env.PRODUCT_IMAGE_R2_BASE_PATH === 'string'
+    ? process.env.PRODUCT_IMAGE_R2_BASE_PATH.trim()
+    : '';
+  const segments = splitPathSegments(envValue);
+  if (segments.length) {
+    return segments.join('/');
+  }
+  return DEFAULT_R2_BASE_PATH;
+}
+
 function getProductImagesDriveBaseSegments() {
   return getProductImagesDriveBaseConfig().segments;
 }
@@ -205,6 +217,13 @@ function buildProductImagePublicPath(barcode, fileName) {
   const encodedFolder = encodeURIComponent(folderSegment);
   const encodedFile = encodeURIComponent(fileName);
   return `${prefix}/${encodedFolder}/${encodedFile}`;
+}
+
+function buildProductImageR2Key(barcode, fileName) {
+  const folderSegment = sanitizeBarcodeSegment(barcode);
+  const basePath = getProductImagesR2BasePath();
+  const baseSegments = splitPathSegments(basePath);
+  return [...baseSegments, folderSegment, fileName].join('/');
 }
 
 function resolveDiskPathFromPublicPath(imagePath) {
@@ -325,6 +344,7 @@ module.exports = {
   buildProductImageFileName,
   buildProductImagePublicPath,
   buildProductImageStoragePath,
+  buildProductImageR2Key,
   ensureProductImageFolder,
   getLegacyUploadsDir,
   getLegacyUrlPrefix,
@@ -333,6 +353,7 @@ module.exports = {
   getProductImagesDriveFolderIdHint,
   getProductImagesDriveFolderPath,
   getProductImagesRoot,
+  getProductImagesR2BasePath,
   getProductImagesUrlPrefix,
   listProductImageFiles,
   listProductImagePublicPaths,

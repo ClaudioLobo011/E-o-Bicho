@@ -42,7 +42,46 @@ function buildPublicUrl(key) {
         const base = publicBaseUrl.replace(/\/$/, '');
         return `${base}/${encodeURI(normalizedKey)}`;
     }
-    return `https://${bucket}.${accountId}.r2.cloudflarestorage.com/${encodeURI(normalizedKey)}`;
+    // O domínio r2.cloudflarestorage.com funciona melhor usando o estilo de caminho
+    // (<account>/<bucket>/chave) para acesso público, evitando problemas de
+    // resolução em alguns navegadores e CDNs ao usar o bucket como subdomínio.
+    return `https://${accountId}.r2.cloudflarestorage.com/${bucket}/${encodeURI(normalizedKey)}`;
+}
+
+function parseKeyFromPublicUrl(url) {
+    if (typeof url !== 'string') return null;
+
+    const trimmed = url.trim();
+    if (!trimmed) return null;
+
+    if (publicBaseUrl) {
+        const base = publicBaseUrl.replace(/\/$/, '');
+        if (trimmed.startsWith(base)) {
+            const remainder = trimmed.slice(base.length).replace(/^\/+/, '');
+            try {
+                return decodeURIComponent(remainder);
+            } catch (error) {
+                return remainder;
+            }
+        }
+    }
+
+    if (accountId && bucket) {
+        const base = `https://${accountId}.r2.cloudflarestorage.com`;
+        if (trimmed.startsWith(base)) {
+            const remainder = trimmed.slice(base.length).replace(/^\/+/, '');
+            if (remainder.startsWith(`${bucket}/`)) {
+                const keyPart = remainder.slice(bucket.length + 1);
+                try {
+                    return decodeURIComponent(keyPart);
+                } catch (error) {
+                    return keyPart;
+                }
+            }
+        }
+    }
+
+    return null;
 }
 
 async function uploadBufferToR2(buffer, { key, contentType }) {
@@ -82,4 +121,5 @@ module.exports = {
     uploadBufferToR2,
     deleteObjectFromR2,
     buildPublicUrl,
+    parseKeyFromPublicUrl,
 };
