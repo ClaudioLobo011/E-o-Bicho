@@ -262,7 +262,7 @@ const importProducts = async (socket, productsFromExcel, options = {}) => {
                 searchableString: normalizeText(`${product.nome} ${product.cod} ${product.marca || ''} ${product.codbarras}`),
                 unidade: effectiveUnit,
                 imagens: imagePathsForDB,
-                imagemPrincipal: imagePathsForDB.length > 0 ? imagePathsForDB[0] : '/image/placeholder.png',
+                imagemPrincipal: imagePathsForDB.length > 0 ? imagePathsForDB[0] : '/image/placeholder.svg',
                 estoques: normalizedStocks,
                 stock: totalStock
             };

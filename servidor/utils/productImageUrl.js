@@ -1,6 +1,6 @@
 const { buildPublicUrl: buildR2PublicUrl, parseKeyFromPublicUrl } = require('./cloudflareR2');
 
-const PLACEHOLDER_IMAGE = '/image/placeholder.png';
+const PLACEHOLDER_IMAGE = '/image/placeholder.svg';
 
 const normalizeProductImageUrl = (rawValue) => {
     const value = typeof rawValue === 'string' ? rawValue.trim() : '';

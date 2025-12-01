@@ -18,7 +18,7 @@ const {
   uploadBufferToDrive,
 } = require('../utils/googleDrive');
 
-const PLACEHOLDER_IMAGE = '/image/placeholder.png';
+const PLACEHOLDER_IMAGE = '/image/placeholder.svg';
 const DRIVE_FOLDER_MIME = 'application/vnd.google-apps.folder';
 const DRIVE_SHORTCUT_MIME = 'application/vnd.google-apps.shortcut';
 const MAX_DRIVE_FOLDER_DEPTH = 6;

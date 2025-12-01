@@ -69,7 +69,7 @@ function renderProducts(products, container) {
   const toReais = (n)=> `R$ ${Number(n||0).toFixed(2).replace('.', ',')}`;
 
   const html = products.map(p => {
-    const img = `${API_CONFIG.SERVER_URL}${p.imagemPrincipal || '/image/placeholder.png'}`;
+    const img = `${API_CONFIG.SERVER_URL}${p.imagemPrincipal || '/image/placeholder.svg'}`;
     let price = '';
     if (p.promocao && p.promocao.ativa && p.promocao.porcentagem > 0) {
       const disc = (p.venda||0) * (1 - (p.promocao.porcentagem/100));

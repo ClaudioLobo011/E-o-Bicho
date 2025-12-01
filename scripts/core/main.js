@@ -519,7 +519,7 @@ function initializeHeaderSearch() {
       ? products.filter(item => item && item.naoMostrarNoSite !== true)
       : [];
     const productCards = visibleProducts.map(p=>{
-      const imgSrc = p.imagemPrincipal ? `${API_CONFIG.SERVER_URL}${p.imagemPrincipal}` : `${API_CONFIG.SERVER_URL}/image/placeholder.png`;
+      const imgSrc = p.imagemPrincipal ? `${API_CONFIG.SERVER_URL}${p.imagemPrincipal}` : `${API_CONFIG.SERVER_URL}/image/placeholder.svg`;
       return `<a href="/pages/menu-departments-item/product.html?id=${p._id}" class="flex gap-3 border rounded-lg p-2 hover:shadow">
               <img src="${imgSrc}" class="w-16 h-16 object-contain bg-white rounded" alt="${p.nome}">
               <div class="min-w-0">

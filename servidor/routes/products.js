@@ -1003,7 +1003,7 @@ router.get('/by-barcode/:barcode', async (req, res) => {
         if (imageIndex >= 0 && product.imagens && product.imagens[imageIndex]) {
             product.imagemPrincipal = product.imagens[imageIndex];
         } else if (!product.imagemPrincipal) {
-            product.imagemPrincipal = '/image/placeholder.png';
+            product.imagemPrincipal = '/image/placeholder.svg';
         }
 
         res.json({ products: [product], page: 1, pages: 1, total: 1 });
@@ -2044,7 +2044,7 @@ router.patch(
             if (validOrder.length > 0) {
                 product.imagemPrincipal = validOrder[0];
             } else if (!product.imagemPrincipal || product.imagemPrincipal.includes('placeholder')) {
-                product.imagemPrincipal = '/image/placeholder.png';
+                product.imagemPrincipal = '/image/placeholder.svg';
             }
 
             await product.save();
@@ -2080,7 +2080,7 @@ router.delete('/:productId/images', requireAuth, authorizeRoles('admin', 'admin_
             console.warn('Falha ao remover arquivo do Cloudflare R2 ao apagar URL:', fileError);
         }
         if (product.imagemPrincipal === imageUrl) {
-            product.imagemPrincipal = product.imagens.length > 0 ? product.imagens[0] : '/image/placeholder.png';
+            product.imagemPrincipal = product.imagens.length > 0 ? product.imagens[0] : '/image/placeholder.svg';
         }
         await product.save();
         res.json({ message: 'Imagem apagada com sucesso.', product });
