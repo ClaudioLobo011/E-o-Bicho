@@ -355,6 +355,9 @@ async function uploadLocalProductImages(files = [], options = {}) {
     products: 0,
     images: 0,
     ignored: 0,
+    received: 0,
+    processed: 0,
+    skippedForLimit: 0,
   };
 
   const meta = {
@@ -407,9 +410,17 @@ async function uploadLocalProductImages(files = [], options = {}) {
     };
   }
 
+  summary.received = files.length;
+
   const limitedFiles = files.slice(0, MAX_UPLOAD_FILES);
-  if (files.length > MAX_UPLOAD_FILES) {
-    emitLog(`Limite de ${MAX_UPLOAD_FILES} arquivos excedido. Apenas os primeiros arquivos serão processados.`, 'warning');
+  summary.processed = limitedFiles.length;
+  summary.skippedForLimit = Math.max(0, files.length - limitedFiles.length);
+
+  if (summary.skippedForLimit > 0) {
+    emitLog(
+      `Limite de ${MAX_UPLOAD_FILES} arquivos excedido. Apenas os primeiros ${limitedFiles.length} serão processados agora.`,
+      'warning',
+    );
   }
 
   const groupedFiles = new Map();

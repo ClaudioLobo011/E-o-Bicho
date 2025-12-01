@@ -44,6 +44,7 @@
   const API_ENDPOINT_STATUS = `${API_BASE_URL}/admin/produtos/imagens/status`;
   const API_ENDPOINT_UPLOAD = `${API_BASE_URL}/admin/produtos/imagens/upload-local`;
   const CONSOLE_MAX_LINES = 200;
+  const MAX_UPLOAD_BATCH = 200;
 
   const state = {
     isProcessing: false,
@@ -78,6 +79,7 @@
       ignoredCount: 0,
       products: new Map(),
       isUploading: false,
+      completed: new Set(),
     },
   };
 
@@ -409,6 +411,47 @@
     };
   }
 
+  function mergeProductResults(rawProducts = []) {
+    const normalized = rawProducts.map(normalizeProduct);
+
+    normalized.forEach((product) => {
+      const existingIndex = state.products.findIndex((item) => item.id === product.id);
+      if (existingIndex >= 0) {
+        state.products[existingIndex] = product;
+      } else {
+        state.products.push(product);
+      }
+    });
+  }
+
+  function applyUploadSummary(summary = {}) {
+    const linked = Number(summary.linked ?? summary.uploaded ?? 0) || 0;
+    const images = Number(summary.images ?? linked) || 0;
+    const products = Number(summary.products ?? 0) || 0;
+
+    state.stats.linked += linked;
+    state.stats.images += images;
+
+    if (products) {
+      state.stats.products = Math.max(state.stats.products, products, state.products.length);
+    } else if (state.products.length) {
+      state.stats.products = Math.max(state.stats.products, state.products.length);
+    }
+
+    if (typeof summary.already !== 'undefined') {
+      state.stats.already += Number(summary.already || 0);
+    }
+
+    if (summary.skippedForLimit > 0) {
+      appendLog(
+        `Limite de ${MAX_UPLOAD_BATCH} arquivos por envio atingido. ${summary.skippedForLimit} arquivo${
+          summary.skippedForLimit === 1 ? '' : 's'
+        } ficou${summary.skippedForLimit === 1 ? '' : 'ram'} pendente${summary.skippedForLimit === 1 ? '' : 's'}.`,
+        'warning',
+      );
+    }
+  }
+
   function renderProducts() {
     if (!elements.productResults) {
       return;
@@ -516,6 +559,7 @@
     state.uploads.ignoredCount = 0;
     state.uploads.recognized = [];
     state.uploads.products = new Map();
+    state.uploads.completed = new Set();
 
     if (!files.length) {
       renderFolderSummary();
@@ -626,7 +670,7 @@
     elements.folderRecognized.textContent = recognized;
     elements.folderIgnored.textContent = ignored;
     elements.folderStatus.textContent = recognized
-      ? 'Arquivos prontos para enviar.'
+      ? `Arquivos prontos para enviar em lotes de até ${MAX_UPLOAD_BATCH}.`
       : total
         ? 'Nenhum arquivo no padrão codbarras-1.ext foi reconhecido.'
         : 'Nenhuma pasta selecionada.';
@@ -696,21 +740,71 @@
       return;
     }
 
+    const batches = [];
+    for (let index = 0; index < state.uploads.recognized.length; index += MAX_UPLOAD_BATCH) {
+      batches.push(state.uploads.recognized.slice(index, index + MAX_UPLOAD_BATCH));
+    }
+
     const token = getAuthToken();
     if (!token) {
       appendLog('Sessão expirada. Faça login novamente para enviar imagens.', 'error');
       return;
     }
 
+    setUploading(true, `Enviando 0/${batches.length}`);
+
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
+      const batch = batches[batchIndex];
+      const label = `Enviando ${batchIndex + 1}/${batches.length}`;
+      setUploading(true, label);
+      appendLog(`${label} (${batch.length} arquivo${batch.length === 1 ? '' : 's'}).`, 'info');
+
+      const batchResult = await sendUploadBatch(batch, token);
+      if (!batchResult?.success) {
+        appendLog('Envio interrompido. Corrija o erro e clique em enviar novamente para continuar de onde parou.', 'warning');
+        break;
+      }
+
+      const failedSources = batchResult.failedSources || new Set();
+      const processed = batch.filter((item) => {
+        const key = item.file?.name || `${item.barcode}-${item.sequence}`;
+        return !failedSources.has(key);
+      });
+
+      const processedSet = new Set(processed);
+      state.uploads.recognized = state.uploads.recognized.filter((item) => !processedSet.has(item));
+      processed.forEach((item) => {
+        const key = item.file?.name || `${item.barcode}-${item.sequence}`;
+        state.uploads.completed.add(key);
+      });
+
+      renderFolderSummary();
+      renderFolderResults();
+    }
+
+    if (state.uploads.recognized.length) {
+      appendLog(
+        `${state.uploads.recognized.length} arquivo${state.uploads.recognized.length === 1 ? '' : 's'} aguardando reenvio.`,
+        'info',
+      );
+    } else {
+      appendLog('Todos os arquivos selecionados foram processados.', 'success');
+    }
+
+    setUploading(false);
+  }
+
+  async function sendUploadBatch(batchItems, token) {
+    if (!Array.isArray(batchItems) || !batchItems.length) {
+      return { success: false, failedSources: new Set() };
+    }
+
     const formData = new FormData();
-    state.uploads.recognized.forEach((item) => {
+    batchItems.forEach((item) => {
       if (item.file) {
         formData.append('files', item.file, item.file.name);
       }
     });
-
-    setUploading(true);
-    appendLog('Enviando imagens para a Cloudflare...', 'info');
 
     try {
       const response = await fetch(API_ENDPOINT_UPLOAD, {
@@ -728,27 +822,49 @@
         throw new Error(message);
       }
 
-      appendLog(payload?.message || 'Upload concluído.', 'success');
+      const failedSources = new Set();
+
       if (Array.isArray(payload?.products)) {
-        state.products = payload.products.map(normalizeProduct);
+        payload.products.forEach((product) => {
+          if (!Array.isArray(product?.images)) return;
+          product.images.forEach((image) => {
+            if (image?.status === 'failed' && image?.source) {
+              failedSources.add(String(image.source));
+            }
+          });
+        });
+      }
+
+      appendLog(payload?.message || 'Lote enviado com sucesso.', failedSources.size ? 'warning' : 'success');
+
+      if (Array.isArray(payload?.products)) {
+        mergeProductResults(payload.products);
         renderProducts();
       }
 
       if (payload?.summary) {
-        state.stats.linked = Number(payload.summary.linked || payload.summary.uploaded || 0);
-        state.stats.images = Number(payload.summary.images || state.stats.images);
-        state.stats.products = Number(payload.summary.products || state.stats.products);
+        applyUploadSummary(payload.summary);
         renderStats();
       }
+
+      if (failedSources.size) {
+        appendLog(
+          `${failedSources.size} arquivo${failedSources.size === 1 ? '' : 's'} não foi${failedSources.size === 1 ? '' : 'ram'} enviado${
+            failedSources.size === 1 ? '' : 's'
+          } e permanecerá${failedSources.size === 1 ? '' : 'ão'} na lista para nova tentativa.`,
+          'warning',
+        );
+      }
+
+      return { success: true, failedSources };
     } catch (error) {
       console.error('Erro ao enviar imagens da pasta:', error);
       appendLog(error?.message || 'Não foi possível concluir o upload das imagens.', 'error');
-    } finally {
-      setUploading(false);
+      return { success: false, failedSources: new Set() };
     }
   }
 
-  function setUploading(isUploading) {
+  function setUploading(isUploading, labelText) {
     state.uploads.isUploading = isUploading;
     if (elements.folderUploadBtn) {
       elements.folderUploadBtn.disabled = isUploading || !state.uploads.recognized.length;
@@ -758,7 +874,7 @@
         icon.className = isUploading ? 'fas fa-spinner fa-spin' : 'fas fa-cloud-upload-alt';
       }
       if (label) {
-        label.textContent = isUploading ? 'Enviando...' : 'Enviar para Cloudflare';
+        label.textContent = isUploading ? labelText || 'Enviando...' : 'Enviar para Cloudflare';
       }
     }
   }
