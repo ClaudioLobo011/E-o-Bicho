@@ -168,7 +168,14 @@ async function renderProductDetails(product) {
 
     const placeholderOptions = ['/public/image/placeholder.svg', `${API_CONFIG.SERVER_URL}/image/placeholder.svg`, `${API_CONFIG.SERVER_URL}/image/placeholder.png`];
     const productImages = Array.isArray(product.imagens) ? product.imagens : [];
-    const allImages = [product.imagemPrincipal, ...productImages.filter(img => img !== product.imagemPrincipal)].filter(Boolean);
+    const normalizeImageUrl = (url) => {
+        if (!url) return null;
+        return /^https?:\/\//i.test(url) ? url : `${API_CONFIG.SERVER_URL}${url}`;
+    };
+
+    const allImages = [product.imagemPrincipal, ...productImages.filter(img => img !== product.imagemPrincipal)]
+        .map(normalizeImageUrl)
+        .filter(Boolean);
 
     const setMainImage = (src) => {
         let fallbackIndex = 0;
@@ -183,7 +190,7 @@ async function renderProductDetails(product) {
         mainImage.src = src || placeholderOptions[0];
     };
 
-    setMainImage(allImages.length ? `${API_CONFIG.SERVER_URL}${allImages[0]}` : placeholderOptions[0]);
+    setMainImage(allImages.length ? allImages[0] : placeholderOptions[0]);
     thumbnailGallery.innerHTML = '';
 
     const addThumbnail = (imgSrc, isActive = false) => {
@@ -225,8 +232,7 @@ async function renderProductDetails(product) {
     }
 
     allImages.forEach((imgSrc, index) => {
-        const fullSrc = `${API_CONFIG.SERVER_URL}${imgSrc}`;
-        addThumbnail(fullSrc, index === 0);
+        addThumbnail(imgSrc, index === 0);
     });
 }
 
