@@ -11,6 +11,7 @@ let lastResult = null;
 let currentResult = null;
 let isProcessing = false;
 const upload = multer({ storage: multer.memoryStorage() });
+const uploadAnyField = upload.any();
 
 function createEmptyResult() {
   const startedAt = new Date().toISOString();
@@ -176,10 +177,14 @@ router.post(
   '/imagens/upload-local',
   requireAuth,
   authorizeRoles('funcionario', 'admin', 'admin_master'),
-  upload.array('files', 200),
+  uploadAnyField,
   async (req, res) => {
     try {
-      const result = await uploadLocalProductImages(req.files || []);
+      const files = Array.isArray(req.files)
+        ? req.files
+        : Object.values(req.files || {}).flat();
+
+      const result = await uploadLocalProductImages(files || []);
 
       lastResult = result;
 
