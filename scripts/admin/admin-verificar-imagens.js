@@ -42,6 +42,7 @@
   const API_BASE_URL = resolveApiBaseUrl();
   const API_ENDPOINT_VERIFY = `${API_BASE_URL}/admin/produtos/imagens/verificar`;
   const API_ENDPOINT_STATUS = `${API_BASE_URL}/admin/produtos/imagens/status`;
+  const API_ENDPOINT_UPLOAD = `${API_BASE_URL}/admin/produtos/imagens/upload-local`;
   const CONSOLE_MAX_LINES = 200;
 
   const state = {
@@ -71,6 +72,13 @@
     },
     isLoadingStatus: false,
     awaitingBackgroundResult: false,
+    uploads: {
+      files: [],
+      recognized: [],
+      ignoredCount: 0,
+      products: new Map(),
+      isUploading: false,
+    },
   };
 
   const elements = {};
@@ -89,6 +97,17 @@
     elements.statsProducts = document.getElementById('stats-products');
     elements.statsImages = document.getElementById('stats-images');
     elements.productPanel = document.getElementById('product-panel');
+    elements.folderInput = document.getElementById('folder-input');
+    elements.folderTotal = document.getElementById('folder-total');
+    elements.folderRecognized = document.getElementById('folder-recognized');
+    elements.folderIgnored = document.getElementById('folder-ignored');
+    elements.folderStatus = document.getElementById('folder-status');
+    elements.folderProducts = document.getElementById('folder-products');
+    elements.folderImages = document.getElementById('folder-images');
+    elements.folderFeedback = document.getElementById('folder-feedback');
+    elements.folderResults = document.getElementById('folder-results');
+    elements.folderEmpty = document.getElementById('folder-empty');
+    elements.folderUploadBtn = document.getElementById('folder-upload-btn');
 
     if (!elements.startButton || !elements.console || !elements.productResults) {
       console.error('Não foi possível inicializar a tela de verificação de imagens. Elementos não encontrados.');
@@ -105,6 +124,9 @@
     elements.filterName?.addEventListener('input', handleFilterChange);
     elements.filterCode?.addEventListener('input', handleFilterChange);
     elements.filterBarcode?.addEventListener('input', handleFilterChange);
+
+    elements.folderInput?.addEventListener('change', handleFolderSelection);
+    elements.folderUploadBtn?.addEventListener('click', handleFolderUpload);
 
     elements.productResults.addEventListener('click', (event) => {
       const button = event.target.closest('[data-product-toggle]');
@@ -486,6 +508,259 @@
         `;
       })
       .join('');
+  }
+
+  function handleFolderSelection(event) {
+    const files = Array.from(event?.target?.files || []);
+    state.uploads.files = files;
+    state.uploads.ignoredCount = 0;
+    state.uploads.recognized = [];
+    state.uploads.products = new Map();
+
+    if (!files.length) {
+      renderFolderSummary();
+      renderFolderResults();
+      return;
+    }
+
+    const recognized = [];
+
+    files.forEach((file) => {
+      const parsed = parseFileName(file?.name);
+      if (!parsed) {
+        state.uploads.ignoredCount += 1;
+        return;
+      }
+
+      recognized.push({ ...parsed, file });
+    });
+
+    state.uploads.recognized = recognized;
+    renderFolderSummary();
+    renderFolderResults();
+    if (recognized.length) {
+      preloadProductsForFolder(recognized.map((item) => item.barcode));
+    }
+  }
+
+  async function preloadProductsForFolder(barcodes) {
+    if (!Array.isArray(barcodes) || !barcodes.length) {
+      return;
+    }
+
+    const unique = Array.from(new Set(barcodes.filter(Boolean)));
+    for (const barcode of unique) {
+      if (state.uploads.products.has(barcode)) {
+        continue;
+      }
+
+      const product = await fetchProductByBarcode(barcode);
+      state.uploads.products.set(barcode, product);
+      renderFolderResults();
+    }
+  }
+
+  function parseFileName(name) {
+    if (typeof name !== 'string') {
+      return null;
+    }
+
+    const cleaned = name.trim().split(/[/\\]/).pop();
+    const match = cleaned.match(/^(.+?)-(\d+)\.[^.]+$/);
+    if (!match) {
+      return null;
+    }
+
+    const rawBarcode = match[1].replace(/[^0-9a-zA-Z]/g, '');
+    const sequence = parseInt(match[2], 10);
+
+    if (!rawBarcode || Number.isNaN(sequence) || sequence <= 0) {
+      return null;
+    }
+
+    return {
+      barcode: rawBarcode,
+      sequence,
+    };
+  }
+
+  async function fetchProductByBarcode(barcode) {
+    if (!barcode) {
+      return null;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/products/by-barcode/${encodeURIComponent(barcode)}?includeHidden=true`);
+      if (!response.ok) {
+        return null;
+      }
+
+      const payload = await safeJson(response);
+      if (payload?.products?.length) {
+        const product = payload.products[0];
+        return {
+          id: String(product._id || product.id || product.cod || product.cod_produto || product.codbarras),
+          name: product.nome || product.name || 'Produto sem nome',
+          barcode: product.codbarras || barcode,
+          code: product.cod || product.codigo || '',
+        };
+      }
+    } catch (error) {
+      console.warn('Erro ao buscar produto por código de barras:', error);
+    }
+
+    return null;
+  }
+
+  function renderFolderSummary() {
+    if (!elements.folderTotal) {
+      return;
+    }
+
+    const total = state.uploads.files.length;
+    const recognized = state.uploads.recognized.length;
+    const ignored = state.uploads.ignoredCount;
+    const products = new Set(state.uploads.recognized.map((item) => item.barcode)).size;
+
+    elements.folderTotal.textContent = total;
+    elements.folderRecognized.textContent = recognized;
+    elements.folderIgnored.textContent = ignored;
+    elements.folderStatus.textContent = recognized
+      ? 'Arquivos prontos para enviar.'
+      : total
+        ? 'Nenhum arquivo no padrão codbarras-1.ext foi reconhecido.'
+        : 'Nenhuma pasta selecionada.';
+
+    elements.folderProducts.textContent = `${products} produto${products === 1 ? '' : 's'}`;
+    elements.folderImages.textContent = `${recognized} imagem${recognized === 1 ? '' : 's'}`;
+    elements.folderFeedback.textContent = recognized
+      ? 'Confirme abaixo os produtos identificados e envie quando estiver tudo certo.'
+      : 'Selecione uma pasta para visualizar os produtos encontrados.';
+
+    if (elements.folderUploadBtn) {
+      elements.folderUploadBtn.disabled = !recognized || state.uploads.isUploading;
+    }
+  }
+
+  function renderFolderResults() {
+    if (!elements.folderResults) {
+      return;
+    }
+
+    elements.folderResults.innerHTML = '';
+
+    const grouped = new Map();
+    state.uploads.recognized.forEach((item) => {
+      const list = grouped.get(item.barcode) || [];
+      list.push(item);
+      grouped.set(item.barcode, list);
+    });
+
+    if (!grouped.size) {
+      if (elements.folderEmpty) {
+        elements.folderResults.appendChild(elements.folderEmpty);
+      }
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    grouped.forEach((items, barcode) => {
+      const product = state.uploads.products.get(barcode) || null;
+      const sorted = items.slice().sort((a, b) => a.sequence - b.sequence);
+
+      const card = document.createElement('article');
+      card.className = 'rounded-lg border border-gray-200 bg-white p-4 shadow-sm';
+      card.innerHTML = `
+        <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 class="text-base font-semibold text-gray-800">${escapeHtml(product?.name || 'Produto não encontrado')}</h3>
+            <p class="text-sm text-gray-500">Código de barras: ${escapeHtml(barcode)}${product?.code ? ` • Código: ${escapeHtml(product.code)}` : ''}</p>
+          </div>
+          <span class="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">${sorted.length} imagem${sorted.length === 1 ? '' : 's'}</span>
+        </div>
+        <div class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          ${sorted
+            .map((item) => `<div class="rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700"><span class="text-xs uppercase text-gray-500">Sequência</span><p class="font-semibold text-gray-800">${escapeHtml(item.sequence)}</p><p class="truncate text-xs text-gray-500" title="${escapeHtml(item.file?.name || '')}">${escapeHtml(item.file?.name || '')}</p></div>`)
+            .join('')}
+        </div>
+      `;
+
+      fragment.appendChild(card);
+    });
+
+    elements.folderResults.appendChild(fragment);
+  }
+
+  async function handleFolderUpload() {
+    if (state.uploads.isUploading || !state.uploads.recognized.length) {
+      return;
+    }
+
+    const token = getAuthToken();
+    if (!token) {
+      appendLog('Sessão expirada. Faça login novamente para enviar imagens.', 'error');
+      return;
+    }
+
+    const formData = new FormData();
+    state.uploads.recognized.forEach((item) => {
+      if (item.file) {
+        formData.append('files', item.file, item.file.name);
+      }
+    });
+
+    setUploading(true);
+    appendLog('Enviando imagens para a Cloudflare...', 'info');
+
+    try {
+      const response = await fetch(API_ENDPOINT_UPLOAD, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      const payload = await safeJson(response);
+
+      if (!response.ok) {
+        const message = payload?.message || 'Falha ao enviar imagens. Verifique o padrão dos arquivos e tente novamente.';
+        throw new Error(message);
+      }
+
+      appendLog(payload?.message || 'Upload concluído.', 'success');
+      if (Array.isArray(payload?.products)) {
+        state.products = payload.products.map(normalizeProduct);
+        renderProducts();
+      }
+
+      if (payload?.summary) {
+        state.stats.linked = Number(payload.summary.linked || payload.summary.uploaded || 0);
+        state.stats.images = Number(payload.summary.images || state.stats.images);
+        state.stats.products = Number(payload.summary.products || state.stats.products);
+        renderStats();
+      }
+    } catch (error) {
+      console.error('Erro ao enviar imagens da pasta:', error);
+      appendLog(error?.message || 'Não foi possível concluir o upload das imagens.', 'error');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function setUploading(isUploading) {
+    state.uploads.isUploading = isUploading;
+    if (elements.folderUploadBtn) {
+      elements.folderUploadBtn.disabled = isUploading || !state.uploads.recognized.length;
+      const icon = elements.folderUploadBtn.querySelector('i');
+      const label = elements.folderUploadBtn.querySelector('span');
+      if (icon) {
+        icon.className = isUploading ? 'fas fa-spinner fa-spin' : 'fas fa-cloud-upload-alt';
+      }
+      if (label) {
+        label.textContent = isUploading ? 'Enviando...' : 'Enviar para Cloudflare';
+      }
+    }
   }
 
   function renderStats() {

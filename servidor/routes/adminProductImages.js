@@ -1,14 +1,16 @@
 const express = require('express');
+const multer = require('multer');
 const router = express.Router();
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
-const { verifyAndLinkProductImages } = require('../services/productImageVerification');
+const { verifyAndLinkProductImages, uploadLocalProductImages } = require('../services/productImageVerification');
 
 const LOG_LIMIT = 500;
 
 let lastResult = null;
 let currentResult = null;
 let isProcessing = false;
+const upload = multer({ storage: multer.memoryStorage() });
 
 function createEmptyResult() {
   const startedAt = new Date().toISOString();
@@ -169,5 +171,35 @@ router.post('/imagens/verificar', requireAuth, authorizeRoles('funcionario', 'ad
     status: sharedResult.data.status,
   });
 });
+
+router.post(
+  '/imagens/upload-local',
+  requireAuth,
+  authorizeRoles('funcionario', 'admin', 'admin_master'),
+  upload.array('files', 200),
+  async (req, res) => {
+    try {
+      const result = await uploadLocalProductImages(req.files || []);
+
+      lastResult = result;
+
+      const payload = {
+        message: 'Upload concluído.',
+        ...result,
+        summary: result?.data?.summary || {},
+        products: result?.data?.products || [],
+      };
+
+      if (result?.data?.status === 'failed') {
+        return res.status(400).json(payload);
+      }
+
+      return res.json(payload);
+    } catch (error) {
+      console.error('Erro ao receber upload de imagens locais:', error);
+      return res.status(500).json({ message: error?.message || 'Falha ao processar o upload de imagens.' });
+    }
+  }
+);
 
 module.exports = router;
