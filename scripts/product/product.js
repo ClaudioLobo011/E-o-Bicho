@@ -165,28 +165,74 @@ async function renderProductDetails(product) {
 
     const mainImage = document.getElementById('main-product-image');
     const thumbnailGallery = document.getElementById('thumbnail-gallery');
-    
-    mainImage.src = `${API_CONFIG.SERVER_URL}${product.imagemPrincipal}`;
-    thumbnailGallery.innerHTML = ''; 
 
-    const allImages = [product.imagemPrincipal, ...product.imagens.filter(img => img !== product.imagemPrincipal)];
+    const placeholderOptions = ['/public/image/placeholder.svg', `${API_CONFIG.SERVER_URL}/image/placeholder.svg`, `${API_CONFIG.SERVER_URL}/image/placeholder.png`];
+    const productImages = Array.isArray(product.imagens) ? product.imagens : [];
+    const normalizeImageUrl = (url) => {
+        if (!url) return null;
+        return /^https?:\/\//i.test(url) ? url : `${API_CONFIG.SERVER_URL}${url}`;
+    };
 
-    allImages.forEach(imgSrc => {
+    const allImages = [product.imagemPrincipal, ...productImages.filter(img => img !== product.imagemPrincipal)]
+        .map(normalizeImageUrl)
+        .filter(Boolean);
+
+    const setMainImage = (src) => {
+        let fallbackIndex = 0;
+        mainImage.onerror = () => {
+            if (fallbackIndex < placeholderOptions.length) {
+                mainImage.src = placeholderOptions[fallbackIndex++];
+                return;
+            }
+            mainImage.onerror = null;
+        };
+
+        mainImage.src = src || placeholderOptions[0];
+    };
+
+    setMainImage(allImages.length ? allImages[0] : placeholderOptions[0]);
+    thumbnailGallery.innerHTML = '';
+
+    const addThumbnail = (imgSrc, isActive = false) => {
         const thumb = document.createElement('img');
-        thumb.src = `${API_CONFIG.SERVER_URL}${imgSrc}`;
+        thumb.src = imgSrc;
         thumb.className = 'w-full h-20 object-contain rounded-md cursor-pointer border-2 border-transparent hover:border-primary transition-all p-1';
-        
-        if (imgSrc === product.imagemPrincipal) {
+
+        let fallbackIndex = 0;
+        thumb.onerror = () => {
+            if (fallbackIndex < placeholderOptions.length) {
+                const nextSrc = placeholderOptions[fallbackIndex++];
+                thumb.src = nextSrc;
+
+                if (isActive) {
+                    setMainImage(nextSrc);
+                }
+                return;
+            }
+
+            thumb.onerror = null;
+        };
+
+        if (isActive) {
             thumb.classList.add('border-primary');
             thumb.classList.remove('border-transparent');
         }
 
         thumb.addEventListener('click', () => {
-            mainImage.src = thumb.src;
+            setMainImage(thumb.src);
             thumbnailGallery.querySelectorAll('img').forEach(el => el.classList.remove('border-primary'));
             thumb.classList.add('border-primary');
         });
         thumbnailGallery.appendChild(thumb);
+    };
+
+    if (allImages.length === 0) {
+        addThumbnail(placeholderOptions[0], true);
+        return;
+    }
+
+    allImages.forEach((imgSrc, index) => {
+        addThumbnail(imgSrc, index === 0);
     });
 }
 

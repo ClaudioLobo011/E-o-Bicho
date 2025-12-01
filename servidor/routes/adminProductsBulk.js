@@ -58,8 +58,8 @@ const isValidImagePath = (value) => {
   const normalized = normalizeImagePath(value);
   if (!normalized) return false;
   const lower = normalized.toLowerCase();
-  if (lower === '/image/placeholder.png') return false;
-  if (lower.endsWith('/placeholder.png')) return false;
+  if (lower === '/image/placeholder.svg') return false;
+  if (lower.endsWith('/placeholder.svg')) return false;
   if (lower.includes('placeholder')) return false;
   return true;
 };

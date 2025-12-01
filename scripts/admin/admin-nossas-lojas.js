@@ -636,7 +636,7 @@ document.addEventListener('DOMContentLoaded', () => {
             checkbox.checked = false;
         });
 
-        imagePreview.src = '/public/image/placeholder.png';
+        imagePreview.src = '/public/image/placeholder.svg';
         imageInput.value = '';
         if (certificadoArquivoInput) certificadoArquivoInput.value = '';
         if (certificadoSenhaInput) certificadoSenhaInput.value = '';
@@ -813,7 +813,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const isAbsolute = /^https?:/i.test(store.imagem);
                 imagePreview.src = isAbsolute ? store.imagem : `${API_CONFIG.SERVER_URL}${store.imagem}`;
             } else {
-                imagePreview.src = '/public/image/placeholder.png';
+                imagePreview.src = '/public/image/placeholder.svg';
             }
             imageInput.value = '';
             if (certificadoArquivoInput) certificadoArquivoInput.value = '';
@@ -873,7 +873,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderServiceTags();
         activateTab('endereco');
         buildEnderecoCompleto();
-        imagePreview.src = '/public/image/placeholder.png';
+        imagePreview.src = '/public/image/placeholder.svg';
         imageInput.value = '';
         if (certificadoArquivoInput) certificadoArquivoInput.value = '';
         if (certificadoSenhaInput) certificadoSenhaInput.value = '';

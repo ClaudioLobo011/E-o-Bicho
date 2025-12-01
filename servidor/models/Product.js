@@ -80,7 +80,7 @@ const productSchema = new mongoose.Schema({
     venda: { type: Number, required: true },
     unidade: { type: String, trim: true, default: '' },
     referencia: { type: String, trim: true, default: '' },
-    imagemPrincipal: { type: String, default: '/image/placeholder.png' },
+    imagemPrincipal: { type: String, default: '/image/placeholder.svg' },
     imagens: [{ // Um array que guardará os caminhos para as imagens
         type: String
     }],

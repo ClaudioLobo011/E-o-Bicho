@@ -1,14 +1,17 @@
 const express = require('express');
+const multer = require('multer');
 const router = express.Router();
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
-const { verifyAndLinkProductImages } = require('../services/productImageVerification');
+const { verifyAndLinkProductImages, uploadLocalProductImages } = require('../services/productImageVerification');
 
 const LOG_LIMIT = 500;
 
 let lastResult = null;
 let currentResult = null;
 let isProcessing = false;
+const upload = multer({ storage: multer.memoryStorage() });
+const uploadAnyField = upload.any();
 
 function createEmptyResult() {
   const startedAt = new Date().toISOString();
@@ -23,7 +26,6 @@ function createEmptyResult() {
         images: 0,
       },
       products: [],
-      driveFolders: [],
       startedAt,
       finishedAt: null,
       status: 'processing',
@@ -73,10 +75,6 @@ function applyProgress(result, progress) {
       ...result.meta,
       ...progress.meta,
     };
-  }
-
-  if (Array.isArray(progress.driveFolders)) {
-    result.data.driveFolders = progress.driveFolders.slice();
   }
 }
 
@@ -174,5 +172,39 @@ router.post('/imagens/verificar', requireAuth, authorizeRoles('funcionario', 'ad
     status: sharedResult.data.status,
   });
 });
+
+router.post(
+  '/imagens/upload-local',
+  requireAuth,
+  authorizeRoles('funcionario', 'admin', 'admin_master'),
+  uploadAnyField,
+  async (req, res) => {
+    try {
+      const files = Array.isArray(req.files)
+        ? req.files
+        : Object.values(req.files || {}).flat();
+
+      const result = await uploadLocalProductImages(files || []);
+
+      lastResult = result;
+
+      const payload = {
+        message: 'Upload concluído.',
+        ...result,
+        summary: result?.data?.summary || {},
+        products: result?.data?.products || [],
+      };
+
+      if (result?.data?.status === 'failed') {
+        return res.status(400).json(payload);
+      }
+
+      return res.json(payload);
+    } catch (error) {
+      console.error('Erro ao receber upload de imagens locais:', error);
+      return res.status(500).json({ message: error?.message || 'Falha ao processar o upload de imagens.' });
+    }
+  }
+);
 
 module.exports = router;

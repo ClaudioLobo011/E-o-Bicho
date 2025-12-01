@@ -40,10 +40,11 @@
   }
 
   const API_BASE_URL = resolveApiBaseUrl();
-
   const API_ENDPOINT_VERIFY = `${API_BASE_URL}/admin/produtos/imagens/verificar`;
   const API_ENDPOINT_STATUS = `${API_BASE_URL}/admin/produtos/imagens/status`;
+  const API_ENDPOINT_UPLOAD = `${API_BASE_URL}/admin/produtos/imagens/upload-local`;
   const CONSOLE_MAX_LINES = 200;
+  const MAX_UPLOAD_BATCH = 200;
 
   const state = {
     isProcessing: false,
@@ -54,10 +55,6 @@
     },
     products: [],
     filteredProducts: [],
-    driveFolders: [],
-    currentFolders: [],
-    folderSearch: '',
-    showFoldersOnly: false,
     stats: {
       linked: 0,
       already: 0,
@@ -76,6 +73,14 @@
     },
     isLoadingStatus: false,
     awaitingBackgroundResult: false,
+    uploads: {
+      files: [],
+      recognized: [],
+      ignoredCount: 0,
+      products: new Map(),
+      isUploading: false,
+      completed: new Set(),
+    },
   };
 
   const elements = {};
@@ -93,13 +98,18 @@
     elements.statsAlready = document.getElementById('stats-already');
     elements.statsProducts = document.getElementById('stats-products');
     elements.statsImages = document.getElementById('stats-images');
-    elements.toggleFolderViewBtn = document.getElementById('toggle-folder-view-btn');
-    elements.folderResults = document.getElementById('folder-results');
-    elements.folderEmptyState = document.getElementById('folder-empty-state');
-    elements.folderPanel = document.getElementById('folder-panel');
-    elements.folderCount = document.getElementById('folder-count');
-    elements.folderIdFilter = document.getElementById('filter-folder-id');
     elements.productPanel = document.getElementById('product-panel');
+    elements.folderInput = document.getElementById('folder-input');
+    elements.folderTotal = document.getElementById('folder-total');
+    elements.folderRecognized = document.getElementById('folder-recognized');
+    elements.folderIgnored = document.getElementById('folder-ignored');
+    elements.folderStatus = document.getElementById('folder-status');
+    elements.folderProducts = document.getElementById('folder-products');
+    elements.folderImages = document.getElementById('folder-images');
+    elements.folderFeedback = document.getElementById('folder-feedback');
+    elements.folderResults = document.getElementById('folder-results');
+    elements.folderEmpty = document.getElementById('folder-empty');
+    elements.folderUploadBtn = document.getElementById('folder-upload-btn');
 
     if (!elements.startButton || !elements.console || !elements.productResults) {
       console.error('Não foi possível inicializar a tela de verificação de imagens. Elementos não encontrados.');
@@ -116,8 +126,9 @@
     elements.filterName?.addEventListener('input', handleFilterChange);
     elements.filterCode?.addEventListener('input', handleFilterChange);
     elements.filterBarcode?.addEventListener('input', handleFilterChange);
-    elements.toggleFolderViewBtn?.addEventListener('click', handleToggleFolderView);
-    elements.folderIdFilter?.addEventListener('input', handleFolderSearchChange);
+
+    elements.folderInput?.addEventListener('change', handleFolderSelection);
+    elements.folderUploadBtn?.addEventListener('click', handleFolderUpload);
 
     elements.productResults.addEventListener('click', (event) => {
       const button = event.target.closest('[data-product-toggle]');
@@ -147,9 +158,6 @@
 
     appendLog('Tela pronta para iniciar a verificação.', 'info');
     loadCurrentStatus({ skipCompletionMessage: true });
-    updateFolderCount(0, 0);
-    renderFolders();
-    renderViewMode();
   }
 
   async function handleStartVerification() {
@@ -160,7 +168,7 @@
 
     setProcessing(true);
     state.awaitingBackgroundResult = false;
-    appendLog('Enviando solicitação para verificar imagens no drive...', 'info');
+    appendLog('Enviando solicitação para verificar imagens e enviar à Cloudflare...', 'info');
 
     let waitingForBackground = false;
 
@@ -261,13 +269,8 @@
           state.meta.totalProducts = 0;
           state.meta.processedProducts = 0;
           state.filteredProducts = [];
-          state.driveFolders = [];
-          state.currentFolders = [];
-          state.showFoldersOnly = false;
           renderStats();
           renderProducts();
-          renderFolders();
-          renderViewMode();
           return;
         }
 
@@ -345,12 +348,8 @@
     const products = Array.isArray(data.products) ? data.products : [];
     state.products = products.map(normalizeProduct);
 
-    const driveFolders = Array.isArray(data.driveFolders) ? data.driveFolders : [];
-    state.driveFolders = driveFolders.map(normalizeDriveFolder).filter(Boolean);
-
     renderStats();
     renderProducts();
-    renderFolders();
 
     let status = data.status || payload.status || null;
 
@@ -362,38 +361,21 @@
       }
     }
 
-    if (status === 'processing') {
-      if (!state.isProcessing) {
-        setProcessing(true);
+    if (!fromPolling && !skipCompletionMessage) {
+      if (status === 'completed') {
+        appendLog('Verificação concluída.', 'success');
+      } else if (status === 'failed') {
+        appendLog('A verificação de imagens foi finalizada com erros.', 'error');
       }
-      state.awaitingBackgroundResult = true;
-      if (!fromPolling) {
-        startStatusPolling();
-      }
-      return;
     }
 
-    if (status === 'failed') {
-      state.awaitingBackgroundResult = false;
+    const expectBackground = status === 'processing' || status === 'queued' || state.awaitingBackgroundResult;
+    if (expectBackground) {
+      startStatusPolling();
+    } else {
       stopStatusPolling();
       setProcessing(false);
-      const errorMessage = data.error || payload.message || 'A verificação de imagens foi finalizada com erro.';
-      appendLog(errorMessage, 'error');
-      return;
-    }
-
-    if (status === 'completed') {
-      const shouldLogCompletion = !skipCompletionMessage || state.awaitingBackgroundResult;
       state.awaitingBackgroundResult = false;
-      stopStatusPolling();
-      setProcessing(false);
-
-      if (shouldLogCompletion) {
-        appendLog(
-          `Verificação finalizada. ${state.stats.linked} imagem(ns) vinculada(s) e ${state.stats.already} já vinculada(s).`,
-          'success'
-        );
-      }
     }
   }
 
@@ -414,33 +396,6 @@
 
     const images = Array.isArray(rawProduct.images) ? rawProduct.images : [];
 
-    const rawDriveFolder = rawProduct.driveFolder && typeof rawProduct.driveFolder === 'object'
-      ? rawProduct.driveFolder
-      : null;
-    const rawDriveFolderId = rawDriveFolder?.id ?? rawProduct.driveFolderId ?? null;
-    const rawDriveFolderName = rawDriveFolder?.name ?? rawProduct.driveFolderName ?? null;
-    const rawDriveFolderPath = rawDriveFolder?.path ?? rawProduct.driveFolderPath ?? null;
-
-    const normalizedFolderId = typeof rawDriveFolderId === 'string' && rawDriveFolderId.trim()
-      ? rawDriveFolderId.trim()
-      : rawDriveFolderId !== null && rawDriveFolderId !== undefined
-        ? String(rawDriveFolderId).trim()
-        : '';
-    const normalizedFolderName = typeof rawDriveFolderName === 'string' && rawDriveFolderName.trim()
-      ? rawDriveFolderName.trim()
-      : '';
-    const normalizedFolderPath = typeof rawDriveFolderPath === 'string' && rawDriveFolderPath.trim()
-      ? rawDriveFolderPath.trim()
-      : '';
-
-    const driveFolder = (normalizedFolderId || normalizedFolderName || normalizedFolderPath)
-      ? {
-          id: normalizedFolderId || '',
-          name: normalizedFolderName || '',
-          path: normalizedFolderPath || '',
-        }
-      : null;
-
     return {
       id: String(rawProduct.id ?? rawProduct.codigo ?? rawProduct.code ?? Math.random()).trim(),
       name: String(rawProduct.nome ?? rawProduct.name ?? 'Produto sem nome').trim(),
@@ -448,57 +403,53 @@
       barcode: String(rawProduct.codbarras ?? rawProduct.barcode ?? '').trim(),
       images: images.map((image, index) => ({
         sequence: image?.sequencia ?? image?.sequence ?? index + 1,
-        linkedNow: Boolean(image?.vinculadaAgora ?? image?.linkedNow),
-        alreadyLinked: Boolean(image?.jaVinculada ?? image?.alreadyLinked),
-        path: String(image?.path ?? image?.caminho ?? image?.url ?? '').trim(),
+        status: image?.status || 'unknown',
+        source: String(image?.origem ?? image?.source ?? image?.path ?? '').trim(),
+        destination: String(image?.destino ?? image?.destination ?? image?.newUrl ?? '').trim(),
+        message: String(image?.mensagem ?? image?.message ?? '').trim(),
       })),
-      driveFolder,
     };
   }
 
-  function normalizeDriveFolder(rawFolder) {
-    if (!rawFolder || typeof rawFolder !== 'object') {
-      return null;
+  function mergeProductResults(rawProducts = []) {
+    const normalized = rawProducts.map(normalizeProduct);
+
+    normalized.forEach((product) => {
+      const existingIndex = state.products.findIndex((item) => item.id === product.id);
+      if (existingIndex >= 0) {
+        state.products[existingIndex] = product;
+      } else {
+        state.products.push(product);
+      }
+    });
+  }
+
+  function applyUploadSummary(summary = {}) {
+    const linked = Number(summary.linked ?? summary.uploaded ?? 0) || 0;
+    const images = Number(summary.images ?? linked) || 0;
+    const products = Number(summary.products ?? 0) || 0;
+
+    state.stats.linked += linked;
+    state.stats.images += images;
+
+    if (products) {
+      state.stats.products = Math.max(state.stats.products, products, state.products.length);
+    } else if (state.products.length) {
+      state.stats.products = Math.max(state.stats.products, state.products.length);
     }
 
-    const normalizeText = (value) => {
-      if (value === null || value === undefined) {
-        return '';
-      }
-      if (typeof value === 'string') {
-        return value.trim();
-      }
-      try {
-        return String(value).trim();
-      } catch (error) {
-        return '';
-      }
-    };
+    if (typeof summary.already !== 'undefined') {
+      state.stats.already += Number(summary.already || 0);
+    }
 
-    const id = normalizeText(rawFolder.id ?? rawFolder.folderId);
-    const name = normalizeText(rawFolder.name ?? rawFolder.folderName);
-    const path = normalizeText(rawFolder.path ?? rawFolder.folderPath ?? rawFolder.readablePath);
-    const barcode = normalizeText(rawFolder.barcode ?? rawFolder.barcodeSegment);
-    const sourceRaw = normalizeText(rawFolder.source);
-    const source = sourceRaw === 'local' || sourceRaw === 'unknown' ? sourceRaw || 'drive' : 'drive';
-    const productCount = Number(rawFolder.productCount ?? rawFolder.products ?? 0) || 0;
-    const imageCount = Number(rawFolder.imageCount ?? rawFolder.images ?? 0) || 0;
-    const status = normalizeText(rawFolder.status);
-    const hasDrive = rawFolder.hasDrive !== undefined ? Boolean(rawFolder.hasDrive) : source !== 'local';
-
-    const resolvedName = name || path || id || 'Pasta sem nome';
-
-    return {
-      id,
-      name: resolvedName,
-      path,
-      barcode,
-      productCount,
-      imageCount,
-      source,
-      status: status || (productCount > 0 ? 'matched' : 'unmatched'),
-      hasDrive,
-    };
+    if (summary.skippedForLimit > 0) {
+      appendLog(
+        `Limite de ${MAX_UPLOAD_BATCH} arquivos por envio atingido. ${summary.skippedForLimit} arquivo${
+          summary.skippedForLimit === 1 ? '' : 's'
+        } ficou${summary.skippedForLimit === 1 ? '' : 'ram'} pendente${summary.skippedForLimit === 1 ? '' : 's'}.`,
+        'warning',
+      );
+    }
   }
 
   function renderProducts() {
@@ -523,8 +474,9 @@
     filtered.forEach((product, index) => {
       const itemId = `${product.id}-${index}`;
       const imagesCount = product.images.length;
-      const linkedNow = product.images.filter((img) => img.linkedNow).length;
-      const alreadyLinked = product.images.filter((img) => img.alreadyLinked && !img.linkedNow).length;
+      const uploaded = product.images.filter((img) => img.status === 'uploaded').length;
+      const already = product.images.filter((img) => img.status === 'already').length;
+      const failures = product.images.filter((img) => img.status === 'failed').length;
 
       const wrapper = document.createElement('article');
       wrapper.className = 'overflow-hidden rounded-lg border border-gray-200 shadow-sm';
@@ -541,7 +493,7 @@
           </div>
           <div class="flex flex-col items-end text-xs text-gray-500">
             <span class="font-semibold text-gray-700">${imagesCount} imagem(ns)</span>
-            <span>Novas: ${linkedNow} • Existentes: ${alreadyLinked}</span>
+            <span>Uploads: ${uploaded} • Cloudflare: ${already} • Falhas: ${failures}</span>
           </div>
           <i class="fas fa-chevron-down text-gray-400 transition-transform" data-chevron></i>
         </button>
@@ -558,252 +510,25 @@
     elements.productResults.appendChild(fragment);
   }
 
-  function renderFolders() {
-    if (!elements.folderResults) {
-      if (state.showFoldersOnly) {
-        state.showFoldersOnly = false;
-        renderViewMode();
-      }
-      return;
-    }
-
-    const filteredProducts = Array.isArray(state.filteredProducts) ? state.filteredProducts : applyFilters(state.products);
-    const driveFolderList = Array.isArray(state.driveFolders) ? state.driveFolders.slice() : [];
-    const folders = driveFolderList.length ? driveFolderList : buildDriveFolderMirrorFromProducts(filteredProducts);
-    const totalFolders = folders.length;
-    const searchTerm = typeof state.folderSearch === 'string' ? state.folderSearch.trim().toLowerCase() : '';
-    const searchActive = Boolean(searchTerm);
-    const filteredFolders = searchTerm
-      ? folders.filter((folder) => {
-          const id = (folder.id || '').toLowerCase();
-          const name = (folder.name || '').toLowerCase();
-          const path = (folder.path || '').toLowerCase();
-          return id.includes(searchTerm) || name.includes(searchTerm) || path.includes(searchTerm);
-        })
-      : folders;
-
-    state.currentFolders = filteredFolders;
-
-    updateFolderCount(totalFolders, filteredFolders.length);
-
-    const hasFolders = filteredFolders.length > 0;
-
-    if (elements.toggleFolderViewBtn) {
-      const disableToggle = !hasFolders;
-      elements.toggleFolderViewBtn.disabled = disableToggle;
-      elements.toggleFolderViewBtn.classList.toggle('opacity-60', disableToggle);
-      elements.toggleFolderViewBtn.classList.toggle('cursor-not-allowed', disableToggle);
-      elements.toggleFolderViewBtn.setAttribute('aria-disabled', disableToggle ? 'true' : 'false');
-    }
-
-    if (!hasFolders) {
-      if (elements.folderEmptyState) {
-        elements.folderEmptyState.textContent = searchActive
-          ? 'Nenhuma pasta encontrada para o ID informado.'
-          : 'Nenhuma pasta disponível. Execute uma verificação para carregar os dados.';
-        elements.folderEmptyState.classList.remove('hidden');
-      }
-      elements.folderResults.classList.add('hidden');
-      elements.folderResults.innerHTML = '';
-      if (state.showFoldersOnly) {
-        state.showFoldersOnly = false;
-      }
-      renderViewMode();
-      return;
-    }
-
-    if (elements.folderEmptyState) {
-      elements.folderEmptyState.classList.add('hidden');
-      elements.folderEmptyState.textContent = 'Nenhuma pasta disponível. Execute uma verificação para carregar os dados.';
-    }
-    elements.folderResults.classList.remove('hidden');
-
-    const fragment = document.createDocumentFragment();
-
-    filteredFolders.forEach((folder) => {
-      const item = document.createElement('li');
-      item.className = 'px-4 py-3 text-sm text-gray-700';
-
-      const folderName = escapeHtml(folder.name || 'Pasta sem nome');
-      const folderId = folder.id ? `drive://${escapeHtml(folder.id)}` : 'Não informado';
-      const folderPath = folder.path ? escapeHtml(folder.path) : '';
-      const folderPathTitle = folder.path ? escapeHtml(folder.path) : '';
-      const count = Number(folder.productCount) || 0;
-      const imageCount = Number(folder.imageCount) || 0;
-      const status = typeof folder.status === 'string' ? folder.status : '';
-      const badges = [];
-
-      if ((status === 'unmatched' || !count) && folder.hasDrive !== false) {
-        badges.push('<span class="inline-flex items-center rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">Sem produto vinculado</span>');
-      } else if (status === 'no-images') {
-        badges.push('<span class="inline-flex items-center rounded bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-700">Sem novas imagens</span>');
-      }
-
-      if (imageCount > 0) {
-        badges.push(`<span class="inline-flex items-center rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">${imageCount} imagem(ns)</span>`);
-      }
-
-      item.innerHTML = `
-        <div class="flex flex-col gap-2">
-          <div class="flex items-center justify-between gap-2">
-            <span class="font-semibold text-gray-800">${folderName}</span>
-            <div class="flex flex-col items-end gap-1 text-xs text-gray-500">
-              <span class="font-semibold text-gray-700">${count} produto(s)</span>
-              ${badges.length ? `<div class="flex flex-wrap justify-end gap-1">${badges.join('')}</div>` : ''}
-            </div>
-          </div>
-          <p class="text-xs text-gray-500 break-all">ID: ${folderId}</p>
-          ${folderPath
-            ? `<p class="text-xs text-gray-500 truncate" title="${folderPathTitle}">${folderPath}</p>`
-            : ''}
-        </div>
-      `;
-
-      fragment.appendChild(item);
-    });
-
-    elements.folderResults.innerHTML = '';
-    elements.folderResults.appendChild(fragment);
-
-    renderViewMode();
-  }
-
-  function buildDriveFolderMirrorFromProducts(products) {
-    if (!Array.isArray(products)) {
-      return [];
-    }
-
-    const foldersMap = new Map();
-
-    products.forEach((product) => {
-      const folder = product?.driveFolder;
-      if (!folder || typeof folder !== 'object') {
-        return;
-      }
-
-      const rawId = folder.id;
-      const rawName = folder.name;
-      const rawPath = folder.path;
-
-      const id = typeof rawId === 'string' && rawId.trim()
-        ? rawId.trim()
-        : rawId !== null && rawId !== undefined
-          ? String(rawId).trim()
-          : '';
-      const path = typeof rawPath === 'string' ? rawPath.trim() : '';
-      const name = typeof rawName === 'string' && rawName.trim()
-        ? rawName.trim()
-        : path || id;
-
-      if (!(id || name || path)) {
-        return;
-      }
-
-      const key = id || path || name;
-      if (!foldersMap.has(key)) {
-        foldersMap.set(key, {
-          id,
-          name,
-          path,
-          productCount: 0,
-          imageCount: 0,
-          status: 'matched',
-          hasDrive: true,
-          source: 'drive',
-        });
-      }
-
-      const entry = foldersMap.get(key);
-      entry.productCount += 1;
-      const productImages = Array.isArray(product.images) ? product.images.length : 0;
-      entry.imageCount += productImages;
-      if (!entry.name && name) {
-        entry.name = name;
-      }
-      if (!entry.path && path) {
-        entry.path = path;
-      }
-      if (!entry.id && id) {
-        entry.id = id;
-      }
-      const barcode = typeof product.barcode === 'string' ? product.barcode.trim() : '';
-      if (!entry.barcode && barcode) {
-        entry.barcode = barcode;
-      }
-    });
-
-    return Array.from(foldersMap.values()).sort((a, b) => {
-      const nameA = a.name || '';
-      const nameB = b.name || '';
-      return nameA.localeCompare(nameB, 'pt-BR', { numeric: true, sensitivity: 'base' });
-    });
-  }
-
-  function renderViewMode() {
-    const showOnlyFolders = Boolean(state.showFoldersOnly);
-
-    if (elements.productPanel) {
-      elements.productPanel.classList.toggle('hidden', showOnlyFolders);
-    }
-
-    if (elements.folderPanel) {
-      if (showOnlyFolders) {
-        elements.folderPanel.classList.remove('lg:col-span-2');
-        elements.folderPanel.classList.add('lg:col-span-5');
-      } else {
-        elements.folderPanel.classList.remove('lg:col-span-5');
-        elements.folderPanel.classList.add('lg:col-span-2');
-      }
-    }
-
-    if (elements.toggleFolderViewBtn) {
-      const label = elements.toggleFolderViewBtn.querySelector('span');
-      const icon = elements.toggleFolderViewBtn.querySelector('i');
-      if (label) {
-        label.textContent = showOnlyFolders ? 'Mostrar produtos e pastas' : 'Listar apenas pastas';
-      }
-      if (icon) {
-        icon.className = showOnlyFolders ? 'fas fa-layer-group' : 'fas fa-folder-open';
-      }
-      elements.toggleFolderViewBtn.setAttribute('aria-pressed', showOnlyFolders ? 'true' : 'false');
-    }
-  }
-
-  function handleFolderSearchChange(event) {
-    const value = typeof event?.target?.value === 'string' ? event.target.value : '';
-    state.folderSearch = value;
-    renderFolders();
-  }
-
-  function handleToggleFolderView() {
-    if (elements.toggleFolderViewBtn?.disabled) {
-      appendLog('Nenhuma pasta disponível para exibição no momento.', 'warning');
-      return;
-    }
-
-    if (!Array.isArray(state.currentFolders) || !state.currentFolders.length) {
-      appendLog('Nenhuma pasta disponível para exibição no momento.', 'warning');
-      return;
-    }
-
-    state.showFoldersOnly = !state.showFoldersOnly;
-    renderViewMode();
-  }
-
   function renderImages(images) {
     if (!images.length) {
-      return '<p class="text-sm text-gray-500">Nenhuma imagem vinculada.</p>';
+      return '<p class="text-sm text-gray-500">Nenhuma imagem processada.</p>';
     }
 
     return images
       .map((image) => {
         const badges = [];
-        if (image.linkedNow) {
-          badges.push('<span class="inline-flex items-center rounded bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">Vinculada agora</span>');
+        if (image.status === 'uploaded') {
+          badges.push('<span class="inline-flex items-center rounded bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">Enviada</span>');
+        } else if (image.status === 'already') {
+          badges.push('<span class="inline-flex items-center rounded bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-700">Já estava</span>');
+        } else if (image.status === 'failed') {
+          badges.push('<span class="inline-flex items-center rounded bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-700">Falha</span>');
         }
-        if (image.alreadyLinked) {
-          badges.push('<span class="inline-flex items-center rounded bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-700">Já vinculada</span>');
-        }
+
+        const destination = image.destination || 'Sem URL gerada';
+        const source = image.source || 'Origem não informada';
+        const message = image.message ? `<p class="text-xs text-amber-700">${escapeHtml(image.message)}</p>` : '';
 
         return `
           <div class="flex flex-col gap-1 rounded border border-gray-200 bg-white px-3 py-2">
@@ -811,11 +536,347 @@
               <span>Sequência: ${escapeHtml(String(image.sequence ?? '—'))}</span>
               <div class="flex flex-wrap gap-1">${badges.join(' ')}</div>
             </div>
-            <span class="truncate text-sm text-gray-700" title="${escapeHtml(image.path || 'Sem caminho definido')}">${escapeHtml(image.path || 'Sem caminho definido')}</span>
+            <div class="space-y-1 text-sm text-gray-700">
+              <div class="flex flex-col gap-0.5">
+                <span class="text-xs font-semibold text-gray-500">Origem</span>
+                <span class="truncate" title="${escapeHtml(source)}">${escapeHtml(source)}</span>
+              </div>
+              <div class="flex flex-col gap-0.5">
+                <span class="text-xs font-semibold text-gray-500">Destino</span>
+                <span class="truncate" title="${escapeHtml(destination)}">${escapeHtml(destination)}</span>
+              </div>
+              ${message}
+            </div>
           </div>
         `;
       })
       .join('');
+  }
+
+  function handleFolderSelection(event) {
+    const files = Array.from(event?.target?.files || []);
+    state.uploads.files = files;
+    state.uploads.ignoredCount = 0;
+    state.uploads.recognized = [];
+    state.uploads.products = new Map();
+    state.uploads.completed = new Set();
+
+    if (!files.length) {
+      renderFolderSummary();
+      renderFolderResults();
+      return;
+    }
+
+    const recognized = [];
+
+    files.forEach((file) => {
+      const parsed = parseFileName(file?.name);
+      if (!parsed) {
+        state.uploads.ignoredCount += 1;
+        return;
+      }
+
+      recognized.push({ ...parsed, file });
+    });
+
+    state.uploads.recognized = recognized;
+    renderFolderSummary();
+    renderFolderResults();
+    if (recognized.length) {
+      preloadProductsForFolder(recognized.map((item) => item.barcode));
+    }
+  }
+
+  async function preloadProductsForFolder(barcodes) {
+    if (!Array.isArray(barcodes) || !barcodes.length) {
+      return;
+    }
+
+    const unique = Array.from(new Set(barcodes.filter(Boolean)));
+    for (const barcode of unique) {
+      if (state.uploads.products.has(barcode)) {
+        continue;
+      }
+
+      const product = await fetchProductByBarcode(barcode);
+      state.uploads.products.set(barcode, product);
+      renderFolderResults();
+    }
+  }
+
+  function parseFileName(name) {
+    if (typeof name !== 'string') {
+      return null;
+    }
+
+    const cleaned = name.trim().split(/[/\\]/).pop();
+    const match = cleaned.match(/^(.+?)-(\d+)\.[^.]+$/);
+    if (!match) {
+      return null;
+    }
+
+    const rawBarcode = match[1].replace(/[^0-9a-zA-Z]/g, '');
+    const sequence = parseInt(match[2], 10);
+
+    if (!rawBarcode || Number.isNaN(sequence) || sequence <= 0) {
+      return null;
+    }
+
+    return {
+      barcode: rawBarcode,
+      sequence,
+    };
+  }
+
+  async function fetchProductByBarcode(barcode) {
+    if (!barcode) {
+      return null;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/products/by-barcode/${encodeURIComponent(barcode)}?includeHidden=true`);
+      if (!response.ok) {
+        return null;
+      }
+
+      const payload = await safeJson(response);
+      if (payload?.products?.length) {
+        const product = payload.products[0];
+        return {
+          id: String(product._id || product.id || product.cod || product.cod_produto || product.codbarras),
+          name: product.nome || product.name || 'Produto sem nome',
+          barcode: product.codbarras || barcode,
+          code: product.cod || product.codigo || '',
+        };
+      }
+    } catch (error) {
+      console.warn('Erro ao buscar produto por código de barras:', error);
+    }
+
+    return null;
+  }
+
+  function renderFolderSummary() {
+    if (!elements.folderTotal) {
+      return;
+    }
+
+    const total = state.uploads.files.length;
+    const recognized = state.uploads.recognized.length;
+    const ignored = state.uploads.ignoredCount;
+    const products = new Set(state.uploads.recognized.map((item) => item.barcode)).size;
+
+    elements.folderTotal.textContent = total;
+    elements.folderRecognized.textContent = recognized;
+    elements.folderIgnored.textContent = ignored;
+    elements.folderStatus.textContent = recognized
+      ? `Arquivos prontos para enviar em lotes de até ${MAX_UPLOAD_BATCH}.`
+      : total
+        ? 'Nenhum arquivo no padrão codbarras-1.ext foi reconhecido.'
+        : 'Nenhuma pasta selecionada.';
+
+    elements.folderProducts.textContent = `${products} produto${products === 1 ? '' : 's'}`;
+    elements.folderImages.textContent = `${recognized} imagem${recognized === 1 ? '' : 's'}`;
+    elements.folderFeedback.textContent = recognized
+      ? 'Confirme abaixo os produtos identificados e envie quando estiver tudo certo.'
+      : 'Selecione uma pasta para visualizar os produtos encontrados.';
+
+    if (elements.folderUploadBtn) {
+      elements.folderUploadBtn.disabled = !recognized || state.uploads.isUploading;
+    }
+  }
+
+  function renderFolderResults() {
+    if (!elements.folderResults) {
+      return;
+    }
+
+    elements.folderResults.innerHTML = '';
+
+    const grouped = new Map();
+    state.uploads.recognized.forEach((item) => {
+      const list = grouped.get(item.barcode) || [];
+      list.push(item);
+      grouped.set(item.barcode, list);
+    });
+
+    if (!grouped.size) {
+      if (elements.folderEmpty) {
+        elements.folderResults.appendChild(elements.folderEmpty);
+      }
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    grouped.forEach((items, barcode) => {
+      const product = state.uploads.products.get(barcode) || null;
+      const sorted = items.slice().sort((a, b) => a.sequence - b.sequence);
+
+      const card = document.createElement('article');
+      card.className = 'rounded-lg border border-gray-200 bg-white p-4 shadow-sm';
+      card.innerHTML = `
+        <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 class="text-base font-semibold text-gray-800">${escapeHtml(product?.name || 'Produto não encontrado')}</h3>
+            <p class="text-sm text-gray-500">Código de barras: ${escapeHtml(barcode)}${product?.code ? ` • Código: ${escapeHtml(product.code)}` : ''}</p>
+          </div>
+          <span class="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">${sorted.length} imagem${sorted.length === 1 ? '' : 's'}</span>
+        </div>
+        <div class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          ${sorted
+            .map((item) => `<div class="rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700"><span class="text-xs uppercase text-gray-500">Sequência</span><p class="font-semibold text-gray-800">${escapeHtml(item.sequence)}</p><p class="truncate text-xs text-gray-500" title="${escapeHtml(item.file?.name || '')}">${escapeHtml(item.file?.name || '')}</p></div>`)
+            .join('')}
+        </div>
+      `;
+
+      fragment.appendChild(card);
+    });
+
+    elements.folderResults.appendChild(fragment);
+  }
+
+  async function handleFolderUpload() {
+    if (state.uploads.isUploading || !state.uploads.recognized.length) {
+      return;
+    }
+
+    const batches = [];
+    for (let index = 0; index < state.uploads.recognized.length; index += MAX_UPLOAD_BATCH) {
+      batches.push(state.uploads.recognized.slice(index, index + MAX_UPLOAD_BATCH));
+    }
+
+    const token = getAuthToken();
+    if (!token) {
+      appendLog('Sessão expirada. Faça login novamente para enviar imagens.', 'error');
+      return;
+    }
+
+    setUploading(true, `Enviando 0/${batches.length}`);
+
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
+      const batch = batches[batchIndex];
+      const label = `Enviando ${batchIndex + 1}/${batches.length}`;
+      setUploading(true, label);
+      appendLog(`${label} (${batch.length} arquivo${batch.length === 1 ? '' : 's'}).`, 'info');
+
+      const batchResult = await sendUploadBatch(batch, token);
+      if (!batchResult?.success) {
+        appendLog('Envio interrompido. Corrija o erro e clique em enviar novamente para continuar de onde parou.', 'warning');
+        break;
+      }
+
+      const failedSources = batchResult.failedSources || new Set();
+      const processed = batch.filter((item) => {
+        const key = item.file?.name || `${item.barcode}-${item.sequence}`;
+        return !failedSources.has(key);
+      });
+
+      const processedSet = new Set(processed);
+      state.uploads.recognized = state.uploads.recognized.filter((item) => !processedSet.has(item));
+      processed.forEach((item) => {
+        const key = item.file?.name || `${item.barcode}-${item.sequence}`;
+        state.uploads.completed.add(key);
+      });
+
+      renderFolderSummary();
+      renderFolderResults();
+    }
+
+    if (state.uploads.recognized.length) {
+      appendLog(
+        `${state.uploads.recognized.length} arquivo${state.uploads.recognized.length === 1 ? '' : 's'} aguardando reenvio.`,
+        'info',
+      );
+    } else {
+      appendLog('Todos os arquivos selecionados foram processados.', 'success');
+    }
+
+    setUploading(false);
+  }
+
+  async function sendUploadBatch(batchItems, token) {
+    if (!Array.isArray(batchItems) || !batchItems.length) {
+      return { success: false, failedSources: new Set() };
+    }
+
+    const formData = new FormData();
+    batchItems.forEach((item) => {
+      if (item.file) {
+        formData.append('files', item.file, item.file.name);
+      }
+    });
+
+    try {
+      const response = await fetch(API_ENDPOINT_UPLOAD, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      const payload = await safeJson(response);
+
+      if (!response.ok) {
+        const message = payload?.message || 'Falha ao enviar imagens. Verifique o padrão dos arquivos e tente novamente.';
+        throw new Error(message);
+      }
+
+      const failedSources = new Set();
+
+      if (Array.isArray(payload?.products)) {
+        payload.products.forEach((product) => {
+          if (!Array.isArray(product?.images)) return;
+          product.images.forEach((image) => {
+            if (image?.status === 'failed' && image?.source) {
+              failedSources.add(String(image.source));
+            }
+          });
+        });
+      }
+
+      appendLog(payload?.message || 'Lote enviado com sucesso.', failedSources.size ? 'warning' : 'success');
+
+      if (Array.isArray(payload?.products)) {
+        mergeProductResults(payload.products);
+        renderProducts();
+      }
+
+      if (payload?.summary) {
+        applyUploadSummary(payload.summary);
+        renderStats();
+      }
+
+      if (failedSources.size) {
+        appendLog(
+          `${failedSources.size} arquivo${failedSources.size === 1 ? '' : 's'} não foi${failedSources.size === 1 ? '' : 'ram'} enviado${
+            failedSources.size === 1 ? '' : 's'
+          } e permanecerá${failedSources.size === 1 ? '' : 'ão'} na lista para nova tentativa.`,
+          'warning',
+        );
+      }
+
+      return { success: true, failedSources };
+    } catch (error) {
+      console.error('Erro ao enviar imagens da pasta:', error);
+      appendLog(error?.message || 'Não foi possível concluir o upload das imagens.', 'error');
+      return { success: false, failedSources: new Set() };
+    }
+  }
+
+  function setUploading(isUploading, labelText) {
+    state.uploads.isUploading = isUploading;
+    if (elements.folderUploadBtn) {
+      elements.folderUploadBtn.disabled = isUploading || !state.uploads.recognized.length;
+      const icon = elements.folderUploadBtn.querySelector('i');
+      const label = elements.folderUploadBtn.querySelector('span');
+      if (icon) {
+        icon.className = isUploading ? 'fas fa-spinner fa-spin' : 'fas fa-cloud-upload-alt';
+      }
+      if (label) {
+        label.textContent = isUploading ? labelText || 'Enviando...' : 'Enviar para Cloudflare';
+      }
+    }
   }
 
   function renderStats() {
@@ -847,45 +908,6 @@
     state.filters.code = elements.filterCode?.value?.trim().toLowerCase() || '';
     state.filters.barcode = elements.filterBarcode?.value?.trim().toLowerCase() || '';
     renderProducts();
-    renderFolders();
-  }
-
-  function updateFolderCount(total, visible) {
-    if (!elements.folderCount) {
-      return;
-    }
-
-    const safeTotal = normalizeFolderCount(total);
-    const safeVisible = normalizeFolderCount(visible);
-
-    let text;
-    if (safeTotal === 0) {
-      text = '0 pastas';
-    } else if (safeTotal === safeVisible) {
-      text = formatFolderCountLabel(safeVisible);
-    } else {
-      text = `${formatFolderCountLabel(safeVisible)} de ${formatFolderCountLabel(safeTotal)}`;
-    }
-
-    elements.folderCount.textContent = text;
-  }
-
-  function formatFolderCountLabel(value) {
-    const normalized = normalizeFolderCount(value);
-    return normalized === 1 ? '1 pasta' : `${normalized} pastas`;
-  }
-
-  function normalizeFolderCount(value) {
-    if (typeof value === 'number' && Number.isFinite(value)) {
-      return Math.max(0, Math.floor(value));
-    }
-
-    const numeric = Number(value);
-    if (Number.isFinite(numeric)) {
-      return Math.max(0, Math.floor(numeric));
-    }
-
-    return 0;
   }
 
   function applyFilters(products) {

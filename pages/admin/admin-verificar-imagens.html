@@ -22,11 +22,85 @@
             <div>
               <h1 class="text-2xl font-bold text-gray-800">Verificar Imagens de Produtos</h1>
               <p class="text-gray-600 mt-1 max-w-3xl">
-                Execute a verificação das imagens armazenadas no drive para vincular automaticamente aos produtos cadastrados.
-                Revise os resultados e acompanhe o histórico de mensagens no console abaixo.
+                Valide e envie as imagens dos produtos diretamente para a Cloudflare, atualizando os links salvos no catálogo.
+                Acompanhe o progresso e eventuais erros no console abaixo.
               </p>
             </div>
           </header>
+
+          <section class="space-y-4">
+            <header class="flex flex-col gap-1">
+              <h2 class="text-lg font-semibold text-gray-800">Envio por pasta de imagens</h2>
+              <p class="text-sm text-gray-500">
+                Selecione uma pasta com imagens nomeadas no formato <code>codbarras-1</code>, <code>codbarras-2</code>, etc. A
+                tela identifica os produtos, mostra quantas imagens foram encontradas e permite enviar tudo para a
+                Cloudflare de uma vez.
+              </p>
+            </header>
+
+            <div class="space-y-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+              <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <label class="flex flex-col gap-2 text-sm text-gray-700">
+                  <span class="font-semibold">Selecionar pasta</span>
+                  <input
+                    type="file"
+                    id="folder-input"
+                    webkitdirectory
+                    multiple
+                    class="w-full cursor-pointer rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    aria-describedby="folder-helper"
+                  />
+                  <span id="folder-helper" class="text-xs text-gray-500">Apenas arquivos com nome <code>codbarras-1.ext</code>
+                    serão considerados.</span>
+                </label>
+
+                <div class="flex flex-col justify-center rounded-lg bg-gray-50 p-3 text-sm text-gray-700">
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs uppercase text-gray-500">Arquivos lidos</span>
+                    <span id="folder-total" class="text-lg font-semibold text-gray-800">0</span>
+                  </div>
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs uppercase text-gray-500">Reconhecidos</span>
+                    <span id="folder-recognized" class="text-lg font-semibold text-gray-800">0</span>
+                  </div>
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs uppercase text-gray-500">Ignorados</span>
+                    <span id="folder-ignored" class="text-lg font-semibold text-gray-800">0</span>
+                  </div>
+                </div>
+
+                <div class="flex flex-col gap-2 rounded-lg bg-gray-50 p-3 text-sm text-gray-700">
+                  <p class="text-xs uppercase text-gray-500">Status</p>
+                  <p id="folder-status" class="text-sm text-gray-700">Nenhuma pasta selecionada.</p>
+                  <div class="flex flex-wrap gap-2">
+                    <span class="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary" id="folder-products">
+                      0 produtos</span>
+                    <span class="rounded-full bg-secondary/10 px-3 py-1 text-xs font-semibold text-secondary" id="folder-images">
+                      0 imagens</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex items-center justify-between gap-3">
+                <div class="text-sm text-gray-600" id="folder-feedback">Selecione uma pasta para visualizar os produtos encontrados.</div>
+                <button
+                  type="button"
+                  id="folder-upload-btn"
+                  class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled
+                >
+                  <i class="fas fa-cloud-upload-alt"></i>
+                  <span>Enviar para Cloudflare</span>
+                </button>
+              </div>
+
+              <div id="folder-results" class="space-y-3">
+                <div class="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 text-center text-sm text-gray-500" id="folder-empty">
+                  Nenhum arquivo carregado. Escolha uma pasta com imagens para pré-visualizar os produtos.
+                </div>
+              </div>
+            </div>
+          </section>
 
           <section class="space-y-4">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -90,15 +164,15 @@
 
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" id="verification-summary">
               <article class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-                <p class="text-xs uppercase text-gray-500">Vinculações realizadas</p>
+                <p class="text-xs uppercase text-gray-500">Uploads realizados</p>
                 <p id="stats-linked" class="mt-1 text-2xl font-semibold text-gray-800">0</p>
               </article>
               <article class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-                <p class="text-xs uppercase text-gray-500">Já vinculadas</p>
+                <p class="text-xs uppercase text-gray-500">Já na Cloudflare</p>
                 <p id="stats-already" class="mt-1 text-2xl font-semibold text-gray-800">0</p>
               </article>
               <article class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-                <p class="text-xs uppercase text-gray-500">Produtos com imagens</p>
+                <p class="text-xs uppercase text-gray-500">Produtos processados</p>
                 <p id="stats-products" class="mt-1 text-2xl font-semibold text-gray-800">0</p>
               </article>
               <article class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
@@ -112,63 +186,19 @@
             <header class="flex flex-col gap-1">
               <h2 class="text-lg font-semibold text-gray-800">Produtos encontrados</h2>
               <p class="text-sm text-gray-500">
-                Utilize a lista abaixo para conferir as imagens associadas a cada produto e visualize, ao lado, as pastas correspondentes no Google Drive.
+                Consulte as imagens enviadas para a Cloudflare por produto. Ajuste os filtros para localizar itens específicos.
               </p>
             </header>
 
-            <div class="grid gap-4 lg:grid-cols-5" id="product-folder-layout">
-              <div class="space-y-3 lg:col-span-3" id="product-panel">
-                <div
-                  id="product-empty-state"
-                  class="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500"
-                >
-                  Nenhuma informação disponível. Inicie uma verificação ou ajuste os filtros.
-                </div>
-
-                <div id="product-results" class="space-y-3"></div>
+            <div class="space-y-3" id="product-panel">
+              <div
+                id="product-empty-state"
+                class="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500"
+              >
+                Nenhuma informação disponível. Inicie uma verificação ou ajuste os filtros.
               </div>
 
-              <aside class="space-y-3 lg:col-span-2" id="folder-panel">
-                <div class="rounded-lg border border-gray-200 bg-white shadow-sm">
-                  <header class="flex flex-col gap-2 border-b border-gray-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div class="space-y-1">
-                      <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-600">Pastas do Drive</h3>
-                      <p class="text-xs text-gray-500">Espelho das pastas vinculadas aos produtos analisados.</p>
-                      <p id="folder-count" class="text-xs font-semibold text-gray-500">0 pastas</p>
-                    </div>
-                    <button
-                      type="button"
-                      id="toggle-folder-view-btn"
-                      class="inline-flex items-center justify-center gap-2 text-xs font-semibold text-primary transition hover:text-secondary"
-                    >
-                      <i class="fas fa-folder-open"></i>
-                      <span>Listar apenas pastas</span>
-                    </button>
-                  </header>
-                  <div class="border-b border-gray-200 px-4 py-3">
-                    <label class="flex flex-col gap-1 text-xs font-semibold text-gray-600">
-                      <span>ID da pasta</span>
-                      <input
-                        type="text"
-                        id="filter-folder-id"
-                        placeholder="Pesquisar por ID da pasta"
-                        class="rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal text-gray-800 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                      />
-                    </label>
-                  </div>
-                  <div
-                    id="folder-empty-state"
-                    class="px-4 py-6 text-center text-sm text-gray-500"
-                  >
-                    Nenhuma pasta disponível. Execute uma verificação para carregar os dados.
-                  </div>
-                  <ul
-                    id="folder-results"
-                    class="hidden divide-y divide-gray-200"
-                    aria-live="polite"
-                  ></ul>
-                </div>
-              </aside>
+              <div id="product-results" class="space-y-3"></div>
             </div>
           </section>
         </div>

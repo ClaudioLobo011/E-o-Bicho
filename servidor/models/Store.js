@@ -28,7 +28,7 @@ const storeSchema = new mongoose.Schema({
     emailFiscal: { type: String, trim: true },
     telefone: { type: String, trim: true },
     whatsapp: { type: String, trim: true },
-    imagem: { type: String, default: '/image/placeholder.png' },
+    imagem: { type: String, default: '/image/placeholder.svg' },
     endereco: { type: String, trim: true },
     cep: { type: String, trim: true },
     municipio: { type: String, trim: true },
