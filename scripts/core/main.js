@@ -1,5 +1,12 @@
 var basePath = basePath || '';
 
+function normalizeProductImageUrl(rawUrl) {
+  const placeholder = `${API_CONFIG.SERVER_URL}/image/placeholder.svg`;
+  const cleanUrl = typeof rawUrl === 'string' ? rawUrl.trim() : '';
+  if (!cleanUrl) return placeholder;
+  return /^https?:\/\//i.test(cleanUrl) ? cleanUrl : `${API_CONFIG.SERVER_URL}${cleanUrl}`;
+}
+
 async function loadComponents() {
     try {
         const placeholders = {
@@ -519,7 +526,7 @@ function initializeHeaderSearch() {
       ? products.filter(item => item && item.naoMostrarNoSite !== true)
       : [];
     const productCards = visibleProducts.map(p=>{
-      const imgSrc = p.imagemPrincipal ? `${API_CONFIG.SERVER_URL}${p.imagemPrincipal}` : `${API_CONFIG.SERVER_URL}/image/placeholder.svg`;
+      const imgSrc = normalizeProductImageUrl(p.imagemPrincipal);
       return `<a href="/pages/menu-departments-item/product.html?id=${p._id}" class="flex gap-3 border rounded-lg p-2 hover:shadow">
               <img src="${imgSrc}" class="w-16 h-16 object-contain bg-white rounded" alt="${p.nome}">
               <div class="min-w-0">
@@ -1302,7 +1309,7 @@ async function loadFeaturedProducts() {
 
                     <div class="p-4 product-info flex flex-col h-full">
                         <div class="relative w-full h-48 mb-4">
-                            <img src="${API_CONFIG.SERVER_URL}${product.imagemPrincipal}" alt="${product.nome}" class="w-full h-full object-cover rounded-md">
+                            <img src="${normalizeProductImageUrl(product.imagemPrincipal)}" alt="${product.nome}" class="w-full h-full object-cover rounded-md">
                             
                             <div class="add-to-cart absolute bottom-3 right-3 w-[55px] h-[55px] flex items-center justify-center rounded-full transition-all duration-300 opacity-0 group-hover:opacity-100 hover:bg-secondary" data-product-id="${product._id}">
                                 <div data-icon="sacola" class="w-[55px] h-[55px]"></div>
