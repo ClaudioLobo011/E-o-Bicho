@@ -40,7 +40,6 @@
   }
 
   const API_BASE_URL = resolveApiBaseUrl();
-
   const API_ENDPOINT_VERIFY = `${API_BASE_URL}/admin/produtos/imagens/verificar`;
   const API_ENDPOINT_STATUS = `${API_BASE_URL}/admin/produtos/imagens/status`;
   const CONSOLE_MAX_LINES = 200;
@@ -54,10 +53,6 @@
     },
     products: [],
     filteredProducts: [],
-    driveFolders: [],
-    currentFolders: [],
-    folderSearch: '',
-    showFoldersOnly: false,
     stats: {
       linked: 0,
       already: 0,
@@ -93,12 +88,6 @@
     elements.statsAlready = document.getElementById('stats-already');
     elements.statsProducts = document.getElementById('stats-products');
     elements.statsImages = document.getElementById('stats-images');
-    elements.toggleFolderViewBtn = document.getElementById('toggle-folder-view-btn');
-    elements.folderResults = document.getElementById('folder-results');
-    elements.folderEmptyState = document.getElementById('folder-empty-state');
-    elements.folderPanel = document.getElementById('folder-panel');
-    elements.folderCount = document.getElementById('folder-count');
-    elements.folderIdFilter = document.getElementById('filter-folder-id');
     elements.productPanel = document.getElementById('product-panel');
 
     if (!elements.startButton || !elements.console || !elements.productResults) {
@@ -116,8 +105,6 @@
     elements.filterName?.addEventListener('input', handleFilterChange);
     elements.filterCode?.addEventListener('input', handleFilterChange);
     elements.filterBarcode?.addEventListener('input', handleFilterChange);
-    elements.toggleFolderViewBtn?.addEventListener('click', handleToggleFolderView);
-    elements.folderIdFilter?.addEventListener('input', handleFolderSearchChange);
 
     elements.productResults.addEventListener('click', (event) => {
       const button = event.target.closest('[data-product-toggle]');
@@ -147,9 +134,6 @@
 
     appendLog('Tela pronta para iniciar a verificação.', 'info');
     loadCurrentStatus({ skipCompletionMessage: true });
-    updateFolderCount(0, 0);
-    renderFolders();
-    renderViewMode();
   }
 
   async function handleStartVerification() {
@@ -160,7 +144,7 @@
 
     setProcessing(true);
     state.awaitingBackgroundResult = false;
-    appendLog('Enviando solicitação para verificar imagens no drive...', 'info');
+    appendLog('Enviando solicitação para verificar imagens e enviar à Cloudflare...', 'info');
 
     let waitingForBackground = false;
 
@@ -261,13 +245,8 @@
           state.meta.totalProducts = 0;
           state.meta.processedProducts = 0;
           state.filteredProducts = [];
-          state.driveFolders = [];
-          state.currentFolders = [];
-          state.showFoldersOnly = false;
           renderStats();
           renderProducts();
-          renderFolders();
-          renderViewMode();
           return;
         }
 
@@ -345,12 +324,8 @@
     const products = Array.isArray(data.products) ? data.products : [];
     state.products = products.map(normalizeProduct);
 
-    const driveFolders = Array.isArray(data.driveFolders) ? data.driveFolders : [];
-    state.driveFolders = driveFolders.map(normalizeDriveFolder).filter(Boolean);
-
     renderStats();
     renderProducts();
-    renderFolders();
 
     let status = data.status || payload.status || null;
 
@@ -362,38 +337,21 @@
       }
     }
 
-    if (status === 'processing') {
-      if (!state.isProcessing) {
-        setProcessing(true);
+    if (!fromPolling && !skipCompletionMessage) {
+      if (status === 'completed') {
+        appendLog('Verificação concluída.', 'success');
+      } else if (status === 'failed') {
+        appendLog('A verificação de imagens foi finalizada com erros.', 'error');
       }
-      state.awaitingBackgroundResult = true;
-      if (!fromPolling) {
-        startStatusPolling();
-      }
-      return;
     }
 
-    if (status === 'failed') {
-      state.awaitingBackgroundResult = false;
+    const expectBackground = status === 'processing' || status === 'queued' || state.awaitingBackgroundResult;
+    if (expectBackground) {
+      startStatusPolling();
+    } else {
       stopStatusPolling();
       setProcessing(false);
-      const errorMessage = data.error || payload.message || 'A verificação de imagens foi finalizada com erro.';
-      appendLog(errorMessage, 'error');
-      return;
-    }
-
-    if (status === 'completed') {
-      const shouldLogCompletion = !skipCompletionMessage || state.awaitingBackgroundResult;
       state.awaitingBackgroundResult = false;
-      stopStatusPolling();
-      setProcessing(false);
-
-      if (shouldLogCompletion) {
-        appendLog(
-          `Verificação finalizada. ${state.stats.linked} imagem(ns) vinculada(s) e ${state.stats.already} já vinculada(s).`,
-          'success'
-        );
-      }
     }
   }
 
@@ -414,33 +372,6 @@
 
     const images = Array.isArray(rawProduct.images) ? rawProduct.images : [];
 
-    const rawDriveFolder = rawProduct.driveFolder && typeof rawProduct.driveFolder === 'object'
-      ? rawProduct.driveFolder
-      : null;
-    const rawDriveFolderId = rawDriveFolder?.id ?? rawProduct.driveFolderId ?? null;
-    const rawDriveFolderName = rawDriveFolder?.name ?? rawProduct.driveFolderName ?? null;
-    const rawDriveFolderPath = rawDriveFolder?.path ?? rawProduct.driveFolderPath ?? null;
-
-    const normalizedFolderId = typeof rawDriveFolderId === 'string' && rawDriveFolderId.trim()
-      ? rawDriveFolderId.trim()
-      : rawDriveFolderId !== null && rawDriveFolderId !== undefined
-        ? String(rawDriveFolderId).trim()
-        : '';
-    const normalizedFolderName = typeof rawDriveFolderName === 'string' && rawDriveFolderName.trim()
-      ? rawDriveFolderName.trim()
-      : '';
-    const normalizedFolderPath = typeof rawDriveFolderPath === 'string' && rawDriveFolderPath.trim()
-      ? rawDriveFolderPath.trim()
-      : '';
-
-    const driveFolder = (normalizedFolderId || normalizedFolderName || normalizedFolderPath)
-      ? {
-          id: normalizedFolderId || '',
-          name: normalizedFolderName || '',
-          path: normalizedFolderPath || '',
-        }
-      : null;
-
     return {
       id: String(rawProduct.id ?? rawProduct.codigo ?? rawProduct.code ?? Math.random()).trim(),
       name: String(rawProduct.nome ?? rawProduct.name ?? 'Produto sem nome').trim(),
@@ -448,56 +379,11 @@
       barcode: String(rawProduct.codbarras ?? rawProduct.barcode ?? '').trim(),
       images: images.map((image, index) => ({
         sequence: image?.sequencia ?? image?.sequence ?? index + 1,
-        linkedNow: Boolean(image?.vinculadaAgora ?? image?.linkedNow),
-        alreadyLinked: Boolean(image?.jaVinculada ?? image?.alreadyLinked),
-        path: String(image?.path ?? image?.caminho ?? image?.url ?? '').trim(),
+        status: image?.status || 'unknown',
+        source: String(image?.origem ?? image?.source ?? image?.path ?? '').trim(),
+        destination: String(image?.destino ?? image?.destination ?? image?.newUrl ?? '').trim(),
+        message: String(image?.mensagem ?? image?.message ?? '').trim(),
       })),
-      driveFolder,
-    };
-  }
-
-  function normalizeDriveFolder(rawFolder) {
-    if (!rawFolder || typeof rawFolder !== 'object') {
-      return null;
-    }
-
-    const normalizeText = (value) => {
-      if (value === null || value === undefined) {
-        return '';
-      }
-      if (typeof value === 'string') {
-        return value.trim();
-      }
-      try {
-        return String(value).trim();
-      } catch (error) {
-        return '';
-      }
-    };
-
-    const id = normalizeText(rawFolder.id ?? rawFolder.folderId);
-    const name = normalizeText(rawFolder.name ?? rawFolder.folderName);
-    const path = normalizeText(rawFolder.path ?? rawFolder.folderPath ?? rawFolder.readablePath);
-    const barcode = normalizeText(rawFolder.barcode ?? rawFolder.barcodeSegment);
-    const sourceRaw = normalizeText(rawFolder.source);
-    const source = sourceRaw === 'local' || sourceRaw === 'unknown' ? sourceRaw || 'drive' : 'drive';
-    const productCount = Number(rawFolder.productCount ?? rawFolder.products ?? 0) || 0;
-    const imageCount = Number(rawFolder.imageCount ?? rawFolder.images ?? 0) || 0;
-    const status = normalizeText(rawFolder.status);
-    const hasDrive = rawFolder.hasDrive !== undefined ? Boolean(rawFolder.hasDrive) : source !== 'local';
-
-    const resolvedName = name || path || id || 'Pasta sem nome';
-
-    return {
-      id,
-      name: resolvedName,
-      path,
-      barcode,
-      productCount,
-      imageCount,
-      source,
-      status: status || (productCount > 0 ? 'matched' : 'unmatched'),
-      hasDrive,
     };
   }
 
@@ -523,8 +409,9 @@
     filtered.forEach((product, index) => {
       const itemId = `${product.id}-${index}`;
       const imagesCount = product.images.length;
-      const linkedNow = product.images.filter((img) => img.linkedNow).length;
-      const alreadyLinked = product.images.filter((img) => img.alreadyLinked && !img.linkedNow).length;
+      const uploaded = product.images.filter((img) => img.status === 'uploaded').length;
+      const already = product.images.filter((img) => img.status === 'already').length;
+      const failures = product.images.filter((img) => img.status === 'failed').length;
 
       const wrapper = document.createElement('article');
       wrapper.className = 'overflow-hidden rounded-lg border border-gray-200 shadow-sm';
@@ -541,7 +428,7 @@
           </div>
           <div class="flex flex-col items-end text-xs text-gray-500">
             <span class="font-semibold text-gray-700">${imagesCount} imagem(ns)</span>
-            <span>Novas: ${linkedNow} • Existentes: ${alreadyLinked}</span>
+            <span>Uploads: ${uploaded} • Cloudflare: ${already} • Falhas: ${failures}</span>
           </div>
           <i class="fas fa-chevron-down text-gray-400 transition-transform" data-chevron></i>
         </button>
@@ -558,252 +445,25 @@
     elements.productResults.appendChild(fragment);
   }
 
-  function renderFolders() {
-    if (!elements.folderResults) {
-      if (state.showFoldersOnly) {
-        state.showFoldersOnly = false;
-        renderViewMode();
-      }
-      return;
-    }
-
-    const filteredProducts = Array.isArray(state.filteredProducts) ? state.filteredProducts : applyFilters(state.products);
-    const driveFolderList = Array.isArray(state.driveFolders) ? state.driveFolders.slice() : [];
-    const folders = driveFolderList.length ? driveFolderList : buildDriveFolderMirrorFromProducts(filteredProducts);
-    const totalFolders = folders.length;
-    const searchTerm = typeof state.folderSearch === 'string' ? state.folderSearch.trim().toLowerCase() : '';
-    const searchActive = Boolean(searchTerm);
-    const filteredFolders = searchTerm
-      ? folders.filter((folder) => {
-          const id = (folder.id || '').toLowerCase();
-          const name = (folder.name || '').toLowerCase();
-          const path = (folder.path || '').toLowerCase();
-          return id.includes(searchTerm) || name.includes(searchTerm) || path.includes(searchTerm);
-        })
-      : folders;
-
-    state.currentFolders = filteredFolders;
-
-    updateFolderCount(totalFolders, filteredFolders.length);
-
-    const hasFolders = filteredFolders.length > 0;
-
-    if (elements.toggleFolderViewBtn) {
-      const disableToggle = !hasFolders;
-      elements.toggleFolderViewBtn.disabled = disableToggle;
-      elements.toggleFolderViewBtn.classList.toggle('opacity-60', disableToggle);
-      elements.toggleFolderViewBtn.classList.toggle('cursor-not-allowed', disableToggle);
-      elements.toggleFolderViewBtn.setAttribute('aria-disabled', disableToggle ? 'true' : 'false');
-    }
-
-    if (!hasFolders) {
-      if (elements.folderEmptyState) {
-        elements.folderEmptyState.textContent = searchActive
-          ? 'Nenhuma pasta encontrada para o ID informado.'
-          : 'Nenhuma pasta disponível. Execute uma verificação para carregar os dados.';
-        elements.folderEmptyState.classList.remove('hidden');
-      }
-      elements.folderResults.classList.add('hidden');
-      elements.folderResults.innerHTML = '';
-      if (state.showFoldersOnly) {
-        state.showFoldersOnly = false;
-      }
-      renderViewMode();
-      return;
-    }
-
-    if (elements.folderEmptyState) {
-      elements.folderEmptyState.classList.add('hidden');
-      elements.folderEmptyState.textContent = 'Nenhuma pasta disponível. Execute uma verificação para carregar os dados.';
-    }
-    elements.folderResults.classList.remove('hidden');
-
-    const fragment = document.createDocumentFragment();
-
-    filteredFolders.forEach((folder) => {
-      const item = document.createElement('li');
-      item.className = 'px-4 py-3 text-sm text-gray-700';
-
-      const folderName = escapeHtml(folder.name || 'Pasta sem nome');
-      const folderId = folder.id ? `drive://${escapeHtml(folder.id)}` : 'Não informado';
-      const folderPath = folder.path ? escapeHtml(folder.path) : '';
-      const folderPathTitle = folder.path ? escapeHtml(folder.path) : '';
-      const count = Number(folder.productCount) || 0;
-      const imageCount = Number(folder.imageCount) || 0;
-      const status = typeof folder.status === 'string' ? folder.status : '';
-      const badges = [];
-
-      if ((status === 'unmatched' || !count) && folder.hasDrive !== false) {
-        badges.push('<span class="inline-flex items-center rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">Sem produto vinculado</span>');
-      } else if (status === 'no-images') {
-        badges.push('<span class="inline-flex items-center rounded bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-700">Sem novas imagens</span>');
-      }
-
-      if (imageCount > 0) {
-        badges.push(`<span class="inline-flex items-center rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">${imageCount} imagem(ns)</span>`);
-      }
-
-      item.innerHTML = `
-        <div class="flex flex-col gap-2">
-          <div class="flex items-center justify-between gap-2">
-            <span class="font-semibold text-gray-800">${folderName}</span>
-            <div class="flex flex-col items-end gap-1 text-xs text-gray-500">
-              <span class="font-semibold text-gray-700">${count} produto(s)</span>
-              ${badges.length ? `<div class="flex flex-wrap justify-end gap-1">${badges.join('')}</div>` : ''}
-            </div>
-          </div>
-          <p class="text-xs text-gray-500 break-all">ID: ${folderId}</p>
-          ${folderPath
-            ? `<p class="text-xs text-gray-500 truncate" title="${folderPathTitle}">${folderPath}</p>`
-            : ''}
-        </div>
-      `;
-
-      fragment.appendChild(item);
-    });
-
-    elements.folderResults.innerHTML = '';
-    elements.folderResults.appendChild(fragment);
-
-    renderViewMode();
-  }
-
-  function buildDriveFolderMirrorFromProducts(products) {
-    if (!Array.isArray(products)) {
-      return [];
-    }
-
-    const foldersMap = new Map();
-
-    products.forEach((product) => {
-      const folder = product?.driveFolder;
-      if (!folder || typeof folder !== 'object') {
-        return;
-      }
-
-      const rawId = folder.id;
-      const rawName = folder.name;
-      const rawPath = folder.path;
-
-      const id = typeof rawId === 'string' && rawId.trim()
-        ? rawId.trim()
-        : rawId !== null && rawId !== undefined
-          ? String(rawId).trim()
-          : '';
-      const path = typeof rawPath === 'string' ? rawPath.trim() : '';
-      const name = typeof rawName === 'string' && rawName.trim()
-        ? rawName.trim()
-        : path || id;
-
-      if (!(id || name || path)) {
-        return;
-      }
-
-      const key = id || path || name;
-      if (!foldersMap.has(key)) {
-        foldersMap.set(key, {
-          id,
-          name,
-          path,
-          productCount: 0,
-          imageCount: 0,
-          status: 'matched',
-          hasDrive: true,
-          source: 'drive',
-        });
-      }
-
-      const entry = foldersMap.get(key);
-      entry.productCount += 1;
-      const productImages = Array.isArray(product.images) ? product.images.length : 0;
-      entry.imageCount += productImages;
-      if (!entry.name && name) {
-        entry.name = name;
-      }
-      if (!entry.path && path) {
-        entry.path = path;
-      }
-      if (!entry.id && id) {
-        entry.id = id;
-      }
-      const barcode = typeof product.barcode === 'string' ? product.barcode.trim() : '';
-      if (!entry.barcode && barcode) {
-        entry.barcode = barcode;
-      }
-    });
-
-    return Array.from(foldersMap.values()).sort((a, b) => {
-      const nameA = a.name || '';
-      const nameB = b.name || '';
-      return nameA.localeCompare(nameB, 'pt-BR', { numeric: true, sensitivity: 'base' });
-    });
-  }
-
-  function renderViewMode() {
-    const showOnlyFolders = Boolean(state.showFoldersOnly);
-
-    if (elements.productPanel) {
-      elements.productPanel.classList.toggle('hidden', showOnlyFolders);
-    }
-
-    if (elements.folderPanel) {
-      if (showOnlyFolders) {
-        elements.folderPanel.classList.remove('lg:col-span-2');
-        elements.folderPanel.classList.add('lg:col-span-5');
-      } else {
-        elements.folderPanel.classList.remove('lg:col-span-5');
-        elements.folderPanel.classList.add('lg:col-span-2');
-      }
-    }
-
-    if (elements.toggleFolderViewBtn) {
-      const label = elements.toggleFolderViewBtn.querySelector('span');
-      const icon = elements.toggleFolderViewBtn.querySelector('i');
-      if (label) {
-        label.textContent = showOnlyFolders ? 'Mostrar produtos e pastas' : 'Listar apenas pastas';
-      }
-      if (icon) {
-        icon.className = showOnlyFolders ? 'fas fa-layer-group' : 'fas fa-folder-open';
-      }
-      elements.toggleFolderViewBtn.setAttribute('aria-pressed', showOnlyFolders ? 'true' : 'false');
-    }
-  }
-
-  function handleFolderSearchChange(event) {
-    const value = typeof event?.target?.value === 'string' ? event.target.value : '';
-    state.folderSearch = value;
-    renderFolders();
-  }
-
-  function handleToggleFolderView() {
-    if (elements.toggleFolderViewBtn?.disabled) {
-      appendLog('Nenhuma pasta disponível para exibição no momento.', 'warning');
-      return;
-    }
-
-    if (!Array.isArray(state.currentFolders) || !state.currentFolders.length) {
-      appendLog('Nenhuma pasta disponível para exibição no momento.', 'warning');
-      return;
-    }
-
-    state.showFoldersOnly = !state.showFoldersOnly;
-    renderViewMode();
-  }
-
   function renderImages(images) {
     if (!images.length) {
-      return '<p class="text-sm text-gray-500">Nenhuma imagem vinculada.</p>';
+      return '<p class="text-sm text-gray-500">Nenhuma imagem processada.</p>';
     }
 
     return images
       .map((image) => {
         const badges = [];
-        if (image.linkedNow) {
-          badges.push('<span class="inline-flex items-center rounded bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">Vinculada agora</span>');
+        if (image.status === 'uploaded') {
+          badges.push('<span class="inline-flex items-center rounded bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">Enviada</span>');
+        } else if (image.status === 'already') {
+          badges.push('<span class="inline-flex items-center rounded bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-700">Já estava</span>');
+        } else if (image.status === 'failed') {
+          badges.push('<span class="inline-flex items-center rounded bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-700">Falha</span>');
         }
-        if (image.alreadyLinked) {
-          badges.push('<span class="inline-flex items-center rounded bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-700">Já vinculada</span>');
-        }
+
+        const destination = image.destination || 'Sem URL gerada';
+        const source = image.source || 'Origem não informada';
+        const message = image.message ? `<p class="text-xs text-amber-700">${escapeHtml(image.message)}</p>` : '';
 
         return `
           <div class="flex flex-col gap-1 rounded border border-gray-200 bg-white px-3 py-2">
@@ -811,7 +471,17 @@
               <span>Sequência: ${escapeHtml(String(image.sequence ?? '—'))}</span>
               <div class="flex flex-wrap gap-1">${badges.join(' ')}</div>
             </div>
-            <span class="truncate text-sm text-gray-700" title="${escapeHtml(image.path || 'Sem caminho definido')}">${escapeHtml(image.path || 'Sem caminho definido')}</span>
+            <div class="space-y-1 text-sm text-gray-700">
+              <div class="flex flex-col gap-0.5">
+                <span class="text-xs font-semibold text-gray-500">Origem</span>
+                <span class="truncate" title="${escapeHtml(source)}">${escapeHtml(source)}</span>
+              </div>
+              <div class="flex flex-col gap-0.5">
+                <span class="text-xs font-semibold text-gray-500">Destino</span>
+                <span class="truncate" title="${escapeHtml(destination)}">${escapeHtml(destination)}</span>
+              </div>
+              ${message}
+            </div>
           </div>
         `;
       })
@@ -847,45 +517,6 @@
     state.filters.code = elements.filterCode?.value?.trim().toLowerCase() || '';
     state.filters.barcode = elements.filterBarcode?.value?.trim().toLowerCase() || '';
     renderProducts();
-    renderFolders();
-  }
-
-  function updateFolderCount(total, visible) {
-    if (!elements.folderCount) {
-      return;
-    }
-
-    const safeTotal = normalizeFolderCount(total);
-    const safeVisible = normalizeFolderCount(visible);
-
-    let text;
-    if (safeTotal === 0) {
-      text = '0 pastas';
-    } else if (safeTotal === safeVisible) {
-      text = formatFolderCountLabel(safeVisible);
-    } else {
-      text = `${formatFolderCountLabel(safeVisible)} de ${formatFolderCountLabel(safeTotal)}`;
-    }
-
-    elements.folderCount.textContent = text;
-  }
-
-  function formatFolderCountLabel(value) {
-    const normalized = normalizeFolderCount(value);
-    return normalized === 1 ? '1 pasta' : `${normalized} pastas`;
-  }
-
-  function normalizeFolderCount(value) {
-    if (typeof value === 'number' && Number.isFinite(value)) {
-      return Math.max(0, Math.floor(value));
-    }
-
-    const numeric = Number(value);
-    if (Number.isFinite(numeric)) {
-      return Math.max(0, Math.floor(numeric));
-    }
-
-    return 0;
   }
 
   function applyFilters(products) {
