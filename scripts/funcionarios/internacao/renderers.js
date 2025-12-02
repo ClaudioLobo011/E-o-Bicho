@@ -928,7 +928,11 @@ export function renderMapaExecucao(root, dataset, state = {}) {
     return;
   }
 
-  const ativos = internacoes.filter((registro) => !registro.cancelado && !registro.obitoRegistrado);
+  const ativos = internacoes.filter((registro) => {
+    const situacaoKey = normalizeActionKey(registro?.situacao || registro?.situacaoCodigo);
+    const alta = registro?.altaRegistrada || situacaoKey.includes('alta');
+    return !registro.cancelado && !registro.obitoRegistrado && !alta;
+  });
   const filtrados = petId ? ativos.filter((registro) => registro.filterKey === petId) : ativos;
 
   if (!filtrados.length) {
