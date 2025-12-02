@@ -1,6 +1,8 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const InternacaoBox = require('../models/InternacaoBox');
 const InternacaoRegistro = require('../models/InternacaoRegistro');
+const Pet = require('../models/Pet');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 
@@ -1217,6 +1219,15 @@ router.post('/registros/:id/obito', async (req, res) => {
     });
 
     await record.save();
+
+    const petId = sanitizeText(record.petId);
+    if (petId && mongoose.isValidObjectId(petId)) {
+      try {
+        await Pet.findByIdAndUpdate(petId, { obito: true });
+      } catch (petUpdateError) {
+        console.warn('internacao: falha ao atualizar status de óbito do pet', petUpdateError);
+      }
+    }
 
     if (record.box) {
       try {
