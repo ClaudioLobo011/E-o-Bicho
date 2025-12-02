@@ -180,6 +180,25 @@ const obitoModal = {
   petInfo: null,
 };
 
+const altaModal = {
+  overlay: null,
+  dialog: null,
+  form: null,
+  submitBtn: null,
+  errorEl: null,
+  petSummaryEl: null,
+  petSummaryNameEl: null,
+  petSummaryMetaEl: null,
+  petSummaryTutorEl: null,
+  dataset: null,
+  state: null,
+  onSuccess: null,
+  record: null,
+  recordId: null,
+  onClose: null,
+  petInfo: null,
+};
+
 const cancelarModal = {
   overlay: null,
   dialog: null,
@@ -1114,6 +1133,13 @@ function normalizeInternacaoRecord(raw) {
     altaPrevistaData: toText(raw.altaPrevistaData),
     altaPrevistaHora: toText(raw.altaPrevistaHora),
     altaPrevistaISO: combineDateAndTime(raw.altaPrevistaData, raw.altaPrevistaHora),
+    altaRegistrada: Boolean(raw.altaRegistrada) || normalizeActionKey(situacaoCodigo) === 'alta',
+    altaVeterinario: toText(raw.altaVeterinario),
+    altaData: toText(raw.altaData),
+    altaHora: toText(raw.altaHora),
+    altaRelatorio: toText(raw.altaRelatorio),
+    altaConfirmadaEm: raw.altaConfirmadaEm || '',
+    altaISO: combineDateAndTime(raw.altaData, raw.altaHora),
     queixa: toText(raw.queixa),
     diagnostico: toText(raw.diagnostico),
     prognostico: toText(raw.prognostico),
@@ -1689,6 +1715,336 @@ async function handleObitoModalSubmit(event) {
     setObitoModalError(error.message || 'Não foi possível registrar o óbito.');
   } finally {
     setObitoModalLoading(false);
+  }
+}
+
+function setAltaModalError(message) {
+  if (!altaModal.errorEl) return;
+  const text = String(message || '').trim();
+  altaModal.errorEl.textContent = text;
+  altaModal.errorEl.classList.toggle('hidden', !text);
+}
+
+function setAltaModalLoading(isLoading) {
+  if (!altaModal.submitBtn) return;
+  if (!altaModal.submitBtn.dataset.defaultLabel) {
+    altaModal.submitBtn.dataset.defaultLabel = altaModal.submitBtn.textContent.trim();
+  }
+  altaModal.submitBtn.disabled = !!isLoading;
+  altaModal.submitBtn.classList.toggle('opacity-60', !!isLoading);
+  altaModal.submitBtn.textContent = isLoading
+    ? 'Salvando...'
+    : altaModal.submitBtn.dataset.defaultLabel;
+}
+
+function resetAltaModalForm() {
+  if (altaModal.form) {
+    altaModal.form.reset();
+  }
+}
+
+function setAltaModalPetInfo(info) {
+  const normalized = normalizePetInfo(info);
+  altaModal.petInfo = normalized;
+  if (!altaModal.petSummaryEl) return;
+  const hasInfo = !!normalized;
+  altaModal.petSummaryEl.classList.toggle('hidden', !hasInfo);
+  const petName = normalized?.petNome || 'Paciente';
+  const meta = normalized
+    ? [normalized.petEspecie, normalized.petRaca, normalized.petPeso || normalized.petIdade].filter(Boolean).join(' · ')
+    : '';
+  const tutorNome = normalized?.tutorNome || '';
+  const tutorContato = [normalized?.tutorDocumento, normalized?.tutorContato]
+    .filter(Boolean)
+    .join(' · ');
+  const tutorLabel = tutorNome && tutorContato ? `${tutorNome} · ${tutorContato}` : tutorNome || tutorContato || 'Tutor não informado';
+
+  if (altaModal.petSummaryNameEl) altaModal.petSummaryNameEl.textContent = hasInfo ? petName : 'Paciente';
+  if (altaModal.petSummaryMetaEl) altaModal.petSummaryMetaEl.textContent = meta || '—';
+  if (altaModal.petSummaryTutorEl) altaModal.petSummaryTutorEl.textContent = tutorLabel;
+}
+
+function fillAltaModalForm(record) {
+  if (!altaModal.form) return;
+  const vetSelect = altaModal.form.querySelector('select[name="altaVeterinario"]');
+  const dateField = altaModal.form.querySelector('input[name="altaData"]');
+  const timeField = altaModal.form.querySelector('input[name="altaHora"]');
+  const relatorioField = altaModal.form.querySelector('textarea[name="altaRelatorio"]');
+  const now = new Date();
+  const vetValue = record?.altaVeterinario || record?.veterinario || '';
+  if (vetSelect) {
+    if (vetValue) {
+      ensureSelectOption(vetSelect, { value: vetValue, label: vetValue });
+      vetSelect.value = vetValue;
+    } else {
+      vetSelect.value = '';
+    }
+  }
+  if (dateField) {
+    dateField.value = record?.altaData || getLocalDateInputValue(now) || '';
+  }
+  if (timeField) {
+    timeField.value = record?.altaHora || getLocalTimeInputValue(now) || '';
+  }
+  if (relatorioField) {
+    relatorioField.value = record?.altaRelatorio || '';
+  }
+}
+
+function closeAltaModal() {
+  const onClose = altaModal.onClose;
+  if (!altaModal.overlay) return;
+  altaModal.overlay.classList.add('hidden');
+  altaModal.overlay.dataset.modalOpen = 'false';
+  if (altaModal.dialog) {
+    altaModal.dialog.classList.add('opacity-0', 'scale-95');
+  }
+  altaModal.record = null;
+  altaModal.recordId = null;
+  altaModal.dataset = null;
+  altaModal.state = null;
+  altaModal.onSuccess = null;
+  altaModal.onClose = null;
+  altaModal.petInfo = null;
+
+  if (typeof onClose === 'function') {
+    try {
+      onClose();
+    } catch (error) {
+      console.warn('internacao: falha ao acionar callback de alta', error);
+    }
+  }
+}
+
+function ensureAltaModal() {
+  if (altaModal.overlay) return altaModal.overlay;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'internacao-alta-modal fixed inset-0 z-[1004] hidden';
+  overlay.innerHTML = `
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-alta-modal></div>
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
+      <div class="relative flex w-full max-w-3xl transform-gpu flex-col overflow-hidden rounded-2xl bg-white text-[12px] leading-[1.35] shadow-2xl ring-1 ring-black/10 opacity-0 scale-95 transition-all duration-200" role="dialog" aria-modal="true" aria-labelledby="alta-modal-title" data-alta-dialog tabindex="-1">
+        <header class="flex flex-col gap-2.5 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+              <i class="fas fa-circle-check"></i>
+              Alta
+            </span>
+            <h2 id="alta-modal-title" class="mt-1.5 text-lg font-semibold text-gray-900">Registrar alta</h2>
+            <p class="mt-1 max-w-2xl text-[11px] text-gray-600">Confirme os detalhes para encerrar a internação.</p>
+          </div>
+          <button type="button" class="inline-flex items-center justify-center rounded-full border border-gray-200 p-1.5 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700" data-close-alta-modal>
+            <span class="sr-only">Fechar modal</span>
+            <i class="fas fa-xmark text-sm"></i>
+          </button>
+        </header>
+        <form class="flex max-h-[80vh] flex-col overflow-hidden" novalidate>
+          <div class="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+            <div class="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-[11px] text-gray-600" data-alta-summary>
+              <div class="flex flex-wrap items-center gap-2 text-gray-700">
+                <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Paciente</span>
+                <span class="text-[13px] font-semibold text-gray-900" data-alta-summary-name>—</span>
+                <span class="text-[10px] text-gray-400" data-alta-summary-meta>—</span>
+              </div>
+              <p class="mt-1 text-[11px] text-gray-500" data-alta-summary-tutor>—</p>
+            </div>
+            <div class="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-[11px] text-amber-900">
+              <p class="font-semibold">Atenção</p>
+              <p class="mt-1">Esta opção encerrará a internação com status de "Alta" e interromperá todos os procedimentos ainda não realizados.</p>
+            </div>
+            <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Veterinário*
+              <select name="altaVeterinario" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+                <option value="">Selecione</option>
+              </select>
+            </label>
+            <div class="grid gap-3 md:grid-cols-2">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Data*
+                <input type="date" name="altaData" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
+              </label>
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Hora*
+                <input type="time" name="altaHora" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
+              </label>
+            </div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Relatório de Alta*
+              <textarea name="altaRelatorio" rows="4" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Descreva o resumo clínico e orientações da alta"></textarea>
+            </label>
+            <p class="hidden rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[11px] text-red-700" data-alta-error></p>
+          </div>
+          <footer class="flex flex-col gap-3 border-t border-gray-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <span class="text-[11px] text-gray-500">O registro ficará disponível no histórico de internações.</span>
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <button type="button" class="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-700 transition hover:bg-gray-50" data-close-alta-modal>Cancelar</button>
+              <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-emerald-500" data-alta-submit>Salvar</button>
+            </div>
+          </footer>
+        </form>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  altaModal.overlay = overlay;
+  altaModal.dialog = overlay.querySelector('[data-alta-dialog]');
+  altaModal.form = overlay.querySelector('form');
+  altaModal.submitBtn = overlay.querySelector('[data-alta-submit]');
+  altaModal.errorEl = overlay.querySelector('[data-alta-error]');
+  altaModal.petSummaryEl = overlay.querySelector('[data-alta-summary]');
+  altaModal.petSummaryNameEl = overlay.querySelector('[data-alta-summary-name]');
+  altaModal.petSummaryMetaEl = overlay.querySelector('[data-alta-summary-meta]');
+  altaModal.petSummaryTutorEl = overlay.querySelector('[data-alta-summary-tutor]');
+
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) {
+      closeAltaModal();
+      return;
+    }
+    const closeTrigger = event.target.closest('[data-close-alta-modal]');
+    if (closeTrigger) {
+      event.preventDefault();
+      closeAltaModal();
+    }
+  });
+
+  overlay.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !overlay.classList.contains('hidden')) {
+      event.preventDefault();
+      closeAltaModal();
+    }
+  });
+
+  if (altaModal.form) {
+    altaModal.form.addEventListener('submit', handleAltaModalSubmit);
+  }
+
+  return overlay;
+}
+
+function openAltaModal(record, options = {}) {
+  if (!record) {
+    showToastMessage('Não foi possível carregar essa internação.', 'warning');
+    return;
+  }
+  ensureAltaModal();
+  const datasetRef = options.dataset || altaModal.dataset || getDataset();
+  const stateRef = options.state || altaModal.state || {};
+  const successHandler = options.onSuccess || altaModal.onSuccess;
+  const closeHandler = options.onClose || altaModal.onClose;
+  const recordId = record.id || record._id || '';
+  if (!recordId) {
+    showToastMessage('Não foi possível identificar essa internação para alta.', 'warning');
+    return;
+  }
+
+  altaModal.dataset = datasetRef || null;
+  altaModal.state = stateRef || null;
+  altaModal.onSuccess = successHandler || null;
+  altaModal.onClose = closeHandler || null;
+  altaModal.record = record;
+  altaModal.recordId = recordId;
+
+  setAltaModalError('');
+  setAltaModalLoading(false);
+  resetAltaModalForm();
+  setAltaModalPetInfo(getPetInfoFromInternacaoRecord(record));
+
+  const selectOverrides = {};
+  if (record.veterinario) {
+    selectOverrides.forceAltaVeterinario = { value: record.veterinario, label: record.veterinario };
+  }
+  populateDynamicSelects(datasetRef, selectOverrides);
+  fillAltaModalForm(record);
+
+  altaModal.overlay.classList.remove('hidden');
+  altaModal.overlay.dataset.modalOpen = 'true';
+  if (altaModal.dialog) {
+    requestAnimationFrame(() => {
+      altaModal.dialog.classList.remove('opacity-0', 'scale-95');
+      altaModal.dialog.focus();
+    });
+  }
+}
+
+async function handleAltaModalSubmit(event) {
+  event.preventDefault();
+  if (!altaModal.form) return;
+  setAltaModalError('');
+  const recordId = altaModal.recordId;
+  if (!recordId) {
+    setAltaModalError('Não foi possível identificar a internação selecionada.');
+    return;
+  }
+
+  const formData = new FormData(altaModal.form);
+  const payload = {
+    veterinario: (formData.get('altaVeterinario') || '').toString().trim(),
+    data: (formData.get('altaData') || '').toString().trim(),
+    hora: (formData.get('altaHora') || '').toString().trim(),
+    relatorio: (formData.get('altaRelatorio') || '').toString().trim(),
+  };
+
+  if (!payload.veterinario) {
+    setAltaModalError('Informe o veterinário responsável.');
+    return;
+  }
+  if (!payload.data) {
+    setAltaModalError('Informe a data da alta.');
+    return;
+  }
+  if (!payload.hora) {
+    setAltaModalError('Informe o horário da alta.');
+    return;
+  }
+  if (!payload.relatorio) {
+    setAltaModalError('Descreva o relatório de alta.');
+    return;
+  }
+
+  setAltaModalLoading(true);
+  const datasetRef = altaModal.dataset || getDataset();
+  const stateRef = altaModal.state || {};
+  try {
+    const updatedRecord = await requestJson(`/internacao/registros/${encodeURIComponent(recordId)}/alta`, {
+      method: 'POST',
+      body: payload,
+    });
+    const normalized = normalizeInternacaoRecord(updatedRecord);
+    if (normalized) {
+      applyInternacaoRecordUpdate(normalized, datasetRef, stateRef);
+      const fichaRecord = fichaInternacaoModal.record;
+      if (fichaRecord) {
+        const sameRecord =
+          fichaRecord.id === normalized.id ||
+          fichaRecord.filterKey === normalized.filterKey ||
+          (normalized.codigo !== null && fichaRecord.codigo === normalized.codigo);
+        if (sameRecord) {
+          fichaInternacaoModal.record = normalized;
+          fillFichaInternacaoModal(normalized);
+        }
+      }
+    }
+
+    showToastMessage('Alta registrada com sucesso.', 'success');
+    const successCallback = altaModal.onSuccess;
+    closeAltaModal();
+
+    if (typeof stateRef.refreshInternacoes === 'function') {
+      try {
+        stateRef.refreshInternacoes();
+      } catch (refreshError) {
+        console.warn('internacao: falha ao atualizar lista após alta', refreshError);
+      }
+    }
+
+    if (typeof successCallback === 'function') {
+      successCallback();
+    }
+  } catch (error) {
+    console.error('internacao: falha ao registrar alta', error);
+    setAltaModalError(error.message || 'Não foi possível registrar a alta.');
+  } finally {
+    setAltaModalLoading(false);
   }
 }
 
@@ -3512,6 +3868,18 @@ function populateDynamicSelects(dataset, extraOptions = {}) {
       }
     }
   }
+
+  if (altaModal.form) {
+    const altaVetSelect = altaModal.form.querySelector('select[name="altaVeterinario"]');
+    if (altaVetSelect) {
+      altaVetSelect.innerHTML = vetOptionsMarkup;
+      const forced = extraOptions.forceAltaVeterinario || extraOptions.forceVeterinario;
+      if (forced) {
+        ensureSelectOption(altaVetSelect, forced);
+        altaVetSelect.value = forced.value || '';
+      }
+    }
+  }
 }
 
 function openInternarPetModal(dataset, options = {}) {
@@ -4077,6 +4445,8 @@ function ensureFichaInternacaoModal() {
       const actionType = normalizeActionKey(actionTrigger.dataset.fichaAction);
       if (actionType === 'editar') {
         await handleFichaEditarAction();
+      } else if (actionType === 'alta') {
+        await handleFichaAltaAction();
       } else if (actionType === 'obito') {
         await handleFichaObitoAction();
       } else if (actionType === 'cancelar') {
@@ -4286,6 +4656,46 @@ async function handleFichaPesoAction() {
 
   closeFichaInternacaoModal();
   await openPesoModalFromInternacao(record, { dataset, state, onClose: reopenFicha });
+}
+
+async function handleFichaAltaAction() {
+  const record = fichaInternacaoModal.record;
+  if (!record) {
+    showToastMessage('Não foi possível carregar os dados dessa internação.', 'warning');
+    return;
+  }
+
+  const isCancelado = record.cancelado || normalizeActionKey(record.situacaoCodigo) === 'cancelado';
+  if (isCancelado) {
+    showToastMessage('Não é possível registrar alta para internações canceladas.', 'info');
+    return;
+  }
+
+  const hasObito = record.obitoRegistrado || normalizeActionKey(record.situacaoCodigo) === 'obito';
+  if (hasObito) {
+    showToastMessage('Não é possível registrar alta após o óbito.', 'warning');
+    return;
+  }
+
+  if (normalizeActionKey(record.situacaoCodigo) === 'alta') {
+    showToastMessage('A alta desse paciente já está registrada.', 'info');
+    return;
+  }
+
+  const dataset = fichaInternacaoModal.dataset || getDataset();
+  const state = fichaInternacaoModal.state || {};
+  try {
+    await fetchVeterinariosData(dataset, state, { quiet: true });
+  } catch (error) {
+    console.warn('internacao: falha ao atualizar veterinários antes da alta', error);
+  }
+
+  closeFichaInternacaoModal();
+  openAltaModal(record, {
+    dataset,
+    state,
+    onSuccess: state.refreshInternacoes,
+  });
 }
 
 async function handleFichaObitoAction() {

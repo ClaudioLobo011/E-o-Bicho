@@ -1,6 +1,8 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const InternacaoBox = require('../models/InternacaoBox');
 const InternacaoRegistro = require('../models/InternacaoRegistro');
+const Pet = require('../models/Pet');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 
@@ -187,6 +189,23 @@ const findExecucaoById = (record, execucaoId) => {
     if (doc) return doc;
   }
   return record.execucoes.find((item) => sanitizeText(item?._id || item?.id) === targetId) || null;
+};
+
+const removeExecucoesPendentes = (record) => {
+  if (!record || !Array.isArray(record.execucoes)) {
+    record.execucoes = [];
+    return 0;
+  }
+  let removidas = 0;
+  record.execucoes = record.execucoes.filter((execucao) => {
+    const pendente = isExecucaoPendente(execucao);
+    if (pendente) {
+      removidas += 1;
+      return false;
+    }
+    return true;
+  });
+  return removidas;
 };
 
 const pullPrescricaoById = (record, prescricaoId) => {
@@ -575,6 +594,13 @@ const buildObitoPayload = (body = {}) => ({
   relatorio: sanitizeText(body.relatorio),
 });
 
+const buildAltaPayload = (body = {}) => ({
+  veterinario: sanitizeText(body.veterinario),
+  data: sanitizeText(body.data),
+  hora: sanitizeText(body.hora),
+  relatorio: sanitizeText(body.relatorio),
+});
+
 const buildCancelamentoPayload = (body = {}) => ({
   responsavel: sanitizeText(body.responsavel),
   data: sanitizeText(body.data),
@@ -731,6 +757,12 @@ const formatRegistro = (doc) => {
     box: sanitizeText(plain.box),
     altaPrevistaData: sanitizeText(plain.altaPrevistaData),
     altaPrevistaHora: sanitizeText(plain.altaPrevistaHora),
+    altaRegistrada: Boolean(plain.altaRegistrada),
+    altaVeterinario: sanitizeText(plain.altaVeterinario),
+    altaData: sanitizeText(plain.altaData),
+    altaHora: sanitizeText(plain.altaHora),
+    altaRelatorio: sanitizeText(plain.altaRelatorio),
+    altaConfirmadaEm: plain.altaConfirmadaEm || null,
     queixa: sanitizeText(plain.queixa),
     diagnostico: sanitizeText(plain.diagnostico),
     prognostico: sanitizeText(plain.prognostico),
@@ -1188,6 +1220,15 @@ router.post('/registros/:id/obito', async (req, res) => {
 
     await record.save();
 
+    const petId = sanitizeText(record.petId);
+    if (petId && mongoose.isValidObjectId(petId)) {
+      try {
+        await Pet.findByIdAndUpdate(petId, { obito: true });
+      } catch (petUpdateError) {
+        console.warn('internacao: falha ao atualizar status de óbito do pet', petUpdateError);
+      }
+    }
+
     if (record.box) {
       try {
         await InternacaoBox.findOneAndUpdate(
@@ -1207,6 +1248,99 @@ router.post('/registros/:id/obito', async (req, res) => {
       return res.status(400).json({ message: 'Revise os dados informados antes de confirmar o óbito.' });
     }
     return res.status(500).json({ message: 'Não foi possível registrar o óbito do paciente.' });
+  }
+});
+
+router.post('/registros/:id/alta', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: 'Informe o registro que deseja atualizar.' });
+    }
+
+    const record = await InternacaoRegistro.findById(id);
+    if (!record) {
+      return res.status(404).json({ message: 'Internação não encontrada.' });
+    }
+
+    if (record.cancelado || normalizeKey(record.situacaoCodigo) === 'cancelado') {
+      return res.status(409).json({ message: 'Não é possível registrar alta para internações canceladas.' });
+    }
+
+    if (record.obitoRegistrado || normalizeKey(record.situacaoCodigo) === 'obito') {
+      return res.status(409).json({ message: 'Não é possível registrar alta após o óbito.' });
+    }
+
+    if (record.altaRegistrada || normalizeKey(record.situacaoCodigo) === 'alta') {
+      return res.status(409).json({ message: 'A alta desse paciente já está registrada.' });
+    }
+
+    const payload = buildAltaPayload(req.body);
+    if (!payload.veterinario) {
+      payload.veterinario = sanitizeText(record.veterinario);
+    }
+    const now = new Date();
+    if (!payload.data) {
+      payload.data = now.toISOString().slice(0, 10);
+    }
+    if (!payload.hora) {
+      payload.hora = now.toISOString().slice(11, 16);
+    }
+
+    if (!payload.veterinario || !payload.data || !payload.hora || !payload.relatorio) {
+      return res.status(400).json({ message: 'Preencha os campos obrigatórios antes de registrar a alta.' });
+    }
+
+    record.altaRegistrada = true;
+    record.altaVeterinario = payload.veterinario;
+    record.altaData = payload.data;
+    record.altaHora = payload.hora;
+    record.altaRelatorio = payload.relatorio;
+    record.altaConfirmadaEm = now;
+    record.situacao = 'Alta';
+    record.situacaoCodigo = 'alta';
+
+    const execucoesInterrompidas = removeExecucoesPendentes(record);
+    const autor = req.user?.email || payload.veterinario || 'Sistema';
+    const detalhes = [
+      `Data: ${payload.data}${payload.hora ? ` às ${payload.hora}` : ''}.`,
+      payload.relatorio ? `Relatório: ${payload.relatorio}.` : '',
+      execucoesInterrompidas
+        ? `${execucoesInterrompidas} procedimento(s) pendente(s) interrompido(s).`
+        : 'Nenhum procedimento pendente encontrado.',
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+    record.historico = Array.isArray(record.historico) ? record.historico : [];
+    record.historico.push({
+      tipo: 'Alta',
+      descricao: `Alta registrada. ${detalhes}`,
+      criadoPor: autor,
+      criadoEm: now,
+    });
+
+    await record.save();
+
+    if (record.box) {
+      try {
+        await InternacaoBox.findOneAndUpdate(
+          { box: record.box },
+          { ocupante: 'Livre', status: 'Disponível' },
+        );
+      } catch (boxReleaseError) {
+        console.warn('internacao: falha ao liberar box após alta', boxReleaseError);
+      }
+    }
+
+    const updated = await InternacaoRegistro.findById(record._id).lean();
+    return res.json(formatRegistro(updated));
+  } catch (error) {
+    console.error('internacao: falha ao registrar alta', error);
+    if (error?.name === 'ValidationError') {
+      return res.status(400).json({ message: 'Revise os dados informados antes de registrar a alta.' });
+    }
+    return res.status(500).json({ message: 'Não foi possível registrar a alta do paciente.' });
   }
 });
 
