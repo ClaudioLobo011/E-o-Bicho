@@ -40,6 +40,71 @@ const parseNumber = (value) => {
   return null;
 };
 
+const collectSaleItems = (sale = {}) => {
+  const candidates = [
+    sale.items,
+    sale.receiptSnapshot?.items,
+    sale.receiptSnapshot?.itens,
+    sale.receiptSnapshot?.products,
+    sale.receiptSnapshot?.produtos,
+    sale.fiscalItemsSnapshot,
+    sale.fiscalItemsSnapshot?.items,
+    sale.fiscalItemsSnapshot?.itens,
+  ];
+
+  const items = [];
+  candidates.forEach((entry) => {
+    if (Array.isArray(entry)) {
+      entry.forEach((item) => {
+        if (item && typeof item === 'object') {
+          items.push(item);
+        }
+      });
+    }
+  });
+
+  return items;
+};
+
+const deriveItemQuantity = (item = {}) => {
+  const candidates = [item.quantity, item.quantidade, item.qty, item.qtd, item.amount];
+  for (const candidate of candidates) {
+    const parsed = parseNumber(candidate);
+    if (parsed !== null) return parsed;
+  }
+  return 1;
+};
+
+const deriveItemCost = (item = {}) => {
+  const candidates = [
+    item.cost,
+    item.costPrice,
+    item.unitCost,
+    item.precoCusto,
+    item.custo,
+    item.custoCalculado,
+    item.custoUnitario,
+    item.product?.custo,
+    item.produto?.custo,
+  ];
+  for (const candidate of candidates) {
+    const parsed = parseNumber(candidate);
+    if (parsed !== null) return parsed;
+  }
+  return 0;
+};
+
+const deriveSaleCost = (sale = {}) => {
+  const items = collectSaleItems(sale);
+  if (!items.length) return 0;
+
+  return items.reduce((acc, item) => {
+    const quantity = deriveItemQuantity(item) || 0;
+    const unitCost = deriveItemCost(item) || 0;
+    return acc + quantity * unitCost;
+  }, 0);
+};
+
 const deriveSaleTotal = (sale = {}) => {
   const totals = sale?.receiptSnapshot?.totais || {};
   const candidates = [
@@ -185,6 +250,7 @@ router.get(
           channel: sale.type || 'venda',
           channelLabel: sale.typeLabel || 'Venda',
           totalValue: deriveSaleTotal(sale),
+          costValue: deriveSaleCost(sale),
           status: sale.status || 'completed',
         };
       });

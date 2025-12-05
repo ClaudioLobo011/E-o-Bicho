@@ -112,6 +112,7 @@
         <td class="px-4 py-3">${sale.store?.name || '—'}</td>
         <td class="px-4 py-3">${sale.channelLabel || 'PDV'}</td>
         <td class="px-4 py-3 text-right font-semibold text-gray-900">${formatCurrency(sale.totalValue)}</td>
+        <td class="px-4 py-3 text-right text-gray-900">${formatCurrency(sale.costValue)}</td>
         <td class="px-4 py-3 text-right text-gray-600">—</td>
         <td class="px-4 py-3 text-right">${buildStatusBadge(sale.status)}</td>
       `;
