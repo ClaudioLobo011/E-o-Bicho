@@ -8,7 +8,28 @@ const router = express.Router();
 
 const parseDate = (value, endOfDay = false) => {
   if (!value) return null;
-  const date = new Date(value);
+
+  let date;
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+
+    const isIsoDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(trimmed);
+    const isBrDateOnly = /^\d{2}\/\d{2}\/\d{4}$/.test(trimmed);
+
+    if (isIsoDateOnly) {
+      const [year, month, day] = trimmed.split('-').map(Number);
+      date = new Date(year, month - 1, day);
+    } else if (isBrDateOnly) {
+      const [day, month, year] = trimmed.split('/').map(Number);
+      date = new Date(year, month - 1, day);
+    } else {
+      date = new Date(trimmed);
+    }
+  } else {
+    date = new Date(value);
+  }
+
   if (Number.isNaN(date.getTime())) return null;
   if (endOfDay) {
     date.setHours(23, 59, 59, 999);
