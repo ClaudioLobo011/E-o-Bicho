@@ -109,14 +109,34 @@ const deriveItemUnitCost = (item = {}) => {
     item.costPrice,
     item.unitCost,
     item.precoCusto,
+    item.preco_custo,
     item.custo,
     item.custoCalculado,
     item.custoUnitario,
+    item.custo_unitario,
     item.custoMedio,
     item.custoReferencia,
+    item.custo_referencia,
     item.precoCustoUnitario,
+    item.preco_custo_unitario,
     item.costValue,
     item.precoCustoValue,
+    item.productSnapshot?.custo,
+    item.productSnapshot?.custoCalculado,
+    item.productSnapshot?.custoMedio,
+    item.productSnapshot?.custoReferencia,
+    item.productSnapshot?.precoCusto,
+    item.productSnapshot?.precoCustoUnitario,
+    item.productSnapshot?.preco_custo,
+    item.productSnapshot?.preco_custo_unitario,
+    item.produtoSnapshot?.custo,
+    item.produtoSnapshot?.custoCalculado,
+    item.produtoSnapshot?.custoMedio,
+    item.produtoSnapshot?.custoReferencia,
+    item.produtoSnapshot?.precoCusto,
+    item.produtoSnapshot?.precoCustoUnitario,
+    item.produtoSnapshot?.preco_custo,
+    item.produtoSnapshot?.preco_custo_unitario,
     item.product?.custo,
     item.produto?.custo,
     item.product?.custoCalculado,
@@ -129,24 +149,16 @@ const deriveItemUnitCost = (item = {}) => {
     item.produto?.precoCusto,
     item.product?.precoCustoUnitario,
     item.produto?.precoCustoUnitario,
-    item.productSnapshot?.custo,
-    item.productSnapshot?.custoCalculado,
-    item.productSnapshot?.custoMedio,
-    item.productSnapshot?.custoReferencia,
-    item.productSnapshot?.precoCusto,
-    item.productSnapshot?.precoCustoUnitario,
-    item.produtoSnapshot?.custo,
-    item.produtoSnapshot?.custoCalculado,
-    item.produtoSnapshot?.custoMedio,
-    item.produtoSnapshot?.custoReferencia,
-    item.produtoSnapshot?.precoCusto,
-    item.produtoSnapshot?.precoCustoUnitario,
+    item.product?.preco_custo,
+    item.produto?.preco_custo,
+    item.product?.preco_custo_unitario,
+    item.produto?.preco_custo_unitario,
   ];
   for (const candidate of candidates) {
     const parsed = parseNumber(candidate);
     if (parsed !== null) return parsed;
   }
-  return 0;
+  return null;
 };
 
 const deriveItemTotalCost = (item = {}) => {
@@ -159,8 +171,6 @@ const deriveItemTotalCost = (item = {}) => {
     item.precoCustoTotal,
     item.totalPrecoCusto,
     item.precoCustoValorTotal,
-    item.product?.custoTotal,
-    item.produto?.custoTotal,
     item.productSnapshot?.custoTotal,
     item.productSnapshot?.totalCusto,
     item.productSnapshot?.custoTotalCalculado,
@@ -169,6 +179,8 @@ const deriveItemTotalCost = (item = {}) => {
     item.produtoSnapshot?.totalCusto,
     item.produtoSnapshot?.custoTotalCalculado,
     item.produtoSnapshot?.precoCustoTotal,
+    item.product?.custoTotal,
+    item.produto?.custoTotal,
   ];
   for (const candidate of candidates) {
     const parsed = parseNumber(candidate);
@@ -181,18 +193,26 @@ const deriveSaleCost = (sale = {}) => {
   const items = collectSaleItems(sale);
   if (!items.length) return 0;
 
+  let foundItemCost = false;
+
   const totalFromItems = items.reduce((acc, item) => {
+    const quantity = deriveItemQuantity(item) || 0;
+    const unitCost = deriveItemUnitCost(item);
+    if (unitCost !== null) {
+      foundItemCost = true;
+      return acc + quantity * unitCost;
+    }
+
     const itemTotalCost = deriveItemTotalCost(item);
     if (itemTotalCost !== null) {
+      foundItemCost = true;
       return acc + itemTotalCost;
     }
 
-    const quantity = deriveItemQuantity(item) || 0;
-    const unitCost = deriveItemUnitCost(item) || 0;
-    return acc + quantity * unitCost;
+    return acc;
   }, 0);
 
-  if (totalFromItems > 0) return totalFromItems;
+  if (foundItemCost) return totalFromItems;
 
   const totals = sale?.receiptSnapshot?.totais || sale?.totais || {};
   const candidates = [
