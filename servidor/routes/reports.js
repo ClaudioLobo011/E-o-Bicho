@@ -96,6 +96,18 @@ const deriveItemUnitCost = (item = {}) => {
     item.produto?.custoMedio,
     item.product?.custoReferencia,
     item.produto?.custoReferencia,
+    item.productSnapshot?.custo,
+    item.productSnapshot?.custoCalculado,
+    item.productSnapshot?.custoMedio,
+    item.productSnapshot?.custoReferencia,
+    item.productSnapshot?.precoCusto,
+    item.productSnapshot?.precoCustoUnitario,
+    item.produtoSnapshot?.custo,
+    item.produtoSnapshot?.custoCalculado,
+    item.produtoSnapshot?.custoMedio,
+    item.produtoSnapshot?.custoReferencia,
+    item.produtoSnapshot?.precoCusto,
+    item.produtoSnapshot?.precoCustoUnitario,
   ];
   for (const candidate of candidates) {
     const parsed = parseNumber(candidate);
@@ -111,6 +123,12 @@ const deriveItemTotalCost = (item = {}) => {
     item.totalCusto,
     item.custoTotalCalculado,
     item.totalCostValue,
+    item.productSnapshot?.custoTotal,
+    item.productSnapshot?.totalCusto,
+    item.productSnapshot?.custoTotalCalculado,
+    item.produtoSnapshot?.custoTotal,
+    item.produtoSnapshot?.totalCusto,
+    item.produtoSnapshot?.custoTotalCalculado,
   ];
   for (const candidate of candidates) {
     const parsed = parseNumber(candidate);
