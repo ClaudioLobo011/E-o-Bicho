@@ -482,7 +482,15 @@ const ensureSalesHaveCostData = (sales = [], productMap = new Map()) => {
         const product = productMap.get(productId.toString());
         if (!product) continue;
 
-        const baseCost = isPositive(product.custoCalculado) ? product.custoCalculado : product.custo;
+        const unitCostCandidates = [
+          product.precoCusto,
+          product.precoCustoUnitario,
+          product.custo,
+          product.custoMedio,
+          product.custoCalculado,
+        ];
+
+        const baseCost = unitCostCandidates.find(isPositive);
         if (!isPositive(baseCost)) continue;
 
         setUnitCostIfMissing(item, baseCost);
@@ -2145,7 +2153,9 @@ router.put('/:id/state', requireAuth, async (req, res) => {
 
     const productIds = collectProductIdsFromSales(updatePayload.completedSales);
     if (productIds.length) {
-      const products = await Product.find({ _id: { $in: productIds } }).select('custo custoCalculado').lean();
+      const products = await Product.find({ _id: { $in: productIds } })
+        .select('custo custoMedio custoCalculado precoCusto precoCustoUnitario')
+        .lean();
       const productMap = new Map(products.map((product) => [product._id.toString(), product]));
       ensureSalesHaveCostData(updatePayload.completedSales, productMap);
     }
