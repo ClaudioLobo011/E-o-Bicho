@@ -142,7 +142,8 @@
       const response = await fetch(`${API_BASE}/stores`);
       if (!response.ok) throw new Error('Falha ao carregar lojas');
       const data = await response.json();
-      state.stores = Array.isArray(data.stores) ? data.stores : [];
+      const stores = Array.isArray(data) ? data : Array.isArray(data?.stores) ? data.stores : [];
+      state.stores = stores;
       if (elements.store) {
         const current = elements.store.value;
         elements.store.innerHTML = '<option value="">Todas as lojas</option>';
