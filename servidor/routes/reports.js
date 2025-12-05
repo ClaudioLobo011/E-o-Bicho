@@ -8,7 +8,28 @@ const router = express.Router();
 
 const parseDate = (value, endOfDay = false) => {
   if (!value) return null;
-  const date = new Date(value);
+
+  let date;
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+
+    const isIsoDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(trimmed);
+    const isBrDateOnly = /^\d{2}\/\d{2}\/\d{4}$/.test(trimmed);
+
+    if (isIsoDateOnly) {
+      const [year, month, day] = trimmed.split('-').map(Number);
+      date = new Date(year, month - 1, day);
+    } else if (isBrDateOnly) {
+      const [day, month, year] = trimmed.split('/').map(Number);
+      date = new Date(year, month - 1, day);
+    } else {
+      date = new Date(trimmed);
+    }
+  } else {
+    date = new Date(value);
+  }
+
   if (Number.isNaN(date.getTime())) return null;
   if (endOfDay) {
     date.setHours(23, 59, 59, 999);
@@ -47,6 +68,13 @@ const collectSaleItems = (sale = {}) => {
     sale.receiptSnapshot?.itens,
     sale.receiptSnapshot?.products,
     sale.receiptSnapshot?.produtos,
+    sale.receiptSnapshot?.cart?.items,
+    sale.receiptSnapshot?.cart?.itens,
+    sale.receiptSnapshot?.cart?.products,
+    sale.receiptSnapshot?.cart?.produtos,
+    sale.itemsSnapshot,
+    sale.itemsSnapshot?.items,
+    sale.itemsSnapshot?.itens,
     sale.fiscalItemsSnapshot,
     sale.fiscalItemsSnapshot?.items,
     sale.fiscalItemsSnapshot?.itens,
@@ -88,6 +116,7 @@ const deriveItemUnitCost = (item = {}) => {
     item.custoReferencia,
     item.precoCustoUnitario,
     item.costValue,
+    item.precoCustoValue,
     item.product?.custo,
     item.produto?.custo,
     item.product?.custoCalculado,
@@ -96,6 +125,22 @@ const deriveItemUnitCost = (item = {}) => {
     item.produto?.custoMedio,
     item.product?.custoReferencia,
     item.produto?.custoReferencia,
+    item.product?.precoCusto,
+    item.produto?.precoCusto,
+    item.product?.precoCustoUnitario,
+    item.produto?.precoCustoUnitario,
+    item.productSnapshot?.custo,
+    item.productSnapshot?.custoCalculado,
+    item.productSnapshot?.custoMedio,
+    item.productSnapshot?.custoReferencia,
+    item.productSnapshot?.precoCusto,
+    item.productSnapshot?.precoCustoUnitario,
+    item.produtoSnapshot?.custo,
+    item.produtoSnapshot?.custoCalculado,
+    item.produtoSnapshot?.custoMedio,
+    item.produtoSnapshot?.custoReferencia,
+    item.produtoSnapshot?.precoCusto,
+    item.produtoSnapshot?.precoCustoUnitario,
   ];
   for (const candidate of candidates) {
     const parsed = parseNumber(candidate);
@@ -111,6 +156,19 @@ const deriveItemTotalCost = (item = {}) => {
     item.totalCusto,
     item.custoTotalCalculado,
     item.totalCostValue,
+    item.precoCustoTotal,
+    item.totalPrecoCusto,
+    item.precoCustoValorTotal,
+    item.product?.custoTotal,
+    item.produto?.custoTotal,
+    item.productSnapshot?.custoTotal,
+    item.productSnapshot?.totalCusto,
+    item.productSnapshot?.custoTotalCalculado,
+    item.productSnapshot?.precoCustoTotal,
+    item.produtoSnapshot?.custoTotal,
+    item.produtoSnapshot?.totalCusto,
+    item.produtoSnapshot?.custoTotalCalculado,
+    item.produtoSnapshot?.precoCustoTotal,
   ];
   for (const candidate of candidates) {
     const parsed = parseNumber(candidate);
@@ -142,9 +200,14 @@ const deriveSaleCost = (sale = {}) => {
     sale.totalCost,
     sale.custo,
     sale.custoTotal,
+    sale.precoCustoTotal,
+    sale.totalPrecoCusto,
     totals.custo,
     totals.custoTotal,
     totals.totalCusto,
+    totals.precoCusto,
+    totals.precoCustoTotal,
+    totals.totalPrecoCusto,
   ];
 
   for (const candidate of candidates) {
