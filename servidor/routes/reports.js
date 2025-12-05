@@ -25,17 +25,29 @@ const toObjectId = (value) => {
 
 const parseNumber = (value) => {
   if (typeof value === 'number') return value;
+
   if (typeof value === 'string') {
-    const normalized = value.replace(/\./g, '').replace(',', '.');
-    const asNumber = Number(normalized);
+    const cleaned = value
+      .replace(/\s+/g, '')
+      .replace(/[^0-9,.-]/g, '')
+      .replace(/\.(?=\d{3}(\D|$))/g, '')
+      .replace(',', '.');
+
+    const asNumber = Number(cleaned);
     return Number.isFinite(asNumber) ? asNumber : null;
   }
+
   return null;
 };
 
 const deriveSaleTotal = (sale = {}) => {
   const totals = sale?.receiptSnapshot?.totais || {};
   const candidates = [
+    sale.total,
+    sale.totalAmount,
+    sale.valorTotal,
+    sale.totalVenda,
+    sale.totalGeral,
     totals?.liquido,
     totals?.total,
     totals?.totalGeral,
