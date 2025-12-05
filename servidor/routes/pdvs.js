@@ -273,6 +273,33 @@ const extractProductIdFromSnapshot = (item) => {
   return null;
 };
 
+const extractProductIdFromItem = (item) => {
+  if (!item || typeof item !== 'object') return null;
+  const candidates = [
+    item.productId,
+    item.product_id,
+    item.produtoId,
+    item.produto_id,
+    item.product?._id,
+    item.product?.id,
+    item.product?.productId,
+    item.produto?._id,
+    item.produto?.id,
+    item.produto?.productId,
+    item.productSnapshot?._id,
+    item.productSnapshot?.id,
+    item.produtoSnapshot?._id,
+    item.produtoSnapshot?.id,
+  ];
+  for (const candidate of candidates) {
+    const objectId = toObjectIdOrNull(candidate);
+    if (objectId) {
+      return objectId;
+    }
+  }
+  return null;
+};
+
 const collectSaleProductQuantities = (sale) => {
   const quantities = new Map();
   if (!sale || typeof sale !== 'object') {
@@ -306,6 +333,165 @@ const collectSaleProductQuantities = (sale) => {
     quantities.set(key, current + numericQuantity);
   }
   return quantities;
+};
+
+const collectProductIdsFromSales = (sales = []) => {
+  const ids = new Set();
+  const candidates = [
+    (sale) => sale.items,
+    (sale) => sale.receiptSnapshot?.items,
+    (sale) => sale.receiptSnapshot?.itens,
+    (sale) => sale.receiptSnapshot?.products,
+    (sale) => sale.receiptSnapshot?.produtos,
+    (sale) => sale.receiptSnapshot?.cart?.items,
+    (sale) => sale.receiptSnapshot?.cart?.itens,
+    (sale) => sale.receiptSnapshot?.cart?.products,
+    (sale) => sale.receiptSnapshot?.cart?.produtos,
+    (sale) => sale.itemsSnapshot,
+    (sale) => sale.itemsSnapshot?.items,
+    (sale) => sale.itemsSnapshot?.itens,
+    (sale) => sale.fiscalItemsSnapshot,
+  ];
+
+  for (const sale of sales) {
+    for (const getter of candidates) {
+      const list = getter(sale);
+      if (!Array.isArray(list)) continue;
+      for (const item of list) {
+        const id = extractProductIdFromItem(item);
+        if (id) {
+          ids.add(id.toString());
+        }
+      }
+    }
+  }
+
+  return Array.from(ids);
+};
+
+const ensureSalesHaveCostData = (sales = [], productMap = new Map()) => {
+  const isPositive = (value) => {
+    if (value === undefined || value === null) return false;
+    const parsed = typeof value === 'string' ? Number(value.replace(',', '.')) : Number(value);
+    return Number.isFinite(parsed) && parsed > 0;
+  };
+
+  const resolveQuantity = (item) => {
+    const candidates = [item?.quantity, item?.quantidade, item?.qty, item?.qtd, item?.amount];
+    for (const candidate of candidates) {
+      const parsed = typeof candidate === 'string' ? Number(candidate.replace(',', '.')) : Number(candidate);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+    return 1;
+  };
+
+  const setUnitCostIfMissing = (item, cost) => {
+    const unitCostCandidates = [
+      item.cost,
+      item.costPrice,
+      item.unitCost,
+      item.precoCusto,
+      item.custo,
+      item.custoCalculado,
+      item.custoUnitario,
+      item.custoMedio,
+      item.custoReferencia,
+      item.precoCustoUnitario,
+      item.costValue,
+      item.precoCustoValue,
+    ];
+
+    if (unitCostCandidates.some(isPositive)) return;
+
+    item.custo = cost;
+    item.precoCusto = cost;
+    item.unitCost = cost;
+    item.cost = cost;
+
+    if (item.productSnapshot && typeof item.productSnapshot === 'object') {
+      if (!isPositive(item.productSnapshot.custo)) item.productSnapshot.custo = cost;
+      if (!isPositive(item.productSnapshot.custoCalculado)) item.productSnapshot.custoCalculado = cost;
+      if (!isPositive(item.productSnapshot.precoCusto)) item.productSnapshot.precoCusto = cost;
+    }
+
+    if (item.produtoSnapshot && typeof item.produtoSnapshot === 'object') {
+      if (!isPositive(item.produtoSnapshot.custo)) item.produtoSnapshot.custo = cost;
+      if (!isPositive(item.produtoSnapshot.custoCalculado)) item.produtoSnapshot.custoCalculado = cost;
+      if (!isPositive(item.produtoSnapshot.precoCusto)) item.produtoSnapshot.precoCusto = cost;
+    }
+  };
+
+  const setTotalCostIfMissing = (item, cost) => {
+    const totalCostCandidates = [
+      item.totalCost,
+      item.custoTotal,
+      item.totalCusto,
+      item.custoTotalCalculado,
+      item.totalCostValue,
+      item.precoCustoTotal,
+      item.totalPrecoCusto,
+      item.precoCustoValorTotal,
+    ];
+
+    if (totalCostCandidates.some(isPositive)) return;
+
+    const quantity = resolveQuantity(item);
+    const totalCost = quantity * cost;
+
+    item.custoTotal = totalCost;
+    item.totalCost = totalCost;
+    item.precoCustoTotal = totalCost;
+
+    if (item.productSnapshot && typeof item.productSnapshot === 'object') {
+      if (!isPositive(item.productSnapshot.custoTotal)) item.productSnapshot.custoTotal = totalCost;
+      if (!isPositive(item.productSnapshot.precoCustoTotal)) item.productSnapshot.precoCustoTotal = totalCost;
+    }
+
+    if (item.produtoSnapshot && typeof item.produtoSnapshot === 'object') {
+      if (!isPositive(item.produtoSnapshot.custoTotal)) item.produtoSnapshot.custoTotal = totalCost;
+      if (!isPositive(item.produtoSnapshot.precoCustoTotal)) item.produtoSnapshot.precoCustoTotal = totalCost;
+    }
+  };
+
+  const itemCollections = [
+    (sale) => sale.items,
+    (sale) => sale.receiptSnapshot?.items,
+    (sale) => sale.receiptSnapshot?.itens,
+    (sale) => sale.receiptSnapshot?.products,
+    (sale) => sale.receiptSnapshot?.produtos,
+    (sale) => sale.receiptSnapshot?.cart?.items,
+    (sale) => sale.receiptSnapshot?.cart?.itens,
+    (sale) => sale.receiptSnapshot?.cart?.products,
+    (sale) => sale.receiptSnapshot?.cart?.produtos,
+    (sale) => sale.itemsSnapshot,
+    (sale) => sale.itemsSnapshot?.items,
+    (sale) => sale.itemsSnapshot?.itens,
+    (sale) => sale.fiscalItemsSnapshot,
+  ];
+
+  for (const sale of sales) {
+    for (const getter of itemCollections) {
+      const list = getter(sale);
+      if (!Array.isArray(list)) continue;
+      for (const item of list) {
+        const productId = extractProductIdFromItem(item);
+        if (!productId) continue;
+
+        const product = productMap.get(productId.toString());
+        if (!product) continue;
+
+        const baseCost = isPositive(product.custoCalculado) ? product.custoCalculado : product.custo;
+        if (!isPositive(baseCost)) continue;
+
+        setUnitCostIfMissing(item, baseCost);
+        setTotalCostIfMissing(item, baseCost);
+      }
+    }
+  }
+
+  return sales;
 };
 
 const resolveProductObjectId = (value) => {
@@ -1956,6 +2142,13 @@ router.put('/:id/state', requireAuth, async (req, res) => {
       existingState: existingState || {},
       empresaId: pdv.empresa,
     });
+
+    const productIds = collectProductIdsFromSales(updatePayload.completedSales);
+    if (productIds.length) {
+      const products = await Product.find({ _id: { $in: productIds } }).select('custo custoCalculado').lean();
+      const productMap = new Map(products.map((product) => [product._id.toString(), product]));
+      ensureSalesHaveCostData(updatePayload.completedSales, productMap);
+    }
 
     updatePayload.completedSales = mergeInventoryProcessingStatus(
       updatePayload.completedSales || [],
