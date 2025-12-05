@@ -75,7 +75,7 @@ const deriveItemQuantity = (item = {}) => {
   return 1;
 };
 
-const deriveItemCost = (item = {}) => {
+const deriveItemUnitCost = (item = {}) => {
   const candidates = [
     item.cost,
     item.costPrice,
@@ -84,8 +84,18 @@ const deriveItemCost = (item = {}) => {
     item.custo,
     item.custoCalculado,
     item.custoUnitario,
+    item.custoMedio,
+    item.custoReferencia,
+    item.precoCustoUnitario,
+    item.costValue,
     item.product?.custo,
     item.produto?.custo,
+    item.product?.custoCalculado,
+    item.produto?.custoCalculado,
+    item.product?.custoMedio,
+    item.produto?.custoMedio,
+    item.product?.custoReferencia,
+    item.produto?.custoReferencia,
   ];
   for (const candidate of candidates) {
     const parsed = parseNumber(candidate);
@@ -94,15 +104,55 @@ const deriveItemCost = (item = {}) => {
   return 0;
 };
 
+const deriveItemTotalCost = (item = {}) => {
+  const candidates = [
+    item.totalCost,
+    item.custoTotal,
+    item.totalCusto,
+    item.custoTotalCalculado,
+    item.totalCostValue,
+  ];
+  for (const candidate of candidates) {
+    const parsed = parseNumber(candidate);
+    if (parsed !== null) return parsed;
+  }
+  return null;
+};
+
 const deriveSaleCost = (sale = {}) => {
   const items = collectSaleItems(sale);
   if (!items.length) return 0;
 
-  return items.reduce((acc, item) => {
+  const totalFromItems = items.reduce((acc, item) => {
+    const itemTotalCost = deriveItemTotalCost(item);
+    if (itemTotalCost !== null) {
+      return acc + itemTotalCost;
+    }
+
     const quantity = deriveItemQuantity(item) || 0;
-    const unitCost = deriveItemCost(item) || 0;
+    const unitCost = deriveItemUnitCost(item) || 0;
     return acc + quantity * unitCost;
   }, 0);
+
+  if (totalFromItems > 0) return totalFromItems;
+
+  const totals = sale?.receiptSnapshot?.totais || sale?.totais || {};
+  const candidates = [
+    sale.cost,
+    sale.totalCost,
+    sale.custo,
+    sale.custoTotal,
+    totals.custo,
+    totals.custoTotal,
+    totals.totalCusto,
+  ];
+
+  for (const candidate of candidates) {
+    const parsed = parseNumber(candidate);
+    if (parsed !== null) return parsed;
+  }
+
+  return 0;
 };
 
 const deriveSaleTotal = (sale = {}) => {
