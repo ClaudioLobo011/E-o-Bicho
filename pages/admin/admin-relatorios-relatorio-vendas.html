@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin: Relatório de Vendas - E o Bicho</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="../../src/output.css">
+</head>
+<body class="bg-gray-100">
+  <div id="admin-header-placeholder"></div>
+
+  <main class="container mx-auto px-4 pt-1 pb-10 min-h-screen">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <aside class="md:col-span-4">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
+
+      <div class="md:col-span-4 space-y-6">
+        <header class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div class="space-y-1">
+            <h1 class="text-2xl font-bold text-gray-800">Relatório de Vendas</h1>
+            <p class="text-sm text-gray-600">Visualize os principais indicadores de vendas, filtre por períodos e exporte os resultados.</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-3">
+            <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">
+              <i class="fas fa-file-export text-primary"></i>
+              Exportar CSV
+            </button>
+            <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-secondary transition">
+              <i class="fas fa-file-pdf"></i>
+              Gerar PDF
+            </button>
+          </div>
+        </header>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
+          <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Filtros</h2>
+              <p class="text-sm text-gray-600">Aplique filtros para refinar o período, a loja e o canal de venda.</p>
+            </div>
+            <div class="flex flex-wrap gap-2 text-xs text-gray-600">
+              <span class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 font-semibold text-primary"><i class="fas fa-clock"></i>Atualizado há 5 min</span>
+              <span class="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 font-semibold text-emerald-700"><i class="fas fa-circle text-[10px]"></i>Online</span>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            <div class="lg:col-span-3 space-y-2">
+              <label for="sales-period-start" class="block text-sm font-medium text-gray-700">Data inicial</label>
+              <input type="date" id="sales-period-start" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+            </div>
+            <div class="lg:col-span-3 space-y-2">
+              <label for="sales-period-end" class="block text-sm font-medium text-gray-700">Data final</label>
+              <input type="date" id="sales-period-end" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+            </div>
+            <div class="lg:col-span-3 space-y-2">
+              <label for="sales-store" class="block text-sm font-medium text-gray-700">Loja</label>
+              <select id="sales-store" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="">Todas as lojas</option>
+              </select>
+            </div>
+            <div class="lg:col-span-3 space-y-2">
+              <label for="sales-channel" class="block text-sm font-medium text-gray-700">Canal</label>
+              <select id="sales-channel" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="">Todos os canais</option>
+                <option value="venda">PDV</option>
+                <option value="delivery">Delivery</option>
+              </select>
+            </div>
+            <div class="lg:col-span-3 space-y-2">
+              <label for="sales-status" class="block text-sm font-medium text-gray-700">Status</label>
+              <select id="sales-status" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="">Todos</option>
+                <option value="completed">Concluído</option>
+                <option value="pending">Pendente</option>
+                <option value="cancelled">Cancelado</option>
+              </select>
+            </div>
+            <div class="lg:col-span-3 flex items-end gap-3">
+              <button id="apply-filters" type="button" class="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-secondary transition">
+                <i class="fas fa-filter"></i>
+                Aplicar filtros
+              </button>
+              <button id="reset-filters" type="button" class="inline-flex items-center justify-center rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">
+                <i class="fas fa-rotate-left"></i>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+            <div class="flex items-center justify-between text-sm text-gray-500">
+              <span>Total vendido</span>
+              <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700"><i class="fas fa-arrow-up"></i>12%</span>
+            </div>
+            <p id="metric-total" class="mt-2 text-2xl font-bold text-gray-800">R$ 0,00</p>
+            <p class="text-xs text-gray-500">Período selecionado</p>
+          </article>
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+            <div class="flex items-center justify-between text-sm text-gray-500">
+              <span>Ticket médio</span>
+              <span class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-700">+R$ 12,40</span>
+            </div>
+            <p id="metric-ticket" class="mt-2 text-2xl font-bold text-gray-800">R$ 0,00</p>
+            <p class="text-xs text-gray-500">Por venda</p>
+          </article>
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+            <div class="flex items-center justify-between text-sm text-gray-500">
+              <span>Pedidos concluídos</span>
+              <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700"><i class="fas fa-circle text-[8px]"></i>Estável</span>
+            </div>
+            <p id="metric-completed" class="mt-2 text-2xl font-bold text-gray-800">0</p>
+            <p class="text-xs text-gray-500">Emissão finalizada</p>
+          </article>
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+            <div class="flex items-center justify-between text-sm text-gray-500">
+              <span>Margem média</span>
+              <span class="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700"><i class="fas fa-arrow-down"></i>2,3%</span>
+            </div>
+            <p class="mt-2 text-2xl font-bold text-gray-800">31,4%</p>
+            <p class="text-xs text-gray-500">Após impostos e taxas</p>
+          </article>
+        </section>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+          <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Resultados</h2>
+              <p class="text-sm text-gray-600">Resumo das vendas agrupado por pedido. Exporte para compartilhar com a equipe.</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 text-sm text-gray-600">
+              <span id="results-counter" class="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1"><i class="fas fa-magnifying-glass"></i>Nenhuma venda carregada</span>
+              <span class="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1"><i class="fas fa-chart-pie"></i>Filtro aplicado</span>
+            </div>
+          </div>
+
+          <div class="overflow-hidden rounded-xl border border-gray-100">
+            <div class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-100 text-sm">
+                <thead class="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+                  <tr>
+                    <th class="px-4 py-3 font-semibold">Pedido</th>
+                    <th class="px-4 py-3 font-semibold">Data</th>
+                    <th class="px-4 py-3 font-semibold">Loja</th>
+                    <th class="px-4 py-3 font-semibold">Canal</th>
+                    <th class="px-4 py-3 font-semibold text-right">Total</th>
+                    <th class="px-4 py-3 font-semibold text-right">Custo</th>
+                    <th class="px-4 py-3 font-semibold text-right">Margem</th>
+                    <th class="px-4 py-3 font-semibold text-right">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="sales-table-body" class="divide-y divide-gray-100 bg-white text-gray-700">
+                  <tr id="sales-empty-state">
+                    <td colspan="8" class="px-4 py-6 text-center text-gray-500">Nenhuma venda encontrada para o filtro selecionado.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-3 text-sm text-gray-600 md:flex-row md:items-center md:justify-between">
+            <div class="flex items-center gap-2">
+              <span class="text-gray-500">Exibindo</span>
+              <select id="page-size" class="rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:ring-2 focus:ring-primary/20 text-sm">
+                <option value="25">25 linhas</option>
+                <option value="50">50 linhas</option>
+                <option value="100">100 linhas</option>
+              </select>
+            </div>
+            <div class="flex items-center gap-2">
+              <button id="page-prev" type="button" class="rounded-lg border border-gray-200 px-3 py-2 hover:bg-gray-50"><i class="fas fa-arrow-left"></i></button>
+              <span id="page-indicator" class="text-gray-700">Página 1 de 1</span>
+              <button id="page-next" type="button" class="rounded-lg border border-gray-200 px-3 py-2 hover:bg-gray-50"><i class="fas fa-arrow-right"></i></button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <div id="admin-footer-placeholder"></div>
+  <div id="modal-placeholder"></div>
+  <div id="confirm-modal-placeholder"></div>
+
+  <script>var basePath = '../../';</script>
+  <script src="../../scripts/core/config.js"></script>
+  <script src="../../scripts/core/ui.js"></script>
+  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/admin/admin.js"></script>
+  <script src="../../scripts/admin/admin-relatorios-relatorio-vendas.js"></script>
+</body>
+</html>
