@@ -77,8 +77,7 @@
 
   const setDefaultDates = () => {
     const today = new Date();
-    const start = new Date();
-    start.setDate(today.getDate() - 7);
+    const start = new Date(today);
     elements.start.value = start.toISOString().split('T')[0];
     elements.end.value = today.toISOString().split('T')[0];
     state.filters.start = elements.start.value;
