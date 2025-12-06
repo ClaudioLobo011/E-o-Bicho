@@ -60,6 +60,38 @@
     return `${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
   };
 
+  const normalizeText = (value) => {
+    if (value === null || value === undefined) return '';
+    try {
+      return String(value)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase();
+    } catch (_error) {
+      return String(value).toLowerCase();
+    }
+  };
+
+  const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  const buildFilterRegex = (rawValue) => {
+    const normalized = normalizeText(rawValue || '').trim();
+    if (!normalized) return null;
+
+    const pattern = normalized
+      .split('*')
+      .map((segment) => escapeRegex(segment))
+      .join('.*');
+
+    if (!pattern) return null;
+
+    try {
+      return new RegExp(pattern, 'i');
+    } catch (_error) {
+      return null;
+    }
+  };
+
   const formatDateTime = (value) => {
     if (!value) return '—';
     const date = new Date(value);
@@ -291,10 +323,11 @@
     const baseItems = Array.isArray(items) ? items : [];
     const filtered = baseItems.filter((sale) => {
       return tableColumns.every((column) => {
-        const term = (state.table.filters[column.key] || '').trim().toLowerCase();
-        if (!term) return true;
-        const display = String(getDisplayValue(sale, column) ?? '').toLowerCase();
-        return display.includes(term);
+        const term = state.table.filters[column.key] || '';
+        const regex = buildFilterRegex(term);
+        if (!regex) return true;
+        const display = normalizeText(getDisplayValue(sale, column) ?? '');
+        return regex.test(display);
       });
     });
 
