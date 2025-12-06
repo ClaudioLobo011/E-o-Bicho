@@ -746,6 +746,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const formData = new FormData(form);
+        const parseCurrencyField = (value) => {
+            const parsed = parseLocalizedNumberInput(value);
+            return Number.isFinite(parsed) ? parsed : null;
+        };
         const productName = (formData.get('nome') || '').trim();
 
         const additionalBarcodesRaw = (formData.get('barcode-additional') || '')
@@ -799,9 +803,9 @@ document.addEventListener('DOMContentLoaded', () => {
             marca: formData.get('marca'),
             unidade: formData.get('unidade'),
             referencia: formData.get('referencia'),
-            custo: formData.get('custo'),
-            venda: formData.get('venda'),
-            precoClube: promoPriceValue === '' ? null : promoPriceValue,
+            custo: parseCurrencyField(formData.get('custo')),
+            venda: parseCurrencyField(formData.get('venda')),
+            precoClube: promoPriceValue === '' ? null : parseCurrencyField(promoPriceValue),
             categorias: productCategories,
             fornecedores: supplierEntries.map((item) => ({
                 fornecedor: item.fornecedor,
@@ -3133,10 +3137,24 @@ document.addEventListener('DOMContentLoaded', () => {
     let isUpdatingFromMarkup = false;
     let isUpdatingFromPrice = false;
 
+    const parseLocalizedNumberInput = (rawValue) => {
+        if (rawValue === null || rawValue === undefined) return null;
+        const normalized = typeof rawValue === 'string' ? rawValue.trim() : String(rawValue);
+        if (!normalized) return null;
+
+        const usesComma = normalized.includes(',');
+        const sanitized = usesComma
+            ? normalized.replace(/\./g, '').replace(',', '.')
+            : normalized;
+
+        const parsed = Number(sanitized);
+        return Number.isFinite(parsed) ? parsed : null;
+    };
+
     const updateMarkupFromValues = () => {
         if (!costInput || !saleInput || !markupInput || isUpdatingFromMarkup) return;
-        const cost = parseFloat(costInput.value);
-        const sale = parseFloat(saleInput.value);
+        const cost = parseLocalizedNumberInput(costInput.value);
+        const sale = parseLocalizedNumberInput(saleInput.value);
 
         if (!Number.isFinite(cost) || cost <= 0 || !Number.isFinite(sale)) {
             markupInput.value = '';
@@ -3152,8 +3170,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const updateSaleFromMarkup = (options = {}) => {
         if (!costInput || !saleInput || !markupInput || isUpdatingFromPrice) return;
         const { shouldNormalizeMarkup = true } = options;
-        const cost = parseFloat(costInput.value);
-        const markup = parseFloat(markupInput.value);
+        const cost = parseLocalizedNumberInput(costInput.value);
+        const markup = parseLocalizedNumberInput(markupInput.value);
 
         if (!Number.isFinite(cost) || cost < 0 || !Number.isFinite(markup)) return;
 
@@ -3255,7 +3273,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const getParentCostForFraction = () => {
         if (costInput) {
-            const parsed = Number(costInput.value);
+            const parsed = parseLocalizedNumberInput(costInput.value);
             if (Number.isFinite(parsed) && parsed > 0) {
                 return parsed;
             }
