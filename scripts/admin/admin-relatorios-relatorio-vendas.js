@@ -454,7 +454,7 @@
 
     const popover = document.createElement('div');
     popover.className =
-      'absolute right-0 z-30 mt-1 w-64 rounded-lg border border-gray-200 bg-white p-3 shadow-lg';
+      'fixed z-40 mt-1 w-64 rounded-lg border border-gray-200 bg-white p-3 shadow-lg';
     popover.dataset.popoverFor = column.key;
 
     const title = document.createElement('div');
@@ -588,7 +588,32 @@
     popover.append(title, searchInput, selectAllWrapper, list, actions);
 
     parentCell.classList.add('relative');
-    parentCell.appendChild(popover);
+    document.body.appendChild(popover);
+
+    const updatePosition = () => {
+      const anchorRect = anchor.getBoundingClientRect();
+      const popoverRect = popover.getBoundingClientRect();
+
+      const spacing = 6;
+      let top = anchorRect.bottom + spacing;
+      if (top + popoverRect.height > window.innerHeight) {
+        top = anchorRect.top - popoverRect.height - spacing;
+      }
+
+      const maxLeft = window.innerWidth - popoverRect.width - spacing;
+      const minLeft = spacing;
+      let left = anchorRect.left;
+      if (left > maxLeft) left = maxLeft;
+      if (left < minLeft) left = minLeft;
+
+      popover.style.top = `${Math.max(top, spacing)}px`;
+      popover.style.left = `${left}px`;
+    };
+
+    updatePosition();
+
+    const handleScroll = () => updatePosition();
+    const handleResize = () => updatePosition();
 
     const handleClickOutside = (event) => {
       if (!popover.contains(event.target) && !anchor.contains(event.target)) {
@@ -602,6 +627,8 @@
 
     document.addEventListener('mousedown', handleClickOutside);
     document.addEventListener('keydown', handleEscape);
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', handleResize);
 
     activePopover = { key: column.key, element: popover };
     state.table.openPopover = column.key;
@@ -609,6 +636,8 @@
     activePopoverCleanup = () => {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleEscape);
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', handleResize);
     };
 
     renderOptions();
