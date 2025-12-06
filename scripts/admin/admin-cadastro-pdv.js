@@ -29,6 +29,7 @@
     nfceSeries: '#pdv-nfce-series',
     nfeInitialNumber: '#pdv-nfe-initial-number',
     nfceInitialNumber: '#pdv-nfce-initial-number',
+    nfceLastNumber: '#pdv-nfce-last-number',
     envHomologacao: '#pdv-env-homologacao',
     envProducao: '#pdv-env-producao',
     envDefaultHomologacao: '#pdv-env-default-homologacao',
@@ -536,6 +537,7 @@
       elements.offlineLimit.value = '';
       elements.offlineLimit.disabled = true;
     }
+    if (elements.nfceLastNumber) elements.nfceLastNumber.value = '';
     if (elements.notes) elements.notes.value = '';
     resetAuditInfo();
     updateCompanySummary();
@@ -574,6 +576,12 @@
       elements.nfceInitialNumber.value =
         pdv.numeroNfceInicial !== null && pdv.numeroNfceInicial !== undefined
           ? String(pdv.numeroNfceInicial)
+          : '';
+    }
+    if (elements.nfceLastNumber) {
+      elements.nfceLastNumber.value =
+        pdv.numeroNfceAtual !== null && pdv.numeroNfceAtual !== undefined
+          ? String(pdv.numeroNfceAtual)
           : '';
     }
     if (elements.syncAuto) elements.syncAuto.checked = pdv.sincronizacaoAutomatica !== false;
@@ -752,6 +760,22 @@
       return { ok: true, value: Math.floor(parsed) };
     };
 
+    const parseCurrentNumber = (input, label) => {
+      if (!input) return { ok: true, value: null };
+      const raw = typeof input.value === 'number' ? String(input.value) : (input.value || '').toString();
+      const trimmed = raw.trim();
+      if (!trimmed) {
+        return { ok: true, value: null };
+      }
+      const parsed = Number(trimmed.replace(',', '.'));
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        notify(`Informe o último número válido já emitido para ${label}.`, 'warning');
+        input.focus();
+        return { ok: false };
+      }
+      return { ok: true, value: Math.floor(parsed) };
+    };
+
     const numeroNfeInicial = parseInitialNumber(elements.nfeInitialNumber, 'NF-e');
     if (!numeroNfeInicial.ok) {
       return null;
@@ -759,6 +783,11 @@
 
     const numeroNfceInicial = parseInitialNumber(elements.nfceInitialNumber, 'NFC-e');
     if (!numeroNfceInicial.ok) {
+      return null;
+    }
+
+    const numeroNfceAtual = parseCurrentNumber(elements.nfceLastNumber, 'NFC-e');
+    if (!numeroNfceAtual.ok) {
       return null;
     }
 
@@ -772,6 +801,7 @@
       serieNfce: elements.nfceSeries?.value.trim() || '',
       numeroNfeInicial: numeroNfeInicial.value,
       numeroNfceInicial: numeroNfceInicial.value,
+      numeroNfceAtual: numeroNfceAtual.value,
       ambientesHabilitados,
       ambientePadrao,
       sincronizacaoAutomatica: Boolean(elements.syncAuto?.checked),
