@@ -14,6 +14,7 @@
     pageNext: document.getElementById('page-next'),
     pageIndicator: document.getElementById('page-indicator'),
     tableBody: document.getElementById('sales-table-body'),
+    tableHead: document.getElementById('sales-table-head'),
     emptyState: document.getElementById('sales-empty-state'),
     resultsCounter: document.getElementById('results-counter'),
     metricTotal: document.getElementById('metric-total'),
@@ -42,6 +43,10 @@
     },
     loading: false,
     sales: [],
+    table: {
+      filters: {},
+      sort: { key: null, direction: null },
+    },
     stores: [],
   };
 
@@ -63,6 +68,77 @@
       dateStyle: 'short',
       timeStyle: 'short',
     });
+  };
+
+  const tableColumns = [
+    { key: 'saleCode', label: 'Pedido', headerClass: 'px-4 py-3', cellClass: 'px-4 py-3 font-semibold text-gray-800' },
+    {
+      key: 'createdAt',
+      label: 'Data',
+      headerClass: 'px-4 py-3',
+      cellClass: 'px-4 py-3',
+      getComparable: (sale) => new Date(sale.createdAt || 0).getTime(),
+      getDisplay: (sale) => formatDateTime(sale.createdAt),
+    },
+    { key: 'store', label: 'Loja', headerClass: 'px-4 py-3', cellClass: 'px-4 py-3', getDisplay: (sale) => sale.store?.name || '—' },
+    { key: 'channelLabel', label: 'Canal', headerClass: 'px-4 py-3', cellClass: 'px-4 py-3', fallback: 'PDV' },
+    {
+      key: 'fiscalType',
+      label: 'Tipo',
+      headerClass: 'px-4 py-3',
+      cellClass: 'px-4 py-3',
+      getDisplay: (sale) => sale.fiscalTypeLabel || sale.fiscalType || 'Matricial',
+    },
+    {
+      key: 'totalValue',
+      label: 'Total',
+      headerClass: 'px-4 py-3 text-right',
+      cellClass: 'px-4 py-3 text-right font-semibold text-gray-900',
+      isNumeric: true,
+      getComparable: (sale) => sale.totalValue ?? 0,
+      getDisplay: (sale) => formatCurrency(sale.totalValue),
+    },
+    {
+      key: 'costValue',
+      label: 'Custo',
+      headerClass: 'px-4 py-3 text-right',
+      cellClass: 'px-4 py-3 text-right text-gray-900',
+      isNumeric: true,
+      getComparable: (sale) => Number.isFinite(sale.costValue) ? sale.costValue : Number.NEGATIVE_INFINITY,
+      getDisplay: (sale) => (Number.isFinite(sale.costValue) ? formatCurrency(sale.costValue) : ''),
+    },
+    {
+      key: 'markup',
+      label: 'Margem',
+      headerClass: 'px-4 py-3 text-right',
+      cellClass: 'px-4 py-3 text-right text-gray-600',
+      isNumeric: true,
+      getComparable: (sale) => Number.isFinite(sale.markup) ? sale.markup : Number.NEGATIVE_INFINITY,
+      getDisplay: (sale) => (Number.isFinite(sale.markup) ? formatPercentage(sale.markup) : ''),
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      headerClass: 'px-4 py-3 text-right',
+      cellClass: 'px-4 py-3 text-right',
+      getDisplay: (sale) => sale.status,
+    },
+  ];
+
+  tableColumns.forEach((column) => {
+    state.table.filters[column.key] = '';
+  });
+
+  const getDisplayValue = (sale, column) => {
+    if (typeof column.getDisplay === 'function') return column.getDisplay(sale);
+    if (column.key === 'store') return sale.store?.name || '—';
+    return sale[column.key] ?? column.fallback ?? '—';
+  };
+
+  const getComparableValue = (sale, column) => {
+    if (typeof column.getComparable === 'function') return column.getComparable(sale);
+    const value = getDisplayValue(sale, column);
+    return typeof value === 'string' ? value.toLowerCase() : value;
   };
 
   const buildStatusBadge = (status) => {
@@ -211,46 +287,171 @@
     }
   };
 
-  const renderTable = () => {
-    if (!elements.tableBody) return;
-    elements.tableBody.innerHTML = '';
-    if (!state.sales.length) {
-      if (elements.emptyState) {
-        elements.tableBody.appendChild(elements.emptyState);
-      }
-      return;
-    }
+  const applyTableState = (items) => {
+    const baseItems = Array.isArray(items) ? items : [];
+    const filtered = baseItems.filter((sale) => {
+      return tableColumns.every((column) => {
+        const term = (state.table.filters[column.key] || '').trim().toLowerCase();
+        if (!term) return true;
+        const display = String(getDisplayValue(sale, column) ?? '').toLowerCase();
+        return display.includes(term);
+      });
+    });
 
-    state.sales.forEach((sale) => {
-      const row = document.createElement('tr');
-      row.className = 'hover:bg-gray-50';
-      const costText = Number.isFinite(sale.costValue) ? formatCurrency(sale.costValue) : '';
-      const markupText = Number.isFinite(sale.markup) ? formatPercentage(sale.markup) : '';
-      const fiscalType = sale.fiscalTypeLabel || sale.fiscalType || 'Matricial';
-      row.innerHTML = `
-        <td class="px-4 py-3 font-semibold text-gray-800">${sale.saleCode || '—'}</td>
-        <td class="px-4 py-3">${formatDateTime(sale.createdAt)}</td>
-        <td class="px-4 py-3">${sale.store?.name || '—'}</td>
-        <td class="px-4 py-3">${sale.channelLabel || 'PDV'}</td>
-        <td class="px-4 py-3">${fiscalType}</td>
-        <td class="px-4 py-3 text-right font-semibold text-gray-900">${formatCurrency(sale.totalValue)}</td>
-        <td class="px-4 py-3 text-right text-gray-900">${costText}</td>
-        <td class="px-4 py-3 text-right text-gray-600">${markupText}</td>
-        <td class="px-4 py-3 text-right">${buildStatusBadge(sale.status)}</td>
-      `;
-      elements.tableBody.appendChild(row);
+    const { key, direction } = state.table.sort;
+    if (!key || !direction) return filtered;
+
+    const targetColumn = tableColumns.find((column) => column.key === key);
+    if (!targetColumn) return filtered;
+
+    const directionMultiplier = direction === 'asc' ? 1 : -1;
+
+    return [...filtered].sort((a, b) => {
+      const valueA = getComparableValue(a, targetColumn);
+      const valueB = getComparableValue(b, targetColumn);
+
+      if (typeof valueA === 'number' && typeof valueB === 'number') {
+        if (!Number.isFinite(valueA) && !Number.isFinite(valueB)) return 0;
+        if (!Number.isFinite(valueA)) return -1 * directionMultiplier;
+        if (!Number.isFinite(valueB)) return 1 * directionMultiplier;
+        if (valueA === valueB) return 0;
+        return valueA > valueB ? directionMultiplier : -directionMultiplier;
+      }
+
+      const textA = String(valueA ?? '');
+      const textB = String(valueB ?? '');
+      return textA.localeCompare(textB, 'pt-BR', { sensitivity: 'base', numeric: true }) * directionMultiplier;
     });
   };
 
-  const updatePagination = () => {
+  const updateTableHeadSortIndicators = () => {
+    if (!elements.tableHead) return;
+    const buttons = elements.tableHead.querySelectorAll('[data-sort-button]');
+    buttons.forEach((button) => {
+      const { columnKey, sortDirection } = button.dataset;
+      const isActive = state.table.sort.key === columnKey && state.table.sort.direction === sortDirection;
+      button.classList.toggle('text-primary', isActive);
+      button.classList.toggle('border-primary/40', isActive);
+      button.classList.toggle('bg-primary/5', isActive);
+      button.classList.toggle('text-gray-400', !isActive);
+      button.classList.toggle('border-transparent', !isActive);
+    });
+  };
+
+  const setTableSort = (key, direction) => {
+    const isSame = state.table.sort.key === key && state.table.sort.direction === direction;
+    state.table.sort = isSame ? { key: null, direction: null } : { key, direction };
+    updateTableHeadSortIndicators();
+    renderTable();
+  };
+
+  const buildTableHead = () => {
+    if (!elements.tableHead) return;
+    elements.tableHead.innerHTML = '';
+
+    const row = document.createElement('tr');
+
+    tableColumns.forEach((column) => {
+      const th = document.createElement('th');
+      th.dataset.columnKey = column.key;
+      th.className = `${column.headerClass || ''} align-top bg-gray-50 whitespace-nowrap`;
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'flex flex-col gap-1';
+
+      const labelRow = document.createElement('div');
+      labelRow.className = 'flex items-center justify-between gap-1';
+
+      const label = document.createElement('span');
+      label.textContent = column.label;
+      label.className = 'flex-1 text-[11px] font-semibold uppercase leading-tight tracking-wide text-gray-600';
+      if (column.isNumeric) label.classList.add('text-right');
+      labelRow.appendChild(label);
+
+      const sortGroup = document.createElement('div');
+      sortGroup.className = 'flex flex-col items-center justify-center gap-px text-gray-400';
+
+      ['asc', 'desc'].forEach((direction) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.sortButton = 'true';
+        button.dataset.columnKey = column.key;
+        button.dataset.sortDirection = direction;
+        button.className = 'flex h-4 w-4 items-center justify-center rounded border border-transparent text-gray-400 transition';
+        button.setAttribute('aria-label', `Ordenar ${direction === 'asc' ? 'crescente' : 'decrescente'} por ${column.label}`);
+        button.innerHTML = `<i class="fas fa-sort-${direction === 'asc' ? 'up' : 'down'} text-[10px]"></i>`;
+        button.addEventListener('click', () => setTableSort(column.key, direction));
+        sortGroup.appendChild(button);
+      });
+
+      labelRow.appendChild(sortGroup);
+
+      const filter = document.createElement('input');
+      filter.type = 'text';
+      filter.placeholder = 'Filtrar';
+      filter.value = state.table.filters[column.key] || '';
+      filter.className =
+        'rounded border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20';
+      if (column.isNumeric) filter.classList.add('text-right');
+      filter.addEventListener('input', (event) => {
+        state.table.filters[column.key] = event.target.value || '';
+        renderTable();
+      });
+
+      wrapper.append(labelRow, filter);
+      th.appendChild(wrapper);
+      row.appendChild(th);
+    });
+
+    elements.tableHead.appendChild(row);
+    updateTableHeadSortIndicators();
+  };
+
+  const updatePagination = (visibleCount = Array.isArray(state.sales) ? state.sales.length : state.pagination.total) => {
     if (elements.pageIndicator) {
       elements.pageIndicator.textContent = `Página ${state.pagination.page} de ${state.pagination.totalPages}`;
     }
     if (elements.resultsCounter) {
-      const total = state.pagination.total;
-      elements.resultsCounter.innerHTML = `<i class="fas fa-magnifying-glass"></i>${total} vendas encontradas`;
+      elements.resultsCounter.innerHTML = `<i class="fas fa-magnifying-glass"></i>${visibleCount} vendas encontradas`;
     }
   };
+
+  const renderTable = () => {
+    if (!elements.tableBody) return;
+    elements.tableBody.innerHTML = '';
+    const visibleSales = applyTableState(state.sales);
+
+    if (!visibleSales.length) {
+      if (elements.emptyState) {
+        elements.tableBody.appendChild(elements.emptyState);
+      }
+      updatePagination(0);
+      return 0;
+    }
+
+    visibleSales.forEach((sale) => {
+      const row = document.createElement('tr');
+      row.className = 'hover:bg-gray-50';
+
+      tableColumns.forEach((column) => {
+        const cell = document.createElement('td');
+        cell.className = column.cellClass || 'px-4 py-3';
+        const value = column.key === 'status' ? buildStatusBadge(sale.status) : getDisplayValue(sale, column);
+        if (column.key === 'status') {
+          cell.innerHTML = value;
+        } else {
+          cell.textContent = value;
+        }
+        row.appendChild(cell);
+      });
+
+      elements.tableBody.appendChild(row);
+    });
+
+    updatePagination(visibleSales.length);
+    return visibleSales.length;
+  };
+
 
   const setLoading = (loading) => {
     state.loading = loading;
@@ -308,12 +509,10 @@
       state.pagination.total = data?.pagination?.total || 0;
       updateMetrics(data.metrics);
       renderTable();
-      updatePagination();
     } catch (error) {
       console.error(error);
       state.sales = [];
       renderTable();
-      updatePagination();
       alert('Erro ao carregar as vendas. Verifique sua conexão e tente novamente.');
     } finally {
       setLoading(false);
@@ -362,6 +561,7 @@
 
   const init = async () => {
     setDefaultDates();
+    buildTableHead();
     setupEvents();
     await fetchStores();
     applyFilters();
