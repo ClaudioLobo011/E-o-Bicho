@@ -274,6 +274,27 @@ const deriveSaleMarkup = (totalValue, costValue) => {
   return (profit / costValue) * 100;
 };
 
+const calculateAverageTicket = (sales = []) => {
+  const totals = sales.reduce(
+    (acc, record) => {
+      const sale = record?.completedSales || record?.sale || record;
+      const totalValue = deriveSaleTotal(sale);
+
+      if (!Number.isFinite(totalValue)) return acc;
+
+      return {
+        total: acc.total + totalValue,
+        count: acc.count + 1,
+      };
+    },
+    { total: 0, count: 0 }
+  );
+
+  if (!totals.count) return null;
+
+  return totals.total / totals.count;
+};
+
 const calculateMarginPercentage = (sales = []) => {
   const totals = sales.reduce(
     (acc, record) => {
@@ -457,9 +478,15 @@ router.get(
 
       const previousMargin = calculateMarginPercentage(previousMonthSales);
       const comparisonMargin = calculateMarginPercentage(comparisonMonthSales);
+      const previousAverageTicket = calculateAverageTicket(previousMonthSales);
+      const comparisonAverageTicket = calculateAverageTicket(comparisonMonthSales);
       const marginChange =
         Number.isFinite(previousMargin) && Number.isFinite(comparisonMargin)
           ? previousMargin - comparisonMargin
+          : null;
+      const averageTicketChange =
+        Number.isFinite(previousAverageTicket) && Number.isFinite(comparisonAverageTicket)
+          ? previousAverageTicket - comparisonAverageTicket
           : null;
 
       res.json({
@@ -474,6 +501,7 @@ router.get(
           totalValue: completedSalesTotal,
           averageTicket,
           completedCount,
+          averageTicketChange,
           marginAverage: previousMargin,
           marginChange,
         },
