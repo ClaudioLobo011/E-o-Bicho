@@ -463,30 +463,30 @@ router.get(
       const completedCount = sales.filter((sale) => sale.status === 'completed').length;
 
       const today = new Date();
+      const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+      const currentMonthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
       const previousMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
       const previousMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0, 23, 59, 59, 999);
-      const comparisonMonthStart = new Date(today.getFullYear(), today.getMonth() - 2, 1);
-      const comparisonMonthEnd = new Date(today.getFullYear(), today.getMonth() - 1, 0, 23, 59, 59, 999);
 
       const saleMatchForMargin = { ...saleMatch };
       delete saleMatchForMargin['completedSales.createdAt'];
 
-      const [previousMonthSales, comparisonMonthSales] = await Promise.all([
+      const [currentMonthSales, previousMonthSales] = await Promise.all([
+        fetchSalesForPeriod(baseMatch, saleMatchForMargin, currentMonthStart, currentMonthEnd),
         fetchSalesForPeriod(baseMatch, saleMatchForMargin, previousMonthStart, previousMonthEnd),
-        fetchSalesForPeriod(baseMatch, saleMatchForMargin, comparisonMonthStart, comparisonMonthEnd),
       ]);
 
+      const currentMargin = calculateMarginPercentage(currentMonthSales);
       const previousMargin = calculateMarginPercentage(previousMonthSales);
-      const comparisonMargin = calculateMarginPercentage(comparisonMonthSales);
+      const currentAverageTicket = calculateAverageTicket(currentMonthSales);
       const previousAverageTicket = calculateAverageTicket(previousMonthSales);
-      const comparisonAverageTicket = calculateAverageTicket(comparisonMonthSales);
       const marginChange =
-        Number.isFinite(previousMargin) && Number.isFinite(comparisonMargin)
-          ? previousMargin - comparisonMargin
+        Number.isFinite(currentMargin) && Number.isFinite(previousMargin)
+          ? currentMargin - previousMargin
           : null;
       const averageTicketChange =
-        Number.isFinite(previousAverageTicket) && Number.isFinite(comparisonAverageTicket)
-          ? previousAverageTicket - comparisonAverageTicket
+        Number.isFinite(currentAverageTicket) && Number.isFinite(previousAverageTicket)
+          ? currentAverageTicket - previousAverageTicket
           : null;
 
       res.json({
@@ -502,7 +502,7 @@ router.get(
           averageTicket,
           completedCount,
           averageTicketChange,
-          marginAverage: previousMargin,
+          marginAverage: currentMargin,
           marginChange,
         },
       });
