@@ -166,22 +166,21 @@ function initAdminSidebar() {
   const overlay = wrapper.querySelector('[data-admin-sidebar-overlay]');
   const toggleButtons = document.querySelectorAll('[data-admin-sidebar-trigger]');
   const closeButtons = wrapper.querySelectorAll('[data-admin-sidebar-close]');
-
-  const isDesktop = () => window.matchMedia('(min-width: 768px)').matches;
+  let overlayHideTimeout;
 
   const openSidebar = () => {
+    if (overlayHideTimeout) {
+      clearTimeout(overlayHideTimeout);
+      overlayHideTimeout = null;
+    }
     panel.classList.add('translate-x-0');
     panel.classList.remove('-translate-x-full');
     panel.setAttribute('aria-hidden', 'false');
     if (overlay) {
-      if (!isDesktop()) {
-        overlay.classList.remove('pointer-events-none');
-        overlay.classList.add('opacity-100');
-      }
+      overlay.classList.remove('hidden', 'pointer-events-none', 'opacity-0');
+      overlay.classList.add('opacity-100');
     }
-    if (!isDesktop()) {
-      document.body.classList.add('overflow-hidden');
-    }
+    document.body.classList.add('overflow-hidden');
   };
 
   const closeSidebar = () => {
@@ -189,8 +188,9 @@ function initAdminSidebar() {
     panel.classList.add('-translate-x-full');
     panel.setAttribute('aria-hidden', 'true');
     if (overlay) {
-      overlay.classList.add('pointer-events-none');
+      overlay.classList.add('opacity-0', 'pointer-events-none');
       overlay.classList.remove('opacity-100');
+      overlayHideTimeout = setTimeout(() => overlay.classList.add('hidden'), 200);
     }
     document.body.classList.remove('overflow-hidden');
   };
