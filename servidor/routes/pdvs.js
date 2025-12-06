@@ -484,6 +484,50 @@ const ensureSalesHaveCostData = (sales = [], productMap = new Map()) => {
     (sale) => sale.fiscalItemsSnapshot,
   ];
 
+  const resolvePrimaryItems = (sale) => {
+    for (const getter of itemCollections) {
+      const list = getter(sale);
+      if (Array.isArray(list) && list.length) {
+        return list;
+      }
+    }
+    return [];
+  };
+
+  const setSaleTotalCost = (sale, totalCost) => {
+    if (!(totalCost > 0)) return;
+
+    const shouldUpdateSaleField = (value) => isDifferentCost(value, totalCost);
+
+    const saleCostFields = [
+      'cost',
+      'totalCost',
+      'custo',
+      'custoTotal',
+      'precoCustoTotal',
+      'totalPrecoCusto',
+    ];
+
+    saleCostFields.forEach((field) => {
+      if (shouldUpdateSaleField(sale?.[field])) {
+        sale[field] = totalCost;
+      }
+    });
+
+    const updateTotals = (totals) => {
+      if (!totals || typeof totals !== 'object') return;
+      const totalFields = ['custo', 'custoTotal', 'totalCusto', 'precoCusto', 'precoCustoTotal', 'totalPrecoCusto'];
+      totalFields.forEach((field) => {
+        if (shouldUpdateSaleField(totals?.[field])) {
+          totals[field] = totalCost;
+        }
+      });
+    };
+
+    updateTotals(sale.totais);
+    updateTotals(sale.receiptSnapshot?.totais);
+  };
+
   for (const sale of sales) {
     for (const getter of itemCollections) {
       const list = getter(sale);
@@ -509,6 +553,44 @@ const ensureSalesHaveCostData = (sales = [], productMap = new Map()) => {
         setUnitCost(item, baseCost);
         setTotalCost(item, baseCost);
       }
+    }
+
+    const primaryItems = resolvePrimaryItems(sale);
+    if (primaryItems.length) {
+      const saleTotalCost = primaryItems.reduce((acc, item) => {
+        const candidates = [
+          item.cost,
+          item.costPrice,
+          item.unitCost,
+          item.precoCusto,
+          item.custo,
+          item.custoCalculado,
+          item.custoUnitario,
+          item.custoMedio,
+          item.custoReferencia,
+          item.precoCustoUnitario,
+          item.costValue,
+          item.precoCustoValue,
+          item.productSnapshot?.custo,
+          item.productSnapshot?.custoCalculado,
+          item.productSnapshot?.precoCusto,
+          item.productSnapshot?.precoCustoUnitario,
+          item.produtoSnapshot?.custo,
+          item.produtoSnapshot?.custoCalculado,
+          item.produtoSnapshot?.precoCusto,
+          item.produtoSnapshot?.precoCustoUnitario,
+        ];
+
+        const unitCost = candidates.map(parseNumber).find((value) => Number.isFinite(value) && value > 0);
+        if (!Number.isFinite(unitCost)) {
+          return acc;
+        }
+
+        const quantity = resolveQuantity(item);
+        return acc + quantity * unitCost;
+      }, 0);
+
+      setSaleTotalCost(sale, saleTotalCost);
     }
   }
 
