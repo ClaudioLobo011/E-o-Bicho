@@ -46,6 +46,9 @@
     table: {
       filters: {},
       sort: { key: null, direction: null },
+      valueFilters: {},
+      filterSearch: {},
+      openPopover: null,
     },
     stores: [],
   };
@@ -70,6 +73,11 @@
     } catch (_error) {
       return String(value).toLowerCase();
     }
+  };
+
+  const normalizeOptionValue = (value) => {
+    const normalized = normalizeText(value ?? '');
+    return normalized || '__vazio__';
   };
 
   const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -159,12 +167,55 @@
 
   tableColumns.forEach((column) => {
     state.table.filters[column.key] = '';
+    state.table.valueFilters[column.key] = null;
+    state.table.filterSearch[column.key] = '';
   });
 
   const getDisplayValue = (sale, column) => {
     if (typeof column.getDisplay === 'function') return column.getDisplay(sale);
     if (column.key === 'store') return sale.store?.name || '—';
     return sale[column.key] ?? column.fallback ?? '—';
+  };
+
+  const getOptionLabel = (value) => {
+    if (value === undefined || value === null) return 'Vazio';
+    const asText = String(value);
+    return asText === '' ? 'Vazio' : asText;
+  };
+
+  const getColumnOptions = (column) => {
+    const unique = new Map();
+    state.sales.forEach((sale) => {
+      const displayValue = getDisplayValue(sale, column);
+      const normalized = normalizeOptionValue(displayValue);
+      if (!unique.has(normalized)) {
+        unique.set(normalized, {
+          normalized,
+          label: getOptionLabel(displayValue),
+        });
+      }
+    });
+
+    return Array.from(unique.values()).sort((a, b) =>
+      a.label.localeCompare(b.label, 'pt-BR', { sensitivity: 'base', numeric: true })
+    );
+  };
+
+  const syncValueFiltersWithData = () => {
+    tableColumns.forEach((column) => {
+      const selected = state.table.valueFilters[column.key];
+      if (!(selected instanceof Set)) return;
+
+      const options = getColumnOptions(column);
+      const allowed = new Set(options.map((option) => option.normalized));
+      const next = new Set([...selected].filter((value) => allowed.has(value)));
+
+      if (next.size === allowed.size || allowed.size === 0) {
+        state.table.valueFilters[column.key] = null;
+      } else {
+        state.table.valueFilters[column.key] = next;
+      }
+    });
   };
 
   const getComparableValue = (sale, column) => {
@@ -325,9 +376,18 @@
       return tableColumns.every((column) => {
         const term = state.table.filters[column.key] || '';
         const regex = buildFilterRegex(term);
+        const hasValueFilter = state.table.valueFilters[column.key] instanceof Set;
+        const display = getDisplayValue(sale, column);
+        const normalizedDisplay = normalizeText(display ?? '');
+
+        if (hasValueFilter) {
+          const selectedValues = state.table.valueFilters[column.key];
+          const optionKey = normalizeOptionValue(display);
+          if (!selectedValues.has(optionKey)) return false;
+        }
+
         if (!regex) return true;
-        const display = normalizeText(getDisplayValue(sale, column) ?? '');
-        return regex.test(display);
+        return regex.test(normalizedDisplay);
       });
     });
 
@@ -355,6 +415,211 @@
       const textB = String(valueB ?? '');
       return textA.localeCompare(textB, 'pt-BR', { sensitivity: 'base', numeric: true }) * directionMultiplier;
     });
+  };
+
+  let activePopover = null;
+  let activePopoverCleanup = null;
+
+  const closeFilterPopover = () => {
+    if (typeof activePopoverCleanup === 'function') {
+      activePopoverCleanup();
+      activePopoverCleanup = null;
+    }
+
+    if (activePopover?.element?.parentNode) {
+      activePopover.element.parentNode.removeChild(activePopover.element);
+    }
+
+    activePopover = null;
+    state.table.openPopover = null;
+  };
+
+  const ensureValueFilterSet = (columnKey, options) => {
+    if (!(state.table.valueFilters[columnKey] instanceof Set)) {
+      const next = new Set(options.map((option) => option.normalized));
+      state.table.valueFilters[columnKey] = next;
+    }
+    return state.table.valueFilters[columnKey];
+  };
+
+  const renderFilterPopover = (column, anchor) => {
+    if (!anchor) return;
+
+    const parentCell = anchor.closest('th');
+    if (!parentCell) return;
+
+    closeFilterPopover();
+
+    const options = getColumnOptions(column);
+
+    const popover = document.createElement('div');
+    popover.className =
+      'absolute right-0 z-30 mt-1 w-64 rounded-lg border border-gray-200 bg-white p-3 shadow-lg';
+    popover.dataset.popoverFor = column.key;
+
+    const title = document.createElement('div');
+    title.className = 'mb-2 text-xs font-semibold uppercase text-gray-600';
+    title.textContent = `Filtrar ${column.label}`;
+
+    const searchInput = document.createElement('input');
+    searchInput.type = 'text';
+    searchInput.placeholder = 'Procurar valores';
+    searchInput.value = state.table.filterSearch[column.key] || '';
+    searchInput.className =
+      'mb-2 w-full rounded border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20';
+
+    const selectAllWrapper = document.createElement('label');
+    selectAllWrapper.className = 'mb-2 flex cursor-pointer items-center gap-2 text-sm text-gray-700';
+
+    const selectAllCheckbox = document.createElement('input');
+    selectAllCheckbox.type = 'checkbox';
+    selectAllCheckbox.className = 'h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/50';
+
+    const selectAllLabel = document.createElement('span');
+    selectAllLabel.textContent = 'Selecionar todos';
+    selectAllWrapper.append(selectAllCheckbox, selectAllLabel);
+
+    const list = document.createElement('div');
+    list.className = 'max-h-48 space-y-1 overflow-y-auto rounded border border-gray-100 bg-gray-50 px-2 py-2';
+
+    const actions = document.createElement('div');
+    actions.className = 'mt-3 flex items-center justify-between gap-2';
+
+    const clearButton = document.createElement('button');
+    clearButton.type = 'button';
+    clearButton.className =
+      'inline-flex items-center gap-1 rounded border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50';
+    clearButton.innerHTML = '<i class="fas fa-eraser"></i>Limpar';
+
+    const applyButton = document.createElement('button');
+    applyButton.type = 'button';
+    applyButton.className =
+      'inline-flex items-center gap-1 rounded bg-primary px-3 py-1 text-xs font-semibold text-white hover:bg-secondary';
+    applyButton.innerHTML = '<i class="fas fa-check"></i>Aplicar';
+
+    actions.append(clearButton, applyButton);
+
+    const renderOptions = () => {
+      list.innerHTML = '';
+
+      const searchTerm = normalizeText(state.table.filterSearch[column.key] || '');
+      const filteredOptions = options.filter((option) =>
+        normalizeText(option.label).includes(searchTerm)
+      );
+
+      const selectedSet = state.table.valueFilters[column.key];
+      const isAllSelected = !(selectedSet instanceof Set) || selectedSet.size === options.length;
+      selectAllCheckbox.checked = isAllSelected;
+      selectAllCheckbox.indeterminate = selectedSet instanceof Set && selectedSet.size > 0 && !isAllSelected;
+
+      if (!filteredOptions.length) {
+        const empty = document.createElement('p');
+        empty.className = 'py-2 text-center text-xs text-gray-500';
+        empty.textContent = 'Nenhum valor encontrado';
+        list.appendChild(empty);
+        return;
+      }
+
+      filteredOptions.forEach((option) => {
+        const item = document.createElement('label');
+        item.className = 'flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm text-gray-700 hover:bg-white';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/50';
+
+        const isSelected =
+          !(selectedSet instanceof Set) || selectedSet.size === options.length
+            ? true
+            : selectedSet.has(option.normalized);
+        checkbox.checked = isSelected;
+
+        checkbox.addEventListener('change', () => {
+          const targetSet = ensureValueFilterSet(column.key, options);
+          if (checkbox.checked) {
+            targetSet.add(option.normalized);
+          } else {
+            targetSet.delete(option.normalized);
+          }
+
+          if (targetSet.size === options.length) {
+            state.table.valueFilters[column.key] = null;
+          }
+
+          renderTable();
+          renderOptions();
+        });
+
+        const text = document.createElement('span');
+        text.textContent = option.label;
+
+        item.append(checkbox, text);
+        list.appendChild(item);
+      });
+    };
+
+    selectAllCheckbox.addEventListener('change', () => {
+      if (selectAllCheckbox.checked) {
+        state.table.valueFilters[column.key] = null;
+      } else {
+        state.table.valueFilters[column.key] = new Set();
+      }
+      renderTable();
+      renderOptions();
+    });
+
+    clearButton.addEventListener('click', () => {
+      state.table.valueFilters[column.key] = null;
+      state.table.filterSearch[column.key] = '';
+      searchInput.value = '';
+      renderTable();
+      renderOptions();
+    });
+
+    applyButton.addEventListener('click', () => {
+      closeFilterPopover();
+    });
+
+    searchInput.addEventListener('input', (event) => {
+      state.table.filterSearch[column.key] = event.target.value || '';
+      renderOptions();
+    });
+
+    popover.append(title, searchInput, selectAllWrapper, list, actions);
+
+    parentCell.classList.add('relative');
+    parentCell.appendChild(popover);
+
+    const handleClickOutside = (event) => {
+      if (!popover.contains(event.target) && !anchor.contains(event.target)) {
+        closeFilterPopover();
+      }
+    };
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') closeFilterPopover();
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+
+    activePopover = { key: column.key, element: popover };
+    state.table.openPopover = column.key;
+
+    activePopoverCleanup = () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+
+    renderOptions();
+  };
+
+  const toggleFilterPopover = (column, anchor) => {
+    if (state.table.openPopover === column.key) {
+      closeFilterPopover();
+      return;
+    }
+    renderFilterPopover(column, anchor);
   };
 
   const updateTableHeadSortIndicators = () => {
@@ -387,7 +652,7 @@
     tableColumns.forEach((column) => {
       const th = document.createElement('th');
       th.dataset.columnKey = column.key;
-      th.className = `${column.headerClass || ''} align-top bg-gray-50 whitespace-nowrap`;
+      th.className = `${column.headerClass || ''} relative align-top bg-gray-50 whitespace-nowrap`;
 
       const wrapper = document.createElement('div');
       wrapper.className = 'flex flex-col gap-1';
@@ -419,19 +684,35 @@
 
       labelRow.appendChild(sortGroup);
 
+      const filterRow = document.createElement('div');
+      filterRow.className = 'flex items-center gap-1';
+
       const filter = document.createElement('input');
       filter.type = 'text';
       filter.placeholder = 'Filtrar';
       filter.value = state.table.filters[column.key] || '';
       filter.className =
-        'rounded border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20';
+        'flex-1 rounded border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20';
       if (column.isNumeric) filter.classList.add('text-right');
       filter.addEventListener('input', (event) => {
         state.table.filters[column.key] = event.target.value || '';
         renderTable();
       });
 
-      wrapper.append(labelRow, filter);
+      const popoverButton = document.createElement('button');
+      popoverButton.type = 'button';
+      popoverButton.className =
+        'flex h-8 w-8 items-center justify-center rounded border border-gray-200 bg-white text-gray-500 transition hover:border-primary/50 hover:text-primary';
+      popoverButton.setAttribute('aria-label', `Filtrar valores da coluna ${column.label}`);
+      popoverButton.innerHTML = '<i class="fas fa-magnifying-glass"></i>';
+      popoverButton.addEventListener('click', (event) => {
+        event.preventDefault();
+        toggleFilterPopover(column, popoverButton);
+      });
+
+      filterRow.append(filter, popoverButton);
+
+      wrapper.append(labelRow, filterRow);
       th.appendChild(wrapper);
       row.appendChild(th);
     });
@@ -541,6 +822,7 @@
       state.pagination.totalPages = data?.pagination?.totalPages || 1;
       state.pagination.total = data?.pagination?.total || 0;
       updateMetrics(data.metrics);
+      syncValueFiltersWithData();
       renderTable();
     } catch (error) {
       console.error(error);
