@@ -254,6 +254,8 @@ const toObjectIdOrNull = (value) => {
 const extractProductIdFromSnapshot = (item) => {
   if (!item || typeof item !== 'object') return null;
   const candidates = [
+    item.id,
+    item._id,
     item.productId,
     item.product_id,
     item.produtoId,
@@ -276,6 +278,8 @@ const extractProductIdFromSnapshot = (item) => {
 const extractProductIdFromItem = (item) => {
   if (!item || typeof item !== 'object') return null;
   const candidates = [
+    item.id,
+    item._id,
     item.productId,
     item.product_id,
     item.produtoId,
