@@ -80,18 +80,13 @@ const collectSaleItems = (sale = {}) => {
     sale.fiscalItemsSnapshot?.itens,
   ];
 
-  const items = [];
-  candidates.forEach((entry) => {
-    if (Array.isArray(entry)) {
-      entry.forEach((item) => {
-        if (item && typeof item === 'object') {
-          items.push(item);
-        }
-      });
-    }
-  });
+  for (const entry of candidates) {
+    if (!Array.isArray(entry) || !entry.length) continue;
+    const filtered = entry.filter((item) => item && typeof item === 'object');
+    if (filtered.length) return filtered;
+  }
 
-  return items;
+  return [];
 };
 
 const deriveItemQuantity = (item = {}) => {
