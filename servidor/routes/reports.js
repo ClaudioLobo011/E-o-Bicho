@@ -80,18 +80,13 @@ const collectSaleItems = (sale = {}) => {
     sale.fiscalItemsSnapshot?.itens,
   ];
 
-  const items = [];
-  candidates.forEach((entry) => {
-    if (Array.isArray(entry)) {
-      entry.forEach((item) => {
-        if (item && typeof item === 'object') {
-          items.push(item);
-        }
-      });
-    }
-  });
+  for (const entry of candidates) {
+    if (!Array.isArray(entry) || !entry.length) continue;
+    const filtered = entry.filter((item) => item && typeof item === 'object');
+    if (filtered.length) return filtered;
+  }
 
-  return items;
+  return [];
 };
 
 const deriveItemQuantity = (item = {}) => {
@@ -191,22 +186,22 @@ const deriveItemTotalCost = (item = {}) => {
 
 const deriveSaleCost = (sale = {}) => {
   const items = collectSaleItems(sale);
-  if (!items.length) return 0;
+  if (!items.length) return null;
 
   let foundItemCost = false;
 
   const totalFromItems = items.reduce((acc, item) => {
+    const itemTotalCost = deriveItemTotalCost(item);
+    if (itemTotalCost !== null) {
+      foundItemCost = true;
+      return acc + itemTotalCost;
+    }
+
     const quantity = deriveItemQuantity(item) || 0;
     const unitCost = deriveItemUnitCost(item);
     if (unitCost !== null) {
       foundItemCost = true;
       return acc + quantity * unitCost;
-    }
-
-    const itemTotalCost = deriveItemTotalCost(item);
-    if (itemTotalCost !== null) {
-      foundItemCost = true;
-      return acc + itemTotalCost;
     }
 
     return acc;
@@ -235,7 +230,7 @@ const deriveSaleCost = (sale = {}) => {
     if (parsed !== null) return parsed;
   }
 
-  return 0;
+  return null;
 };
 
 const deriveSaleTotal = (sale = {}) => {
@@ -269,6 +264,125 @@ const deriveSaleTotal = (sale = {}) => {
   }
 
   return 0;
+};
+
+const deriveSaleMarkup = (totalValue, costValue) => {
+  if (!Number.isFinite(totalValue)) return null;
+  if (!Number.isFinite(costValue) || costValue <= 0) return null;
+
+  const profit = totalValue - costValue;
+  return (profit / costValue) * 100;
+};
+
+const calculateTotalValue = (sales = []) => {
+  return sales.reduce((acc, record) => {
+    const sale = record?.completedSales || record?.sale || record;
+    const totalValue = deriveSaleTotal(sale);
+
+    if (!Number.isFinite(totalValue)) return acc;
+
+    return acc + totalValue;
+  }, 0);
+};
+
+const calculateAverageTicket = (sales = []) => {
+  const totals = sales.reduce(
+    (acc, record) => {
+      const sale = record?.completedSales || record?.sale || record;
+      const totalValue = deriveSaleTotal(sale);
+
+      if (!Number.isFinite(totalValue)) return acc;
+
+      return {
+        total: acc.total + totalValue,
+        count: acc.count + 1,
+      };
+    },
+    { total: 0, count: 0 }
+  );
+
+  if (!totals.count) return null;
+
+  return totals.total / totals.count;
+};
+
+const isCompletedSale = (record) => {
+  const sale = record?.completedSales || record?.sale || record || {};
+  const status = (sale.status || 'completed').toLowerCase();
+  return status === 'completed';
+};
+
+const deriveFiscalTypeLabel = (sale = {}) => {
+  const fiscalStatus = (sale.fiscalStatus || '').toLowerCase();
+  const hasFiscalEmission =
+    ['emitted', 'authorized', 'autorizado', 'approved', 'aprovado'].includes(fiscalStatus) ||
+    (sale.fiscalXmlName && sale.fiscalXmlName.trim()) ||
+    (sale.fiscalAccessKey && sale.fiscalAccessKey.trim());
+
+  if (!hasFiscalEmission) return 'Matricial';
+
+  const joinedHints = [
+    sale.fiscalXmlName,
+    sale.fiscalXmlUrl,
+    sale.fiscalEnvironment,
+    sale.fiscalAccessKey,
+    sale.fiscalSerie,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  const xmlContent = (sale.fiscalXmlContent || '').toLowerCase();
+  const contentHints = `${joinedHints} ${xmlContent}`;
+
+  if (contentHints.includes('nfse')) return 'NFSe';
+  if (contentHints.includes('nfce')) return 'NFCe';
+  if (contentHints.includes('nfe')) return 'NFe';
+
+  return 'NFe';
+};
+
+const calculateMarginPercentage = (sales = []) => {
+  const totals = sales.reduce(
+    (acc, record) => {
+      const sale = record?.completedSales || record?.sale || record;
+      const totalValue = deriveSaleTotal(sale);
+      const costValue = deriveSaleCost(sale);
+
+      if (!Number.isFinite(totalValue) || !Number.isFinite(costValue)) return acc;
+
+      return {
+        total: acc.total + totalValue,
+        cost: acc.cost + costValue,
+      };
+    },
+    { total: 0, cost: 0 }
+  );
+
+  if (totals.total <= 0 || totals.cost <= 0) return null;
+
+  const profit = totals.total - totals.cost;
+  return (profit / totals.total) * 100;
+};
+
+const fetchSalesForPeriod = async (baseMatch, saleMatch, startDate, endDate) => {
+  const periodMatch = { ...saleMatch };
+
+  if (startDate || endDate) {
+    const createdAt = { ...(saleMatch?.['completedSales.createdAt'] || {}) };
+    if (startDate) createdAt.$gte = startDate;
+    if (endDate) createdAt.$lte = endDate;
+    periodMatch['completedSales.createdAt'] = createdAt;
+  }
+
+  const pipeline = [
+    { $match: baseMatch },
+    { $project: { completedSales: 1 } },
+    { $unwind: '$completedSales' },
+    { $match: periodMatch },
+  ];
+
+  return PdvState.aggregate(pipeline);
 };
 
 router.get(
@@ -367,6 +481,9 @@ router.get(
       const sales = records.map((record) => {
         const sale = record.completedSales || {};
         const storeName = record.store?.fantasia || record.store?.apelido || record.store?.nome;
+        const totalValue = deriveSaleTotal(sale);
+        const costValue = deriveSaleCost(sale);
+        const fiscalTypeLabel = deriveFiscalTypeLabel(sale);
         return {
           id: sale.id,
           saleCode: sale.saleCode || sale.saleCodeLabel || 'Sem código',
@@ -382,15 +499,53 @@ router.get(
           },
           channel: sale.type || 'venda',
           channelLabel: sale.typeLabel || 'Venda',
-          totalValue: deriveSaleTotal(sale),
-          costValue: deriveSaleCost(sale),
+          totalValue,
+          costValue,
+          markup: deriveSaleMarkup(totalValue, costValue),
           status: sale.status || 'completed',
+          fiscalTypeLabel,
         };
       });
 
-      const completedSalesTotal = sales.reduce((acc, sale) => acc + (sale.totalValue || 0), 0);
-      const averageTicket = sales.length ? completedSalesTotal / sales.length : 0;
-      const completedCount = sales.filter((sale) => sale.status === 'completed').length;
+      const today = new Date();
+      const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+      const currentMonthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
+      const previousMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      const previousMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0, 23, 59, 59, 999);
+
+      const saleMatchForMargin = { ...saleMatch };
+      delete saleMatchForMargin['completedSales.createdAt'];
+
+      const [filteredSales, currentMonthSales, previousMonthSales] = await Promise.all([
+        fetchSalesForPeriod(baseMatch, saleMatch, startDate, endDate),
+        fetchSalesForPeriod(baseMatch, saleMatchForMargin, currentMonthStart, currentMonthEnd),
+        fetchSalesForPeriod(baseMatch, saleMatchForMargin, previousMonthStart, previousMonthEnd),
+      ]);
+
+      const completedSalesTotal = calculateTotalValue(filteredSales);
+      const averageTicket = calculateAverageTicket(filteredSales) || 0;
+
+      const filteredMargin = calculateMarginPercentage(filteredSales);
+      const currentMargin = calculateMarginPercentage(currentMonthSales);
+      const previousMargin = calculateMarginPercentage(previousMonthSales);
+      const currentTotal = calculateTotalValue(currentMonthSales);
+      const previousTotal = calculateTotalValue(previousMonthSales);
+      const currentAverageTicket = calculateAverageTicket(currentMonthSales);
+      const previousAverageTicket = calculateAverageTicket(previousMonthSales);
+      const completedCount = filteredSales.filter(isCompletedSale).length;
+      const currentCompletedCount = currentMonthSales.filter(isCompletedSale).length;
+      const previousCompletedCount = previousMonthSales.filter(isCompletedSale).length;
+      const marginChange =
+        Number.isFinite(currentMargin) && Number.isFinite(previousMargin)
+          ? currentMargin - previousMargin
+          : null;
+      const totalChange =
+        Number.isFinite(currentTotal) && Number.isFinite(previousTotal) ? currentTotal - previousTotal : null;
+      const averageTicketChange =
+        Number.isFinite(currentAverageTicket) && Number.isFinite(previousAverageTicket)
+          ? currentAverageTicket - previousAverageTicket
+          : null;
+      const completedChange = currentCompletedCount - previousCompletedCount;
 
       res.json({
         sales,
@@ -404,6 +559,11 @@ router.get(
           totalValue: completedSalesTotal,
           averageTicket,
           completedCount,
+          totalChange,
+          averageTicketChange,
+          completedChange,
+          marginAverage: filteredMargin,
+          marginChange,
         },
       });
     } catch (error) {

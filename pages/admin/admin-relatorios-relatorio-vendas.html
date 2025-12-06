@@ -94,7 +94,10 @@
           <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
             <div class="flex items-center justify-between text-sm text-gray-500">
               <span>Total vendido</span>
-              <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700"><i class="fas fa-arrow-up"></i>12%</span>
+              <span id="metric-total-trend" class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-700">
+                <i class="fas fa-minus"></i>
+                —
+              </span>
             </div>
             <p id="metric-total" class="mt-2 text-2xl font-bold text-gray-800">R$ 0,00</p>
             <p class="text-xs text-gray-500">Período selecionado</p>
@@ -102,15 +105,24 @@
           <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
             <div class="flex items-center justify-between text-sm text-gray-500">
               <span>Ticket médio</span>
-              <span class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-700">+R$ 12,40</span>
+              <span id="metric-ticket-trend" class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-700">
+                <i class="fas fa-minus"></i>
+                —
+              </span>
             </div>
             <p id="metric-ticket" class="mt-2 text-2xl font-bold text-gray-800">R$ 0,00</p>
             <p class="text-xs text-gray-500">Por venda</p>
           </article>
           <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
             <div class="flex items-center justify-between text-sm text-gray-500">
-              <span>Pedidos concluídos</span>
-              <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700"><i class="fas fa-circle text-[8px]"></i>Estável</span>
+              <span>Vendas Concluídas</span>
+              <span
+                id="metric-completed-trend"
+                class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-700"
+              >
+                <i class="fas fa-minus"></i>
+                —
+              </span>
             </div>
             <p id="metric-completed" class="mt-2 text-2xl font-bold text-gray-800">0</p>
             <p class="text-xs text-gray-500">Emissão finalizada</p>
@@ -118,9 +130,12 @@
           <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
             <div class="flex items-center justify-between text-sm text-gray-500">
               <span>Margem média</span>
-              <span class="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700"><i class="fas fa-arrow-down"></i>2,3%</span>
+              <span id="metric-margin-trend" class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-700">
+                <i class="fas fa-minus"></i>
+                —
+              </span>
             </div>
-            <p class="mt-2 text-2xl font-bold text-gray-800">31,4%</p>
+            <p id="metric-margin" class="mt-2 text-2xl font-bold text-gray-800">—</p>
             <p class="text-xs text-gray-500">Após impostos e taxas</p>
           </article>
         </section>
@@ -139,22 +154,23 @@
 
           <div class="overflow-hidden rounded-xl border border-gray-100">
             <div class="overflow-x-auto">
-              <table class="min-w-full divide-y divide-gray-100 text-sm">
-                <thead class="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+              <table id="sales-table" class="min-w-full divide-y divide-gray-100 text-left text-[11px] leading-[1.35] text-gray-700">
+                <thead id="sales-table-head" class="bg-gray-50 text-left text-[10px] uppercase tracking-wide text-gray-500">
                   <tr>
-                    <th class="px-4 py-3 font-semibold">Pedido</th>
-                    <th class="px-4 py-3 font-semibold">Data</th>
-                    <th class="px-4 py-3 font-semibold">Loja</th>
-                    <th class="px-4 py-3 font-semibold">Canal</th>
-                    <th class="px-4 py-3 font-semibold text-right">Total</th>
-                    <th class="px-4 py-3 font-semibold text-right">Custo</th>
-                    <th class="px-4 py-3 font-semibold text-right">Margem</th>
-                    <th class="px-4 py-3 font-semibold text-right">Status</th>
+                    <th class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-600">Pedido</th>
+                    <th class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-600">Data</th>
+                    <th class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-600">Loja</th>
+                    <th class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-600">Canal</th>
+                    <th class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-600">Tipo</th>
+                    <th class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-600 text-right">Total</th>
+                    <th class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-600 text-right">Custo</th>
+                    <th class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-600 text-right">Margem</th>
+                    <th class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-600 text-right">Status</th>
                   </tr>
                 </thead>
-                <tbody id="sales-table-body" class="divide-y divide-gray-100 bg-white text-gray-700">
+                <tbody id="sales-table-body" class="divide-y divide-gray-100 bg-white text-[11px] text-gray-700">
                   <tr id="sales-empty-state">
-                    <td colspan="8" class="px-4 py-6 text-center text-gray-500">Nenhuma venda encontrada para o filtro selecionado.</td>
+                    <td colspan="9" class="px-4 py-6 text-center text-gray-500">Nenhuma venda encontrada para o filtro selecionado.</td>
                   </tr>
                 </tbody>
               </table>
