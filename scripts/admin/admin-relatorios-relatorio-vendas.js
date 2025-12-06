@@ -117,14 +117,14 @@
     {
       key: 'saleCode',
       label: 'Pedido',
-      minWidth: 60,
+      minWidth: 36,
       headerClass: 'px-3 py-2',
       cellClass: 'px-3 py-2.5 text-[11px] font-semibold text-gray-800',
     },
     {
       key: 'createdAt',
       label: 'Data',
-      minWidth: 80,
+      minWidth: 48,
       headerClass: 'px-3 py-2',
       cellClass: 'px-3 py-2.5 text-[11px]',
       getComparable: (sale) => new Date(sale.createdAt || 0).getTime(),
@@ -133,7 +133,7 @@
     {
       key: 'store',
       label: 'Loja',
-      minWidth: 70,
+      minWidth: 44,
       headerClass: 'px-3 py-2',
       cellClass: 'px-3 py-2.5 text-[11px]',
       getDisplay: (sale) => sale.store?.name || '—',
@@ -141,7 +141,7 @@
     {
       key: 'channelLabel',
       label: 'Canal',
-      minWidth: 60,
+      minWidth: 40,
       headerClass: 'px-3 py-2',
       cellClass: 'px-3 py-2.5 text-[11px]',
       fallback: 'PDV',
@@ -149,7 +149,7 @@
     {
       key: 'fiscalType',
       label: 'Tipo',
-      minWidth: 60,
+      minWidth: 40,
       headerClass: 'px-3 py-2',
       cellClass: 'px-3 py-2.5 text-[11px]',
       getDisplay: (sale) => sale.fiscalTypeLabel || sale.fiscalType || 'Matricial',
@@ -157,7 +157,7 @@
     {
       key: 'totalValue',
       label: 'Total',
-      minWidth: 90,
+      minWidth: 54,
       headerClass: 'px-3 py-2 text-right',
       cellClass: 'px-3 py-2.5 text-right text-[11px] font-semibold text-gray-900',
       isNumeric: true,
@@ -167,7 +167,7 @@
     {
       key: 'costValue',
       label: 'Custo',
-      minWidth: 90,
+      minWidth: 54,
       headerClass: 'px-3 py-2 text-right',
       cellClass: 'px-3 py-2.5 text-right text-[11px] text-gray-900',
       isNumeric: true,
@@ -177,7 +177,7 @@
     {
       key: 'markup',
       label: 'Margem',
-      minWidth: 70,
+      minWidth: 44,
       headerClass: 'px-3 py-2 text-right',
       cellClass: 'px-3 py-2.5 text-right text-[11px] text-gray-600',
       isNumeric: true,
@@ -187,7 +187,7 @@
     {
       key: 'status',
       label: 'Status',
-      minWidth: 70,
+      minWidth: 44,
       headerClass: 'px-3 py-2 text-right',
       cellClass: 'px-3 py-2.5 text-right text-[11px]',
       getDisplay: (sale) => sale.status,
@@ -196,7 +196,7 @@
 
   const getColumnMinWidth = (key) => {
     const column = tableColumns.find((col) => col.key === key);
-    return column?.minWidth || 50;
+    return column?.minWidth || 28;
   };
 
   const ensureTableLayout = () => {
