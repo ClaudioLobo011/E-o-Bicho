@@ -87,8 +87,16 @@
     const today = new Date();
     const start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
     const end = new Date(today.getFullYear(), today.getMonth(), 0);
-    elements.start.value = start.toISOString().split('T')[0];
-    elements.end.value = end.toISOString().split('T')[0];
+
+    const formatInputDate = (date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    elements.start.value = formatInputDate(start);
+    elements.end.value = formatInputDate(end);
     state.filters.start = elements.start.value;
     state.filters.end = elements.end.value;
   };
