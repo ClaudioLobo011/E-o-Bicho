@@ -17,6 +17,7 @@
     emptyState: document.getElementById('sales-empty-state'),
     resultsCounter: document.getElementById('results-counter'),
     metricTotal: document.getElementById('metric-total'),
+    metricTotalTrend: document.getElementById('metric-total-trend'),
     metricTicket: document.getElementById('metric-ticket'),
     metricCompleted: document.getElementById('metric-completed'),
     metricTicketTrend: document.getElementById('metric-ticket-trend'),
@@ -105,12 +106,36 @@
     const totalValue = metrics.totalValue || 0;
     const averageTicket = metrics.averageTicket || 0;
     const completedCount = metrics.completedCount || 0;
+    const totalChange = metrics.totalChange;
     const averageTicketChange = metrics.averageTicketChange;
     const marginAverage = metrics.marginAverage;
     const marginChange = metrics.marginChange;
     if (elements.metricTotal) elements.metricTotal.textContent = formatCurrency(totalValue);
     if (elements.metricTicket) elements.metricTicket.textContent = formatCurrency(averageTicket);
     if (elements.metricCompleted) elements.metricCompleted.textContent = completedCount.toLocaleString('pt-BR');
+    if (elements.metricTotalTrend) {
+      const trendValue = Number.isFinite(totalChange) ? Math.abs(totalChange) : null;
+      const isIncrease = Number.isFinite(totalChange) && totalChange > 0.01;
+      const isDecrease = Number.isFinite(totalChange) && totalChange < -0.01;
+
+      elements.metricTotalTrend.className =
+        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold';
+
+      if (isIncrease) {
+        elements.metricTotalTrend.classList.add('bg-emerald-50', 'text-emerald-700');
+        elements.metricTotalTrend.innerHTML = `<i class="fas fa-arrow-up"></i>${formatCurrency(trendValue)}`;
+      } else if (isDecrease) {
+        elements.metricTotalTrend.classList.add('bg-rose-50', 'text-rose-700');
+        elements.metricTotalTrend.innerHTML = `<i class="fas fa-arrow-down"></i>${formatCurrency(trendValue)}`;
+      } else if (Number.isFinite(trendValue)) {
+        elements.metricTotalTrend.classList.add('bg-gray-100', 'text-gray-700');
+        elements.metricTotalTrend.innerHTML = `<i class="fas fa-minus"></i>${formatCurrency(trendValue)}`;
+      } else {
+        elements.metricTotalTrend.classList.add('bg-gray-100', 'text-gray-700');
+        elements.metricTotalTrend.innerHTML = '<i class="fas fa-minus"></i>—';
+      }
+    }
+
     if (elements.metricTicketTrend) {
       const trendValue = Number.isFinite(averageTicketChange) ? Math.abs(averageTicketChange) : null;
       const isIncrease = Number.isFinite(averageTicketChange) && averageTicketChange > 0.01;

@@ -274,6 +274,17 @@ const deriveSaleMarkup = (totalValue, costValue) => {
   return (profit / costValue) * 100;
 };
 
+const calculateTotalValue = (sales = []) => {
+  return sales.reduce((acc, record) => {
+    const sale = record?.completedSales || record?.sale || record;
+    const totalValue = deriveSaleTotal(sale);
+
+    if (!Number.isFinite(totalValue)) return acc;
+
+    return acc + totalValue;
+  }, 0);
+};
+
 const calculateAverageTicket = (sales = []) => {
   const totals = sales.reduce(
     (acc, record) => {
@@ -458,8 +469,8 @@ router.get(
         };
       });
 
-      const completedSalesTotal = sales.reduce((acc, sale) => acc + (sale.totalValue || 0), 0);
-      const averageTicket = sales.length ? completedSalesTotal / sales.length : 0;
+      const completedSalesTotal = calculateTotalValue(filteredSales);
+      const averageTicket = calculateAverageTicket(filteredSales) || 0;
       const completedCount = sales.filter((sale) => sale.status === 'completed').length;
 
       const today = new Date();
@@ -480,12 +491,16 @@ router.get(
       const filteredMargin = calculateMarginPercentage(filteredSales);
       const currentMargin = calculateMarginPercentage(currentMonthSales);
       const previousMargin = calculateMarginPercentage(previousMonthSales);
+      const currentTotal = calculateTotalValue(currentMonthSales);
+      const previousTotal = calculateTotalValue(previousMonthSales);
       const currentAverageTicket = calculateAverageTicket(currentMonthSales);
       const previousAverageTicket = calculateAverageTicket(previousMonthSales);
       const marginChange =
         Number.isFinite(currentMargin) && Number.isFinite(previousMargin)
           ? currentMargin - previousMargin
           : null;
+      const totalChange =
+        Number.isFinite(currentTotal) && Number.isFinite(previousTotal) ? currentTotal - previousTotal : null;
       const averageTicketChange =
         Number.isFinite(currentAverageTicket) && Number.isFinite(previousAverageTicket)
           ? currentAverageTicket - previousAverageTicket
@@ -503,6 +518,7 @@ router.get(
           totalValue: completedSalesTotal,
           averageTicket,
           completedCount,
+          totalChange,
           averageTicketChange,
           marginAverage: filteredMargin,
           marginChange,
