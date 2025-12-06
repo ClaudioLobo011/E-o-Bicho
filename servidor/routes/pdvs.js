@@ -370,10 +370,22 @@ const collectProductIdsFromSales = (sales = []) => {
 };
 
 const ensureSalesHaveCostData = (sales = [], productMap = new Map()) => {
+  const parseNumber = (value) => {
+    if (value === undefined || value === null) return NaN;
+    return typeof value === 'string' ? Number(value.replace(',', '.')) : Number(value);
+  };
+
   const isPositive = (value) => {
-    if (value === undefined || value === null) return false;
-    const parsed = typeof value === 'string' ? Number(value.replace(',', '.')) : Number(value);
+    const parsed = parseNumber(value);
     return Number.isFinite(parsed) && parsed > 0;
+  };
+
+  const isDifferentCost = (current, expected) => {
+    const parsedCurrent = parseNumber(current);
+    const parsedExpected = parseNumber(expected);
+    if (!Number.isFinite(parsedExpected)) return false;
+    if (!Number.isFinite(parsedCurrent) || parsedCurrent <= 0) return true;
+    return Math.abs(parsedCurrent - parsedExpected) > 0.0001;
   };
 
   const resolveQuantity = (item) => {
@@ -387,7 +399,7 @@ const ensureSalesHaveCostData = (sales = [], productMap = new Map()) => {
     return 1;
   };
 
-  const setUnitCostIfMissing = (item, cost) => {
+  const setUnitCost = (item, cost) => {
     const unitCostCandidates = [
       item.cost,
       item.costPrice,
@@ -403,7 +415,8 @@ const ensureSalesHaveCostData = (sales = [], productMap = new Map()) => {
       item.precoCustoValue,
     ];
 
-    if (unitCostCandidates.some(isPositive)) return;
+    const shouldUpdate = unitCostCandidates.every((candidate) => isDifferentCost(candidate, cost));
+    if (!shouldUpdate) return;
 
     item.custo = cost;
     item.precoCusto = cost;
@@ -411,19 +424,19 @@ const ensureSalesHaveCostData = (sales = [], productMap = new Map()) => {
     item.cost = cost;
 
     if (item.productSnapshot && typeof item.productSnapshot === 'object') {
-      if (!isPositive(item.productSnapshot.custo)) item.productSnapshot.custo = cost;
-      if (!isPositive(item.productSnapshot.custoCalculado)) item.productSnapshot.custoCalculado = cost;
-      if (!isPositive(item.productSnapshot.precoCusto)) item.productSnapshot.precoCusto = cost;
+      item.productSnapshot.custo = cost;
+      item.productSnapshot.custoCalculado = cost;
+      item.productSnapshot.precoCusto = cost;
     }
 
     if (item.produtoSnapshot && typeof item.produtoSnapshot === 'object') {
-      if (!isPositive(item.produtoSnapshot.custo)) item.produtoSnapshot.custo = cost;
-      if (!isPositive(item.produtoSnapshot.custoCalculado)) item.produtoSnapshot.custoCalculado = cost;
-      if (!isPositive(item.produtoSnapshot.precoCusto)) item.produtoSnapshot.precoCusto = cost;
+      item.produtoSnapshot.custo = cost;
+      item.produtoSnapshot.custoCalculado = cost;
+      item.produtoSnapshot.precoCusto = cost;
     }
   };
 
-  const setTotalCostIfMissing = (item, cost) => {
+  const setTotalCost = (item, cost) => {
     const totalCostCandidates = [
       item.totalCost,
       item.custoTotal,
@@ -435,23 +448,23 @@ const ensureSalesHaveCostData = (sales = [], productMap = new Map()) => {
       item.precoCustoValorTotal,
     ];
 
-    if (totalCostCandidates.some(isPositive)) return;
-
     const quantity = resolveQuantity(item);
     const totalCost = quantity * cost;
+    const shouldUpdate = totalCostCandidates.every((candidate) => isDifferentCost(candidate, totalCost));
+    if (!shouldUpdate) return;
 
     item.custoTotal = totalCost;
     item.totalCost = totalCost;
     item.precoCustoTotal = totalCost;
 
     if (item.productSnapshot && typeof item.productSnapshot === 'object') {
-      if (!isPositive(item.productSnapshot.custoTotal)) item.productSnapshot.custoTotal = totalCost;
-      if (!isPositive(item.productSnapshot.precoCustoTotal)) item.productSnapshot.precoCustoTotal = totalCost;
+      item.productSnapshot.custoTotal = totalCost;
+      item.productSnapshot.precoCustoTotal = totalCost;
     }
 
     if (item.produtoSnapshot && typeof item.produtoSnapshot === 'object') {
-      if (!isPositive(item.produtoSnapshot.custoTotal)) item.produtoSnapshot.custoTotal = totalCost;
-      if (!isPositive(item.produtoSnapshot.precoCustoTotal)) item.produtoSnapshot.precoCustoTotal = totalCost;
+      item.produtoSnapshot.custoTotal = totalCost;
+      item.produtoSnapshot.precoCustoTotal = totalCost;
     }
   };
 
@@ -470,6 +483,50 @@ const ensureSalesHaveCostData = (sales = [], productMap = new Map()) => {
     (sale) => sale.itemsSnapshot?.itens,
     (sale) => sale.fiscalItemsSnapshot,
   ];
+
+  const resolvePrimaryItems = (sale) => {
+    for (const getter of itemCollections) {
+      const list = getter(sale);
+      if (Array.isArray(list) && list.length) {
+        return list;
+      }
+    }
+    return [];
+  };
+
+  const setSaleTotalCost = (sale, totalCost) => {
+    if (!(totalCost > 0)) return;
+
+    const shouldUpdateSaleField = (value) => isDifferentCost(value, totalCost);
+
+    const saleCostFields = [
+      'cost',
+      'totalCost',
+      'custo',
+      'custoTotal',
+      'precoCustoTotal',
+      'totalPrecoCusto',
+    ];
+
+    saleCostFields.forEach((field) => {
+      if (shouldUpdateSaleField(sale?.[field])) {
+        sale[field] = totalCost;
+      }
+    });
+
+    const updateTotals = (totals) => {
+      if (!totals || typeof totals !== 'object') return;
+      const totalFields = ['custo', 'custoTotal', 'totalCusto', 'precoCusto', 'precoCustoTotal', 'totalPrecoCusto'];
+      totalFields.forEach((field) => {
+        if (shouldUpdateSaleField(totals?.[field])) {
+          totals[field] = totalCost;
+        }
+      });
+    };
+
+    updateTotals(sale.totais);
+    updateTotals(sale.receiptSnapshot?.totais);
+  };
 
   for (const sale of sales) {
     for (const getter of itemCollections) {
@@ -493,9 +550,47 @@ const ensureSalesHaveCostData = (sales = [], productMap = new Map()) => {
         const baseCost = unitCostCandidates.find(isPositive);
         if (!isPositive(baseCost)) continue;
 
-        setUnitCostIfMissing(item, baseCost);
-        setTotalCostIfMissing(item, baseCost);
+        setUnitCost(item, baseCost);
+        setTotalCost(item, baseCost);
       }
+    }
+
+    const primaryItems = resolvePrimaryItems(sale);
+    if (primaryItems.length) {
+      const saleTotalCost = primaryItems.reduce((acc, item) => {
+        const candidates = [
+          item.cost,
+          item.costPrice,
+          item.unitCost,
+          item.precoCusto,
+          item.custo,
+          item.custoCalculado,
+          item.custoUnitario,
+          item.custoMedio,
+          item.custoReferencia,
+          item.precoCustoUnitario,
+          item.costValue,
+          item.precoCustoValue,
+          item.productSnapshot?.custo,
+          item.productSnapshot?.custoCalculado,
+          item.productSnapshot?.precoCusto,
+          item.productSnapshot?.precoCustoUnitario,
+          item.produtoSnapshot?.custo,
+          item.produtoSnapshot?.custoCalculado,
+          item.produtoSnapshot?.precoCusto,
+          item.produtoSnapshot?.precoCustoUnitario,
+        ];
+
+        const unitCost = candidates.map(parseNumber).find((value) => Number.isFinite(value) && value > 0);
+        if (!Number.isFinite(unitCost)) {
+          return acc;
+        }
+
+        const quantity = resolveQuantity(item);
+        return acc + quantity * unitCost;
+      }, 0);
+
+      setSaleTotalCost(sale, saleTotalCost);
     }
   }
 
