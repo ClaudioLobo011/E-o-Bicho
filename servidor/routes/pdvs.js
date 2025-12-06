@@ -14,9 +14,9 @@ const BankAccount = require('../models/BankAccount');
 const AccountingAccount = require('../models/AccountingAccount');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
-const { isDriveConfigured, uploadBufferToDrive } = require('../utils/googleDrive');
+const { uploadBufferToR2, isR2Configured } = require('../utils/cloudflareR2');
 const { emitPdvSaleFiscal } = require('../services/nfceEmitter');
-const { buildFiscalDrivePath } = require('../utils/fiscalDrivePath');
+const { buildFiscalR2Key } = require('../utils/fiscalDrivePath');
 const { buildFiscalXmlFileName } = require('../utils/fiscalXmlFileName');
 
 const ambientesPermitidos = ['homologacao', 'producao'];
@@ -1759,8 +1759,10 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
       return res.status(400).json({ message: 'Identificador da venda é obrigatório.' });
     }
 
-    if (!isDriveConfigured()) {
-      return res.status(500).json({ message: 'Integração com o Google Drive não está configurada.' });
+    if (!isR2Configured()) {
+      return res
+        .status(500)
+        .json({ message: 'Armazenamento externo não está configurado (Cloudflare R2).' });
     }
 
     const pdv = await Pdv.findById(pdvId).populate('empresa');
@@ -1837,7 +1839,7 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
         .json({ message: 'Não é possível emitir nota fiscal para uma venda cancelada.' });
     }
 
-    if (sale.fiscalStatus === 'emitted' && sale.fiscalDriveFileId) {
+    if (sale.fiscalStatus === 'emitted' && (sale.fiscalDriveFileId || sale.fiscalXmlUrl)) {
       return res.status(409).json({ message: 'Esta venda já possui XML emitido.' });
     }
 
@@ -1912,22 +1914,24 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
       emissionDate,
     });
 
-    const uploadResult = await uploadBufferToDrive(Buffer.from(emissionResult.xml, 'utf8'), {
-      name: fileName,
-      mimeType: 'application/xml',
-      folderPath: buildFiscalDrivePath({
-        store: storeForXml,
-        pdv,
-        emissionDate,
-      }),
+    const r2Key = buildFiscalR2Key({
+      store: storeForXml,
+      pdv,
+      emissionDate,
+      accessKey: emissionResult.accessKey || fileName,
+    });
+
+    const uploadResult = await uploadBufferToR2(Buffer.from(emissionResult.xml, 'utf8'), {
+      key: r2Key,
+      contentType: 'application/xml',
     });
 
     sale.fiscalStatus = 'emitted';
     sale.fiscalEmittedAt = emissionDate;
     sale.fiscalEmittedAtLabel = formatDateTimeLabel(emissionDate);
-    sale.fiscalDriveFileId = uploadResult?.id || '';
-    sale.fiscalXmlUrl = uploadResult?.webViewLink || uploadResult?.webContentLink || '';
-    sale.fiscalXmlName = uploadResult?.name || fileName;
+    sale.fiscalDriveFileId = uploadResult?.key || r2Key || '';
+    sale.fiscalXmlUrl = uploadResult?.url || '';
+    sale.fiscalXmlName = fileName;
     sale.fiscalEnvironment = ambiente;
     sale.fiscalSerie = serieNfce;
     sale.fiscalNumber = proximoNumeroFiscal;
