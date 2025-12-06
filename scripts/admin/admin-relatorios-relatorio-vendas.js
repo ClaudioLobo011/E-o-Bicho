@@ -19,6 +19,8 @@
     metricTotal: document.getElementById('metric-total'),
     metricTicket: document.getElementById('metric-ticket'),
     metricCompleted: document.getElementById('metric-completed'),
+    metricMargin: document.getElementById('metric-margin'),
+    metricMarginTrend: document.getElementById('metric-margin-trend'),
   };
 
   const state = {
@@ -82,9 +84,10 @@
 
   const setDefaultDates = () => {
     const today = new Date();
-    const start = new Date(today);
+    const start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const end = new Date(today.getFullYear(), today.getMonth(), 0);
     elements.start.value = start.toISOString().split('T')[0];
-    elements.end.value = today.toISOString().split('T')[0];
+    elements.end.value = end.toISOString().split('T')[0];
     state.filters.start = elements.start.value;
     state.filters.end = elements.end.value;
   };
@@ -93,9 +96,36 @@
     const totalValue = metrics.totalValue || 0;
     const averageTicket = metrics.averageTicket || 0;
     const completedCount = metrics.completedCount || 0;
+    const marginAverage = metrics.marginAverage;
+    const marginChange = metrics.marginChange;
     if (elements.metricTotal) elements.metricTotal.textContent = formatCurrency(totalValue);
     if (elements.metricTicket) elements.metricTicket.textContent = formatCurrency(averageTicket);
     if (elements.metricCompleted) elements.metricCompleted.textContent = completedCount.toLocaleString('pt-BR');
+    if (elements.metricMargin) {
+      elements.metricMargin.textContent = Number.isFinite(marginAverage) ? formatPercentage(marginAverage) : '—';
+    }
+    if (elements.metricMarginTrend) {
+      const trendValue = Number.isFinite(marginChange) ? Math.abs(marginChange) : null;
+      const isIncrease = Number.isFinite(marginChange) && marginChange > 0.0001;
+      const isDecrease = Number.isFinite(marginChange) && marginChange < -0.0001;
+
+      elements.metricMarginTrend.className =
+        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold';
+
+      if (isIncrease) {
+        elements.metricMarginTrend.classList.add('bg-emerald-50', 'text-emerald-700');
+        elements.metricMarginTrend.innerHTML = `<i class="fas fa-arrow-up"></i>${formatPercentage(trendValue)}`;
+      } else if (isDecrease) {
+        elements.metricMarginTrend.classList.add('bg-rose-50', 'text-rose-700');
+        elements.metricMarginTrend.innerHTML = `<i class="fas fa-arrow-down"></i>${formatPercentage(trendValue)}`;
+      } else if (Number.isFinite(trendValue)) {
+        elements.metricMarginTrend.classList.add('bg-gray-100', 'text-gray-700');
+        elements.metricMarginTrend.innerHTML = `<i class="fas fa-minus"></i>${formatPercentage(trendValue)}`;
+      } else {
+        elements.metricMarginTrend.classList.add('bg-gray-100', 'text-gray-700');
+        elements.metricMarginTrend.innerHTML = '<i class="fas fa-minus"></i>—';
+      }
+    }
   };
 
   const renderTable = () => {

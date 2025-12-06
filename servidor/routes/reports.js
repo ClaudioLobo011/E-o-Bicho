@@ -274,6 +274,49 @@ const deriveSaleMarkup = (totalValue, costValue) => {
   return (profit / costValue) * 100;
 };
 
+const calculateMarginPercentage = (sales = []) => {
+  const totals = sales.reduce(
+    (acc, record) => {
+      const sale = record?.completedSales || record?.sale || record;
+      const totalValue = deriveSaleTotal(sale);
+      const costValue = deriveSaleCost(sale);
+
+      if (!Number.isFinite(totalValue) || !Number.isFinite(costValue)) return acc;
+
+      return {
+        total: acc.total + totalValue,
+        cost: acc.cost + costValue,
+      };
+    },
+    { total: 0, cost: 0 }
+  );
+
+  if (totals.total <= 0 || totals.cost <= 0) return null;
+
+  const profit = totals.total - totals.cost;
+  return (profit / totals.total) * 100;
+};
+
+const fetchSalesForPeriod = async (baseMatch, saleMatch, startDate, endDate) => {
+  const periodMatch = { ...saleMatch };
+
+  if (startDate || endDate) {
+    const createdAt = { ...(saleMatch?.['completedSales.createdAt'] || {}) };
+    if (startDate) createdAt.$gte = startDate;
+    if (endDate) createdAt.$lte = endDate;
+    periodMatch['completedSales.createdAt'] = createdAt;
+  }
+
+  const pipeline = [
+    { $match: baseMatch },
+    { $project: { completedSales: 1 } },
+    { $unwind: '$completedSales' },
+    { $match: periodMatch },
+  ];
+
+  return PdvState.aggregate(pipeline);
+};
+
 router.get(
   '/pdv-sales',
   requireAuth,
@@ -398,6 +441,27 @@ router.get(
       const averageTicket = sales.length ? completedSalesTotal / sales.length : 0;
       const completedCount = sales.filter((sale) => sale.status === 'completed').length;
 
+      const today = new Date();
+      const previousMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      const previousMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0, 23, 59, 59, 999);
+      const comparisonMonthStart = new Date(today.getFullYear(), today.getMonth() - 2, 1);
+      const comparisonMonthEnd = new Date(today.getFullYear(), today.getMonth() - 1, 0, 23, 59, 59, 999);
+
+      const saleMatchForMargin = { ...saleMatch };
+      delete saleMatchForMargin['completedSales.createdAt'];
+
+      const [previousMonthSales, comparisonMonthSales] = await Promise.all([
+        fetchSalesForPeriod(baseMatch, saleMatchForMargin, previousMonthStart, previousMonthEnd),
+        fetchSalesForPeriod(baseMatch, saleMatchForMargin, comparisonMonthStart, comparisonMonthEnd),
+      ]);
+
+      const previousMargin = calculateMarginPercentage(previousMonthSales);
+      const comparisonMargin = calculateMarginPercentage(comparisonMonthSales);
+      const marginChange =
+        Number.isFinite(previousMargin) && Number.isFinite(comparisonMargin)
+          ? previousMargin - comparisonMargin
+          : null;
+
       res.json({
         sales,
         pagination: {
@@ -410,6 +474,8 @@ router.get(
           totalValue: completedSalesTotal,
           averageTicket,
           completedCount,
+          marginAverage: previousMargin,
+          marginChange,
         },
       });
     } catch (error) {
