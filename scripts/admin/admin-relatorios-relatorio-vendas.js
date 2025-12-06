@@ -13,6 +13,7 @@
     pagePrev: document.getElementById('page-prev'),
     pageNext: document.getElementById('page-next'),
     pageIndicator: document.getElementById('page-indicator'),
+    table: document.getElementById('sales-table'),
     tableBody: document.getElementById('sales-table-body'),
     tableHead: document.getElementById('sales-table-head'),
     emptyState: document.getElementById('sales-empty-state'),
@@ -170,6 +171,43 @@
   const getColumnMinWidth = (key) => {
     const column = tableColumns.find((col) => col.key === key);
     return column?.minWidth || 80;
+  };
+
+  const ensureTableLayout = () => {
+    if (!elements.table) return;
+    elements.table.style.tableLayout = 'fixed';
+    elements.table.style.width = 'max-content';
+    elements.table.style.minWidth = '100%';
+  };
+
+  const ensureTableColGroup = () => {
+    if (!elements.table) return null;
+    let colgroup = elements.table.querySelector('colgroup[data-sales-columns]');
+    if (!colgroup) {
+      colgroup = document.createElement('colgroup');
+      colgroup.dataset.salesColumns = 'true';
+      tableColumns.forEach((column) => {
+        const col = document.createElement('col');
+        col.dataset.columnKey = column.key;
+        colgroup.appendChild(col);
+      });
+      elements.table.insertBefore(colgroup, elements.table.firstChild);
+    } else {
+      const columns = Array.from(colgroup.querySelectorAll('col'));
+      const isOutdated =
+        columns.length !== tableColumns.length ||
+        columns.some((col, index) => col.dataset.columnKey !== tableColumns[index].key);
+
+      if (isOutdated) {
+        colgroup.innerHTML = '';
+        tableColumns.forEach((column) => {
+          const col = document.createElement('col');
+          col.dataset.columnKey = column.key;
+          colgroup.appendChild(col);
+        });
+      }
+    }
+    return colgroup;
   };
 
   tableColumns.forEach((column) => {
@@ -682,6 +720,12 @@
   const applyColumnWidths = (syncFromDom = false) => {
     if (!elements.tableHead) return;
 
+    ensureTableLayout();
+    const colgroup = ensureTableColGroup();
+    const colMap = colgroup
+      ? new Map(Array.from(colgroup.querySelectorAll('col')).map((col) => [col.dataset.columnKey, col]))
+      : null;
+
     const headerCells = Array.from(elements.tableHead.querySelectorAll('th[data-column-key]'));
 
     headerCells.forEach((th) => {
@@ -697,6 +741,12 @@
 
       th.style.width = `${width}px`;
       th.style.minWidth = `${minWidth}px`;
+
+      const colEl = colMap?.get(columnKey);
+      if (colEl) {
+        colEl.style.width = `${width}px`;
+        colEl.style.minWidth = `${minWidth}px`;
+      }
 
       const cells = elements.tableBody?.querySelectorAll(`td[data-column-key="${columnKey}"]`);
       cells?.forEach((cell) => {
