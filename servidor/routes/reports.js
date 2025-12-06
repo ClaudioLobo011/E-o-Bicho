@@ -306,6 +306,12 @@ const calculateAverageTicket = (sales = []) => {
   return totals.total / totals.count;
 };
 
+const isCompletedSale = (record) => {
+  const sale = record?.completedSales || record?.sale || record || {};
+  const status = (sale.status || 'completed').toLowerCase();
+  return status === 'completed';
+};
+
 const calculateMarginPercentage = (sales = []) => {
   const totals = sales.reduce(
     (acc, record) => {
@@ -469,8 +475,6 @@ router.get(
         };
       });
 
-      const completedCount = sales.filter((sale) => sale.status === 'completed').length;
-
       const today = new Date();
       const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
       const currentMonthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
@@ -496,8 +500,9 @@ router.get(
       const previousTotal = calculateTotalValue(previousMonthSales);
       const currentAverageTicket = calculateAverageTicket(currentMonthSales);
       const previousAverageTicket = calculateAverageTicket(previousMonthSales);
-      const currentCompletedCount = currentMonthSales.filter((sale) => sale.status === 'completed').length;
-      const previousCompletedCount = previousMonthSales.filter((sale) => sale.status === 'completed').length;
+      const completedCount = filteredSales.filter(isCompletedSale).length;
+      const currentCompletedCount = currentMonthSales.filter(isCompletedSale).length;
+      const previousCompletedCount = previousMonthSales.filter(isCompletedSale).length;
       const marginChange =
         Number.isFinite(currentMargin) && Number.isFinite(previousMargin)
           ? currentMargin - previousMargin
