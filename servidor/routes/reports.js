@@ -469,8 +469,6 @@ router.get(
         };
       });
 
-      const completedSalesTotal = calculateTotalValue(filteredSales);
-      const averageTicket = calculateAverageTicket(filteredSales) || 0;
       const completedCount = sales.filter((sale) => sale.status === 'completed').length;
 
       const today = new Date();
@@ -487,6 +485,9 @@ router.get(
         fetchSalesForPeriod(baseMatch, saleMatchForMargin, currentMonthStart, currentMonthEnd),
         fetchSalesForPeriod(baseMatch, saleMatchForMargin, previousMonthStart, previousMonthEnd),
       ]);
+
+      const completedSalesTotal = calculateTotalValue(filteredSales);
+      const averageTicket = calculateAverageTicket(filteredSales) || 0;
 
       const filteredMargin = calculateMarginPercentage(filteredSales);
       const currentMargin = calculateMarginPercentage(currentMonthSales);
