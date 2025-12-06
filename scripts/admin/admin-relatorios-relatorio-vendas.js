@@ -111,29 +111,29 @@
   };
 
   const tableColumns = [
-    { key: 'saleCode', label: 'Pedido', headerClass: 'px-4 py-3', cellClass: 'px-4 py-3 font-semibold text-gray-800' },
+    { key: 'saleCode', label: 'Pedido', headerClass: 'px-3 py-2', cellClass: 'px-3 py-2.5 text-[11px] font-semibold text-gray-800' },
     {
       key: 'createdAt',
       label: 'Data',
-      headerClass: 'px-4 py-3',
-      cellClass: 'px-4 py-3',
+      headerClass: 'px-3 py-2',
+      cellClass: 'px-3 py-2.5 text-[11px]',
       getComparable: (sale) => new Date(sale.createdAt || 0).getTime(),
       getDisplay: (sale) => formatDateTime(sale.createdAt),
     },
-    { key: 'store', label: 'Loja', headerClass: 'px-4 py-3', cellClass: 'px-4 py-3', getDisplay: (sale) => sale.store?.name || '—' },
-    { key: 'channelLabel', label: 'Canal', headerClass: 'px-4 py-3', cellClass: 'px-4 py-3', fallback: 'PDV' },
+    { key: 'store', label: 'Loja', headerClass: 'px-3 py-2', cellClass: 'px-3 py-2.5 text-[11px]', getDisplay: (sale) => sale.store?.name || '—' },
+    { key: 'channelLabel', label: 'Canal', headerClass: 'px-3 py-2', cellClass: 'px-3 py-2.5 text-[11px]', fallback: 'PDV' },
     {
       key: 'fiscalType',
       label: 'Tipo',
-      headerClass: 'px-4 py-3',
-      cellClass: 'px-4 py-3',
+      headerClass: 'px-3 py-2',
+      cellClass: 'px-3 py-2.5 text-[11px]',
       getDisplay: (sale) => sale.fiscalTypeLabel || sale.fiscalType || 'Matricial',
     },
     {
       key: 'totalValue',
       label: 'Total',
-      headerClass: 'px-4 py-3 text-right',
-      cellClass: 'px-4 py-3 text-right font-semibold text-gray-900',
+      headerClass: 'px-3 py-2 text-right',
+      cellClass: 'px-3 py-2.5 text-right text-[11px] font-semibold text-gray-900',
       isNumeric: true,
       getComparable: (sale) => sale.totalValue ?? 0,
       getDisplay: (sale) => formatCurrency(sale.totalValue),
@@ -141,8 +141,8 @@
     {
       key: 'costValue',
       label: 'Custo',
-      headerClass: 'px-4 py-3 text-right',
-      cellClass: 'px-4 py-3 text-right text-gray-900',
+      headerClass: 'px-3 py-2 text-right',
+      cellClass: 'px-3 py-2.5 text-right text-[11px] text-gray-900',
       isNumeric: true,
       getComparable: (sale) => Number.isFinite(sale.costValue) ? sale.costValue : Number.NEGATIVE_INFINITY,
       getDisplay: (sale) => (Number.isFinite(sale.costValue) ? formatCurrency(sale.costValue) : ''),
@@ -150,8 +150,8 @@
     {
       key: 'markup',
       label: 'Margem',
-      headerClass: 'px-4 py-3 text-right',
-      cellClass: 'px-4 py-3 text-right text-gray-600',
+      headerClass: 'px-3 py-2 text-right',
+      cellClass: 'px-3 py-2.5 text-right text-[11px] text-gray-600',
       isNumeric: true,
       getComparable: (sale) => Number.isFinite(sale.markup) ? sale.markup : Number.NEGATIVE_INFINITY,
       getDisplay: (sale) => (Number.isFinite(sale.markup) ? formatPercentage(sale.markup) : ''),
@@ -159,8 +159,8 @@
     {
       key: 'status',
       label: 'Status',
-      headerClass: 'px-4 py-3 text-right',
-      cellClass: 'px-4 py-3 text-right',
+      headerClass: 'px-3 py-2 text-right',
+      cellClass: 'px-3 py-2.5 text-right text-[11px]',
       getDisplay: (sale) => sale.status,
     },
   ];
@@ -691,7 +691,7 @@
 
       const label = document.createElement('span');
       label.textContent = column.label;
-      label.className = 'flex-1 text-[11px] font-semibold uppercase leading-tight tracking-wide text-gray-600';
+      label.className = 'flex-1 text-[10px] font-semibold uppercase leading-tight tracking-wide text-gray-600';
       if (column.isNumeric) label.classList.add('text-right');
       labelRow.appendChild(label);
 
