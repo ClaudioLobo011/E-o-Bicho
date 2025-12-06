@@ -49,6 +49,7 @@
       valueFilters: {},
       filterSearch: {},
       openPopover: null,
+      columnWidths: {},
     },
     stores: [],
   };
@@ -99,6 +100,7 @@
       return null;
     }
   };
+
 
   const formatDateTime = (value) => {
     if (!value) return '—';
@@ -164,6 +166,11 @@
       getDisplay: (sale) => sale.status,
     },
   ];
+
+  const getColumnMinWidth = (key) => {
+    const column = tableColumns.find((col) => col.key === key);
+    return column?.minWidth || 80;
+  };
 
   tableColumns.forEach((column) => {
     state.table.filters[column.key] = '';
@@ -672,6 +679,71 @@
     renderTable();
   };
 
+  const applyColumnWidths = (syncFromDom = false) => {
+    if (!elements.tableHead) return;
+
+    const headerCells = Array.from(elements.tableHead.querySelectorAll('th[data-column-key]'));
+
+    headerCells.forEach((th) => {
+      const columnKey = th.dataset.columnKey;
+      const minWidth = getColumnMinWidth(columnKey);
+
+      if (syncFromDom && !Number.isFinite(state.table.columnWidths[columnKey])) {
+        state.table.columnWidths[columnKey] = Math.max(minWidth, th.getBoundingClientRect().width);
+      }
+
+      const storedWidth = state.table.columnWidths[columnKey];
+      const width = Number.isFinite(storedWidth) ? Math.max(minWidth, storedWidth) : minWidth;
+
+      th.style.width = `${width}px`;
+      th.style.minWidth = `${minWidth}px`;
+
+      const cells = elements.tableBody?.querySelectorAll(`td[data-column-key="${columnKey}"]`);
+      cells?.forEach((cell) => {
+        cell.style.width = `${width}px`;
+        cell.style.minWidth = `${minWidth}px`;
+      });
+    });
+  };
+
+  const startColumnResize = (column, th, startEvent) => {
+    if (!th) return;
+    startEvent.preventDefault();
+    closeFilterPopover();
+
+    const minWidth = getColumnMinWidth(column.key);
+    const startX = startEvent.touches?.[0]?.clientX ?? startEvent.clientX;
+    const startWidth = th.getBoundingClientRect().width;
+    const originalUserSelect = document.body.style.userSelect;
+    const originalCursor = document.body.style.cursor;
+
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+
+    const handleMove = (moveEvent) => {
+      const currentX = moveEvent.touches?.[0]?.clientX ?? moveEvent.clientX;
+      if (!Number.isFinite(currentX)) return;
+      const delta = currentX - startX;
+      const nextWidth = Math.max(minWidth, startWidth + delta);
+      state.table.columnWidths[column.key] = nextWidth;
+      applyColumnWidths();
+    };
+
+    const handleEnd = () => {
+      document.body.style.userSelect = originalUserSelect;
+      document.body.style.cursor = originalCursor;
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleEnd);
+      window.removeEventListener('touchmove', handleMove);
+      window.removeEventListener('touchend', handleEnd);
+    };
+
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleEnd);
+    window.addEventListener('touchmove', handleMove, { passive: true });
+    window.addEventListener('touchend', handleEnd);
+  };
+
   const buildTableHead = () => {
     if (!elements.tableHead) return;
     elements.tableHead.innerHTML = '';
@@ -743,11 +815,22 @@
 
       wrapper.append(labelRow, filterRow);
       th.appendChild(wrapper);
+
+      const resizeHandle = document.createElement('div');
+      resizeHandle.className =
+        'absolute inset-y-0 right-0 flex w-2 cursor-col-resize select-none items-center justify-center px-px';
+      resizeHandle.setAttribute('aria-label', `Redimensionar coluna ${column.label}`);
+      resizeHandle.innerHTML = '<span class="pointer-events-none block h-8 w-px rounded-full bg-gray-200"></span>';
+      resizeHandle.addEventListener('mousedown', (event) => startColumnResize(column, th, event));
+      resizeHandle.addEventListener('touchstart', (event) => startColumnResize(column, th, event));
+      th.appendChild(resizeHandle);
+
       row.appendChild(th);
     });
 
     elements.tableHead.appendChild(row);
     updateTableHeadSortIndicators();
+    applyColumnWidths(true);
   };
 
   const updatePagination = (visibleCount = Array.isArray(state.sales) ? state.sales.length : state.pagination.total) => {
@@ -778,6 +861,7 @@
 
       tableColumns.forEach((column) => {
         const cell = document.createElement('td');
+        cell.dataset.columnKey = column.key;
         cell.className = column.cellClass || 'px-4 py-3';
         const value = column.key === 'status' ? buildStatusBadge(sale.status) : getDisplayValue(sale, column);
         if (column.key === 'status') {
@@ -791,6 +875,7 @@
       elements.tableBody.appendChild(row);
     });
 
+    applyColumnWidths();
     updatePagination(visibleSales.length);
     return visibleSales.length;
   };
