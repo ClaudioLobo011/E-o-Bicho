@@ -20,6 +20,7 @@
     metricTotalTrend: document.getElementById('metric-total-trend'),
     metricTicket: document.getElementById('metric-ticket'),
     metricCompleted: document.getElementById('metric-completed'),
+    metricCompletedTrend: document.getElementById('metric-completed-trend'),
     metricTicketTrend: document.getElementById('metric-ticket-trend'),
     metricMargin: document.getElementById('metric-margin'),
     metricMarginTrend: document.getElementById('metric-margin-trend'),
@@ -110,6 +111,7 @@
     const averageTicketChange = metrics.averageTicketChange;
     const marginAverage = metrics.marginAverage;
     const marginChange = metrics.marginChange;
+    const completedChange = metrics.completedChange;
     if (elements.metricTotal) elements.metricTotal.textContent = formatCurrency(totalValue);
     if (elements.metricTicket) elements.metricTicket.textContent = formatCurrency(averageTicket);
     if (elements.metricCompleted) elements.metricCompleted.textContent = completedCount.toLocaleString('pt-BR');
@@ -156,6 +158,30 @@
       } else {
         elements.metricTicketTrend.classList.add('bg-gray-100', 'text-gray-700');
         elements.metricTicketTrend.innerHTML = '<i class="fas fa-minus"></i>—';
+      }
+    }
+    if (elements.metricCompletedTrend) {
+      const trendValue = Number.isFinite(completedChange) ? Math.abs(completedChange) : null;
+      const isIncrease = Number.isFinite(completedChange) && completedChange > 0.01;
+      const isDecrease = Number.isFinite(completedChange) && completedChange < -0.01;
+
+      elements.metricCompletedTrend.className =
+        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold';
+
+      const formattedTrend = Number.isFinite(trendValue) ? trendValue.toLocaleString('pt-BR') : '—';
+
+      if (isIncrease) {
+        elements.metricCompletedTrend.classList.add('bg-emerald-50', 'text-emerald-700');
+        elements.metricCompletedTrend.innerHTML = `<i class="fas fa-arrow-up"></i>${formattedTrend}`;
+      } else if (isDecrease) {
+        elements.metricCompletedTrend.classList.add('bg-rose-50', 'text-rose-700');
+        elements.metricCompletedTrend.innerHTML = `<i class="fas fa-arrow-down"></i>${formattedTrend}`;
+      } else if (Number.isFinite(trendValue)) {
+        elements.metricCompletedTrend.classList.add('bg-gray-100', 'text-gray-700');
+        elements.metricCompletedTrend.innerHTML = `<i class="fas fa-minus"></i>${formattedTrend}`;
+      } else {
+        elements.metricCompletedTrend.classList.add('bg-gray-100', 'text-gray-700');
+        elements.metricCompletedTrend.innerHTML = '<i class="fas fa-minus"></i>—';
       }
     }
     if (elements.metricMargin) {

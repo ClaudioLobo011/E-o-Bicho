@@ -496,6 +496,8 @@ router.get(
       const previousTotal = calculateTotalValue(previousMonthSales);
       const currentAverageTicket = calculateAverageTicket(currentMonthSales);
       const previousAverageTicket = calculateAverageTicket(previousMonthSales);
+      const currentCompletedCount = currentMonthSales.filter((sale) => sale.status === 'completed').length;
+      const previousCompletedCount = previousMonthSales.filter((sale) => sale.status === 'completed').length;
       const marginChange =
         Number.isFinite(currentMargin) && Number.isFinite(previousMargin)
           ? currentMargin - previousMargin
@@ -506,6 +508,7 @@ router.get(
         Number.isFinite(currentAverageTicket) && Number.isFinite(previousAverageTicket)
           ? currentAverageTicket - previousAverageTicket
           : null;
+      const completedChange = currentCompletedCount - previousCompletedCount;
 
       res.json({
         sales,
@@ -521,6 +524,7 @@ router.get(
           completedCount,
           totalChange,
           averageTicketChange,
+          completedChange,
           marginAverage: filteredMargin,
           marginChange,
         },
