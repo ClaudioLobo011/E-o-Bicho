@@ -164,6 +164,7 @@
     deliveryFinalizingOrderId: '',
     finalizeProcessing: false,
     completedSales: [],
+    salesFilters: { start: getTodayIsoDate(), end: getTodayIsoDate() },
     budgets: [],
     selectedBudgetId: '',
     activeBudgetId: '',
@@ -2515,6 +2516,8 @@
 
     elements.salesList = document.getElementById('pdv-sales-list');
     elements.salesEmpty = document.getElementById('pdv-sales-empty');
+    elements.salesStart = document.getElementById('pdv-sales-start');
+    elements.salesEnd = document.getElementById('pdv-sales-end');
 
     elements.budgetPresets = document.getElementById('pdv-budget-presets');
     elements.budgetStart = document.getElementById('pdv-budget-start');
@@ -6634,6 +6637,26 @@
       end: endValue,
     };
     renderBudgets();
+  };
+
+  const handleSalesDateChange = () => {
+    const startInput = elements.salesStart;
+    const endInput = elements.salesEnd;
+    if (!startInput || !endInput) return;
+    let startValue = startInput.value || '';
+    let endValue = endInput.value || '';
+    const startDate = parseDateInputValue(startValue || '');
+    const endDate = parseDateInputValue(endValue || '');
+    if (startDate && endDate && startDate.getTime() > endDate.getTime()) {
+      const temp = startValue;
+      startValue = endValue;
+      endValue = temp;
+    }
+    state.salesFilters = {
+      start: startValue,
+      end: endValue,
+    };
+    renderSalesList();
   };
 
   const handleBudgetListClick = (event) => {
@@ -11525,17 +11548,51 @@
     };
   };
 
+  const getFilteredSales = () => {
+    const sales = Array.isArray(state.completedSales) ? state.completedSales : [];
+    const filters = state.salesFilters || { start: getTodayIsoDate(), end: getTodayIsoDate() };
+    if (!state.salesFilters) {
+      state.salesFilters = { ...filters };
+    }
+    const startDate = parseDateInputValue(filters.start || '');
+    const endDate = parseDateInputValue(filters.end || '');
+    const start = startDate ? toStartOfDay(startDate) : null;
+    const end = endDate ? toEndOfDay(endDate) : null;
+    if (!start && !end) {
+      return sales;
+    }
+    return sales.filter((sale) => {
+      const createdAt = sale.createdAt ? new Date(sale.createdAt) : null;
+      if (!createdAt || Number.isNaN(createdAt.getTime())) return false;
+      return isDateWithinRange(createdAt, start, end);
+    });
+  };
+
+  const renderSalesFilters = () => {
+    if (!state.salesFilters) {
+      state.salesFilters = { start: getTodayIsoDate(), end: getTodayIsoDate() };
+    }
+    if (elements.salesStart) {
+      elements.salesStart.value = state.salesFilters?.start || '';
+    }
+    if (elements.salesEnd) {
+      elements.salesEnd.value = state.salesFilters?.end || '';
+    }
+  };
+
   const renderSalesList = () => {
     if (!elements.salesList || !elements.salesEmpty) return;
+    renderSalesFilters();
+    const sales = getFilteredSales();
     elements.salesList.innerHTML = '';
-    const hasSales = state.completedSales.length > 0;
+    const hasSales = sales.length > 0;
     elements.salesEmpty.classList.toggle('hidden', hasSales);
     elements.salesList.classList.toggle('hidden', !hasSales);
     if (!hasSales) {
       return;
     }
     const fragment = document.createDocumentFragment();
-    state.completedSales.forEach((sale) => {
+    sales.forEach((sale) => {
       const saleId = sale.id;
       const chevronIcon = sale.expanded ? 'fa-chevron-up' : 'fa-chevron-down';
       const paymentTagsHtml = sale.paymentTags
@@ -14347,6 +14404,7 @@
           receivables: normalizedReceivables.filter(Boolean),
         };
       });
+    state.salesFilters = { start: getTodayIsoDate(), end: getTodayIsoDate() };
     const mergedReceivables = [...saleReceivables];
     normalizedRootReceivables.forEach((entry) => {
       const alreadyRegistered = mergedReceivables.some((item) => item.id === entry.id);
@@ -15229,6 +15287,8 @@
     elements.budgetPresets?.addEventListener('click', handleBudgetPresetClick);
     elements.budgetStart?.addEventListener('change', handleBudgetDateChange);
     elements.budgetEnd?.addEventListener('change', handleBudgetDateChange);
+    elements.salesStart?.addEventListener('change', handleSalesDateChange);
+    elements.salesEnd?.addEventListener('change', handleSalesDateChange);
     elements.budgetList?.addEventListener('click', handleBudgetListClick);
     elements.budgetImport?.addEventListener('click', handleBudgetImport);
     elements.budgetDelete?.addEventListener('click', handleBudgetDelete);
