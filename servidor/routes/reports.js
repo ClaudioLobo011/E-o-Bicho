@@ -471,11 +471,13 @@ router.get(
       const saleMatchForMargin = { ...saleMatch };
       delete saleMatchForMargin['completedSales.createdAt'];
 
-      const [currentMonthSales, previousMonthSales] = await Promise.all([
+      const [filteredSales, currentMonthSales, previousMonthSales] = await Promise.all([
+        fetchSalesForPeriod(baseMatch, saleMatch, startDate, endDate),
         fetchSalesForPeriod(baseMatch, saleMatchForMargin, currentMonthStart, currentMonthEnd),
         fetchSalesForPeriod(baseMatch, saleMatchForMargin, previousMonthStart, previousMonthEnd),
       ]);
 
+      const filteredMargin = calculateMarginPercentage(filteredSales);
       const currentMargin = calculateMarginPercentage(currentMonthSales);
       const previousMargin = calculateMarginPercentage(previousMonthSales);
       const currentAverageTicket = calculateAverageTicket(currentMonthSales);
@@ -502,7 +504,7 @@ router.get(
           averageTicket,
           completedCount,
           averageTicketChange,
-          marginAverage: currentMargin,
+          marginAverage: filteredMargin,
           marginChange,
         },
       });
