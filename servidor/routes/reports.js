@@ -312,6 +312,36 @@ const isCompletedSale = (record) => {
   return status === 'completed';
 };
 
+const deriveFiscalTypeLabel = (sale = {}) => {
+  const fiscalStatus = (sale.fiscalStatus || '').toLowerCase();
+  const hasFiscalEmission =
+    ['emitted', 'authorized', 'autorizado', 'approved', 'aprovado'].includes(fiscalStatus) ||
+    (sale.fiscalXmlName && sale.fiscalXmlName.trim()) ||
+    (sale.fiscalAccessKey && sale.fiscalAccessKey.trim());
+
+  if (!hasFiscalEmission) return 'Matricial';
+
+  const joinedHints = [
+    sale.fiscalXmlName,
+    sale.fiscalXmlUrl,
+    sale.fiscalEnvironment,
+    sale.fiscalAccessKey,
+    sale.fiscalSerie,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  const xmlContent = (sale.fiscalXmlContent || '').toLowerCase();
+  const contentHints = `${joinedHints} ${xmlContent}`;
+
+  if (contentHints.includes('nfse')) return 'NFSe';
+  if (contentHints.includes('nfce')) return 'NFCe';
+  if (contentHints.includes('nfe')) return 'NFe';
+
+  return 'NFe';
+};
+
 const calculateMarginPercentage = (sales = []) => {
   const totals = sales.reduce(
     (acc, record) => {
@@ -453,6 +483,7 @@ router.get(
         const storeName = record.store?.fantasia || record.store?.apelido || record.store?.nome;
         const totalValue = deriveSaleTotal(sale);
         const costValue = deriveSaleCost(sale);
+        const fiscalTypeLabel = deriveFiscalTypeLabel(sale);
         return {
           id: sale.id,
           saleCode: sale.saleCode || sale.saleCodeLabel || 'Sem código',
@@ -472,6 +503,7 @@ router.get(
           costValue,
           markup: deriveSaleMarkup(totalValue, costValue),
           status: sale.status || 'completed',
+          fiscalTypeLabel,
         };
       });
 

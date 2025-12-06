@@ -226,11 +226,13 @@
       row.className = 'hover:bg-gray-50';
       const costText = Number.isFinite(sale.costValue) ? formatCurrency(sale.costValue) : '';
       const markupText = Number.isFinite(sale.markup) ? formatPercentage(sale.markup) : '';
+      const fiscalType = sale.fiscalTypeLabel || sale.fiscalType || 'Matricial';
       row.innerHTML = `
         <td class="px-4 py-3 font-semibold text-gray-800">${sale.saleCode || '—'}</td>
         <td class="px-4 py-3">${formatDateTime(sale.createdAt)}</td>
         <td class="px-4 py-3">${sale.store?.name || '—'}</td>
         <td class="px-4 py-3">${sale.channelLabel || 'PDV'}</td>
+        <td class="px-4 py-3">${fiscalType}</td>
         <td class="px-4 py-3 text-right font-semibold text-gray-900">${formatCurrency(sale.totalValue)}</td>
         <td class="px-4 py-3 text-right text-gray-900">${costText}</td>
         <td class="px-4 py-3 text-right text-gray-600">${markupText}</td>
