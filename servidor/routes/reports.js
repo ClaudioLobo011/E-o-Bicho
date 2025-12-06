@@ -266,6 +266,14 @@ const deriveSaleTotal = (sale = {}) => {
   return 0;
 };
 
+const deriveSaleMarkup = (totalValue, costValue) => {
+  if (!Number.isFinite(totalValue)) return null;
+  if (!Number.isFinite(costValue) || costValue <= 0) return null;
+
+  const profit = totalValue - costValue;
+  return (profit / costValue) * 100;
+};
+
 router.get(
   '/pdv-sales',
   requireAuth,
@@ -362,6 +370,8 @@ router.get(
       const sales = records.map((record) => {
         const sale = record.completedSales || {};
         const storeName = record.store?.fantasia || record.store?.apelido || record.store?.nome;
+        const totalValue = deriveSaleTotal(sale);
+        const costValue = deriveSaleCost(sale);
         return {
           id: sale.id,
           saleCode: sale.saleCode || sale.saleCodeLabel || 'Sem código',
@@ -377,8 +387,9 @@ router.get(
           },
           channel: sale.type || 'venda',
           channelLabel: sale.typeLabel || 'Venda',
-          totalValue: deriveSaleTotal(sale),
-          costValue: deriveSaleCost(sale),
+          totalValue,
+          costValue,
+          markup: deriveSaleMarkup(totalValue, costValue),
           status: sale.status || 'completed',
         };
       });

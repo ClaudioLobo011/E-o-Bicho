@@ -45,6 +45,11 @@
     return safe.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   };
 
+  const formatPercentage = (value) => {
+    if (!Number.isFinite(value)) return '';
+    return `${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+  };
+
   const formatDateTime = (value) => {
     if (!value) return '—';
     const date = new Date(value);
@@ -107,6 +112,7 @@
       const row = document.createElement('tr');
       row.className = 'hover:bg-gray-50';
       const costText = Number.isFinite(sale.costValue) ? formatCurrency(sale.costValue) : '';
+      const markupText = Number.isFinite(sale.markup) ? formatPercentage(sale.markup) : '';
       row.innerHTML = `
         <td class="px-4 py-3 font-semibold text-gray-800">${sale.saleCode || '—'}</td>
         <td class="px-4 py-3">${formatDateTime(sale.createdAt)}</td>
@@ -114,7 +120,7 @@
         <td class="px-4 py-3">${sale.channelLabel || 'PDV'}</td>
         <td class="px-4 py-3 text-right font-semibold text-gray-900">${formatCurrency(sale.totalValue)}</td>
         <td class="px-4 py-3 text-right text-gray-900">${costText}</td>
-        <td class="px-4 py-3 text-right text-gray-600">—</td>
+        <td class="px-4 py-3 text-right text-gray-600">${markupText}</td>
         <td class="px-4 py-3 text-right">${buildStatusBadge(sale.status)}</td>
       `;
       elements.tableBody.appendChild(row);
