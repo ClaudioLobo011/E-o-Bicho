@@ -540,6 +540,24 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
         };
         const parseNumber = (value) => {
             if (value === null || value === undefined || value === '') return null;
+
+            if (typeof value === 'number') {
+                return Number.isFinite(value) ? value : null;
+            }
+
+            if (typeof value === 'string') {
+                const normalized = value.trim();
+                if (!normalized) return null;
+
+                const usesComma = normalized.includes(',');
+                const sanitized = usesComma
+                    ? normalized.replace(/\./g, '').replace(',', '.')
+                    : normalized;
+
+                const parsed = Number(sanitized);
+                return Number.isFinite(parsed) ? parsed : null;
+            }
+
             const parsed = Number(value);
             return Number.isFinite(parsed) ? parsed : null;
         };
@@ -1365,6 +1383,24 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
         };
         const parseNumber = (value) => {
             if (value === null || value === undefined || value === '') return null;
+
+            if (typeof value === 'number') {
+                return Number.isFinite(value) ? value : null;
+            }
+
+            if (typeof value === 'string') {
+                const normalized = value.trim();
+                if (!normalized) return null;
+
+                const usesComma = normalized.includes(',');
+                const sanitized = usesComma
+                    ? normalized.replace(/\./g, '').replace(',', '.')
+                    : normalized;
+
+                const parsed = Number(sanitized);
+                return Number.isFinite(parsed) ? parsed : null;
+            }
+
             const parsed = Number(value);
             return Number.isFinite(parsed) ? parsed : null;
         };
