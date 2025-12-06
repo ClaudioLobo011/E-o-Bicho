@@ -191,22 +191,22 @@ const deriveItemTotalCost = (item = {}) => {
 
 const deriveSaleCost = (sale = {}) => {
   const items = collectSaleItems(sale);
-  if (!items.length) return 0;
+  if (!items.length) return null;
 
   let foundItemCost = false;
 
   const totalFromItems = items.reduce((acc, item) => {
+    const itemTotalCost = deriveItemTotalCost(item);
+    if (itemTotalCost !== null) {
+      foundItemCost = true;
+      return acc + itemTotalCost;
+    }
+
     const quantity = deriveItemQuantity(item) || 0;
     const unitCost = deriveItemUnitCost(item);
     if (unitCost !== null) {
       foundItemCost = true;
       return acc + quantity * unitCost;
-    }
-
-    const itemTotalCost = deriveItemTotalCost(item);
-    if (itemTotalCost !== null) {
-      foundItemCost = true;
-      return acc + itemTotalCost;
     }
 
     return acc;
@@ -235,7 +235,7 @@ const deriveSaleCost = (sale = {}) => {
     if (parsed !== null) return parsed;
   }
 
-  return 0;
+  return null;
 };
 
 const deriveSaleTotal = (sale = {}) => {
