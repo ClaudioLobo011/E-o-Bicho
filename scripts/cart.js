@@ -1,6 +1,35 @@
 // Variável de controlo para garantir que os eventos só sejam adicionados uma vez
 let cartEventListenersAdded = false;
 
+const cartPlaceholderOptions = ['/public/image/placeholder.svg', `${API_CONFIG.SERVER_URL}/image/placeholder.svg`, `${API_CONFIG.SERVER_URL}/image/placeholder.png`];
+
+const normalizeCartImageUrl = (url) => {
+    if (!url) return null;
+    return /^https?:\/\//i.test(url) ? url : `${API_CONFIG.SERVER_URL}${url}`;
+};
+
+const buildCartProductImage = (product) => {
+    const imageEl = document.createElement('img');
+    imageEl.alt = product.nome || 'Produto';
+    imageEl.className = 'w-20 h-20 object-contain border rounded-md';
+
+    const productImageUrl = normalizeCartImageUrl(product.imagemPrincipal);
+    const fallbackSources = [productImageUrl, ...cartPlaceholderOptions].filter(Boolean);
+    let fallbackIndex = 0;
+
+    imageEl.onerror = () => {
+        fallbackIndex += 1;
+        if (fallbackIndex < fallbackSources.length) {
+            imageEl.src = fallbackSources[fallbackIndex];
+        } else {
+            imageEl.onerror = null;
+        }
+    };
+
+    imageEl.src = fallbackSources[0] || cartPlaceholderOptions[0];
+    return imageEl;
+};
+
 /**
  * Inicializa os botões principais da sacola (abrir/fechar).
  */
@@ -77,12 +106,17 @@ async function renderCartItems() {
             const itemTotal = cartItem.effectivePrice * cartItem.quantity;
             subtotal += itemTotal;
 
-            const itemHtml = `
-                <div class="flex items-start space-x-3 p-2 border-b last:border-b-0">
-                    <img src="${API_CONFIG.SERVER_URL}${product.imagemPrincipal}" alt="${product.nome}" class="w-20 h-20 object-contain border rounded-md">
-                    <div class="flex-grow space-y-2">
+            const itemWrapper = document.createElement('div');
+            itemWrapper.className = 'flex items-start space-x-3 p-2 border-b last:border-b-0';
+
+            const imageEl = buildCartProductImage(product);
+            itemWrapper.appendChild(imageEl);
+
+            const infoWrapper = document.createElement('div');
+            infoWrapper.className = 'flex-grow space-y-2';
+            infoWrapper.innerHTML = `
                         <p class="text-sm font-semibold text-gray-800">${product.nome}</p>
-                        
+
                         <div>
                             ${cartItem.effectivePrice < product.venda ? `<p class="text-xs text-gray-500 line-through">R$ ${product.venda.toFixed(2).replace('.', ',')}</p>` : ''}
                             <p class="text-sm font-bold text-primary">R$ ${cartItem.effectivePrice.toFixed(2).replace('.', ',')} <span class="text-xs text-gray-600 font-normal">/un.</span></p>
@@ -95,13 +129,18 @@ async function renderCartItems() {
                                 <button class="px-2 py-1 text-gray-600 hover:bg-gray-100" data-action="increase-qty" data-product-id="${product._id}">+</button>
                             </div>
                             <p class="text-base font-bold text-gray-800">R$ ${itemTotal.toFixed(2).replace('.', ',')}</p>
-                        </div>
-                    </div>
-                    <button class="text-gray-400 hover:text-red-500 pt-1" data-action="remove-item" data-product-id="${product._id}">
-                        <i class="fas fa-trash-alt"></i>
-                    </button>
-                </div>`;
-            container.innerHTML += itemHtml;
+                        </div>`;
+
+            itemWrapper.appendChild(infoWrapper);
+
+            const removeButton = document.createElement('button');
+            removeButton.className = 'text-gray-400 hover:text-red-500 pt-1';
+            removeButton.dataset.action = 'remove-item';
+            removeButton.dataset.productId = product._id;
+            removeButton.innerHTML = '<i class="fas fa-trash-alt"></i>';
+
+            itemWrapper.appendChild(removeButton);
+            container.appendChild(itemWrapper);
         });
         
         // Atualiza o subtotal e mostra o rodapé
