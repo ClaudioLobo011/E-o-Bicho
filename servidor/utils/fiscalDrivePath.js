@@ -52,7 +52,24 @@ const buildFiscalDrivePath = ({ store, pdv, emissionDate } = {}) => {
   return [...ROOT_SEGMENTS, companySegment, pdvSegment, ...dateSegments];
 };
 
+const normalizeXmlFileBase = (value, fallback = '') => {
+  const normalized = sanitizeSegment(value || '', fallback).replace(/\.xml$/i, '');
+  return normalized || fallback || 'nfce-documento';
+};
+
+const buildFiscalR2Key = ({ store, pdv, emissionDate, accessKey } = {}) => {
+  const companySegment = resolveCompanySegment(store || {});
+  const pdvSegment = resolvePdvSegment(pdv || {});
+  const dateSegments = resolveDateSegments(emissionDate);
+  const fileBase = normalizeXmlFileBase(accessKey, 'NFCe');
+  const fileName = `${fileBase}.xml`;
+  return ['NFCe', companySegment, pdvSegment, ...dateSegments, fileName]
+    .filter(Boolean)
+    .join('/');
+};
+
 module.exports = {
   buildFiscalDrivePath,
+  buildFiscalR2Key,
   sanitizeSegment,
 };
