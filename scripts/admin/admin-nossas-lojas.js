@@ -934,6 +934,123 @@ document.addEventListener('DOMContentLoaded', () => {
         storesTable.style.minWidth = '100%';
     };
 
+    const storeTableColumns = [
+        {
+            key: 'nome',
+            label: 'Empresa',
+            minWidth: 180,
+            getDisplay: (store) => (store?.nomeFantasia || store?.nome || store?.razaoSocial || '—').trim() || '—'
+        },
+        {
+            key: 'endereco',
+            label: 'Endereço',
+            minWidth: 220,
+            getDisplay: (store) => (store?.endereco || '').trim() || '—'
+        },
+        {
+            key: 'acoes',
+            label: 'Ações',
+            minWidth: 140,
+            disableFilter: true,
+            disableSort: true,
+            disableResize: true,
+            headerClass: 'text-center',
+            cellClass: 'text-center whitespace-nowrap',
+            renderCell: (store) => {
+                const id = store?._id || '';
+                return `
+                    <div class="inline-flex items-center gap-2 justify-center">
+                        <button data-action="edit" data-id="${id}" class="inline-flex items-center gap-1 rounded-full border border-gray-200 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-700 transition hover:bg-gray-50">
+                            <i class="fa-solid fa-pen-to-square"></i>
+                            Editar
+                        </button>
+                        <button data-action="delete" data-id="${id}" class="inline-flex items-center gap-1 rounded-full border border-gray-200 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-red-700 transition hover:bg-red-50">
+                            <i class="fa-solid fa-trash"></i>
+                            Apagar
+                        </button>
+                    </div>
+                `;
+            }
+        }
+    ];
+
+    const storeTableState = {
+        data: [],
+        filters: {},
+        valueFilters: {},
+        filterSearch: {},
+        sort: { key: null, direction: null },
+        columnWidths: {},
+        openPopover: null
+    };
+
+    let storeActivePopover = null;
+    let storeActivePopoverCleanup = null;
+
+    const normalizeStoreText = (value) => {
+        if (value === null || value === undefined) return '';
+        try {
+            return String(value)
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .toLowerCase();
+        } catch (_error) {
+            return String(value).toLowerCase();
+        }
+    };
+
+    const escapeStoreRegexValue = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    const buildStoreFilterRegex = (rawValue) => {
+        const normalized = normalizeStoreText(rawValue || '').trim();
+        if (!normalized) return null;
+
+        const pattern = normalized
+            .split('*')
+            .map((segment) => escapeStoreRegexValue(segment))
+            .join('.*');
+
+        if (!pattern) return null;
+
+        try {
+            return new RegExp(pattern, 'i');
+        } catch (_error) {
+            return null;
+        }
+    };
+
+    const getStoreColumnMinWidth = (key) => {
+        const column = storeTableColumns.find((col) => col.key === key);
+        return column?.minWidth || 32;
+    };
+
+    const ensureStoresColGroup = () => {
+        if (!storesTable) return null;
+        let colgroup = storesTable.querySelector('colgroup');
+        if (!colgroup) {
+            colgroup = document.createElement('colgroup');
+            storesTable.insertBefore(colgroup, storesTable.firstChild);
+        }
+
+        if (colgroup) {
+            const columns = Array.from(colgroup.querySelectorAll('col'));
+            const isOutdated =
+                columns.length !== storeTableColumns.length ||
+                columns.some((col, index) => col.dataset.columnKey !== storeTableColumns[index].key);
+
+            if (isOutdated) {
+                colgroup.innerHTML = '';
+                storeTableColumns.forEach((column) => {
+                    const col = document.createElement('col');
+                    col.dataset.columnKey = column.key;
+                    colgroup.appendChild(col);
+                });
+            }
+        }
+
+        return colgroup;
+    };
+
     const setStoresCounter = (label) => {
         if (!storesCounter) return;
         storesCounter.innerHTML = `<i class="fas fa-magnifying-glass"></i>${label}`;
@@ -944,10 +1061,560 @@ document.addEventListener('DOMContentLoaded', () => {
         const toneClass = tone === 'error' ? 'text-red-500' : 'text-gray-500';
         tableBody.innerHTML = `
             <tr>
-                <td colspan="3" class="px-4 py-6 text-center ${toneClass}">${message}</td>
-            </tr>
-        `;
+                <td colspan="${storeTableColumns.length}" class="px-4 py-6 text-center ${toneClass}">${message}</td>
+            </tr>`;
     };
+
+    const getStoreDisplayValue = (store, column) => {
+        if (typeof column.renderCell === 'function') return column.renderCell(store);
+        if (typeof column.getDisplay === 'function') return column.getDisplay(store);
+        return store[column.key] ?? '—';
+    };
+
+    const getStoreComparableValue = (store, column) => {
+        if (typeof column.getComparable === 'function') return column.getComparable(store);
+        const value = getStoreDisplayValue(store, column);
+        return typeof value === 'string' ? value.toLowerCase() : value;
+    };
+
+    const getStoreColumnOptions = (column) => {
+        const unique = new Map();
+        storeTableState.data.forEach((item) => {
+            const displayValue = getStoreDisplayValue(item, column);
+            const normalized = normalizeStoreText(displayValue) || '__vazio__';
+            if (!unique.has(normalized)) {
+                unique.set(normalized, {
+                    normalized,
+                    label: displayValue === '' || displayValue === undefined || displayValue === null ? 'Vazio' : String(displayValue)
+                });
+            }
+        });
+
+        return Array.from(unique.values()).sort((a, b) =>
+            a.label.localeCompare(b.label, 'pt-BR', { sensitivity: 'base', numeric: true })
+        );
+    };
+
+    const syncStoreValueFilters = () => {
+        storeTableColumns.forEach((column) => {
+            if (column.disableFilter) return;
+            const selected = storeTableState.valueFilters[column.key];
+            if (!(selected instanceof Set)) return;
+
+            const options = getStoreColumnOptions(column);
+            const allowed = new Set(options.map((option) => option.normalized));
+            const next = new Set([...selected].filter((value) => allowed.has(value)));
+
+            if (next.size === allowed.size || allowed.size === 0) {
+                storeTableState.valueFilters[column.key] = null;
+            } else {
+                storeTableState.valueFilters[column.key] = next;
+            }
+        });
+    };
+
+    const applyStoreTableState = (items) => {
+        const baseItems = Array.isArray(items) ? items : [];
+        const filtered = baseItems.filter((store) => storeTableColumns.every((column) => {
+            if (column.disableFilter) return true;
+            const term = storeTableState.filters[column.key] || '';
+            const regex = buildStoreFilterRegex(term);
+            const hasValueFilter = storeTableState.valueFilters[column.key] instanceof Set;
+            const display = getStoreDisplayValue(store, column);
+            const normalizedDisplay = normalizeStoreText(display ?? '');
+
+            if (hasValueFilter) {
+                const selectedValues = storeTableState.valueFilters[column.key];
+                const optionKey = normalizeStoreText(display) || '__vazio__';
+                if (!selectedValues.has(optionKey)) return false;
+            }
+
+            if (!regex) return true;
+            return regex.test(normalizedDisplay);
+        }));
+
+        const { key, direction } = storeTableState.sort;
+        const defaultSorted = [...filtered].sort((a, b) => {
+            const nameA = String(storeTableColumns[0].getDisplay(a) || '');
+            const nameB = String(storeTableColumns[0].getDisplay(b) || '');
+            return nameA.localeCompare(nameB, 'pt-BR', { sensitivity: 'base' });
+        });
+
+        if (!key || !direction) return defaultSorted;
+
+        const targetColumn = storeTableColumns.find((column) => column.key === key);
+        if (!targetColumn) return defaultSorted;
+
+        const directionMultiplier = direction === 'asc' ? 1 : -1;
+
+        return [...defaultSorted].sort((a, b) => {
+            const valueA = getStoreComparableValue(a, targetColumn);
+            const valueB = getStoreComparableValue(b, targetColumn);
+
+            if (typeof valueA === 'number' && typeof valueB === 'number') {
+                if (!Number.isFinite(valueA) && !Number.isFinite(valueB)) return 0;
+                if (!Number.isFinite(valueA)) return -1 * directionMultiplier;
+                if (!Number.isFinite(valueB)) return 1 * directionMultiplier;
+                if (valueA === valueB) return 0;
+                return valueA > valueB ? directionMultiplier : -directionMultiplier;
+            }
+
+            const textA = String(valueA ?? '');
+            const textB = String(valueB ?? '');
+            return textA.localeCompare(textB, 'pt-BR', { sensitivity: 'base', numeric: true }) * directionMultiplier;
+        });
+    };
+
+    const updateStoreSortIndicators = () => {
+        const buttons = storesTable?.querySelectorAll('[data-store-sort-button]');
+        buttons?.forEach((button) => {
+            const { columnKey, sortDirection } = button.dataset;
+            const isActive = storeTableState.sort.key === columnKey && storeTableState.sort.direction === sortDirection;
+            button.classList.toggle('text-primary', isActive);
+            button.classList.toggle('border-primary/40', isActive);
+            button.classList.toggle('bg-primary/5', isActive);
+            button.classList.toggle('text-gray-400', !isActive);
+            button.classList.toggle('border-transparent', !isActive);
+        });
+    };
+
+    const setStoreTableSort = (key, direction) => {
+        const isSame = storeTableState.sort.key === key && storeTableState.sort.direction === direction;
+        storeTableState.sort = isSame ? { key: null, direction: null } : { key, direction };
+        updateStoreSortIndicators();
+        renderStoresTable();
+    };
+
+    const applyStoreColumnWidths = (syncFromDom = false) => {
+        if (!storesTable) return;
+
+        ensureStoresTableLayout();
+        const colgroup = ensureStoresColGroup();
+        const colMap = colgroup
+            ? new Map(Array.from(colgroup.querySelectorAll('col')).map((col) => [col.dataset.columnKey, col]))
+            : null;
+
+        const headerCells = Array.from(storesTable.querySelectorAll('th[data-column-key]'));
+
+        headerCells.forEach((th) => {
+            const columnKey = th.dataset.columnKey;
+            const minWidth = getStoreColumnMinWidth(columnKey);
+
+            if (syncFromDom && !Number.isFinite(storeTableState.columnWidths[columnKey])) {
+                storeTableState.columnWidths[columnKey] = Math.max(minWidth, th.getBoundingClientRect().width);
+            }
+
+            const storedWidth = storeTableState.columnWidths[columnKey];
+            const width = Number.isFinite(storedWidth) ? Math.max(minWidth, storedWidth) : minWidth;
+
+            th.style.width = `${width}px`;
+            th.style.minWidth = `${minWidth}px`;
+
+            const colEl = colMap?.get(columnKey);
+            if (colEl) {
+                colEl.style.width = `${width}px`;
+                colEl.style.minWidth = `${minWidth}px`;
+            }
+
+            const cells = tableBody?.querySelectorAll(`td[data-column-key="${columnKey}"]`);
+            cells?.forEach((cell) => {
+                cell.style.width = `${width}px`;
+                cell.style.minWidth = `${minWidth}px`;
+            });
+        });
+    };
+
+    const startStoreColumnResize = (column, th, startEvent) => {
+        if (!th) return;
+        startEvent.preventDefault();
+        closeStoreFilterPopover();
+
+        const minWidth = getStoreColumnMinWidth(column.key);
+        const startX = startEvent.touches?.[0]?.clientX ?? startEvent.clientX;
+        const startWidth = th.getBoundingClientRect().width;
+        const originalUserSelect = document.body.style.userSelect;
+        const originalCursor = document.body.style.cursor;
+
+        document.body.style.userSelect = 'none';
+        document.body.style.cursor = 'col-resize';
+
+        const handleMove = (moveEvent) => {
+            const currentX = moveEvent.touches?.[0]?.clientX ?? moveEvent.clientX;
+            if (!Number.isFinite(currentX)) return;
+            const delta = currentX - startX;
+            const nextWidth = Math.max(minWidth, startWidth + delta);
+            storeTableState.columnWidths[column.key] = nextWidth;
+            applyStoreColumnWidths();
+        };
+
+        const handleEnd = () => {
+            document.body.style.userSelect = originalUserSelect;
+            document.body.style.cursor = originalCursor;
+            window.removeEventListener('mousemove', handleMove);
+            window.removeEventListener('mouseup', handleEnd);
+            window.removeEventListener('touchmove', handleMove);
+            window.removeEventListener('touchend', handleEnd);
+        };
+
+        window.addEventListener('mousemove', handleMove);
+        window.addEventListener('mouseup', handleEnd);
+        window.addEventListener('touchmove', handleMove, { passive: true });
+        window.addEventListener('touchend', handleEnd);
+    };
+
+    const closeStoreFilterPopover = () => {
+        if (typeof storeActivePopoverCleanup === 'function') {
+            storeActivePopoverCleanup();
+            storeActivePopoverCleanup = null;
+        }
+
+        if (storeActivePopover?.element?.parentNode) {
+            storeActivePopover.element.parentNode.removeChild(storeActivePopover.element);
+        }
+
+        storeActivePopover = null;
+        storeTableState.openPopover = null;
+    };
+
+    const renderStoreFilterPopover = (column, anchor) => {
+        if (!anchor) return;
+
+        const parentCell = anchor.closest('th');
+        if (!parentCell) return;
+
+        closeStoreFilterPopover();
+
+        const options = getStoreColumnOptions(column);
+
+        const popover = document.createElement('div');
+        popover.className = 'fixed z-40 mt-1 w-64 rounded-lg border border-gray-200 bg-white p-3 shadow-lg';
+        popover.dataset.popoverFor = column.key;
+
+        const title = document.createElement('div');
+        title.className = 'mb-2 text-xs font-semibold uppercase text-gray-600';
+        title.textContent = `Filtrar ${column.label}`;
+
+        const searchInput = document.createElement('input');
+        searchInput.type = 'text';
+        searchInput.placeholder = 'Procurar valores';
+        searchInput.value = storeTableState.filterSearch[column.key] || '';
+        searchInput.className =
+            'mb-2 w-full rounded border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20';
+
+        const selectAllWrapper = document.createElement('label');
+        selectAllWrapper.className = 'mb-2 flex cursor-pointer items-center gap-2 text-sm text-gray-700';
+
+        const selectAllCheckbox = document.createElement('input');
+        selectAllCheckbox.type = 'checkbox';
+        selectAllCheckbox.className = 'h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/50';
+
+        const selectAllLabel = document.createElement('span');
+        selectAllLabel.textContent = 'Selecionar todos';
+        selectAllWrapper.append(selectAllCheckbox, selectAllLabel);
+
+        const list = document.createElement('div');
+        list.className = 'max-h-48 space-y-1 overflow-y-auto rounded border border-gray-100 bg-gray-50 px-2 py-2';
+
+        const actions = document.createElement('div');
+        actions.className = 'mt-3 flex items-center justify-between gap-2';
+
+        const clearButton = document.createElement('button');
+        clearButton.type = 'button';
+        clearButton.className =
+            'inline-flex items-center gap-1 rounded border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50';
+        clearButton.innerHTML = '<i class="fas fa-eraser"></i>Limpar';
+
+        const applyButton = document.createElement('button');
+        applyButton.type = 'button';
+        applyButton.className =
+            'inline-flex items-center gap-1 rounded bg-primary px-3 py-1 text-xs font-semibold text-white hover:bg-secondary';
+        applyButton.innerHTML = '<i class="fas fa-check"></i>Aplicar';
+
+        actions.append(clearButton, applyButton);
+
+        const renderOptions = () => {
+            list.innerHTML = '';
+
+            const searchTerm = normalizeStoreText(storeTableState.filterSearch[column.key] || '');
+            const filteredOptions = options.filter((option) => normalizeStoreText(option.label).includes(searchTerm));
+
+            const selectedSet = storeTableState.valueFilters[column.key];
+            const isAllSelected = !(selectedSet instanceof Set) || selectedSet.size === options.length;
+            selectAllCheckbox.checked = isAllSelected;
+            selectAllCheckbox.indeterminate = selectedSet instanceof Set && selectedSet.size > 0 && !isAllSelected;
+
+            if (!filteredOptions.length) {
+                const empty = document.createElement('p');
+                empty.className = 'py-2 text-center text-xs text-gray-500';
+                empty.textContent = 'Nenhum valor encontrado';
+                list.appendChild(empty);
+                return;
+            }
+
+            filteredOptions.forEach((option) => {
+                const item = document.createElement('label');
+                item.className = 'flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm text-gray-700 hover:bg-white';
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/50';
+
+                const isSelected =
+                    !(selectedSet instanceof Set) || selectedSet.size === options.length
+                        ? true
+                        : selectedSet.has(option.normalized);
+                checkbox.checked = isSelected;
+
+                checkbox.addEventListener('change', () => {
+                    if (!(storeTableState.valueFilters[column.key] instanceof Set)) {
+                        storeTableState.valueFilters[column.key] = new Set(options.map((opt) => opt.normalized));
+                    }
+                    const targetSet = storeTableState.valueFilters[column.key];
+                    if (checkbox.checked) {
+                        targetSet.add(option.normalized);
+                    } else {
+                        targetSet.delete(option.normalized);
+                    }
+
+                    if (targetSet.size === options.length) {
+                        storeTableState.valueFilters[column.key] = null;
+                    }
+
+                    renderStoresTable();
+                    renderOptions();
+                });
+
+                const text = document.createElement('span');
+                text.textContent = option.label;
+
+                item.append(checkbox, text);
+                list.appendChild(item);
+            });
+        };
+
+        selectAllCheckbox.addEventListener('change', () => {
+            if (selectAllCheckbox.checked) {
+                storeTableState.valueFilters[column.key] = null;
+            } else {
+                storeTableState.valueFilters[column.key] = new Set();
+            }
+            renderStoresTable();
+            renderOptions();
+        });
+
+        searchInput.addEventListener('input', (event) => {
+            storeTableState.filterSearch[column.key] = event.target.value || '';
+            renderOptions();
+        });
+
+        clearButton.addEventListener('click', () => {
+            storeTableState.filterSearch[column.key] = '';
+            storeTableState.valueFilters[column.key] = null;
+            renderStoresTable();
+            renderOptions();
+        });
+
+        applyButton.addEventListener('click', () => {
+            closeStoreFilterPopover();
+        });
+
+        popover.append(title, searchInput, selectAllWrapper, list, actions);
+        document.body.appendChild(popover);
+
+        const anchorRect = anchor.getBoundingClientRect();
+        const popRect = popover.getBoundingClientRect();
+        const top = anchorRect.bottom + window.scrollY + 4;
+        const left = Math.min(anchorRect.left + window.scrollX, window.innerWidth - popRect.width - 8);
+
+        popover.style.top = `${top}px`;
+        popover.style.left = `${left}px`;
+
+        const handleClickOutside = (event) => {
+            if (popover.contains(event.target)) return;
+            if (anchor.contains(event.target)) return;
+            closeStoreFilterPopover();
+        };
+
+        const handleEscape = (event) => {
+            if (event.key === 'Escape') closeStoreFilterPopover();
+        };
+
+        const handleScroll = () => closeStoreFilterPopover();
+        const handleResize = () => closeStoreFilterPopover();
+
+        document.addEventListener('mousedown', handleClickOutside);
+        document.addEventListener('keydown', handleEscape);
+        window.addEventListener('scroll', handleScroll, true);
+        window.addEventListener('resize', handleResize);
+
+        storeActivePopover = { key: column.key, element: popover };
+        storeTableState.openPopover = column.key;
+
+        storeActivePopoverCleanup = () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('keydown', handleEscape);
+            window.removeEventListener('scroll', handleScroll, true);
+            window.removeEventListener('resize', handleResize);
+        };
+
+        renderOptions();
+    };
+
+    const buildStoresTableHead = () => {
+        if (!storesTable) return;
+        const thead = storesTable.querySelector('thead');
+        if (!thead) return;
+
+        thead.innerHTML = '';
+        const row = document.createElement('tr');
+
+        storeTableColumns.forEach((column) => {
+            const th = document.createElement('th');
+            th.dataset.columnKey = column.key;
+            th.className = `${column.headerClass || ''} relative align-top bg-gray-50 whitespace-nowrap`;
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'flex flex-col gap-1 px-3 py-2';
+
+            const labelRow = document.createElement('div');
+            labelRow.className = 'flex items-center justify-between gap-1';
+
+            const label = document.createElement('span');
+            label.textContent = column.label;
+            label.className = 'flex-1 text-[10px] font-semibold uppercase leading-tight tracking-wide text-gray-600';
+            if (column.headerClass?.includes('text-right')) label.classList.add('text-right');
+            labelRow.appendChild(label);
+
+            if (!column.disableSort) {
+                const sortGroup = document.createElement('div');
+                sortGroup.className = 'flex flex-col items-center justify-center gap-px text-gray-400';
+
+                ['asc', 'desc'].forEach((direction) => {
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.dataset.storeSortButton = 'true';
+                    button.dataset.columnKey = column.key;
+                    button.dataset.sortDirection = direction;
+                    button.className = 'flex h-4 w-4 items-center justify-center rounded border border-transparent text-gray-400 transition';
+                    button.setAttribute('aria-label', `Ordenar ${direction === 'asc' ? 'crescente' : 'decrescente'} por ${column.label}`);
+                    button.innerHTML = `<i class="fas fa-sort-${direction === 'asc' ? 'up' : 'down'} text-[10px]"></i>`;
+                    button.addEventListener('click', () => setStoreTableSort(column.key, direction));
+                    sortGroup.appendChild(button);
+                });
+
+                labelRow.appendChild(sortGroup);
+            }
+
+            wrapper.appendChild(labelRow);
+
+            const filterRow = document.createElement('div');
+            filterRow.className = 'flex items-center gap-1';
+
+            if (!column.disableFilter) {
+                const filter = document.createElement('input');
+                filter.type = 'text';
+                filter.placeholder = 'Filtrar';
+                filter.value = storeTableState.filters[column.key] || '';
+                filter.className =
+                    'flex-1 rounded border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20';
+                filter.addEventListener('input', (event) => {
+                    storeTableState.filters[column.key] = event.target.value || '';
+                    renderStoresTable();
+                });
+
+                const popoverButton = document.createElement('button');
+                popoverButton.type = 'button';
+                popoverButton.className =
+                    'flex h-8 w-8 items-center justify-center rounded border border-gray-200 bg-white text-gray-500 transition hover:border-primary/50 hover:text-primary';
+                popoverButton.setAttribute('aria-label', `Filtrar valores da coluna ${column.label}`);
+                popoverButton.innerHTML = '<i class="fas fa-magnifying-glass"></i>';
+                popoverButton.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    renderStoreFilterPopover(column, popoverButton);
+                });
+
+                filterRow.append(filter, popoverButton);
+            } else {
+                const spacer = document.createElement('div');
+                spacer.className = 'h-8';
+                filterRow.appendChild(spacer);
+            }
+
+            wrapper.appendChild(filterRow);
+            th.appendChild(wrapper);
+
+            if (!column.disableResize) {
+                const resizeHandle = document.createElement('div');
+                resizeHandle.className =
+                    'absolute inset-y-0 right-0 flex w-2 cursor-col-resize select-none items-center justify-center px-px';
+                resizeHandle.setAttribute('aria-label', `Redimensionar coluna ${column.label}`);
+                resizeHandle.innerHTML = '<span class="pointer-events-none block h-8 w-px rounded-full bg-gray-200"></span>';
+                resizeHandle.addEventListener('mousedown', (event) => startStoreColumnResize(column, th, event));
+                resizeHandle.addEventListener('touchstart', (event) => startStoreColumnResize(column, th, event));
+                th.appendChild(resizeHandle);
+            }
+
+            row.appendChild(th);
+        });
+
+        thead.appendChild(row);
+        updateStoreSortIndicators();
+        applyStoreColumnWidths(true);
+    };
+
+    function renderStoresTable(stores) {
+        ensureStoresTableLayout();
+        if (Array.isArray(stores)) {
+            storeTableState.data = stores;
+            syncStoreValueFilters();
+            buildStoresTableHead();
+        }
+
+        if (!tableBody) return;
+        tableBody.innerHTML = '';
+
+        const visible = applyStoreTableState(storeTableState.data);
+
+        if (!visible.length) {
+            const emptyRow = document.createElement('tr');
+            const td = document.createElement('td');
+            td.colSpan = storeTableColumns.length;
+            td.className = 'px-4 py-6 text-center text-gray-500';
+            td.textContent = storeTableState.data.length ? 'Nenhuma loja encontrada para os filtros atuais.' : 'Nenhuma loja carregada.';
+            emptyRow.appendChild(td);
+            tableBody.appendChild(emptyRow);
+            setStoresCounter('Nenhuma loja encontrada');
+            applyStoreColumnWidths();
+            return;
+        }
+
+        visible.forEach((store) => {
+            const tr = document.createElement('tr');
+            tr.className = 'align-top hover:bg-gray-50';
+
+            storeTableColumns.forEach((column) => {
+                const td = document.createElement('td');
+                td.dataset.columnKey = column.key;
+                td.className = `${column.cellClass || ''} px-3 py-2 ${column.disableFilter ? 'align-middle' : 'align-top'}`.trim();
+                if (column.key === 'nome') {
+                    td.classList.add('font-semibold', 'text-gray-900');
+                }
+
+                if (typeof column.renderCell === 'function') {
+                    td.innerHTML = column.renderCell(store);
+                } else {
+                    td.textContent = getStoreDisplayValue(store, column);
+                }
+                tr.appendChild(td);
+            });
+
+            tableBody.appendChild(tr);
+        });
+
+        const plural = visible.length === 1 ? 'loja encontrada' : 'lojas encontradas';
+        setStoresCounter(`${visible.length} ${plural}`);
+        applyStoreColumnWidths();
+    }
 
     async function fetchAndDisplayStores() {
         ensureStoresTableLayout();
@@ -959,41 +1626,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const stores = Array.isArray(response) ? response : await response.json();
             const list = Array.isArray(stores) ? stores : [];
 
-            if (list.length === 0) {
-                setStoresCounter('Nenhuma loja carregada');
-                setStoresTableMessage('Nenhuma loja encontrada para os filtros atuais.');
-                return;
-            }
-
-            const rowsHtml = list.map((store) => {
-                const nome = (store?.nomeFantasia || store?.nome || store?.razaoSocial || '—').trim() || '—';
-                const endereco = (store?.endereco || '').trim() || '—';
-                const id = store?._id || '';
-
-                return `
-                    <tr class="align-top hover:bg-gray-50">
-                        <td class="px-3 py-2 font-semibold text-gray-900">${nome}</td>
-                        <td class="px-3 py-2 text-gray-700">${endereco}</td>
-                        <td class="px-3 py-2 text-center whitespace-nowrap">
-                            <div class="inline-flex items-center gap-2 justify-center">
-                                <button data-action="edit" data-id="${id}" class="inline-flex items-center gap-1 rounded-full border border-gray-200 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-700 transition hover:bg-gray-50">
-                                    <i class="fa-solid fa-pen-to-square"></i>
-                                    Editar
-                                </button>
-                                <button data-action="delete" data-id="${id}" class="inline-flex items-center gap-1 rounded-full border border-gray-200 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-red-700 transition hover:bg-red-50">
-                                    <i class="fa-solid fa-trash"></i>
-                                    Apagar
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-
-            tableBody.innerHTML = rowsHtml;
-
-            const plural = list.length === 1 ? 'loja encontrada' : 'lojas encontradas';
-            setStoresCounter(`${list.length} ${plural}`);
+            renderStoresTable(list);
         } catch (error) {
             console.error(error);
             setStoresCounter('Erro ao carregar');
