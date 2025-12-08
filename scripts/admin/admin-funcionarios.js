@@ -1422,44 +1422,58 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Render com fallback de ordenação (servidor já manda ordenado)
   function renderTable(funcionarios) {
-    if (!Array.isArray(funcionarios) || funcionarios.length === 0) {
-      tabela.innerHTML = `<p class="text-gray-500">Nenhum funcionário cadastrado.</p>`;
-      return;
-    }
-    funcionarios.sort((a, b) => {
-      const r = (roleRank[b.role] ?? -1) - (roleRank[a.role] ?? -1);
-      if (r !== 0) return r;
-      return getNome(a).localeCompare(getNome(b), 'pt-BR');
-    });
+    const hasFuncionarios = Array.isArray(funcionarios) && funcionarios.length > 0;
 
-    const rows = funcionarios.map(f => `
-      <tr class="border-b">
-        <td class="py-2 px-4">${getNome(f) || '-'}</td>
-        <td class="py-2 px-4">${f.email || '-'}</td>
-        <td class="py-2 px-4 capitalize">${ROLE_LABEL[f.role] || f.role}</td>
-        <td class="py-2 px-4 text-right">
-          <button class="text-blue-600 hover:text-blue-800 mr-3" data-action="edit" data-id="${f._id}">
-            <i class="fa-solid fa-pen-to-square"></i> Editar
-          </button>
-          <button class="text-red-600 hover:text-red-800" data-action="delete" data-id="${f._id}">
-            <i class="fa-solid fa-trash"></i> Remover do quadro
-          </button>
-        </td>
-      </tr>
-    `).join('');
+    if (hasFuncionarios) {
+      funcionarios.sort((a, b) => {
+        const r = (roleRank[b.role] ?? -1) - (roleRank[a.role] ?? -1);
+        if (r !== 0) return r;
+        return getNome(a).localeCompare(getNome(b), 'pt-BR');
+      });
+    }
+
+    const rows = hasFuncionarios
+      ? funcionarios.map(f => `
+        <tr>
+          <td class="px-3 py-2 font-semibold text-gray-800">${getNome(f) || '-'}</td>
+          <td class="px-3 py-2">${f.email || '-'}</td>
+          <td class="px-3 py-2 capitalize">${ROLE_LABEL[f.role] || f.role}</td>
+          <td class="px-3 py-2 text-right">
+            <div class="flex justify-end gap-2 text-[11px]">
+              <button class="inline-flex items-center gap-1 rounded-lg border border-emerald-100 px-2 py-1 font-semibold text-emerald-700 transition hover:border-emerald-200 hover:bg-emerald-50" data-action="edit" data-id="${f._id}">
+                <i class="fa-solid fa-pen-to-square"></i>
+                Editar
+              </button>
+              <button class="inline-flex items-center gap-1 rounded-lg border border-red-100 px-2 py-1 font-semibold text-red-700 transition hover:border-red-200 hover:bg-red-50" data-action="delete" data-id="${f._id}">
+                <i class="fa-solid fa-trash"></i>
+                Remover
+              </button>
+            </div>
+          </td>
+        </tr>
+      `).join('')
+      : `
+        <tr id="funcionarios-empty-state">
+          <td colspan="4" class="px-4 py-6 text-center text-gray-500">Nenhum funcionário cadastrado.</td>
+        </tr>
+      `;
 
     tabela.innerHTML = `
-      <table class="min-w-full bg-white border rounded-lg overflow-hidden">
-        <thead>
-          <tr class="bg-gray-50 text-left">
-            <th class="py-2 px-4">Nome</th>
-            <th class="py-2 px-4">Email</th>
-            <th class="py-2 px-4">Cargo</th>
-            <th class="py-2 px-4 text-right">Ações</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
+      <div class="overflow-hidden rounded-xl border border-gray-100">
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-100 text-left text-[11px] leading-[1.35] text-gray-700">
+            <thead class="bg-gray-50 text-left text-[10px] uppercase tracking-wide text-gray-500">
+              <tr>
+                <th class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-600">Nome</th>
+                <th class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-600">Email</th>
+                <th class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-600">Cargo</th>
+                <th class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-600 text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 bg-white text-[11px] text-gray-700">${rows}</tbody>
+          </table>
+        </div>
+      </div>
     `;
   }
 
