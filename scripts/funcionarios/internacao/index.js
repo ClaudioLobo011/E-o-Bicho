@@ -812,15 +812,31 @@ function getAuthToken() {
 
 function getLoggedInUserData() {
   try {
-    return JSON.parse(localStorage.getItem('loggedInUser') || 'null');
+    const logged = JSON.parse(localStorage.getItem('loggedInUser') || 'null');
+    if (logged) return logged;
+    const legacy = JSON.parse(localStorage.getItem('user') || 'null');
+    return legacy;
   } catch (error) {
     console.error('internacao: falha ao ler dados do usuário logado', error);
     return null;
   }
 }
 
-function getUserEmpresasOptions() {
-  const user = getLoggedInUserData();
+function getSelectedUserData() {
+  try {
+    const cached =
+      sessionStorage.getItem('selectedUser') ||
+      localStorage.getItem('selectedUser') ||
+      null;
+    return cached ? JSON.parse(cached) : null;
+  } catch (error) {
+    console.error('internacao: falha ao ler usuário selecionado', error);
+    return null;
+  }
+}
+
+function getUserEmpresasOptions(userOverride = null) {
+  const user = userOverride || getSelectedUserData() || getLoggedInUserData();
   const normalizeToArray = (value) => {
     if (!value) return [];
     if (Array.isArray(value)) return value;
@@ -829,19 +845,31 @@ function getUserEmpresasOptions() {
 
   const rawEmpresas = [
     ...normalizeToArray(user?.empresas),
+    ...normalizeToArray(user?.empresasSelecionadas),
+    ...normalizeToArray(user?.empresasSelecionadasIds),
     ...normalizeToArray(user?.empresa),
+    ...normalizeToArray(user?.empresaId),
     ...normalizeToArray(user?.empresaPrincipal),
     ...normalizeToArray(user?.empresa_principal),
     ...normalizeToArray(user?.empresaPrincipalId),
+    ...normalizeToArray(user?.selectedCompanies),
+    ...normalizeToArray(user?.selectedCompany),
+    ...normalizeToArray(user?.companies),
+    ...normalizeToArray(user?.company),
+    ...normalizeToArray(user?.companyId),
+    ...normalizeToArray(user?.companyIds),
     ...normalizeToArray(user?.funcionario?.empresas),
+    ...normalizeToArray(user?.funcionario?.empresasSelecionadas),
     ...normalizeToArray(user?.funcionario?.empresa),
     ...normalizeToArray(user?.funcionario?.empresaPrincipal),
     ...normalizeToArray(user?.funcionario?.lojas),
     ...normalizeToArray(user?.funcionario?.loja),
+    ...normalizeToArray(user?.funcionario?.lojasSelecionadas),
     ...normalizeToArray(user?.funcionario?.stores),
     ...normalizeToArray(user?.funcionario?.store),
     ...normalizeToArray(user?.lojas),
     ...normalizeToArray(user?.loja),
+    ...normalizeToArray(user?.lojasSelecionadas),
     ...normalizeToArray(user?.stores),
     ...normalizeToArray(user?.store),
   ];
@@ -3923,7 +3951,14 @@ function ensureSelectOption(select, option) {
 
 function populateEmpresaSelect(extraOption) {
   if (!internarModal.empresaSelect) return;
-  const options = getUserEmpresasOptions();
+  const selectedUser =
+    internarModal.state?.selectedUser ||
+    internarModal.state?.usuarioSelecionado ||
+    internarModal.state?.usuario ||
+    internarModal.state?.user ||
+    internarModal.state?.funcionario ||
+    null;
+  const options = getUserEmpresasOptions(selectedUser);
   internarModal.empresasOptions = options;
   const markup = ['<option value="">Selecione</option>', ...options.map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`)];
   internarModal.empresaSelect.innerHTML = markup.join('');
