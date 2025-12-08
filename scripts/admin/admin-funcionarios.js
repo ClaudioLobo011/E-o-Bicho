@@ -112,6 +112,31 @@ document.addEventListener('DOMContentLoaded', () => {
     admin_master: 'Admin Master',
   };
   const roleRank = { cliente: 0, funcionario: 1, admin: 2, admin_master: 3 };
+  function getEmpresaNomeById(id) {
+    if (!id || !Array.isArray(empresasDisponiveis)) return '';
+    const found = empresasDisponiveis.find((empresa) => empresa?._id === id || empresa?.id === id);
+    return (found?.nome || found?.razaoSocial || found?.fantasia || '').trim();
+  }
+  function getEmpresasSelecionadas(funcionario) {
+    if (!funcionario || !Array.isArray(funcionario.empresas)) return [];
+    const seen = new Set();
+    const nomes = [];
+
+    funcionario.empresas.forEach((empresa) => {
+      const id = typeof empresa === 'string' ? empresa : (empresa?._id || empresa?.id || '');
+      const nomeDireto = (empresa && typeof empresa === 'object')
+        ? (empresa.nome || empresa.razaoSocial || empresa.fantasia || empresa.label || '')
+        : '';
+      const nome = (nomeDireto || getEmpresaNomeById(id) || id || '').trim();
+      if (!nome) return;
+      const normalized = nome.toLowerCase();
+      if (seen.has(normalized)) return;
+      seen.add(normalized);
+      nomes.push(nome);
+    });
+
+    return nomes;
+  }
   const funcTableColumns = [
     {
       key: 'nome',
@@ -139,6 +164,18 @@ document.addEventListener('DOMContentLoaded', () => {
       cellClass: 'px-3 py-2.5 capitalize text-[11px] text-gray-700',
       getDisplay: (f) => ROLE_LABEL[f.role] || f.role || '-',
       getComparable: (f) => roleRank[f.role] ?? -1,
+    },
+    {
+      key: 'empresas',
+      label: 'Empresa',
+      minWidth: 96,
+      headerClass: 'px-3 py-2',
+      cellClass: 'px-3 py-2.5 text-[11px] text-gray-700',
+      getDisplay: (f) => {
+        const nomes = getEmpresasSelecionadas(f);
+        return nomes.length ? nomes.join(', ') : '-';
+      },
+      getComparable: (f) => getEmpresasSelecionadas(f).join(', ').toLowerCase(),
     },
     {
       key: 'acoes',
