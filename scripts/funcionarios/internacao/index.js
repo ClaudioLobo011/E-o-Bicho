@@ -354,6 +354,10 @@ const boxesModal = {
   errorEl: null,
   submitBtn: null,
   onSuccess: null,
+  empresaSelect: null,
+  empresasOptions: [],
+  dataset: null,
+  state: null,
 };
 
 const fichaInternacaoModal = {
@@ -3604,9 +3608,12 @@ function closeCreateBoxModal() {
   setBoxesModalError('');
 }
 
-function openCreateBoxModal() {
+function openCreateBoxModal(options = {}) {
   ensureCreateBoxModal();
   if (!boxesModal.overlay) return;
+  boxesModal.dataset = options.dataset || boxesModal.dataset || getDataset();
+  boxesModal.state = options.state || boxesModal.state || {};
+  populateBoxesEmpresaSelect();
   boxesModal.overlay.classList.remove('hidden');
   boxesModal.overlay.dataset.modalOpen = 'true';
   setBoxesModalError('');
@@ -3624,6 +3631,18 @@ async function handleBoxesModalSubmit(event) {
   if (!boxesModal.form) return;
   setBoxesModalError('');
   const formData = new FormData(boxesModal.form);
+  const empresaDetails = getOptionDetails(boxesModal.empresasOptions || [], formData.get('boxEmpresa'));
+  const empresaPayload = empresaDetails.value || empresaDetails.label
+    ? {
+        _id: empresaDetails.value || empresaDetails.label,
+        id: empresaDetails.value || empresaDetails.label,
+        value: empresaDetails.value || empresaDetails.label,
+        nomeFantasia: empresaDetails.label || empresaDetails.value,
+        nome: empresaDetails.label || empresaDetails.value,
+        razaoSocial: empresaDetails.label || empresaDetails.value,
+        label: empresaDetails.label || empresaDetails.value,
+      }
+    : null;
   const payload = {
     box: (formData.get('box') || '').toString().trim(),
     especialidade: (formData.get('especialidade') || '').toString().trim(),
@@ -3638,7 +3657,18 @@ async function handleBoxesModalSubmit(event) {
     return;
   }
 
+  if (!empresaPayload) {
+    setBoxesModalError('Selecione a empresa do box.');
+    return;
+  }
+
   if (!payload.higienizacao) payload.higienizacao = '—';
+
+  payload.empresaId = empresaDetails.value;
+  payload.empresaNome = empresaDetails.label || empresaDetails.value;
+  payload.empresaNomeFantasia = empresaDetails.label || empresaDetails.value;
+  payload.empresaRazaoSocial = empresaDetails.label || empresaDetails.value;
+  payload.empresa = empresaPayload;
 
   setBoxesModalLoading(true);
   try {
@@ -3682,6 +3712,11 @@ function ensureCreateBoxModal() {
             <input type="text" name="especialidade" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-primary" placeholder="Clínico, Cirúrgico..." />
           </label>
         </div>
+        <label class="text-sm font-medium text-gray-700">Empresa
+          <select name="boxEmpresa" class="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+            <option value="">Selecione</option>
+          </select>
+        </label>
         <label class="text-sm font-medium text-gray-700">Higienização programada
           <input type="text" name="higienizacao" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-primary" placeholder="Ex.: 09h30" />
         </label>
@@ -3701,6 +3736,7 @@ function ensureCreateBoxModal() {
   boxesModal.overlay = overlay;
   boxesModal.dialog = overlay.querySelector('[data-boxes-modal-dialog]');
   boxesModal.form = overlay.querySelector('form');
+  boxesModal.empresaSelect = overlay.querySelector('select[name="boxEmpresa"]');
   boxesModal.errorEl = overlay.querySelector('[data-boxes-modal-error]');
   boxesModal.submitBtn = overlay.querySelector('[data-boxes-modal-submit]');
 
@@ -3730,8 +3766,10 @@ function ensureCreateBoxModal() {
   return overlay;
 }
 
-function initCreateBoxModal(onSuccess) {
+function initCreateBoxModal(onSuccess, options = {}) {
   boxesModal.onSuccess = onSuccess;
+  boxesModal.dataset = options.dataset || boxesModal.dataset || null;
+  boxesModal.state = options.state || boxesModal.state || {};
   ensureCreateBoxModal();
 }
 
@@ -4171,6 +4209,54 @@ async function populateEmpresaSelect(extraOption) {
 
   if (!options.length) {
     setInternarModalError('Não foi possível carregar as empresas vinculadas ao usuário selecionado.');
+  }
+}
+
+async function populateBoxesEmpresaSelect(extraOption) {
+  if (!boxesModal.empresaSelect) return;
+  boxesModal.empresaSelect.innerHTML = '<option value="">Carregando...</option>';
+  const selectedUser =
+    boxesModal.state?.selectedUser ||
+    boxesModal.state?.usuarioSelecionado ||
+    boxesModal.state?.usuario ||
+    boxesModal.state?.user ||
+    boxesModal.state?.funcionario ||
+    null;
+
+  let options = getUserEmpresasOptions(selectedUser);
+
+  if (options.length) {
+    options = await hydrateEmpresasOptions(options);
+  }
+
+  if (!options.length) {
+    options = await fetchUserEmpresasFromDatabase(selectedUser);
+  }
+
+  if (!options.length) {
+    options = await fetchUserEmpresasFromDatabase();
+  }
+
+  boxesModal.empresasOptions = options;
+  const markup = ['<option value="">Selecione</option>', ...options.map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`)];
+  boxesModal.empresaSelect.innerHTML = markup.join('');
+
+  if (extraOption && (extraOption.value || extraOption.label)) {
+    const option = {
+      value: extraOption.value || extraOption.label || '',
+      label: extraOption.label || extraOption.value || '',
+    };
+    ensureSelectOption(boxesModal.empresaSelect, option);
+    boxesModal.empresaSelect.value = option.value;
+    return;
+  }
+
+  if (!boxesModal.empresaSelect.value && options.length === 1) {
+    boxesModal.empresaSelect.value = options[0].value;
+  }
+
+  if (!options.length) {
+    setBoxesModalError('Não foi possível carregar as empresas vinculadas ao usuário selecionado.');
   }
 }
 
@@ -7306,7 +7392,7 @@ function setupBoxesPage(dataset, state, render) {
   if (createBtn) {
     createBtn.addEventListener('click', (event) => {
       event.preventDefault();
-      openCreateBoxModal();
+      openCreateBoxModal({ dataset, state });
     });
   }
 
@@ -7338,7 +7424,7 @@ function setupBoxesPage(dataset, state, render) {
     });
   }
 
-  initCreateBoxModal(fetchBoxes);
+  initCreateBoxModal(fetchBoxes, { dataset, state });
   fetchBoxes();
 }
 

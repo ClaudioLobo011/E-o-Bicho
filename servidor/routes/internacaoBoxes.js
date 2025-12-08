@@ -761,6 +761,12 @@ const formatBox = (doc) => {
   if (!doc) return null;
   const plain = typeof doc.toObject === 'function' ? doc.toObject() : doc;
   const ocupante = sanitizeText(plain.ocupante, { fallback: 'Livre' });
+  const empresa = formatEmpresa(plain.empresa, {
+    empresaId: plain.empresaId,
+    empresaNome: plain.empresaNome,
+    empresaNomeFantasia: plain.empresaNomeFantasia,
+    empresaRazaoSocial: plain.empresaRazaoSocial,
+  });
   return {
     id: String(plain._id || plain.id || plain.box || '').trim(),
     box: sanitizeText(plain.box),
@@ -769,6 +775,17 @@ const formatBox = (doc) => {
     especialidade: sanitizeText(plain.especialidade),
     higienizacao: sanitizeText(plain.higienizacao, { fallback: '—' }),
     observacao: sanitizeText(plain.observacao),
+    empresaId: sanitizeText(empresa?.id),
+    empresaNome: sanitizeText(
+      empresa?.nomeFantasia || empresa?.nome || plain.empresaNome || plain.empresaNomeFantasia || plain.empresaRazaoSocial,
+    ),
+    empresaNomeFantasia: sanitizeText(
+      empresa?.nomeFantasia || plain.empresaNomeFantasia || plain.empresaNome || plain.empresaRazaoSocial,
+    ),
+    empresaRazaoSocial: sanitizeText(
+      empresa?.razaoSocial || plain.empresaRazaoSocial || plain.empresaNome || plain.empresaNomeFantasia,
+    ),
+    empresa: empresa || null,
     createdAt: plain.createdAt || null,
     updatedAt: plain.updatedAt || null,
   };
@@ -909,13 +926,30 @@ router.post('/boxes', async (req, res) => {
       observacao: sanitizeText(req.body?.observacao),
     };
 
+    const empresa = formatEmpresa(req.body?.empresa, {
+      empresaId: req.body?.empresaId,
+      empresaNome: req.body?.empresaNome,
+      empresaNomeFantasia: req.body?.empresaNomeFantasia,
+      empresaRazaoSocial: req.body?.empresaRazaoSocial,
+    });
+
     if (!payload.box) {
       return res.status(400).json({ message: 'Informe o identificador do box.' });
+    }
+
+    if (!empresa) {
+      return res.status(400).json({ message: 'Selecione a empresa do box.' });
     }
 
     if (!payload.status) {
       payload.status = payload.ocupante === 'Livre' ? 'Disponível' : 'Em uso';
     }
+
+    payload.empresa = empresa;
+    payload.empresaId = sanitizeText(empresa.id);
+    payload.empresaNome = sanitizeText(empresa.nome || empresa.nomeFantasia || empresa.razaoSocial);
+    payload.empresaNomeFantasia = sanitizeText(empresa.nomeFantasia || payload.empresaNome);
+    payload.empresaRazaoSocial = sanitizeText(empresa.razaoSocial || payload.empresaNome);
 
     const record = await InternacaoBox.create(payload);
     return res.status(201).json(formatBox(record));
