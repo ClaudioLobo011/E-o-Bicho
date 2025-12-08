@@ -929,11 +929,80 @@ async function fetchUserEmpresasFromDatabase(userOverride = null) {
 
   try {
     const userData = await requestJson(`/users/${encodeURIComponent(userId)}`);
-    return getUserEmpresasOptions(userData);
+    const options = getUserEmpresasOptions(userData);
+    return await hydrateEmpresasOptions(options);
   } catch (error) {
     console.warn('internacao: falha ao consultar empresas direto no banco', error);
     return [];
   }
+}
+
+function normalizeEmpresaOptionFromStore(store, fallbackValue = '') {
+  if (!store || typeof store !== 'object') return null;
+
+  const rawValue =
+    store._id ||
+    store.id ||
+    store.value ||
+    store.codigo ||
+    store.codigoLoja ||
+    fallbackValue ||
+    '';
+
+  const rawLabel =
+    store.nomeFantasia ||
+    store.nome ||
+    store.razaoSocial ||
+    store.label ||
+    store.nomeLoja ||
+    rawValue ||
+    '';
+
+  const value = String(rawValue || rawLabel || '').trim();
+  const label = String(rawLabel || rawValue || '').trim();
+  if (!value) return null;
+
+  return { value, label: label || value };
+}
+
+async function hydrateEmpresasOptions(options = []) {
+  const candidates = Array.isArray(options)
+    ? options.filter((opt) => {
+        const value = (opt?.value || '').toString().trim();
+        const label = (opt?.label || '').toString().trim();
+        return value && (!label || label === value);
+      })
+    : [];
+
+  const idsToFetch = Array.from(new Set(candidates.map((opt) => opt.value).filter(Boolean)));
+  if (!idsToFetch.length) return options || [];
+
+  const resolved = new Map();
+  await Promise.all(
+    idsToFetch.map(async (id) => {
+      try {
+        const store = await requestJson(`/stores/${encodeURIComponent(id)}`);
+        const normalized = normalizeEmpresaOptionFromStore(store, id);
+        if (normalized) {
+          resolved.set(id, normalized);
+        }
+      } catch (error) {
+        console.warn('internacao: falha ao buscar detalhes da empresa', id, error);
+      }
+    })
+  );
+
+  return (options || []).map((opt) => {
+    if (!opt) return opt;
+    const value = (opt.value || '').toString().trim();
+    if (resolved.has(value)) {
+      return {
+        ...opt,
+        ...resolved.get(value),
+      };
+    }
+    return opt;
+  });
 }
 
 function showToastMessage(message, type = 'info') {
@@ -3989,6 +4058,10 @@ async function populateEmpresaSelect(extraOption) {
     null;
 
   let options = getUserEmpresasOptions(selectedUser);
+
+  if (options.length) {
+    options = await hydrateEmpresasOptions(options);
+  }
 
   if (!options.length) {
     options = await fetchUserEmpresasFromDatabase(selectedUser);
