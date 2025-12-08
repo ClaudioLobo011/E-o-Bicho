@@ -7315,6 +7315,25 @@ function setupBoxesPage(dataset, state, render) {
       if (event.target.closest('[data-boxes-retry]')) {
         event.preventDefault();
         fetchBoxes();
+        return;
+      }
+
+      const deleteBtn = event.target.closest('[data-box-delete]');
+      if (deleteBtn) {
+        event.preventDefault();
+        const recordId = deleteBtn.dataset.boxDelete;
+        const confirmed = window.confirm('Deseja realmente excluir este box?');
+        if (!recordId || !confirmed) return;
+
+        requestJson(`/internacao/boxes/${recordId}`, { method: 'DELETE' })
+          .then(() => {
+            fetchBoxes();
+            showToastMessage('Box excluído com sucesso.', 'success');
+          })
+          .catch((error) => {
+            console.error('internacao: falha ao excluir box', error);
+            showToastMessage(error.message || 'Não foi possível excluir o box. Tente novamente.', 'warning');
+          });
       }
     });
   }

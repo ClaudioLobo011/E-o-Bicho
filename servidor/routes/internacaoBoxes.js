@@ -928,6 +928,42 @@ router.post('/boxes', async (req, res) => {
   }
 });
 
+router.delete('/boxes/:id', async (req, res) => {
+  try {
+    const targetId = sanitizeText(req.params?.id);
+    if (!targetId) {
+      return res.status(400).json({ message: 'Informe o box que deseja excluir.' });
+    }
+
+    let record = null;
+    if (mongoose.isValidObjectId(targetId)) {
+      record = await InternacaoBox.findById(targetId);
+    }
+    if (!record) {
+      record = await InternacaoBox.findOne({ box: targetId });
+    }
+
+    if (!record) {
+      return res.status(404).json({ message: 'Box não encontrado.' });
+    }
+
+    const ocupante = sanitizeText(record.ocupante, { fallback: 'Livre' });
+    const status = sanitizeText(record.status);
+    const ocupado = normalizeKey(ocupante) !== 'livre' || normalizeKey(status).includes('ocup');
+    if (ocupado) {
+      return res
+        .status(409)
+        .json({ message: 'Libere o box antes de excluí-lo para evitar inconsistências nas internações.' });
+    }
+
+    await record.deleteOne();
+    return res.json({ message: 'Box excluído com sucesso.' });
+  } catch (error) {
+    console.error('internacao: falha ao excluir box', error);
+    return res.status(500).json({ message: 'Não foi possível excluir o box.' });
+  }
+});
+
 router.get('/registros', async (req, res) => {
   try {
     const registros = await InternacaoRegistro.find().sort({ createdAt: -1 }).lean();

@@ -1433,7 +1433,17 @@ export function renderBoxes(root, dataset, { petId, boxesLoading, boxesError, bo
               <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">${escapeHtml(especialidade)}</p>
               <h2 class="text-xl font-semibold text-gray-900">${escapeHtml(box?.box || 'Box')}</h2>
             </div>
-            <span class="rounded-full px-3 py-1 text-xs font-semibold ${ocupante === 'Livre' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-700'}">${escapeHtml(box?.status || (ocupante === 'Livre' ? 'Disponível' : 'Em uso'))}</span>
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-sm text-red-700 transition hover:bg-red-100"
+                data-box-delete="${escapeHtml(box?.id || box?.box || '')}"
+                title="Excluir box"
+              >
+                <i class="fas fa-trash"></i>
+              </button>
+              <span class="rounded-full px-3 py-1 text-xs font-semibold ${ocupante === 'Livre' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-700'}">${escapeHtml(box?.status || (ocupante === 'Livre' ? 'Disponível' : 'Em uso'))}</span>
+            </div>
           </header>
           <div class="mt-4 space-y-1 text-sm text-gray-600">
             <p>Ocupante: <span class="font-semibold text-gray-900">${escapeHtml(ocupante)}</span></p>
