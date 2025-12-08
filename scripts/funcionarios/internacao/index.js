@@ -3819,10 +3819,15 @@ function getEquipeOptions(dataset) {
   return Array.from(set).sort().map((nome) => ({ value: nome, label: nome }));
 }
 
-function getBoxOptions(dataset) {
+function getBoxOptions(dataset, empresaId) {
   const boxes = Array.isArray(dataset?.boxes) ? dataset.boxes : [];
+  const targetEmpresa = typeof empresaId === 'string' ? empresaId.trim() : '';
+  if (!targetEmpresa) return [];
   return boxes
-    .filter((item) => isBoxAvailable(item))
+    .filter((item) => {
+      const matchesEmpresa = !targetEmpresa || String(item?.empresaId || '').trim() === targetEmpresa;
+      return matchesEmpresa && isBoxAvailable(item);
+    })
     .map((item) => ({ value: item.box, label: `${item.box}${item.ocupante ? ` · ${item.ocupante}` : ''}` }));
 }
 
@@ -4122,6 +4127,12 @@ function ensureInternarPetModal() {
   internarModal.petSummaryTutorEl = overlay.querySelector('[data-pet-summary-tutor]');
   internarModal.petSummaryContactEl = overlay.querySelector('[data-pet-summary-contact]');
 
+  if (internarModal.empresaSelect) {
+    internarModal.empresaSelect.addEventListener('change', () => {
+      refreshInternarBoxSelect({}, internarModal.dataset);
+    });
+  }
+
   overlay.addEventListener('click', (event) => {
     if (event.target === overlay) {
       closeInternarPetModal();
@@ -4193,6 +4204,32 @@ function ensureSelectOption(select, option) {
   select.appendChild(opt);
 }
 
+function refreshInternarBoxSelect(extraOptions = {}, dataset) {
+  if (!internarModal.form) return;
+  const boxSelect = internarModal.form.querySelector('select[name="internarBox"]');
+  if (!boxSelect) return;
+
+  const sourceDataset = dataset || internarModal.dataset || {};
+  const empresaId = internarModal.empresaSelect?.value || '';
+  const boxOptions = getBoxOptions(sourceDataset, empresaId);
+  const currentValue = boxSelect.value;
+
+  const boxOptionsMarkup = ['<option value="">Selecione</option>', ...boxOptions.map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`)]
+    .join('');
+  boxSelect.innerHTML = boxOptionsMarkup;
+
+  const forced = extraOptions.forceBox;
+  if (forced) {
+    ensureSelectOption(boxSelect, forced);
+    boxSelect.value = forced.value || '';
+    return;
+  }
+
+  if (currentValue && boxOptions.some((opt) => opt.value === currentValue)) {
+    boxSelect.value = currentValue;
+  }
+}
+
 async function populateEmpresaSelect(extraOption) {
   if (!internarModal.empresaSelect) return;
   internarModal.empresaSelect.innerHTML = '<option value="">Carregando...</option>';
@@ -4239,6 +4276,8 @@ async function populateEmpresaSelect(extraOption) {
   if (!options.length) {
     setInternarModalError('Não foi possível carregar as empresas vinculadas ao usuário selecionado.');
   }
+
+  refreshInternarBoxSelect({}, internarModal.dataset);
 }
 
 async function populateBoxesEmpresaSelect(extraOption) {
@@ -4295,7 +4334,6 @@ function populateDynamicSelects(dataset, extraOptions = {}) {
 
   if (internarModal.form) {
     const vetSelect = internarModal.form.querySelector('select[name="internarVeterinario"]');
-    const boxSelect = internarModal.form.querySelector('select[name="internarBox"]');
     if (vetSelect) {
       vetSelect.innerHTML = vetOptionsMarkup;
       if (extraOptions.forceVeterinario) {
@@ -4303,15 +4341,7 @@ function populateDynamicSelects(dataset, extraOptions = {}) {
         vetSelect.value = extraOptions.forceVeterinario.value || '';
       }
     }
-    if (boxSelect) {
-      const boxOptionsMarkup = ['<option value="">Selecione</option>', ...getBoxOptions(dataset).map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`)]
-        .join('');
-      boxSelect.innerHTML = boxOptionsMarkup;
-      if (extraOptions.forceBox) {
-        ensureSelectOption(boxSelect, extraOptions.forceBox);
-        boxSelect.value = extraOptions.forceBox.value || '';
-      }
-    }
+    refreshInternarBoxSelect(extraOptions, dataset);
   }
 
   if (obitoModal.form) {
