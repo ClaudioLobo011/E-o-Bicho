@@ -835,6 +835,27 @@ function getSelectedUserData() {
   }
 }
 
+function isAllEmpresasFlagEnabled(userOverride = null) {
+  const user = userOverride || getSelectedUserData() || getLoggedInUserData();
+  if (!user || typeof user !== 'object') return false;
+
+  const candidateFlags = [
+    user.todasEmpresas,
+    user.todasAsEmpresas,
+    user.verTodasEmpresas,
+    user.verTodasAsEmpresas,
+    user.allEmpresas,
+    user.allCompanies,
+    user.funcionario?.todasEmpresas,
+    user.funcionario?.todasAsEmpresas,
+    user.funcionario?.verTodasEmpresas,
+    user.funcionario?.verTodasAsEmpresas,
+    user.funcionario?.allCompanies,
+  ];
+
+  return candidateFlags.some((flag) => flag === true || flag === 'true' || flag === 'all');
+}
+
 function getUserEmpresasOptions(userOverride = null) {
   const user = userOverride || getSelectedUserData() || getLoggedInUserData();
   const normalizeToArray = (value) => {
@@ -923,17 +944,61 @@ function getUserIdForFetch(userOverride = null) {
   return typeof idCandidate === 'string' ? idCandidate.trim() : String(idCandidate || '').trim();
 }
 
-async function fetchUserEmpresasFromDatabase(userOverride = null) {
+async function fetchUserEmpresasFromDatabaseDetailed(userOverride = null) {
   const userId = getUserIdForFetch(userOverride);
-  if (!userId) return [];
+  if (!userId) return { options: [], user: null };
 
   try {
     const userData = await requestJson(`/users/${encodeURIComponent(userId)}`);
     const options = getUserEmpresasOptions(userData);
-    return await hydrateEmpresasOptions(options);
+    return {
+      options: await hydrateEmpresasOptions(options),
+      user: userData || null,
+    };
   } catch (error) {
     console.warn('internacao: falha ao consultar empresas direto no banco', error);
-    return [];
+    return { options: [], user: null };
+  }
+}
+
+async function fetchUserEmpresasFromDatabase(userOverride = null) {
+  const { options } = await fetchUserEmpresasFromDatabaseDetailed(userOverride);
+  return options;
+}
+
+let cachedAllEmpresasOptions = null;
+
+async function fetchAllEmpresasOptions() {
+  if (Array.isArray(cachedAllEmpresasOptions)) return cachedAllEmpresasOptions;
+
+  try {
+    const stores = await requestJson('/stores');
+    cachedAllEmpresasOptions = Array.isArray(stores)
+      ? stores
+          .map((store) => normalizeEmpresaOptionFromStore(store))
+          .filter(Boolean)
+      : [];
+    return cachedAllEmpresasOptions;
+  } catch (error) {
+    console.warn('internacao: falha ao buscar lista completa de empresas', error);
+    cachedAllEmpresasOptions = [];
+    return cachedAllEmpresasOptions;
+  }
+}
+
+async function shouldAllowTodasEmpresas(options = [], userOverride = null) {
+  if (isAllEmpresasFlagEnabled(userOverride)) return true;
+
+  try {
+    const allEmpresas = await fetchAllEmpresasOptions();
+    if (!allEmpresas.length || !options.length) return false;
+    const allIds = new Set(allEmpresas.map((opt) => opt.value).filter(Boolean));
+    const userIds = new Set(options.map((opt) => opt.value).filter(Boolean));
+    const missing = Array.from(allIds).filter((id) => !userIds.has(id));
+    return missing.length === 0;
+  } catch (error) {
+    console.warn('internacao: falha ao comparar empresas do usuário com o total', error);
+    return false;
   }
 }
 
@@ -6558,11 +6623,12 @@ function fillEmpresaFilters(state = {}) {
   const error = String(state.empresasError || '').trim();
   const currentValue = String(state.empresaId || '').trim();
   const options = Array.isArray(state.empresasOptions) ? state.empresasOptions : [];
+  const allowAll = !!state.empresasAllowAll;
 
   const baseMarkup = loading
     ? ['<option value="">Carregando...</option>']
     : [
-        '<option value="">Todas as empresas</option>',
+        ...(allowAll ? ['<option value="">Todas as empresas</option>'] : []),
         ...options.map((opt) =>
           `<option value="${escapeHtml(opt.value)}" ${opt.value === currentValue ? 'selected' : ''}>${escapeHtml(opt.label)}</option>`,
         ),
@@ -6793,28 +6859,44 @@ async function fetchEmpresasForFilters(state = {}, { quiet = false, dataset } = 
   if (state) {
     state.empresasLoading = true;
     state.empresasError = '';
+    state.empresasAllowAll = false;
   }
 
   fillEmpresaFilters(state);
 
   try {
-    let options = getUserEmpresasOptions();
+    let currentUser = getSelectedUserData() || getLoggedInUserData();
+    let options = getUserEmpresasOptions(currentUser);
     if (options.length) {
       options = await hydrateEmpresasOptions(options);
     }
 
     if (!options.length) {
-      options = await fetchUserEmpresasFromDatabase();
+      const { options: fetchedOptions, user } = await fetchUserEmpresasFromDatabaseDetailed();
+      options = fetchedOptions;
+      if (user) currentUser = user;
     }
+
+    const allowAll = await shouldAllowTodasEmpresas(options, currentUser);
 
     if (state) {
       state.empresasOptions = options;
+      state.empresasAllowAll = allowAll;
       state.empresasLoading = false;
-      if (!state.empresaId && options.length === 1) {
-        state.empresaId = options[0].value;
-      }
-      if (state.empresaId && !options.some((opt) => opt?.value === state.empresaId)) {
-        state.empresaId = '';
+      if (allowAll) {
+        if (!state.empresaId && options.length === 1) {
+          state.empresaId = options[0].value;
+        }
+        if (state.empresaId && !options.some((opt) => opt?.value === state.empresaId)) {
+          state.empresaId = '';
+        }
+      } else {
+        if (!state.empresaId && options.length) {
+          state.empresaId = options[0].value;
+        }
+        if (state.empresaId && !options.some((opt) => opt?.value === state.empresaId) && options.length) {
+          state.empresaId = options[0].value;
+        }
       }
     }
 
@@ -7576,6 +7658,7 @@ document.addEventListener('DOMContentLoaded', () => {
     empresasOptions: [],
     empresasLoading: false,
     empresasError: '',
+    empresasAllowAll: false,
     parametrosConfig: [],
     parametrosLoading: false,
     parametrosError: '',
