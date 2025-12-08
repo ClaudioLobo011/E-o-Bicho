@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const storesTable = document.getElementById('stores-table');
     const addStoreBtn = document.getElementById('add-store-btn');
     const modal = document.getElementById('store-modal');
+    const modalCard = document.querySelector('[data-store-modal-card]');
     const form = document.getElementById('store-form');
     const cancelBtn = document.getElementById('cancel-store-modal-btn');
     const modalTitle = document.getElementById('store-modal-title');
@@ -660,7 +661,14 @@ document.addEventListener('DOMContentLoaded', () => {
         );
         updateCertificadoStatus('', 'muted');
         modal.classList.remove('hidden');
+        modal.classList.add('flex');
         setModalOpenState(modal, true);
+        requestAnimationFrame(() => {
+            if (modalCard) {
+                modalCard.classList.remove('opacity-0', 'scale-95');
+                modalCard.classList.add('opacity-100', 'scale-100');
+            }
+        });
 
         setTimeout(() => {
             if (locationMap) {
@@ -821,7 +829,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if (certificadoArquivoInput) certificadoArquivoInput.value = '';
 
             modal.classList.remove('hidden');
+            modal.classList.add('flex');
             setModalOpenState(modal, true);
+            requestAnimationFrame(() => {
+                if (modalCard) {
+                    modalCard.classList.remove('opacity-0', 'scale-95');
+                    modalCard.classList.add('opacity-100', 'scale-100');
+                }
+            });
 
             setTimeout(async () => {
                 if (locationMap) {
@@ -868,8 +883,15 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const closeModal = () => {
-        modal.classList.add('hidden');
-        setModalOpenState(modal, false);
+        if (modalCard) {
+            modalCard.classList.add('opacity-0', 'scale-95');
+            modalCard.classList.remove('opacity-100', 'scale-100');
+        }
+        setTimeout(() => {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            setModalOpenState(modal, false);
+        }, 180);
         form.reset();
         selectedServices = [];
         renderServiceTags();
