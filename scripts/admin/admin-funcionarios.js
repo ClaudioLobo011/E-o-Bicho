@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const togglePasswordIcon = document.getElementById('toggle-password-icon');
   const roleSelect = document.getElementById('edit-role');
   const passwordBar = document.getElementById('password-bar');
+  const modalCard = document.querySelector('[data-edit-modal-card]');
   const gruposBox = document.getElementById('edit-grupos');
   const empresasBox = document.getElementById('edit-empresas');
   const selectSexo = document.getElementById('edit-sexo');
@@ -1504,12 +1505,27 @@ document.addEventListener('DOMContentLoaded', () => {
     if (form) form.scrollTop = 0;
     modal.classList.remove('hidden');
     modal.classList.add('flex');
+    requestAnimationFrame(() => {
+      if (modalCard) {
+        modalCard.classList.remove('opacity-0', 'scale-95');
+        modalCard.classList.add('opacity-100', 'scale-100');
+      }
+    });
 
     if (mode === 'edit' && data?._id) {
       carregarEnderecosFuncionario(data._id);
     }
   }
-  function closeModal()      { modal.classList.add('hidden'); modal.classList.remove('flex'); }
+  function closeModal() {
+    if (modalCard) {
+      modalCard.classList.add('opacity-0', 'scale-95');
+      modalCard.classList.remove('opacity-100', 'scale-100');
+    }
+    setTimeout(() => {
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }, 180);
+  }
   function openSearchModal() { modalSearch.classList.remove('hidden'); modalSearch.classList.add('flex'); searchInput.value = ''; searchUsers(''); }
   function closeSearchModal(){ modalSearch.classList.add('hidden'); modalSearch.classList.remove('flex'); }
 
@@ -2297,7 +2313,7 @@ document.addEventListener('DOMContentLoaded', () => {
   btnAdd?.addEventListener('click', openSearchModal);
 
   modal.addEventListener('click', (e) => {
-    const back = e.target === modal;
+    const back = e.target === modal || e.target.hasAttribute('data-close-modal');
     const x = e.target.closest('#modal-close');
     const cancel = e.target.closest('#btn-cancelar');
     if (back || x || cancel) { e.preventDefault(); closeModal(); }

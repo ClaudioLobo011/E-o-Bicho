@@ -33,495 +33,507 @@
   </main>
 
   <!-- MODAL: EDITAR/CRIAR -->
-  <div id="modal-edit-funcionario" class="fixed inset-0 bg-black/50 hidden flex items-stretch md:items-start justify-center px-0 md:px-4 py-0 md:py-10 z-50 overflow-visible">
-    <div class="bg-white w-full max-w-modal-wide mx-auto md:mx-2 rounded-none md:rounded-lg shadow-lg flex flex-col modal-shell">
-      <div class="flex justify-between items-center px-4 py-3 border-b">
-        <h2 id="modal-title" class="text-base font-semibold">Editar Funcionário</h2>
-        <button id="modal-close" class="text-gray-500 hover:text-gray-700">
-          <i class="fa-solid fa-xmark text-base"></i>
-        </button>
-      </div>
+  <div id="modal-edit-funcionario" class="fixed inset-0 z-[999] hidden">
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-modal></div>
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
+      <div data-edit-modal-card class="relative flex w-full max-w-[1352px] transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl transition-all duration-200 ease-out opacity-0 scale-95 max-h-[90vh] min-h-0 text-[12px] leading-[1.35]">
+        <header class="flex flex-col gap-2.5 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+          <div class="space-y-1">
+            <span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+              <i class="fa-solid fa-user-pen"></i>
+              Funcionário
+            </span>
+            <h2 id="modal-title" class="text-lg font-semibold text-gray-900">Editar Funcionário</h2>
+            <p class="text-[11px] text-gray-600">Revise ou ajuste os dados do colaborador antes de salvar.</p>
+          </div>
+          <button id="modal-close" class="inline-flex items-center justify-center rounded-full border border-gray-200 p-1.5 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700">
+            <span class="sr-only">Fechar modal</span>
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </header>
+        <div class="flex-1 overflow-y-auto bg-white px-4 py-4">
+        <form id="edit-funcionario-form" class="flex-1 space-y-4">
+                <input type="hidden" id="edit-id"/>
 
-      <form id="edit-funcionario-form" class="flex-1 px-4 py-3 space-y-4">
-        <input type="hidden" id="edit-id"/>
-
-        <div class="grid grid-cols-12 gap-2">
-          <div class="col-span-12 md:col-span-3">
-            <label for="edit-codigo" class="block font-medium mb-0.5">Código</label>
-            <input id="edit-codigo" type="text" class="w-full border rounded-lg px-3 py-1.5 bg-gray-100 text-gray-600" readonly />
-          </div>
-          <div class="col-span-12 md:col-span-9">
-            <label for="edit-nome" class="block font-medium mb-0.5">Nome</label>
-            <input id="edit-nome" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Nome completo" required/>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-12 gap-2 items-start">
-          <div class="col-span-12 md:col-span-3">
-            <label for="edit-data-cadastro" class="block font-medium mb-0.5">Data de cadastro</label>
-            <input id="edit-data-cadastro" type="text" class="w-full border rounded-lg px-3 py-1.5 bg-gray-100 text-gray-600" readonly />
-          </div>
-          <div class="col-span-12 md:col-span-3">
-            <label for="edit-situacao" class="block font-medium mb-0.5">Situação</label>
-            <select id="edit-situacao" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
-              <option value="ativo">Ativo</option>
-              <option value="afastado">Afastado</option>
-            </select>
-          </div>
-          <div class="col-span-12 md:col-span-4 space-y-2">
-            <label for="edit-password" class="block font-medium mb-0.5">Senha</label>
-            <div class="relative">
-              <input id="edit-password" type="password" class="w-full border rounded-lg px-3 py-1.5 pr-10 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Definir/alterar senha (opcional)"/>
-              <button type="button" id="toggle-password" aria-label="Mostrar senha" class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500 hover:text-gray-700">
-                <i id="toggle-password-icon" class="fa-regular fa-eye"></i>
-              </button>
-            </div>
-            <div class="mt-1 flex items-center gap-2">
-              <div id="password-strength" class="h-1 w-full bg-gray-200 rounded">
-                <div id="password-bar" class="h-1 w-0 bg-emerald-600 rounded transition-all"></div>
-              </div>
-              <span id="password-hint" class="helper-text text-gray-500">Mín. 8 + letra + número + símbolo</span>
-            </div>
-            <p class="helper-text text-gray-500">Preencha apenas se quiser definir/alterar a senha.</p>
-          </div>
-          <div class="col-span-12 md:col-span-2">
-            <label for="edit-sexo" class="block font-medium mb-0.5">Sexo</label>
-            <select id="edit-sexo" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
-              <option value="">Selecione</option>
-              <option value="masculino">Masculino</option>
-              <option value="feminino">Feminino</option>
-              <option value="nao_informar">Prefere não dizer</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-12 gap-2 items-start">
-          <div class="col-span-12 md:col-span-3">
-            <label for="edit-data-nascimento" class="block font-medium mb-0.5">Data de nascimento</label>
-            <input id="edit-data-nascimento" type="date" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-          </div>
-          <div class="col-span-12 md:col-span-3">
-            <label for="edit-raca-cor" class="block font-medium mb-0.5">Raça/Cor</label>
-            <select id="edit-raca-cor" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
-              <option value="">Selecione</option>
-              <option value="nao_informar">Não informar</option>
-              <option value="indigena">Indígena</option>
-              <option value="branco">Branco</option>
-              <option value="preto">Preto</option>
-              <option value="amarelo">Amarelo</option>
-              <option value="pardo">Pardo</option>
-            </select>
-          </div>
-          <div class="col-span-12 md:col-span-3">
-            <label for="edit-deficiencia" class="block font-medium mb-0.5">Deficiência</label>
-            <select id="edit-deficiencia" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
-              <option value="">Selecione</option>
-              <option value="nao_portador">Não portador</option>
-              <option value="fisica">Física</option>
-              <option value="auditiva">Auditiva</option>
-              <option value="visual">Visual</option>
-              <option value="intelectual">Intelectual</option>
-              <option value="multipla">Múltipla</option>
-            </select>
-          </div>
-          <div class="col-span-12 md:col-span-3">
-            <label for="edit-estado-civil" class="block font-medium mb-0.5">Estado civil</label>
-            <select id="edit-estado-civil" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
-              <option value="">Selecione</option>
-              <option value="solteiro">Solteiro(a)</option>
-              <option value="casado">Casado(a)</option>
-              <option value="separado">Separado(a)</option>
-              <option value="viuvo">Viúvo(a)</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="pt-4">
-          <div class="border-b border-gray-200 sticky top-0 bg-white z-20 -mx-4 px-4 py-2 shadow-sm">
-            <nav class="flex flex-wrap lg:flex-nowrap gap-2 overflow-x-auto pb-1" role="tablist">
-              <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold bg-emerald-50 text-emerald-700" data-tab-target="dados">Dados</button>
-              <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="endereco">Endereço</button>
-              <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="contato">Contato</button>
-              <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="dados-complementares">Dados Complementares</button>
-              <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="informacoes-gerais">Informações Gerais</button>
-              <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="trabalhista">Trabalhista</button>
-              <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="cursos">Cursos</button>
-              <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="horarios">Horários</button>
-            </nav>
-          </div>
-
-          <div class="mt-3 space-y-4">
-            <div class="tab-panel space-y-2" data-tab-panel="dados">
-              <div>
-                <label for="edit-role" class="block font-medium mb-0.5">Cargo</label>
-                <select id="edit-role" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" required></select>
-              </div>
-              <div id="field-grupos" class="space-y-2">
-                <label class="block font-medium">Grupos</label>
-                <div id="edit-grupos" class="grid grid-cols-2 gap-2">
-                  <label class="inline-flex items-center gap-2">
-                    <input type="checkbox" value="gerente" class="rounded border-gray-300">
-                    <span>Gerente</span>
-                  </label>
-                  <label class="inline-flex items-center gap-2">
-                    <input type="checkbox" value="vendedor" class="rounded border-gray-300">
-                    <span>Vendedor</span>
-                  </label>
-                  <label class="inline-flex items-center gap-2">
-                    <input type="checkbox" value="esteticista" class="rounded border-gray-300">
-                    <span>Esteticista</span>
-                  </label>
-                  <label class="inline-flex items-center gap-2">
-                    <input type="checkbox" value="veterinario" class="rounded border-gray-300">
-                    <span>Veterinário</span>
-                  </label>
-                </div>
-                <p class="helper-text text-gray-500">Selecione um ou mais grupos.</p>
-              </div>
-              <div class="grid grid-cols-12 gap-2">
-                <div class="col-span-12 md:col-span-6">
-                  <label for="edit-empresa-contratual" class="block font-medium mb-0.5">Empresa Contratual</label>
-                  <select id="edit-empresa-contratual" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                    <option value="">Selecione uma empresa</option>
-                  </select>
-                </div>
-                <div id="field-empresas" class="col-span-12 md:col-span-6 space-y-2">
-                  <label class="block font-medium">Empresa Gerencial</label>
-                  <div id="edit-empresas" class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <!-- Opções carregadas dinamicamente -->
+                <div class="grid grid-cols-12 gap-2">
+                  <div class="col-span-12 md:col-span-3">
+                    <label for="edit-codigo" class="block font-medium mb-0.5">Código</label>
+                    <input id="edit-codigo" type="text" class="w-full border rounded-lg px-3 py-1.5 bg-gray-100 text-gray-600" readonly />
                   </div>
-                  <p class="helper-text text-gray-500">Selecione uma ou mais empresas (lojas) para o funcionário.</p>
+                  <div class="col-span-12 md:col-span-9">
+                    <label for="edit-nome" class="block font-medium mb-0.5">Nome</label>
+                    <input id="edit-nome" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Nome completo" required/>
+                  </div>
                 </div>
-              </div>
-            </div>
 
-            <div class="tab-panel hidden space-y-2" data-tab-panel="endereco">
-              <div class="grid grid-cols-12 gap-2">
-                <div class="col-span-12 md:col-span-3">
-                  <label for="edit-endereco-cep" class="block font-medium mb-0.5">CEP</label>
-                  <input id="edit-endereco-cep" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="00000-000" />
+                <div class="grid grid-cols-12 gap-2 items-start">
+                  <div class="col-span-12 md:col-span-3">
+                    <label for="edit-data-cadastro" class="block font-medium mb-0.5">Data de cadastro</label>
+                    <input id="edit-data-cadastro" type="text" class="w-full border rounded-lg px-3 py-1.5 bg-gray-100 text-gray-600" readonly />
+                  </div>
+                  <div class="col-span-12 md:col-span-3">
+                    <label for="edit-situacao" class="block font-medium mb-0.5">Situação</label>
+                    <select id="edit-situacao" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                      <option value="ativo">Ativo</option>
+                      <option value="afastado">Afastado</option>
+                    </select>
+                  </div>
+                  <div class="col-span-12 md:col-span-4 space-y-2">
+                    <label for="edit-password" class="block font-medium mb-0.5">Senha</label>
+                    <div class="relative">
+                      <input id="edit-password" type="password" class="w-full border rounded-lg px-3 py-1.5 pr-10 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Definir/alterar senha (opcional)"/>
+                      <button type="button" id="toggle-password" aria-label="Mostrar senha" class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500 hover:text-gray-700">
+                        <i id="toggle-password-icon" class="fa-regular fa-eye"></i>
+                      </button>
+                    </div>
+                    <div class="mt-1 flex items-center gap-2">
+                      <div id="password-strength" class="h-1 w-full bg-gray-200 rounded">
+                        <div id="password-bar" class="h-1 w-0 bg-emerald-600 rounded transition-all"></div>
+                      </div>
+                      <span id="password-hint" class="helper-text text-gray-500">Mín. 8 + letra + número + símbolo</span>
+                    </div>
+                    <p class="helper-text text-gray-500">Preencha apenas se quiser definir/alterar a senha.</p>
+                  </div>
+                  <div class="col-span-12 md:col-span-2">
+                    <label for="edit-sexo" class="block font-medium mb-0.5">Sexo</label>
+                    <select id="edit-sexo" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                      <option value="">Selecione</option>
+                      <option value="masculino">Masculino</option>
+                      <option value="feminino">Feminino</option>
+                      <option value="nao_informar">Prefere não dizer</option>
+                    </select>
+                  </div>
                 </div>
-                <div class="col-span-12 md:col-span-9">
-                  <label for="edit-endereco-endereco" class="block font-medium mb-0.5">Endereço</label>
-                  <input id="edit-endereco-endereco" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Rua, avenida..." />
-                </div>
-              </div>
-              <div class="grid grid-cols-12 gap-2">
-                <div class="col-span-12 md:col-span-3">
-                  <label for="edit-endereco-numero" class="block font-medium mb-0.5">Número</label>
-                  <input id="edit-endereco-numero" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                </div>
-                <div class="col-span-12 md:col-span-4">
-                  <label for="edit-endereco-complemento" class="block font-medium mb-0.5">Complemento</label>
-                  <input id="edit-endereco-complemento" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                </div>
-                <div class="col-span-12 md:col-span-5">
-                  <label for="edit-endereco-bairro" class="block font-medium mb-0.5">Bairro</label>
-                  <input id="edit-endereco-bairro" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                </div>
-              </div>
-              <div class="grid grid-cols-12 gap-2">
-                <div class="col-span-12 md:col-span-7">
-                  <label for="edit-endereco-cidade" class="block font-medium mb-0.5">Cidade</label>
-                  <input id="edit-endereco-cidade" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                </div>
-                <div class="col-span-12 md:col-span-5">
-                  <label for="edit-endereco-apelido" class="block font-medium mb-0.5">Apelido</label>
-                  <input id="edit-endereco-apelido" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Principal, Casa, Trabalho" />
-                </div>
-              </div>
-              <div class="flex justify-end">
-                <button type="button" id="btn-add-endereco" class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">Adicionar endereço</button>
-              </div>
-              <div id="lista-enderecos" class="space-y-2">
-                <p class="helper-text text-gray-500">Nenhum endereço cadastrado.</p>
-              </div>
-            </div>
 
-            <div class="tab-panel hidden space-y-2" data-tab-panel="contato">
-              <div class="grid grid-cols-12 gap-2">
-                <div class="col-span-12 md:col-span-6">
-                  <label for="edit-email" class="block font-medium mb-0.5">Email</label>
-                  <input id="edit-email" type="email" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="email@dominio.com" required />
+                <div class="grid grid-cols-12 gap-2 items-start">
+                  <div class="col-span-12 md:col-span-3">
+                    <label for="edit-data-nascimento" class="block font-medium mb-0.5">Data de nascimento</label>
+                    <input id="edit-data-nascimento" type="date" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                  </div>
+                  <div class="col-span-12 md:col-span-3">
+                    <label for="edit-raca-cor" class="block font-medium mb-0.5">Raça/Cor</label>
+                    <select id="edit-raca-cor" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                      <option value="">Selecione</option>
+                      <option value="nao_informar">Não informar</option>
+                      <option value="indigena">Indígena</option>
+                      <option value="branco">Branco</option>
+                      <option value="preto">Preto</option>
+                      <option value="amarelo">Amarelo</option>
+                      <option value="pardo">Pardo</option>
+                    </select>
+                  </div>
+                  <div class="col-span-12 md:col-span-3">
+                    <label for="edit-deficiencia" class="block font-medium mb-0.5">Deficiência</label>
+                    <select id="edit-deficiencia" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                      <option value="">Selecione</option>
+                      <option value="nao_portador">Não portador</option>
+                      <option value="fisica">Física</option>
+                      <option value="auditiva">Auditiva</option>
+                      <option value="visual">Visual</option>
+                      <option value="intelectual">Intelectual</option>
+                      <option value="multipla">Múltipla</option>
+                    </select>
+                  </div>
+                  <div class="col-span-12 md:col-span-3">
+                    <label for="edit-estado-civil" class="block font-medium mb-0.5">Estado civil</label>
+                    <select id="edit-estado-civil" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                      <option value="">Selecione</option>
+                      <option value="solteiro">Solteiro(a)</option>
+                      <option value="casado">Casado(a)</option>
+                      <option value="separado">Separado(a)</option>
+                      <option value="viuvo">Viúvo(a)</option>
+                    </select>
+                  </div>
                 </div>
-                <div class="col-span-12 md:col-span-6">
-                  <label for="edit-celular" class="block font-medium mb-0.5">Celular</label>
-                  <input id="edit-celular" type="tel" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="(00) 00000-0000" required />
-                </div>
-              </div>
-              <div class="grid grid-cols-12 gap-2">
-                <div class="col-span-12 md:col-span-6">
-                  <label for="edit-telefone" class="block font-medium mb-0.5">Telefone</label>
-                  <input id="edit-telefone" type="tel" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="(00) 0000-0000" />
-                  <p class="helper-text text-gray-500 mt-1">Opcional. Informe um telefone fixo, se houver.</p>
-                </div>
-              </div>
-            </div>
-            <div class="tab-panel hidden space-y-2" data-tab-panel="dados-complementares">
-              <div class="grid grid-cols-12 gap-2">
-                <div class="col-span-12 md:col-span-4">
-                  <label for="edit-periodo-experiencia-inicio" class="block font-medium mb-0.5">Período de Experiência (Início)</label>
-                  <input id="edit-periodo-experiencia-inicio" type="date" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                </div>
-                <div class="col-span-12 md:col-span-4">
-                  <label for="edit-periodo-experiencia-fim" class="block font-medium mb-0.5">Período de Experiência (Fim)</label>
-                  <input id="edit-periodo-experiencia-fim" type="date" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                </div>
-                <div class="col-span-12 md:col-span-4">
-                  <label for="edit-data-admissao" class="block font-medium mb-0.5">Data de Admissão</label>
-                  <input id="edit-data-admissao" type="date" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                </div>
-              </div>
 
-              <div class="grid grid-cols-12 gap-2">
-                <div class="col-span-12 md:col-span-4">
-                  <label for="edit-dias-prorrogacao" class="block font-medium mb-0.5">Dias de Prorrogação de Experiência</label>
-                  <input id="edit-dias-prorrogacao" type="number" min="0" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="0" />
-                </div>
-                <div class="col-span-12 md:col-span-4">
-                  <label for="edit-exame-medico" class="block font-medium mb-0.5">Exame Médico</label>
-                  <input id="edit-exame-medico" type="date" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                </div>
-                <div class="col-span-12 md:col-span-4">
-                  <label for="edit-data-demissao" class="block font-medium mb-0.5">Data de Demissão</label>
-                  <input id="edit-data-demissao" type="date" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                </div>
-              </div>
+                <div class="pt-4">
+                  <div class="border-b border-gray-200 sticky top-0 bg-white z-20 -mx-4 px-4 py-2 shadow-sm">
+                    <nav class="flex flex-wrap lg:flex-nowrap gap-2 overflow-x-auto pb-1" role="tablist">
+                      <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold bg-emerald-50 text-emerald-700" data-tab-target="dados">Dados</button>
+                      <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="endereco">Endereço</button>
+                      <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="contato">Contato</button>
+                      <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="dados-complementares">Dados Complementares</button>
+                      <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="informacoes-gerais">Informações Gerais</button>
+                      <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="trabalhista">Trabalhista</button>
+                      <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="cursos">Cursos</button>
+                      <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="horarios">Horários</button>
+                    </nav>
+                  </div>
 
-              <div class="grid grid-cols-12 gap-2">
-                <div class="col-span-12 md:col-span-6">
-                  <label for="edit-cargo-carteira" class="block font-medium mb-0.5">Cargo Carteira</label>
-                  <input id="edit-cargo-carteira" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Cargo registrado" />
-                </div>
-                <div class="col-span-12 md:col-span-6">
-                  <label for="edit-salario-contratual" class="block font-medium mb-0.5">Salário Contratual</label>
-                  <input id="edit-salario-contratual" type="number" min="0" step="0.01" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="0,00" />
-                </div>
-              </div>
+                  <div class="mt-3 space-y-4">
+                    <div class="tab-panel space-y-2" data-tab-panel="dados">
+                      <div>
+                        <label for="edit-role" class="block font-medium mb-0.5">Cargo</label>
+                        <select id="edit-role" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" required></select>
+                      </div>
+                      <div id="field-grupos" class="space-y-2">
+                        <label class="block font-medium">Grupos</label>
+                        <div id="edit-grupos" class="grid grid-cols-2 gap-2">
+                          <label class="inline-flex items-center gap-2">
+                            <input type="checkbox" value="gerente" class="rounded border-gray-300">
+                            <span>Gerente</span>
+                          </label>
+                          <label class="inline-flex items-center gap-2">
+                            <input type="checkbox" value="vendedor" class="rounded border-gray-300">
+                            <span>Vendedor</span>
+                          </label>
+                          <label class="inline-flex items-center gap-2">
+                            <input type="checkbox" value="esteticista" class="rounded border-gray-300">
+                            <span>Esteticista</span>
+                          </label>
+                          <label class="inline-flex items-center gap-2">
+                            <input type="checkbox" value="veterinario" class="rounded border-gray-300">
+                            <span>Veterinário</span>
+                          </label>
+                        </div>
+                        <p class="helper-text text-gray-500">Selecione um ou mais grupos.</p>
+                      </div>
+                      <div class="grid grid-cols-12 gap-2">
+                        <div class="col-span-12 md:col-span-6">
+                          <label for="edit-empresa-contratual" class="block font-medium mb-0.5">Empresa Contratual</label>
+                          <select id="edit-empresa-contratual" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            <option value="">Selecione uma empresa</option>
+                          </select>
+                        </div>
+                        <div id="field-empresas" class="col-span-12 md:col-span-6 space-y-2">
+                          <label class="block font-medium">Empresa Gerencial</label>
+                          <div id="edit-empresas" class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <!-- Opções carregadas dinamicamente -->
+                          </div>
+                          <p class="helper-text text-gray-500">Selecione uma ou mais empresas (lojas) para o funcionário.</p>
+                        </div>
+                      </div>
+                    </div>
 
-              <div class="grid grid-cols-12 gap-2">
-                <div class="col-span-12 md:col-span-4">
-                  <label for="edit-nome-mae" class="block font-medium mb-0.5">Nome da Mãe</label>
-                  <input id="edit-nome-mae" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                </div>
-                <div class="col-span-12 md:col-span-4">
-                  <label for="edit-nascimento-mae" class="block font-medium mb-0.5">Nascimento da Mãe</label>
-                  <input id="edit-nascimento-mae" type="date" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                </div>
-                <div class="col-span-12 md:col-span-4">
-                  <label for="edit-nome-conjuge" class="block font-medium mb-0.5">Nome do Cônjuge</label>
-                  <input id="edit-nome-conjuge" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                </div>
-              </div>
+                    <div class="tab-panel hidden space-y-2" data-tab-panel="endereco">
+                      <div class="grid grid-cols-12 gap-2">
+                        <div class="col-span-12 md:col-span-3">
+                          <label for="edit-endereco-cep" class="block font-medium mb-0.5">CEP</label>
+                          <input id="edit-endereco-cep" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="00000-000" />
+                        </div>
+                        <div class="col-span-12 md:col-span-9">
+                          <label for="edit-endereco-endereco" class="block font-medium mb-0.5">Endereço</label>
+                          <input id="edit-endereco-endereco" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Rua, avenida..." />
+                        </div>
+                      </div>
+                      <div class="grid grid-cols-12 gap-2">
+                        <div class="col-span-12 md:col-span-3">
+                          <label for="edit-endereco-numero" class="block font-medium mb-0.5">Número</label>
+                          <input id="edit-endereco-numero" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                        </div>
+                        <div class="col-span-12 md:col-span-4">
+                          <label for="edit-endereco-complemento" class="block font-medium mb-0.5">Complemento</label>
+                          <input id="edit-endereco-complemento" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                        </div>
+                        <div class="col-span-12 md:col-span-5">
+                          <label for="edit-endereco-bairro" class="block font-medium mb-0.5">Bairro</label>
+                          <input id="edit-endereco-bairro" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                        </div>
+                      </div>
+                      <div class="grid grid-cols-12 gap-2">
+                        <div class="col-span-12 md:col-span-7">
+                          <label for="edit-endereco-cidade" class="block font-medium mb-0.5">Cidade</label>
+                          <input id="edit-endereco-cidade" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                        </div>
+                        <div class="col-span-12 md:col-span-5">
+                          <label for="edit-endereco-apelido" class="block font-medium mb-0.5">Apelido</label>
+                          <input id="edit-endereco-apelido" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Principal, Casa, Trabalho" />
+                        </div>
+                      </div>
+                      <div class="flex justify-end">
+                        <button type="button" id="btn-add-endereco" class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">Adicionar endereço</button>
+                      </div>
+                      <div id="lista-enderecos" class="space-y-2">
+                        <p class="helper-text text-gray-500">Nenhum endereço cadastrado.</p>
+                      </div>
+                    </div>
 
-              <div class="grid grid-cols-12 gap-2">
-                <div class="col-span-12 md:col-span-6">
-                  <label for="edit-forma-pagamento" class="block font-medium mb-0.5">Forma de Pagamento</label>
-                  <select id="edit-forma-pagamento" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                    <option value="">Selecione</option>
-                    <option value="mensal">Mensal</option>
-                    <option value="quinzenal">Quinzenal</option>
-                    <option value="semanal">Semanal</option>
-                    <option value="diaria">Diária</option>
-                  </select>
-                </div>
-                <div class="col-span-12 md:col-span-6">
-                  <label for="edit-tipo-contrato" class="block font-medium mb-0.5">Tipo de Contrato</label>
-                  <select id="edit-tipo-contrato" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                    <option value="">Selecione</option>
-                    <option value="clt">CLT</option>
-                    <option value="mei">MEI</option>
-                    <option value="estagiario">Estagiário</option>
-                    <option value="temporario">Temporário</option>
-                    <option value="avulso">Avulso</option>
-                  </select>
-                </div>
-              </div>
+                    <div class="tab-panel hidden space-y-2" data-tab-panel="contato">
+                      <div class="grid grid-cols-12 gap-2">
+                        <div class="col-span-12 md:col-span-6">
+                          <label for="edit-email" class="block font-medium mb-0.5">Email</label>
+                          <input id="edit-email" type="email" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="email@dominio.com" required />
+                        </div>
+                        <div class="col-span-12 md:col-span-6">
+                          <label for="edit-celular" class="block font-medium mb-0.5">Celular</label>
+                          <input id="edit-celular" type="tel" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="(00) 00000-0000" required />
+                        </div>
+                      </div>
+                      <div class="grid grid-cols-12 gap-2">
+                        <div class="col-span-12 md:col-span-6">
+                          <label for="edit-telefone" class="block font-medium mb-0.5">Telefone</label>
+                          <input id="edit-telefone" type="tel" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="(00) 0000-0000" />
+                          <p class="helper-text text-gray-500 mt-1">Opcional. Informe um telefone fixo, se houver.</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="tab-panel hidden space-y-2" data-tab-panel="dados-complementares">
+                      <div class="grid grid-cols-12 gap-2">
+                        <div class="col-span-12 md:col-span-4">
+                          <label for="edit-periodo-experiencia-inicio" class="block font-medium mb-0.5">Período de Experiência (Início)</label>
+                          <input id="edit-periodo-experiencia-inicio" type="date" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                        </div>
+                        <div class="col-span-12 md:col-span-4">
+                          <label for="edit-periodo-experiencia-fim" class="block font-medium mb-0.5">Período de Experiência (Fim)</label>
+                          <input id="edit-periodo-experiencia-fim" type="date" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                        </div>
+                        <div class="col-span-12 md:col-span-4">
+                          <label for="edit-data-admissao" class="block font-medium mb-0.5">Data de Admissão</label>
+                          <input id="edit-data-admissao" type="date" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                        </div>
+                      </div>
 
-              <div class="grid grid-cols-12 gap-2">
-                <div class="col-span-12 md:col-span-6">
-                  <label for="edit-horas-semanais" class="block font-medium mb-0.5">Horas Semanais</label>
-                  <input id="edit-horas-semanais" type="number" min="0" step="0.1" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="0" />
-                </div>
-                <div class="col-span-12 md:col-span-6">
-                  <label for="edit-horas-mensais" class="block font-medium mb-0.5">Horas Mensais</label>
-                  <input id="edit-horas-mensais" type="number" min="0" step="0.1" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="0" />
-                </div>
-              </div>
-            </div>
-            <div class="tab-panel hidden space-y-2" data-tab-panel="informacoes-gerais">
-              <div class="grid grid-cols-12 gap-2">
-                <div class="col-span-12 md:col-span-6">
-                  <label for="edit-passagens-dia" class="block font-medium mb-0.5">Passagens por dia</label>
-                  <input id="edit-passagens-dia" type="number" min="0" step="1" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="0" />
-                </div>
-                <div class="col-span-12 md:col-span-6">
-                  <label for="edit-valor-passagem" class="block font-medium mb-0.5">Valor da passagem</label>
-                  <input id="edit-valor-passagem" type="number" min="0" step="0.01" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="0,00" />
-                </div>
-              </div>
+                      <div class="grid grid-cols-12 gap-2">
+                        <div class="col-span-12 md:col-span-4">
+                          <label for="edit-dias-prorrogacao" class="block font-medium mb-0.5">Dias de Prorrogação de Experiência</label>
+                          <input id="edit-dias-prorrogacao" type="number" min="0" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="0" />
+                        </div>
+                        <div class="col-span-12 md:col-span-4">
+                          <label for="edit-exame-medico" class="block font-medium mb-0.5">Exame Médico</label>
+                          <input id="edit-exame-medico" type="date" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                        </div>
+                        <div class="col-span-12 md:col-span-4">
+                          <label for="edit-data-demissao" class="block font-medium mb-0.5">Data de Demissão</label>
+                          <input id="edit-data-demissao" type="date" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                        </div>
+                      </div>
 
-              <div class="grid grid-cols-12 gap-2">
-                <div class="col-span-12 md:col-span-6">
-                  <label for="edit-banco" class="block font-medium mb-0.5">Banco</label>
-                  <input id="edit-banco" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Nome do banco" />
-                </div>
-                <div class="col-span-12 md:col-span-6">
-                  <label for="edit-tipo-conta-bancaria" class="block font-medium mb-0.5">Tipo de conta</label>
-                  <select id="edit-tipo-conta-bancaria" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                    <option value="">Selecione</option>
-                    <option value="corrente">Corrente</option>
-                    <option value="poupanca">Poupança</option>
-                    <option value="cartao_salario">Cartão Salário</option>
-                    <option value="conta_salario">Conta Salário</option>
-                  </select>
-                </div>
-              </div>
+                      <div class="grid grid-cols-12 gap-2">
+                        <div class="col-span-12 md:col-span-6">
+                          <label for="edit-cargo-carteira" class="block font-medium mb-0.5">Cargo Carteira</label>
+                          <input id="edit-cargo-carteira" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Cargo registrado" />
+                        </div>
+                        <div class="col-span-12 md:col-span-6">
+                          <label for="edit-salario-contratual" class="block font-medium mb-0.5">Salário Contratual</label>
+                          <input id="edit-salario-contratual" type="number" min="0" step="0.01" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="0,00" />
+                        </div>
+                      </div>
 
-              <div class="grid grid-cols-12 gap-2">
-                <div class="col-span-12 md:col-span-6">
-                  <label for="edit-agencia" class="block font-medium mb-0.5">Agência</label>
-                  <input id="edit-agencia" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="0000" />
-                </div>
-                <div class="col-span-12 md:col-span-6">
-                  <label for="edit-conta" class="block font-medium mb-0.5">Conta</label>
-                  <input id="edit-conta" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="000000-0" />
-                </div>
-              </div>
+                      <div class="grid grid-cols-12 gap-2">
+                        <div class="col-span-12 md:col-span-4">
+                          <label for="edit-nome-mae" class="block font-medium mb-0.5">Nome da Mãe</label>
+                          <input id="edit-nome-mae" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                        </div>
+                        <div class="col-span-12 md:col-span-4">
+                          <label for="edit-nascimento-mae" class="block font-medium mb-0.5">Nascimento da Mãe</label>
+                          <input id="edit-nascimento-mae" type="date" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                        </div>
+                        <div class="col-span-12 md:col-span-4">
+                          <label for="edit-nome-conjuge" class="block font-medium mb-0.5">Nome do Cônjuge</label>
+                          <input id="edit-nome-conjuge" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                        </div>
+                      </div>
 
-              <div class="grid grid-cols-12 gap-2">
-                <div class="col-span-12 md:col-span-6">
-                  <label for="edit-tipo-chave-pix" class="block font-medium mb-0.5">Tipo de chave Pix</label>
-                  <select id="edit-tipo-chave-pix" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                    <option value="">Selecione</option>
-                    <option value="cpf">CPF</option>
-                    <option value="cnpj">CNPJ</option>
-                    <option value="email">Email</option>
-                    <option value="telefone">Telefone</option>
-                  </select>
-                </div>
-                <div class="col-span-12 md:col-span-6">
-                  <label for="edit-chave-pix" class="block font-medium mb-0.5">Chave Pix</label>
-                  <input id="edit-chave-pix" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Informe a chave Pix" />
-                </div>
-              </div>
-            </div>
-            <div class="tab-panel hidden space-y-2" data-tab-panel="trabalhista">
-              <div class="grid grid-cols-12 gap-2">
-                <div class="col-span-12 md:col-span-3">
-                  <label for="edit-emissao-rg" class="block font-medium mb-0.5">Emissão RG</label>
-                  <input id="edit-emissao-rg" type="date" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                </div>
-                <div class="col-span-12 md:col-span-3">
-                  <label for="edit-rg" class="block font-medium mb-0.5">RG</label>
-                  <input id="edit-rg" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="00.000.000-0" />
-                </div>
-                <div class="col-span-12 md:col-span-3">
-                  <label for="edit-rg-orgao" class="block font-medium mb-0.5">Órgão Expedidor</label>
-                  <input id="edit-rg-orgao" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="SSP" />
-                </div>
-                <div class="col-span-12 md:col-span-3">
-                  <label for="edit-cpf" class="block font-medium mb-0.5">CPF</label>
-                  <input id="edit-cpf" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="000.000.000-00" />
-                </div>
-              </div>
+                      <div class="grid grid-cols-12 gap-2">
+                        <div class="col-span-12 md:col-span-6">
+                          <label for="edit-forma-pagamento" class="block font-medium mb-0.5">Forma de Pagamento</label>
+                          <select id="edit-forma-pagamento" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            <option value="">Selecione</option>
+                            <option value="mensal">Mensal</option>
+                            <option value="quinzenal">Quinzenal</option>
+                            <option value="semanal">Semanal</option>
+                            <option value="diaria">Diária</option>
+                          </select>
+                        </div>
+                        <div class="col-span-12 md:col-span-6">
+                          <label for="edit-tipo-contrato" class="block font-medium mb-0.5">Tipo de Contrato</label>
+                          <select id="edit-tipo-contrato" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            <option value="">Selecione</option>
+                            <option value="clt">CLT</option>
+                            <option value="mei">MEI</option>
+                            <option value="estagiario">Estagiário</option>
+                            <option value="temporario">Temporário</option>
+                            <option value="avulso">Avulso</option>
+                          </select>
+                        </div>
+                      </div>
 
-              <div class="grid grid-cols-12 gap-2">
-                <div class="col-span-12 md:col-span-3">
-                  <label for="edit-habilitacao" class="block font-medium mb-0.5">Habilitação</label>
-                  <input id="edit-habilitacao" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Número da CNH" />
+                      <div class="grid grid-cols-12 gap-2">
+                        <div class="col-span-12 md:col-span-6">
+                          <label for="edit-horas-semanais" class="block font-medium mb-0.5">Horas Semanais</label>
+                          <input id="edit-horas-semanais" type="number" min="0" step="0.1" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="0" />
+                        </div>
+                        <div class="col-span-12 md:col-span-6">
+                          <label for="edit-horas-mensais" class="block font-medium mb-0.5">Horas Mensais</label>
+                          <input id="edit-horas-mensais" type="number" min="0" step="0.1" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="0" />
+                        </div>
+                      </div>
+                    </div>
+                    <div class="tab-panel hidden space-y-2" data-tab-panel="informacoes-gerais">
+                      <div class="grid grid-cols-12 gap-2">
+                        <div class="col-span-12 md:col-span-6">
+                          <label for="edit-passagens-dia" class="block font-medium mb-0.5">Passagens por dia</label>
+                          <input id="edit-passagens-dia" type="number" min="0" step="1" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="0" />
+                        </div>
+                        <div class="col-span-12 md:col-span-6">
+                          <label for="edit-valor-passagem" class="block font-medium mb-0.5">Valor da passagem</label>
+                          <input id="edit-valor-passagem" type="number" min="0" step="0.01" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="0,00" />
+                        </div>
+                      </div>
+
+                      <div class="grid grid-cols-12 gap-2">
+                        <div class="col-span-12 md:col-span-6">
+                          <label for="edit-banco" class="block font-medium mb-0.5">Banco</label>
+                          <input id="edit-banco" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Nome do banco" />
+                        </div>
+                        <div class="col-span-12 md:col-span-6">
+                          <label for="edit-tipo-conta-bancaria" class="block font-medium mb-0.5">Tipo de conta</label>
+                          <select id="edit-tipo-conta-bancaria" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            <option value="">Selecione</option>
+                            <option value="corrente">Corrente</option>
+                            <option value="poupanca">Poupança</option>
+                            <option value="cartao_salario">Cartão Salário</option>
+                            <option value="conta_salario">Conta Salário</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div class="grid grid-cols-12 gap-2">
+                        <div class="col-span-12 md:col-span-6">
+                          <label for="edit-agencia" class="block font-medium mb-0.5">Agência</label>
+                          <input id="edit-agencia" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="0000" />
+                        </div>
+                        <div class="col-span-12 md:col-span-6">
+                          <label for="edit-conta" class="block font-medium mb-0.5">Conta</label>
+                          <input id="edit-conta" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="000000-0" />
+                        </div>
+                      </div>
+
+                      <div class="grid grid-cols-12 gap-2">
+                        <div class="col-span-12 md:col-span-6">
+                          <label for="edit-tipo-chave-pix" class="block font-medium mb-0.5">Tipo de chave Pix</label>
+                          <select id="edit-tipo-chave-pix" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            <option value="">Selecione</option>
+                            <option value="cpf">CPF</option>
+                            <option value="cnpj">CNPJ</option>
+                            <option value="email">Email</option>
+                            <option value="telefone">Telefone</option>
+                          </select>
+                        </div>
+                        <div class="col-span-12 md:col-span-6">
+                          <label for="edit-chave-pix" class="block font-medium mb-0.5">Chave Pix</label>
+                          <input id="edit-chave-pix" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Informe a chave Pix" />
+                        </div>
+                      </div>
+                    </div>
+                    <div class="tab-panel hidden space-y-2" data-tab-panel="trabalhista">
+                      <div class="grid grid-cols-12 gap-2">
+                        <div class="col-span-12 md:col-span-3">
+                          <label for="edit-emissao-rg" class="block font-medium mb-0.5">Emissão RG</label>
+                          <input id="edit-emissao-rg" type="date" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                        </div>
+                        <div class="col-span-12 md:col-span-3">
+                          <label for="edit-rg" class="block font-medium mb-0.5">RG</label>
+                          <input id="edit-rg" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="00.000.000-0" />
+                        </div>
+                        <div class="col-span-12 md:col-span-3">
+                          <label for="edit-rg-orgao" class="block font-medium mb-0.5">Órgão Expedidor</label>
+                          <input id="edit-rg-orgao" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="SSP" />
+                        </div>
+                        <div class="col-span-12 md:col-span-3">
+                          <label for="edit-cpf" class="block font-medium mb-0.5">CPF</label>
+                          <input id="edit-cpf" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="000.000.000-00" />
+                        </div>
+                      </div>
+
+                      <div class="grid grid-cols-12 gap-2">
+                        <div class="col-span-12 md:col-span-3">
+                          <label for="edit-habilitacao" class="block font-medium mb-0.5">Habilitação</label>
+                          <input id="edit-habilitacao" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Número da CNH" />
+                        </div>
+                        <div class="col-span-12 md:col-span-3">
+                          <label for="edit-habilitacao-categoria" class="block font-medium mb-0.5">Categoria</label>
+                          <input id="edit-habilitacao-categoria" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Ex.: B" />
+                        </div>
+                        <div class="col-span-12 md:col-span-3">
+                          <label for="edit-habilitacao-orgao" class="block font-medium mb-0.5">Órgão Emissor</label>
+                          <input id="edit-habilitacao-orgao" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Detran" />
+                        </div>
+                        <div class="col-span-12 md:col-span-3">
+                          <label for="edit-habilitacao-validade" class="block font-medium mb-0.5">Validade</label>
+                          <input id="edit-habilitacao-validade" type="date" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                        </div>
+                      </div>
+                    </div>
+                    <div class="tab-panel hidden space-y-2" data-tab-panel="cursos">
+                      <div class="grid grid-cols-12 gap-2">
+                        <div class="col-span-12 md:col-span-6">
+                          <label for="edit-curso-nome" class="block font-medium mb-0.5">Formação/Curso</label>
+                          <input id="edit-curso-nome" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Nome do curso" />
+                        </div>
+                        <div class="col-span-12 md:col-span-3">
+                          <label for="edit-curso-data" class="block font-medium mb-0.5">Data</label>
+                          <input id="edit-curso-data" type="date" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                        </div>
+                        <div class="col-span-12 md:col-span-3">
+                          <label for="edit-curso-situacao" class="block font-medium mb-0.5">Situação</label>
+                          <select id="edit-curso-situacao" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            <option value="">Selecione</option>
+                            <option value="concluido">Concluído</option>
+                            <option value="cursando">Cursando</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div>
+                        <label for="edit-curso-observacao" class="block font-medium mb-0.5">Observação</label>
+                        <textarea id="edit-curso-observacao" rows="2" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Notas adicionais"></textarea>
+                      </div>
+                      <div class="flex justify-end">
+                        <button type="button" id="btn-add-curso" class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">Adicionar curso</button>
+                      </div>
+                      <div id="lista-cursos" class="space-y-2">
+                        <p class="helper-text text-gray-500">Nenhum curso cadastrado.</p>
+                      </div>
+                    </div>
+                    <div class="tab-panel hidden space-y-4" data-tab-panel="horarios">
+                      <div class="grid grid-cols-12 gap-2">
+                        <div class="col-span-12 md:col-span-3">
+                          <label for="edit-tipo-jornada" class="block font-medium mb-0.5">Tipo de Jornada</label>
+                          <select id="edit-tipo-jornada" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            <option value="">Selecione</option>
+                            <option value="jornada">Jornada</option>
+                            <option value="escala">Escala</option>
+                          </select>
+                        </div>
+                        <div class="col-span-12 md:col-span-3">
+                          <label for="edit-modalidade-jornada" class="block font-medium mb-0.5">Modalidade</label>
+                          <select id="edit-modalidade-jornada" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            <option value="">Selecione</option>
+                          </select>
+                        </div>
+                        <div class="col-span-6 md:col-span-2">
+                          <label for="edit-horario-inicio" class="block font-medium mb-0.5">Hora de Início</label>
+                          <input id="edit-horario-inicio" type="time" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                        </div>
+                        <div class="col-span-6 md:col-span-2">
+                          <label for="edit-horario-fim" class="block font-medium mb-0.5">Hora de Término</label>
+                          <input id="edit-horario-fim" type="time" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                        </div>
+                        <div class="col-span-6 md:col-span-2">
+                          <label for="edit-almoco-inicio" class="block font-medium mb-0.5">Almoço Início</label>
+                          <input id="edit-almoco-inicio" type="time" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                        </div>
+                        <div class="col-span-6 md:col-span-2">
+                          <label for="edit-almoco-fim" class="block font-medium mb-0.5">Almoço Fim</label>
+                          <input id="edit-almoco-fim" type="time" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                        </div>
+                      </div>
+                      <div class="flex items-center justify-end gap-2">
+                        <button type="button" id="btn-cancelar-horario" class="px-3 py-1.5 rounded-lg border text-sm font-semibold text-gray-600 hidden">Cancelar edição</button>
+                        <button type="button" id="btn-add-horario" class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">Adicionar horário</button>
+                      </div>
+                      <div id="grade-horarios" class="overflow-x-auto"></div>
+                    </div>
+                  </div>
                 </div>
-                <div class="col-span-12 md:col-span-3">
-                  <label for="edit-habilitacao-categoria" class="block font-medium mb-0.5">Categoria</label>
-                  <input id="edit-habilitacao-categoria" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Ex.: B" />
-                </div>
-                <div class="col-span-12 md:col-span-3">
-                  <label for="edit-habilitacao-orgao" class="block font-medium mb-0.5">Órgão Emissor</label>
-                  <input id="edit-habilitacao-orgao" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Detran" />
-                </div>
-                <div class="col-span-12 md:col-span-3">
-                  <label for="edit-habilitacao-validade" class="block font-medium mb-0.5">Validade</label>
-                  <input id="edit-habilitacao-validade" type="date" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                </div>
-              </div>
-            </div>
-            <div class="tab-panel hidden space-y-2" data-tab-panel="cursos">
-              <div class="grid grid-cols-12 gap-2">
-                <div class="col-span-12 md:col-span-6">
-                  <label for="edit-curso-nome" class="block font-medium mb-0.5">Formação/Curso</label>
-                  <input id="edit-curso-nome" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Nome do curso" />
-                </div>
-                <div class="col-span-12 md:col-span-3">
-                  <label for="edit-curso-data" class="block font-medium mb-0.5">Data</label>
-                  <input id="edit-curso-data" type="date" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                </div>
-                <div class="col-span-12 md:col-span-3">
-                  <label for="edit-curso-situacao" class="block font-medium mb-0.5">Situação</label>
-                  <select id="edit-curso-situacao" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                    <option value="">Selecione</option>
-                    <option value="concluido">Concluído</option>
-                    <option value="cursando">Cursando</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label for="edit-curso-observacao" class="block font-medium mb-0.5">Observação</label>
-                <textarea id="edit-curso-observacao" rows="2" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Notas adicionais"></textarea>
-              </div>
-              <div class="flex justify-end">
-                <button type="button" id="btn-add-curso" class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">Adicionar curso</button>
-              </div>
-              <div id="lista-cursos" class="space-y-2">
-                <p class="helper-text text-gray-500">Nenhum curso cadastrado.</p>
-              </div>
-            </div>
-            <div class="tab-panel hidden space-y-4" data-tab-panel="horarios">
-              <div class="grid grid-cols-12 gap-2">
-                <div class="col-span-12 md:col-span-3">
-                  <label for="edit-tipo-jornada" class="block font-medium mb-0.5">Tipo de Jornada</label>
-                  <select id="edit-tipo-jornada" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                    <option value="">Selecione</option>
-                    <option value="jornada">Jornada</option>
-                    <option value="escala">Escala</option>
-                  </select>
-                </div>
-                <div class="col-span-12 md:col-span-3">
-                  <label for="edit-modalidade-jornada" class="block font-medium mb-0.5">Modalidade</label>
-                  <select id="edit-modalidade-jornada" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                    <option value="">Selecione</option>
-                  </select>
-                </div>
-                <div class="col-span-6 md:col-span-2">
-                  <label for="edit-horario-inicio" class="block font-medium mb-0.5">Hora de Início</label>
-                  <input id="edit-horario-inicio" type="time" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                </div>
-                <div class="col-span-6 md:col-span-2">
-                  <label for="edit-horario-fim" class="block font-medium mb-0.5">Hora de Término</label>
-                  <input id="edit-horario-fim" type="time" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                </div>
-                <div class="col-span-6 md:col-span-2">
-                  <label for="edit-almoco-inicio" class="block font-medium mb-0.5">Almoço Início</label>
-                  <input id="edit-almoco-inicio" type="time" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                </div>
-                <div class="col-span-6 md:col-span-2">
-                  <label for="edit-almoco-fim" class="block font-medium mb-0.5">Almoço Fim</label>
-                  <input id="edit-almoco-fim" type="time" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                </div>
-              </div>
-              <div class="flex items-center justify-end gap-2">
-                <button type="button" id="btn-cancelar-horario" class="px-3 py-1.5 rounded-lg border text-sm font-semibold text-gray-600 hidden">Cancelar edição</button>
-                <button type="button" id="btn-add-horario" class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">Adicionar horário</button>
-              </div>
-              <div id="grade-horarios" class="overflow-x-auto"></div>
-            </div>
-          </div>
+
+        <div class="mt-2 flex justify-end gap-3 border-t border-gray-100 pt-4">
+          <button type="button" id="btn-cancelar" class="inline-flex items-center justify-center rounded-lg border border-gray-200 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-700 transition hover:bg-gray-50">Cancelar</button>
+          <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-200">Salvar</button>
         </div>
-
-        <div class="flex justify-end gap-3 pt-3">
-          <button type="button" id="btn-cancelar" class="px-4 py-1.5 rounded-lg border">Cancelar</button>
-          <button type="submit" class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">Salvar</button>
+                </form>
         </div>
-      </form>
+      </div>
     </div>
   </div>
 
