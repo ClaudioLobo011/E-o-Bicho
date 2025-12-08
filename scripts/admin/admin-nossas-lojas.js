@@ -1,6 +1,8 @@
 document.addEventListener('DOMContentLoaded', () => {
     // --- Referências ao DOM ---
     const tableBody = document.getElementById('stores-table-body');
+    const storesCounter = document.getElementById('stores-counter');
+    const storesTable = document.getElementById('stores-table');
     const addStoreBtn = document.getElementById('add-store-btn');
     const modal = document.getElementById('store-modal');
     const form = document.getElementById('store-form');
@@ -903,27 +905,77 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- Renderização da Tabela ---
+    const ensureStoresTableLayout = () => {
+        if (!storesTable) return;
+        storesTable.style.tableLayout = 'fixed';
+        storesTable.style.width = 'max-content';
+        storesTable.style.minWidth = '100%';
+    };
+
+    const setStoresCounter = (label) => {
+        if (!storesCounter) return;
+        storesCounter.innerHTML = `<i class="fas fa-magnifying-glass"></i>${label}`;
+    };
+
+    const setStoresTableMessage = (message, tone = 'muted') => {
+        if (!tableBody) return;
+        const toneClass = tone === 'error' ? 'text-red-500' : 'text-gray-500';
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="3" class="px-4 py-6 text-center ${toneClass}">${message}</td>
+            </tr>
+        `;
+    };
+
     async function fetchAndDisplayStores() {
+        ensureStoresTableLayout();
+        setStoresCounter('A carregar lojas...');
+        setStoresTableMessage('A carregar lojas...');
+
         try {
             const response = await fetch(`${API_CONFIG.BASE_URL}/stores`);
-            const stores = await response.json();
-            
-            tableBody.innerHTML = '';
-            stores.forEach(store => {
-                const rowHtml = `
-                    <tr class="bg-white border-b hover:bg-gray-50">
-                        <td class="px-6 py-4 font-medium text-gray-900">${store.nome}</td>
-                        <td class="px-6 py-4">${store.endereco}</td>
-                        <td class="px-6 py-4 text-center">
-                            <button data-action="edit" data-id="${store._id}" class="font-medium text-blue-600 hover:underline mr-3">Editar</button>
-                            <button data-action="delete" data-id="${store._id}" class="font-medium text-red-600 hover:underline">Apagar</button>
+            const stores = Array.isArray(response) ? response : await response.json();
+            const list = Array.isArray(stores) ? stores : [];
+
+            if (list.length === 0) {
+                setStoresCounter('Nenhuma loja carregada');
+                setStoresTableMessage('Nenhuma loja encontrada para os filtros atuais.');
+                return;
+            }
+
+            const rowsHtml = list.map((store) => {
+                const nome = (store?.nomeFantasia || store?.nome || store?.razaoSocial || '—').trim() || '—';
+                const endereco = (store?.endereco || '').trim() || '—';
+                const id = store?._id || '';
+
+                return `
+                    <tr class="align-top hover:bg-gray-50">
+                        <td class="px-3 py-2 font-semibold text-gray-900">${nome}</td>
+                        <td class="px-3 py-2 text-gray-700">${endereco}</td>
+                        <td class="px-3 py-2 text-center whitespace-nowrap">
+                            <div class="inline-flex items-center gap-2 justify-center">
+                                <button data-action="edit" data-id="${id}" class="inline-flex items-center gap-1 rounded-full border border-gray-200 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-700 transition hover:bg-gray-50">
+                                    <i class="fa-solid fa-pen-to-square"></i>
+                                    Editar
+                                </button>
+                                <button data-action="delete" data-id="${id}" class="inline-flex items-center gap-1 rounded-full border border-gray-200 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-red-700 transition hover:bg-red-50">
+                                    <i class="fa-solid fa-trash"></i>
+                                    Apagar
+                                </button>
+                            </div>
                         </td>
                     </tr>
                 `;
-                tableBody.innerHTML += rowHtml;
-            });
+            }).join('');
+
+            tableBody.innerHTML = rowsHtml;
+
+            const plural = list.length === 1 ? 'loja encontrada' : 'lojas encontradas';
+            setStoresCounter(`${list.length} ${plural}`);
         } catch (error) {
-            tableBody.innerHTML = `<tr><td colspan="3" class="text-center py-10 text-red-500">Não foi possível carregar as lojas.</td></tr>`;
+            console.error(error);
+            setStoresCounter('Erro ao carregar');
+            setStoresTableMessage('Não foi possível carregar as lojas.', 'error');
         }
     }
 
