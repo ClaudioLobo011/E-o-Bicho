@@ -139,6 +139,8 @@ const internarModal = {
   dialog: null,
   titleEl: null,
   form: null,
+  empresaSelect: null,
+  empresasOptions: [],
   tabButtons: [],
   tabPanels: [],
   tagsInput: null,
@@ -804,13 +806,54 @@ function consumeInternacaoPreselectPayload() {
 }
 
 function getAuthToken() {
+  const cached = getLoggedInUserData();
+  return cached?.token || null;
+}
+
+function getLoggedInUserData() {
   try {
-    const cached = JSON.parse(localStorage.getItem('loggedInUser') || 'null');
-    return cached?.token || null;
+    return JSON.parse(localStorage.getItem('loggedInUser') || 'null');
   } catch (error) {
-    console.error('internacao: falha ao ler token do usuário logado', error);
+    console.error('internacao: falha ao ler dados do usuário logado', error);
     return null;
   }
+}
+
+function getUserEmpresasOptions() {
+  const user = getLoggedInUserData();
+  const rawEmpresas =
+    (Array.isArray(user?.empresas) && user.empresas) ||
+    (Array.isArray(user?.lojas) && user.lojas) ||
+    (Array.isArray(user?.stores) && user.stores) ||
+    [];
+
+  const seen = new Set();
+  return rawEmpresas
+    .map((item) => {
+      if (!item) return null;
+      const value =
+        (typeof item === 'object' && (item._id || item.id || item.value || item.codigo)) ||
+        (typeof item === 'string' ? item : '') ||
+        '';
+      const label =
+        (typeof item === 'object' &&
+          (item.nomeFantasia || item.nome || item.razaoSocial || item.label || item.nomeEmpresa)) ||
+        (typeof item === 'string' ? item : '') ||
+        value ||
+        '';
+
+      const normalizedValue = String(value || label || '').trim();
+      if (!normalizedValue) return null;
+      const normalizedKey = normalizedValue.toLowerCase();
+      if (seen.has(normalizedKey)) return null;
+      seen.add(normalizedKey);
+
+      return {
+        value: normalizedValue,
+        label: label || normalizedValue,
+      };
+    })
+    .filter(Boolean);
 }
 
 function showToastMessage(message, type = 'info') {
@@ -1086,6 +1129,14 @@ function normalizeInternacaoRecord(raw) {
   const relatoriosMedicos = Array.isArray(raw.relatoriosMedicos)
     ? raw.relatoriosMedicos.map(normalizeRelatorioMedicoEntry).filter(Boolean)
     : [];
+  const empresaId = toText(raw.empresaId || raw.empresa || raw.empresa?._id);
+  const empresaNome = toText(
+    raw.empresaNome ||
+      raw.empresa?.nomeFantasia ||
+      raw.empresa?.nome ||
+      raw.empresa?.razaoSocial ||
+      raw.empresa?.label,
+  );
   const situacaoCodigo = toText(raw.situacaoCodigo);
   const canceladoFlag = Boolean(raw.cancelado) || normalizeActionKey(situacaoCodigo) === 'cancelado';
   const ultimoPesoHistorico = historico.find((entry) =>
@@ -1124,6 +1175,8 @@ function normalizeInternacaoRecord(raw) {
       contato: toText(raw.tutorContato),
       documento: toText(raw.tutorDocumento),
     },
+    empresaId,
+    empresaNome,
     situacao: toText(raw.situacao),
     situacaoCodigo,
     risco: toText(raw.risco),
@@ -1282,6 +1335,7 @@ async function handleInternarModalSubmit(event) {
   const formData = new FormData(internarModal.form);
   const situacaoDetails = getOptionDetails(INTERNAR_SITUACAO_OPTIONS, formData.get('internarSituacao'));
   const riscoDetails = getOptionDetails(INTERNAR_RISCO_OPTIONS, formData.get('internarRisco'));
+  const empresaDetails = getOptionDetails(internarModal.empresasOptions || [], formData.get('internarEmpresa'));
   const payload = {
     petId: petInfo.petId || '',
     petNome,
@@ -1292,6 +1346,8 @@ async function handleInternarModalSubmit(event) {
     tutorNome: petInfo.tutorNome || '',
     tutorContato: petInfo.tutorContato || '',
     tutorDocumento: petInfo.tutorDocumento || '',
+    empresaId: empresaDetails.value,
+    empresaNome: empresaDetails.label || empresaDetails.value,
     situacao: situacaoDetails.label || situacaoDetails.value,
     situacaoCodigo: situacaoDetails.value,
     risco: riscoDetails.label || riscoDetails.value,
@@ -3532,11 +3588,13 @@ function fillInternarModalFormFromRecord(record) {
   const riscoValue = record.riscoCodigo || record.risco || '';
   const altaData = record.altaPrevistaData || (record.altaPrevistaISO ? record.altaPrevistaISO.slice(0, 10) : '');
   const altaHora = record.altaPrevistaHora || (record.altaPrevistaISO ? record.altaPrevistaISO.slice(11, 16) : '');
+  const empresaValue = getEmpresaOptionFromRecord(record)?.value || '';
 
   setValue('internarSituacao', situacaoValue);
   setValue('internarRisco', riscoValue);
   setValue('internarVeterinario', record.veterinario || '');
   setValue('internarBox', record.box || '');
+  setValue('internarEmpresa', empresaValue);
   setValue('internarAltaPrevista', altaData || '');
   setValue('internarAltaPrevistaHora', altaHora || '');
   setValue('internarQueixa', record.queixa || '');
@@ -3614,6 +3672,7 @@ function closeInternarPetModal() {
   internarModal.state = null;
   internarModal.recordId = null;
   internarModal.currentRecord = null;
+  internarModal.empresasOptions = [];
   setInternarModalMode('create');
 }
 
@@ -3655,7 +3714,7 @@ function ensureInternarPetModal() {
                 <span class="text-gray-400" data-pet-summary-contact></span>
               </div>
             </div>
-            <div class="grid gap-4 md:grid-cols-2">
+            <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Situação
                 <select name="internarSituacao" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
                   ${situacaoOptions}
@@ -3674,6 +3733,11 @@ function ensureInternarPetModal() {
               </label>
               <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Box
                 <select name="internarBox" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+                  <option value="">Selecione</option>
+                </select>
+              </label>
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Empresa
+                <select name="internarEmpresa" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
                   <option value="">Selecione</option>
                 </select>
               </label>
@@ -3749,6 +3813,7 @@ function ensureInternarPetModal() {
   internarModal.dialog = overlay.querySelector('[data-internar-dialog]');
   internarModal.titleEl = overlay.querySelector('#internar-pet-modal-title');
   internarModal.form = overlay.querySelector('form');
+  internarModal.empresaSelect = overlay.querySelector('select[name="internarEmpresa"]');
   internarModal.submitBtn = overlay.querySelector('[data-modal-submit]');
   internarModal.errorEl = overlay.querySelector('[data-modal-error]');
   internarModal.tabButtons = Array.from(overlay.querySelectorAll('[data-tab-target]'));
@@ -3832,6 +3897,28 @@ function ensureSelectOption(select, option) {
   select.appendChild(opt);
 }
 
+function populateEmpresaSelect(extraOption) {
+  if (!internarModal.empresaSelect) return;
+  const options = getUserEmpresasOptions();
+  internarModal.empresasOptions = options;
+  const markup = ['<option value="">Selecione</option>', ...options.map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`)];
+  internarModal.empresaSelect.innerHTML = markup.join('');
+
+  if (extraOption && (extraOption.value || extraOption.label)) {
+    const option = {
+      value: extraOption.value || extraOption.label || '',
+      label: extraOption.label || extraOption.value || '',
+    };
+    ensureSelectOption(internarModal.empresaSelect, option);
+    internarModal.empresaSelect.value = option.value;
+    return;
+  }
+
+  if (!internarModal.empresaSelect.value && options.length === 1) {
+    internarModal.empresaSelect.value = options[0].value;
+  }
+}
+
 function populateDynamicSelects(dataset, extraOptions = {}) {
   const vetOptionsMarkup = ['<option value="">Selecione</option>', ...getEquipeOptions(dataset).map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`)]
     .join('');
@@ -3882,6 +3969,23 @@ function populateDynamicSelects(dataset, extraOptions = {}) {
   }
 }
 
+function getEmpresaOptionFromRecord(record) {
+  if (!record) return null;
+  const value =
+    record.empresaId ||
+    (record.empresa && (record.empresa.id || record.empresa._id || record.empresa.value)) ||
+    record.empresa ||
+    record.empresaNome ||
+    '';
+  const label =
+    record.empresaNome ||
+    (record.empresa && (record.empresa.nomeFantasia || record.empresa.nome || record.empresa.razaoSocial || record.empresa.label)) ||
+    value ||
+    '';
+  if (!value && !label) return null;
+  return { value: value || label, label: label || value };
+}
+
 function openInternarPetModal(dataset, options = {}) {
   ensureInternarPetModal();
   const wantsEdit = options?.mode === 'edit';
@@ -3910,6 +4014,7 @@ function openInternarPetModal(dataset, options = {}) {
     }
   }
   populateDynamicSelects(dataset, selectOverrides);
+  populateEmpresaSelect(getEmpresaOptionFromRecord(record));
   if (mode === 'edit' && record) {
     fillInternarModalFormFromRecord(record);
   }
