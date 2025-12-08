@@ -1385,9 +1385,10 @@ export function renderModelosPrescricao(root, dataset, { petId } = {}) {
   `;
 }
 
-export function renderBoxes(root, dataset, { petId, boxesLoading, boxesError, boxes } = {}) {
+export function renderBoxes(root, dataset, { petId, empresaId, boxesLoading, boxesError, boxes } = {}) {
   const highlightNome = petId ? dataset.pacientes.find((pet) => pet.id === petId)?.nome : null;
   const resolvedBoxes = Array.isArray(boxes) ? boxes : Array.isArray(dataset.boxes) ? dataset.boxes : [];
+  const filteredBoxes = resolvedBoxes.filter((box) => matchesEmpresaFilter(box, empresaId));
 
   if (boxesLoading) {
     root.innerHTML = `
@@ -1415,12 +1416,12 @@ export function renderBoxes(root, dataset, { petId, boxesLoading, boxesError, bo
     return;
   }
 
-  if (!resolvedBoxes.length) {
+  if (!filteredBoxes.length) {
     root.innerHTML = buildEmptyState('Nenhum box cadastrado até o momento. Utilize o botão “Criar box” para começar.');
     return;
   }
 
-  const cards = resolvedBoxes
+  const cards = filteredBoxes
     .map((box) => {
       const ocupante = box?.ocupante || 'Livre';
       const isTarget = highlightNome && ocupante === highlightNome;

@@ -1158,6 +1158,19 @@ function normalizeBox(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const boxLabel = typeof raw.box === 'string' && raw.box.trim() ? raw.box.trim() : 'Box';
   const ocupante = typeof raw.ocupante === 'string' && raw.ocupante.trim() ? raw.ocupante.trim() : 'Livre';
+  const toText = (value) => {
+    if (value === undefined || value === null) return '';
+    return String(value).trim();
+  };
+  const empresaId = toText(raw.empresaId || raw.empresa || raw.empresa?._id || raw.empresa?.id || raw.empresa?.value);
+  const empresaNome = toText(
+    raw.empresaNome ||
+      raw.empresaNomeFantasia ||
+      raw.empresa?.nomeFantasia ||
+      raw.empresa?.nome ||
+      raw.empresa?.razaoSocial ||
+      raw.empresa?.label,
+  );
   const status = typeof raw.status === 'string' && raw.status.trim()
     ? raw.status.trim()
     : ocupante === 'Livre'
@@ -1175,6 +1188,22 @@ function normalizeBox(raw) {
     especialidade,
     higienizacao,
     observacao,
+    empresaId,
+    empresaNome,
+    empresaNomeFantasia: toText(raw.empresaNomeFantasia || empresaNome),
+    empresaRazaoSocial: toText(raw.empresaRazaoSocial || raw.empresa?.razaoSocial),
+    empresa:
+      raw.empresa ||
+      (empresaId || empresaNome
+        ? {
+            id: empresaId || empresaNome,
+            nomeFantasia: empresaNome || empresaId,
+            nome: empresaNome || empresaId,
+            razaoSocial: toText(raw.empresa?.razaoSocial || raw.empresaRazaoSocial || empresaNome || empresaId),
+            label: empresaNome || empresaId,
+            value: empresaId || empresaNome,
+          }
+        : null),
   };
 }
 
