@@ -821,23 +821,37 @@ function getLoggedInUserData() {
 
 function getUserEmpresasOptions() {
   const user = getLoggedInUserData();
-  const rawEmpresas =
-    (Array.isArray(user?.empresas) && user.empresas) ||
-    (Array.isArray(user?.lojas) && user.lojas) ||
-    (Array.isArray(user?.stores) && user.stores) ||
-    [];
+  const normalizeToArray = (value) => {
+    if (!value) return [];
+    if (Array.isArray(value)) return value;
+    return [value];
+  };
+
+  const rawEmpresas = [
+    ...normalizeToArray(user?.empresas),
+    ...normalizeToArray(user?.empresa),
+    ...normalizeToArray(user?.lojas),
+    ...normalizeToArray(user?.loja),
+    ...normalizeToArray(user?.stores),
+    ...normalizeToArray(user?.store),
+  ];
 
   const seen = new Set();
   return rawEmpresas
     .map((item) => {
       if (!item) return null;
       const value =
-        (typeof item === 'object' && (item._id || item.id || item.value || item.codigo)) ||
+        (typeof item === 'object' && (item._id || item.id || item.value || item.codigo || item.codigoLoja)) ||
         (typeof item === 'string' ? item : '') ||
         '';
       const label =
         (typeof item === 'object' &&
-          (item.nomeFantasia || item.nome || item.razaoSocial || item.label || item.nomeEmpresa)) ||
+          (item.nomeFantasia ||
+            item.nome ||
+            item.razaoSocial ||
+            item.label ||
+            item.nomeEmpresa ||
+            item.nomeLoja)) ||
         (typeof item === 'string' ? item : '') ||
         value ||
         '';
