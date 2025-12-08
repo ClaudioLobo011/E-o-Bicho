@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const togglePasswordIcon = document.getElementById('toggle-password-icon');
   const roleSelect = document.getElementById('edit-role');
   const passwordBar = document.getElementById('password-bar');
+  const modalCard = document.querySelector('[data-edit-modal-card]');
   const gruposBox = document.getElementById('edit-grupos');
   const empresasBox = document.getElementById('edit-empresas');
   const selectSexo = document.getElementById('edit-sexo');
@@ -112,6 +113,108 @@ document.addEventListener('DOMContentLoaded', () => {
     admin_master: 'Admin Master',
   };
   const roleRank = { cliente: 0, funcionario: 1, admin: 2, admin_master: 3 };
+  function getEmpresaNomeById(id) {
+    if (!id || !Array.isArray(empresasDisponiveis)) return '';
+    const found = empresasDisponiveis.find((empresa) => empresa?._id === id || empresa?.id === id);
+    return (found?.nome || found?.razaoSocial || found?.fantasia || '').trim();
+  }
+  function getEmpresasSelecionadas(funcionario) {
+    if (!funcionario || !Array.isArray(funcionario.empresas)) return [];
+    const seen = new Set();
+    const nomes = [];
+
+    funcionario.empresas.forEach((empresa) => {
+      const id = typeof empresa === 'string' ? empresa : (empresa?._id || empresa?.id || '');
+      const nomeDireto = (empresa && typeof empresa === 'object')
+        ? (empresa.nome || empresa.razaoSocial || empresa.fantasia || empresa.label || '')
+        : '';
+      const nome = (nomeDireto || getEmpresaNomeById(id) || id || '').trim();
+      if (!nome) return;
+      const normalized = nome.toLowerCase();
+      if (seen.has(normalized)) return;
+      seen.add(normalized);
+      nomes.push(nome);
+    });
+
+    return nomes;
+  }
+  const funcTableColumns = [
+    {
+      key: 'nome',
+      label: 'Nome',
+      minWidth: 72,
+      headerClass: 'px-3 py-2',
+      cellClass: 'px-3 py-2.5 font-semibold text-gray-800',
+      getDisplay: (f) => getNome(f) || '-',
+      getComparable: (f) => (getNome(f) || '').toLowerCase(),
+    },
+    {
+      key: 'email',
+      label: 'Email',
+      minWidth: 72,
+      headerClass: 'px-3 py-2',
+      cellClass: 'px-3 py-2.5 text-[11px] text-gray-700',
+      getDisplay: (f) => f.email || '-',
+      getComparable: (f) => (f.email || '').toLowerCase(),
+    },
+    {
+      key: 'role',
+      label: 'Cargo',
+      minWidth: 60,
+      headerClass: 'px-3 py-2',
+      cellClass: 'px-3 py-2.5 capitalize text-[11px] text-gray-700',
+      getDisplay: (f) => ROLE_LABEL[f.role] || f.role || '-',
+      getComparable: (f) => roleRank[f.role] ?? -1,
+    },
+    {
+      key: 'empresas',
+      label: 'Empresa',
+      minWidth: 96,
+      headerClass: 'px-3 py-2',
+      cellClass: 'px-3 py-2.5 text-[11px] text-gray-700',
+      getDisplay: (f) => {
+        const nomes = getEmpresasSelecionadas(f);
+        return nomes.length ? nomes.join(', ') : '-';
+      },
+      getComparable: (f) => getEmpresasSelecionadas(f).join(', ').toLowerCase(),
+    },
+    {
+      key: 'acoes',
+      label: 'Ações',
+      minWidth: 84,
+      headerClass: 'px-3 py-2 text-right',
+      cellClass: 'px-3 py-2 text-right text-[11px]',
+      disableFilter: true,
+      disableSort: true,
+      disableResize: false,
+    },
+  ];
+  const funcTableElements = {
+    wrapper: null,
+    counter: null,
+    table: null,
+    tableHead: null,
+    tableBody: null,
+  };
+  const funcTableState = {
+    data: [],
+    filters: {},
+    filterSearch: {},
+    valueFilters: {},
+    sort: { key: null, direction: null },
+    openPopover: null,
+    columnWidths: {},
+  };
+  let funcActivePopover = null;
+  let funcActivePopoverCleanup = null;
+
+  funcTableColumns.forEach((column) => {
+    if (!column.disableFilter) {
+      funcTableState.filters[column.key] = '';
+      funcTableState.filterSearch[column.key] = '';
+      funcTableState.valueFilters[column.key] = null;
+    }
+  });
   let enderecos = [];
   let empresasDisponiveis = [];
   let enderecoEditandoIndex = null;
@@ -1402,12 +1505,27 @@ document.addEventListener('DOMContentLoaded', () => {
     if (form) form.scrollTop = 0;
     modal.classList.remove('hidden');
     modal.classList.add('flex');
+    requestAnimationFrame(() => {
+      if (modalCard) {
+        modalCard.classList.remove('opacity-0', 'scale-95');
+        modalCard.classList.add('opacity-100', 'scale-100');
+      }
+    });
 
     if (mode === 'edit' && data?._id) {
       carregarEnderecosFuncionario(data._id);
     }
   }
-  function closeModal()      { modal.classList.add('hidden'); modal.classList.remove('flex'); }
+  function closeModal() {
+    if (modalCard) {
+      modalCard.classList.add('opacity-0', 'scale-95');
+      modalCard.classList.remove('opacity-100', 'scale-100');
+    }
+    setTimeout(() => {
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }, 180);
+  }
   function openSearchModal() { modalSearch.classList.remove('hidden'); modalSearch.classList.add('flex'); searchInput.value = ''; searchUsers(''); }
   function closeSearchModal(){ modalSearch.classList.add('hidden'); modalSearch.classList.remove('flex'); }
 
@@ -1420,50 +1538,714 @@ document.addEventListener('DOMContentLoaded', () => {
     return Math.min(100, s);
   }
 
-  // Render com fallback de ordenação (servidor já manda ordenado)
-  function renderTable(funcionarios) {
-    if (!Array.isArray(funcionarios) || funcionarios.length === 0) {
-      tabela.innerHTML = `<p class="text-gray-500">Nenhum funcionário cadastrado.</p>`;
-      return;
+  const normalizeTextValue = (value) => {
+    if (value === null || value === undefined) return '';
+    try {
+      return String(value)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase();
+    } catch (_err) {
+      return String(value).toLowerCase();
     }
-    funcionarios.sort((a, b) => {
+  };
+
+  const escapeRegexValue = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  const buildFilterRegex = (rawValue) => {
+    const normalized = normalizeTextValue(rawValue || '').trim();
+    if (!normalized) return null;
+
+    const pattern = normalized
+      .split('*')
+      .map((segment) => escapeRegexValue(segment))
+      .join('.*');
+
+    if (!pattern) return null;
+
+    try {
+      return new RegExp(pattern, 'i');
+    } catch (_error) {
+      return null;
+    }
+  };
+
+  const getFuncColumnMinWidth = (key) => {
+    const column = funcTableColumns.find((col) => col.key === key);
+    return column?.minWidth || 32;
+  };
+
+  const ensureFuncTableLayout = () => {
+    if (!funcTableElements.table) return;
+    funcTableElements.table.style.tableLayout = 'fixed';
+    funcTableElements.table.style.width = 'max-content';
+    funcTableElements.table.style.minWidth = '100%';
+  };
+
+  const ensureFuncColGroup = () => {
+    if (!funcTableElements.table) return null;
+    let colgroup = funcTableElements.table.querySelector('colgroup[data-func-columns]');
+    if (!colgroup) {
+      colgroup = document.createElement('colgroup');
+      colgroup.dataset.funcColumns = 'true';
+      funcTableColumns.forEach((column) => {
+        const col = document.createElement('col');
+        col.dataset.columnKey = column.key;
+        colgroup.appendChild(col);
+      });
+      funcTableElements.table.insertBefore(colgroup, funcTableElements.table.firstChild);
+    } else {
+      const columns = Array.from(colgroup.querySelectorAll('col'));
+      const isOutdated =
+        columns.length !== funcTableColumns.length ||
+        columns.some((col, index) => col.dataset.columnKey !== funcTableColumns[index].key);
+
+      if (isOutdated) {
+        colgroup.innerHTML = '';
+        funcTableColumns.forEach((column) => {
+          const col = document.createElement('col');
+          col.dataset.columnKey = column.key;
+          colgroup.appendChild(col);
+        });
+      }
+    }
+    return colgroup;
+  };
+
+  const updateFuncionarioCounter = (count) => {
+    if (!funcTableElements.counter) return;
+    const plural = count === 1 ? 'encontrado' : 'encontrados';
+    const labelPlural = count === 1 ? 'funcionário' : 'funcionários';
+    funcTableElements.counter.innerHTML = `<i class="fas fa-magnifying-glass"></i>${count} ${labelPlural} ${plural}`;
+  };
+
+  const resetFuncTableShell = () => {
+    closeFuncionarioFilterPopover();
+    funcTableElements.wrapper = null;
+    funcTableElements.counter = null;
+    funcTableElements.table = null;
+    funcTableElements.tableHead = null;
+    funcTableElements.tableBody = null;
+  };
+
+  const ensureFuncTableShell = () => {
+    const isTableMounted = funcTableElements.table && tabela.contains(funcTableElements.table);
+    if (isTableMounted) return;
+
+    resetFuncTableShell();
+    tabela.innerHTML = '';
+
+    const wrapper = document.createElement('section');
+    wrapper.className = 'space-y-3';
+
+    const header = document.createElement('div');
+    header.className = 'flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600';
+
+    const counter = document.createElement('span');
+    counter.className = 'inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1';
+    counter.innerHTML = '<i class="fas fa-magnifying-glass"></i>Nenhum funcionário carregado';
+
+    header.appendChild(counter);
+
+    const shell = document.createElement('div');
+    shell.className = 'overflow-hidden rounded-xl border border-gray-100';
+
+    const scroll = document.createElement('div');
+    scroll.className = 'overflow-x-auto';
+
+    const table = document.createElement('table');
+    table.className = 'min-w-full divide-y divide-gray-100 text-left text-[11px] leading-[1.35] text-gray-700';
+
+    const thead = document.createElement('thead');
+    thead.className = 'bg-gray-50 text-left text-[10px] uppercase tracking-wide text-gray-500';
+
+    const tbody = document.createElement('tbody');
+    tbody.className = 'divide-y divide-gray-100 bg-white text-[11px] text-gray-700';
+
+    table.append(thead, tbody);
+    scroll.appendChild(table);
+    shell.appendChild(scroll);
+
+    wrapper.append(header, shell);
+    tabela.appendChild(wrapper);
+
+    funcTableElements.wrapper = wrapper;
+    funcTableElements.counter = counter;
+    funcTableElements.table = table;
+    funcTableElements.tableHead = thead;
+    funcTableElements.tableBody = tbody;
+  };
+
+  const getFuncionarioDisplayValue = (funcionario, column) => {
+    if (typeof column.getDisplay === 'function') return column.getDisplay(funcionario);
+    return funcionario[column.key] ?? column.fallback ?? '—';
+  };
+
+  const getFuncionarioComparableValue = (funcionario, column) => {
+    if (typeof column.getComparable === 'function') return column.getComparable(funcionario);
+    const value = getFuncionarioDisplayValue(funcionario, column);
+    return typeof value === 'string' ? value.toLowerCase() : value;
+  };
+
+  const getFuncionarioColumnOptions = (column) => {
+    const unique = new Map();
+    funcTableState.data.forEach((item) => {
+      const displayValue = getFuncionarioDisplayValue(item, column);
+      const normalized = normalizeTextValue(displayValue) || '__vazio__';
+      if (!unique.has(normalized)) {
+        unique.set(normalized, {
+          normalized,
+          label: displayValue === '' || displayValue === undefined || displayValue === null ? 'Vazio' : String(displayValue),
+        });
+      }
+    });
+
+    return Array.from(unique.values()).sort((a, b) =>
+      a.label.localeCompare(b.label, 'pt-BR', { sensitivity: 'base', numeric: true })
+    );
+  };
+
+  const syncFuncionarioValueFilters = () => {
+    funcTableColumns.forEach((column) => {
+      if (column.disableFilter) return;
+      const selected = funcTableState.valueFilters[column.key];
+      if (!(selected instanceof Set)) return;
+
+      const options = getFuncionarioColumnOptions(column);
+      const allowed = new Set(options.map((option) => option.normalized));
+      const next = new Set([...selected].filter((value) => allowed.has(value)));
+
+      if (next.size === allowed.size || allowed.size === 0) {
+        funcTableState.valueFilters[column.key] = null;
+      } else {
+        funcTableState.valueFilters[column.key] = next;
+      }
+    });
+  };
+
+  const applyFuncionarioTableState = (items) => {
+    const baseItems = Array.isArray(items) ? items : [];
+    const filtered = baseItems.filter((funcionario) => {
+      return funcTableColumns.every((column) => {
+        if (column.disableFilter) return true;
+        const term = funcTableState.filters[column.key] || '';
+        const regex = buildFilterRegex(term);
+        const hasValueFilter = funcTableState.valueFilters[column.key] instanceof Set;
+        const display = getFuncionarioDisplayValue(funcionario, column);
+        const normalizedDisplay = normalizeTextValue(display ?? '');
+
+        if (hasValueFilter) {
+          const selectedValues = funcTableState.valueFilters[column.key];
+          const optionKey = normalizeTextValue(display) || '__vazio__';
+          if (!selectedValues.has(optionKey)) return false;
+        }
+
+        if (!regex) return true;
+        return regex.test(normalizedDisplay);
+      });
+    });
+
+    const { key, direction } = funcTableState.sort;
+    const defaultSorted = [...filtered].sort((a, b) => {
       const r = (roleRank[b.role] ?? -1) - (roleRank[a.role] ?? -1);
       if (r !== 0) return r;
       return getNome(a).localeCompare(getNome(b), 'pt-BR');
     });
 
-    const rows = funcionarios.map(f => `
-      <tr class="border-b">
-        <td class="py-2 px-4">${getNome(f) || '-'}</td>
-        <td class="py-2 px-4">${f.email || '-'}</td>
-        <td class="py-2 px-4 capitalize">${ROLE_LABEL[f.role] || f.role}</td>
-        <td class="py-2 px-4 text-right">
-          <button class="text-blue-600 hover:text-blue-800 mr-3" data-action="edit" data-id="${f._id}">
-            <i class="fa-solid fa-pen-to-square"></i> Editar
-          </button>
-          <button class="text-red-600 hover:text-red-800" data-action="delete" data-id="${f._id}">
-            <i class="fa-solid fa-trash"></i> Remover do quadro
-          </button>
-        </td>
-      </tr>
-    `).join('');
+    if (!key || !direction) return defaultSorted;
 
-    tabela.innerHTML = `
-      <table class="min-w-full bg-white border rounded-lg overflow-hidden">
-        <thead>
-          <tr class="bg-gray-50 text-left">
-            <th class="py-2 px-4">Nome</th>
-            <th class="py-2 px-4">Email</th>
-            <th class="py-2 px-4">Cargo</th>
-            <th class="py-2 px-4 text-right">Ações</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
-    `;
+    const targetColumn = funcTableColumns.find((column) => column.key === key);
+    if (!targetColumn) return defaultSorted;
+
+    const directionMultiplier = direction === 'asc' ? 1 : -1;
+
+    return [...defaultSorted].sort((a, b) => {
+      const valueA = getFuncionarioComparableValue(a, targetColumn);
+      const valueB = getFuncionarioComparableValue(b, targetColumn);
+
+      if (typeof valueA === 'number' && typeof valueB === 'number') {
+        if (!Number.isFinite(valueA) && !Number.isFinite(valueB)) return 0;
+        if (!Number.isFinite(valueA)) return -1 * directionMultiplier;
+        if (!Number.isFinite(valueB)) return 1 * directionMultiplier;
+        if (valueA === valueB) return 0;
+        return valueA > valueB ? directionMultiplier : -directionMultiplier;
+      }
+
+      const textA = String(valueA ?? '');
+      const textB = String(valueB ?? '');
+      return textA.localeCompare(textB, 'pt-BR', { sensitivity: 'base', numeric: true }) * directionMultiplier;
+    });
+  };
+
+  const updateFuncSortIndicators = () => {
+    if (!funcTableElements.tableHead) return;
+    const buttons = funcTableElements.tableHead.querySelectorAll('[data-func-sort-button]');
+    buttons.forEach((button) => {
+      const { columnKey, sortDirection } = button.dataset;
+      const isActive = funcTableState.sort.key === columnKey && funcTableState.sort.direction === sortDirection;
+      button.classList.toggle('text-primary', isActive);
+      button.classList.toggle('border-primary/40', isActive);
+      button.classList.toggle('bg-primary/5', isActive);
+      button.classList.toggle('text-gray-400', !isActive);
+      button.classList.toggle('border-transparent', !isActive);
+    });
+  };
+
+  const setFuncTableSort = (key, direction) => {
+    const isSame = funcTableState.sort.key === key && funcTableState.sort.direction === direction;
+    funcTableState.sort = isSame ? { key: null, direction: null } : { key, direction };
+    updateFuncSortIndicators();
+    renderTable();
+  };
+
+  const applyFuncColumnWidths = (syncFromDom = false) => {
+    if (!funcTableElements.tableHead) return;
+
+    ensureFuncTableLayout();
+    const colgroup = ensureFuncColGroup();
+    const colMap = colgroup
+      ? new Map(Array.from(colgroup.querySelectorAll('col')).map((col) => [col.dataset.columnKey, col]))
+      : null;
+
+    const headerCells = Array.from(funcTableElements.tableHead.querySelectorAll('th[data-column-key]'));
+
+    headerCells.forEach((th) => {
+      const columnKey = th.dataset.columnKey;
+      const minWidth = getFuncColumnMinWidth(columnKey);
+
+      if (syncFromDom && !Number.isFinite(funcTableState.columnWidths[columnKey])) {
+        funcTableState.columnWidths[columnKey] = Math.max(minWidth, th.getBoundingClientRect().width);
+      }
+
+      const storedWidth = funcTableState.columnWidths[columnKey];
+      const width = Number.isFinite(storedWidth) ? Math.max(minWidth, storedWidth) : minWidth;
+
+      th.style.width = `${width}px`;
+      th.style.minWidth = `${minWidth}px`;
+
+      const colEl = colMap?.get(columnKey);
+      if (colEl) {
+        colEl.style.width = `${width}px`;
+        colEl.style.minWidth = `${minWidth}px`;
+      }
+
+      const cells = funcTableElements.tableBody?.querySelectorAll(`td[data-column-key="${columnKey}"]`);
+      cells?.forEach((cell) => {
+        cell.style.width = `${width}px`;
+        cell.style.minWidth = `${minWidth}px`;
+      });
+    });
+  };
+
+  const startFuncColumnResize = (column, th, startEvent) => {
+    if (!th) return;
+    startEvent.preventDefault();
+    closeFuncionarioFilterPopover();
+
+    const minWidth = getFuncColumnMinWidth(column.key);
+    const startX = startEvent.touches?.[0]?.clientX ?? startEvent.clientX;
+    const startWidth = th.getBoundingClientRect().width;
+    const originalUserSelect = document.body.style.userSelect;
+    const originalCursor = document.body.style.cursor;
+
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+
+    const handleMove = (moveEvent) => {
+      const currentX = moveEvent.touches?.[0]?.clientX ?? moveEvent.clientX;
+      if (!Number.isFinite(currentX)) return;
+      const delta = currentX - startX;
+      const nextWidth = Math.max(minWidth, startWidth + delta);
+      funcTableState.columnWidths[column.key] = nextWidth;
+      applyFuncColumnWidths();
+    };
+
+    const handleEnd = () => {
+      document.body.style.userSelect = originalUserSelect;
+      document.body.style.cursor = originalCursor;
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleEnd);
+      window.removeEventListener('touchmove', handleMove);
+      window.removeEventListener('touchend', handleEnd);
+    };
+
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleEnd);
+    window.addEventListener('touchmove', handleMove, { passive: true });
+    window.addEventListener('touchend', handleEnd);
+  };
+
+  const closeFuncionarioFilterPopover = () => {
+    if (typeof funcActivePopoverCleanup === 'function') {
+      funcActivePopoverCleanup();
+      funcActivePopoverCleanup = null;
+    }
+
+    if (funcActivePopover?.element?.parentNode) {
+      funcActivePopover.element.parentNode.removeChild(funcActivePopover.element);
+    }
+
+    funcActivePopover = null;
+    funcTableState.openPopover = null;
+  };
+
+  const renderFuncionarioFilterPopover = (column, anchor) => {
+    if (!anchor) return;
+
+    const parentCell = anchor.closest('th');
+    if (!parentCell) return;
+
+    closeFuncionarioFilterPopover();
+
+    const options = getFuncionarioColumnOptions(column);
+
+    const popover = document.createElement('div');
+    popover.className = 'fixed z-40 mt-1 w-64 rounded-lg border border-gray-200 bg-white p-3 shadow-lg';
+    popover.dataset.popoverFor = column.key;
+
+    const title = document.createElement('div');
+    title.className = 'mb-2 text-xs font-semibold uppercase text-gray-600';
+    title.textContent = `Filtrar ${column.label}`;
+
+    const searchInput = document.createElement('input');
+    searchInput.type = 'text';
+    searchInput.placeholder = 'Procurar valores';
+    searchInput.value = funcTableState.filterSearch[column.key] || '';
+    searchInput.className =
+      'mb-2 w-full rounded border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20';
+
+    const selectAllWrapper = document.createElement('label');
+    selectAllWrapper.className = 'mb-2 flex cursor-pointer items-center gap-2 text-sm text-gray-700';
+
+    const selectAllCheckbox = document.createElement('input');
+    selectAllCheckbox.type = 'checkbox';
+    selectAllCheckbox.className = 'h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/50';
+
+    const selectAllLabel = document.createElement('span');
+    selectAllLabel.textContent = 'Selecionar todos';
+    selectAllWrapper.append(selectAllCheckbox, selectAllLabel);
+
+    const list = document.createElement('div');
+    list.className = 'max-h-48 space-y-1 overflow-y-auto rounded border border-gray-100 bg-gray-50 px-2 py-2';
+
+    const actions = document.createElement('div');
+    actions.className = 'mt-3 flex items-center justify-between gap-2';
+
+    const clearButton = document.createElement('button');
+    clearButton.type = 'button';
+    clearButton.className =
+      'inline-flex items-center gap-1 rounded border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50';
+    clearButton.innerHTML = '<i class="fas fa-eraser"></i>Limpar';
+
+    const applyButton = document.createElement('button');
+    applyButton.type = 'button';
+    applyButton.className =
+      'inline-flex items-center gap-1 rounded bg-primary px-3 py-1 text-xs font-semibold text-white hover:bg-secondary';
+    applyButton.innerHTML = '<i class="fas fa-check"></i>Aplicar';
+
+    actions.append(clearButton, applyButton);
+
+    const renderOptions = () => {
+      list.innerHTML = '';
+
+      const searchTerm = normalizeTextValue(funcTableState.filterSearch[column.key] || '');
+      const filteredOptions = options.filter((option) => normalizeTextValue(option.label).includes(searchTerm));
+
+      const selectedSet = funcTableState.valueFilters[column.key];
+      const isAllSelected = !(selectedSet instanceof Set) || selectedSet.size === options.length;
+      selectAllCheckbox.checked = isAllSelected;
+      selectAllCheckbox.indeterminate = selectedSet instanceof Set && selectedSet.size > 0 && !isAllSelected;
+
+      if (!filteredOptions.length) {
+        const empty = document.createElement('p');
+        empty.className = 'py-2 text-center text-xs text-gray-500';
+        empty.textContent = 'Nenhum valor encontrado';
+        list.appendChild(empty);
+        return;
+      }
+
+      filteredOptions.forEach((option) => {
+        const item = document.createElement('label');
+        item.className = 'flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm text-gray-700 hover:bg-white';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/50';
+
+        const isSelected =
+          !(selectedSet instanceof Set) || selectedSet.size === options.length
+            ? true
+            : selectedSet.has(option.normalized);
+        checkbox.checked = isSelected;
+
+        checkbox.addEventListener('change', () => {
+          if (!(funcTableState.valueFilters[column.key] instanceof Set)) {
+            funcTableState.valueFilters[column.key] = new Set(options.map((opt) => opt.normalized));
+          }
+          const targetSet = funcTableState.valueFilters[column.key];
+          if (checkbox.checked) {
+            targetSet.add(option.normalized);
+          } else {
+            targetSet.delete(option.normalized);
+          }
+
+          if (targetSet.size === options.length) {
+            funcTableState.valueFilters[column.key] = null;
+          }
+
+          renderTable();
+          renderOptions();
+        });
+
+        const text = document.createElement('span');
+        text.textContent = option.label;
+
+        item.append(checkbox, text);
+        list.appendChild(item);
+      });
+    };
+
+    selectAllCheckbox.addEventListener('change', () => {
+      if (selectAllCheckbox.checked) {
+        funcTableState.valueFilters[column.key] = null;
+      } else {
+        funcTableState.valueFilters[column.key] = new Set();
+      }
+      renderTable();
+      renderOptions();
+    });
+
+    searchInput.addEventListener('input', (event) => {
+      funcTableState.filterSearch[column.key] = event.target.value || '';
+      renderOptions();
+    });
+
+    clearButton.addEventListener('click', () => {
+      funcTableState.filterSearch[column.key] = '';
+      funcTableState.valueFilters[column.key] = null;
+      renderTable();
+      renderOptions();
+    });
+
+    applyButton.addEventListener('click', () => {
+      closeFuncionarioFilterPopover();
+    });
+
+    popover.append(title, searchInput, selectAllWrapper, list, actions);
+    document.body.appendChild(popover);
+
+    const anchorRect = anchor.getBoundingClientRect();
+    const popRect = popover.getBoundingClientRect();
+    const top = anchorRect.bottom + window.scrollY + 4;
+    const left = Math.min(anchorRect.left + window.scrollX, window.innerWidth - popRect.width - 8);
+
+    popover.style.top = `${top}px`;
+    popover.style.left = `${left}px`;
+
+    const handleClickOutside = (event) => {
+      if (popover.contains(event.target)) return;
+      if (anchor.contains(event.target)) return;
+      closeFuncionarioFilterPopover();
+    };
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') closeFuncionarioFilterPopover();
+    };
+
+    const handleScroll = () => closeFuncionarioFilterPopover();
+    const handleResize = () => closeFuncionarioFilterPopover();
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', handleResize);
+
+    funcActivePopover = { key: column.key, element: popover };
+    funcTableState.openPopover = column.key;
+
+    funcActivePopoverCleanup = () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', handleResize);
+    };
+
+    renderOptions();
+  };
+
+  const toggleFuncionarioFilterPopover = (column, anchor) => {
+    if (funcTableState.openPopover === column.key) {
+      closeFuncionarioFilterPopover();
+      return;
+    }
+    renderFuncionarioFilterPopover(column, anchor);
+  };
+
+  const buildFuncionarioTableHead = () => {
+    if (!funcTableElements.tableHead) return;
+    funcTableElements.tableHead.innerHTML = '';
+
+    const row = document.createElement('tr');
+
+    funcTableColumns.forEach((column) => {
+      const th = document.createElement('th');
+      th.dataset.columnKey = column.key;
+      th.className = `${column.headerClass || ''} relative align-top bg-gray-50 whitespace-nowrap`;
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'flex flex-col gap-1';
+
+      const labelRow = document.createElement('div');
+      labelRow.className = 'flex items-center justify-between gap-1';
+
+      const label = document.createElement('span');
+      label.textContent = column.label;
+      label.className = 'flex-1 text-[10px] font-semibold uppercase leading-tight tracking-wide text-gray-600';
+      if (column.headerClass?.includes('text-right')) label.classList.add('text-right');
+      labelRow.appendChild(label);
+
+      if (!column.disableSort) {
+        const sortGroup = document.createElement('div');
+        sortGroup.className = 'flex flex-col items-center justify-center gap-px text-gray-400';
+
+        ['asc', 'desc'].forEach((direction) => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.dataset.funcSortButton = 'true';
+          button.dataset.columnKey = column.key;
+          button.dataset.sortDirection = direction;
+          button.className = 'flex h-4 w-4 items-center justify-center rounded border border-transparent text-gray-400 transition';
+          button.setAttribute('aria-label', `Ordenar ${direction === 'asc' ? 'crescente' : 'decrescente'} por ${column.label}`);
+          button.innerHTML = `<i class="fas fa-sort-${direction === 'asc' ? 'up' : 'down'} text-[10px]"></i>`;
+          button.addEventListener('click', () => setFuncTableSort(column.key, direction));
+          sortGroup.appendChild(button);
+        });
+
+        labelRow.appendChild(sortGroup);
+      }
+
+      wrapper.appendChild(labelRow);
+
+      const filterRow = document.createElement('div');
+      filterRow.className = 'flex items-center gap-1';
+
+      if (!column.disableFilter) {
+        const filter = document.createElement('input');
+        filter.type = 'text';
+        filter.placeholder = 'Filtrar';
+        filter.value = funcTableState.filters[column.key] || '';
+        filter.className =
+          'flex-1 rounded border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20';
+        filter.addEventListener('input', (event) => {
+          funcTableState.filters[column.key] = event.target.value || '';
+          renderTable();
+        });
+
+        const popoverButton = document.createElement('button');
+        popoverButton.type = 'button';
+        popoverButton.className =
+          'flex h-8 w-8 items-center justify-center rounded border border-gray-200 bg-white text-gray-500 transition hover:border-primary/50 hover:text-primary';
+        popoverButton.setAttribute('aria-label', `Filtrar valores da coluna ${column.label}`);
+        popoverButton.innerHTML = '<i class="fas fa-magnifying-glass"></i>';
+        popoverButton.addEventListener('click', (event) => {
+          event.preventDefault();
+          toggleFuncionarioFilterPopover(column, popoverButton);
+        });
+
+        filterRow.append(filter, popoverButton);
+      } else {
+        const spacer = document.createElement('div');
+        spacer.className = 'h-8';
+        filterRow.appendChild(spacer);
+      }
+
+      wrapper.appendChild(filterRow);
+      th.appendChild(wrapper);
+
+      if (!column.disableResize) {
+        const resizeHandle = document.createElement('div');
+        resizeHandle.className =
+          'absolute inset-y-0 right-0 flex w-2 cursor-col-resize select-none items-center justify-center px-px';
+        resizeHandle.setAttribute('aria-label', `Redimensionar coluna ${column.label}`);
+        resizeHandle.innerHTML = '<span class="pointer-events-none block h-8 w-px rounded-full bg-gray-200"></span>';
+        resizeHandle.addEventListener('mousedown', (event) => startFuncColumnResize(column, th, event));
+        resizeHandle.addEventListener('touchstart', (event) => startFuncColumnResize(column, th, event));
+        th.appendChild(resizeHandle);
+      }
+
+      row.appendChild(th);
+    });
+
+    funcTableElements.tableHead.appendChild(row);
+    updateFuncSortIndicators();
+    applyFuncColumnWidths(true);
+  };
+
+  // Render com filtros, ordenação e redimensionamento
+  function renderTable(funcionarios) {
+    ensureFuncTableShell();
+    if (Array.isArray(funcionarios)) {
+      funcTableState.data = funcionarios;
+      syncFuncionarioValueFilters();
+      buildFuncionarioTableHead();
+    }
+
+    if (!funcTableElements.tableBody) return;
+    funcTableElements.tableBody.innerHTML = '';
+
+    const visible = applyFuncionarioTableState(funcTableState.data);
+
+    if (!visible.length) {
+      const emptyRow = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = funcTableColumns.length;
+      td.className = 'px-4 py-6 text-center text-gray-500';
+      td.textContent = 'Nenhum funcionário cadastrado.';
+      emptyRow.appendChild(td);
+      funcTableElements.tableBody.appendChild(emptyRow);
+      updateFuncionarioCounter(0);
+      applyFuncColumnWidths();
+      return;
+    }
+
+    visible.forEach((f) => {
+      const row = document.createElement('tr');
+      row.className = 'hover:bg-gray-50';
+
+      funcTableColumns.forEach((column) => {
+        const cell = document.createElement('td');
+        cell.dataset.columnKey = column.key;
+        cell.className = column.cellClass || 'px-4 py-3';
+
+        if (column.key === 'acoes') {
+          cell.innerHTML = `
+            <div class="flex justify-end gap-2 text-[11px]">
+              <button class="inline-flex items-center gap-1 rounded-lg border border-emerald-100 px-2 py-1 font-semibold text-emerald-700 transition hover:border-emerald-200 hover:bg-emerald-50" data-action="edit" data-id="${f._id}">
+                <i class="fa-solid fa-pen-to-square"></i>
+                Editar
+              </button>
+              <button class="inline-flex items-center gap-1 rounded-lg border border-red-100 px-2 py-1 font-semibold text-red-700 transition hover:border-red-200 hover:bg-red-50" data-action="delete" data-id="${f._id}">
+                <i class="fa-solid fa-trash"></i>
+                Remover
+              </button>
+            </div>
+          `;
+        } else {
+          cell.textContent = getFuncionarioDisplayValue(f, column);
+        }
+
+        row.appendChild(cell);
+      });
+
+      funcTableElements.tableBody.appendChild(row);
+    });
+
+    updateFuncionarioCounter(visible.length);
+    applyFuncColumnWidths();
   }
 
   async function loadFuncionarios() {
+    resetFuncTableShell();
     tabela.innerHTML = `<p class="text-gray-600">Carregando funcionários...</p>`;
     try {
       const res = await fetch(API.list, { headers: headers() });
@@ -1531,7 +2313,7 @@ document.addEventListener('DOMContentLoaded', () => {
   btnAdd?.addEventListener('click', openSearchModal);
 
   modal.addEventListener('click', (e) => {
-    const back = e.target === modal;
+    const back = e.target === modal || e.target.hasAttribute('data-close-modal');
     const x = e.target.closest('#modal-close');
     const cancel = e.target.closest('#btn-cancelar');
     if (back || x || cancel) { e.preventDefault(); closeModal(); }
