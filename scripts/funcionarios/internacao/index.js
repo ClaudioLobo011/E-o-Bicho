@@ -908,6 +908,34 @@ function getUserEmpresasOptions(userOverride = null) {
     .filter(Boolean);
 }
 
+function getUserIdForFetch(userOverride = null) {
+  const user = userOverride || getSelectedUserData() || getLoggedInUserData();
+  const idCandidate =
+    (user &&
+      (user.id ||
+        user._id ||
+        user.userId ||
+        user.funcionarioId ||
+        user.value ||
+        user.codigo ||
+        user.codigoLoja)) ||
+    '';
+  return typeof idCandidate === 'string' ? idCandidate.trim() : String(idCandidate || '').trim();
+}
+
+async function fetchUserEmpresasFromDatabase(userOverride = null) {
+  const userId = getUserIdForFetch(userOverride);
+  if (!userId) return [];
+
+  try {
+    const userData = await requestJson(`/users/${encodeURIComponent(userId)}`);
+    return getUserEmpresasOptions(userData);
+  } catch (error) {
+    console.warn('internacao: falha ao consultar empresas direto no banco', error);
+    return [];
+  }
+}
+
 function showToastMessage(message, type = 'info') {
   const text = String(message || '').trim();
   if (!text) return;
@@ -3949,8 +3977,9 @@ function ensureSelectOption(select, option) {
   select.appendChild(opt);
 }
 
-function populateEmpresaSelect(extraOption) {
+async function populateEmpresaSelect(extraOption) {
   if (!internarModal.empresaSelect) return;
+  internarModal.empresaSelect.innerHTML = '<option value="">Carregando...</option>';
   const selectedUser =
     internarModal.state?.selectedUser ||
     internarModal.state?.usuarioSelecionado ||
@@ -3958,7 +3987,17 @@ function populateEmpresaSelect(extraOption) {
     internarModal.state?.user ||
     internarModal.state?.funcionario ||
     null;
-  const options = getUserEmpresasOptions(selectedUser);
+
+  let options = getUserEmpresasOptions(selectedUser);
+
+  if (!options.length) {
+    options = await fetchUserEmpresasFromDatabase(selectedUser);
+  }
+
+  if (!options.length) {
+    options = await fetchUserEmpresasFromDatabase();
+  }
+
   internarModal.empresasOptions = options;
   const markup = ['<option value="">Selecione</option>', ...options.map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`)];
   internarModal.empresaSelect.innerHTML = markup.join('');
@@ -3975,6 +4014,10 @@ function populateEmpresaSelect(extraOption) {
 
   if (!internarModal.empresaSelect.value && options.length === 1) {
     internarModal.empresaSelect.value = options[0].value;
+  }
+
+  if (!options.length) {
+    setInternarModalError('Não foi possível carregar as empresas vinculadas ao usuário selecionado.');
   }
 }
 
@@ -4073,7 +4116,10 @@ function openInternarPetModal(dataset, options = {}) {
     }
   }
   populateDynamicSelects(dataset, selectOverrides);
-  populateEmpresaSelect(getEmpresaOptionFromRecord(record));
+  populateEmpresaSelect(getEmpresaOptionFromRecord(record)).catch((error) => {
+    console.warn('internacao: não foi possível atualizar a lista de empresas', error);
+    setInternarModalError('Não foi possível carregar as empresas do usuário selecionado.');
+  });
   if (mode === 'edit' && record) {
     fillInternarModalFormFromRecord(record);
   }
