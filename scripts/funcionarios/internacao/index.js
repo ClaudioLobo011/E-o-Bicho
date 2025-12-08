@@ -1485,6 +1485,17 @@ async function handleInternarModalSubmit(event) {
   const situacaoDetails = getOptionDetails(INTERNAR_SITUACAO_OPTIONS, formData.get('internarSituacao'));
   const riscoDetails = getOptionDetails(INTERNAR_RISCO_OPTIONS, formData.get('internarRisco'));
   const empresaDetails = getOptionDetails(internarModal.empresasOptions || [], formData.get('internarEmpresa'));
+  const empresaPayload = empresaDetails.value || empresaDetails.label
+    ? {
+        _id: empresaDetails.value || empresaDetails.label,
+        id: empresaDetails.value || empresaDetails.label,
+        value: empresaDetails.value || empresaDetails.label,
+        nomeFantasia: empresaDetails.label || empresaDetails.value,
+        nome: empresaDetails.label || empresaDetails.value,
+        razaoSocial: empresaDetails.label || empresaDetails.value,
+        label: empresaDetails.label || empresaDetails.value,
+      }
+    : null;
   const payload = {
     petId: petInfo.petId || '',
     petNome,
@@ -1512,6 +1523,10 @@ async function handleInternarModalSubmit(event) {
     acessorios: (formData.get('internarAcessorios') || '').toString().trim(),
     observacoes: (formData.get('internarObservacoes') || '').toString().trim(),
   };
+
+  if (empresaPayload) {
+    payload.empresa = empresaPayload;
+  }
 
   setInternarModalLoading(true);
   try {
