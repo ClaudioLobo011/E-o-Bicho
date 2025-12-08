@@ -59,6 +59,13 @@ function filterPacientes(dataset, petId) {
   return dataset.pacientes.filter((pet) => pet.id === petId);
 }
 
+function matchesEmpresaFilter(registro, empresaId) {
+  const target = String(empresaId || '').trim();
+  if (!target) return true;
+  const current = String(registro?.empresaId || '').trim();
+  return current && current === target;
+}
+
 function buildPendencias(list = []) {
   if (!list.length) return '<p class="text-sm text-gray-500">Sem pendências registradas.</p>';
   return `
@@ -780,6 +787,7 @@ function attachExecucaoModalHandlers(root, pacientes = [], selectedDate = '') {
 
 export function renderAnimaisInternados(root, dataset, state = {}) {
   const petId = state?.petId || '';
+  const empresaId = state?.empresaId || '';
   const internacoes = Array.isArray(state?.internacoes) ? state.internacoes : [];
 
   const internacoesAtivas = internacoes.filter((registro) => {
@@ -789,6 +797,10 @@ export function renderAnimaisInternados(root, dataset, state = {}) {
     const alta = situacaoKey.includes('alta');
     return !(cancelado || obito || alta);
   });
+
+  const internacoesFiltradas = empresaId
+    ? internacoesAtivas.filter((registro) => matchesEmpresaFilter(registro, empresaId))
+    : internacoesAtivas;
 
   if (state?.internacoesLoading) {
     root.innerHTML = buildEmptyState('Carregando internações...');
@@ -807,20 +819,23 @@ export function renderAnimaisInternados(root, dataset, state = {}) {
     return;
   }
 
-  if (!internacoesAtivas.length) {
-    root.innerHTML = buildEmptyState('Nenhuma internação ativa no momento.');
+  if (!internacoesFiltradas.length) {
+    const mensagem = empresaId
+      ? 'Nenhuma internação ativa para a empresa selecionada.'
+      : 'Nenhuma internação ativa no momento.';
+    root.innerHTML = buildEmptyState(mensagem);
     return;
   }
 
-  const total = internacoesAtivas.length;
-  const proximasAltas = internacoesAtivas.filter((registro) => {
+  const total = internacoesFiltradas.length;
+  const proximasAltas = internacoesFiltradas.filter((registro) => {
     if (!registro.altaPrevistaISO) return false;
     const alta = new Date(registro.altaPrevistaISO);
     if (Number.isNaN(alta.getTime())) return false;
     const diff = (alta - Date.now()) / (1000 * 60 * 60);
     return diff <= 48;
   }).length;
-  const isolamento = internacoesAtivas.filter((registro) => (registro.situacao || '').toLowerCase().includes('isolamento')).length;
+  const isolamento = internacoesFiltradas.filter((registro) => (registro.situacao || '').toLowerCase().includes('isolamento')).length;
 
   const resumo = `
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -843,8 +858,8 @@ export function renderAnimaisInternados(root, dataset, state = {}) {
   `;
 
   const registrosFiltrados = petId
-    ? internacoesAtivas.filter((registro) => registro.filterKey === petId)
-    : internacoesAtivas;
+    ? internacoesFiltradas.filter((registro) => registro.filterKey === petId)
+    : internacoesFiltradas;
 
   const cardsContent = registrosFiltrados.length
     ? registrosFiltrados

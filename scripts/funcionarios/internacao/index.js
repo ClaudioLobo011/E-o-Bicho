@@ -6528,11 +6528,47 @@ function isInternacaoAtiva(registro) {
   return !(cancelado || obito || alta);
 }
 
+function matchesEmpresaFilter(registro, empresaId) {
+  const target = String(empresaId || '').trim();
+  if (!target) return true;
+  const current = String(registro?.empresaId || '').trim();
+  return current && current === target;
+}
+
+function fillEmpresaFilters(state = {}) {
+  const selects = document.querySelectorAll('[data-internacao-empresa-filter]');
+  if (!selects.length) return;
+
+  const loading = !!state.empresasLoading;
+  const error = String(state.empresasError || '').trim();
+  const currentValue = String(state.empresaId || '').trim();
+  const options = Array.isArray(state.empresasOptions) ? state.empresasOptions : [];
+
+  const baseMarkup = loading
+    ? ['<option value="">Carregando...</option>']
+    : [
+        '<option value="">Todas as empresas</option>',
+        ...options.map((opt) =>
+          `<option value="${escapeHtml(opt.value)}" ${opt.value === currentValue ? 'selected' : ''}>${escapeHtml(opt.label)}</option>`,
+        ),
+      ];
+
+  const markup = !loading && error && !options.length
+    ? [...baseMarkup, `<option value="" disabled>${escapeHtml(error)}</option>`]
+    : baseMarkup;
+
+  selects.forEach((select) => {
+    select.innerHTML = markup.join('');
+    select.value = currentValue || '';
+  });
+}
+
 function fillPetFilters(dataset, currentPetId, state = {}) {
   const baseOptions = [];
   if (Array.isArray(state?.internacoes) && state.internacoes.length) {
     const seen = new Set();
     state.internacoes.filter(isInternacaoAtiva).forEach((registro) => {
+      if (!matchesEmpresaFilter(registro, state.empresaId)) return;
       const value = registro.filterKey;
       if (!value || seen.has(value)) return;
       seen.add(value);
@@ -6649,9 +6685,13 @@ async function fetchInternacoesData(dataset, state = {}, { quiet = false, onUpda
     state.internacoes = sorted;
     state.internacoesLoading = false;
   }
-  if (state && state.petId) {
-    const availableKeys = new Set(sorted.filter(isInternacaoAtiva).map((item) => item.filterKey));
-    if (availableKeys.size && !availableKeys.has(state.petId)) {
+  if (state) {
+    const availableKeys = new Set(
+      sorted
+        .filter((item) => isInternacaoAtiva(item) && matchesEmpresaFilter(item, state.empresaId))
+        .map((item) => item.filterKey),
+    );
+    if (availableKeys.size && state.petId && !availableKeys.has(state.petId)) {
       state.petId = '';
     }
   }
@@ -6728,6 +6768,58 @@ async function fetchVeterinariosData(dataset, state = {}, { quiet = false } = {}
     }
     if (!quiet) {
       showToastMessage(state?.veterinariosError || 'Não foi possível carregar os veterinários.', 'warning');
+    }
+    return [];
+  }
+}
+
+async function fetchEmpresasForFilters(state = {}, { quiet = false, dataset } = {}) {
+  const datasetRef = dataset || getDataset();
+  if (state) {
+    state.empresasLoading = true;
+    state.empresasError = '';
+  }
+
+  fillEmpresaFilters(state);
+
+  try {
+    let options = getUserEmpresasOptions();
+    if (options.length) {
+      options = await hydrateEmpresasOptions(options);
+    }
+
+    if (!options.length) {
+      options = await fetchUserEmpresasFromDatabase();
+    }
+
+    if (state) {
+      state.empresasOptions = options;
+      state.empresasLoading = false;
+      if (!state.empresaId && options.length === 1) {
+        state.empresaId = options[0].value;
+      }
+      if (state.empresaId && !options.some((opt) => opt?.value === state.empresaId)) {
+        state.empresaId = '';
+      }
+    }
+
+    fillEmpresaFilters(state);
+    fillPetFilters(datasetRef, state?.petId, state);
+
+    if (state?.render) {
+      state.render();
+    }
+
+    return options;
+  } catch (error) {
+    console.warn('internacao: não foi possível carregar as empresas para filtro', error);
+    if (state) {
+      state.empresasError = error.message || 'Não foi possível carregar as empresas.';
+      state.empresasLoading = false;
+    }
+    fillEmpresaFilters(state);
+    if (!quiet) {
+      showToastMessage(state?.empresasError || 'Não foi possível carregar as empresas.', 'warning');
     }
     return [];
   }
@@ -7455,6 +7547,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const dataset = getDataset();
   const state = {
     petId: '',
+    empresaId: '',
     execucaoData: getLocalDateInputValue(),
     boxes: Array.isArray(dataset.boxes) ? [...dataset.boxes] : [],
     boxesLoading: false,
@@ -7465,6 +7558,9 @@ document.addEventListener('DOMContentLoaded', () => {
     internacoes: Array.isArray(dataset.internacoes) ? [...dataset.internacoes] : [],
     internacoesLoading: false,
     internacoesError: '',
+    empresasOptions: [],
+    empresasLoading: false,
+    empresasError: '',
     parametrosConfig: [],
     parametrosLoading: false,
     parametrosError: '',
@@ -7497,6 +7593,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   state.refreshBoxes = () => fetchBoxesData(dataset, state, { quiet: true });
 
+  fillEmpresaFilters(state);
   fillPetFilters(dataset, state.petId, state);
   updateSyncInfo(dataset);
   render();
@@ -7520,10 +7617,28 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   fetchVeterinariosData(dataset, state, { quiet: true });
+  fetchEmpresasForFilters(state, { quiet: true, dataset });
 
   document.querySelectorAll('[data-internacao-pet-filter]').forEach((select) => {
     select.addEventListener('change', (event) => {
       state.petId = event.target.value;
+      fillPetFilters(dataset, state.petId, state);
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-internacao-empresa-filter]').forEach((select) => {
+    select.addEventListener('change', (event) => {
+      state.empresaId = event.target.value || '';
+      const availableKeys = new Set(
+        state.internacoes
+          .filter((item) => isInternacaoAtiva(item) && matchesEmpresaFilter(item, state.empresaId))
+          .map((item) => item.filterKey),
+      );
+      if (state.petId && availableKeys.size && !availableKeys.has(state.petId)) {
+        state.petId = '';
+      }
+      fillEmpresaFilters(state);
       fillPetFilters(dataset, state.petId, state);
       render();
     });
