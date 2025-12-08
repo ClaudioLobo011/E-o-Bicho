@@ -923,6 +923,7 @@ export function renderAnimaisInternados(root, dataset, state = {}) {
 
 export function renderMapaExecucao(root, dataset, state = {}) {
   const petId = state?.petId || '';
+  const empresaId = state?.empresaId || '';
   const internacoes = Array.isArray(state?.internacoes) ? state.internacoes : [];
   const selectedDate = state?.execucaoData || getLocalISODate();
 
@@ -943,11 +944,13 @@ export function renderMapaExecucao(root, dataset, state = {}) {
     return;
   }
 
-  const ativos = internacoes.filter((registro) => {
-    const situacaoKey = normalizeActionKey(registro?.situacao || registro?.situacaoCodigo);
-    const alta = registro?.altaRegistrada || situacaoKey.includes('alta');
-    return !registro.cancelado && !registro.obitoRegistrado && !alta;
-  });
+  const ativos = internacoes
+    .filter((registro) => {
+      const situacaoKey = normalizeActionKey(registro?.situacao || registro?.situacaoCodigo);
+      const alta = registro?.altaRegistrada || situacaoKey.includes('alta');
+      return !registro.cancelado && !registro.obitoRegistrado && !alta;
+    })
+    .filter((registro) => matchesEmpresaFilter(registro, empresaId));
   const filtrados = petId ? ativos.filter((registro) => registro.filterKey === petId) : ativos;
 
   if (!filtrados.length) {
@@ -1090,6 +1093,7 @@ export function renderMapaExecucao(root, dataset, state = {}) {
 
 export function renderHistoricoInternacoes(root, dataset, state = {}) {
   const petId = state?.petId || '';
+  const empresaId = state?.empresaId || '';
   const internacoes = Array.isArray(state?.internacoes) ? state.internacoes : [];
 
   if (state?.internacoesLoading && !internacoes.length) {
@@ -1109,13 +1113,15 @@ export function renderHistoricoInternacoes(root, dataset, state = {}) {
     return;
   }
 
-  const historicoConcluido = internacoes.filter((registro) => {
-    const situacaoKey = normalizeActionKey(registro?.situacao || registro?.situacaoCodigo);
-    const cancelado = registro?.cancelado || situacaoKey === 'cancelado';
-    const obito = registro?.obitoRegistrado || situacaoKey === 'obito';
-    const alta = situacaoKey.includes('alta');
-    return cancelado || obito || alta;
-  });
+  const historicoConcluido = internacoes
+    .filter((registro) => {
+      const situacaoKey = normalizeActionKey(registro?.situacao || registro?.situacaoCodigo);
+      const cancelado = registro?.cancelado || situacaoKey === 'cancelado';
+      const obito = registro?.obitoRegistrado || situacaoKey === 'obito';
+      const alta = situacaoKey.includes('alta');
+      return cancelado || obito || alta;
+    })
+    .filter((registro) => matchesEmpresaFilter(registro, empresaId));
 
   const filtrados = petId ? historicoConcluido.filter((registro) => registro.filterKey === petId) : historicoConcluido;
 
