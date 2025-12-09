@@ -274,11 +274,15 @@ function buildPublicReceivable(receivable, referenceDate = new Date()) {
       _id: plain.company._id,
       name: buildCompanyName(plain.company),
     } : null,
-    customer: plain.customer ? {
-      _id: plain.customer._id,
-      name: buildDisplayName(plain.customer),
-      document: plain.customer.cpf || plain.customer.cnpj || null,
-    } : null,
+    customer: plain.customer
+      ? {
+          _id: plain.customer._id,
+          name: buildDisplayName(plain.customer),
+          document: plain.customer.cpf || plain.customer.cnpj || null,
+        }
+      : plain.customerName
+      ? { _id: null, name: plain.customerName, document: null }
+      : null,
     installmentsCount: plain.installmentsCount,
     issueDate: plain.issueDate,
     dueDate: plain.dueDate,
@@ -425,7 +429,9 @@ async function assembleReceivablePayload(body, { existing = null } = {}) {
   }
 
   const customer = normalizeString(body.customer) || (existing ? String(existing.customer) : '');
-  if (!customer || !mongoose.Types.ObjectId.isValid(customer)) {
+  const customerNameRaw =
+    normalizeString(body.customerName || body.customerLabel) || existing?.customerName || '';
+  if (customer && !mongoose.Types.ObjectId.isValid(customer)) {
     throw Object.assign(new Error('Selecione o cliente vinculado à conta a receber.'), { status: 400 });
   }
 
@@ -466,17 +472,25 @@ async function assembleReceivablePayload(body, { existing = null } = {}) {
   const documentNumber = normalizeString(body.documentNumber || existing?.documentNumber);
   const notes = normalizeString(body.notes || existing?.notes);
 
-  const [companyExists, customerExists] = await Promise.all([
+  const [companyExists, customerDocument] = await Promise.all([
     Store.exists({ _id: company }),
-    User.exists({ _id: customer }),
+    customer ? User.findById(customer) : null,
   ]);
 
   if (!companyExists) {
     throw Object.assign(new Error('Empresa selecionada não foi encontrada.'), { status: 404 });
   }
 
-  if (!customerExists) {
-    throw Object.assign(new Error('Cliente selecionado não foi encontrado.'), { status: 404 });
+  let customerName = customerNameRaw;
+  if (customer) {
+    if (!customerDocument) {
+      throw Object.assign(new Error('Cliente selecionado não foi encontrado.'), { status: 404 });
+    }
+    if (!customerName) {
+      customerName = buildDisplayName(customerDocument);
+    }
+  } else {
+    customerName = customerName || 'Cliente não informado';
   }
 
   const [bankAccount, accountingAccount] = await Promise.all([
@@ -629,7 +643,8 @@ async function assembleReceivablePayload(body, { existing = null } = {}) {
   return {
     code,
     company,
-    customer,
+    customer: customer || null,
+    customerName,
     installmentsCount: installments.length,
     issueDate,
     dueDate,
