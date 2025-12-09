@@ -226,25 +226,30 @@
         </section>
 
         <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-5">
-          <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 class="text-lg font-semibold text-gray-800">Previsão de recebimentos</h2>
-              <p class="text-sm text-gray-600">Visualize os valores a receber agrupados por período e status.</p>
+            <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h2 class="text-lg font-semibold text-gray-800">Previsão de recebimentos</h2>
+                <p class="text-sm text-gray-600">Visualize os valores a receber agrupados por período e status.</p>
+              </div>
+              <div class="flex flex-wrap items-center gap-2 md:justify-end">
+                <div class="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm">
+                  <span class="text-gray-600 font-semibold">Período</span>
+                  <input
+                    type="date"
+                    id="receivable-forecast-start"
+                    class="rounded border border-gray-200 px-2 py-1 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  />
+                  <span class="text-gray-400">até</span>
+                  <input
+                    type="date"
+                    id="receivable-forecast-end"
+                    class="rounded border border-gray-200 px-2 py-1 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  />
+                </div>
+              </div>
             </div>
-            <div class="flex flex-wrap items-center gap-2">
-              <select class="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                <option value="7">Próximos 7 dias</option>
-                <option value="30">Próximos 30 dias</option>
-                <option value="90">Próximos 90 dias</option>
-              </select>
-              <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
-                <i class="fas fa-file-export"></i>
-                Exportar
-              </button>
-            </div>
-          </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <div class="rounded-xl border border-amber-100 bg-amber-50 p-4">
               <span class="text-xs font-semibold uppercase tracking-wide text-amber-700">Em aberto</span>
               <p class="mt-2 text-2xl font-bold text-amber-800" id="receivable-summary-open-total">R$ 0,00</p>
@@ -268,23 +273,16 @@
           </div>
 
           <div class="overflow-hidden rounded-lg border border-gray-200">
-            <table class="min-w-full divide-y divide-gray-200 text-sm">
-              <thead class="bg-gray-50 text-gray-600">
-                <tr>
-                  <th scope="col" class="px-4 py-2 text-left font-semibold">Cliente</th>
-                  <th scope="col" class="px-4 py-2 text-left font-semibold">Documento</th>
-                  <th scope="col" class="px-4 py-2 text-left font-semibold">Vencimento</th>
-                  <th scope="col" class="px-4 py-2 text-right font-semibold">Valor</th>
-                  <th scope="col" class="px-4 py-2 text-center font-semibold">Status</th>
-                  <th scope="col" class="px-4 py-2 text-center font-semibold">Ações</th>
-                </tr>
-              </thead>
-              <tbody id="receivable-forecast-body" class="divide-y divide-gray-100 text-gray-700">
-                <tr>
-                  <td colspan="6" class="px-4 py-6 text-center text-sm text-gray-500">Cadastre contas a receber para acompanhar a previsão.</td>
-                </tr>
-              </tbody>
-            </table>
+            <div class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-100 text-left text-[11px] leading-[1.35] text-gray-700" id="receivable-forecast-table">
+                <thead id="receivable-forecast-head" class="bg-gray-50 text-left text-[10px] uppercase tracking-wide text-gray-500"></thead>
+                <tbody id="receivable-forecast-body" class="divide-y divide-gray-100 bg-white text-[11px] text-gray-700">
+                  <tr>
+                    <td colspan="6" class="px-4 py-6 text-center text-sm text-gray-500">Cadastre contas a receber para acompanhar a previsão.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
       </div>

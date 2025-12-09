@@ -30,7 +30,8 @@ const accountReceivableSchema = new Schema(
   {
     code: { type: String, required: true, unique: true, trim: true },
     company: { type: Schema.Types.ObjectId, ref: 'Store', required: true },
-    customer: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    customer: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+    customerName: { type: String, trim: true, default: '' },
     installmentsCount: { type: Number, min: 1, default: 1 },
     issueDate: { type: Date, required: true },
     dueDate: { type: Date, required: true },

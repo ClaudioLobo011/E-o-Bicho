@@ -30,7 +30,69 @@
     receivableCache: new Map(),
     currentEditing: null,
     isSaving: false,
+    forecastTable: {
+      search: '',
+      sort: { key: 'dueDate', direction: 'asc' },
+      manualOrder: [],
+      draggingId: null,
+      filters: {},
+      filterSearch: {},
+      range: { start: '', end: '' },
+    },
   };
+
+  const forecastColumns = [
+    {
+      key: 'customer',
+      label: 'Cliente',
+      minWidth: 64,
+      headerClass: 'px-3 py-2',
+      cellClass: 'px-3 py-2.5 text-[11px] font-semibold text-gray-800',
+      placeholder: 'Filtrar cliente',
+    },
+    {
+      key: 'document',
+      label: 'Documento',
+      minWidth: 64,
+      headerClass: 'px-3 py-2',
+      cellClass: 'px-3 py-2.5 text-[11px]',
+      placeholder: 'Filtrar documento',
+    },
+    {
+      key: 'dueDate',
+      label: 'Vencimento',
+      minWidth: 60,
+      headerClass: 'px-3 py-2',
+      cellClass: 'px-3 py-2.5 text-[11px]',
+      placeholder: 'Filtrar data',
+      getComparable: (row) => new Date(row.dueDate || 0).getTime(),
+      getDisplay: (row) => formatDateBR(row.dueDate),
+    },
+    {
+      key: 'value',
+      label: 'Valor',
+      minWidth: 52,
+      headerClass: 'px-3 py-2 text-right',
+      cellClass: 'px-3 py-2.5 text-right text-[11px] font-semibold text-gray-900',
+      placeholder: 'Filtrar valor',
+      isNumeric: true,
+      getComparable: (row) => (Number.isFinite(row.value) ? row.value : Number.NEGATIVE_INFINITY),
+      getDisplay: (row) => (Number.isFinite(row.value) ? formatCurrencyBR(row.value) : ''),
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      minWidth: 52,
+      headerClass: 'px-3 py-2 text-center',
+      cellClass: 'px-3 py-2.5 text-center text-[11px]',
+      placeholder: 'Filtrar status',
+    },
+  ];
+
+  forecastColumns.forEach((column) => {
+    state.forecastTable.filters[column.key] = '';
+    state.forecastTable.filterSearch[column.key] = '';
+  });
 
   const elements = {
     form: document.getElementById('receivable-form'),
@@ -64,6 +126,12 @@
     summaryProtestCount: document.getElementById('receivable-summary-protest-count'),
     historyBody: document.getElementById('receivable-history-body'),
     historyEmpty: document.getElementById('receivable-history-empty'),
+    forecastSearch: document.getElementById('receivable-forecast-search'),
+    forecastTable: document.getElementById('receivable-forecast-table'),
+    forecastHead: document.getElementById('receivable-forecast-head'),
+    forecastSortButtons: document.querySelectorAll('[data-forecast-sort]'),
+    forecastRangeStart: document.getElementById('receivable-forecast-start'),
+    forecastRangeEnd: document.getElementById('receivable-forecast-end'),
     saveButton: document.getElementById('receivable-save'),
     clearButton: document.getElementById('receivable-clear'),
   };
@@ -126,11 +194,62 @@
       .replace(/'/g, '&#39;');
   }
 
+  function normalizeText(value) {
+    if (value === null || value === undefined) return '';
+    try {
+      return String(value)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase();
+    } catch (err) {
+      console.error('accounts-receivable:normalizeText', err);
+      return String(value).toLowerCase();
+    }
+  }
+
+  function buildSearchRegex(rawValue) {
+    const normalized = normalizeText(rawValue || '').trim();
+    if (!normalized) return null;
+
+    const pattern = normalized
+      .split('*')
+      .map((segment) => segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      .join('.*');
+
+    if (!pattern) return null;
+
+    try {
+      return new RegExp(pattern, 'i');
+    } catch (err) {
+      console.error('accounts-receivable:buildSearchRegex', err);
+      return null;
+    }
+  }
+
   function formatDateBR(value) {
     if (!value) return '--';
     const date = value instanceof Date ? value : new Date(value);
     if (Number.isNaN(date.getTime())) return '--';
     return dateFormatter.format(date);
+  }
+
+  function getForecastDisplayValue(row, column) {
+    if (typeof column.getDisplay === 'function') return column.getDisplay(row);
+    if (column.key === 'status') {
+      return row.statusLabel || row.status || '';
+    }
+    if (column.key === 'customer') return row.customer || '—';
+    if (column.key === 'document') return row.document || '—';
+    if (column.key === 'value') return Number.isFinite(row.value) ? formatCurrencyBR(row.value) : '';
+    if (column.key === 'dueDate') return formatDateBR(row.dueDate);
+    return row[column.key] ?? '';
+  }
+
+  function getForecastComparableValue(row, column) {
+    if (typeof column.getComparable === 'function') return column.getComparable(row);
+    const display = getForecastDisplayValue(row, column);
+    if (typeof display === 'number') return display;
+    return normalizeText(display);
   }
 
   function buildModalSelectOptions(baseOptions, selectedValue, selectedLabel, placeholder = 'Selecione...') {
@@ -170,6 +289,37 @@
     const date = new Date(Date.UTC(year, month - 1, day));
     if (Number.isNaN(date.getTime())) return null;
     return date;
+  }
+
+  function normalizeDateOnly(value) {
+    const formatted = formatDateInputValue(value);
+    if (!formatted) return null;
+    return parseDateInputValue(formatted);
+  }
+
+  function getCurrentMonthRange() {
+    const today = new Date();
+    const start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+    const end = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 0));
+    return { start: formatDateInputValue(start) || '', end: formatDateInputValue(end) || '' };
+  }
+
+  function setForecastRange({ start = '', end = '', triggerRender = true } = {}) {
+    state.forecastTable.range = { start, end };
+    if (elements.forecastRangeStart) {
+      elements.forecastRangeStart.value = start;
+    }
+    if (elements.forecastRangeEnd) {
+      elements.forecastRangeEnd.value = end;
+    }
+    if (triggerRender) renderForecast();
+  }
+
+  function initializeForecastRange() {
+    const defaults = getCurrentMonthRange();
+    const start = elements.forecastRangeStart?.value || defaults.start;
+    const end = elements.forecastRangeEnd?.value || defaults.end;
+    setForecastRange({ start, end, triggerRender: false });
   }
 
   function clearSelect(select, placeholder) {
@@ -1109,6 +1259,113 @@
     return normalized;
   }
 
+  function ensureForecastTableLayout() {
+    if (!elements.forecastTable) return;
+    elements.forecastTable.style.tableLayout = 'fixed';
+    elements.forecastTable.style.width = 'max-content';
+    elements.forecastTable.style.minWidth = '100%';
+  }
+
+  function setForecastSort(key, desiredDirection = 'asc') {
+    const current = state.forecastTable.sort || {};
+    const nextDirection = current.key === key && current.direction === desiredDirection
+      ? desiredDirection === 'asc'
+        ? 'desc'
+        : 'asc'
+      : desiredDirection;
+    state.forecastTable.sort = { key, direction: nextDirection };
+    renderForecast();
+    updateForecastSortIndicators();
+  }
+
+  function buildForecastTableHead() {
+    if (!elements.forecastHead) return;
+    elements.forecastHead.innerHTML = '';
+
+    const row = document.createElement('tr');
+
+    forecastColumns.forEach((column) => {
+      const th = document.createElement('th');
+      th.dataset.columnKey = column.key;
+      th.className = `${column.headerClass || ''} relative align-top bg-gray-50 whitespace-nowrap`;
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'flex flex-col gap-1';
+
+      const labelRow = document.createElement('div');
+      labelRow.className = 'flex items-center justify-between gap-1';
+
+      const label = document.createElement('span');
+      label.textContent = column.label;
+      label.className = 'flex-1 text-[10px] font-semibold uppercase leading-tight tracking-wide text-gray-600';
+      if (column.isNumeric) label.classList.add('text-right');
+      labelRow.appendChild(label);
+
+      const sortGroup = document.createElement('div');
+      sortGroup.className = 'flex flex-col items-center justify-center gap-px text-gray-400';
+
+      ['asc', 'desc'].forEach((direction) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.forecastSortButton = 'true';
+        button.dataset.columnKey = column.key;
+        button.dataset.sortDirection = direction;
+        button.className = 'flex h-4 w-4 items-center justify-center rounded border border-transparent text-gray-400 transition';
+        button.setAttribute(
+          'aria-label',
+          `Ordenar ${direction === 'asc' ? 'crescente' : 'decrescente'} por ${column.label}`
+        );
+        button.innerHTML = `<i class="fas fa-sort-${direction === 'asc' ? 'up' : 'down'} text-[10px]"></i>`;
+        button.addEventListener('click', () => setForecastSort(column.key, direction));
+        sortGroup.appendChild(button);
+      });
+
+      labelRow.appendChild(sortGroup);
+
+      const filterRow = document.createElement('div');
+      filterRow.className = 'flex items-center gap-1';
+
+      const filter = document.createElement('input');
+      filter.type = 'text';
+      filter.placeholder = column.placeholder || 'Filtrar';
+      filter.value = state.forecastTable.filters[column.key] || '';
+      filter.className =
+        'flex-1 rounded border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20';
+      if (column.isNumeric) filter.classList.add('text-right');
+      filter.addEventListener('input', (event) => {
+        state.forecastTable.filters[column.key] = event.target.value || '';
+        renderForecast();
+      });
+
+      const searchButton = document.createElement('button');
+      searchButton.type = 'button';
+      searchButton.className =
+        'flex h-8 w-8 items-center justify-center rounded border border-gray-200 bg-white text-gray-500 transition hover:border-primary/50 hover:text-primary';
+      searchButton.setAttribute('aria-label', `Filtrar valores da coluna ${column.label}`);
+      searchButton.innerHTML = '<i class="fas fa-magnifying-glass"></i>';
+      searchButton.addEventListener('click', (event) => {
+        event.preventDefault();
+        filter.focus();
+      });
+
+      filterRow.append(filter, searchButton);
+
+      wrapper.append(labelRow, filterRow);
+      th.appendChild(wrapper);
+
+      row.appendChild(th);
+    });
+
+    const actionsTh = document.createElement('th');
+    actionsTh.className = 'px-3 py-2 text-center text-[10px] font-semibold uppercase tracking-wide text-gray-600';
+    actionsTh.textContent = 'Ações';
+    row.appendChild(actionsTh);
+
+    elements.forecastHead.appendChild(row);
+    updateForecastSortIndicators();
+    ensureForecastTableLayout();
+  }
+
   function renderForecast() {
     if (!elements.forecastBody) return;
     const tbody = elements.forecastBody;
@@ -1118,7 +1375,7 @@
     if (!receivables.length) {
       const row = document.createElement('tr');
       const cell = document.createElement('td');
-      cell.colSpan = 6;
+      cell.colSpan = forecastColumns.length + 1;
       cell.className = 'px-4 py-6 text-center text-sm text-gray-500';
       cell.textContent = 'Cadastre contas a receber para acompanhar a previsão.';
       row.appendChild(cell);
@@ -1160,6 +1417,7 @@
         const notes = installment.paymentNotes || receivable.notes || '';
         const computedStatus = computeStatus(receivable, installment);
         const normalizedStatus = canonicalStatus(installment.status) || computedStatus;
+        const badge = buildStatusBadge(normalizedStatus);
         const originRaw = installment.originInstallmentNumber;
         const originNumber = Number.parseInt(originRaw, 10);
         const isResidual = Number.isFinite(originNumber);
@@ -1178,6 +1436,7 @@
               : '')
             || ''
           ).toLowerCase();
+        const rowId = `${receivable.id || receivable._id || 'sem-id'}-${installment.number || '1'}`;
         rows.push({
           receivableId: receivable.id || receivable._id,
           code: receivable.code || receivable.documentNumber || receivable.document || '—',
@@ -1186,6 +1445,8 @@
           dueDate: installment.dueDate || receivable.dueDate,
           value: installment.value || receivable.totalValue,
           status: normalizedStatus,
+          statusLabel: badge.label || normalizedStatus,
+          statusBadge: badge,
           installmentNumber: installment.number || null,
           originInstallmentNumber: isResidual ? originNumber : null,
           issueDate,
@@ -1195,34 +1456,100 @@
           paymentMethodLabel,
           paymentMethodType,
           notes,
+          rowId,
         });
       });
     });
 
-    rows.sort((a, b) => {
-      const timeA = new Date(a.dueDate || 0).getTime();
-      const timeB = new Date(b.dueDate || 0).getTime();
-      return timeA - timeB;
+    const { start, end } = state.forecastTable.range || {};
+    const startDate = parseDateInputValue(start);
+    const endDate = parseDateInputValue(end);
+
+    const filteredByRange = rows.filter((row) => {
+      const dueDate = normalizeDateOnly(row.dueDate);
+      if (!dueDate) return true;
+      if (startDate && dueDate < startDate) return false;
+      if (endDate && dueDate > endDate) return false;
+      return true;
     });
 
-    rows.forEach((item) => {
+    const filteredByColumns = filteredByRange.filter((row) =>
+      forecastColumns.every((column) => {
+        const term = state.forecastTable.filters[column.key] || '';
+        const regex = buildSearchRegex(term);
+        if (!regex) return true;
+        const display = normalizeText(getForecastDisplayValue(row, column) || '');
+        return regex.test(display);
+      })
+    );
+
+    const searchRegex = buildSearchRegex(state.forecastTable.search);
+    const filteredRows = searchRegex
+      ? filteredByColumns.filter((row) => {
+          const haystack = [
+            row.customer,
+            row.document,
+            row.status,
+            row.code,
+            row.bankAccountLabel,
+            row.paymentMethodLabel,
+            row.notes,
+          ]
+            .map(normalizeText)
+            .join(' ');
+          return searchRegex.test(haystack);
+        })
+      : filteredByColumns;
+
+    const sortKey = state.forecastTable.sort?.key || 'dueDate';
+    const direction = state.forecastTable.sort?.direction === 'desc' ? -1 : 1;
+    const manualOrder = Array.isArray(state.forecastTable.manualOrder)
+      ? state.forecastTable.manualOrder
+      : [];
+    const targetColumn = forecastColumns.find((column) => column.key === sortKey);
+
+    const sortedRows = [...filteredRows].sort((a, b) => {
+      if (sortKey === 'manual' && manualOrder.length) {
+        const indexA = manualOrder.indexOf(a.rowId);
+        const indexB = manualOrder.indexOf(b.rowId);
+        if (indexA !== -1 || indexB !== -1) {
+          const safeA = indexA === -1 ? Number.MAX_SAFE_INTEGER : indexA;
+          const safeB = indexB === -1 ? Number.MAX_SAFE_INTEGER : indexB;
+          if (safeA !== safeB) return (safeA - safeB) * direction;
+        }
+      }
+
+      if (!targetColumn) return 0;
+
+      const valueA = getForecastComparableValue(a, targetColumn);
+      const valueB = getForecastComparableValue(b, targetColumn);
+
+      if (typeof valueA === 'number' && typeof valueB === 'number') {
+        if (!Number.isFinite(valueA) && !Number.isFinite(valueB)) return 0;
+        if (!Number.isFinite(valueA)) return -1 * direction;
+        if (!Number.isFinite(valueB)) return 1 * direction;
+        if (valueA === valueB) return 0;
+        return valueA > valueB ? direction : -direction;
+      }
+
+      return String(valueA || '').localeCompare(String(valueB || ''), 'pt-BR', {
+        sensitivity: 'base',
+        numeric: true,
+      }) * direction;
+    });
+
+    const activeOrder = sortedRows.map((row) => row.rowId);
+    if (sortKey !== 'manual' || !state.forecastTable.manualOrder.length) {
+      state.forecastTable.manualOrder = activeOrder;
+    }
+
+    const fragment = document.createDocumentFragment();
+
+    sortedRows.forEach((item) => {
       const row = document.createElement('tr');
-      let dueISO = '';
-      if (item.dueDate) {
-        const parsedDue = new Date(item.dueDate);
-        if (!Number.isNaN(parsedDue.getTime())) {
-          dueISO = parsedDue.toISOString();
-        }
-      }
-      let issueISO = '';
-      if (item.issueDate) {
-        const parsedIssue = new Date(item.issueDate);
-        if (!Number.isNaN(parsedIssue.getTime())) {
-          issueISO = parsedIssue.toISOString();
-        }
-      }
-      const valueRaw = Number(item.value || 0);
-      const valueString = Number.isFinite(valueRaw) ? valueRaw.toFixed(2) : '0';
+      row.draggable = sortedRows.length > 1;
+      row.dataset.forecastRowId = item.rowId;
+      row.className = 'forecast-row';
 
       const applyDataset = (button) => {
         if (!button) return;
@@ -1237,8 +1564,20 @@
         if (item.document) button.dataset.document = item.document;
         if (item.code) button.dataset.code = item.code;
         if (item.status) button.dataset.status = item.status;
-        if (dueISO) button.dataset.due = dueISO;
-        if (issueISO) button.dataset.issue = issueISO;
+        if (item.dueDate) {
+          const parsedDue = new Date(item.dueDate);
+          if (!Number.isNaN(parsedDue.getTime())) {
+            button.dataset.due = parsedDue.toISOString();
+          }
+        }
+        if (item.issueDate) {
+          const parsedIssue = new Date(item.issueDate);
+          if (!Number.isNaN(parsedIssue.getTime())) {
+            button.dataset.issue = parsedIssue.toISOString();
+          }
+        }
+        const valueRaw = Number(item.value || 0);
+        const valueString = Number.isFinite(valueRaw) ? valueRaw.toFixed(2) : '0';
         button.dataset.value = valueString;
         if (item.bankAccountId) button.dataset.bankAccount = item.bankAccountId;
         if (item.bankAccountLabel) button.dataset.bankLabel = item.bankAccountLabel;
@@ -1248,37 +1587,25 @@
         if (item.notes) button.dataset.notes = item.notes;
       };
 
-      const customerCell = document.createElement('td');
-      customerCell.className = 'px-4 py-3';
-      customerCell.textContent = item.customer;
-      row.appendChild(customerCell);
+      forecastColumns.forEach((column) => {
+        const cell = document.createElement('td');
+        cell.className = column.cellClass || '';
 
-      const docCell = document.createElement('td');
-      docCell.className = 'px-4 py-3';
-      docCell.textContent = item.document;
-      row.appendChild(docCell);
+        if (column.key === 'status') {
+          const badge = item.statusBadge || buildStatusBadge(item.status);
+          const span = document.createElement('span');
+          span.className = `inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${badge.classes}`;
+          span.innerHTML = `<i class="fas ${badge.icon}"></i> ${badge.label}`;
+          cell.appendChild(span);
+        } else {
+          cell.textContent = getForecastDisplayValue(item, column) || '—';
+        }
 
-      const dueCell = document.createElement('td');
-      dueCell.className = 'px-4 py-3';
-      dueCell.textContent = formatDateBR(item.dueDate);
-      row.appendChild(dueCell);
-
-      const valueCell = document.createElement('td');
-      valueCell.className = 'px-4 py-3 text-right';
-      valueCell.textContent = formatCurrencyBR(item.value);
-      row.appendChild(valueCell);
-
-      const statusCell = document.createElement('td');
-      statusCell.className = 'px-4 py-3 text-center';
-      const badge = buildStatusBadge(item.status);
-      const span = document.createElement('span');
-      span.className = `inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${badge.classes}`;
-      span.innerHTML = `<i class="fas ${badge.icon}"></i> ${badge.label}`;
-      statusCell.appendChild(span);
-      row.appendChild(statusCell);
+        row.appendChild(cell);
+      });
 
       const actionsCell = document.createElement('td');
-      actionsCell.className = 'px-4 py-3';
+      actionsCell.className = 'px-3 py-2.5';
       const actionsWrapper = document.createElement('div');
       actionsWrapper.className = 'grid grid-cols-3 gap-1';
       actionsWrapper.style.maxWidth = '18rem';
@@ -1354,10 +1681,32 @@
       actionsCell.appendChild(actionsWrapper);
 
       row.appendChild(actionsCell);
-      tbody.appendChild(row);
+      fragment.appendChild(row);
     });
+
+    tbody.appendChild(fragment);
+    updateForecastSortIndicators();
   }
 
+  function updateForecastSortIndicators() {
+    const activeKey = state.forecastTable.sort?.key || 'dueDate';
+    const direction = state.forecastTable.sort?.direction || 'asc';
+    const buttons = Array.from(
+      elements.forecastHead?.querySelectorAll('[data-forecast-sort-button]') || []
+    );
+    buttons.forEach((button) => {
+      const icon = button.querySelector('i');
+      const key = button.dataset?.columnKey;
+      const buttonDirection = button.dataset?.sortDirection;
+      if (!icon || !key || !buttonDirection) return;
+      icon.classList.remove('text-primary');
+      button.classList.remove('text-primary', 'border-primary/40', 'bg-primary/5');
+      if (key === activeKey && direction === buttonDirection) {
+        icon.classList.add('text-primary');
+        button.classList.add('text-primary', 'border-primary/40', 'bg-primary/5');
+      }
+    });
+  }
   function renderHistory() {
     if (!elements.historyBody) return;
     const tbody = elements.historyBody;
@@ -1723,6 +2072,96 @@
     } else if (context.action === 'delete-forecast') {
       handleDeleteReceivable(context.receivableId, context.installmentNumber);
     }
+  }
+
+  function handleForecastSortClick(event) {
+    const button = event.target.closest('[data-forecast-sort]');
+    if (!button) return;
+    const key = button.dataset.forecastSort;
+    if (!key) return;
+
+    const current = state.forecastTable.sort;
+    let direction = 'asc';
+    if (current?.key === key) {
+      direction = current.direction === 'asc' ? 'desc' : 'asc';
+    }
+
+    state.forecastTable.sort = { key, direction };
+    renderForecast();
+  }
+
+  function handleForecastRangeChange() {
+    const start = elements.forecastRangeStart?.value || '';
+    const end = elements.forecastRangeEnd?.value || '';
+    const startDate = parseDateInputValue(start);
+    const endDate = parseDateInputValue(end);
+    if (startDate && endDate && startDate > endDate) {
+      notify('A data inicial não pode ser maior que a data final.', 'warning');
+      setForecastRange({ ...state.forecastTable.range, triggerRender: false });
+      return;
+    }
+    setForecastRange({ start, end });
+  }
+
+  function handleForecastSearchInput(event) {
+    state.forecastTable.search = event.target?.value || '';
+    renderForecast();
+  }
+
+  function handleForecastDragStart(event) {
+    const row = event.target.closest('tr[data-forecast-row-id]');
+    if (!row) return;
+    state.forecastTable.draggingId = row.dataset.forecastRowId;
+    row.classList.add('opacity-60');
+    event.dataTransfer.effectAllowed = 'move';
+  }
+
+  function handleForecastDragOver(event) {
+    const row = event.target.closest('tr[data-forecast-row-id]');
+    if (!row) return;
+    event.preventDefault();
+    row.classList.add('bg-primary/5');
+  }
+
+  function handleForecastDragLeave(event) {
+    const row = event.target.closest('tr[data-forecast-row-id]');
+    if (!row) return;
+    row.classList.remove('bg-primary/5');
+  }
+
+  function handleForecastDrop(event) {
+    const targetRow = event.target.closest('tr[data-forecast-row-id]');
+    if (!targetRow || !elements.forecastBody) return;
+    event.preventDefault();
+
+    const draggingId = state.forecastTable.draggingId;
+    const targetId = targetRow.dataset.forecastRowId;
+    if (!draggingId || !targetId || draggingId === targetId) return;
+
+    const currentOrder = Array.from(elements.forecastBody.querySelectorAll('tr[data-forecast-row-id]')).map(
+      (row) => row.dataset.forecastRowId
+    );
+
+    const fromIndex = currentOrder.indexOf(draggingId);
+    const toIndex = currentOrder.indexOf(targetId);
+    if (fromIndex === -1 || toIndex === -1) return;
+
+    currentOrder.splice(fromIndex, 1);
+    currentOrder.splice(toIndex, 0, draggingId);
+
+    state.forecastTable.manualOrder = currentOrder;
+    state.forecastTable.sort = { key: 'manual', direction: 'asc' };
+    state.forecastTable.draggingId = null;
+
+    renderForecast();
+  }
+
+  function handleForecastDragEnd(event) {
+    const row = event.target.closest('tr[data-forecast-row-id]');
+    if (row) {
+      row.classList.remove('opacity-60', 'bg-primary/5');
+    }
+    state.forecastTable.draggingId = null;
   }
 
   async function handleHistoryTableClick(event) {
@@ -2642,7 +3081,18 @@
     elements.generateButton?.addEventListener('click', handleGeneratePreview);
     elements.clearButton?.addEventListener('click', handleClear);
     elements.form.addEventListener('submit', handleSubmit);
+    initializeForecastRange();
+    buildForecastTableHead();
+    ensureForecastTableLayout();
     elements.forecastBody?.addEventListener('click', handleForecastTableClick);
+    elements.forecastSearch?.addEventListener('input', handleForecastSearchInput);
+    elements.forecastRangeStart?.addEventListener('change', handleForecastRangeChange);
+    elements.forecastRangeEnd?.addEventListener('change', handleForecastRangeChange);
+    elements.forecastBody?.addEventListener('dragstart', handleForecastDragStart);
+    elements.forecastBody?.addEventListener('dragover', handleForecastDragOver);
+    elements.forecastBody?.addEventListener('dragleave', handleForecastDragLeave);
+    elements.forecastBody?.addEventListener('drop', handleForecastDrop);
+    elements.forecastBody?.addEventListener('dragend', handleForecastDragEnd);
     elements.historyBody?.addEventListener('click', handleHistoryTableClick);
 
     loadOptions().then(() => {
