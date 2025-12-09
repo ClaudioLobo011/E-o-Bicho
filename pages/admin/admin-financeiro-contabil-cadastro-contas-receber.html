@@ -248,40 +248,45 @@
                 </div>
               </div>
             </div>
-          </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div class="rounded-xl border border-amber-100 bg-amber-50 p-4">
-              <span class="text-xs font-semibold uppercase tracking-wide text-amber-700">Em aberto</span>
-              <p class="mt-2 text-2xl font-bold text-amber-800" id="receivable-summary-open-total">R$ 0,00</p>
-              <p class="text-xs text-amber-700" id="receivable-summary-open-count">0 lançamentos</p>
+          <div class="grid gap-4 lg:grid-cols-12">
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 lg:col-span-5 xl:col-span-5">
+              <div class="rounded-xl border border-amber-100 bg-amber-50 p-4">
+                <span class="text-xs font-semibold uppercase tracking-wide text-amber-700">Em aberto</span>
+                <p class="mt-2 text-2xl font-bold text-amber-800" id="receivable-summary-open-total">R$ 0,00</p>
+                <p class="text-xs text-amber-700" id="receivable-summary-open-count">0 lançamentos</p>
+              </div>
+              <div class="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+                <span class="text-xs font-semibold uppercase tracking-wide text-emerald-700">Finalizados</span>
+                <p class="mt-2 text-2xl font-bold text-emerald-800" id="receivable-summary-finalized-total">R$ 0,00</p>
+                <p class="text-xs text-emerald-700" id="receivable-summary-finalized-count">0 lançamentos</p>
+              </div>
+              <div class="rounded-xl border border-slate-200 bg-slate-100 p-4">
+                <span class="text-xs font-semibold uppercase tracking-wide text-slate-700">Impagáveis</span>
+                <p class="mt-2 text-2xl font-bold text-slate-800" id="receivable-summary-uncollectible-total">R$ 0,00</p>
+                <p class="text-xs text-slate-700" id="receivable-summary-uncollectible-count">0 lançamentos</p>
+              </div>
+              <div class="rounded-xl border border-purple-200 bg-purple-50 p-4">
+                <span class="text-xs font-semibold uppercase tracking-wide text-purple-700">Em protesto</span>
+                <p class="mt-2 text-2xl font-bold text-purple-800" id="receivable-summary-protest-total">R$ 0,00</p>
+                <p class="text-xs text-purple-700" id="receivable-summary-protest-count">0 lançamentos</p>
+              </div>
             </div>
-            <div class="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
-              <span class="text-xs font-semibold uppercase tracking-wide text-emerald-700">Finalizados</span>
-              <p class="mt-2 text-2xl font-bold text-emerald-800" id="receivable-summary-finalized-total">R$ 0,00</p>
-              <p class="text-xs text-emerald-700" id="receivable-summary-finalized-count">0 lançamentos</p>
-            </div>
-            <div class="rounded-xl border border-slate-200 bg-slate-100 p-4">
-              <span class="text-xs font-semibold uppercase tracking-wide text-slate-700">Impagáveis</span>
-              <p class="mt-2 text-2xl font-bold text-slate-800" id="receivable-summary-uncollectible-total">R$ 0,00</p>
-              <p class="text-xs text-slate-700" id="receivable-summary-uncollectible-count">0 lançamentos</p>
-            </div>
-            <div class="rounded-xl border border-purple-200 bg-purple-50 p-4">
-              <span class="text-xs font-semibold uppercase tracking-wide text-purple-700">Em protesto</span>
-              <p class="mt-2 text-2xl font-bold text-purple-800" id="receivable-summary-protest-total">R$ 0,00</p>
-              <p class="text-xs text-purple-700" id="receivable-summary-protest-count">0 lançamentos</p>
-            </div>
-          </div>
 
-          <div class="overflow-hidden rounded-lg border border-gray-200">
-            <table class="min-w-full divide-y divide-gray-100 text-left text-[11px] leading-[1.35] text-gray-700" id="receivable-forecast-table">
-              <thead id="receivable-forecast-head" class="bg-gray-50 text-left text-[10px] uppercase tracking-wide text-gray-500"></thead>
-              <tbody id="receivable-forecast-body" class="divide-y divide-gray-100 bg-white text-[11px] text-gray-700">
-                <tr>
-                  <td colspan="6" class="px-4 py-6 text-center text-sm text-gray-500">Cadastre contas a receber para acompanhar a previsão.</td>
-                </tr>
-              </tbody>
-            </table>
+            <div class="lg:col-span-7 xl:col-span-7">
+              <div class="overflow-hidden rounded-lg border border-gray-200 h-full">
+                <div class="overflow-x-auto">
+                  <table class="min-w-full divide-y divide-gray-100 text-left text-[11px] leading-[1.35] text-gray-700" id="receivable-forecast-table">
+                    <thead id="receivable-forecast-head" class="bg-gray-50 text-left text-[10px] uppercase tracking-wide text-gray-500"></thead>
+                    <tbody id="receivable-forecast-body" class="divide-y divide-gray-100 bg-white text-[11px] text-gray-700">
+                      <tr>
+                        <td colspan="6" class="px-4 py-6 text-center text-sm text-gray-500">Cadastre contas a receber para acompanhar a previsão.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
       </div>
