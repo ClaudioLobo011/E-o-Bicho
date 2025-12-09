@@ -38,8 +38,11 @@
           <form id="user-group-form" class="space-y-4">
             <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
               <div class="md:col-span-3 space-y-2">
-                <label for="group-code" class="block text-sm font-medium text-gray-700">Código</label>
-                <input id="group-code" type="number" min="1" step="1" placeholder="1, 2, 3..." class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
+                <div class="flex items-center gap-2">
+                  <label for="group-code" class="block text-sm font-medium text-gray-700">Código</label>
+                  <span class="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-600">Automático</span>
+                </div>
+                <input id="group-code" type="text" readonly placeholder="Gerado automaticamente" class="w-full cursor-not-allowed rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700 focus:border-primary focus:ring-2 focus:ring-primary/20">
               </div>
               <div class="md:col-span-6 space-y-2">
                 <label for="group-name" class="block text-sm font-medium text-gray-700">Nome</label>
@@ -83,9 +86,9 @@
               <table id="groups-table" class="min-w-full divide-y divide-gray-100 text-left text-[11px] leading-[1.35] text-gray-700">
                 <thead class="bg-gray-50 text-left text-[10px] uppercase tracking-wide text-gray-500">
                   <tr>
-                    <th class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-600 cursor-pointer" data-sort-key="code">Código</th>
-                    <th class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-600 cursor-pointer" data-sort-key="name">Nome</th>
-                    <th class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-600 text-right cursor-pointer" data-sort-key="commission">Comissão</th>
+                    <th class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-600 cursor-pointer" data-sort-key="codigo">Código</th>
+                    <th class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-600 cursor-pointer" data-sort-key="nome">Nome</th>
+                    <th class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-600 text-right cursor-pointer" data-sort-key="comissaoPercent">Comissão</th>
                 </tr>
               </thead>
               <tbody id="groups-table-body" class="divide-y divide-gray-100 bg-white text-[11px] text-gray-700">

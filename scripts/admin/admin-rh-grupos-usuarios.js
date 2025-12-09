@@ -1,4 +1,6 @@
 (() => {
+  const API = `${API_CONFIG.BASE_URL}/admin/grupos-usuarios`;
+
   const elements = {
     form: document.getElementById('user-group-form'),
     code: document.getElementById('group-code'),
@@ -17,8 +19,34 @@
 
   const state = {
     groups: [],
-    sort: { key: 'code', direction: 'asc' },
+    sort: { key: 'codigo', direction: 'asc' },
     pagination: { page: 1, pageSize: 25 },
+  };
+
+  const getToken = () => {
+    try {
+      const cached = JSON.parse(localStorage.getItem('loggedInUser') || 'null');
+      return cached?.token || '';
+    } catch {
+      return '';
+    }
+  };
+
+  const fetchJSON = async (url, opts = {}) => {
+    const res = await fetch(url, {
+      ...opts,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${getToken()}`,
+        ...(opts.headers || {}),
+      },
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(text || `Erro HTTP ${res.status}`);
+    }
+    return res.json();
   };
 
   const formatCommission = (value) => {
@@ -31,14 +59,25 @@
     elements.counter.innerHTML = `<i class="fas fa-magnifying-glass"></i>${total} ${label} encontrado${total === 1 ? '' : 's'}`;
   };
 
+  const setNextCode = () => {
+    const next = state.groups.reduce((max, g) => {
+      const c = Number.parseInt(g.codigo, 10);
+      return Number.isFinite(c) && c > max ? c : max;
+    }, 0) + 1;
+
+    if (elements.code) {
+      elements.code.value = Number.isFinite(next) ? next.toString() : '';
+    }
+  };
+
   const getSortedGroups = (list) => {
     const { key, direction } = state.sort;
     const sorted = [...list];
     const factor = direction === 'desc' ? -1 : 1;
 
     sorted.sort((a, b) => {
-      const first = a[key];
-      const second = b[key];
+      const first = a?.[key];
+      const second = b?.[key];
 
       if (typeof first === 'number' && typeof second === 'number') {
         return (first - second) * factor;
@@ -84,9 +123,9 @@
       paged.forEach((group) => {
         const row = document.createElement('tr');
         row.innerHTML = `
-          <td class="px-3 py-2.5 text-[11px] font-semibold text-gray-800">${group.code}</td>
-          <td class="px-3 py-2.5 text-[11px] text-gray-700">${group.name}</td>
-          <td class="px-3 py-2.5 text-[11px] text-right font-semibold text-gray-900">${formatCommission(group.commission)}</td>
+          <td class="px-3 py-2.5 text-[11px] font-semibold text-gray-800">${group.codigo}</td>
+          <td class="px-3 py-2.5 text-[11px] text-gray-700">${group.nome}</td>
+          <td class="px-3 py-2.5 text-[11px] text-right font-semibold text-gray-900">${formatCommission(group.comissaoPercent)}</td>
         `;
         elements.tableBody.appendChild(row);
       });
@@ -111,39 +150,65 @@
 
   const resetForm = () => {
     elements.form?.reset();
+    setNextCode();
   };
 
-  const handleFormSubmit = (event) => {
-    event.preventDefault();
-    const code = Number.parseInt(elements.code.value, 10);
+  const validateForm = () => {
     const name = elements.name.value.trim();
     const commission = Number.parseFloat(elements.commission.value);
+    const errors = [];
 
-    if (!Number.isFinite(code) || code < 1) {
-      alert('Informe um código válido (número inteiro).');
-      return;
-    }
-    if (!name) {
-      alert('Informe o nome do grupo.');
-      return;
+    if (!name) errors.push('Informe o nome do grupo.');
+    if (!Number.isFinite(commission) || commission < 0 || commission > 100) {
+      errors.push('A comissão deve estar entre 0 e 100%.');
     }
 
-    state.groups.push({
-      id: crypto.randomUUID(),
-      code,
-      name,
-      commission: Number.isFinite(commission) ? commission : 0,
-    });
+    return { ok: errors.length === 0, errors, name, commission: Number.isFinite(commission) ? commission : 0 };
+  };
 
-    state.pagination.page = 1;
+  const handleFormSubmit = async (event) => {
+    event.preventDefault();
+    const validation = validateForm();
+    if (!validation.ok) {
+      alert(validation.errors.join('\n'));
+      return;
+    }
+
+    try {
+      const created = await fetchJSON(API, {
+        method: 'POST',
+        body: JSON.stringify({
+          nome: validation.name,
+          comissaoPercent: validation.commission,
+        }),
+      });
+
+      state.groups.push(created);
+      state.pagination.page = 1;
+      renderTable();
+      setNextCode();
+      elements.form.reset();
+      elements.name.focus();
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao salvar grupo.\n' + err.message);
+    }
+  };
+
+  const loadGroups = async () => {
+    if (elements.code) elements.code.value = 'Carregando...';
+    const data = await fetchJSON(API);
+    state.groups = Array.isArray(data) ? data : data?.items || [];
     renderTable();
-    elements.form.reset();
+    setNextCode();
   };
 
   const init = () => {
+    if (!elements.form) return;
+
     renderTable();
 
-    elements.form?.addEventListener('submit', handleFormSubmit);
+    elements.form.addEventListener('submit', handleFormSubmit);
     elements.reset?.addEventListener('click', resetForm);
 
     elements.pageSize?.addEventListener('change', (event) => {
@@ -169,6 +234,12 @@
     });
 
     elements.headers.forEach((th) => th.addEventListener('click', handleSortClick));
+
+    loadGroups().catch((err) => {
+      console.error(err);
+      alert('Erro ao carregar grupos.\n' + err.message);
+      if (elements.code) elements.code.value = '';
+    });
   };
 
   document.addEventListener('DOMContentLoaded', init);
