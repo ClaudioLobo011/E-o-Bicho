@@ -4059,8 +4059,8 @@ function ensureInternarPetModal() {
                   ${riscoOptions}
                 </select>
               </label>
-              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Veterinário
-                <select name="internarVeterinario" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Empresa
+                <select name="internarEmpresa" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
                   <option value="">Selecione</option>
                 </select>
               </label>
@@ -4069,8 +4069,8 @@ function ensureInternarPetModal() {
                   <option value="">Selecione</option>
                 </select>
               </label>
-              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Empresa
-                <select name="internarEmpresa" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Veterinário
+                <select name="internarVeterinario" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
                   <option value="">Selecione</option>
                 </select>
               </label>
