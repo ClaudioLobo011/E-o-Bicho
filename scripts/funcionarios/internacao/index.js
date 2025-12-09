@@ -3802,8 +3802,40 @@ function initCreateBoxModal(onSuccess, options = {}) {
   ensureCreateBoxModal();
 }
 
-function getEquipeOptions(dataset) {
-  const veterinarios = Array.isArray(dataset?.veterinarios) ? dataset.veterinarios : [];
+function getVeterinariosForEmpresa(dataset, empresaId) {
+  if (!dataset) return [];
+  const targetEmpresa = (empresaId || '').trim();
+  const map = dataset.veterinariosByEmpresa || {};
+  const fromMap = map[targetEmpresa || 'all'];
+  if (Array.isArray(fromMap)) return fromMap;
+  if (targetEmpresa && Array.isArray(map.all)) return map.all;
+  if (!targetEmpresa && Array.isArray(dataset.veterinariosAll)) return dataset.veterinariosAll;
+  return Array.isArray(dataset.veterinarios) ? dataset.veterinarios : [];
+}
+
+function getEquipeOptions(dataset, empresaId) {
+  if (typeof empresaId === 'undefined') {
+    const veterinarios = getVeterinariosForEmpresa(dataset, '');
+    if (veterinarios.length) {
+      return veterinarios.map((vet) => ({
+        value: vet.nome || vet.id,
+        label: vet.nome || vet.id || 'Veterinário(a)',
+      }));
+    }
+    const set = new Set();
+    (dataset?.pacientes || []).forEach((pet) => {
+      const nome = pet?.internacao?.equipeMedica;
+      if (nome) set.add(nome);
+    });
+    return Array.from(set).sort().map((nome) => ({ value: nome, label: nome }));
+  }
+
+  const targetEmpresa = (empresaId || '').trim();
+  if (!targetEmpresa) return [];
+  const veterinarios = getVeterinariosForEmpresa(dataset, empresaId);
+  if (empresaId && !veterinarios.length) {
+    return [];
+  }
   if (veterinarios.length) {
     return veterinarios.map((vet) => ({
       value: vet.nome || vet.id,
@@ -4129,7 +4161,7 @@ function ensureInternarPetModal() {
 
   if (internarModal.empresaSelect) {
     internarModal.empresaSelect.addEventListener('change', () => {
-      refreshInternarBoxSelect({}, internarModal.dataset);
+      handleInternarEmpresaChange();
     });
   }
 
@@ -4227,6 +4259,18 @@ function refreshInternarBoxSelect(extraOptions = {}, dataset) {
 
   if (currentValue && boxOptions.some((opt) => opt.value === currentValue)) {
     boxSelect.value = currentValue;
+  }
+}
+
+async function handleInternarEmpresaChange(extraOptions = {}) {
+  try {
+    const datasetRef = internarModal.dataset || getDataset();
+    const empresaId = internarModal.empresaSelect?.value || '';
+    await fetchVeterinariosData(datasetRef, internarModal.state, { quiet: true, empresaId });
+    populateDynamicSelects(datasetRef, extraOptions);
+  } catch (error) {
+    console.warn('internacao: falha ao atualizar dados pela empresa selecionada', error);
+    setInternarModalError('Não foi possível carregar os dados da empresa selecionada.');
   }
 }
 
@@ -4329,7 +4373,8 @@ async function populateBoxesEmpresaSelect(extraOption) {
 }
 
 function populateDynamicSelects(dataset, extraOptions = {}) {
-  const vetOptionsMarkup = ['<option value="">Selecione</option>', ...getEquipeOptions(dataset).map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`)]
+  const selectedEmpresa = internarModal?.empresaSelect ? internarModal.empresaSelect.value || '' : undefined;
+  const vetOptionsMarkup = ['<option value="">Selecione</option>', ...getEquipeOptions(dataset, selectedEmpresa).map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`)]
     .join('');
 
   if (internarModal.form) {
@@ -4414,10 +4459,12 @@ function openInternarPetModal(dataset, options = {}) {
     }
   }
   populateDynamicSelects(dataset, selectOverrides);
-  populateEmpresaSelect(getEmpresaOptionFromRecord(record)).catch((error) => {
-    console.warn('internacao: não foi possível atualizar a lista de empresas', error);
-    setInternarModalError('Não foi possível carregar as empresas do usuário selecionado.');
-  });
+  populateEmpresaSelect(getEmpresaOptionFromRecord(record))
+    .then(() => handleInternarEmpresaChange(selectOverrides))
+    .catch((error) => {
+      console.warn('internacao: não foi possível atualizar a lista de empresas', error);
+      setInternarModalError('Não foi possível carregar as empresas do usuário selecionado.');
+    });
   if (mode === 'edit' && record) {
     fillInternarModalFormFromRecord(record);
   }
@@ -6970,16 +7017,39 @@ async function fetchBoxesData(dataset, state = {}, { quiet = false, onUpdate } =
   }
 }
 
-async function fetchVeterinariosData(dataset, state = {}, { quiet = false } = {}) {
+async function fetchVeterinariosData(dataset, state = {}, { quiet = false, empresaId = '' } = {}) {
+  const targetEmpresa = (empresaId || '').trim();
+  const cacheKey = targetEmpresa || 'all';
+  const vetMap = dataset ? dataset.veterinariosByEmpresa || (dataset.veterinariosByEmpresa = {}) : null;
+
+  if (vetMap && Array.isArray(vetMap[cacheKey]) && vetMap[cacheKey].length) {
+    if (dataset) dataset.veterinarios = vetMap[cacheKey];
+    if (state) {
+      state.veterinarios = vetMap[cacheKey];
+      state.veterinariosLoading = false;
+      state.veterinariosError = '';
+    }
+    populateDynamicSelects(dataset);
+    return vetMap[cacheKey];
+  }
+
   if (state) {
     state.veterinariosLoading = true;
     state.veterinariosError = '';
   }
 
   try {
-    const data = await requestJson('/func/profissionais?tipos=veterinario');
+    const params = new URLSearchParams({ tipos: 'veterinario' });
+    if (targetEmpresa) params.set('storeId', targetEmpresa);
+    const data = await requestJson(`/func/profissionais?${params.toString()}`);
     const normalized = Array.isArray(data) ? data.map(normalizeVeterinario).filter(Boolean) : [];
-    if (dataset) dataset.veterinarios = normalized;
+    if (dataset) {
+      if (vetMap) {
+        vetMap[cacheKey] = normalized;
+      }
+      dataset.veterinarios = normalized;
+      if (!targetEmpresa) dataset.veterinariosAll = normalized;
+    }
     if (state) {
       state.veterinarios = normalized;
       state.veterinariosLoading = false;
