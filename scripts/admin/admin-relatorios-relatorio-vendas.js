@@ -113,6 +113,15 @@
     });
   };
 
+  const formatSellerName = (sale) => {
+    const rawName = (sale?.sellerName || sale?.seller?.nome || sale?.seller?.name || '').trim();
+    if (!rawName) return '—';
+
+    const parts = rawName.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return `${parts[0]} ${parts[1]}`;
+    return parts[0];
+  };
+
   const tableColumns = [
     {
       key: 'saleCode',
@@ -129,6 +138,14 @@
       cellClass: 'px-3 py-2.5 text-[11px]',
       getComparable: (sale) => new Date(sale.createdAt || 0).getTime(),
       getDisplay: (sale) => formatDateTime(sale.createdAt),
+    },
+    {
+      key: 'sellerName',
+      label: 'Vendedor',
+      minWidth: 64,
+      headerClass: 'px-3 py-2',
+      cellClass: 'px-3 py-2.5 text-[11px]',
+      getDisplay: formatSellerName,
     },
     {
       key: 'store',

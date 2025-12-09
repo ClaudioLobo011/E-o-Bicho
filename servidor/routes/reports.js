@@ -484,11 +484,22 @@ router.get(
         const totalValue = deriveSaleTotal(sale);
         const costValue = deriveSaleCost(sale);
         const fiscalTypeLabel = deriveFiscalTypeLabel(sale);
+        const sellerName = (sale.sellerName || sale.vendedorNome || sale.seller?.nome || sale.seller?.name || '').trim();
+        const sellerCode =
+          sale.sellerCode ||
+          sale.vendedorCodigo ||
+          sale.seller?.codigo ||
+          sale.seller?.codigoCliente ||
+          sale.seller?.id ||
+          '';
         return {
           id: sale.id,
           saleCode: sale.saleCode || sale.saleCodeLabel || 'Sem código',
           createdAt: sale.createdAt,
           createdAtLabel: sale.createdAtLabel || '',
+          seller: sale.seller && typeof sale.seller === 'object' ? sale.seller : null,
+          sellerName,
+          sellerCode,
           store: {
             id: record.store?._id,
             name: storeName || 'Loja não informada',
