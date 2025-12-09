@@ -165,16 +165,21 @@ function deriveProductTotal(sale = {}) {
   const totals = sale?.receiptSnapshot?.totais || sale?.totais || {};
   const candidates = [
     sale.total,
+    sale.totalLiquido,
+    sale.totalBruto,
     sale.totalAmount,
     sale.valorTotal,
     sale.totalVenda,
     sale.totalGeral,
+    totals?.totalLiquido,
     totals?.liquido,
     totals?.total,
     totals?.totalGeral,
+    totals?.totalBruto,
     totals?.pago,
     totals?.valorTotal,
     totals?.totalVenda,
+    totals?.totalPagar,
     totals?.bruto,
   ];
 
