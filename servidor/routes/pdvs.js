@@ -1259,6 +1259,14 @@ const normalizeBudgetRecordPayload = (budget, { useDefaults = false } = {}) => {
     normalizeString(
       budget.sellerCode || budget.vendedorCodigo || sellerSource?.codigo || sellerSource?.codigoCliente || sellerSource?.id
     ) || '';
+  const seller =
+    sellerSource ||
+    (sellerName || sellerCode
+      ? {
+          ...(sellerCode ? { codigo: sellerCode } : {}),
+          ...(sellerName ? { nome: sellerName } : {}),
+        }
+      : null);
 
   const paymentLabel =
     normalizeString(budget.paymentLabel || budget.meioPagamento || budget.formaPagamento || budget.condicaoPagamento) || '';
@@ -1277,7 +1285,7 @@ const normalizeBudgetRecordPayload = (budget, { useDefaults = false } = {}) => {
     addition,
     customer,
     pet,
-    seller: sellerSource,
+    seller,
     sellerName: sellerName || '',
     sellerCode,
     items,

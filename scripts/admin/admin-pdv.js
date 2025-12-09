@@ -5842,6 +5842,9 @@
     quantidade: state.quantidade,
     vendaCliente: state.vendaCliente ? { ...state.vendaCliente } : null,
     vendaPet: state.vendaPet ? { ...state.vendaPet } : null,
+    seller: state.selectedSeller ? { ...state.selectedSeller } : null,
+    sellerCode: state.selectedSeller ? getSellerCode(state.selectedSeller) : '',
+    sellerName: state.selectedSeller ? getSellerDisplayName(state.selectedSeller) : '',
   });
 
   const applySaleStateSnapshot = (snapshot = {}) => {
@@ -5863,6 +5866,33 @@
     if (snapshotCustomer || state.vendaCliente) {
       const skipRecalculate = snapshotCustomer ? Boolean(snapshot.preserveItemTotals) : false;
       setSaleCustomer(snapshotCustomer, snapshotPet, { skipRecalculate });
+    }
+    const hasSellerSnapshot =
+      Object.prototype.hasOwnProperty.call(snapshot, 'seller') ||
+      Object.prototype.hasOwnProperty.call(snapshot, 'selectedSeller') ||
+      snapshot.sellerCode ||
+      snapshot.sellerName;
+    if (hasSellerSnapshot) {
+      const rawSeller =
+        (snapshot.selectedSeller && typeof snapshot.selectedSeller === 'object' && snapshot.selectedSeller) ||
+        (snapshot.seller && typeof snapshot.seller === 'object' && snapshot.seller) ||
+        null;
+      const sellerCode = sanitizeSellerCode(snapshot.sellerCode || (rawSeller ? getSellerCode(rawSeller) : ''));
+      const sellerName = snapshot.sellerName || (rawSeller ? getSellerDisplayName(rawSeller) : '');
+      const sellerSnapshot = rawSeller || (sellerName || sellerCode ? { codigo: sellerCode, nome: sellerName } : null);
+      if (sellerSnapshot) {
+        state.selectedSeller = { ...sellerSnapshot };
+        if (elements.sellerInput) {
+          elements.sellerInput.value = sellerCode || '';
+        }
+        setSellerFeedback(sellerName || sellerCode || 'Insira o vendedor.', sellerCode ? 'success' : 'muted');
+      } else {
+        state.selectedSeller = null;
+        if (elements.sellerInput) {
+          elements.sellerInput.value = '';
+        }
+        setSellerFeedback('Insira o vendedor.', 'muted');
+      }
     }
   };
 
@@ -6984,6 +7014,12 @@
       notify('Este orçamento já foi finalizado e não pode ser importado novamente.', 'info');
       return;
     }
+    const budgetSeller =
+      budget.seller && typeof budget.seller === 'object'
+        ? { ...budget.seller }
+        : budget.sellerCode || budget.sellerName
+        ? { codigo: budget.sellerCode || '', nome: budget.sellerName || '' }
+        : null;
     state.activeBudgetId = budget.id;
     state.pendingBudgetValidityDays = clampBudgetValidityDays(budget.validityDays);
     applySaleStateSnapshot({
@@ -6995,6 +7031,9 @@
       vendaAcrescimo: safeNumber(budget.addition ?? 0),
       selectedProduct: null,
       quantidade: 1,
+      seller: budgetSeller,
+      sellerCode: budget.sellerCode || (budgetSeller ? getSellerCode(budgetSeller) : ''),
+      sellerName: budget.sellerName || (budgetSeller ? getSellerDisplayName(budgetSeller) : ''),
     });
     state.vendaCliente = budget.customer ? { ...budget.customer } : null;
     state.vendaPet = budget.pet ? { ...budget.pet } : null;
