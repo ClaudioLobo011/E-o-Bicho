@@ -161,6 +161,12 @@
     saleCodeIdentifier: '',
     saleCodeSequence: 1,
     currentSaleCode: '',
+    sellers: [],
+    sellersLoaded: false,
+    sellerLookupLoading: false,
+    sellerLookupError: '',
+    selectedSeller: null,
+    sellerSearchQuery: '',
     deliveryFinalizingOrderId: '',
     finalizeProcessing: false,
     completedSales: [],
@@ -600,6 +606,7 @@
   let appointmentsRequestId = 0;
   let transferProductSearchTimeout = null;
   let transferProductSearchController = null;
+  let sellerLookupTimeout = null;
   let customerRegisterPreviousFocus = null;
   let customerRegisterFrameUrl = '';
   let customerRegisterFrameWindow = null;
@@ -2001,6 +2008,17 @@
           })
           .filter(Boolean)
       : [];
+    const sellerSnapshot = record.seller && typeof record.seller === 'object' ? { ...record.seller } : null;
+    const sellerName = record.sellerName
+      ? String(record.sellerName)
+      : sellerSnapshot
+      ? getSellerDisplayName(sellerSnapshot)
+      : '';
+    const sellerCode = record.sellerCode
+      ? String(record.sellerCode)
+      : sellerSnapshot
+      ? getSellerCode(sellerSnapshot)
+      : '';
 
     return {
       id: record.id ? String(record.id) : createUid(),
@@ -2016,6 +2034,9 @@
       items: Array.isArray(record.items) ? record.items.map((item) => ({ ...item })) : [],
       discountValue: safeNumber(record.discountValue ?? 0),
       discountLabel: record.discountLabel ? String(record.discountLabel) : '',
+      seller: sellerSnapshot,
+      sellerName,
+      sellerCode,
       additionValue: safeNumber(record.additionValue ?? 0),
       createdAt: createdAt.toISOString(),
       createdAtLabel: record.createdAtLabel ? String(record.createdAtLabel) : '',
@@ -2133,6 +2154,17 @@
       budget.finalizedSale ||
       budget.saleFinalizedId ||
       budget.vendaRelacionadaId;
+    const sellerSource = budget.seller && typeof budget.seller === 'object' ? { ...budget.seller } : null;
+    const sellerName = sellerSource
+      ? getSellerDisplayName(sellerSource)
+      : budget.sellerName
+      ? String(budget.sellerName)
+      : '';
+    const sellerCode = sellerSource
+      ? getSellerCode(sellerSource)
+      : budget.sellerCode
+      ? String(budget.sellerCode)
+      : '';
     return {
       id,
       code: String(budget.code || budget.codigo || budget.numero || id),
@@ -2145,6 +2177,9 @@
       addition: safeNumber(budget.addition ?? budget.acrescimo ?? 0),
       customer: customerSource && typeof customerSource === 'object' ? { ...customerSource } : null,
       pet: petSource && typeof petSource === 'object' ? { ...petSource } : null,
+      seller: sellerSource,
+      sellerName,
+      sellerCode,
       items: normalizedItems,
       payments: normalizedPayments,
       paymentLabel: budget.paymentLabel ? String(budget.paymentLabel) : '',
@@ -2406,6 +2441,17 @@
 
     elements.searchInput = document.getElementById('pdv-product-search');
     elements.searchResults = document.getElementById('pdv-product-results');
+
+    elements.sellerInput = document.getElementById('pdv-seller');
+    elements.sellerFeedback = document.getElementById('pdv-seller-feedback');
+    elements.sellerModal = document.getElementById('pdv-seller-modal');
+    elements.sellerModalBackdrop = elements.sellerModal?.querySelector('[data-seller-dismiss]') || null;
+    elements.sellerModalClose = document.getElementById('pdv-seller-close');
+    elements.sellerModalCancel = document.getElementById('pdv-seller-cancel');
+    elements.sellerSearchInput = document.getElementById('pdv-seller-search');
+    elements.sellerResultsList = document.getElementById('pdv-seller-results');
+    elements.sellerResultsEmpty = document.getElementById('pdv-seller-results-empty');
+    elements.sellerResultsLoading = document.getElementById('pdv-seller-results-loading');
 
     elements.selectedImage = document.getElementById('pdv-selected-image');
     elements.selectedPlaceholder = document.getElementById('pdv-selected-placeholder');
@@ -3376,6 +3422,266 @@
     if (!raw) return '';
     const normalized = typeof raw.normalize === 'function' ? raw.normalize('NFD') : raw;
     return normalized.replace(/[\u0300-\u036f]/g, '');
+  };
+
+  const sanitizeSellerCode = (value) => String(value || '').replace(/\D/g, '');
+
+  const getSellerCode = (seller) =>
+    sanitizeSellerCode(seller?.codigo || seller?.codigoCliente || seller?.id || '');
+
+  const getSellerDisplayName = (seller) => {
+    const fullName = (seller?.nome || '').trim();
+    if (!fullName) return 'Vendedor sem nome';
+    const parts = fullName.split(/\s+/).filter(Boolean);
+    if (!parts.length) return 'Vendedor sem nome';
+    return parts.slice(0, 2).join(' ');
+  };
+
+  const getActiveSellerCompanyId = () => {
+    const pdv = findPdvById(state.selectedPdv);
+    const candidates = [state.activePdvStoreId, getPdvCompanyId(pdv), state.selectedStore];
+    for (const candidate of candidates) {
+      const id = extractNormalizedId(candidate);
+      if (id) return id;
+    }
+    return '';
+  };
+
+  const isSellerFromCompany = (seller, companyId) => {
+    const normalizedCompany = normalizeId(companyId);
+    if (!normalizedCompany) return false;
+    const companies = Array.isArray(seller?.empresas) ? seller.empresas : [];
+    return companies.some((empresa) => extractNormalizedId(empresa) === normalizedCompany);
+  };
+
+  const setSellerFeedback = (message, status = 'muted') => {
+    if (!elements.sellerFeedback) return;
+    const classes = {
+      success: 'text-emerald-600',
+      error: 'text-rose-600',
+      muted: 'text-gray-500',
+    };
+    elements.sellerFeedback.textContent = message || '';
+    elements.sellerFeedback.classList.remove('text-emerald-600', 'text-rose-600', 'text-gray-500');
+    elements.sellerFeedback.classList.add(classes[status] || classes.muted);
+  };
+
+  const findSellerByCode = (code) => {
+    const normalized = sanitizeSellerCode(code);
+    if (!normalized) return null;
+    return state.sellers.find((seller) => {
+      const sellerCode = seller?.codigo || seller?.codigoCliente || seller?.id;
+      const sellerGroups = Array.isArray(seller?.grupos) ? seller.grupos : [];
+      return sellerGroups.includes('vendedor') && sanitizeSellerCode(sellerCode) === normalized;
+    });
+  };
+
+  const ensureSellerList = async () => {
+    if (state.sellersLoaded) return;
+    const companyId = getActiveSellerCompanyId();
+    if (!companyId) {
+      state.sellerLookupError = 'Selecione a empresa do PDV para buscar vendedores.';
+      state.sellers = [];
+      state.sellerLookupLoading = false;
+      throw new Error(state.sellerLookupError);
+    }
+    state.sellerLookupLoading = true;
+    state.sellerLookupError = '';
+    const token = getToken();
+    try {
+      const payload = await fetchWithOptionalAuth(`${API_BASE}/admin/funcionarios`, {
+        token,
+        errorMessage: 'Não foi possível carregar os vendedores cadastrados.',
+      });
+      const funcionarios = Array.isArray(payload) ? payload : Array.isArray(payload?.funcionarios) ? payload.funcionarios : [];
+      state.sellers = funcionarios.filter((funcionario) =>
+        Array.isArray(funcionario?.grupos) &&
+        funcionario.grupos.includes('vendedor') &&
+        isSellerFromCompany(funcionario, companyId)
+      );
+      state.sellersLoaded = true;
+    } catch (error) {
+      state.sellerLookupError = error?.message || 'Erro ao carregar vendedores.';
+      console.error('Erro ao carregar vendedores:', error);
+      notify(state.sellerLookupError, 'error');
+      throw error;
+    } finally {
+      state.sellerLookupLoading = false;
+    }
+  };
+
+  const renderSellerSearchResults = () => {
+    if (!elements.sellerResultsList || !elements.sellerResultsEmpty) return;
+    const container = elements.sellerResultsList;
+    const empty = elements.sellerResultsEmpty;
+    const loading = elements.sellerResultsLoading;
+    container.innerHTML = '';
+    if (loading) {
+      loading.classList.toggle('hidden', !state.sellerLookupLoading);
+    }
+    if (state.sellerLookupLoading) {
+      empty.classList.add('hidden');
+      return;
+    }
+    if (state.sellerLookupError) {
+      empty.textContent = state.sellerLookupError;
+      empty.classList.remove('hidden');
+      return;
+    }
+    const sellers = Array.isArray(state.sellers) ? state.sellers : [];
+    const queryRaw = state.sellerSearchQuery || '';
+    const normalizedQuery = normalizeKeyword(queryRaw);
+    if (!sellers.length) {
+      empty.textContent = 'Nenhum vendedor cadastrado.';
+      empty.classList.remove('hidden');
+      return;
+    }
+    let filtered = [];
+    if (!queryRaw) {
+      empty.textContent = 'Digite o nome do vendedor ou * para listar todos.';
+      empty.classList.remove('hidden');
+      return;
+    }
+    if (queryRaw.trim() === '*') {
+      filtered = sellers;
+    } else if (normalizedQuery) {
+      filtered = sellers.filter((seller) => normalizeKeyword(seller.nome || '').includes(normalizedQuery));
+    }
+    if (!filtered.length) {
+      empty.textContent = `Nenhum vendedor encontrado para "${queryRaw}".`;
+      empty.classList.remove('hidden');
+      return;
+    }
+    empty.classList.add('hidden');
+    filtered.forEach((seller) => {
+      const code = getSellerCode(seller);
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.setAttribute('data-seller-code', code);
+      item.className =
+        'flex w-full items-center justify-between gap-3 rounded-lg border border-gray-100 bg-white px-3 py-2 text-left transition hover:border-primary hover:bg-primary/5';
+      const sellerName = seller?.nome || 'Vendedor sem nome';
+      item.innerHTML = `
+        <div class="flex flex-col">
+          <span class="text-sm font-semibold text-gray-800">${sellerName}</span>
+          <span class="text-xs text-gray-500">${code ? `Código: ${code}` : 'Código não informado'}</span>
+        </div>
+        <span class="text-[11px] font-semibold text-primary">Selecionar</span>
+      `;
+      container.appendChild(item);
+    });
+  };
+
+  const openSellerSearchModal = async (query = '') => {
+    if (!elements.sellerModal) return;
+    state.sellerSearchQuery = query || '';
+    if (elements.sellerSearchInput) {
+      elements.sellerSearchInput.value = query || '';
+    }
+    elements.sellerModal.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+    renderSellerSearchResults();
+    try {
+      await ensureSellerList();
+      renderSellerSearchResults();
+    } catch (error) {
+      renderSellerSearchResults();
+    }
+    setTimeout(() => {
+      elements.sellerSearchInput?.focus();
+    }, 150);
+  };
+
+  const closeSellerSearchModal = () => {
+    if (!elements.sellerModal) return;
+    elements.sellerModal.classList.add('hidden');
+    state.sellerSearchQuery = '';
+    if (elements.sellerSearchInput) {
+      elements.sellerSearchInput.value = '';
+    }
+    renderSellerSearchResults();
+    releaseBodyScrollIfNoModal();
+  };
+
+  const handleSellerSearchInput = (event) => {
+    state.sellerSearchQuery = event?.target?.value || '';
+    renderSellerSearchResults();
+  };
+
+  const handleSellerResultsClick = (event) => {
+    const target = event.target.closest('[data-seller-code]');
+    if (!target) return;
+    const code = target.getAttribute('data-seller-code') || '';
+    const normalized = sanitizeSellerCode(code);
+    const seller = findSellerByCode(normalized) || state.sellers.find((entry) => getSellerCode(entry) === normalized);
+    if (!seller || !normalized) {
+      notify('Não foi possível selecionar este vendedor. Código inválido.', 'warning');
+      return;
+    }
+    if (elements.sellerInput) {
+      elements.sellerInput.value = normalized;
+    }
+    closeSellerSearchModal();
+    updateSellerSelection(normalized);
+  };
+
+  const updateSellerSelection = async (rawCode) => {
+    const normalized = sanitizeSellerCode(rawCode);
+    if (elements.sellerInput && elements.sellerInput.value !== normalized) {
+      elements.sellerInput.value = normalized;
+    }
+    if (!normalized) {
+      state.selectedSeller = null;
+      setSellerFeedback('Insira o vendedor.', 'muted');
+      return;
+    }
+    setSellerFeedback('Validando vendedor...', 'muted');
+    try {
+      await ensureSellerList();
+      const seller = findSellerByCode(normalized);
+      if (seller) {
+        state.selectedSeller = seller;
+        const displayName = getSellerDisplayName(seller);
+        setSellerFeedback(displayName, 'success');
+      } else {
+        state.selectedSeller = null;
+        setSellerFeedback('Código não encontrado entre vendedores cadastrados.', 'error');
+      }
+    } catch (error) {
+      state.selectedSeller = null;
+      setSellerFeedback(error?.message || 'Erro ao validar vendedor.', 'error');
+    }
+  };
+
+  const handleSellerInputChange = (event) => {
+    const value = event?.target?.value ?? '';
+    const trimmed = value.trim();
+    if (/[a-zA-ZÀ-ÿ]/.test(value) || trimmed === '*') {
+      if (sellerLookupTimeout) {
+        clearTimeout(sellerLookupTimeout);
+        sellerLookupTimeout = null;
+      }
+      openSellerSearchModal(trimmed);
+      return;
+    }
+    const normalized = sanitizeSellerCode(value);
+    if (event?.target && value !== normalized) {
+      event.target.value = normalized;
+    }
+    if (sellerLookupTimeout) {
+      clearTimeout(sellerLookupTimeout);
+      sellerLookupTimeout = null;
+    }
+    sellerLookupTimeout = setTimeout(() => updateSellerSelection(normalized), 400);
+  };
+
+  const handleSellerInputBlur = () => {
+    if (sellerLookupTimeout) {
+      clearTimeout(sellerLookupTimeout);
+      sellerLookupTimeout = null;
+    }
+    const value = elements.sellerInput?.value || '';
+    updateSellerSelection(value);
   };
 
   const isCrediarioReceivable = (entry) => {
@@ -5536,6 +5842,9 @@
     quantidade: state.quantidade,
     vendaCliente: state.vendaCliente ? { ...state.vendaCliente } : null,
     vendaPet: state.vendaPet ? { ...state.vendaPet } : null,
+    seller: state.selectedSeller ? { ...state.selectedSeller } : null,
+    sellerCode: state.selectedSeller ? getSellerCode(state.selectedSeller) : '',
+    sellerName: state.selectedSeller ? getSellerDisplayName(state.selectedSeller) : '',
   });
 
   const applySaleStateSnapshot = (snapshot = {}) => {
@@ -5557,6 +5866,33 @@
     if (snapshotCustomer || state.vendaCliente) {
       const skipRecalculate = snapshotCustomer ? Boolean(snapshot.preserveItemTotals) : false;
       setSaleCustomer(snapshotCustomer, snapshotPet, { skipRecalculate });
+    }
+    const hasSellerSnapshot =
+      Object.prototype.hasOwnProperty.call(snapshot, 'seller') ||
+      Object.prototype.hasOwnProperty.call(snapshot, 'selectedSeller') ||
+      snapshot.sellerCode ||
+      snapshot.sellerName;
+    if (hasSellerSnapshot) {
+      const rawSeller =
+        (snapshot.selectedSeller && typeof snapshot.selectedSeller === 'object' && snapshot.selectedSeller) ||
+        (snapshot.seller && typeof snapshot.seller === 'object' && snapshot.seller) ||
+        null;
+      const sellerCode = sanitizeSellerCode(snapshot.sellerCode || (rawSeller ? getSellerCode(rawSeller) : ''));
+      const sellerName = snapshot.sellerName || (rawSeller ? getSellerDisplayName(rawSeller) : '');
+      const sellerSnapshot = rawSeller || (sellerName || sellerCode ? { codigo: sellerCode, nome: sellerName } : null);
+      if (sellerSnapshot) {
+        state.selectedSeller = { ...sellerSnapshot };
+        if (elements.sellerInput) {
+          elements.sellerInput.value = sellerCode || '';
+        }
+        setSellerFeedback(sellerName || sellerCode || 'Insira o vendedor.', sellerCode ? 'success' : 'muted');
+      } else {
+        state.selectedSeller = null;
+        if (elements.sellerInput) {
+          elements.sellerInput.value = '';
+        }
+        setSellerFeedback('Insira o vendedor.', 'muted');
+      }
     }
   };
 
@@ -6678,6 +7014,12 @@
       notify('Este orçamento já foi finalizado e não pode ser importado novamente.', 'info');
       return;
     }
+    const budgetSeller =
+      budget.seller && typeof budget.seller === 'object'
+        ? { ...budget.seller }
+        : budget.sellerCode || budget.sellerName
+        ? { codigo: budget.sellerCode || '', nome: budget.sellerName || '' }
+        : null;
     state.activeBudgetId = budget.id;
     state.pendingBudgetValidityDays = clampBudgetValidityDays(budget.validityDays);
     applySaleStateSnapshot({
@@ -6689,6 +7031,9 @@
       vendaAcrescimo: safeNumber(budget.addition ?? 0),
       selectedProduct: null,
       quantidade: 1,
+      seller: budgetSeller,
+      sellerCode: budget.sellerCode || (budgetSeller ? getSellerCode(budgetSeller) : ''),
+      sellerName: budget.sellerName || (budgetSeller ? getSellerDisplayName(budgetSeller) : ''),
     });
     state.vendaCliente = budget.customer ? { ...budget.customer } : null;
     state.vendaPet = budget.pet ? { ...budget.pet } : null;
@@ -7652,6 +7997,9 @@
     const total = getSaleTotalLiquido();
     const customerSnapshot = state.vendaCliente ? { ...state.vendaCliente } : null;
     const petSnapshot = state.vendaPet ? { ...state.vendaPet } : null;
+    const sellerSnapshot = state.selectedSeller ? { ...state.selectedSeller } : null;
+    const sellerName = sellerSnapshot ? getSellerDisplayName(sellerSnapshot) : '';
+    const sellerCode = sellerSnapshot ? getSellerCode(sellerSnapshot) : '';
     const budgetId = state.activeBudgetId || '';
     const existingBudget = budgetId ? findBudgetById(budgetId) : null;
     let budget = existingBudget;
@@ -7663,6 +8011,9 @@
       existingBudget.total = total;
       existingBudget.customer = customerSnapshot;
       existingBudget.pet = petSnapshot;
+      existingBudget.seller = sellerSnapshot || existingBudget.seller || null;
+      existingBudget.sellerName = sellerSnapshot ? sellerName : existingBudget.sellerName || '';
+      existingBudget.sellerCode = sellerSnapshot ? sellerCode : existingBudget.sellerCode || '';
       existingBudget.validityDays = validityDays;
       existingBudget.validUntil = validUntil.toISOString();
       existingBudget.updatedAt = nowIso;
@@ -7680,6 +8031,9 @@
         addition,
         customer: customerSnapshot,
         pet: petSnapshot,
+        seller: sellerSnapshot,
+        sellerName,
+        sellerCode,
         items: itensSnapshot,
         payments: pagamentosSnapshot,
         paymentLabel: describeSalePayments(pagamentosSnapshot),
@@ -7762,6 +8116,7 @@
       receivables: saleReceivables.entries,
       cashContributions,
       appointmentId: state.activeAppointmentId || '',
+      seller: state.selectedSeller,
     });
     if (saleRecord) {
       saleRecord.cashContributions = cashContributions;
@@ -8009,6 +8364,7 @@
       createdAt: orderRecord.createdAt,
       receivables: saleReceivables.entries,
       cashContributions,
+      seller: state.selectedSeller,
     });
     if (saleRecord) {
       saleRecord.cashContributions = cashContributions;
@@ -11426,6 +11782,7 @@
     receivables = [],
     cashContributions = [],
     appointmentId = '',
+    seller = null,
   } = {}) => {
     const normalizedType = type === 'delivery' ? 'delivery' : 'venda';
     const typeLabel = normalizedType === 'delivery' ? 'Delivery' : 'Venda';
@@ -11459,6 +11816,9 @@
       customerSource?.cnpj ||
       customerSource?.documento ||
       '';
+    const sellerSnapshot = seller && typeof seller === 'object' ? { ...seller } : null;
+    const sellerName = sellerSnapshot ? getSellerDisplayName(sellerSnapshot) : '';
+    const sellerCode = sellerSnapshot ? getSellerCode(sellerSnapshot) : '';
     const createdIso = createdAt || new Date().toISOString();
     const discountValue = Math.max(
       0,
@@ -11508,6 +11868,9 @@
       saleCodeLabel: saleCode || 'Sem código',
       customerName,
       customerDocument,
+      seller: sellerSnapshot,
+      sellerName,
+      sellerCode,
       paymentTags,
       items: itemDisplays,
       discountValue,
@@ -13475,6 +13838,7 @@
 
   const releaseBodyScrollIfNoModal = () => {
     const blockers = [
+      elements.sellerModal,
       elements.customerRegisterModal,
       elements.customerModal,
       elements.finalizeModal,
@@ -13953,6 +14317,12 @@
     state.saleCodeIdentifier = '';
     state.saleCodeSequence = 1;
     state.currentSaleCode = '';
+    state.sellers = [];
+    state.sellersLoaded = false;
+    state.sellerLookupLoading = false;
+    state.sellerLookupError = '';
+    state.selectedSeller = null;
+    state.sellerSearchQuery = '';
     state.customerSearchResults = [];
     state.customerSearchLoading = false;
     state.customerSearchQuery = '';
@@ -14005,6 +14375,10 @@
       clearTimeout(customerSearchTimeout);
       customerSearchTimeout = null;
     }
+    if (sellerLookupTimeout) {
+      clearTimeout(sellerLookupTimeout);
+      sellerLookupTimeout = null;
+    }
     if (customerSearchController) {
       customerSearchController.abort();
       customerSearchController = null;
@@ -14055,6 +14429,15 @@
     if (elements.searchInput) {
       elements.searchInput.value = '';
     }
+    if (elements.sellerInput) {
+      elements.sellerInput.value = '';
+    }
+    if (elements.sellerModal) {
+      elements.sellerModal.classList.add('hidden');
+    }
+    state.sellerSearchQuery = '';
+    renderSellerSearchResults();
+    setSellerFeedback('Insira o vendedor.', 'muted');
     if (elements.searchResults) {
       elements.searchResults.classList.add('hidden');
       elements.searchResults.innerHTML = '';
@@ -15194,6 +15577,13 @@
     elements.searchInput?.addEventListener('input', handleSearchInput);
     elements.searchInput?.addEventListener('keydown', handleSearchKeydown);
     elements.searchResults?.addEventListener('click', handleSearchResultsClick);
+    elements.sellerInput?.addEventListener('input', handleSellerInputChange);
+    elements.sellerInput?.addEventListener('blur', handleSellerInputBlur);
+    elements.sellerModalClose?.addEventListener('click', closeSellerSearchModal);
+    elements.sellerModalCancel?.addEventListener('click', closeSellerSearchModal);
+    elements.sellerModalBackdrop?.addEventListener('click', closeSellerSearchModal);
+    elements.sellerSearchInput?.addEventListener('input', handleSellerSearchInput);
+    elements.sellerResultsList?.addEventListener('click', handleSellerResultsClick);
     document.addEventListener('click', handleDocumentClick);
     elements.addItem?.addEventListener('click', addItemToList);
     elements.itemQuantity?.addEventListener('input', handleQuantityInput);

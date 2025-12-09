@@ -125,13 +125,20 @@
                                     <div class="xl:col-span-2 space-y-5">
                                         <div class="rounded-xl border border-gray-200 p-5 space-y-5">
                                             <div class="space-y-4">
-                                                <div>
-                                                    <label for="pdv-product-search" class="block text-sm font-semibold text-gray-700 mb-1">Pesquisar produtos</label>
-                                                    <div class="relative">
-                                                        <input id="pdv-product-search" type="search" placeholder="Busque por código interno, código de barras ou nome" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" autocomplete="off">
-                                                        <div id="pdv-product-results" class="absolute left-0 right-0 top-full z-20 mt-2 hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg"></div>
+                                                <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+                                                    <div class="md:col-span-4">
+                                                        <label for="pdv-product-search" class="block text-sm font-semibold text-gray-700 mb-1">Pesquisar produtos</label>
+                                                        <div class="relative">
+                                                            <input id="pdv-product-search" type="search" placeholder="Busque por código interno, código de barras ou nome" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" autocomplete="off">
+                                                            <div id="pdv-product-results" class="absolute left-0 right-0 top-full z-20 mt-2 hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg"></div>
+                                                        </div>
+                                                        <p class="text-xs text-gray-500 mt-1">Os resultados são atualizados conforme a digitação, seguindo o mesmo critério de busca do site.</p>
                                                     </div>
-                                                    <p class="text-xs text-gray-500 mt-1">Os resultados são atualizados conforme a digitação, seguindo o mesmo critério de busca do site.</p>
+                                                    <div>
+                                                        <label for="pdv-seller" class="block text-sm font-semibold text-gray-700 mb-1">Vendedor</label>
+                                                        <input id="pdv-seller" type="text" placeholder="Informe o código do vendedor" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" inputmode="numeric" autocomplete="off">
+                                                        <p id="pdv-seller-feedback" class="text-xs text-gray-500 mt-1">Insira o vendedor.</p>
+                                                    </div>
                                                 </div>
                                             </div>
 
@@ -550,6 +557,38 @@
     <div id="admin-footer-placeholder"></div>
     <div id="modal-placeholder"></div>
     <div id="confirm-modal-placeholder"></div>
+
+    <div id="pdv-seller-modal" class="fixed inset-0 z-[80] hidden" aria-hidden="true">
+        <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" data-seller-dismiss="backdrop"></div>
+        <div class="relative mx-auto mt-14 w-full max-w-xl px-4">
+            <div class="overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5">
+                <div class="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+                    <div>
+                        <h2 class="text-lg font-semibold text-gray-800">Buscar vendedor</h2>
+                        <p class="text-sm text-gray-500">Digite o nome do vendedor ou use * para listar todos.</p>
+                    </div>
+                    <button type="button" id="pdv-seller-close" class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600" aria-label="Fechar modal de vendedores">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="space-y-5 px-5 py-5">
+                    <div class="space-y-2">
+                        <label for="pdv-seller-search" class="block text-sm font-semibold text-gray-700">Pesquisar vendedor</label>
+                        <input id="pdv-seller-search" type="search" placeholder="Nome do vendedor ou * para listar todos" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" autocomplete="off">
+                        <p class="text-xs text-gray-500">Digite letras para buscar pelo nome. Use * para mostrar todos os vendedores cadastrados.</p>
+                    </div>
+                    <div class="space-y-2">
+                        <div id="pdv-seller-results-loading" class="hidden rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-500">Carregando vendedores...</div>
+                        <div id="pdv-seller-results-empty" class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-500">Digite o nome do vendedor ou * para listar todos.</div>
+                        <div id="pdv-seller-results" class="max-h-80 space-y-2 overflow-y-auto pr-1"></div>
+                    </div>
+                </div>
+                <div class="flex items-center justify-end gap-2 border-t border-gray-200 bg-gray-50 px-5 py-4">
+                    <button type="button" id="pdv-seller-cancel" class="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100">Fechar</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <div id="pdv-customer-modal" class="fixed inset-0 z-[90] hidden">
         <div class="absolute inset-0 bg-slate-900/60" data-pdv-customer-dismiss="backdrop"></div>

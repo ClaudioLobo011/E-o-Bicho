@@ -1043,6 +1043,18 @@ const normalizeSaleRecordPayload = (record) => {
   const customerName =
     normalizeString(record.customerName) || normalizeString(record.cliente) || 'Cliente não informado';
   const customerDocument = normalizeString(record.customerDocument);
+  const sellerSource = record.seller || record.vendedor || null;
+  const sellerName =
+    normalizeString(record.sellerName || record.vendedorNome) ||
+    normalizeString(sellerSource?.nome || sellerSource?.name);
+  const sellerCode =
+    normalizeString(
+      record.sellerCode ||
+        record.vendedorCodigo ||
+        sellerSource?.codigo ||
+        sellerSource?.codigoCliente ||
+        sellerSource?.id
+    ) || '';
   const paymentTags = Array.isArray(record.paymentTags)
     ? record.paymentTags.map((tag) => normalizeString(tag)).filter(Boolean)
     : [];
@@ -1116,6 +1128,9 @@ const normalizeSaleRecordPayload = (record) => {
     saleCodeLabel,
     customerName,
     customerDocument,
+    seller: sellerSource && typeof sellerSource === 'object' ? { ...sellerSource } : null,
+    sellerName: sellerName || '',
+    sellerCode,
     paymentTags,
     items,
     discountValue,
@@ -1231,6 +1246,27 @@ const normalizeBudgetRecordPayload = (budget, { useDefaults = false } = {}) => {
     ? budget.pagamentos
     : [];
   const payments = paymentsSource.map((payment) => (payment && typeof payment === 'object' ? { ...payment } : payment));
+  const sellerSource =
+    budget.seller && typeof budget.seller === 'object'
+      ? { ...budget.seller }
+      : budget.vendedor && typeof budget.vendedor === 'object'
+      ? { ...budget.vendedor }
+      : null;
+  const sellerName =
+    normalizeString(budget.sellerName || budget.vendedorNome) ||
+    normalizeString(sellerSource?.nome || sellerSource?.name);
+  const sellerCode =
+    normalizeString(
+      budget.sellerCode || budget.vendedorCodigo || sellerSource?.codigo || sellerSource?.codigoCliente || sellerSource?.id
+    ) || '';
+  const seller =
+    sellerSource ||
+    (sellerName || sellerCode
+      ? {
+          ...(sellerCode ? { codigo: sellerCode } : {}),
+          ...(sellerName ? { nome: sellerName } : {}),
+        }
+      : null);
 
   const paymentLabel =
     normalizeString(budget.paymentLabel || budget.meioPagamento || budget.formaPagamento || budget.condicaoPagamento) || '';
@@ -1249,6 +1285,9 @@ const normalizeBudgetRecordPayload = (budget, { useDefaults = false } = {}) => {
     addition,
     customer,
     pet,
+    seller,
+    sellerName: sellerName || '',
+    sellerCode,
     items,
     payments,
     paymentLabel,
