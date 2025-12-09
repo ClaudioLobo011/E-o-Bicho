@@ -161,6 +161,11 @@
     saleCodeIdentifier: '',
     saleCodeSequence: 1,
     currentSaleCode: '',
+    sellers: [],
+    sellersLoaded: false,
+    sellerLookupLoading: false,
+    sellerLookupError: '',
+    selectedSeller: null,
     deliveryFinalizingOrderId: '',
     finalizeProcessing: false,
     completedSales: [],
@@ -600,6 +605,7 @@
   let appointmentsRequestId = 0;
   let transferProductSearchTimeout = null;
   let transferProductSearchController = null;
+  let sellerLookupTimeout = null;
   let customerRegisterPreviousFocus = null;
   let customerRegisterFrameUrl = '';
   let customerRegisterFrameWindow = null;
@@ -2407,6 +2413,9 @@
     elements.searchInput = document.getElementById('pdv-product-search');
     elements.searchResults = document.getElementById('pdv-product-results');
 
+    elements.sellerInput = document.getElementById('pdv-seller');
+    elements.sellerFeedback = document.getElementById('pdv-seller-feedback');
+
     elements.selectedImage = document.getElementById('pdv-selected-image');
     elements.selectedPlaceholder = document.getElementById('pdv-selected-placeholder');
     elements.selectedName = document.getElementById('pdv-selected-name');
@@ -3376,6 +3385,104 @@
     if (!raw) return '';
     const normalized = typeof raw.normalize === 'function' ? raw.normalize('NFD') : raw;
     return normalized.replace(/[\u0300-\u036f]/g, '');
+  };
+
+  const sanitizeSellerCode = (value) => String(value || '').replace(/\D/g, '');
+
+  const setSellerFeedback = (message, status = 'muted') => {
+    if (!elements.sellerFeedback) return;
+    const classes = {
+      success: 'text-emerald-600',
+      error: 'text-rose-600',
+      muted: 'text-gray-500',
+    };
+    elements.sellerFeedback.textContent = message || '';
+    elements.sellerFeedback.classList.remove('text-emerald-600', 'text-rose-600', 'text-gray-500');
+    elements.sellerFeedback.classList.add(classes[status] || classes.muted);
+  };
+
+  const findSellerByCode = (code) => {
+    const normalized = sanitizeSellerCode(code);
+    if (!normalized) return null;
+    return state.sellers.find((seller) => {
+      const sellerCode = seller?.codigo || seller?.codigoCliente || seller?.id;
+      const sellerGroups = Array.isArray(seller?.grupos) ? seller.grupos : [];
+      return sellerGroups.includes('vendedor') && sanitizeSellerCode(sellerCode) === normalized;
+    });
+  };
+
+  const ensureSellerList = async () => {
+    if (state.sellersLoaded) return;
+    state.sellerLookupLoading = true;
+    const token = getToken();
+    try {
+      const payload = await fetchWithOptionalAuth(`${API_BASE}/admin/funcionarios`, {
+        token,
+        errorMessage: 'Não foi possível carregar os vendedores cadastrados.',
+      });
+      const funcionarios = Array.isArray(payload) ? payload : Array.isArray(payload?.funcionarios) ? payload.funcionarios : [];
+      state.sellers = funcionarios.filter((funcionario) =>
+        Array.isArray(funcionario?.grupos) && funcionario.grupos.includes('vendedor')
+      );
+      state.sellersLoaded = true;
+    } catch (error) {
+      state.sellerLookupError = error?.message || 'Erro ao carregar vendedores.';
+      console.error('Erro ao carregar vendedores:', error);
+      notify(state.sellerLookupError, 'error');
+      throw error;
+    } finally {
+      state.sellerLookupLoading = false;
+    }
+  };
+
+  const updateSellerSelection = async (rawCode) => {
+    const normalized = sanitizeSellerCode(rawCode);
+    if (elements.sellerInput && elements.sellerInput.value !== normalized) {
+      elements.sellerInput.value = normalized;
+    }
+    if (!normalized) {
+      state.selectedSeller = null;
+      setSellerFeedback('Digite o código de um vendedor cadastrado para validar.', 'muted');
+      return;
+    }
+    setSellerFeedback('Validando vendedor...', 'muted');
+    try {
+      await ensureSellerList();
+      const seller = findSellerByCode(normalized);
+      if (seller) {
+        state.selectedSeller = seller;
+        const displayName = seller.nome || 'Vendedor sem nome';
+        setSellerFeedback(`Vendedor: ${displayName} (cód. ${normalized})`, 'success');
+      } else {
+        state.selectedSeller = null;
+        setSellerFeedback('Código não encontrado entre vendedores cadastrados.', 'error');
+      }
+    } catch (error) {
+      state.selectedSeller = null;
+      setSellerFeedback(error?.message || 'Erro ao validar vendedor.', 'error');
+    }
+  };
+
+  const handleSellerInputChange = (event) => {
+    const value = event?.target?.value ?? '';
+    const normalized = sanitizeSellerCode(value);
+    if (event?.target && value !== normalized) {
+      event.target.value = normalized;
+    }
+    if (sellerLookupTimeout) {
+      clearTimeout(sellerLookupTimeout);
+      sellerLookupTimeout = null;
+    }
+    sellerLookupTimeout = setTimeout(() => updateSellerSelection(normalized), 400);
+  };
+
+  const handleSellerInputBlur = () => {
+    if (sellerLookupTimeout) {
+      clearTimeout(sellerLookupTimeout);
+      sellerLookupTimeout = null;
+    }
+    const value = elements.sellerInput?.value || '';
+    updateSellerSelection(value);
   };
 
   const isCrediarioReceivable = (entry) => {
@@ -13953,6 +14060,11 @@
     state.saleCodeIdentifier = '';
     state.saleCodeSequence = 1;
     state.currentSaleCode = '';
+    state.sellers = [];
+    state.sellersLoaded = false;
+    state.sellerLookupLoading = false;
+    state.sellerLookupError = '';
+    state.selectedSeller = null;
     state.customerSearchResults = [];
     state.customerSearchLoading = false;
     state.customerSearchQuery = '';
@@ -14005,6 +14117,10 @@
       clearTimeout(customerSearchTimeout);
       customerSearchTimeout = null;
     }
+    if (sellerLookupTimeout) {
+      clearTimeout(sellerLookupTimeout);
+      sellerLookupTimeout = null;
+    }
     if (customerSearchController) {
       customerSearchController.abort();
       customerSearchController = null;
@@ -14055,6 +14171,10 @@
     if (elements.searchInput) {
       elements.searchInput.value = '';
     }
+    if (elements.sellerInput) {
+      elements.sellerInput.value = '';
+    }
+    setSellerFeedback('Digite o código de um vendedor cadastrado para validar.', 'muted');
     if (elements.searchResults) {
       elements.searchResults.classList.add('hidden');
       elements.searchResults.innerHTML = '';
@@ -15194,6 +15314,8 @@
     elements.searchInput?.addEventListener('input', handleSearchInput);
     elements.searchInput?.addEventListener('keydown', handleSearchKeydown);
     elements.searchResults?.addEventListener('click', handleSearchResultsClick);
+    elements.sellerInput?.addEventListener('input', handleSellerInputChange);
+    elements.sellerInput?.addEventListener('blur', handleSellerInputBlur);
     document.addEventListener('click', handleDocumentClick);
     elements.addItem?.addEventListener('click', addItemToList);
     elements.itemQuantity?.addEventListener('input', handleQuantityInput);
