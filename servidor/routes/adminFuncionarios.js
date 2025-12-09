@@ -6,6 +6,7 @@ const User = require('../models/User');
 const authMiddleware = require('../middlewares/authMiddleware');
 const mongoose = require('mongoose');
 const Store = require('../models/Store');
+const EmployeeGroup = require('../models/EmployeeGroup');
 
 // ----- helpers / policies -----
 const roleRank = { cliente: 0, funcionario: 1, admin: 2, admin_master: 3 };
@@ -59,6 +60,30 @@ function parseEnum(value, allowed = []) {
   if (value === null || value === '') return null;
   const normalized = String(value).trim().toLowerCase();
   return allowed.includes(normalized) ? normalized : null;
+}
+
+async function filtrarGruposValidos(valor) {
+  let arr = [];
+  if (Array.isArray(valor)) arr = valor;
+  else if (typeof valor === 'string' && valor) arr = [valor];
+
+  arr = arr.map((g) => String(g).trim()).filter(Boolean);
+  if (!arr.length) return [];
+
+  const existentes = await EmployeeGroup.find({}, 'codigo nome').lean();
+  const codigosValidos = new Set(existentes.map((g) => String(g.codigo)));
+  const nomesValidos = new Set(existentes.map((g) => String(g.nome || '').trim().toLowerCase()).filter(Boolean));
+
+  return arr
+    .filter((g) => {
+      const codigoStr = String(Number(g));
+      const nomeLower = g.toLowerCase();
+      return codigosValidos.has(g) || codigosValidos.has(codigoStr) || nomesValidos.has(nomeLower);
+    })
+    .map((g) => {
+      const num = Number(g);
+      return Number.isFinite(num) ? String(num) : g;
+    });
 }
 
 function sanitizeCursosPayload(raw) {
@@ -499,12 +524,7 @@ router.post('/', authMiddleware, requireAdmin, async (req, res) => {
       doc.cpf = cpfDigits || null;
     }
 
-    const ALLOWED_GROUPS = ['gerente','vendedor','esteticista','veterinario'];
-    let gruposArr = [];
-    if (Array.isArray(grupos)) gruposArr = grupos;
-    else if (typeof grupos === 'string' && grupos) gruposArr = [grupos];
-    gruposArr = [...new Set(gruposArr.filter(g => ALLOWED_GROUPS.includes(g)))];
-    doc.grupos = gruposArr;
+    doc.grupos = await filtrarGruposValidos(grupos);
 
     // Empresas (lojas): aceita array/string de IDs; valida ObjectId e existência
     let empresasArr = [];
@@ -659,12 +679,7 @@ router.put('/:id', authMiddleware, requireAdmin, async (req, res) => {
     }
 
     if (typeof grupos !== 'undefined') {
-      const ALLOWED_GROUPS = ['gerente','vendedor','esteticista','veterinario'];
-      let arr = [];
-      if (Array.isArray(grupos)) arr = grupos;
-      else if (typeof grupos === 'string' && grupos) arr = [grupos];
-      arr = [...new Set(arr.filter(g => ALLOWED_GROUPS.includes(g)))];
-      update.grupos = arr;
+      update.grupos = await filtrarGruposValidos(grupos);
 
       if (typeof req.body.empresas !== 'undefined') {
         let arr = [];

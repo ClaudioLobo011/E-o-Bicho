@@ -217,6 +217,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   let enderecos = [];
   let empresasDisponiveis = [];
+  let gruposDisponiveis = [];
   let enderecoEditandoIndex = null;
   let cursos = [];
   let cursoEditandoIndex = null;
@@ -2365,12 +2366,43 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function getSelectedGrupos() {
     if (!gruposBox) return [];
-    return Array.from(gruposBox.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
+    return Array
+      .from(gruposBox.querySelectorAll('input[type="checkbox"]:checked'))
+      .map(cb => String(cb.value));
   }
   function setGruposSelected(arr) {
     if (!gruposBox) return;
-    const sel = new Set(arr || []);
-    gruposBox.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = sel.has(cb.value));
+    const sel = new Set((arr || []).map((v) => String(v)));
+    gruposBox.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = sel.has(String(cb.value)));
+  }
+
+  // --- Grupos (Tipos) ---
+  async function loadGruposOptions() {
+  async function loadGruposOptions() {
+    if (!gruposBox) return;
+    const selecionadosAtuais = getSelectedGrupos();
+    try {
+      const res = await fetch(`${API_CONFIG.BASE_URL}/admin/funcionarios/grupos`, { headers: headers() });
+      if (!res.ok) throw new Error('Falha ao carregar tipos');
+      const grupos = await res.json();
+      gruposDisponiveis = Array.isArray(grupos) ? grupos : [];
+
+      if (!gruposDisponiveis.length) {
+        gruposBox.innerHTML = '<p class="text-sm text-gray-500">Nenhum tipo cadastrado.</p>';
+        return;
+      }
+
+      gruposBox.innerHTML = gruposDisponiveis.map((g) => `
+        <label class="inline-flex items-center gap-2">
+          <input type="checkbox" value="${g.codigo}" class="rounded border-gray-300">
+          <span>${g.nome || 'Sem nome'}${g.codigo ? ` (cód. ${g.codigo})` : ''}</span>
+        </label>
+      `).join('');
+      setGruposSelected(selecionadosAtuais);
+    } catch (err) {
+      console.error(err);
+      gruposBox.innerHTML = '<p class="text-sm text-red-600">Erro ao carregar tipos.</p>';
+    }
   }
 
   // --- Empresas (Lojas) ---
@@ -2686,6 +2718,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Init
   (async () => {
     await ensureActorRole();
+    await loadGruposOptions();
     await loadEmpresasOptions();
     await loadFuncionarios();
   })()
