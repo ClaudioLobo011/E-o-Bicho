@@ -2378,7 +2378,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- Grupos (Tipos) ---
   async function loadGruposOptions() {
-  async function loadGruposOptions() {
     if (!gruposBox) return;
     const selecionadosAtuais = getSelectedGrupos();
     try {
