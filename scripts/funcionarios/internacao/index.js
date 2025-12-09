@@ -354,6 +354,10 @@ const boxesModal = {
   errorEl: null,
   submitBtn: null,
   onSuccess: null,
+  empresaSelect: null,
+  empresasOptions: [],
+  dataset: null,
+  state: null,
 };
 
 const fichaInternacaoModal = {
@@ -812,15 +816,52 @@ function getAuthToken() {
 
 function getLoggedInUserData() {
   try {
-    return JSON.parse(localStorage.getItem('loggedInUser') || 'null');
+    const logged = JSON.parse(localStorage.getItem('loggedInUser') || 'null');
+    if (logged) return logged;
+    const legacy = JSON.parse(localStorage.getItem('user') || 'null');
+    return legacy;
   } catch (error) {
     console.error('internacao: falha ao ler dados do usuário logado', error);
     return null;
   }
 }
 
-function getUserEmpresasOptions() {
-  const user = getLoggedInUserData();
+function getSelectedUserData() {
+  try {
+    const cached =
+      sessionStorage.getItem('selectedUser') ||
+      localStorage.getItem('selectedUser') ||
+      null;
+    return cached ? JSON.parse(cached) : null;
+  } catch (error) {
+    console.error('internacao: falha ao ler usuário selecionado', error);
+    return null;
+  }
+}
+
+function isAllEmpresasFlagEnabled(userOverride = null) {
+  const user = userOverride || getSelectedUserData() || getLoggedInUserData();
+  if (!user || typeof user !== 'object') return false;
+
+  const candidateFlags = [
+    user.todasEmpresas,
+    user.todasAsEmpresas,
+    user.verTodasEmpresas,
+    user.verTodasAsEmpresas,
+    user.allEmpresas,
+    user.allCompanies,
+    user.funcionario?.todasEmpresas,
+    user.funcionario?.todasAsEmpresas,
+    user.funcionario?.verTodasEmpresas,
+    user.funcionario?.verTodasAsEmpresas,
+    user.funcionario?.allCompanies,
+  ];
+
+  return candidateFlags.some((flag) => flag === true || flag === 'true' || flag === 'all');
+}
+
+function getUserEmpresasOptions(userOverride = null) {
+  const user = userOverride || getSelectedUserData() || getLoggedInUserData();
   const normalizeToArray = (value) => {
     if (!value) return [];
     if (Array.isArray(value)) return value;
@@ -829,19 +870,31 @@ function getUserEmpresasOptions() {
 
   const rawEmpresas = [
     ...normalizeToArray(user?.empresas),
+    ...normalizeToArray(user?.empresasSelecionadas),
+    ...normalizeToArray(user?.empresasSelecionadasIds),
     ...normalizeToArray(user?.empresa),
+    ...normalizeToArray(user?.empresaId),
     ...normalizeToArray(user?.empresaPrincipal),
     ...normalizeToArray(user?.empresa_principal),
     ...normalizeToArray(user?.empresaPrincipalId),
+    ...normalizeToArray(user?.selectedCompanies),
+    ...normalizeToArray(user?.selectedCompany),
+    ...normalizeToArray(user?.companies),
+    ...normalizeToArray(user?.company),
+    ...normalizeToArray(user?.companyId),
+    ...normalizeToArray(user?.companyIds),
     ...normalizeToArray(user?.funcionario?.empresas),
+    ...normalizeToArray(user?.funcionario?.empresasSelecionadas),
     ...normalizeToArray(user?.funcionario?.empresa),
     ...normalizeToArray(user?.funcionario?.empresaPrincipal),
     ...normalizeToArray(user?.funcionario?.lojas),
     ...normalizeToArray(user?.funcionario?.loja),
+    ...normalizeToArray(user?.funcionario?.lojasSelecionadas),
     ...normalizeToArray(user?.funcionario?.stores),
     ...normalizeToArray(user?.funcionario?.store),
     ...normalizeToArray(user?.lojas),
     ...normalizeToArray(user?.loja),
+    ...normalizeToArray(user?.lojasSelecionadas),
     ...normalizeToArray(user?.stores),
     ...normalizeToArray(user?.store),
   ];
@@ -878,6 +931,147 @@ function getUserEmpresasOptions() {
       };
     })
     .filter(Boolean);
+}
+
+function getUserIdForFetch(userOverride = null) {
+  const user = userOverride || getSelectedUserData() || getLoggedInUserData();
+  const idCandidate =
+    (user &&
+      (user.id ||
+        user._id ||
+        user.userId ||
+        user.funcionarioId ||
+        user.value ||
+        user.codigo ||
+        user.codigoLoja)) ||
+    '';
+  return typeof idCandidate === 'string' ? idCandidate.trim() : String(idCandidate || '').trim();
+}
+
+async function fetchUserEmpresasFromDatabaseDetailed(userOverride = null) {
+  const userId = getUserIdForFetch(userOverride);
+  if (!userId) return { options: [], user: null };
+
+  try {
+    const userData = await requestJson(`/users/${encodeURIComponent(userId)}`);
+    const options = getUserEmpresasOptions(userData);
+    return {
+      options: await hydrateEmpresasOptions(options),
+      user: userData || null,
+    };
+  } catch (error) {
+    console.warn('internacao: falha ao consultar empresas direto no banco', error);
+    return { options: [], user: null };
+  }
+}
+
+async function fetchUserEmpresasFromDatabase(userOverride = null) {
+  const { options } = await fetchUserEmpresasFromDatabaseDetailed(userOverride);
+  return options;
+}
+
+let cachedAllEmpresasOptions = null;
+
+async function fetchAllEmpresasOptions() {
+  if (Array.isArray(cachedAllEmpresasOptions)) return cachedAllEmpresasOptions;
+
+  try {
+    const stores = await requestJson('/stores');
+    cachedAllEmpresasOptions = Array.isArray(stores)
+      ? stores
+          .map((store) => normalizeEmpresaOptionFromStore(store))
+          .filter(Boolean)
+      : [];
+    return cachedAllEmpresasOptions;
+  } catch (error) {
+    console.warn('internacao: falha ao buscar lista completa de empresas', error);
+    cachedAllEmpresasOptions = [];
+    return cachedAllEmpresasOptions;
+  }
+}
+
+async function shouldAllowTodasEmpresas(options = [], userOverride = null) {
+  if (isAllEmpresasFlagEnabled(userOverride)) return true;
+
+  try {
+    const allEmpresas = await fetchAllEmpresasOptions();
+    if (!allEmpresas.length || !options.length) return false;
+    const allIds = new Set(allEmpresas.map((opt) => opt.value).filter(Boolean));
+    const userIds = new Set(options.map((opt) => opt.value).filter(Boolean));
+    const missing = Array.from(allIds).filter((id) => !userIds.has(id));
+    return missing.length === 0;
+  } catch (error) {
+    console.warn('internacao: falha ao comparar empresas do usuário com o total', error);
+    return false;
+  }
+}
+
+function normalizeEmpresaOptionFromStore(store, fallbackValue = '') {
+  if (!store || typeof store !== 'object') return null;
+
+  const rawValue =
+    store._id ||
+    store.id ||
+    store.value ||
+    store.codigo ||
+    store.codigoLoja ||
+    fallbackValue ||
+    '';
+
+  const rawLabel =
+    store.nomeFantasia ||
+    store.nome ||
+    store.razaoSocial ||
+    store.label ||
+    store.nomeLoja ||
+    rawValue ||
+    '';
+
+  const value = String(rawValue || rawLabel || '').trim();
+  const label = String(rawLabel || rawValue || '').trim();
+  if (!value) return null;
+
+  return { value, label: label || value };
+}
+
+async function hydrateEmpresasOptions(options = []) {
+  const candidates = Array.isArray(options)
+    ? options.filter((opt) => {
+        const value = (opt?.value || '').toString().trim();
+        const label = (opt?.label || '').toString().trim();
+        return value && (!label || label === value);
+      })
+    : [];
+
+  const idsToFetch = Array.from(new Set(candidates.map((opt) => opt.value).filter(Boolean)));
+  if (!idsToFetch.length) return options || [];
+
+  const resolved = new Map();
+  await Promise.all(
+    idsToFetch.map(async (id) => {
+      try {
+        const store = await requestJson(`/stores/${encodeURIComponent(id)}`);
+        const normalized = normalizeEmpresaOptionFromStore(store, id);
+        if (normalized) {
+          resolved.set(id, normalized);
+        }
+      } catch (error) {
+        console.warn('internacao: falha ao buscar detalhes da empresa', id, error);
+      }
+    })
+  );
+
+  return (options || []).map((opt) => {
+    if (!opt) return opt;
+    const value = (opt.value || '').toString().trim();
+    if (resolved.has(value)) {
+      return {
+        ...opt,
+        ...resolved.get(value),
+      };
+    }
+    return opt;
+  });
 }
 
 function showToastMessage(message, type = 'info') {
@@ -964,6 +1158,19 @@ function normalizeBox(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const boxLabel = typeof raw.box === 'string' && raw.box.trim() ? raw.box.trim() : 'Box';
   const ocupante = typeof raw.ocupante === 'string' && raw.ocupante.trim() ? raw.ocupante.trim() : 'Livre';
+  const toText = (value) => {
+    if (value === undefined || value === null) return '';
+    return String(value).trim();
+  };
+  const empresaId = toText(raw.empresaId || raw.empresa || raw.empresa?._id || raw.empresa?.id || raw.empresa?.value);
+  const empresaNome = toText(
+    raw.empresaNome ||
+      raw.empresaNomeFantasia ||
+      raw.empresa?.nomeFantasia ||
+      raw.empresa?.nome ||
+      raw.empresa?.razaoSocial ||
+      raw.empresa?.label,
+  );
   const status = typeof raw.status === 'string' && raw.status.trim()
     ? raw.status.trim()
     : ocupante === 'Livre'
@@ -981,6 +1188,22 @@ function normalizeBox(raw) {
     especialidade,
     higienizacao,
     observacao,
+    empresaId,
+    empresaNome,
+    empresaNomeFantasia: toText(raw.empresaNomeFantasia || empresaNome),
+    empresaRazaoSocial: toText(raw.empresaRazaoSocial || raw.empresa?.razaoSocial),
+    empresa:
+      raw.empresa ||
+      (empresaId || empresaNome
+        ? {
+            id: empresaId || empresaNome,
+            nomeFantasia: empresaNome || empresaId,
+            nome: empresaNome || empresaId,
+            razaoSocial: toText(raw.empresa?.razaoSocial || raw.empresaRazaoSocial || empresaNome || empresaId),
+            label: empresaNome || empresaId,
+            value: empresaId || empresaNome,
+          }
+        : null),
   };
 }
 
@@ -1360,6 +1583,17 @@ async function handleInternarModalSubmit(event) {
   const situacaoDetails = getOptionDetails(INTERNAR_SITUACAO_OPTIONS, formData.get('internarSituacao'));
   const riscoDetails = getOptionDetails(INTERNAR_RISCO_OPTIONS, formData.get('internarRisco'));
   const empresaDetails = getOptionDetails(internarModal.empresasOptions || [], formData.get('internarEmpresa'));
+  const empresaPayload = empresaDetails.value || empresaDetails.label
+    ? {
+        _id: empresaDetails.value || empresaDetails.label,
+        id: empresaDetails.value || empresaDetails.label,
+        value: empresaDetails.value || empresaDetails.label,
+        nomeFantasia: empresaDetails.label || empresaDetails.value,
+        nome: empresaDetails.label || empresaDetails.value,
+        razaoSocial: empresaDetails.label || empresaDetails.value,
+        label: empresaDetails.label || empresaDetails.value,
+      }
+    : null;
   const payload = {
     petId: petInfo.petId || '',
     petNome,
@@ -1387,6 +1621,10 @@ async function handleInternarModalSubmit(event) {
     acessorios: (formData.get('internarAcessorios') || '').toString().trim(),
     observacoes: (formData.get('internarObservacoes') || '').toString().trim(),
   };
+
+  if (empresaPayload) {
+    payload.empresa = empresaPayload;
+  }
 
   setInternarModalLoading(true);
   try {
@@ -3399,9 +3637,12 @@ function closeCreateBoxModal() {
   setBoxesModalError('');
 }
 
-function openCreateBoxModal() {
+function openCreateBoxModal(options = {}) {
   ensureCreateBoxModal();
   if (!boxesModal.overlay) return;
+  boxesModal.dataset = options.dataset || boxesModal.dataset || getDataset();
+  boxesModal.state = options.state || boxesModal.state || {};
+  populateBoxesEmpresaSelect();
   boxesModal.overlay.classList.remove('hidden');
   boxesModal.overlay.dataset.modalOpen = 'true';
   setBoxesModalError('');
@@ -3419,6 +3660,18 @@ async function handleBoxesModalSubmit(event) {
   if (!boxesModal.form) return;
   setBoxesModalError('');
   const formData = new FormData(boxesModal.form);
+  const empresaDetails = getOptionDetails(boxesModal.empresasOptions || [], formData.get('boxEmpresa'));
+  const empresaPayload = empresaDetails.value || empresaDetails.label
+    ? {
+        _id: empresaDetails.value || empresaDetails.label,
+        id: empresaDetails.value || empresaDetails.label,
+        value: empresaDetails.value || empresaDetails.label,
+        nomeFantasia: empresaDetails.label || empresaDetails.value,
+        nome: empresaDetails.label || empresaDetails.value,
+        razaoSocial: empresaDetails.label || empresaDetails.value,
+        label: empresaDetails.label || empresaDetails.value,
+      }
+    : null;
   const payload = {
     box: (formData.get('box') || '').toString().trim(),
     especialidade: (formData.get('especialidade') || '').toString().trim(),
@@ -3433,7 +3686,18 @@ async function handleBoxesModalSubmit(event) {
     return;
   }
 
+  if (!empresaPayload) {
+    setBoxesModalError('Selecione a empresa do box.');
+    return;
+  }
+
   if (!payload.higienizacao) payload.higienizacao = '—';
+
+  payload.empresaId = empresaDetails.value;
+  payload.empresaNome = empresaDetails.label || empresaDetails.value;
+  payload.empresaNomeFantasia = empresaDetails.label || empresaDetails.value;
+  payload.empresaRazaoSocial = empresaDetails.label || empresaDetails.value;
+  payload.empresa = empresaPayload;
 
   setBoxesModalLoading(true);
   try {
@@ -3477,6 +3741,11 @@ function ensureCreateBoxModal() {
             <input type="text" name="especialidade" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-primary" placeholder="Clínico, Cirúrgico..." />
           </label>
         </div>
+        <label class="text-sm font-medium text-gray-700">Empresa
+          <select name="boxEmpresa" class="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+            <option value="">Selecione</option>
+          </select>
+        </label>
         <label class="text-sm font-medium text-gray-700">Higienização programada
           <input type="text" name="higienizacao" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-primary" placeholder="Ex.: 09h30" />
         </label>
@@ -3496,6 +3765,7 @@ function ensureCreateBoxModal() {
   boxesModal.overlay = overlay;
   boxesModal.dialog = overlay.querySelector('[data-boxes-modal-dialog]');
   boxesModal.form = overlay.querySelector('form');
+  boxesModal.empresaSelect = overlay.querySelector('select[name="boxEmpresa"]');
   boxesModal.errorEl = overlay.querySelector('[data-boxes-modal-error]');
   boxesModal.submitBtn = overlay.querySelector('[data-boxes-modal-submit]');
 
@@ -3525,13 +3795,47 @@ function ensureCreateBoxModal() {
   return overlay;
 }
 
-function initCreateBoxModal(onSuccess) {
+function initCreateBoxModal(onSuccess, options = {}) {
   boxesModal.onSuccess = onSuccess;
+  boxesModal.dataset = options.dataset || boxesModal.dataset || null;
+  boxesModal.state = options.state || boxesModal.state || {};
   ensureCreateBoxModal();
 }
 
-function getEquipeOptions(dataset) {
-  const veterinarios = Array.isArray(dataset?.veterinarios) ? dataset.veterinarios : [];
+function getVeterinariosForEmpresa(dataset, empresaId) {
+  if (!dataset) return [];
+  const targetEmpresa = (empresaId || '').trim();
+  const map = dataset.veterinariosByEmpresa || {};
+  const fromMap = map[targetEmpresa || 'all'];
+  if (Array.isArray(fromMap)) return fromMap;
+  if (targetEmpresa && Array.isArray(map.all)) return map.all;
+  if (!targetEmpresa && Array.isArray(dataset.veterinariosAll)) return dataset.veterinariosAll;
+  return Array.isArray(dataset.veterinarios) ? dataset.veterinarios : [];
+}
+
+function getEquipeOptions(dataset, empresaId) {
+  if (typeof empresaId === 'undefined') {
+    const veterinarios = getVeterinariosForEmpresa(dataset, '');
+    if (veterinarios.length) {
+      return veterinarios.map((vet) => ({
+        value: vet.nome || vet.id,
+        label: vet.nome || vet.id || 'Veterinário(a)',
+      }));
+    }
+    const set = new Set();
+    (dataset?.pacientes || []).forEach((pet) => {
+      const nome = pet?.internacao?.equipeMedica;
+      if (nome) set.add(nome);
+    });
+    return Array.from(set).sort().map((nome) => ({ value: nome, label: nome }));
+  }
+
+  const targetEmpresa = (empresaId || '').trim();
+  if (!targetEmpresa) return [];
+  const veterinarios = getVeterinariosForEmpresa(dataset, empresaId);
+  if (empresaId && !veterinarios.length) {
+    return [];
+  }
   if (veterinarios.length) {
     return veterinarios.map((vet) => ({
       value: vet.nome || vet.id,
@@ -3547,10 +3851,15 @@ function getEquipeOptions(dataset) {
   return Array.from(set).sort().map((nome) => ({ value: nome, label: nome }));
 }
 
-function getBoxOptions(dataset) {
+function getBoxOptions(dataset, empresaId) {
   const boxes = Array.isArray(dataset?.boxes) ? dataset.boxes : [];
+  const targetEmpresa = typeof empresaId === 'string' ? empresaId.trim() : '';
+  if (!targetEmpresa) return [];
   return boxes
-    .filter((item) => isBoxAvailable(item))
+    .filter((item) => {
+      const matchesEmpresa = !targetEmpresa || String(item?.empresaId || '').trim() === targetEmpresa;
+      return matchesEmpresa && isBoxAvailable(item);
+    })
     .map((item) => ({ value: item.box, label: `${item.box}${item.ocupante ? ` · ${item.ocupante}` : ''}` }));
 }
 
@@ -3750,8 +4059,8 @@ function ensureInternarPetModal() {
                   ${riscoOptions}
                 </select>
               </label>
-              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Veterinário
-                <select name="internarVeterinario" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Empresa
+                <select name="internarEmpresa" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
                   <option value="">Selecione</option>
                 </select>
               </label>
@@ -3760,13 +4069,13 @@ function ensureInternarPetModal() {
                   <option value="">Selecione</option>
                 </select>
               </label>
-              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Empresa
-                <select name="internarEmpresa" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Veterinário
+                <select name="internarVeterinario" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
                   <option value="">Selecione</option>
                 </select>
               </label>
             </div>
-            <div class="mt-4 grid gap-3 md:grid-cols-[2fr,1fr]">
+            <div class="mt-4 grid gap-3 md:grid-cols-[2fr_1fr]">
               <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Alta prevista (data)
                 <input type="date" name="internarAltaPrevista" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
               </label>
@@ -3850,6 +4159,12 @@ function ensureInternarPetModal() {
   internarModal.petSummaryTutorEl = overlay.querySelector('[data-pet-summary-tutor]');
   internarModal.petSummaryContactEl = overlay.querySelector('[data-pet-summary-contact]');
 
+  if (internarModal.empresaSelect) {
+    internarModal.empresaSelect.addEventListener('change', () => {
+      handleInternarEmpresaChange();
+    });
+  }
+
   overlay.addEventListener('click', (event) => {
     if (event.target === overlay) {
       closeInternarPetModal();
@@ -3921,9 +4236,69 @@ function ensureSelectOption(select, option) {
   select.appendChild(opt);
 }
 
-function populateEmpresaSelect(extraOption) {
+function refreshInternarBoxSelect(extraOptions = {}, dataset) {
+  if (!internarModal.form) return;
+  const boxSelect = internarModal.form.querySelector('select[name="internarBox"]');
+  if (!boxSelect) return;
+
+  const sourceDataset = dataset || internarModal.dataset || {};
+  const empresaId = internarModal.empresaSelect?.value || '';
+  const boxOptions = getBoxOptions(sourceDataset, empresaId);
+  const currentValue = boxSelect.value;
+
+  const boxOptionsMarkup = ['<option value="">Selecione</option>', ...boxOptions.map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`)]
+    .join('');
+  boxSelect.innerHTML = boxOptionsMarkup;
+
+  const forced = extraOptions.forceBox;
+  if (forced) {
+    ensureSelectOption(boxSelect, forced);
+    boxSelect.value = forced.value || '';
+    return;
+  }
+
+  if (currentValue && boxOptions.some((opt) => opt.value === currentValue)) {
+    boxSelect.value = currentValue;
+  }
+}
+
+async function handleInternarEmpresaChange(extraOptions = {}) {
+  try {
+    const datasetRef = internarModal.dataset || getDataset();
+    const empresaId = internarModal.empresaSelect?.value || '';
+    await fetchVeterinariosData(datasetRef, internarModal.state, { quiet: true, empresaId });
+    populateDynamicSelects(datasetRef, extraOptions);
+  } catch (error) {
+    console.warn('internacao: falha ao atualizar dados pela empresa selecionada', error);
+    setInternarModalError('Não foi possível carregar os dados da empresa selecionada.');
+  }
+}
+
+async function populateEmpresaSelect(extraOption) {
   if (!internarModal.empresaSelect) return;
-  const options = getUserEmpresasOptions();
+  internarModal.empresaSelect.innerHTML = '<option value="">Carregando...</option>';
+  const selectedUser =
+    internarModal.state?.selectedUser ||
+    internarModal.state?.usuarioSelecionado ||
+    internarModal.state?.usuario ||
+    internarModal.state?.user ||
+    internarModal.state?.funcionario ||
+    null;
+
+  let options = getUserEmpresasOptions(selectedUser);
+
+  if (options.length) {
+    options = await hydrateEmpresasOptions(options);
+  }
+
+  if (!options.length) {
+    options = await fetchUserEmpresasFromDatabase(selectedUser);
+  }
+
+  if (!options.length) {
+    options = await fetchUserEmpresasFromDatabase();
+  }
+
   internarModal.empresasOptions = options;
   const markup = ['<option value="">Selecione</option>', ...options.map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`)];
   internarModal.empresaSelect.innerHTML = markup.join('');
@@ -3941,15 +4316,69 @@ function populateEmpresaSelect(extraOption) {
   if (!internarModal.empresaSelect.value && options.length === 1) {
     internarModal.empresaSelect.value = options[0].value;
   }
+
+  if (!options.length) {
+    setInternarModalError('Não foi possível carregar as empresas vinculadas ao usuário selecionado.');
+  }
+
+  refreshInternarBoxSelect({}, internarModal.dataset);
+}
+
+async function populateBoxesEmpresaSelect(extraOption) {
+  if (!boxesModal.empresaSelect) return;
+  boxesModal.empresaSelect.innerHTML = '<option value="">Carregando...</option>';
+  const selectedUser =
+    boxesModal.state?.selectedUser ||
+    boxesModal.state?.usuarioSelecionado ||
+    boxesModal.state?.usuario ||
+    boxesModal.state?.user ||
+    boxesModal.state?.funcionario ||
+    null;
+
+  let options = getUserEmpresasOptions(selectedUser);
+
+  if (options.length) {
+    options = await hydrateEmpresasOptions(options);
+  }
+
+  if (!options.length) {
+    options = await fetchUserEmpresasFromDatabase(selectedUser);
+  }
+
+  if (!options.length) {
+    options = await fetchUserEmpresasFromDatabase();
+  }
+
+  boxesModal.empresasOptions = options;
+  const markup = ['<option value="">Selecione</option>', ...options.map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`)];
+  boxesModal.empresaSelect.innerHTML = markup.join('');
+
+  if (extraOption && (extraOption.value || extraOption.label)) {
+    const option = {
+      value: extraOption.value || extraOption.label || '',
+      label: extraOption.label || extraOption.value || '',
+    };
+    ensureSelectOption(boxesModal.empresaSelect, option);
+    boxesModal.empresaSelect.value = option.value;
+    return;
+  }
+
+  if (!boxesModal.empresaSelect.value && options.length === 1) {
+    boxesModal.empresaSelect.value = options[0].value;
+  }
+
+  if (!options.length) {
+    setBoxesModalError('Não foi possível carregar as empresas vinculadas ao usuário selecionado.');
+  }
 }
 
 function populateDynamicSelects(dataset, extraOptions = {}) {
-  const vetOptionsMarkup = ['<option value="">Selecione</option>', ...getEquipeOptions(dataset).map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`)]
+  const selectedEmpresa = internarModal?.empresaSelect ? internarModal.empresaSelect.value || '' : undefined;
+  const vetOptionsMarkup = ['<option value="">Selecione</option>', ...getEquipeOptions(dataset, selectedEmpresa).map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`)]
     .join('');
 
   if (internarModal.form) {
     const vetSelect = internarModal.form.querySelector('select[name="internarVeterinario"]');
-    const boxSelect = internarModal.form.querySelector('select[name="internarBox"]');
     if (vetSelect) {
       vetSelect.innerHTML = vetOptionsMarkup;
       if (extraOptions.forceVeterinario) {
@@ -3957,15 +4386,7 @@ function populateDynamicSelects(dataset, extraOptions = {}) {
         vetSelect.value = extraOptions.forceVeterinario.value || '';
       }
     }
-    if (boxSelect) {
-      const boxOptionsMarkup = ['<option value="">Selecione</option>', ...getBoxOptions(dataset).map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`)]
-        .join('');
-      boxSelect.innerHTML = boxOptionsMarkup;
-      if (extraOptions.forceBox) {
-        ensureSelectOption(boxSelect, extraOptions.forceBox);
-        boxSelect.value = extraOptions.forceBox.value || '';
-      }
-    }
+    refreshInternarBoxSelect(extraOptions, dataset);
   }
 
   if (obitoModal.form) {
@@ -4038,7 +4459,12 @@ function openInternarPetModal(dataset, options = {}) {
     }
   }
   populateDynamicSelects(dataset, selectOverrides);
-  populateEmpresaSelect(getEmpresaOptionFromRecord(record));
+  populateEmpresaSelect(getEmpresaOptionFromRecord(record))
+    .then(() => handleInternarEmpresaChange(selectOverrides))
+    .catch((error) => {
+      console.warn('internacao: não foi possível atualizar a lista de empresas', error);
+      setInternarModalError('Não foi possível carregar as empresas do usuário selecionado.');
+    });
   if (mode === 'edit' && record) {
     fillInternarModalFormFromRecord(record);
   }
@@ -6374,11 +6800,48 @@ function isInternacaoAtiva(registro) {
   return !(cancelado || obito || alta);
 }
 
+function matchesEmpresaFilter(registro, empresaId) {
+  const target = String(empresaId || '').trim();
+  if (!target) return true;
+  const current = String(registro?.empresaId || '').trim();
+  return current && current === target;
+}
+
+function fillEmpresaFilters(state = {}) {
+  const selects = document.querySelectorAll('[data-internacao-empresa-filter]');
+  if (!selects.length) return;
+
+  const loading = !!state.empresasLoading;
+  const error = String(state.empresasError || '').trim();
+  const currentValue = String(state.empresaId || '').trim();
+  const options = Array.isArray(state.empresasOptions) ? state.empresasOptions : [];
+  const allowAll = !!state.empresasAllowAll;
+
+  const baseMarkup = loading
+    ? ['<option value="">Carregando...</option>']
+    : [
+        ...(allowAll ? ['<option value="">Todas as empresas</option>'] : []),
+        ...options.map((opt) =>
+          `<option value="${escapeHtml(opt.value)}" ${opt.value === currentValue ? 'selected' : ''}>${escapeHtml(opt.label)}</option>`,
+        ),
+      ];
+
+  const markup = !loading && error && !options.length
+    ? [...baseMarkup, `<option value="" disabled>${escapeHtml(error)}</option>`]
+    : baseMarkup;
+
+  selects.forEach((select) => {
+    select.innerHTML = markup.join('');
+    select.value = currentValue || '';
+  });
+}
+
 function fillPetFilters(dataset, currentPetId, state = {}) {
   const baseOptions = [];
   if (Array.isArray(state?.internacoes) && state.internacoes.length) {
     const seen = new Set();
     state.internacoes.filter(isInternacaoAtiva).forEach((registro) => {
+      if (!matchesEmpresaFilter(registro, state.empresaId)) return;
       const value = registro.filterKey;
       if (!value || seen.has(value)) return;
       seen.add(value);
@@ -6495,9 +6958,13 @@ async function fetchInternacoesData(dataset, state = {}, { quiet = false, onUpda
     state.internacoes = sorted;
     state.internacoesLoading = false;
   }
-  if (state && state.petId) {
-    const availableKeys = new Set(sorted.filter(isInternacaoAtiva).map((item) => item.filterKey));
-    if (availableKeys.size && !availableKeys.has(state.petId)) {
+  if (state) {
+    const availableKeys = new Set(
+      sorted
+        .filter((item) => isInternacaoAtiva(item) && matchesEmpresaFilter(item, state.empresaId))
+        .map((item) => item.filterKey),
+    );
+    if (availableKeys.size && state.petId && !availableKeys.has(state.petId)) {
       state.petId = '';
     }
   }
@@ -6550,16 +7017,39 @@ async function fetchBoxesData(dataset, state = {}, { quiet = false, onUpdate } =
   }
 }
 
-async function fetchVeterinariosData(dataset, state = {}, { quiet = false } = {}) {
+async function fetchVeterinariosData(dataset, state = {}, { quiet = false, empresaId = '' } = {}) {
+  const targetEmpresa = (empresaId || '').trim();
+  const cacheKey = targetEmpresa || 'all';
+  const vetMap = dataset ? dataset.veterinariosByEmpresa || (dataset.veterinariosByEmpresa = {}) : null;
+
+  if (vetMap && Array.isArray(vetMap[cacheKey]) && vetMap[cacheKey].length) {
+    if (dataset) dataset.veterinarios = vetMap[cacheKey];
+    if (state) {
+      state.veterinarios = vetMap[cacheKey];
+      state.veterinariosLoading = false;
+      state.veterinariosError = '';
+    }
+    populateDynamicSelects(dataset);
+    return vetMap[cacheKey];
+  }
+
   if (state) {
     state.veterinariosLoading = true;
     state.veterinariosError = '';
   }
 
   try {
-    const data = await requestJson('/func/profissionais?tipos=veterinario');
+    const params = new URLSearchParams({ tipos: 'veterinario' });
+    if (targetEmpresa) params.set('storeId', targetEmpresa);
+    const data = await requestJson(`/func/profissionais?${params.toString()}`);
     const normalized = Array.isArray(data) ? data.map(normalizeVeterinario).filter(Boolean) : [];
-    if (dataset) dataset.veterinarios = normalized;
+    if (dataset) {
+      if (vetMap) {
+        vetMap[cacheKey] = normalized;
+      }
+      dataset.veterinarios = normalized;
+      if (!targetEmpresa) dataset.veterinariosAll = normalized;
+    }
     if (state) {
       state.veterinarios = normalized;
       state.veterinariosLoading = false;
@@ -6574,6 +7064,74 @@ async function fetchVeterinariosData(dataset, state = {}, { quiet = false } = {}
     }
     if (!quiet) {
       showToastMessage(state?.veterinariosError || 'Não foi possível carregar os veterinários.', 'warning');
+    }
+    return [];
+  }
+}
+
+async function fetchEmpresasForFilters(state = {}, { quiet = false, dataset } = {}) {
+  const datasetRef = dataset || getDataset();
+  if (state) {
+    state.empresasLoading = true;
+    state.empresasError = '';
+    state.empresasAllowAll = false;
+  }
+
+  fillEmpresaFilters(state);
+
+  try {
+    let currentUser = getSelectedUserData() || getLoggedInUserData();
+    let options = getUserEmpresasOptions(currentUser);
+    if (options.length) {
+      options = await hydrateEmpresasOptions(options);
+    }
+
+    if (!options.length) {
+      const { options: fetchedOptions, user } = await fetchUserEmpresasFromDatabaseDetailed();
+      options = fetchedOptions;
+      if (user) currentUser = user;
+    }
+
+    const allowAll = await shouldAllowTodasEmpresas(options, currentUser);
+
+    if (state) {
+      state.empresasOptions = options;
+      state.empresasAllowAll = allowAll;
+      state.empresasLoading = false;
+      if (allowAll) {
+        if (!state.empresaId && options.length === 1) {
+          state.empresaId = options[0].value;
+        }
+        if (state.empresaId && !options.some((opt) => opt?.value === state.empresaId)) {
+          state.empresaId = '';
+        }
+      } else {
+        if (!state.empresaId && options.length) {
+          state.empresaId = options[0].value;
+        }
+        if (state.empresaId && !options.some((opt) => opt?.value === state.empresaId) && options.length) {
+          state.empresaId = options[0].value;
+        }
+      }
+    }
+
+    fillEmpresaFilters(state);
+    fillPetFilters(datasetRef, state?.petId, state);
+
+    if (state?.render) {
+      state.render();
+    }
+
+    return options;
+  } catch (error) {
+    console.warn('internacao: não foi possível carregar as empresas para filtro', error);
+    if (state) {
+      state.empresasError = error.message || 'Não foi possível carregar as empresas.';
+      state.empresasLoading = false;
+    }
+    fillEmpresaFilters(state);
+    if (!quiet) {
+      showToastMessage(state?.empresasError || 'Não foi possível carregar as empresas.', 'warning');
     }
     return [];
   }
@@ -6963,7 +7521,7 @@ function setupBoxesPage(dataset, state, render) {
   if (createBtn) {
     createBtn.addEventListener('click', (event) => {
       event.preventDefault();
-      openCreateBoxModal();
+      openCreateBoxModal({ dataset, state });
     });
   }
 
@@ -6972,11 +7530,30 @@ function setupBoxesPage(dataset, state, render) {
       if (event.target.closest('[data-boxes-retry]')) {
         event.preventDefault();
         fetchBoxes();
+        return;
+      }
+
+      const deleteBtn = event.target.closest('[data-box-delete]');
+      if (deleteBtn) {
+        event.preventDefault();
+        const recordId = deleteBtn.dataset.boxDelete;
+        const confirmed = window.confirm('Deseja realmente excluir este box?');
+        if (!recordId || !confirmed) return;
+
+        requestJson(`/internacao/boxes/${recordId}`, { method: 'DELETE' })
+          .then(() => {
+            fetchBoxes();
+            showToastMessage('Box excluído com sucesso.', 'success');
+          })
+          .catch((error) => {
+            console.error('internacao: falha ao excluir box', error);
+            showToastMessage(error.message || 'Não foi possível excluir o box. Tente novamente.', 'warning');
+          });
       }
     });
   }
 
-  initCreateBoxModal(fetchBoxes);
+  initCreateBoxModal(fetchBoxes, { dataset, state });
   fetchBoxes();
 }
 
@@ -7301,6 +7878,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const dataset = getDataset();
   const state = {
     petId: '',
+    empresaId: '',
     execucaoData: getLocalDateInputValue(),
     boxes: Array.isArray(dataset.boxes) ? [...dataset.boxes] : [],
     boxesLoading: false,
@@ -7311,6 +7889,10 @@ document.addEventListener('DOMContentLoaded', () => {
     internacoes: Array.isArray(dataset.internacoes) ? [...dataset.internacoes] : [],
     internacoesLoading: false,
     internacoesError: '',
+    empresasOptions: [],
+    empresasLoading: false,
+    empresasError: '',
+    empresasAllowAll: false,
     parametrosConfig: [],
     parametrosLoading: false,
     parametrosError: '',
@@ -7343,6 +7925,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   state.refreshBoxes = () => fetchBoxesData(dataset, state, { quiet: true });
 
+  fillEmpresaFilters(state);
   fillPetFilters(dataset, state.petId, state);
   updateSyncInfo(dataset);
   render();
@@ -7366,10 +7949,28 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   fetchVeterinariosData(dataset, state, { quiet: true });
+  fetchEmpresasForFilters(state, { quiet: true, dataset });
 
   document.querySelectorAll('[data-internacao-pet-filter]').forEach((select) => {
     select.addEventListener('change', (event) => {
       state.petId = event.target.value;
+      fillPetFilters(dataset, state.petId, state);
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-internacao-empresa-filter]').forEach((select) => {
+    select.addEventListener('change', (event) => {
+      state.empresaId = event.target.value || '';
+      const availableKeys = new Set(
+        state.internacoes
+          .filter((item) => isInternacaoAtiva(item) && matchesEmpresaFilter(item, state.empresaId))
+          .map((item) => item.filterKey),
+      );
+      if (state.petId && availableKeys.size && !availableKeys.has(state.petId)) {
+        state.petId = '';
+      }
+      fillEmpresaFilters(state);
       fillPetFilters(dataset, state.petId, state);
       render();
     });

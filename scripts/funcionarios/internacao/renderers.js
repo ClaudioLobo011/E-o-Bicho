@@ -59,6 +59,13 @@ function filterPacientes(dataset, petId) {
   return dataset.pacientes.filter((pet) => pet.id === petId);
 }
 
+function matchesEmpresaFilter(registro, empresaId) {
+  const target = String(empresaId || '').trim();
+  if (!target) return true;
+  const current = String(registro?.empresaId || '').trim();
+  return current && current === target;
+}
+
 function buildPendencias(list = []) {
   if (!list.length) return '<p class="text-sm text-gray-500">Sem pendências registradas.</p>';
   return `
@@ -780,6 +787,7 @@ function attachExecucaoModalHandlers(root, pacientes = [], selectedDate = '') {
 
 export function renderAnimaisInternados(root, dataset, state = {}) {
   const petId = state?.petId || '';
+  const empresaId = state?.empresaId || '';
   const internacoes = Array.isArray(state?.internacoes) ? state.internacoes : [];
 
   const internacoesAtivas = internacoes.filter((registro) => {
@@ -789,6 +797,10 @@ export function renderAnimaisInternados(root, dataset, state = {}) {
     const alta = situacaoKey.includes('alta');
     return !(cancelado || obito || alta);
   });
+
+  const internacoesFiltradas = empresaId
+    ? internacoesAtivas.filter((registro) => matchesEmpresaFilter(registro, empresaId))
+    : internacoesAtivas;
 
   if (state?.internacoesLoading) {
     root.innerHTML = buildEmptyState('Carregando internações...');
@@ -807,20 +819,23 @@ export function renderAnimaisInternados(root, dataset, state = {}) {
     return;
   }
 
-  if (!internacoesAtivas.length) {
-    root.innerHTML = buildEmptyState('Nenhuma internação ativa no momento.');
+  if (!internacoesFiltradas.length) {
+    const mensagem = empresaId
+      ? 'Nenhuma internação ativa para a empresa selecionada.'
+      : 'Nenhuma internação ativa no momento.';
+    root.innerHTML = buildEmptyState(mensagem);
     return;
   }
 
-  const total = internacoesAtivas.length;
-  const proximasAltas = internacoesAtivas.filter((registro) => {
+  const total = internacoesFiltradas.length;
+  const proximasAltas = internacoesFiltradas.filter((registro) => {
     if (!registro.altaPrevistaISO) return false;
     const alta = new Date(registro.altaPrevistaISO);
     if (Number.isNaN(alta.getTime())) return false;
     const diff = (alta - Date.now()) / (1000 * 60 * 60);
     return diff <= 48;
   }).length;
-  const isolamento = internacoesAtivas.filter((registro) => (registro.situacao || '').toLowerCase().includes('isolamento')).length;
+  const isolamento = internacoesFiltradas.filter((registro) => (registro.situacao || '').toLowerCase().includes('isolamento')).length;
 
   const resumo = `
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -843,8 +858,8 @@ export function renderAnimaisInternados(root, dataset, state = {}) {
   `;
 
   const registrosFiltrados = petId
-    ? internacoesAtivas.filter((registro) => registro.filterKey === petId)
-    : internacoesAtivas;
+    ? internacoesFiltradas.filter((registro) => registro.filterKey === petId)
+    : internacoesFiltradas;
 
   const cardsContent = registrosFiltrados.length
     ? registrosFiltrados
@@ -908,6 +923,7 @@ export function renderAnimaisInternados(root, dataset, state = {}) {
 
 export function renderMapaExecucao(root, dataset, state = {}) {
   const petId = state?.petId || '';
+  const empresaId = state?.empresaId || '';
   const internacoes = Array.isArray(state?.internacoes) ? state.internacoes : [];
   const selectedDate = state?.execucaoData || getLocalISODate();
 
@@ -928,11 +944,13 @@ export function renderMapaExecucao(root, dataset, state = {}) {
     return;
   }
 
-  const ativos = internacoes.filter((registro) => {
-    const situacaoKey = normalizeActionKey(registro?.situacao || registro?.situacaoCodigo);
-    const alta = registro?.altaRegistrada || situacaoKey.includes('alta');
-    return !registro.cancelado && !registro.obitoRegistrado && !alta;
-  });
+  const ativos = internacoes
+    .filter((registro) => {
+      const situacaoKey = normalizeActionKey(registro?.situacao || registro?.situacaoCodigo);
+      const alta = registro?.altaRegistrada || situacaoKey.includes('alta');
+      return !registro.cancelado && !registro.obitoRegistrado && !alta;
+    })
+    .filter((registro) => matchesEmpresaFilter(registro, empresaId));
   const filtrados = petId ? ativos.filter((registro) => registro.filterKey === petId) : ativos;
 
   if (!filtrados.length) {
@@ -1075,6 +1093,7 @@ export function renderMapaExecucao(root, dataset, state = {}) {
 
 export function renderHistoricoInternacoes(root, dataset, state = {}) {
   const petId = state?.petId || '';
+  const empresaId = state?.empresaId || '';
   const internacoes = Array.isArray(state?.internacoes) ? state.internacoes : [];
 
   if (state?.internacoesLoading && !internacoes.length) {
@@ -1094,13 +1113,15 @@ export function renderHistoricoInternacoes(root, dataset, state = {}) {
     return;
   }
 
-  const historicoConcluido = internacoes.filter((registro) => {
-    const situacaoKey = normalizeActionKey(registro?.situacao || registro?.situacaoCodigo);
-    const cancelado = registro?.cancelado || situacaoKey === 'cancelado';
-    const obito = registro?.obitoRegistrado || situacaoKey === 'obito';
-    const alta = situacaoKey.includes('alta');
-    return cancelado || obito || alta;
-  });
+  const historicoConcluido = internacoes
+    .filter((registro) => {
+      const situacaoKey = normalizeActionKey(registro?.situacao || registro?.situacaoCodigo);
+      const cancelado = registro?.cancelado || situacaoKey === 'cancelado';
+      const obito = registro?.obitoRegistrado || situacaoKey === 'obito';
+      const alta = situacaoKey.includes('alta');
+      return cancelado || obito || alta;
+    })
+    .filter((registro) => matchesEmpresaFilter(registro, empresaId));
 
   const filtrados = petId ? historicoConcluido.filter((registro) => registro.filterKey === petId) : historicoConcluido;
 
@@ -1364,9 +1385,10 @@ export function renderModelosPrescricao(root, dataset, { petId } = {}) {
   `;
 }
 
-export function renderBoxes(root, dataset, { petId, boxesLoading, boxesError, boxes } = {}) {
+export function renderBoxes(root, dataset, { petId, empresaId, boxesLoading, boxesError, boxes } = {}) {
   const highlightNome = petId ? dataset.pacientes.find((pet) => pet.id === petId)?.nome : null;
   const resolvedBoxes = Array.isArray(boxes) ? boxes : Array.isArray(dataset.boxes) ? dataset.boxes : [];
+  const filteredBoxes = resolvedBoxes.filter((box) => matchesEmpresaFilter(box, empresaId));
 
   if (boxesLoading) {
     root.innerHTML = `
@@ -1394,12 +1416,12 @@ export function renderBoxes(root, dataset, { petId, boxesLoading, boxesError, bo
     return;
   }
 
-  if (!resolvedBoxes.length) {
+  if (!filteredBoxes.length) {
     root.innerHTML = buildEmptyState('Nenhum box cadastrado até o momento. Utilize o botão “Criar box” para começar.');
     return;
   }
 
-  const cards = resolvedBoxes
+  const cards = filteredBoxes
     .map((box) => {
       const ocupante = box?.ocupante || 'Livre';
       const isTarget = highlightNome && ocupante === highlightNome;
@@ -1412,7 +1434,17 @@ export function renderBoxes(root, dataset, { petId, boxesLoading, boxesError, bo
               <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">${escapeHtml(especialidade)}</p>
               <h2 class="text-xl font-semibold text-gray-900">${escapeHtml(box?.box || 'Box')}</h2>
             </div>
-            <span class="rounded-full px-3 py-1 text-xs font-semibold ${ocupante === 'Livre' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-700'}">${escapeHtml(box?.status || (ocupante === 'Livre' ? 'Disponível' : 'Em uso'))}</span>
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-sm text-red-700 transition hover:bg-red-100"
+                data-box-delete="${escapeHtml(box?.id || box?.box || '')}"
+                title="Excluir box"
+              >
+                <i class="fas fa-trash"></i>
+              </button>
+              <span class="rounded-full px-3 py-1 text-xs font-semibold ${ocupante === 'Livre' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-700'}">${escapeHtml(box?.status || (ocupante === 'Livre' ? 'Disponível' : 'Em uso'))}</span>
+            </div>
           </header>
           <div class="mt-4 space-y-1 text-sm text-gray-600">
             <p>Ocupante: <span class="font-semibold text-gray-900">${escapeHtml(ocupante)}</span></p>

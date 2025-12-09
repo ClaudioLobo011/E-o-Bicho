@@ -25,6 +25,36 @@ const sanitizeArray = (value) => {
   return text ? [text] : [];
 };
 
+const formatEmpresa = (data = {}, fallback = {}) => {
+  const plain = typeof data?.toObject === 'function' ? data.toObject() : data || {};
+  const id = sanitizeText(plain.id || plain._id || plain.value || fallback.empresaId || fallback.empresa);
+  const nomeFantasia = sanitizeText(
+    plain.nomeFantasia || plain.label || fallback.empresaNomeFantasia || fallback.empresaNome,
+  );
+  const razaoSocial = sanitizeText(plain.razaoSocial || plain.nome || fallback.empresaRazaoSocial);
+  const nome = sanitizeText(plain.nome || nomeFantasia || razaoSocial || fallback.empresaNome);
+  const label = sanitizeText(plain.label || nomeFantasia || nome || razaoSocial);
+  const value = sanitizeText(plain.value || id);
+
+  if (!(id || nome || nomeFantasia || razaoSocial || label)) {
+    return null;
+  }
+
+  const effectiveId = id || value || label;
+  const effectiveFantasia = nomeFantasia || nome || razaoSocial || label || effectiveId;
+  const effectiveRazao = razaoSocial || nome || effectiveFantasia || effectiveId;
+  const effectiveNome = nome || effectiveFantasia || effectiveRazao || effectiveId;
+
+  return {
+    id: effectiveId,
+    value: value || effectiveId,
+    nome: effectiveNome,
+    nomeFantasia: effectiveFantasia,
+    razaoSocial: effectiveRazao,
+    label: label || effectiveFantasia,
+  };
+};
+
 const normalizeKey = (value) =>
   sanitizeText(value)
     .normalize('NFD')
@@ -560,31 +590,50 @@ const formatRelatorioMedicoItem = (entry) => {
   };
 };
 
-const buildRegistroPayload = (body = {}) => ({
-  petId: sanitizeText(body.petId),
-  petNome: sanitizeText(body.petNome),
-  petEspecie: sanitizeText(body.petEspecie),
-  petRaca: sanitizeText(body.petRaca),
-  petPeso: sanitizeText(body.petPeso),
-  petIdade: sanitizeText(body.petIdade),
-  tutorNome: sanitizeText(body.tutorNome),
-  tutorDocumento: sanitizeText(body.tutorDocumento),
-  tutorContato: sanitizeText(body.tutorContato),
-  situacao: sanitizeText(body.situacao),
-  situacaoCodigo: sanitizeText(body.situacaoCodigo),
-  risco: sanitizeText(body.risco),
-  riscoCodigo: sanitizeText(body.riscoCodigo),
-  veterinario: sanitizeText(body.veterinario),
-  box: sanitizeText(body.box),
-  altaPrevistaData: sanitizeText(body.altaPrevistaData),
-  altaPrevistaHora: sanitizeText(body.altaPrevistaHora),
-  queixa: sanitizeText(body.queixa),
-  diagnostico: sanitizeText(body.diagnostico),
-  prognostico: sanitizeText(body.prognostico),
-  alergias: sanitizeArray(body.alergias),
-  acessorios: sanitizeText(body.acessorios),
-  observacoes: sanitizeText(body.observacoes),
-});
+const buildRegistroPayload = (body = {}) => {
+  const empresa = formatEmpresa(body.empresa, {
+    empresaId: body.empresaId,
+    empresaNome: body.empresaNome,
+    empresaNomeFantasia: body.empresaNomeFantasia,
+    empresaRazaoSocial: body.empresaRazaoSocial,
+  });
+
+  const payload = {
+    petId: sanitizeText(body.petId),
+    petNome: sanitizeText(body.petNome),
+    petEspecie: sanitizeText(body.petEspecie),
+    petRaca: sanitizeText(body.petRaca),
+    petPeso: sanitizeText(body.petPeso),
+    petIdade: sanitizeText(body.petIdade),
+    tutorNome: sanitizeText(body.tutorNome),
+    tutorDocumento: sanitizeText(body.tutorDocumento),
+    tutorContato: sanitizeText(body.tutorContato),
+    situacao: sanitizeText(body.situacao),
+    situacaoCodigo: sanitizeText(body.situacaoCodigo),
+    risco: sanitizeText(body.risco),
+    riscoCodigo: sanitizeText(body.riscoCodigo),
+    veterinario: sanitizeText(body.veterinario),
+    box: sanitizeText(body.box),
+    altaPrevistaData: sanitizeText(body.altaPrevistaData),
+    altaPrevistaHora: sanitizeText(body.altaPrevistaHora),
+    queixa: sanitizeText(body.queixa),
+    diagnostico: sanitizeText(body.diagnostico),
+    prognostico: sanitizeText(body.prognostico),
+    alergias: sanitizeArray(body.alergias),
+    acessorios: sanitizeText(body.acessorios),
+    observacoes: sanitizeText(body.observacoes),
+  };
+
+  if (empresa) {
+    payload.empresaId = empresa.id;
+    payload.empresaNome = empresa.nomeFantasia || empresa.nome;
+    payload.empresaNomeFantasia = empresa.nomeFantasia;
+    payload.empresaRazaoSocial = empresa.razaoSocial;
+    payload.empresa = empresa;
+  }
+
+  return payload;
+};
 
 const buildObitoPayload = (body = {}) => ({
   veterinario: sanitizeText(body.veterinario),
@@ -637,6 +686,32 @@ const describeRegistroChanges = (before, after) => {
     changes.push(`${label} alterado de "${previous}" para "${next}".`);
   };
 
+  const beforeEmpresa = formatEmpresa(before.empresa, before);
+  const afterEmpresa = formatEmpresa(after.empresa, after);
+  const beforeEmpresaLabel = sanitizeText(
+    beforeEmpresa?.nomeFantasia ||
+      beforeEmpresa?.nome ||
+      beforeEmpresa?.label ||
+      beforeEmpresa?.razaoSocial ||
+      beforeEmpresa?.id,
+  );
+  const afterEmpresaLabel = sanitizeText(
+    afterEmpresa?.nomeFantasia ||
+      afterEmpresa?.nome ||
+      afterEmpresa?.label ||
+      afterEmpresa?.razaoSocial ||
+      afterEmpresa?.id,
+  );
+  if (beforeEmpresaLabel !== afterEmpresaLabel) {
+    if (!beforeEmpresaLabel && afterEmpresaLabel) {
+      changes.push(`Empresa definida como "${afterEmpresaLabel}".`);
+    } else if (beforeEmpresaLabel && !afterEmpresaLabel) {
+      changes.push('Empresa removida.');
+    } else {
+      changes.push(`Empresa alterada de "${beforeEmpresaLabel}" para "${afterEmpresaLabel}".`);
+    }
+  }
+
   compareTextField('situacao', 'Situação');
   compareTextField('risco', 'Risco');
   compareTextField('veterinario', 'Veterinário responsável');
@@ -686,6 +761,12 @@ const formatBox = (doc) => {
   if (!doc) return null;
   const plain = typeof doc.toObject === 'function' ? doc.toObject() : doc;
   const ocupante = sanitizeText(plain.ocupante, { fallback: 'Livre' });
+  const empresa = formatEmpresa(plain.empresa, {
+    empresaId: plain.empresaId,
+    empresaNome: plain.empresaNome,
+    empresaNomeFantasia: plain.empresaNomeFantasia,
+    empresaRazaoSocial: plain.empresaRazaoSocial,
+  });
   return {
     id: String(plain._id || plain.id || plain.box || '').trim(),
     box: sanitizeText(plain.box),
@@ -694,6 +775,17 @@ const formatBox = (doc) => {
     especialidade: sanitizeText(plain.especialidade),
     higienizacao: sanitizeText(plain.higienizacao, { fallback: '—' }),
     observacao: sanitizeText(plain.observacao),
+    empresaId: sanitizeText(empresa?.id),
+    empresaNome: sanitizeText(
+      empresa?.nomeFantasia || empresa?.nome || plain.empresaNome || plain.empresaNomeFantasia || plain.empresaRazaoSocial,
+    ),
+    empresaNomeFantasia: sanitizeText(
+      empresa?.nomeFantasia || plain.empresaNomeFantasia || plain.empresaNome || plain.empresaRazaoSocial,
+    ),
+    empresaRazaoSocial: sanitizeText(
+      empresa?.razaoSocial || plain.empresaRazaoSocial || plain.empresaNome || plain.empresaNomeFantasia,
+    ),
+    empresa: empresa || null,
     createdAt: plain.createdAt || null,
     updatedAt: plain.updatedAt || null,
   };
@@ -722,6 +814,12 @@ const formatRegistro = (doc) => {
           return bTime - aTime;
         })
     : [];
+  const empresa = formatEmpresa(plain.empresa, {
+    empresaId: plain.empresaId,
+    empresaNome: plain.empresaNome,
+    empresaNomeFantasia: plain.empresaNomeFantasia,
+    empresaRazaoSocial: plain.empresaRazaoSocial,
+  });
   const petPesoAtualizadoEm = toIsoStringSafe(plain.petPesoAtualizadoEm);
   const execucoes = Array.isArray(plain.execucoes)
     ? plain.execucoes.map(formatExecucaoItem).filter(Boolean)
@@ -749,6 +847,17 @@ const formatRegistro = (doc) => {
     tutorNome: sanitizeText(plain.tutorNome),
     tutorDocumento: sanitizeText(plain.tutorDocumento),
     tutorContato: sanitizeText(plain.tutorContato),
+    empresaId: sanitizeText(empresa?.id),
+    empresaNome: sanitizeText(
+      empresa?.nomeFantasia ||
+        empresa?.nome ||
+        plain.empresaNome ||
+        plain.empresaNomeFantasia ||
+        plain.empresaRazaoSocial,
+    ),
+    empresaNomeFantasia: sanitizeText(empresa?.nomeFantasia || plain.empresaNomeFantasia),
+    empresaRazaoSocial: sanitizeText(empresa?.razaoSocial || plain.empresaRazaoSocial),
+    empresa: empresa || null,
     situacao: sanitizeText(plain.situacao),
     situacaoCodigo: sanitizeText(plain.situacaoCodigo),
     risco: sanitizeText(plain.risco),
@@ -817,13 +926,30 @@ router.post('/boxes', async (req, res) => {
       observacao: sanitizeText(req.body?.observacao),
     };
 
+    const empresa = formatEmpresa(req.body?.empresa, {
+      empresaId: req.body?.empresaId,
+      empresaNome: req.body?.empresaNome,
+      empresaNomeFantasia: req.body?.empresaNomeFantasia,
+      empresaRazaoSocial: req.body?.empresaRazaoSocial,
+    });
+
     if (!payload.box) {
       return res.status(400).json({ message: 'Informe o identificador do box.' });
+    }
+
+    if (!empresa) {
+      return res.status(400).json({ message: 'Selecione a empresa do box.' });
     }
 
     if (!payload.status) {
       payload.status = payload.ocupante === 'Livre' ? 'Disponível' : 'Em uso';
     }
+
+    payload.empresa = empresa;
+    payload.empresaId = sanitizeText(empresa.id);
+    payload.empresaNome = sanitizeText(empresa.nome || empresa.nomeFantasia || empresa.razaoSocial);
+    payload.empresaNomeFantasia = sanitizeText(empresa.nomeFantasia || payload.empresaNome);
+    payload.empresaRazaoSocial = sanitizeText(empresa.razaoSocial || payload.empresaNome);
 
     const record = await InternacaoBox.create(payload);
     return res.status(201).json(formatBox(record));
@@ -833,6 +959,42 @@ router.post('/boxes', async (req, res) => {
       return res.status(400).json({ message: 'Verifique os dados informados para o box.' });
     }
     return res.status(500).json({ message: 'Não foi possível salvar o box.' });
+  }
+});
+
+router.delete('/boxes/:id', async (req, res) => {
+  try {
+    const targetId = sanitizeText(req.params?.id);
+    if (!targetId) {
+      return res.status(400).json({ message: 'Informe o box que deseja excluir.' });
+    }
+
+    let record = null;
+    if (mongoose.isValidObjectId(targetId)) {
+      record = await InternacaoBox.findById(targetId);
+    }
+    if (!record) {
+      record = await InternacaoBox.findOne({ box: targetId });
+    }
+
+    if (!record) {
+      return res.status(404).json({ message: 'Box não encontrado.' });
+    }
+
+    const ocupante = sanitizeText(record.ocupante, { fallback: 'Livre' });
+    const status = sanitizeText(record.status);
+    const ocupado = normalizeKey(ocupante) !== 'livre' || normalizeKey(status).includes('ocup');
+    if (ocupado) {
+      return res
+        .status(409)
+        .json({ message: 'Libere o box antes de excluí-lo para evitar inconsistências nas internações.' });
+    }
+
+    await record.deleteOne();
+    return res.json({ message: 'Box excluído com sucesso.' });
+  } catch (error) {
+    console.error('internacao: falha ao excluir box', error);
+    return res.status(500).json({ message: 'Não foi possível excluir o box.' });
   }
 });
 
