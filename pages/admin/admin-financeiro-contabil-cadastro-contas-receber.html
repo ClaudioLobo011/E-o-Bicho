@@ -226,21 +226,34 @@
         </section>
 
         <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-5">
-          <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <h2 class="text-lg font-semibold text-gray-800">Previsão de recebimentos</h2>
               <p class="text-sm text-gray-600">Visualize os valores a receber agrupados por período e status.</p>
             </div>
-            <div class="flex flex-wrap items-center gap-2">
-              <select class="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                <option value="7">Próximos 7 dias</option>
-                <option value="30">Próximos 30 dias</option>
-                <option value="90">Próximos 90 dias</option>
-              </select>
-              <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
-                <i class="fas fa-file-export"></i>
-                Exportar
-              </button>
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
+              <div class="relative w-full sm:w-72">
+                <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400">
+                  <i class="fas fa-magnifying-glass"></i>
+                </span>
+                <input
+                  type="search"
+                  id="receivable-forecast-search"
+                  class="w-full rounded-lg border border-gray-200 px-3 py-2 pl-10 text-sm font-medium text-gray-700 placeholder:text-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  placeholder="Buscar por cliente, documento ou status (use * como curinga)"
+                />
+              </div>
+              <div class="flex items-center gap-2">
+                <select class="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  <option value="7">Próximos 7 dias</option>
+                  <option value="30">Próximos 30 dias</option>
+                  <option value="90">Próximos 90 dias</option>
+                </select>
+                <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
+                  <i class="fas fa-file-export"></i>
+                  Exportar
+                </button>
+              </div>
             </div>
           </div>
 
@@ -268,14 +281,39 @@
           </div>
 
           <div class="overflow-hidden rounded-lg border border-gray-200">
-            <table class="min-w-full divide-y divide-gray-200 text-sm">
-              <thead class="bg-gray-50 text-gray-600">
+            <table class="min-w-full divide-y divide-gray-200 text-sm" id="receivable-forecast-table">
+              <thead class="bg-gray-50 text-gray-600 text-xs uppercase tracking-wide">
                 <tr>
-                  <th scope="col" class="px-4 py-2 text-left font-semibold">Cliente</th>
-                  <th scope="col" class="px-4 py-2 text-left font-semibold">Documento</th>
-                  <th scope="col" class="px-4 py-2 text-left font-semibold">Vencimento</th>
-                  <th scope="col" class="px-4 py-2 text-right font-semibold">Valor</th>
-                  <th scope="col" class="px-4 py-2 text-center font-semibold">Status</th>
+                  <th scope="col" class="px-4 py-2 text-left font-semibold">
+                    <button type="button" class="flex items-center gap-1 text-left" data-forecast-sort="customer">
+                      Cliente
+                      <i class="fas fa-sort text-[10px] text-gray-400"></i>
+                    </button>
+                  </th>
+                  <th scope="col" class="px-4 py-2 text-left font-semibold">
+                    <button type="button" class="flex items-center gap-1 text-left" data-forecast-sort="document">
+                      Documento
+                      <i class="fas fa-sort text-[10px] text-gray-400"></i>
+                    </button>
+                  </th>
+                  <th scope="col" class="px-4 py-2 text-left font-semibold">
+                    <button type="button" class="flex items-center gap-1 text-left" data-forecast-sort="dueDate">
+                      Vencimento
+                      <i class="fas fa-sort text-[10px] text-gray-400"></i>
+                    </button>
+                  </th>
+                  <th scope="col" class="px-4 py-2 text-right font-semibold">
+                    <button type="button" class="ml-auto flex items-center gap-1" data-forecast-sort="value">
+                      Valor
+                      <i class="fas fa-sort text-[10px] text-gray-400"></i>
+                    </button>
+                  </th>
+                  <th scope="col" class="px-4 py-2 text-center font-semibold">
+                    <button type="button" class="flex items-center justify-center gap-1 w-full" data-forecast-sort="status">
+                      Status
+                      <i class="fas fa-sort text-[10px] text-gray-400"></i>
+                    </button>
+                  </th>
                   <th scope="col" class="px-4 py-2 text-center font-semibold">Ações</th>
                 </tr>
               </thead>
