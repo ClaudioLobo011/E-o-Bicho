@@ -166,27 +166,36 @@
                         <label for="edit-role" class="block font-medium mb-0.5">Cargo</label>
                         <select id="edit-role" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" required></select>
                       </div>
-                      <div id="field-grupos" class="space-y-2">
-                        <label class="block font-medium">Grupos</label>
-                        <div id="edit-grupos" class="grid grid-cols-2 gap-2">
-                          <label class="inline-flex items-center gap-2">
-                            <input type="checkbox" value="gerente" class="rounded border-gray-300">
-                            <span>Gerente</span>
-                          </label>
-                          <label class="inline-flex items-center gap-2">
-                            <input type="checkbox" value="vendedor" class="rounded border-gray-300">
-                            <span>Vendedor</span>
-                          </label>
-                          <label class="inline-flex items-center gap-2">
-                            <input type="checkbox" value="esteticista" class="rounded border-gray-300">
-                            <span>Esteticista</span>
-                          </label>
-                          <label class="inline-flex items-center gap-2">
-                            <input type="checkbox" value="veterinario" class="rounded border-gray-300">
-                            <span>Veterinário</span>
-                          </label>
+                      <div class="grid grid-cols-12 gap-2">
+                        <div id="field-grupos" class="col-span-12 md:col-span-6 space-y-2">
+                          <label class="block font-medium">Grupos</label>
+                          <div id="edit-grupos" class="grid grid-cols-2 gap-2">
+                            <label class="inline-flex items-center gap-2">
+                              <input type="checkbox" value="gerente" class="rounded border-gray-300">
+                              <span>Gerente</span>
+                            </label>
+                            <label class="inline-flex items-center gap-2">
+                              <input type="checkbox" value="vendedor" class="rounded border-gray-300">
+                              <span>Vendedor</span>
+                            </label>
+                            <label class="inline-flex items-center gap-2">
+                              <input type="checkbox" value="esteticista" class="rounded border-gray-300">
+                              <span>Esteticista</span>
+                            </label>
+                            <label class="inline-flex items-center gap-2">
+                              <input type="checkbox" value="veterinario" class="rounded border-gray-300">
+                              <span>Veterinário</span>
+                            </label>
+                          </div>
+                          <p class="helper-text text-gray-500">Selecione um ou mais grupos.</p>
                         </div>
-                        <p class="helper-text text-gray-500">Selecione um ou mais grupos.</p>
+
+                        <div class="col-span-12 md:col-span-6 space-y-2">
+                          <label for="edit-grupo-usuario" class="block font-medium">Grupos de Usuários</label>
+                          <select id="edit-grupo-usuario" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            <option value="">Selecione um grupo de usuário</option>
+                          </select>
+                        </div>
                       </div>
                       <div class="grid grid-cols-12 gap-2">
                         <div class="col-span-12 md:col-span-6">

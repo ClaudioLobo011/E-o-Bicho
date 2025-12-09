@@ -61,6 +61,7 @@ const routes = [
   { path: '/api/shipping', file: './routes/shipping' },
   { path: '/api/admin/users', file: './routes/adminUsers' },
   { path: '/api/admin/funcionarios', file: './routes/adminFuncionarios' },
+  { path: '/api/admin/grupos-usuarios', file: './routes/adminUserGroups' },
   { path: '/api/admin/servicos/grupos', file: './routes/adminServicosGrupos' },
   { path: '/api/admin/servicos/precos', file: './routes/adminServicosPrecos' },
   { path: '/api/admin/servicos', file: './routes/adminServicos' },

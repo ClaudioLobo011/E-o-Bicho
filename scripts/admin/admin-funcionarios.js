@@ -21,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const passwordBar = document.getElementById('password-bar');
   const modalCard = document.querySelector('[data-edit-modal-card]');
   const gruposBox = document.getElementById('edit-grupos');
+  const selectGrupoUsuario = document.getElementById('edit-grupo-usuario');
   const empresasBox = document.getElementById('edit-empresas');
   const selectSexo = document.getElementById('edit-sexo');
   const dataNascimentoInput = document.getElementById('edit-data-nascimento');
@@ -94,6 +95,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const cached = JSON.parse(localStorage.getItem('loggedInUser') || 'null');
   const token = cached?.token || '';
   let ACTOR_ROLE = cached?.role || null;
+  let gruposUsuariosDisponiveis = [];
 
   const API = {
     list:   `${API_CONFIG.BASE_URL}/admin/funcionarios`,
@@ -105,6 +107,7 @@ document.addEventListener('DOMContentLoaded', () => {
       `${API_CONFIG.BASE_URL}/admin/funcionarios/buscar-usuarios?q=${encodeURIComponent(q)}&limit=${limit}`,
     transform: `${API_CONFIG.BASE_URL}/admin/funcionarios/transformar`,
     authCheck: `${API_CONFIG.BASE_URL}/auth/check`,
+    userGroups: `${API_CONFIG.BASE_URL}/admin/grupos-usuarios`,
   };
 
   const ROLE_LABEL = {
@@ -1367,6 +1370,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const sexoValor = normalizeSexoValue(data?.genero ?? data?.sexo);
     const empresaContratualValor = data?.empresaContratual || data?.empresaContratualId || '';
     const empresaContratualLabel = data?.empresaContratualNome || '';
+    const grupoUsuarioValor = data?.userGroup?.id || data?.userGroup?._id || data?.userGroup || '';
 
     if (mode === 'create') {
       modalTitle.textContent = 'Adicionar Funcionário';
@@ -1386,6 +1390,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (estadoCivilSelect) estadoCivilSelect.value = '';
       setEmpresaContratualValue('');
       roleSelect.value = opts[0] || 'funcionario';
+      setSelectedGrupoUsuario('');
       passwordBar.style.width = '0%';
       setGruposSelected([]);
       setEmpresasSelected([]);
@@ -1447,6 +1452,7 @@ document.addEventListener('DOMContentLoaded', () => {
       passwordBar.style.width = '0%';
       setGruposSelected(Array.isArray(data.grupos) ? data.grupos : []);
       setEmpresasSelected(Array.isArray(data.empresas) ? data.empresas : []);
+      setSelectedGrupoUsuario(grupoUsuarioValor);
       enderecos = Array.isArray(data.enderecos) ? data.enderecos.map(normalizeEndereco) : [];
       enderecoEditandoIndex = null;
       cursos = Array.isArray(data.cursos) ? data.cursos.map(normalizeCurso) : [];
@@ -2373,6 +2379,18 @@ document.addEventListener('DOMContentLoaded', () => {
     gruposBox.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = sel.has(cb.value));
   }
 
+  function getSelectedGrupoUsuario() {
+    if (!selectGrupoUsuario) return null;
+    const val = selectGrupoUsuario.value;
+    return val ? val : null;
+  }
+  function setSelectedGrupoUsuario(val) {
+    if (!selectGrupoUsuario) return;
+    const normalized = val || '';
+    selectGrupoUsuario.dataset.selectedValue = normalized;
+    selectGrupoUsuario.value = normalized;
+  }
+
   // --- Empresas (Lojas) ---
   async function loadEmpresasOptions() {
     if (!empresasBox) return;
@@ -2403,6 +2421,28 @@ document.addEventListener('DOMContentLoaded', () => {
       if (empresaContratualSelect) {
         empresaContratualSelect.innerHTML = '<option value="">Selecione uma empresa</option>';
       }
+    }
+  }
+
+  async function loadGruposUsuariosOptions() {
+    if (!selectGrupoUsuario) return;
+    try {
+      const res = await fetch(API.userGroups, { headers: headers() });
+      if (!res.ok) throw new Error('Falha ao carregar grupos de usuários');
+      const items = await res.json();
+      gruposUsuariosDisponiveis = Array.isArray(items) ? items : [];
+      const options = ['<option value="">Selecione um grupo de usuário</option>',
+        ...gruposUsuariosDisponiveis.map((g) => {
+          const codigo = Number.isFinite(g?.codigo) ? String(g.codigo).padStart(3, '0') : '-';
+          const nome = g?.nome || 'Sem nome';
+          return `<option value="${g._id}">${codigo} - ${nome}</option>`;
+        })];
+      selectGrupoUsuario.innerHTML = options.join('');
+      const selected = selectGrupoUsuario.dataset.selectedValue || '';
+      if (selected) selectGrupoUsuario.value = selected;
+    } catch (err) {
+      console.error(err);
+      selectGrupoUsuario.innerHTML = '<option value="">Erro ao carregar grupos de usuários</option>';
     }
   }
   function getSelectedEmpresas() {
@@ -2492,6 +2532,7 @@ document.addEventListener('DOMContentLoaded', () => {
       email: inputEmail.value.trim(),
       role: roleSelect.value,
       grupos: getSelectedGrupos(),
+      userGroup: getSelectedGrupoUsuario(),
       empresas: getSelectedEmpresas(),
     };
 
@@ -2686,6 +2727,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Init
   (async () => {
     await ensureActorRole();
+    await loadGruposUsuariosOptions();
     await loadEmpresasOptions();
     await loadFuncionarios();
   })()

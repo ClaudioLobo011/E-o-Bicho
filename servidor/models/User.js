@@ -220,6 +220,11 @@ const userSchema = new Schema({
     enum: ['gerente','vendedor','esteticista','veterinario'],
     default: []
   },
+  userGroup: {
+    type: Schema.Types.ObjectId,
+    ref: 'UserGroup',
+    default: null,
+  },
   empresas: [{
     type: Schema.Types.ObjectId,
     ref: 'Store'
