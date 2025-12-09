@@ -2,6 +2,7 @@
   const STORAGE_KEY = 'admin-grupos-funcionarios';
   const form = document.getElementById('grupo-form');
   const inputId = document.getElementById('grupo-id');
+  const inputCodigo = document.getElementById('grupo-codigo');
   const inputNome = document.getElementById('grupo-nome');
   const inputDescricao = document.getElementById('grupo-descricao');
   const selectStatus = document.getElementById('grupo-status');
@@ -36,6 +37,7 @@
     return [
       {
         id: 'g1',
+        codigo: 'GRP-001',
         nome: 'Gerência',
         descricao: 'Time responsável por gestão de pessoas e processos.',
         status: 'ativo',
@@ -44,6 +46,7 @@
       },
       {
         id: 'g2',
+        codigo: 'GRP-002',
         nome: 'Atendimento',
         descricao: 'Foco em agendamentos, check-in e relacionamento.',
         status: 'ativo',
@@ -52,6 +55,7 @@
       },
       {
         id: 'g3',
+        codigo: 'GRP-003',
         nome: 'Estoquista',
         descricao: 'Conferência de mercadorias, inventários e ajustes.',
         status: 'inativo',
@@ -93,20 +97,29 @@
 
   function validar() {
     const erros = [];
+    const codigo = (inputCodigo.value || '').trim();
     const nome = (inputNome.value || '').trim();
     const descricao = (inputDescricao.value || '').trim();
     const status = selectStatus.value || 'ativo';
     const prioridade = selectPrioridade.value || 'padrao';
     const permissoes = getPermissoesSelecionadas();
 
+    if (!codigo) erros.push('Informe o código do grupo.');
     if (!nome) erros.push('Informe o nome do grupo.');
     if (!permissoes.length) erros.push('Selecione ao menos uma permissão.');
 
-    return { ok: erros.length === 0, erros, nome, descricao, status, prioridade, permissoes };
+    const codigoNormalizado = codigo.toLowerCase();
+    const grupos = getGrupos();
+    const idAtual = inputId.value;
+    const codigoDuplicado = grupos.some(g => (g.codigo || '').trim().toLowerCase() === codigoNormalizado && g.id !== idAtual);
+    if (codigoDuplicado) erros.push('Já existe um grupo com este código.');
+
+    return { ok: erros.length === 0, erros, codigo, nome, descricao, status, prioridade, permissoes };
   }
 
   function resetForm() {
     inputId.value = '';
+    inputCodigo.value = '';
     inputNome.value = '';
     inputDescricao.value = '';
     selectStatus.value = 'ativo';
@@ -118,6 +131,7 @@
 
   function preencherForm(grupo) {
     inputId.value = grupo.id;
+    inputCodigo.value = grupo.codigo || '';
     inputNome.value = grupo.nome || '';
     inputDescricao.value = grupo.descricao || '';
     selectStatus.value = grupo.status || 'ativo';
@@ -150,7 +164,7 @@
     tbody.innerHTML = '';
 
     const filtrados = grupos.filter(g => {
-      const texto = `${g.nome} ${g.descricao || ''}`.toLowerCase();
+      const texto = `${g.codigo || ''} ${g.nome} ${g.descricao || ''}`.toLowerCase();
       const matchBusca = !busca || texto.includes(busca);
       const matchStatus = filtro === 'todos' || g.status === filtro;
       return matchBusca && matchStatus;
@@ -170,6 +184,7 @@
         .join(' ');
 
       tr.innerHTML = `
+        <td class="px-3 py-2">${grupo.codigo || '—'}</td>
         <td class="px-3 py-2">
           <div class="font-semibold text-gray-900">${grupo.nome || ''}</div>
           <p class="text-xs text-gray-500">${grupo.descricao || '—'}</p>
@@ -212,6 +227,7 @@
     const grupos = getGrupos();
     const payload = {
       id: inputId.value || `g-${Date.now()}`,
+      codigo: v.codigo,
       nome: v.nome,
       descricao: v.descricao,
       status: v.status,
