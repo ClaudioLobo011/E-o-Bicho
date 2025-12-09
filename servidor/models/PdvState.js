@@ -56,7 +56,7 @@ const receivableSchema = new mongoose.Schema(
   { _id: false }
 );
 
-const saleRecordSchema = new mongoose.Schema(
+  const saleRecordSchema = new mongoose.Schema(
   {
     id: { type: String, required: true, trim: true },
     type: { type: String, trim: true },
@@ -65,6 +65,9 @@ const saleRecordSchema = new mongoose.Schema(
     saleCodeLabel: { type: String, trim: true },
     customerName: { type: String, trim: true },
     customerDocument: { type: String, trim: true },
+    seller: { type: mongoose.Schema.Types.Mixed, default: null },
+    sellerName: { type: String, trim: true },
+    sellerCode: { type: String, trim: true },
     paymentTags: [{ type: String, trim: true }],
     items: { type: [mongoose.Schema.Types.Mixed], default: [] },
     discountValue: { type: Number, default: 0 },
@@ -126,7 +129,7 @@ const inventoryMovementSchema = new mongoose.Schema(
   { _id: false }
 );
 
-const budgetRecordSchema = new mongoose.Schema(
+  const budgetRecordSchema = new mongoose.Schema(
   {
     id: { type: String, trim: true },
     code: { type: String, trim: true },
@@ -139,6 +142,9 @@ const budgetRecordSchema = new mongoose.Schema(
     addition: { type: Number, default: 0 },
     customer: { type: mongoose.Schema.Types.Mixed, default: null },
     pet: { type: mongoose.Schema.Types.Mixed, default: null },
+    seller: { type: mongoose.Schema.Types.Mixed, default: null },
+    sellerName: { type: String, trim: true },
+    sellerCode: { type: String, trim: true },
     items: { type: [mongoose.Schema.Types.Mixed], default: [] },
     payments: { type: [mongoose.Schema.Types.Mixed], default: [] },
     paymentLabel: { type: String, trim: true, default: '' },

@@ -2008,6 +2008,17 @@
           })
           .filter(Boolean)
       : [];
+    const sellerSnapshot = record.seller && typeof record.seller === 'object' ? { ...record.seller } : null;
+    const sellerName = record.sellerName
+      ? String(record.sellerName)
+      : sellerSnapshot
+      ? getSellerDisplayName(sellerSnapshot)
+      : '';
+    const sellerCode = record.sellerCode
+      ? String(record.sellerCode)
+      : sellerSnapshot
+      ? getSellerCode(sellerSnapshot)
+      : '';
 
     return {
       id: record.id ? String(record.id) : createUid(),
@@ -2023,6 +2034,9 @@
       items: Array.isArray(record.items) ? record.items.map((item) => ({ ...item })) : [],
       discountValue: safeNumber(record.discountValue ?? 0),
       discountLabel: record.discountLabel ? String(record.discountLabel) : '',
+      seller: sellerSnapshot,
+      sellerName,
+      sellerCode,
       additionValue: safeNumber(record.additionValue ?? 0),
       createdAt: createdAt.toISOString(),
       createdAtLabel: record.createdAtLabel ? String(record.createdAtLabel) : '',
@@ -2140,6 +2154,17 @@
       budget.finalizedSale ||
       budget.saleFinalizedId ||
       budget.vendaRelacionadaId;
+    const sellerSource = budget.seller && typeof budget.seller === 'object' ? { ...budget.seller } : null;
+    const sellerName = sellerSource
+      ? getSellerDisplayName(sellerSource)
+      : budget.sellerName
+      ? String(budget.sellerName)
+      : '';
+    const sellerCode = sellerSource
+      ? getSellerCode(sellerSource)
+      : budget.sellerCode
+      ? String(budget.sellerCode)
+      : '';
     return {
       id,
       code: String(budget.code || budget.codigo || budget.numero || id),
@@ -2152,6 +2177,9 @@
       addition: safeNumber(budget.addition ?? budget.acrescimo ?? 0),
       customer: customerSource && typeof customerSource === 'object' ? { ...customerSource } : null,
       pet: petSource && typeof petSource === 'object' ? { ...petSource } : null,
+      seller: sellerSource,
+      sellerName,
+      sellerCode,
       items: normalizedItems,
       payments: normalizedPayments,
       paymentLabel: budget.paymentLabel ? String(budget.paymentLabel) : '',
@@ -7930,6 +7958,9 @@
     const total = getSaleTotalLiquido();
     const customerSnapshot = state.vendaCliente ? { ...state.vendaCliente } : null;
     const petSnapshot = state.vendaPet ? { ...state.vendaPet } : null;
+    const sellerSnapshot = state.selectedSeller ? { ...state.selectedSeller } : null;
+    const sellerName = sellerSnapshot ? getSellerDisplayName(sellerSnapshot) : '';
+    const sellerCode = sellerSnapshot ? getSellerCode(sellerSnapshot) : '';
     const budgetId = state.activeBudgetId || '';
     const existingBudget = budgetId ? findBudgetById(budgetId) : null;
     let budget = existingBudget;
@@ -7941,6 +7972,9 @@
       existingBudget.total = total;
       existingBudget.customer = customerSnapshot;
       existingBudget.pet = petSnapshot;
+      existingBudget.seller = sellerSnapshot || existingBudget.seller || null;
+      existingBudget.sellerName = sellerSnapshot ? sellerName : existingBudget.sellerName || '';
+      existingBudget.sellerCode = sellerSnapshot ? sellerCode : existingBudget.sellerCode || '';
       existingBudget.validityDays = validityDays;
       existingBudget.validUntil = validUntil.toISOString();
       existingBudget.updatedAt = nowIso;
@@ -7958,6 +7992,9 @@
         addition,
         customer: customerSnapshot,
         pet: petSnapshot,
+        seller: sellerSnapshot,
+        sellerName,
+        sellerCode,
         items: itensSnapshot,
         payments: pagamentosSnapshot,
         paymentLabel: describeSalePayments(pagamentosSnapshot),
@@ -8040,6 +8077,7 @@
       receivables: saleReceivables.entries,
       cashContributions,
       appointmentId: state.activeAppointmentId || '',
+      seller: state.selectedSeller,
     });
     if (saleRecord) {
       saleRecord.cashContributions = cashContributions;
@@ -8287,6 +8325,7 @@
       createdAt: orderRecord.createdAt,
       receivables: saleReceivables.entries,
       cashContributions,
+      seller: state.selectedSeller,
     });
     if (saleRecord) {
       saleRecord.cashContributions = cashContributions;
@@ -11704,6 +11743,7 @@
     receivables = [],
     cashContributions = [],
     appointmentId = '',
+    seller = null,
   } = {}) => {
     const normalizedType = type === 'delivery' ? 'delivery' : 'venda';
     const typeLabel = normalizedType === 'delivery' ? 'Delivery' : 'Venda';
@@ -11737,6 +11777,9 @@
       customerSource?.cnpj ||
       customerSource?.documento ||
       '';
+    const sellerSnapshot = seller && typeof seller === 'object' ? { ...seller } : null;
+    const sellerName = sellerSnapshot ? getSellerDisplayName(sellerSnapshot) : '';
+    const sellerCode = sellerSnapshot ? getSellerCode(sellerSnapshot) : '';
     const createdIso = createdAt || new Date().toISOString();
     const discountValue = Math.max(
       0,
@@ -11786,6 +11829,9 @@
       saleCodeLabel: saleCode || 'Sem código',
       customerName,
       customerDocument,
+      seller: sellerSnapshot,
+      sellerName,
+      sellerCode,
       paymentTags,
       items: itemDisplays,
       discountValue,
