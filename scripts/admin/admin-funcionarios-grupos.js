@@ -5,7 +5,6 @@
   const inputCodigo = document.getElementById('grupo-codigo');
   const inputNome = document.getElementById('grupo-nome');
   const inputDescricao = document.getElementById('grupo-descricao');
-  const selectPrioridade = document.getElementById('grupo-prioridade');
   const submitLabel = document.getElementById('grupo-submit-label');
   const btnCancelar = document.getElementById('grupo-cancelar');
   const inputBusca = document.getElementById('grupo-busca');
@@ -24,25 +23,28 @@
     }
     return [
       {
-        id: 'g1',
-        codigo: 'GRP-001',
-        nome: 'Gerência',
-        descricao: 'Time responsável por gestão de pessoas e processos.',
-        prioridade: 'gestor'
+        id: 'gerente',
+        codigo: 'GER',
+        nome: 'Gerente',
+        descricao: 'Responsável por gerir a unidade, metas e equipe.'
       },
       {
-        id: 'g2',
-        codigo: 'GRP-002',
-        nome: 'Atendimento',
-        descricao: 'Foco em agendamentos, check-in e relacionamento.',
-        prioridade: 'padrao'
+        id: 'vendedor',
+        codigo: 'VEN',
+        nome: 'Vendedor',
+        descricao: 'Atende clientes e conduz processos comerciais.'
       },
       {
-        id: 'g3',
-        codigo: 'GRP-003',
-        nome: 'Estoquista',
-        descricao: 'Conferência de mercadorias, inventários e ajustes.',
-        prioridade: 'restrito'
+        id: 'esteticista',
+        codigo: 'EST',
+        nome: 'Esteticista',
+        descricao: 'Realiza procedimentos estéticos e acompanha resultados.'
+      },
+      {
+        id: 'veterinario',
+        codigo: 'VET',
+        nome: 'Veterinário',
+        descricao: 'Cuida das consultas, diagnósticos e prescrições.'
       }
     ];
   }
@@ -69,7 +71,6 @@
     const codigo = (inputCodigo.value || '').trim();
     const nome = (inputNome.value || '').trim();
     const descricao = (inputDescricao.value || '').trim();
-    const prioridade = selectPrioridade.value || 'padrao';
 
     if (!codigo) erros.push('Informe o código do grupo.');
     if (!nome) erros.push('Informe o nome do grupo.');
@@ -80,7 +81,7 @@
     const codigoDuplicado = grupos.some(g => (g.codigo || '').trim().toLowerCase() === codigoNormalizado && g.id !== idAtual);
     if (codigoDuplicado) erros.push('Já existe um grupo com este código.');
 
-    return { ok: erros.length === 0, erros, codigo, nome, descricao, prioridade };
+    return { ok: erros.length === 0, erros, codigo, nome, descricao };
   }
 
   function resetForm() {
@@ -88,7 +89,6 @@
     inputCodigo.value = '';
     inputNome.value = '';
     inputDescricao.value = '';
-    selectPrioridade.value = 'padrao';
     submitLabel.textContent = 'Salvar';
     btnCancelar.classList.add('hidden');
   }
@@ -98,16 +98,8 @@
     inputCodigo.value = grupo.codigo || '';
     inputNome.value = grupo.nome || '';
     inputDescricao.value = grupo.descricao || '';
-    selectPrioridade.value = grupo.prioridade || 'padrao';
     submitLabel.textContent = 'Atualizar';
     btnCancelar.classList.remove('hidden');
-  }
-
-  function badgePrioridade(prioridade) {
-    const base = 'inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold';
-    if (prioridade === 'gestor') return `${base} bg-orange-50 text-orange-700`;
-    if (prioridade === 'restrito') return `${base} bg-blue-50 text-blue-700`;
-    return `${base} bg-gray-100 text-gray-700`;
   }
 
   function renderLista() {
@@ -137,12 +129,6 @@
           <p class="text-xs text-gray-500">${grupo.descricao || '—'}</p>
         </td>
         <td class="px-3 py-2">
-          <span class="${badgePrioridade(grupo.prioridade)}">
-            <i class="fas fa-signal"></i>
-            ${grupo.prioridade === 'gestor' ? 'Gestor' : grupo.prioridade === 'restrito' ? 'Restrito' : 'Padrão'}
-          </span>
-        </td>
-        <td class="px-3 py-2">
           <div class="flex items-center gap-2">
             <button class="px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-800" data-edit="${grupo.id}"><i class="fas fa-pen"></i></button>
             <button class="px-2 py-1 rounded bg-red-50 hover:bg-red-100 text-red-700" data-del="${grupo.id}"><i class="fas fa-trash"></i></button>
@@ -167,8 +153,7 @@
       id: inputId.value || `g-${Date.now()}`,
       codigo: v.codigo,
       nome: v.nome,
-      descricao: v.descricao,
-      prioridade: v.prioridade
+      descricao: v.descricao
     };
 
     const idx = grupos.findIndex(g => g.id === payload.id);
