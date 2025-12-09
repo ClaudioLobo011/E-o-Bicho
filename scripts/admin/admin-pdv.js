@@ -3614,7 +3614,7 @@
       if (seller) {
         state.selectedSeller = seller;
         const displayName = getSellerDisplayName(seller);
-        setSellerFeedback(`Vendedor: ${displayName} (cód. ${normalized})`, 'success');
+        setSellerFeedback(displayName, 'success');
       } else {
         state.selectedSeller = null;
         setSellerFeedback('Código não encontrado entre vendedores cadastrados.', 'error');
