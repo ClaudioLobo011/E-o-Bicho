@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Admin — Cadastro de Grupo de Funcionários</title>
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="../../src/output.css">
+</head>
+<body class="bg-gray-100">
+  <div id="admin-header-placeholder"></div>
+
+  <main class="container mx-auto px-4 pt-1 pb-8 min-h-screen">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <aside class="md:col-span-4">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
+
+      <section class="md:col-span-4 space-y-6">
+        <div class="bg-white rounded-lg shadow p-6">
+          <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div class="flex items-center gap-3">
+              <i class="fas fa-people-group text-gray-400 text-2xl"></i>
+              <div>
+                <p class="text-sm text-gray-500">RH · Funcionários</p>
+                <h1 class="text-2xl font-bold text-gray-800">Cadastro de Grupo</h1>
+              </div>
+            </div>
+            <div class="text-sm text-gray-500">Última atualização visual: março/2025</div>
+          </div>
+
+          <form id="grupo-form" class="mt-6 space-y-4">
+            <input type="hidden" id="grupo-id">
+
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
+              <div class="md:col-span-6">
+                <label for="grupo-nome" class="block text-sm font-semibold text-gray-700 mb-1">Nome do grupo <span class="text-red-500">*</span></label>
+                <input id="grupo-nome" type="text" maxlength="80" required
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                       placeholder="Ex.: Gerência de Loja">
+              </div>
+              <div class="md:col-span-3">
+                <label for="grupo-status" class="block text-sm font-semibold text-gray-700 mb-1">Situação</label>
+                <select id="grupo-status" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50">
+                  <option value="ativo">Ativo</option>
+                  <option value="inativo">Inativo</option>
+                </select>
+              </div>
+              <div class="md:col-span-3">
+                <label for="grupo-prioridade" class="block text-sm font-semibold text-gray-700 mb-1">Prioridade de acesso</label>
+                <select id="grupo-prioridade" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50">
+                  <option value="padrao">Padrão</option>
+                  <option value="restrito">Restrito</option>
+                  <option value="gestor">Gestor</option>
+                </select>
+                <p class="text-xs text-gray-500 mt-1">Define permissões complementares no app.</p>
+              </div>
+            </div>
+
+            <div>
+              <div class="flex items-start justify-between gap-2">
+                <label class="block text-sm font-semibold text-gray-700">Permissões de acesso <span class="text-red-500">*</span></label>
+                <span class="text-xs text-gray-500">Escolha tudo o que o grupo poderá visualizar ou editar.</span>
+              </div>
+              <div id="grupo-permissoes" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-2">
+                <label class="inline-flex items-start gap-3 p-2 rounded-lg border border-gray-200 hover:border-primary/60">
+                  <input type="checkbox" value="pdv" class="mt-1 rounded border-gray-300">
+                  <div>
+                    <p class="font-medium text-gray-800">PDV e vendas</p>
+                    <p class="text-xs text-gray-500">Emitir vendas, abrir/fechar caixa.</p>
+                  </div>
+                </label>
+                <label class="inline-flex items-start gap-3 p-2 rounded-lg border border-gray-200 hover:border-primary/60">
+                  <input type="checkbox" value="agenda" class="mt-1 rounded border-gray-300">
+                  <div>
+                    <p class="font-medium text-gray-800">Agenda &amp; serviços</p>
+                    <p class="text-xs text-gray-500">Gerir horários de Banho &amp; Tosa e serviços.</p>
+                  </div>
+                </label>
+                <label class="inline-flex items-start gap-3 p-2 rounded-lg border border-gray-200 hover:border-primary/60">
+                  <input type="checkbox" value="clientes" class="mt-1 rounded border-gray-300">
+                  <div>
+                    <p class="font-medium text-gray-800">Clientes e pets</p>
+                    <p class="text-xs text-gray-500">Editar cadastro de clientes e animais.</p>
+                  </div>
+                </label>
+                <label class="inline-flex items-start gap-3 p-2 rounded-lg border border-gray-200 hover:border-primary/60">
+                  <input type="checkbox" value="estoque" class="mt-1 rounded border-gray-300">
+                  <div>
+                    <p class="font-medium text-gray-800">Estoque</p>
+                    <p class="text-xs text-gray-500">Realizar contagens, transferências e ajustes.</p>
+                  </div>
+                </label>
+                <label class="inline-flex items-start gap-3 p-2 rounded-lg border border-gray-200 hover:border-primary/60">
+                  <input type="checkbox" value="financeiro" class="mt-1 rounded border-gray-300">
+                  <div>
+                    <p class="font-medium text-gray-800">Financeiro</p>
+                    <p class="text-xs text-gray-500">Contas a pagar/receber e comissões.</p>
+                  </div>
+                </label>
+                <label class="inline-flex items-start gap-3 p-2 rounded-lg border border-gray-200 hover:border-primary/60">
+                  <input type="checkbox" value="relatorios" class="mt-1 rounded border-gray-300">
+                  <div>
+                    <p class="font-medium text-gray-800">Relatórios</p>
+                    <p class="text-xs text-gray-500">Acesso a relatórios gerenciais.</p>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <label for="grupo-descricao" class="block text-sm font-semibold text-gray-700 mb-1">Descrição</label>
+              <textarea id="grupo-descricao" rows="3" maxlength="280"
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                        placeholder="Resumo rápido do objetivo deste grupo."></textarea>
+            </div>
+
+            <div class="flex items-center gap-3 pt-2">
+              <button type="submit" class="inline-flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg hover:opacity-90 transition">
+                <i class="fas fa-save"></i>
+                <span id="grupo-submit-label">Salvar</span>
+              </button>
+              <button type="button" id="grupo-cancelar" class="hidden text-sm text-gray-600 hover:text-gray-800 underline">Cancelar edição</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-6">
+          <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-4">
+            <div class="flex items-center gap-3">
+              <i class="fas fa-list text-gray-400"></i>
+              <div>
+                <h2 class="text-lg font-bold text-gray-800">Grupos cadastrados</h2>
+                <p class="text-sm text-gray-500">Revise as permissões antes de atribuir a um colaborador.</p>
+              </div>
+            </div>
+            <div class="flex flex-col sm:flex-row gap-2 sm:items-center">
+              <div class="relative">
+                <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                <input id="grupo-busca" type="search" placeholder="Buscar por nome ou descrição" class="pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40 w-64">
+              </div>
+              <select id="grupo-filtro" class="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40">
+                <option value="todos">Todos</option>
+                <option value="ativo">Ativos</option>
+                <option value="inativo">Inativos</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+              <thead>
+                <tr class="text-left text-gray-500">
+                  <th class="px-3 py-2">Grupo</th>
+                  <th class="px-3 py-2">Permissões</th>
+                  <th class="px-3 py-2">Situação</th>
+                  <th class="px-3 py-2">Prioridade</th>
+                  <th class="px-3 py-2 w-36">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="grupo-tbody" class="divide-y divide-gray-200"></tbody>
+            </table>
+          </div>
+          <p id="grupo-empty" class="hidden text-gray-400 text-sm italic mt-3">Nenhum grupo encontrado com os filtros atuais.</p>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <div id="admin-footer-placeholder"></div>
+
+  <script>var basePath = '../../';</script>
+  <script src="../../scripts/core/config.js"></script>
+  <script src="../../scripts/core/ui.js"></script>
+  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/admin/admin.js"></script>
+  <script src="../../scripts/admin/admin-funcionarios-grupos.js"></script>
+</body>
+</html>
