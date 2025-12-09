@@ -21,32 +21,7 @@
     } catch (err) {
       console.warn('Não foi possível ler os grupos salvos.', err);
     }
-    return [
-      {
-        id: 'gerente',
-        codigo: 'GER',
-        nome: 'Gerente',
-        descricao: 'Responsável por gerir a unidade, metas e equipe.'
-      },
-      {
-        id: 'vendedor',
-        codigo: 'VEN',
-        nome: 'Vendedor',
-        descricao: 'Atende clientes e conduz processos comerciais.'
-      },
-      {
-        id: 'esteticista',
-        codigo: 'EST',
-        nome: 'Esteticista',
-        descricao: 'Realiza procedimentos estéticos e acompanha resultados.'
-      },
-      {
-        id: 'veterinario',
-        codigo: 'VET',
-        nome: 'Veterinário',
-        descricao: 'Cuida das consultas, diagnósticos e prescrições.'
-      }
-    ];
+    return [];
   }
 
   function salvar(grupos) {
