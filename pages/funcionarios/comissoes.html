@@ -26,7 +26,7 @@
               <h1 class="text-2xl font-bold text-gray-800">Minhas Comissões</h1>
               <p class="text-sm text-gray-500">Acompanhe seus ganhos, previsões de pagamento e histórico detalhado.</p>
             </div>
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-3">
+            <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-3">
               <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
                 <i class="fas fa-filter text-primary"></i>
                 <span>Período</span>
@@ -37,235 +37,471 @@
                   <option>Este ano</option>
                 </select>
               </label>
-              <button class="flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 hover:shadow-sm">
-                <i class="fas fa-file-arrow-down text-primary"></i>
-                Exportar</button>
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-2">
+                <div class="inline-flex items-center rounded-xl border border-gray-200 bg-gray-50 p-1 text-sm font-semibold text-gray-600 shadow-sm">
+                  <button type="button" data-comissoes-tab="servicos" class="rounded-lg px-3 py-2 text-primary shadow-sm ring-1 ring-primary bg-white">Serviços</button>
+                  <button type="button" data-comissoes-tab="produtos" class="rounded-lg px-3 py-2 hover:text-primary">Produtos</button>
+                </div>
+                <button class="flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 hover:shadow-sm">
+                  <i class="fas fa-file-arrow-down text-primary"></i>
+                  Exportar</button>
+              </div>
             </div>
           </header>
 
           <div class="px-6 py-6 space-y-6">
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <article class="rounded-xl border border-gray-100 bg-gradient-to-br from-primary/10 to-primary/5 p-4 shadow-sm">
-                <div class="flex items-center justify-between">
-                  <div class="text-xs font-semibold uppercase tracking-wide text-primary">Total gerado</div>
-                  <span class="rounded-full bg-white/80 px-3 py-1 text-xs font-semibold text-primary">+12%</span>
-                </div>
-                <p class="mt-2 text-2xl font-bold text-gray-900">R$ 14.820,00</p>
-                <p class="text-sm text-gray-500">Comissões acumuladas no período selecionado.</p>
-              </article>
+            <div data-comissoes-view="servicos" class="space-y-6">
+              <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <article class="rounded-xl border border-gray-100 bg-gradient-to-br from-primary/10 to-primary/5 p-4 shadow-sm">
+                  <div class="flex items-center justify-between">
+                    <div class="text-xs font-semibold uppercase tracking-wide text-primary">Total gerado</div>
+                    <span class="rounded-full bg-white/80 px-3 py-1 text-xs font-semibold text-primary">+12%</span>
+                  </div>
+                  <p class="mt-2 text-2xl font-bold text-gray-900">R$ 14.820,00</p>
+                  <p class="text-sm text-gray-500">Comissões acumuladas no período selecionado.</p>
+                </article>
 
-              <article class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
-                <div class="flex items-center justify-between">
-                  <div class="text-xs font-semibold uppercase tracking-wide text-amber-500">A receber</div>
-                  <i class="fas fa-clock text-amber-500"></i>
-                </div>
-                <p class="mt-2 text-2xl font-bold text-gray-900">R$ 4.250,00</p>
-                <p class="text-sm text-gray-500">Pagamentos agendados até 25/06.</p>
-              </article>
+                <article class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+                  <div class="flex items-center justify-between">
+                    <div class="text-xs font-semibold uppercase tracking-wide text-amber-500">A receber</div>
+                    <i class="fas fa-clock text-amber-500"></i>
+                  </div>
+                  <p class="mt-2 text-2xl font-bold text-gray-900">R$ 4.250,00</p>
+                  <p class="text-sm text-gray-500">Pagamentos agendados até 25/06.</p>
+                </article>
 
-              <article class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
-                <div class="flex items-center justify-between">
-                  <div class="text-xs font-semibold uppercase tracking-wide text-emerald-600">Pagas</div>
-                  <i class="fas fa-circle-check text-emerald-600"></i>
-                </div>
-                <p class="mt-2 text-2xl font-bold text-gray-900">R$ 9.880,00</p>
-                <p class="text-sm text-gray-500">Último pagamento em 08/06.</p>
-              </article>
+                <article class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+                  <div class="flex items-center justify-between">
+                    <div class="text-xs font-semibold uppercase tracking-wide text-emerald-600">Pagas</div>
+                    <i class="fas fa-circle-check text-emerald-600"></i>
+                  </div>
+                  <p class="mt-2 text-2xl font-bold text-gray-900">R$ 9.880,00</p>
+                  <p class="text-sm text-gray-500">Último pagamento em 08/06.</p>
+                </article>
 
-              <article class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
-                <div class="flex items-center justify-between">
-                  <div class="text-xs font-semibold uppercase tracking-wide text-blue-500">Média</div>
-                  <i class="fas fa-chart-line text-blue-500"></i>
+                <article class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+                  <div class="flex items-center justify-between">
+                    <div class="text-xs font-semibold uppercase tracking-wide text-blue-500">Média</div>
+                    <i class="fas fa-chart-line text-blue-500"></i>
+                  </div>
+                  <p class="mt-2 text-2xl font-bold text-gray-900">R$ 494,00</p>
+                  <p class="text-sm text-gray-500">Ticket médio por venda com comissão.</p>
+                </article>
+              </div>
+
+              <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <div class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm lg:col-span-2">
+                  <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h2 class="text-lg font-semibold text-gray-800">Próximos pagamentos</h2>
+                      <p class="text-sm text-gray-500">Datas previstas com base no fechamento de cada comissão.</p>
+                    </div>
+                    <div class="flex items-center gap-2 text-sm text-gray-700">
+                      <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-600"><i class="fas fa-circle text-[8px]"></i>Confirmado</span>
+                      <span class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-600"><i class="fas fa-circle text-[8px]"></i>Pendente</span>
+                    </div>
+                  </div>
+
+                  <div class="mt-4 space-y-3">
+                    <div class="flex items-start gap-3 rounded-lg border border-gray-100 p-3">
+                      <div class="mt-1 h-2 w-2 rounded-full bg-emerald-500"></div>
+                      <div class="flex-1">
+                        <div class="flex items-center justify-between">
+                          <p class="text-sm font-semibold text-gray-800">25/06 • Comissão de vendas online</p>
+                          <span class="text-sm font-semibold text-emerald-600">R$ 2.150,00</span>
+                        </div>
+                        <p class="text-xs text-gray-500">Período 01/06 - 15/06 • Pagamento via folha</p>
+                      </div>
+                    </div>
+                    <div class="flex items-start gap-3 rounded-lg border border-gray-100 p-3">
+                      <div class="mt-1 h-2 w-2 rounded-full bg-amber-500"></div>
+                      <div class="flex-1">
+                        <div class="flex items-center justify-between">
+                          <p class="text-sm font-semibold text-gray-800">08/07 • Serviços de banho e tosa</p>
+                          <span class="text-sm font-semibold text-amber-600">R$ 1.450,00</span>
+                        </div>
+                        <p class="text-xs text-gray-500">Aguardando confirmação de dois atendimentos.</p>
+                      </div>
+                    </div>
+                    <div class="flex items-start gap-3 rounded-lg border border-gray-100 p-3">
+                      <div class="mt-1 h-2 w-2 rounded-full bg-emerald-500"></div>
+                      <div class="flex-1">
+                        <div class="flex items-center justify-between">
+                          <p class="text-sm font-semibold text-gray-800">22/07 • Comissões de fidelidade</p>
+                          <span class="text-sm font-semibold text-emerald-600">R$ 650,00</span>
+                        </div>
+                        <p class="text-xs text-gray-500">Pontuação convertida em crédito de comissão.</p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <p class="mt-2 text-2xl font-bold text-gray-900">R$ 494,00</p>
-                <p class="text-sm text-gray-500">Ticket médio por venda com comissão.</p>
-              </article>
+
+                <div class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <h3 class="text-lg font-semibold text-gray-800">Resumo do período</h3>
+                      <p class="text-sm text-gray-500">Indicadores rápidos para o seu desempenho.</p>
+                    </div>
+                    <i class="fas fa-gauge-high text-primary"></i>
+                  </div>
+
+                  <dl class="mt-4 space-y-4 text-sm">
+                    <div class="flex items-center justify-between">
+                      <dt class="text-gray-600">Vendas com comissão</dt>
+                      <dd class="font-semibold text-gray-900">30</dd>
+                    </div>
+                    <div class="flex items-center justify-between">
+                      <dt class="text-gray-600">Taxa de aprovação</dt>
+                      <dd class="font-semibold text-emerald-600">96%</dd>
+                    </div>
+                    <div class="flex items-center justify-between">
+                      <dt class="text-gray-600">Tempo médio de liberação</dt>
+                      <dd class="font-semibold text-gray-900">4 dias</dd>
+                    </div>
+                    <div class="flex items-center justify-between">
+                      <dt class="text-gray-600">Bonificações</dt>
+                      <dd class="font-semibold text-blue-600">R$ 620,00</dd>
+                    </div>
+                    <div class="flex items-center justify-between">
+                      <dt class="text-gray-600">Cancelamentos</dt>
+                      <dd class="font-semibold text-amber-600">2 pedidos</dd>
+                    </div>
+                  </dl>
+                </div>
+              </div>
+
+              <div class="rounded-xl border border-gray-100 bg-white shadow-sm">
+                <div class="flex flex-col gap-3 border-b border-gray-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 class="text-lg font-semibold text-gray-800">Histórico de comissões</h2>
+                    <p class="text-sm text-gray-500">Detalhes dos pedidos, serviços e status de pagamento.</p>
+                  </div>
+                  <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
+                    <label class="flex items-center gap-2 text-sm text-gray-700">
+                      <span class="hidden text-xs font-semibold uppercase tracking-wide text-gray-500 sm:inline">Status</span>
+                      <select class="rounded-lg border-gray-200 text-sm text-gray-700 shadow-sm focus:border-primary focus:ring-primary">
+                        <option>Todos</option>
+                        <option>Pago</option>
+                        <option>Pendente</option>
+                        <option>Aguardando</option>
+                        <option>Cancelado</option>
+                      </select>
+                    </label>
+                    <div class="relative">
+                      <span class="absolute inset-y-0 left-3 flex items-center text-gray-400"><i class="fas fa-magnifying-glass"></i></span>
+                      <input type="search" class="w-full rounded-lg border border-gray-200 pl-9 pr-3 py-2 text-sm text-gray-700 shadow-sm focus:border-primary focus:ring-primary" placeholder="Buscar pedido, cliente ou serviço" />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                  <table class="min-w-full divide-y divide-gray-100">
+                    <thead class="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+                      <tr>
+                        <th scope="col" class="px-4 py-3 text-left">Data</th>
+                        <th scope="col" class="px-4 py-3 text-left">Pedido</th>
+                        <th scope="col" class="px-4 py-3 text-left">Cliente</th>
+                        <th scope="col" class="px-4 py-3 text-left">Origem</th>
+                        <th scope="col" class="px-4 py-3 text-left">Status</th>
+                        <th scope="col" class="px-4 py-3 text-left">Valor da comissão</th>
+                        <th scope="col" class="px-4 py-3 text-left">Pagamento</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100 bg-white text-sm text-gray-700">
+                      <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3">15/06</td>
+                        <td class="px-4 py-3">
+                          <p class="font-semibold text-gray-900">#18473</p>
+                          <p class="text-xs text-gray-500">Assinatura premium</p>
+                        </td>
+                        <td class="px-4 py-3">Juliana Costa</td>
+                        <td class="px-4 py-3">Venda online</td>
+                        <td class="px-4 py-3">
+                          <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-600"><i class="fas fa-circle text-[8px]"></i>Pago</span>
+                        </td>
+                        <td class="px-4 py-3 font-semibold text-gray-900">R$ 420,00</td>
+                        <td class="px-4 py-3 text-gray-600">Creditado em 18/06</td>
+                      </tr>
+                      <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3">12/06</td>
+                        <td class="px-4 py-3">
+                          <p class="font-semibold text-gray-900">#18388</p>
+                          <p class="text-xs text-gray-500">Banho e tosa</p>
+                        </td>
+                        <td class="px-4 py-3">Carlos Silva</td>
+                        <td class="px-4 py-3">Atendimento loja</td>
+                        <td class="px-4 py-3">
+                          <span class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-600"><i class="fas fa-circle text-[8px]"></i>Pendente</span>
+                        </td>
+                        <td class="px-4 py-3 font-semibold text-gray-900">R$ 160,00</td>
+                        <td class="px-4 py-3 text-gray-600">Previsão 25/06</td>
+                      </tr>
+                      <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3">10/06</td>
+                        <td class="px-4 py-3">
+                          <p class="font-semibold text-gray-900">#18340</p>
+                          <p class="text-xs text-gray-500">Programa fidelidade</p>
+                        </td>
+                        <td class="px-4 py-3">Patrícia Lima</td>
+                        <td class="px-4 py-3">Indicação</td>
+                        <td class="px-4 py-3">
+                          <span class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700"><i class="fas fa-circle text-[8px]"></i>Aguardando</span>
+                        </td>
+                        <td class="px-4 py-3 font-semibold text-gray-900">R$ 80,00</td>
+                        <td class="px-4 py-3 text-gray-600">Aguardando validação</td>
+                      </tr>
+                      <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3">04/06</td>
+                        <td class="px-4 py-3">
+                          <p class="font-semibold text-gray-900">#18210</p>
+                          <p class="text-xs text-gray-500">Cirurgia veterinária</p>
+                        </td>
+                        <td class="px-4 py-3">Amora (cliente: João)</td>
+                        <td class="px-4 py-3">Clínica</td>
+                        <td class="px-4 py-3">
+                          <span class="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-600"><i class="fas fa-circle text-[8px]"></i>Cancelado</span>
+                        </td>
+                        <td class="px-4 py-3 font-semibold text-gray-900">R$ 0,00</td>
+                        <td class="px-4 py-3 text-gray-600">Cancelado pelo cliente</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div class="flex flex-col gap-3 border-t border-gray-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div class="text-sm text-gray-600">Mostrando 1 a 4 de 12 registros</div>
+                  <div class="flex items-center gap-2">
+                    <button class="rounded-lg border border-gray-200 px-3 py-1 text-sm text-gray-700 hover:bg-gray-50">Anterior</button>
+                    <button class="rounded-lg bg-primary px-3 py-1 text-sm font-semibold text-white shadow hover:bg-primary/90">Próxima</button>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <div class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm lg:col-span-2">
-                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div data-comissoes-view="produtos" class="hidden space-y-6">
+              <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <article class="rounded-xl border border-gray-100 bg-gradient-to-br from-primary/10 to-primary/5 p-4 shadow-sm">
+                  <div class="flex items-center justify-between">
+                    <div class="text-xs font-semibold uppercase tracking-wide text-primary">Total gerado</div>
+                    <span class="rounded-full bg-white/80 px-3 py-1 text-xs font-semibold text-primary">+18%</span>
+                  </div>
+                  <p class="mt-2 text-2xl font-bold text-gray-900">R$ 9.430,00</p>
+                  <p class="text-sm text-gray-500">Comissões sobre vendas de produtos no período.</p>
+                </article>
+
+                <article class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+                  <div class="flex items-center justify-between">
+                    <div class="text-xs font-semibold uppercase tracking-wide text-amber-500">A receber</div>
+                    <i class="fas fa-clock text-amber-500"></i>
+                  </div>
+                  <p class="mt-2 text-2xl font-bold text-gray-900">R$ 2.180,00</p>
+                  <p class="text-sm text-gray-500">Faturamento confirmado aguardando repasse.</p>
+                </article>
+
+                <article class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+                  <div class="flex items-center justify-between">
+                    <div class="text-xs font-semibold uppercase tracking-wide text-emerald-600">Pagas</div>
+                    <i class="fas fa-circle-check text-emerald-600"></i>
+                  </div>
+                  <p class="mt-2 text-2xl font-bold text-gray-900">R$ 6.870,00</p>
+                  <p class="text-sm text-gray-500">Inclui bonificações por meta batida.</p>
+                </article>
+
+                <article class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+                  <div class="flex items-center justify-between">
+                    <div class="text-xs font-semibold uppercase tracking-wide text-blue-500">Ticket médio</div>
+                    <i class="fas fa-box-open text-blue-500"></i>
+                  </div>
+                  <p class="mt-2 text-2xl font-bold text-gray-900">R$ 320,00</p>
+                  <p class="text-sm text-gray-500">Comissão média por pedido faturado.</p>
+                </article>
+              </div>
+
+              <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <div class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm lg:col-span-2">
+                  <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h2 class="text-lg font-semibold text-gray-800">Próximos pagamentos</h2>
+                      <p class="text-sm text-gray-500">Fechamentos de comissões de produtos.</p>
+                    </div>
+                    <div class="flex items-center gap-2 text-sm text-gray-700">
+                      <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-600"><i class="fas fa-circle text-[8px]"></i>Confirmado</span>
+                      <span class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-600"><i class="fas fa-circle text-[8px]"></i>Pendente</span>
+                    </div>
+                  </div>
+
+                  <div class="mt-4 space-y-3">
+                    <div class="flex items-start gap-3 rounded-lg border border-gray-100 p-3">
+                      <div class="mt-1 h-2 w-2 rounded-full bg-emerald-500"></div>
+                      <div class="flex-1">
+                        <div class="flex items-center justify-between">
+                          <p class="text-sm font-semibold text-gray-800">02/07 • Linha premium rações</p>
+                          <span class="text-sm font-semibold text-emerald-600">R$ 1.120,00</span>
+                        </div>
+                        <p class="text-xs text-gray-500">Pedidos faturados entre 15/06 e 25/06.</p>
+                      </div>
+                    </div>
+                    <div class="flex items-start gap-3 rounded-lg border border-gray-100 p-3">
+                      <div class="mt-1 h-2 w-2 rounded-full bg-amber-500"></div>
+                      <div class="flex-1">
+                        <div class="flex items-center justify-between">
+                          <p class="text-sm font-semibold text-gray-800">15/07 • Kits de higiene</p>
+                          <span class="text-sm font-semibold text-amber-600">R$ 780,00</span>
+                        </div>
+                        <p class="text-xs text-gray-500">Pendente de confirmação de estoque de brinde.</p>
+                      </div>
+                    </div>
+                    <div class="flex items-start gap-3 rounded-lg border border-gray-100 p-3">
+                      <div class="mt-1 h-2 w-2 rounded-full bg-emerald-500"></div>
+                      <div class="flex-1">
+                        <div class="flex items-center justify-between">
+                          <p class="text-sm font-semibold text-gray-800">29/07 • Acessórios pet</p>
+                          <span class="text-sm font-semibold text-emerald-600">R$ 560,00</span>
+                        </div>
+                        <p class="text-xs text-gray-500">Inclui coleiras, camas e brinquedos.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <h3 class="text-lg font-semibold text-gray-800">Resumo do período</h3>
+                      <p class="text-sm text-gray-500">Indicadores rápidos para vendas de produtos.</p>
+                    </div>
+                    <i class="fas fa-chart-pie text-primary"></i>
+                  </div>
+
+                  <dl class="mt-4 space-y-4 text-sm">
+                    <div class="flex items-center justify-between">
+                      <dt class="text-gray-600">Pedidos com comissão</dt>
+                      <dd class="font-semibold text-gray-900">42</dd>
+                    </div>
+                    <div class="flex items-center justify-between">
+                      <dt class="text-gray-600">Meta de mix de produtos</dt>
+                      <dd class="font-semibold text-emerald-600">92%</dd>
+                    </div>
+                    <div class="flex items-center justify-between">
+                      <dt class="text-gray-600">Tempo médio de repasse</dt>
+                      <dd class="font-semibold text-gray-900">3 dias</dd>
+                    </div>
+                    <div class="flex items-center justify-between">
+                      <dt class="text-gray-600">Bônus por combo</dt>
+                      <dd class="font-semibold text-blue-600">R$ 380,00</dd>
+                    </div>
+                    <div class="flex items-center justify-between">
+                      <dt class="text-gray-600">Pedidos devolvidos</dt>
+                      <dd class="font-semibold text-amber-600">1 pedido</dd>
+                    </div>
+                  </dl>
+                </div>
+              </div>
+
+              <div class="rounded-xl border border-gray-100 bg-white shadow-sm">
+                <div class="flex flex-col gap-3 border-b border-gray-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <h2 class="text-lg font-semibold text-gray-800">Próximos pagamentos</h2>
-                    <p class="text-sm text-gray-500">Datas previstas com base no fechamento de cada comissão.</p>
+                    <h2 class="text-lg font-semibold text-gray-800">Histórico de comissões</h2>
+                    <p class="text-sm text-gray-500">Pedidos de produtos com cálculo de comissão.</p>
                   </div>
-                  <div class="flex items-center gap-2 text-sm text-gray-700">
-                    <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-600"><i class="fas fa-circle text-[8px]"></i>Confirmado</span>
-                    <span class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-600"><i class="fas fa-circle text-[8px]"></i>Pendente</span>
-                  </div>
-                </div>
-
-                <div class="mt-4 space-y-3">
-                  <div class="flex items-start gap-3 rounded-lg border border-gray-100 p-3">
-                    <div class="mt-1 h-2 w-2 rounded-full bg-emerald-500"></div>
-                    <div class="flex-1">
-                      <div class="flex items-center justify-between">
-                        <p class="text-sm font-semibold text-gray-800">25/06 • Comissão de vendas online</p>
-                        <span class="text-sm font-semibold text-emerald-600">R$ 2.150,00</span>
-                      </div>
-                      <p class="text-xs text-gray-500">Período 01/06 - 15/06 • Pagamento via folha</p>
-                    </div>
-                  </div>
-                  <div class="flex items-start gap-3 rounded-lg border border-gray-100 p-3">
-                    <div class="mt-1 h-2 w-2 rounded-full bg-amber-500"></div>
-                    <div class="flex-1">
-                      <div class="flex items-center justify-between">
-                        <p class="text-sm font-semibold text-gray-800">08/07 • Serviços de banho e tosa</p>
-                        <span class="text-sm font-semibold text-amber-600">R$ 1.450,00</span>
-                      </div>
-                      <p class="text-xs text-gray-500">Aguardando confirmação de dois atendimentos.</p>
-                    </div>
-                  </div>
-                  <div class="flex items-start gap-3 rounded-lg border border-gray-100 p-3">
-                    <div class="mt-1 h-2 w-2 rounded-full bg-emerald-500"></div>
-                    <div class="flex-1">
-                      <div class="flex items-center justify-between">
-                        <p class="text-sm font-semibold text-gray-800">22/07 • Comissões de fidelidade</p>
-                        <span class="text-sm font-semibold text-emerald-600">R$ 650,00</span>
-                      </div>
-                      <p class="text-xs text-gray-500">Pontuação convertida em crédito de comissão.</p>
+                  <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
+                    <label class="flex items-center gap-2 text-sm text-gray-700">
+                      <span class="hidden text-xs font-semibold uppercase tracking-wide text-gray-500 sm:inline">Status</span>
+                      <select class="rounded-lg border-gray-200 text-sm text-gray-700 shadow-sm focus:border-primary focus:ring-primary">
+                        <option>Todos</option>
+                        <option>Pago</option>
+                        <option>Pendente</option>
+                        <option>Aguardando</option>
+                        <option>Cancelado</option>
+                      </select>
+                    </label>
+                    <div class="relative">
+                      <span class="absolute inset-y-0 left-3 flex items-center text-gray-400"><i class="fas fa-magnifying-glass"></i></span>
+                      <input type="search" class="w-full rounded-lg border border-gray-200 pl-9 pr-3 py-2 text-sm text-gray-700 shadow-sm focus:border-primary focus:ring-primary" placeholder="Buscar pedido, cliente ou produto" />
                     </div>
                   </div>
                 </div>
-              </div>
 
-              <div class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
-                <div class="flex items-center justify-between">
-                  <div>
-                    <h3 class="text-lg font-semibold text-gray-800">Resumo do período</h3>
-                    <p class="text-sm text-gray-500">Indicadores rápidos para o seu desempenho.</p>
-                  </div>
-                  <i class="fas fa-gauge-high text-primary"></i>
+                <div class="overflow-x-auto">
+                  <table class="min-w-full divide-y divide-gray-100">
+                    <thead class="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+                      <tr>
+                        <th scope="col" class="px-4 py-3 text-left">Data</th>
+                        <th scope="col" class="px-4 py-3 text-left">Pedido</th>
+                        <th scope="col" class="px-4 py-3 text-left">Cliente</th>
+                        <th scope="col" class="px-4 py-3 text-left">Categoria</th>
+                        <th scope="col" class="px-4 py-3 text-left">Status</th>
+                        <th scope="col" class="px-4 py-3 text-left">Valor da comissão</th>
+                        <th scope="col" class="px-4 py-3 text-left">Pagamento</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100 bg-white text-sm text-gray-700">
+                      <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3">18/06</td>
+                        <td class="px-4 py-3">
+                          <p class="font-semibold text-gray-900">#19510</p>
+                          <p class="text-xs text-gray-500">Ração premium 10kg</p>
+                        </td>
+                        <td class="px-4 py-3">Bruno Mesquita</td>
+                        <td class="px-4 py-3">Alimentos</td>
+                        <td class="px-4 py-3">
+                          <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-600"><i class="fas fa-circle text-[8px]"></i>Pago</span>
+                        </td>
+                        <td class="px-4 py-3 font-semibold text-gray-900">R$ 240,00</td>
+                        <td class="px-4 py-3 text-gray-600">Creditado em 21/06</td>
+                      </tr>
+                      <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3">16/06</td>
+                        <td class="px-4 py-3">
+                          <p class="font-semibold text-gray-900">#19478</p>
+                          <p class="text-xs text-gray-500">Kit banho e perfume</p>
+                        </td>
+                        <td class="px-4 py-3">Lívia Torres</td>
+                        <td class="px-4 py-3">Higiene</td>
+                        <td class="px-4 py-3">
+                          <span class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-600"><i class="fas fa-circle text-[8px]"></i>Pendente</span>
+                        </td>
+                        <td class="px-4 py-3 font-semibold text-gray-900">R$ 110,00</td>
+                        <td class="px-4 py-3 text-gray-600">Previsão 02/07</td>
+                      </tr>
+                      <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3">13/06</td>
+                        <td class="px-4 py-3">
+                          <p class="font-semibold text-gray-900">#19400</p>
+                          <p class="text-xs text-gray-500">Brinquedo interativo</p>
+                        </td>
+                        <td class="px-4 py-3">Eduardo Prado</td>
+                        <td class="px-4 py-3">Acessórios</td>
+                        <td class="px-4 py-3">
+                          <span class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700"><i class="fas fa-circle text-[8px]"></i>Aguardando</span>
+                        </td>
+                        <td class="px-4 py-3 font-semibold text-gray-900">R$ 70,00</td>
+                        <td class="px-4 py-3 text-gray-600">Aguardando confirmação de entrega</td>
+                      </tr>
+                      <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3">09/06</td>
+                        <td class="px-4 py-3">
+                          <p class="font-semibold text-gray-900">#19320</p>
+                          <p class="text-xs text-gray-500">Coleira com identificação</p>
+                        </td>
+                        <td class="px-4 py-3">Sara Nogueira</td>
+                        <td class="px-4 py-3">Acessórios</td>
+                        <td class="px-4 py-3">
+                          <span class="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-600"><i class="fas fa-circle text-[8px]"></i>Cancelado</span>
+                        </td>
+                        <td class="px-4 py-3 font-semibold text-gray-900">R$ 0,00</td>
+                        <td class="px-4 py-3 text-gray-600">Cancelado por falta de estoque</td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
 
-                <dl class="mt-4 space-y-4 text-sm">
-                  <div class="flex items-center justify-between">
-                    <dt class="text-gray-600">Vendas com comissão</dt>
-                    <dd class="font-semibold text-gray-900">30</dd>
+                <div class="flex flex-col gap-3 border-t border-gray-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div class="text-sm text-gray-600">Mostrando 1 a 4 de 18 registros</div>
+                  <div class="flex items-center gap-2">
+                    <button class="rounded-lg border border-gray-200 px-3 py-1 text-sm text-gray-700 hover:bg-gray-50">Anterior</button>
+                    <button class="rounded-lg bg-primary px-3 py-1 text-sm font-semibold text-white shadow hover:bg-primary/90">Próxima</button>
                   </div>
-                  <div class="flex items-center justify-between">
-                    <dt class="text-gray-600">Taxa de aprovação</dt>
-                    <dd class="font-semibold text-emerald-600">96%</dd>
-                  </div>
-                  <div class="flex items-center justify-between">
-                    <dt class="text-gray-600">Tempo médio de liberação</dt>
-                    <dd class="font-semibold text-gray-900">4 dias</dd>
-                  </div>
-                  <div class="flex items-center justify-between">
-                    <dt class="text-gray-600">Bonificações</dt>
-                    <dd class="font-semibold text-blue-600">R$ 620,00</dd>
-                  </div>
-                  <div class="flex items-center justify-between">
-                    <dt class="text-gray-600">Cancelamentos</dt>
-                    <dd class="font-semibold text-amber-600">2 pedidos</dd>
-                  </div>
-                </dl>
-              </div>
-            </div>
-
-            <div class="rounded-xl border border-gray-100 bg-white shadow-sm">
-              <div class="flex flex-col gap-3 border-b border-gray-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h2 class="text-lg font-semibold text-gray-800">Histórico de comissões</h2>
-                  <p class="text-sm text-gray-500">Detalhes dos pedidos, serviços e status de pagamento.</p>
-                </div>
-                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
-                  <label class="flex items-center gap-2 text-sm text-gray-700">
-                    <span class="hidden text-xs font-semibold uppercase tracking-wide text-gray-500 sm:inline">Status</span>
-                    <select class="rounded-lg border-gray-200 text-sm text-gray-700 shadow-sm focus:border-primary focus:ring-primary">
-                      <option>Todos</option>
-                      <option>Pago</option>
-                      <option>Pendente</option>
-                      <option>Aguardando</option>
-                      <option>Cancelado</option>
-                    </select>
-                  </label>
-                  <div class="relative">
-                    <span class="absolute inset-y-0 left-3 flex items-center text-gray-400"><i class="fas fa-magnifying-glass"></i></span>
-                    <input type="search" class="w-full rounded-lg border border-gray-200 pl-9 pr-3 py-2 text-sm text-gray-700 shadow-sm focus:border-primary focus:ring-primary" placeholder="Buscar pedido, cliente ou serviço" />
-                  </div>
-                </div>
-              </div>
-
-              <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-100">
-                  <thead class="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
-                    <tr>
-                      <th scope="col" class="px-4 py-3 text-left">Data</th>
-                      <th scope="col" class="px-4 py-3 text-left">Pedido</th>
-                      <th scope="col" class="px-4 py-3 text-left">Cliente</th>
-                      <th scope="col" class="px-4 py-3 text-left">Origem</th>
-                      <th scope="col" class="px-4 py-3 text-left">Status</th>
-                      <th scope="col" class="px-4 py-3 text-left">Valor da comissão</th>
-                      <th scope="col" class="px-4 py-3 text-left">Pagamento</th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-gray-100 bg-white text-sm text-gray-700">
-                    <tr class="hover:bg-gray-50">
-                      <td class="px-4 py-3">15/06</td>
-                      <td class="px-4 py-3">
-                        <p class="font-semibold text-gray-900">#18473</p>
-                        <p class="text-xs text-gray-500">Assinatura premium</p>
-                      </td>
-                      <td class="px-4 py-3">Juliana Costa</td>
-                      <td class="px-4 py-3">Venda online</td>
-                      <td class="px-4 py-3">
-                        <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-600"><i class="fas fa-circle text-[8px]"></i>Pago</span>
-                      </td>
-                      <td class="px-4 py-3 font-semibold text-gray-900">R$ 420,00</td>
-                      <td class="px-4 py-3 text-gray-600">Creditado em 18/06</td>
-                    </tr>
-                    <tr class="hover:bg-gray-50">
-                      <td class="px-4 py-3">12/06</td>
-                      <td class="px-4 py-3">
-                        <p class="font-semibold text-gray-900">#18388</p>
-                        <p class="text-xs text-gray-500">Banho e tosa</p>
-                      </td>
-                      <td class="px-4 py-3">Carlos Silva</td>
-                      <td class="px-4 py-3">Atendimento loja</td>
-                      <td class="px-4 py-3">
-                        <span class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-600"><i class="fas fa-circle text-[8px]"></i>Pendente</span>
-                      </td>
-                      <td class="px-4 py-3 font-semibold text-gray-900">R$ 160,00</td>
-                      <td class="px-4 py-3 text-gray-600">Previsão 25/06</td>
-                    </tr>
-                    <tr class="hover:bg-gray-50">
-                      <td class="px-4 py-3">10/06</td>
-                      <td class="px-4 py-3">
-                        <p class="font-semibold text-gray-900">#18340</p>
-                        <p class="text-xs text-gray-500">Programa fidelidade</p>
-                      </td>
-                      <td class="px-4 py-3">Patrícia Lima</td>
-                      <td class="px-4 py-3">Indicação</td>
-                      <td class="px-4 py-3">
-                        <span class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700"><i class="fas fa-circle text-[8px]"></i>Aguardando</span>
-                      </td>
-                      <td class="px-4 py-3 font-semibold text-gray-900">R$ 80,00</td>
-                      <td class="px-4 py-3 text-gray-600">Aguardando validação</td>
-                    </tr>
-                    <tr class="hover:bg-gray-50">
-                      <td class="px-4 py-3">04/06</td>
-                      <td class="px-4 py-3">
-                        <p class="font-semibold text-gray-900">#18210</p>
-                        <p class="text-xs text-gray-500">Cirurgia veterinária</p>
-                      </td>
-                      <td class="px-4 py-3">Amora (cliente: João)</td>
-                      <td class="px-4 py-3">Clínica</td>
-                      <td class="px-4 py-3">
-                        <span class="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-600"><i class="fas fa-circle text-[8px]"></i>Cancelado</span>
-                      </td>
-                      <td class="px-4 py-3 font-semibold text-gray-900">R$ 0,00</td>
-                      <td class="px-4 py-3 text-gray-600">Cancelado pelo cliente</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              <div class="flex flex-col gap-3 border-t border-gray-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-                <div class="text-sm text-gray-600">Mostrando 1 a 4 de 12 registros</div>
-                <div class="flex items-center gap-2">
-                  <button class="rounded-lg border border-gray-200 px-3 py-1 text-sm text-gray-700 hover:bg-gray-50">Anterior</button>
-                  <button class="rounded-lg bg-primary px-3 py-1 text-sm font-semibold text-white shadow hover:bg-primary/90">Próxima</button>
                 </div>
               </div>
             </div>
@@ -285,5 +521,31 @@
   <script src="../../scripts/core/main.js"></script>
   <script src="../../scripts/admin/admin.js"></script>
   <script src="/scripts/common/modal-bridge.js"></script>
+  <script>
+    const tabs = document.querySelectorAll('[data-comissoes-tab]');
+    const views = document.querySelectorAll('[data-comissoes-view]');
+
+    function setActiveView(view) {
+      views.forEach(section => {
+        section.classList.toggle('hidden', section.dataset.comissoesView !== view);
+      });
+
+      tabs.forEach(tab => {
+        const isActive = tab.dataset.comissoesTab === view;
+        tab.classList.toggle('text-primary', isActive);
+        tab.classList.toggle('bg-white', isActive);
+        tab.classList.toggle('shadow-sm', isActive);
+        tab.classList.toggle('ring-1', isActive);
+        tab.classList.toggle('ring-primary', isActive);
+        tab.classList.toggle('hover:text-primary', !isActive);
+      });
+    }
+
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => setActiveView(tab.dataset.comissoesTab));
+    });
+
+    setActiveView('servicos');
+  </script>
 </body>
 </html>
