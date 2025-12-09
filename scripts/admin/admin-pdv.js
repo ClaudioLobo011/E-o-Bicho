@@ -166,6 +166,7 @@
     sellerLookupLoading: false,
     sellerLookupError: '',
     selectedSeller: null,
+    sellerSearchQuery: '',
     deliveryFinalizingOrderId: '',
     finalizeProcessing: false,
     completedSales: [],
@@ -2415,6 +2416,14 @@
 
     elements.sellerInput = document.getElementById('pdv-seller');
     elements.sellerFeedback = document.getElementById('pdv-seller-feedback');
+    elements.sellerModal = document.getElementById('pdv-seller-modal');
+    elements.sellerModalBackdrop = elements.sellerModal?.querySelector('[data-seller-dismiss]') || null;
+    elements.sellerModalClose = document.getElementById('pdv-seller-close');
+    elements.sellerModalCancel = document.getElementById('pdv-seller-cancel');
+    elements.sellerSearchInput = document.getElementById('pdv-seller-search');
+    elements.sellerResultsList = document.getElementById('pdv-seller-results');
+    elements.sellerResultsEmpty = document.getElementById('pdv-seller-results-empty');
+    elements.sellerResultsLoading = document.getElementById('pdv-seller-results-loading');
 
     elements.selectedImage = document.getElementById('pdv-selected-image');
     elements.selectedPlaceholder = document.getElementById('pdv-selected-placeholder');
@@ -3389,6 +3398,9 @@
 
   const sanitizeSellerCode = (value) => String(value || '').replace(/\D/g, '');
 
+  const getSellerCode = (seller) =>
+    sanitizeSellerCode(seller?.codigo || seller?.codigoCliente || seller?.id || '');
+
   const setSellerFeedback = (message, status = 'muted') => {
     if (!elements.sellerFeedback) return;
     const classes = {
@@ -3414,6 +3426,7 @@
   const ensureSellerList = async () => {
     if (state.sellersLoaded) return;
     state.sellerLookupLoading = true;
+    state.sellerLookupError = '';
     const token = getToken();
     try {
       const payload = await fetchWithOptionalAuth(`${API_BASE}/admin/funcionarios`, {
@@ -3433,6 +3446,121 @@
     } finally {
       state.sellerLookupLoading = false;
     }
+  };
+
+  const renderSellerSearchResults = () => {
+    if (!elements.sellerResultsList || !elements.sellerResultsEmpty) return;
+    const container = elements.sellerResultsList;
+    const empty = elements.sellerResultsEmpty;
+    const loading = elements.sellerResultsLoading;
+    container.innerHTML = '';
+    if (loading) {
+      loading.classList.toggle('hidden', !state.sellerLookupLoading);
+    }
+    if (state.sellerLookupLoading) {
+      empty.classList.add('hidden');
+      return;
+    }
+    if (state.sellerLookupError) {
+      empty.textContent = state.sellerLookupError;
+      empty.classList.remove('hidden');
+      return;
+    }
+    const sellers = Array.isArray(state.sellers) ? state.sellers : [];
+    const queryRaw = state.sellerSearchQuery || '';
+    const normalizedQuery = normalizeKeyword(queryRaw);
+    if (!sellers.length) {
+      empty.textContent = 'Nenhum vendedor cadastrado.';
+      empty.classList.remove('hidden');
+      return;
+    }
+    let filtered = [];
+    if (!queryRaw) {
+      empty.textContent = 'Digite o nome do vendedor ou * para listar todos.';
+      empty.classList.remove('hidden');
+      return;
+    }
+    if (queryRaw.trim() === '*') {
+      filtered = sellers;
+    } else if (normalizedQuery) {
+      filtered = sellers.filter((seller) => normalizeKeyword(seller.nome || '').includes(normalizedQuery));
+    }
+    if (!filtered.length) {
+      empty.textContent = `Nenhum vendedor encontrado para "${queryRaw}".`;
+      empty.classList.remove('hidden');
+      return;
+    }
+    empty.classList.add('hidden');
+    filtered.forEach((seller) => {
+      const code = getSellerCode(seller);
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.setAttribute('data-seller-code', code);
+      item.className =
+        'flex w-full items-center justify-between gap-3 rounded-lg border border-gray-100 bg-white px-3 py-2 text-left transition hover:border-primary hover:bg-primary/5';
+      const sellerName = seller?.nome || 'Vendedor sem nome';
+      item.innerHTML = `
+        <div class="flex flex-col">
+          <span class="text-sm font-semibold text-gray-800">${sellerName}</span>
+          <span class="text-xs text-gray-500">${code ? `Código: ${code}` : 'Código não informado'}</span>
+        </div>
+        <span class="text-[11px] font-semibold text-primary">Selecionar</span>
+      `;
+      container.appendChild(item);
+    });
+  };
+
+  const openSellerSearchModal = async (query = '') => {
+    if (!elements.sellerModal) return;
+    state.sellerSearchQuery = query || '';
+    if (elements.sellerSearchInput) {
+      elements.sellerSearchInput.value = query || '';
+    }
+    elements.sellerModal.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+    renderSellerSearchResults();
+    try {
+      await ensureSellerList();
+      renderSellerSearchResults();
+    } catch (error) {
+      renderSellerSearchResults();
+    }
+    setTimeout(() => {
+      elements.sellerSearchInput?.focus();
+    }, 150);
+  };
+
+  const closeSellerSearchModal = () => {
+    if (!elements.sellerModal) return;
+    elements.sellerModal.classList.add('hidden');
+    state.sellerSearchQuery = '';
+    if (elements.sellerSearchInput) {
+      elements.sellerSearchInput.value = '';
+    }
+    renderSellerSearchResults();
+    releaseBodyScrollIfNoModal();
+  };
+
+  const handleSellerSearchInput = (event) => {
+    state.sellerSearchQuery = event?.target?.value || '';
+    renderSellerSearchResults();
+  };
+
+  const handleSellerResultsClick = (event) => {
+    const target = event.target.closest('[data-seller-code]');
+    if (!target) return;
+    const code = target.getAttribute('data-seller-code') || '';
+    const normalized = sanitizeSellerCode(code);
+    const seller = findSellerByCode(normalized) || state.sellers.find((entry) => getSellerCode(entry) === normalized);
+    if (!seller || !normalized) {
+      notify('Não foi possível selecionar este vendedor. Código inválido.', 'warning');
+      return;
+    }
+    if (elements.sellerInput) {
+      elements.sellerInput.value = normalized;
+    }
+    closeSellerSearchModal();
+    updateSellerSelection(normalized);
   };
 
   const updateSellerSelection = async (rawCode) => {
@@ -3465,6 +3593,15 @@
 
   const handleSellerInputChange = (event) => {
     const value = event?.target?.value ?? '';
+    const trimmed = value.trim();
+    if (/[a-zA-ZÀ-ÿ]/.test(value) || trimmed === '*') {
+      if (sellerLookupTimeout) {
+        clearTimeout(sellerLookupTimeout);
+        sellerLookupTimeout = null;
+      }
+      openSellerSearchModal(trimmed);
+      return;
+    }
     const normalized = sanitizeSellerCode(value);
     if (event?.target && value !== normalized) {
       event.target.value = normalized;
@@ -13582,6 +13719,7 @@
 
   const releaseBodyScrollIfNoModal = () => {
     const blockers = [
+      elements.sellerModal,
       elements.customerRegisterModal,
       elements.customerModal,
       elements.finalizeModal,
@@ -14065,6 +14203,7 @@
     state.sellerLookupLoading = false;
     state.sellerLookupError = '';
     state.selectedSeller = null;
+    state.sellerSearchQuery = '';
     state.customerSearchResults = [];
     state.customerSearchLoading = false;
     state.customerSearchQuery = '';
@@ -14174,6 +14313,11 @@
     if (elements.sellerInput) {
       elements.sellerInput.value = '';
     }
+    if (elements.sellerModal) {
+      elements.sellerModal.classList.add('hidden');
+    }
+    state.sellerSearchQuery = '';
+    renderSellerSearchResults();
     setSellerFeedback('Digite o código de um vendedor cadastrado para validar.', 'muted');
     if (elements.searchResults) {
       elements.searchResults.classList.add('hidden');
@@ -15316,6 +15460,11 @@
     elements.searchResults?.addEventListener('click', handleSearchResultsClick);
     elements.sellerInput?.addEventListener('input', handleSellerInputChange);
     elements.sellerInput?.addEventListener('blur', handleSellerInputBlur);
+    elements.sellerModalClose?.addEventListener('click', closeSellerSearchModal);
+    elements.sellerModalCancel?.addEventListener('click', closeSellerSearchModal);
+    elements.sellerModalBackdrop?.addEventListener('click', closeSellerSearchModal);
+    elements.sellerSearchInput?.addEventListener('input', handleSellerSearchInput);
+    elements.sellerResultsList?.addEventListener('click', handleSellerResultsClick);
     document.addEventListener('click', handleDocumentClick);
     elements.addItem?.addEventListener('click', addItemToList);
     elements.itemQuantity?.addEventListener('input', handleQuantityInput);
