@@ -5,27 +5,15 @@
   const inputCodigo = document.getElementById('grupo-codigo');
   const inputNome = document.getElementById('grupo-nome');
   const inputDescricao = document.getElementById('grupo-descricao');
-  const selectStatus = document.getElementById('grupo-status');
   const selectPrioridade = document.getElementById('grupo-prioridade');
-  const permissoesBox = document.getElementById('grupo-permissoes');
   const submitLabel = document.getElementById('grupo-submit-label');
   const btnCancelar = document.getElementById('grupo-cancelar');
   const inputBusca = document.getElementById('grupo-busca');
-  const selectFiltro = document.getElementById('grupo-filtro');
 
   const tbody = document.getElementById('grupo-tbody');
   const empty = document.getElementById('grupo-empty');
 
   if (!form) return;
-
-  const permissoesLabels = {
-    pdv: 'PDV e vendas',
-    agenda: 'Agenda & serviços',
-    clientes: 'Clientes e pets',
-    estoque: 'Estoque',
-    financeiro: 'Financeiro',
-    relatorios: 'Relatórios'
-  };
 
   function carregar() {
     try {
@@ -40,27 +28,21 @@
         codigo: 'GRP-001',
         nome: 'Gerência',
         descricao: 'Time responsável por gestão de pessoas e processos.',
-        status: 'ativo',
-        prioridade: 'gestor',
-        permissoes: ['pdv', 'financeiro', 'relatorios', 'clientes']
+        prioridade: 'gestor'
       },
       {
         id: 'g2',
         codigo: 'GRP-002',
         nome: 'Atendimento',
         descricao: 'Foco em agendamentos, check-in e relacionamento.',
-        status: 'ativo',
-        prioridade: 'padrao',
-        permissoes: ['agenda', 'clientes', 'pdv']
+        prioridade: 'padrao'
       },
       {
         id: 'g3',
         codigo: 'GRP-003',
         nome: 'Estoquista',
         descricao: 'Conferência de mercadorias, inventários e ajustes.',
-        status: 'inativo',
-        prioridade: 'restrito',
-        permissoes: ['estoque']
+        prioridade: 'restrito'
       }
     ];
   }
@@ -82,31 +64,15 @@
     salvar(data);
   }
 
-  function getPermissoesSelecionadas() {
-    return Array
-      .from(permissoesBox.querySelectorAll('input[type="checkbox"]:checked'))
-      .map(cb => cb.value);
-  }
-
-  function setPermissoesSelecionadas(arr) {
-    const set = new Set(arr || []);
-    permissoesBox.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-      cb.checked = set.has(cb.value);
-    });
-  }
-
   function validar() {
     const erros = [];
     const codigo = (inputCodigo.value || '').trim();
     const nome = (inputNome.value || '').trim();
     const descricao = (inputDescricao.value || '').trim();
-    const status = selectStatus.value || 'ativo';
     const prioridade = selectPrioridade.value || 'padrao';
-    const permissoes = getPermissoesSelecionadas();
 
     if (!codigo) erros.push('Informe o código do grupo.');
     if (!nome) erros.push('Informe o nome do grupo.');
-    if (!permissoes.length) erros.push('Selecione ao menos uma permissão.');
 
     const codigoNormalizado = codigo.toLowerCase();
     const grupos = getGrupos();
@@ -114,7 +80,7 @@
     const codigoDuplicado = grupos.some(g => (g.codigo || '').trim().toLowerCase() === codigoNormalizado && g.id !== idAtual);
     if (codigoDuplicado) erros.push('Já existe um grupo com este código.');
 
-    return { ok: erros.length === 0, erros, codigo, nome, descricao, status, prioridade, permissoes };
+    return { ok: erros.length === 0, erros, codigo, nome, descricao, prioridade };
   }
 
   function resetForm() {
@@ -122,9 +88,7 @@
     inputCodigo.value = '';
     inputNome.value = '';
     inputDescricao.value = '';
-    selectStatus.value = 'ativo';
     selectPrioridade.value = 'padrao';
-    setPermissoesSelecionadas([]);
     submitLabel.textContent = 'Salvar';
     btnCancelar.classList.add('hidden');
   }
@@ -134,19 +98,9 @@
     inputCodigo.value = grupo.codigo || '';
     inputNome.value = grupo.nome || '';
     inputDescricao.value = grupo.descricao || '';
-    selectStatus.value = grupo.status || 'ativo';
     selectPrioridade.value = grupo.prioridade || 'padrao';
-    setPermissoesSelecionadas(grupo.permissoes || []);
     submitLabel.textContent = 'Atualizar';
     btnCancelar.classList.remove('hidden');
-  }
-
-  function badgeStatus(status) {
-    const base = 'inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold';
-    if (status === 'inativo') {
-      return `${base} bg-gray-100 text-gray-700`;
-    }
-    return `${base} bg-emerald-50 text-emerald-700`;
   }
 
   function badgePrioridade(prioridade) {
@@ -158,7 +112,6 @@
 
   function renderLista() {
     const busca = (inputBusca.value || '').trim().toLowerCase();
-    const filtro = selectFiltro.value || 'todos';
     const grupos = getGrupos();
 
     tbody.innerHTML = '';
@@ -166,8 +119,7 @@
     const filtrados = grupos.filter(g => {
       const texto = `${g.codigo || ''} ${g.nome} ${g.descricao || ''}`.toLowerCase();
       const matchBusca = !busca || texto.includes(busca);
-      const matchStatus = filtro === 'todos' || g.status === filtro;
-      return matchBusca && matchStatus;
+      return matchBusca;
     });
 
     if (!filtrados.length) {
@@ -178,25 +130,11 @@
 
     filtrados.forEach(grupo => {
       const tr = document.createElement('tr');
-      const permissoesFormatadas = (grupo.permissoes || [])
-        .map(key => permissoesLabels[key] || key)
-        .map(label => `<span class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-gray-100 text-gray-700 text-xs">${label}</span>`)
-        .join(' ');
-
       tr.innerHTML = `
         <td class="px-3 py-2">${grupo.codigo || '—'}</td>
         <td class="px-3 py-2">
           <div class="font-semibold text-gray-900">${grupo.nome || ''}</div>
           <p class="text-xs text-gray-500">${grupo.descricao || '—'}</p>
-        </td>
-        <td class="px-3 py-2">
-          <div class="flex flex-wrap gap-1">${permissoesFormatadas || '<span class="text-xs text-gray-400">Sem permissões</span>'}</div>
-        </td>
-        <td class="px-3 py-2">
-          <span class="${badgeStatus(grupo.status)}">
-            <i class="fas ${grupo.status === 'ativo' ? 'fa-circle-check' : 'fa-circle-xmark'}"></i>
-            ${grupo.status === 'ativo' ? 'Ativo' : 'Inativo'}
-          </span>
         </td>
         <td class="px-3 py-2">
           <span class="${badgePrioridade(grupo.prioridade)}">
@@ -230,9 +168,7 @@
       codigo: v.codigo,
       nome: v.nome,
       descricao: v.descricao,
-      status: v.status,
-      prioridade: v.prioridade,
-      permissoes: v.permissoes
+      prioridade: v.prioridade
     };
 
     const idx = grupos.findIndex(g => g.id === payload.id);
@@ -279,7 +215,6 @@
   });
 
   inputBusca?.addEventListener('input', renderLista);
-  selectFiltro?.addEventListener('change', renderLista);
 
   renderLista();
 })();
