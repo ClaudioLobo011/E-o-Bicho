@@ -3401,6 +3401,14 @@
   const getSellerCode = (seller) =>
     sanitizeSellerCode(seller?.codigo || seller?.codigoCliente || seller?.id || '');
 
+  const getSellerDisplayName = (seller) => {
+    const fullName = (seller?.nome || '').trim();
+    if (!fullName) return 'Vendedor sem nome';
+    const parts = fullName.split(/\s+/).filter(Boolean);
+    if (!parts.length) return 'Vendedor sem nome';
+    return parts.slice(0, 2).join(' ');
+  };
+
   const getActiveSellerCompanyId = () => {
     const pdv = findPdvById(state.selectedPdv);
     const candidates = [state.activePdvStoreId, getPdvCompanyId(pdv), state.selectedStore];
@@ -3596,7 +3604,7 @@
     }
     if (!normalized) {
       state.selectedSeller = null;
-      setSellerFeedback('Digite o código de um vendedor cadastrado para validar.', 'muted');
+      setSellerFeedback('Insira o vendedor.', 'muted');
       return;
     }
     setSellerFeedback('Validando vendedor...', 'muted');
@@ -3605,7 +3613,7 @@
       const seller = findSellerByCode(normalized);
       if (seller) {
         state.selectedSeller = seller;
-        const displayName = seller.nome || 'Vendedor sem nome';
+        const displayName = getSellerDisplayName(seller);
         setSellerFeedback(`Vendedor: ${displayName} (cód. ${normalized})`, 'success');
       } else {
         state.selectedSeller = null;
@@ -14344,7 +14352,7 @@
     }
     state.sellerSearchQuery = '';
     renderSellerSearchResults();
-    setSellerFeedback('Digite o código de um vendedor cadastrado para validar.', 'muted');
+    setSellerFeedback('Insira o vendedor.', 'muted');
     if (elements.searchResults) {
       elements.searchResults.classList.add('hidden');
       elements.searchResults.innerHTML = '';
