@@ -6,6 +6,7 @@
     code: document.getElementById('group-code'),
     name: document.getElementById('group-name'),
     commission: document.getElementById('group-commission'),
+    submit: document.querySelector('#user-group-form button[type="submit"]'),
     reset: document.getElementById('group-reset'),
     tableBody: document.getElementById('groups-table-body'),
     emptyState: document.getElementById('groups-empty-state'),
@@ -21,6 +22,7 @@
     groups: [],
     sort: { key: 'codigo', direction: 'asc' },
     pagination: { page: 1, pageSize: 25 },
+    editing: null,
   };
 
   const getToken = () => {
@@ -126,7 +128,22 @@
           <td class="px-3 py-2.5 text-[11px] font-semibold text-gray-800">${group.codigo}</td>
           <td class="px-3 py-2.5 text-[11px] text-gray-700">${group.nome}</td>
           <td class="px-3 py-2.5 text-[11px] text-right font-semibold text-gray-900">${formatCommission(group.comissaoPercent)}</td>
+          <td class="px-3 py-2.5 text-[11px]">
+            <div class="flex items-center justify-end gap-2">
+              <button type="button" class="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[10px] font-semibold text-primary hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/20 edit-group" aria-label="Editar grupo" data-id="${group._id}">
+                <i class="fas fa-pen"></i>
+                Editar
+              </button>
+              <button type="button" class="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[10px] font-semibold text-red-600 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-100 delete-group" aria-label="Excluir grupo" data-id="${group._id}">
+                <i class="fas fa-trash"></i>
+                Excluir
+              </button>
+            </div>
+          </td>
         `;
+
+        row.querySelector('.edit-group')?.addEventListener('click', () => startEdit(group));
+        row.querySelector('.delete-group')?.addEventListener('click', () => handleDelete(group));
         elements.tableBody.appendChild(row);
       });
     }
@@ -150,6 +167,8 @@
 
   const resetForm = () => {
     elements.form?.reset();
+    state.editing = null;
+    updateFormLabels();
     setNextCode();
   };
 
@@ -174,20 +193,27 @@
       return;
     }
 
+    const isEditing = Boolean(state.editing?._id);
+    const targetId = state.editing?._id;
+
     try {
-      const created = await fetchJSON(API, {
-        method: 'POST',
+      const saved = await fetchJSON(isEditing ? `${API}/${targetId}` : API, {
+        method: isEditing ? 'PUT' : 'POST',
         body: JSON.stringify({
           nome: validation.name,
           comissaoPercent: validation.commission,
         }),
       });
 
-      state.groups.push(created);
+      if (isEditing) {
+        state.groups = state.groups.map((g) => (g._id === targetId ? saved : g));
+      } else {
+        state.groups.push(saved);
+      }
+
       state.pagination.page = 1;
       renderTable();
-      setNextCode();
-      elements.form.reset();
+      resetForm();
       elements.name.focus();
     } catch (err) {
       console.error(err);
@@ -203,10 +229,49 @@
     setNextCode();
   };
 
+  const startEdit = (group) => {
+    state.editing = group;
+    if (elements.code) elements.code.value = group.codigo;
+    if (elements.name) elements.name.value = group.nome || '';
+    if (elements.commission) elements.commission.value = group.comissaoPercent ?? 0;
+    updateFormLabels();
+    elements.name?.focus();
+  };
+
+  const handleDelete = async (group) => {
+    if (!group?._id) return;
+    const confirmed = window.confirm(`Deseja realmente excluir o grupo "${group.nome}"?`);
+    if (!confirmed) return;
+
+    try {
+      await fetchJSON(`${API}/${group._id}`, { method: 'DELETE' });
+      state.groups = state.groups.filter((g) => g._id !== group._id);
+      if (state.editing?._id === group._id) {
+        resetForm();
+      } else {
+        setNextCode();
+      }
+      renderTable();
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao excluir grupo.\n' + err.message);
+    }
+  };
+
+  const updateFormLabels = () => {
+    if (!elements.submit) return;
+    if (state.editing) {
+      elements.submit.innerHTML = '<i class="fas fa-save"></i> Atualizar grupo';
+    } else {
+      elements.submit.innerHTML = '<i class="fas fa-save"></i> Salvar grupo';
+    }
+  };
+
   const init = () => {
     if (!elements.form) return;
 
     renderTable();
+    updateFormLabels();
 
     elements.form.addEventListener('submit', handleFormSubmit);
     elements.reset?.addEventListener('click', resetForm);
