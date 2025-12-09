@@ -2,12 +2,19 @@ const express = require('express');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 const authMiddleware = require('../middlewares/authMiddleware');
 const AccountReceivable = require('../models/AccountReceivable');
+const User = require('../models/User');
+const UserGroup = require('../models/UserGroup');
+const PdvState = require('../models/PdvState');
 
 const router = express.Router();
 const requireStaff = authorizeRoles('funcionario', 'admin', 'admin_master');
 
 function toLower(value = '') {
   return String(value || '').toLowerCase();
+}
+
+function normalize(value = '') {
+  return String(value || '').trim().toLowerCase();
 }
 
 function detectCategoria(receivable) {
@@ -50,6 +57,133 @@ function deriveStatus(installments = []) {
   if (hasPaid && hasPending) return 'aguardando';
   if (hasPaid) return 'pago';
   return 'pendente';
+}
+
+function matchSellerToUser(sale = {}, user = {}) {
+  const seller = sale?.seller || {};
+  const sellerHints = [
+    seller.id,
+    seller._id,
+    seller.userId,
+    seller.codigo,
+    seller.codigoCliente,
+    seller.email,
+    seller.nome,
+    seller.name,
+    sale.sellerCode,
+    sale.sellerName,
+  ]
+    .map(normalize)
+    .filter(Boolean);
+
+  const userHints = [
+    user?._id,
+    user?.id,
+    user?.codigoCliente,
+    user?.email,
+    user?.nomeCompleto,
+    user?.nomeContato,
+  ]
+    .map(normalize)
+    .filter(Boolean);
+
+  return sellerHints.some((hint) => userHints.includes(hint));
+}
+
+function numeric(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function deriveItemQuantity(item = {}) {
+  const candidates = [
+    item.quantity,
+    item.quantidade,
+    item.qnt,
+    item.qtd,
+    item.qty,
+  ];
+  for (const candidate of candidates) {
+    const parsed = numeric(candidate, null);
+    if (parsed !== null) return parsed;
+  }
+  return 1;
+}
+
+function deriveItemUnitPrice(item = {}) {
+  const candidates = [
+    item.unitPrice,
+    item.valor,
+    item.price,
+    item.preco,
+    item.valorTotal,
+    item.total,
+  ];
+  for (const candidate of candidates) {
+    const parsed = numeric(candidate, null);
+    if (parsed !== null) return parsed;
+  }
+  return 0;
+}
+
+function isProductItem(item = {}) {
+  const type = normalize(
+    item.type
+      || item.tipo
+      || item.itemType
+      || item.categoria
+      || item.category
+      || item.grupo
+      || item.group
+  );
+
+  if (type.includes('serv')) return false;
+  if (type.includes('produt')) return true;
+
+  const productHints = [item.product, item.productId, item.produtoId, item.idProduto]
+    .map((value) => value || '')
+    .join('');
+
+  return Boolean(productHints);
+}
+
+function deriveProductTotal(sale = {}) {
+  const items = Array.isArray(sale.items) ? sale.items : [];
+  const productItems = items.filter(isProductItem);
+  const baseItems = productItems.length ? productItems : items;
+
+  if (baseItems.length) {
+    const sum = baseItems.reduce((total, item) => {
+      const qty = deriveItemQuantity(item);
+      const price = deriveItemUnitPrice(item);
+      return total + qty * price;
+    }, 0);
+
+    if (sum > 0) return sum;
+  }
+
+  const totals = sale?.receiptSnapshot?.totais || sale?.totais || {};
+  const candidates = [
+    sale.total,
+    sale.totalAmount,
+    sale.valorTotal,
+    sale.totalVenda,
+    sale.totalGeral,
+    totals?.liquido,
+    totals?.total,
+    totals?.totalGeral,
+    totals?.pago,
+    totals?.valorTotal,
+    totals?.totalVenda,
+    totals?.bruto,
+  ];
+
+  for (const candidate of candidates) {
+    const parsed = numeric(candidate, null);
+    if (parsed !== null) return parsed;
+  }
+
+  return 0;
 }
 
 function buildHistoricoEntry(receivable) {
@@ -153,6 +287,16 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
       return res.status(401).json({ message: 'Usuário não autenticado.' });
     }
 
+    const user = await User.findById(userId)
+      .populate({ path: 'userGroup', model: UserGroup, select: 'nome comissaoPercent' })
+      .lean();
+
+    if (!user) {
+      return res.status(404).json({ message: 'Usuário não encontrado.' });
+    }
+
+    const comissaoPercent = numeric(user.userGroup?.comissaoPercent, 0);
+
     const receivables = await AccountReceivable.find({ responsible: userId })
       .populate('customer', 'nomeCompleto nomeContato razaoSocial email')
       .populate('accountingAccount', 'name code')
@@ -164,6 +308,39 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
     for (const receivable of receivables) {
       const historico = buildHistoricoEntry(receivable);
       payload[historico.categoria].push(historico);
+    }
+
+    if (comissaoPercent > 0) {
+      const states = await PdvState.find({}, 'completedSales').lean();
+      const pdvEntries = [];
+
+      for (const state of states) {
+        const sales = Array.isArray(state.completedSales) ? state.completedSales : [];
+        for (const sale of sales) {
+          const isCancelled = normalize(sale.status) === 'cancelled' || normalize(sale.status) === 'cancelado';
+          if (!matchSellerToUser(sale, user) || isCancelled) continue;
+
+          const productTotal = deriveProductTotal(sale);
+          const commissionValue = formatCurrency(productTotal * (comissaoPercent / 100));
+          const saleDate = sale.createdAt || sale.createdAtLabel || sale.fiscalEmittedAt;
+
+          pdvEntries.push({
+            categoria: 'produtos',
+            data: brDate(saleDate || Date.now()),
+            codigo: sale.saleCode || sale.saleCodeLabel || sale.id || '',
+            descricao: sale.typeLabel || 'Venda PDV',
+            cliente: sale.customerName || 'Cliente PDV',
+            origem: 'PDV',
+            status: 'pago',
+            valor: commissionValue,
+            pago: commissionValue,
+            pendente: 0,
+            pagamento: `Comissão ${comissaoPercent}% sobre R$ ${formatCurrency(productTotal)}`,
+          });
+        }
+      }
+
+      payload.produtos.push(...pdvEntries);
     }
 
     const buildProximos = (items) =>
