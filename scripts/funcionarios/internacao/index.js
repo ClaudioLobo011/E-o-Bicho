@@ -4075,7 +4075,7 @@ function ensureInternarPetModal() {
                 </select>
               </label>
             </div>
-            <div class="mt-4 grid gap-3 md:grid-cols-[2fr,1fr]">
+            <div class="mt-4 grid gap-3 md:grid-cols-[2fr_1fr]">
               <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Alta prevista (data)
                 <input type="date" name="internarAltaPrevista" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
               </label>
