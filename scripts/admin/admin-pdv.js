@@ -3401,6 +3401,23 @@
   const getSellerCode = (seller) =>
     sanitizeSellerCode(seller?.codigo || seller?.codigoCliente || seller?.id || '');
 
+  const getActiveSellerCompanyId = () => {
+    const pdv = findPdvById(state.selectedPdv);
+    const candidates = [state.activePdvStoreId, getPdvCompanyId(pdv), state.selectedStore];
+    for (const candidate of candidates) {
+      const id = extractNormalizedId(candidate);
+      if (id) return id;
+    }
+    return '';
+  };
+
+  const isSellerFromCompany = (seller, companyId) => {
+    const normalizedCompany = normalizeId(companyId);
+    if (!normalizedCompany) return false;
+    const companies = Array.isArray(seller?.empresas) ? seller.empresas : [];
+    return companies.some((empresa) => extractNormalizedId(empresa) === normalizedCompany);
+  };
+
   const setSellerFeedback = (message, status = 'muted') => {
     if (!elements.sellerFeedback) return;
     const classes = {
@@ -3425,6 +3442,13 @@
 
   const ensureSellerList = async () => {
     if (state.sellersLoaded) return;
+    const companyId = getActiveSellerCompanyId();
+    if (!companyId) {
+      state.sellerLookupError = 'Selecione a empresa do PDV para buscar vendedores.';
+      state.sellers = [];
+      state.sellerLookupLoading = false;
+      throw new Error(state.sellerLookupError);
+    }
     state.sellerLookupLoading = true;
     state.sellerLookupError = '';
     const token = getToken();
@@ -3435,7 +3459,9 @@
       });
       const funcionarios = Array.isArray(payload) ? payload : Array.isArray(payload?.funcionarios) ? payload.funcionarios : [];
       state.sellers = funcionarios.filter((funcionario) =>
-        Array.isArray(funcionario?.grupos) && funcionario.grupos.includes('vendedor')
+        Array.isArray(funcionario?.grupos) &&
+        funcionario.grupos.includes('vendedor') &&
+        isSellerFromCompany(funcionario, companyId)
       );
       state.sellersLoaded = true;
     } catch (error) {
