@@ -60,8 +60,9 @@ const routes = [
   { path: '/api/addresses', file: './routes/addresses' },
   { path: '/api/shipping', file: './routes/shipping' },
   { path: '/api/admin/users', file: './routes/adminUsers' },
-  { path: '/api/admin/funcionarios', file: './routes/adminFuncionarios' },
+  // Rotas específicas devem vir antes das genéricas para evitar conflitos de parâmetros
   { path: '/api/admin/funcionarios/grupos', file: './routes/adminFuncionarioGrupos' },
+  { path: '/api/admin/funcionarios', file: './routes/adminFuncionarios' },
   { path: '/api/admin/servicos/grupos', file: './routes/adminServicosGrupos' },
   { path: '/api/admin/servicos/precos', file: './routes/adminServicosPrecos' },
   { path: '/api/admin/servicos', file: './routes/adminServicos' },
