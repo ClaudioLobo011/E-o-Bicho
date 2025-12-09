@@ -21,7 +21,7 @@
         <header class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div class="space-y-1">
             <h1 class="text-2xl font-bold text-gray-800">Cadastro de Grupo de Usuário</h1>
-            <p class="text-sm text-gray-600">Cadastre grupos de usuários e defina as comissões de cada empresa.</p>
+            <p class="text-sm text-gray-600">Cadastre grupos de usuários e defina as comissões.</p>
           </div>
           <span class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-sm font-semibold text-primary">
             <i class="fas fa-users"></i>
@@ -32,27 +32,20 @@
         <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
           <div class="flex flex-col gap-1">
             <h2 class="text-lg font-semibold text-gray-800">Dados do grupo</h2>
-            <p class="text-sm text-gray-600">Selecione a empresa e preencha as informações do grupo.</p>
+            <p class="text-sm text-gray-600">Preencha as informações do grupo.</p>
           </div>
 
           <form id="user-group-form" class="space-y-4">
             <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
-              <div class="md:col-span-5 space-y-2">
-                <label for="group-company" class="block text-sm font-medium text-gray-700">Empresa</label>
-                <select id="group-company" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                  <option value="">Carregando empresas...</option>
-                </select>
-                <p id="group-company-helper" class="text-xs text-gray-500">Mostra apenas empresas vinculadas ao usuário logado.</p>
-              </div>
-              <div class="md:col-span-2 space-y-2">
+              <div class="md:col-span-3 space-y-2">
                 <label for="group-code" class="block text-sm font-medium text-gray-700">Código</label>
                 <input id="group-code" type="number" min="1" step="1" placeholder="1, 2, 3..." class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
               </div>
-              <div class="md:col-span-3 space-y-2">
+              <div class="md:col-span-6 space-y-2">
                 <label for="group-name" class="block text-sm font-medium text-gray-700">Nome</label>
                 <input id="group-name" type="text" maxlength="120" placeholder="Nome do grupo" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
               </div>
-              <div class="md:col-span-2 space-y-2">
+              <div class="md:col-span-3 space-y-2">
                 <label for="group-commission" class="block text-sm font-medium text-gray-700">Comissão (%)</label>
                 <div class="relative">
                   <input id="group-commission" type="number" inputmode="decimal" min="0" max="100" step="0.01" value="0" class="w-full rounded-lg border border-gray-200 px-3 py-2 pr-10 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
@@ -82,7 +75,6 @@
             </div>
             <div class="flex flex-wrap items-center gap-2 text-sm text-gray-600">
               <span id="groups-counter" class="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1"><i class="fas fa-magnifying-glass"></i>Nenhum grupo carregado</span>
-              <span class="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1"><i class="fas fa-building"></i><span id="groups-company-label">—</span></span>
             </div>
           </div>
 
@@ -94,15 +86,14 @@
                     <th class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-600 cursor-pointer" data-sort-key="code">Código</th>
                     <th class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-600 cursor-pointer" data-sort-key="name">Nome</th>
                     <th class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-600 text-right cursor-pointer" data-sort-key="commission">Comissão</th>
-                    <th class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-600 cursor-pointer" data-sort-key="company">Empresa</th>
-                  </tr>
-                </thead>
-                <tbody id="groups-table-body" class="divide-y divide-gray-100 bg-white text-[11px] text-gray-700">
-                  <tr id="groups-empty-state">
-                    <td colspan="4" class="px-4 py-6 text-center text-gray-500">Nenhum grupo encontrado.</td>
-                  </tr>
-                </tbody>
-              </table>
+                </tr>
+              </thead>
+              <tbody id="groups-table-body" class="divide-y divide-gray-100 bg-white text-[11px] text-gray-700">
+                <tr id="groups-empty-state">
+                    <td colspan="3" class="px-4 py-6 text-center text-gray-500">Nenhum grupo encontrado.</td>
+                </tr>
+              </tbody>
+            </table>
             </div>
           </div>
 
