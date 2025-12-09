@@ -37,6 +37,7 @@
       draggingId: null,
       filters: {},
       filterSearch: {},
+      range: { start: '', end: '' },
     },
   };
 
@@ -129,6 +130,8 @@
     forecastTable: document.getElementById('receivable-forecast-table'),
     forecastHead: document.getElementById('receivable-forecast-head'),
     forecastSortButtons: document.querySelectorAll('[data-forecast-sort]'),
+    forecastRangeStart: document.getElementById('receivable-forecast-start'),
+    forecastRangeEnd: document.getElementById('receivable-forecast-end'),
     saveButton: document.getElementById('receivable-save'),
     clearButton: document.getElementById('receivable-clear'),
   };
@@ -286,6 +289,37 @@
     const date = new Date(Date.UTC(year, month - 1, day));
     if (Number.isNaN(date.getTime())) return null;
     return date;
+  }
+
+  function normalizeDateOnly(value) {
+    const formatted = formatDateInputValue(value);
+    if (!formatted) return null;
+    return parseDateInputValue(formatted);
+  }
+
+  function getCurrentMonthRange() {
+    const today = new Date();
+    const start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+    const end = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 0));
+    return { start: formatDateInputValue(start) || '', end: formatDateInputValue(end) || '' };
+  }
+
+  function setForecastRange({ start = '', end = '', triggerRender = true } = {}) {
+    state.forecastTable.range = { start, end };
+    if (elements.forecastRangeStart) {
+      elements.forecastRangeStart.value = start;
+    }
+    if (elements.forecastRangeEnd) {
+      elements.forecastRangeEnd.value = end;
+    }
+    if (triggerRender) renderForecast();
+  }
+
+  function initializeForecastRange() {
+    const defaults = getCurrentMonthRange();
+    const start = elements.forecastRangeStart?.value || defaults.start;
+    const end = elements.forecastRangeEnd?.value || defaults.end;
+    setForecastRange({ start, end, triggerRender: false });
   }
 
   function clearSelect(select, placeholder) {
@@ -1427,7 +1461,19 @@
       });
     });
 
-    const filteredByColumns = rows.filter((row) =>
+    const { start, end } = state.forecastTable.range || {};
+    const startDate = parseDateInputValue(start);
+    const endDate = parseDateInputValue(end);
+
+    const filteredByRange = rows.filter((row) => {
+      const dueDate = normalizeDateOnly(row.dueDate);
+      if (!dueDate) return true;
+      if (startDate && dueDate < startDate) return false;
+      if (endDate && dueDate > endDate) return false;
+      return true;
+    });
+
+    const filteredByColumns = filteredByRange.filter((row) =>
       forecastColumns.every((column) => {
         const term = state.forecastTable.filters[column.key] || '';
         const regex = buildSearchRegex(term);
@@ -2042,6 +2088,19 @@
 
     state.forecastTable.sort = { key, direction };
     renderForecast();
+  }
+
+  function handleForecastRangeChange() {
+    const start = elements.forecastRangeStart?.value || '';
+    const end = elements.forecastRangeEnd?.value || '';
+    const startDate = parseDateInputValue(start);
+    const endDate = parseDateInputValue(end);
+    if (startDate && endDate && startDate > endDate) {
+      notify('A data inicial não pode ser maior que a data final.', 'warning');
+      setForecastRange({ ...state.forecastTable.range, triggerRender: false });
+      return;
+    }
+    setForecastRange({ start, end });
   }
 
   function handleForecastSearchInput(event) {
@@ -3022,10 +3081,13 @@
     elements.generateButton?.addEventListener('click', handleGeneratePreview);
     elements.clearButton?.addEventListener('click', handleClear);
     elements.form.addEventListener('submit', handleSubmit);
+    initializeForecastRange();
     buildForecastTableHead();
     ensureForecastTableLayout();
     elements.forecastBody?.addEventListener('click', handleForecastTableClick);
     elements.forecastSearch?.addEventListener('input', handleForecastSearchInput);
+    elements.forecastRangeStart?.addEventListener('change', handleForecastRangeChange);
+    elements.forecastRangeEnd?.addEventListener('change', handleForecastRangeChange);
     elements.forecastBody?.addEventListener('dragstart', handleForecastDragStart);
     elements.forecastBody?.addEventListener('dragover', handleForecastDragOver);
     elements.forecastBody?.addEventListener('dragleave', handleForecastDragLeave);
