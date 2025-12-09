@@ -6,6 +6,7 @@ const User = require('../models/User');
 const authMiddleware = require('../middlewares/authMiddleware');
 const mongoose = require('mongoose');
 const Store = require('../models/Store');
+const UserGroup = require('../models/UserGroup');
 
 // ----- helpers / policies -----
 const roleRank = { cliente: 0, funcionario: 1, admin: 2, admin_master: 3 };
@@ -215,7 +216,23 @@ function normName(u) {
   );
 }
 
+function normalizeUserGroup(value) {
+  if (!value) return null;
+  const id = typeof value === 'object' ? (value._id || value.id) : value;
+  if (!id) return null;
+  const group = { id: String(id) };
+  if (value && typeof value === 'object') {
+    if (Object.prototype.hasOwnProperty.call(value, 'nome')) group.nome = value.nome || null;
+    if (Object.prototype.hasOwnProperty.call(value, 'codigo')) group.codigo = value.codigo ?? null;
+    if (Object.prototype.hasOwnProperty.call(value, 'comissaoPercent')) {
+      group.comissaoPercent = value.comissaoPercent ?? null;
+    }
+  }
+  return group;
+}
+
 function userToDTO(u) {
+  const userGroup = normalizeUserGroup(u.userGroup);
   return {
     _id: u._id,
     codigo: parseCodigoCliente(u.codigoCliente) || null,
@@ -230,6 +247,7 @@ function userToDTO(u) {
     nome: normName(u),
     grupos: Array.isArray(u.grupos) ? u.grupos : [],
     empresas: Array.isArray(u.empresas) ? u.empresas : [],
+    userGroup,
     genero: u.genero || '',
     dataNascimento: u.dataNascimento || null,
     racaCor: u.racaCor || '',
@@ -319,8 +337,9 @@ router.get('/', authMiddleware, requireAdmin, async (req, res) => {
     const users = await User
       .find(
         { role: { $in: ['admin_master', 'admin', 'funcionario'] } },
-        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero dataNascimento racaCor deficiencia estadoCivil situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios codigoCliente'
+        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas userGroup genero dataNascimento racaCor deficiencia estadoCivil situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios codigoCliente'
       )
+      .populate('userGroup', 'nome codigo comissaoPercent')
       .lean();
 
     // Ordenar: Admin Master > Admin > Funcionário; depois por nome
@@ -369,10 +388,11 @@ router.get('/buscar-usuarios', authMiddleware, requireAdmin, async (req, res) =>
     const users = await User
       .find(
         filter,
-        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos genero dataNascimento racaCor deficiencia estadoCivil situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios codigoCliente'
+        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos userGroup genero dataNascimento racaCor deficiencia estadoCivil situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios codigoCliente'
       )
       .sort({ createdAt: -1 })
       .limit(lim)
+      .populate('userGroup', 'nome codigo comissaoPercent')
       .lean();
 
     res.json(users.map(userToDTO));
@@ -404,8 +424,8 @@ router.post('/transformar', authMiddleware, requireAdmin, async (req, res) => {
 
     const ret = await User.findById(
       userId,
-      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero dataNascimento racaCor deficiencia estadoCivil rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios codigoCliente'
-    ).lean();
+      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas userGroup genero dataNascimento racaCor deficiencia estadoCivil rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios codigoCliente'
+    ).populate('userGroup', 'nome codigo comissaoPercent').lean();
     res.json({ message: 'Usuário transformado com sucesso.', funcionario: userToDTO(ret) });
   } catch (err) {
     console.error(err);
@@ -418,10 +438,10 @@ router.post('/transformar', authMiddleware, requireAdmin, async (req, res) => {
 // OBTÉM um funcionário
 router.get('/:id', authMiddleware, requireAdmin, async (req, res) => {
   try {
-    const u = await User.findById(
-      req.params.id,
-      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero dataNascimento racaCor deficiencia estadoCivil rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios codigoCliente'
-    ).lean();
+      const u = await User.findById(
+        req.params.id,
+        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas userGroup genero dataNascimento racaCor deficiencia estadoCivil rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios codigoCliente'
+      ).populate('userGroup', 'nome codigo comissaoPercent').lean();
     if (!u || !['admin_master', 'admin', 'funcionario'].includes(u.role)) {
       return res.status(404).json({ message: 'Funcionário não encontrado.' });
     }
@@ -505,6 +525,21 @@ router.post('/', authMiddleware, requireAdmin, async (req, res) => {
     else if (typeof grupos === 'string' && grupos) gruposArr = [grupos];
     gruposArr = [...new Set(gruposArr.filter(g => ALLOWED_GROUPS.includes(g)))];
     doc.grupos = gruposArr;
+
+    if (Object.prototype.hasOwnProperty.call(req.body, 'userGroup')) {
+      const rawGroup = req.body.userGroup;
+      if (rawGroup === null || rawGroup === '') {
+        doc.userGroup = null;
+      } else if (mongoose.Types.ObjectId.isValid(rawGroup)) {
+        const groupExists = await UserGroup.findById(rawGroup).select('_id').lean();
+        if (!groupExists) {
+          return res.status(400).json({ message: 'Grupo de usuário não encontrado.' });
+        }
+        doc.userGroup = rawGroup;
+      } else {
+        return res.status(400).json({ message: 'Grupo de usuário inválido.' });
+      }
+    }
 
     // Empresas (lojas): aceita array/string de IDs; valida ObjectId e existência
     let empresasArr = [];
@@ -680,6 +715,19 @@ router.put('/:id', authMiddleware, requireAdmin, async (req, res) => {
       }
     }
 
+    if (Object.prototype.hasOwnProperty.call(req.body, 'userGroup')) {
+      const rawGroup = req.body.userGroup;
+      if (rawGroup === null || rawGroup === '') {
+        update.userGroup = null;
+      } else if (mongoose.Types.ObjectId.isValid(rawGroup)) {
+        const exists = await UserGroup.findById(rawGroup).select('_id').lean();
+        if (!exists) return res.status(400).json({ message: 'Grupo de usuário não encontrado.' });
+        update.userGroup = rawGroup;
+      } else {
+        return res.status(400).json({ message: 'Grupo de usuário inválido.' });
+      }
+    }
+
     const conta = (tipoConta === 'pessoa_juridica') ? 'pessoa_juridica' : undefined;
     if (conta === 'pessoa_juridica') {
       if (nomeContato || nome) update.nomeContato = (nomeContato || nome).trim();
@@ -840,8 +888,8 @@ router.put('/:id', authMiddleware, requireAdmin, async (req, res) => {
     const updated = await User.findByIdAndUpdate(
       req.params.id,
       update,
-      { new: true, runValidators: true, fields: 'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero dataNascimento racaCor deficiencia estadoCivil rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios' }
-    ).lean();
+      { new: true, runValidators: true, fields: 'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas userGroup genero dataNascimento racaCor deficiencia estadoCivil rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios' }
+    ).populate('userGroup', 'nome codigo comissaoPercent').lean();
 
     res.json({ message: 'Funcionário atualizado com sucesso.', funcionario: userToDTO(updated) });
   } catch (err) {
