@@ -207,6 +207,40 @@ function deriveProductTotal(sale = {}) {
   return 0;
 }
 
+function findSaleTotal(state = {}, sale = {}) {
+  const receivables = Array.isArray(state.accountsReceivable) ? state.accountsReceivable : [];
+  if (!receivables.length) return null;
+
+  const saleId = normalize(sale.id);
+  const saleCode = normalize(sale.saleCode || sale.saleCodeLabel);
+
+  const matchableFields = (receivable = {}) => [
+    receivable.id,
+    receivable.saleId,
+    receivable.saleCode,
+    receivable.saleCodeLabel,
+    receivable.document,
+    receivable.documentNumber,
+  ].map(normalize);
+
+  const matches = receivables.filter((receivable) => {
+    const fields = matchableFields(receivable);
+    return (
+      (saleCode && fields.includes(saleCode))
+      || (saleId && fields.includes(saleId))
+    );
+  });
+
+  if (!matches.length) return null;
+
+  const total = matches.reduce(
+    (sum, receivable) => sum + numeric(receivable.value, 0),
+    0,
+  );
+
+  return formatCurrency(total);
+}
+
 function buildHistoricoEntry(receivable) {
   const installments = Array.isArray(receivable.installments) ? receivable.installments : [];
   const paidInstallments = installments.filter((item) => item?.status === 'received');
@@ -338,7 +372,7 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
     }
 
     if (comissaoPercent > 0) {
-      const states = await PdvState.find({}, 'completedSales').lean();
+      const states = await PdvState.find({}, 'completedSales accountsReceivable').lean();
       const pdvEntries = [];
 
       for (const state of states) {
@@ -348,8 +382,10 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
           if (!matchSellerToUser(sale, user) || isCancelled) continue;
 
           const productTotal = deriveProductTotal(sale);
+          const saleTotal = findSaleTotal(state, sale) ?? productTotal;
           const commissionValue = formatCurrency(productTotal * (comissaoPercent / 100));
           const saleDate = sale.createdAt || sale.createdAtLabel || sale.fiscalEmittedAt;
+          const hasSaleTotal = saleTotal !== null && saleTotal !== undefined;
 
           pdvEntries.push({
             categoria: 'produtos',
@@ -362,7 +398,9 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
             valor: commissionValue,
             pago: commissionValue,
             pendente: 0,
-            pagamento: `Comissão ${comissaoPercent}% sobre R$ ${formatCurrency(productTotal)}`,
+            pagamento: hasSaleTotal
+              ? `Comissão ${comissaoPercent}% sobre venda de R$ ${formatCurrency(saleTotal)}`
+              : `Comissão ${comissaoPercent}%`,
           });
         }
       }
