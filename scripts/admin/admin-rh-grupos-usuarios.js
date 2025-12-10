@@ -6,6 +6,7 @@
     code: document.getElementById('group-code'),
     name: document.getElementById('group-name'),
     commission: document.getElementById('group-commission'),
+    serviceCommission: document.getElementById('group-service-commission'),
     submit: document.querySelector('#user-group-form button[type="submit"]'),
     reset: document.getElementById('group-reset'),
     tableBody: document.getElementById('groups-table-body'),
@@ -128,6 +129,7 @@
           <td class="px-3 py-2.5 text-[11px] font-semibold text-gray-800">${group.codigo}</td>
           <td class="px-3 py-2.5 text-[11px] text-gray-700">${group.nome}</td>
           <td class="px-3 py-2.5 text-[11px] text-right font-semibold text-gray-900">${formatCommission(group.comissaoPercent)}</td>
+          <td class="px-3 py-2.5 text-[11px] text-right font-semibold text-gray-900">${formatCommission(group.comissaoServicoPercent)}</td>
           <td class="px-3 py-2.5 text-[11px]">
             <div class="flex items-center justify-end gap-2">
               <button type="button" class="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[10px] font-semibold text-primary hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/20 edit-group" aria-label="Editar grupo" data-id="${group._id}">
@@ -175,14 +177,24 @@
   const validateForm = () => {
     const name = elements.name.value.trim();
     const commission = Number.parseFloat(elements.commission.value);
+    const serviceCommission = Number.parseFloat(elements.serviceCommission.value);
     const errors = [];
 
     if (!name) errors.push('Informe o nome do grupo.');
     if (!Number.isFinite(commission) || commission < 0 || commission > 100) {
       errors.push('A comissão deve estar entre 0 e 100%.');
     }
+    if (!Number.isFinite(serviceCommission) || serviceCommission < 0 || serviceCommission > 100) {
+      errors.push('A comissão de serviço deve estar entre 0 e 100%.');
+    }
 
-    return { ok: errors.length === 0, errors, name, commission: Number.isFinite(commission) ? commission : 0 };
+    return {
+      ok: errors.length === 0,
+      errors,
+      name,
+      commission: Number.isFinite(commission) ? commission : 0,
+      serviceCommission: Number.isFinite(serviceCommission) ? serviceCommission : 0,
+    };
   };
 
   const handleFormSubmit = async (event) => {
@@ -202,6 +214,7 @@
         body: JSON.stringify({
           nome: validation.name,
           comissaoPercent: validation.commission,
+          comissaoServicoPercent: validation.serviceCommission,
         }),
       });
 
@@ -234,6 +247,7 @@
     if (elements.code) elements.code.value = group.codigo;
     if (elements.name) elements.name.value = group.nome || '';
     if (elements.commission) elements.commission.value = group.comissaoPercent ?? 0;
+    if (elements.serviceCommission) elements.serviceCommission.value = group.comissaoServicoPercent ?? 0;
     updateFormLabels();
     elements.name?.focus();
   };

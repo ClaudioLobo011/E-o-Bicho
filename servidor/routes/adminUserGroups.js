@@ -36,10 +36,15 @@ router.post('/', authMiddleware, requireAdmin, async (req, res) => {
       return res.status(400).json({ message: 'A comissão deve estar entre 0 e 100%.' });
     }
 
+    const comissaoServico = Number(req.body.comissaoServicoPercent ?? 0);
+    if (!Number.isFinite(comissaoServico) || comissaoServico < 0 || comissaoServico > 100) {
+      return res.status(400).json({ message: 'A comissão de serviço deve estar entre 0 e 100%.' });
+    }
+
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
         const codigo = await getNextCode();
-        const created = await UserGroup.create({ codigo, nome, comissaoPercent: comissao });
+        const created = await UserGroup.create({ codigo, nome, comissaoPercent: comissao, comissaoServicoPercent: comissaoServico });
         return res.status(201).json(created);
       } catch (err) {
         if (err?.code === 11000) {
@@ -74,9 +79,14 @@ router.put('/:id', authMiddleware, requireAdmin, async (req, res) => {
       return res.status(400).json({ message: 'A comissão deve estar entre 0 e 100%.' });
     }
 
+    const comissaoServico = Number(req.body.comissaoServicoPercent ?? 0);
+    if (!Number.isFinite(comissaoServico) || comissaoServico < 0 || comissaoServico > 100) {
+      return res.status(400).json({ message: 'A comissão de serviço deve estar entre 0 e 100%.' });
+    }
+
     const updated = await UserGroup.findByIdAndUpdate(
       id,
-      { nome, comissaoPercent: comissao },
+      { nome, comissaoPercent: comissao, comissaoServicoPercent: comissaoServico },
       { new: true, runValidators: true },
     );
 

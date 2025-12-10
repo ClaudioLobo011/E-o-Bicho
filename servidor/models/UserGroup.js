@@ -19,6 +19,12 @@ const UserGroupSchema = new mongoose.Schema({
     max: 100,
     default: 0,
   },
+  comissaoServicoPercent: {
+    type: Number,
+    min: 0,
+    max: 100,
+    default: 0,
+  },
   ativo: {
     type: Boolean,
     default: true,
