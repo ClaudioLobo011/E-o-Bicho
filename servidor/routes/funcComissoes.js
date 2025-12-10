@@ -185,6 +185,44 @@ function itemIsProduct(item = {}) {
   return Boolean(productHints);
 }
 
+function saleIsServiceFromAgenda(sale = {}) {
+  const originHints = [
+    sale.type,
+    sale.typeLabel,
+    sale.channel,
+    sale.channelLabel,
+    sale.origin,
+    sale.source,
+    sale.sourceLabel,
+    sale.receiptSnapshot?.origem,
+    sale.receiptSnapshot?.origin,
+    sale.receiptSnapshot?.originLabel,
+  ]
+    .map((value) => normalize(value))
+    .filter(Boolean)
+    .join(' ');
+
+  if (originHints.includes('agenda') || originHints.includes('servi')) return true;
+
+  const appointmentFlags = [
+    sale.appointment,
+    sale.appointmentId,
+    sale.agendamento,
+    sale.agendamentoId,
+    sale.fromAppointment,
+  ].some(Boolean);
+
+  if (appointmentFlags) return true;
+
+  const items = getSaleItems(sale);
+  if (!items.length) return false;
+
+  const hasProductItems = items.some((item) => itemIsProduct(item));
+  const hasServiceItems = items.some((item) => !itemIsProduct(item));
+
+  return hasServiceItems && !hasProductItems;
+}
+
 function deriveItemQuantity(item = {}) {
   const candidates = [
     item.quantity,
@@ -334,9 +372,7 @@ function buildProductEntries(states = [], user = {}, comissaoPercent = 0, comiss
       if (cancelled || !matchSellerToUser(sale, user)) continue;
 
       const items = getSaleItems(sale);
-      const productItems = items.filter(itemIsProduct);
-      const serviceItems = items.filter((item) => !itemIsProduct(item));
-      const isServiceSale = serviceItems.length > 0 && productItems.length === 0;
+      const isServiceSale = saleIsServiceFromAgenda(sale);
       const commissionPercent = isServiceSale ? comissaoServicoPercent : comissaoPercent;
 
       const saleTotal = resolveSaleTotal(sale, state);
