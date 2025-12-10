@@ -5,9 +5,23 @@
   const tabs = document.querySelectorAll('[data-comissoes-tab]');
   const views = document.querySelectorAll('[data-comissoes-view]');
 
-  function formatCurrency(value = 0) {
-    const numeric = Number.isFinite(value) ? value : 0;
-    return currencyFormatter.format(numeric);
+  function parseMoney(value, fallback = 0) {
+    if (Number.isFinite(value)) return value;
+    if (typeof value === 'string') {
+      const cleaned = value
+        .replace(/[^0-9,.-]+/g, '')
+        .replace(/\.(?=\d{3}(?:\D|$))/g, '')
+        .replace(',', '.');
+      const parsed = Number(cleaned);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+
+  function formatMoney(value = 0) {
+    return currencyFormatter.format(parseMoney(value, 0));
   }
 
   function statusBadge(status = '') {
@@ -64,11 +78,11 @@
 
   function renderResumo(view, resumo = {}) {
     const prefix = view === 'produtos' ? 'produtos' : 'servicos';
-    document.getElementById(`${prefix}-total-gerado`).textContent = formatCurrency(resumo.totalGerado || 0);
+    document.getElementById(`${prefix}-total-gerado`).textContent = formatMoney(resumo.totalGerado || 0);
     document.getElementById(`${prefix}-total-variacao`).textContent = resumo.totalGerado ? '+0%' : '--';
-    document.getElementById(`${prefix}-a-receber`).textContent = formatCurrency(resumo.aReceber || 0);
-    document.getElementById(`${prefix}-pagas`).textContent = formatCurrency(resumo.pagas || 0);
-    document.getElementById(`${prefix}-media`).textContent = formatCurrency(resumo.media || 0);
+    document.getElementById(`${prefix}-a-receber`).textContent = formatMoney(resumo.aReceber || 0);
+    document.getElementById(`${prefix}-pagas`).textContent = formatMoney(resumo.pagas || 0);
+    document.getElementById(`${prefix}-media`).textContent = formatMoney(resumo.media || 0);
   }
 
   function renderProximos(view, proximos = []) {
@@ -90,7 +104,7 @@
         <div class="flex-1">
           <div class="flex items-center justify-between">
             <p class="text-sm font-semibold text-gray-800">${item.titulo}</p>
-            <span class="text-sm font-semibold ${valueClass}">${formatCurrency(item.valor || 0)}</span>
+            <span class="text-sm font-semibold ${valueClass}">${formatMoney(item.valor || 0)}</span>
           </div>
           <p class="text-xs text-gray-500">${item.info || 'Sem detalhes adicionais'}</p>
         </div>
@@ -106,7 +120,7 @@
       { label: view === 'produtos' ? 'Pedidos com comissão' : 'Vendas com comissão', value: resumo.vendasComComissao || 0, highlight: 'text-gray-900' },
       { label: 'Taxa de aprovação', value: `${resumo.taxaAprovacao || 0}%`, highlight: 'text-emerald-600' },
       { label: view === 'produtos' ? 'Tempo médio de repasse' : 'Tempo médio de liberação', value: resumo.tempoMedioLiberacao ? `${resumo.tempoMedioLiberacao} dias` : 'N/D', highlight: 'text-gray-900' },
-      { label: view === 'produtos' ? 'Bônus por combo' : 'Bonificações', value: formatCurrency(resumo.bonificacoes || 0), highlight: 'text-blue-600' },
+      { label: view === 'produtos' ? 'Bônus por combo' : 'Bonificações', value: formatMoney(resumo.bonificacoes || 0), highlight: 'text-blue-600' },
       { label: view === 'produtos' ? 'Pedidos devolvidos' : 'Cancelamentos', value: resumo.cancelamentos ? `${resumo.cancelamentos} registro(s)` : 'Nenhum', highlight: 'text-amber-600' },
     ];
 
@@ -144,7 +158,10 @@
         <td class="px-4 py-3">${item.cliente || '--'}</td>
         <td class="px-4 py-3">${item.origem || '--'}</td>
         <td class="px-4 py-3">${statusBadge(item.status)}</td>
-        <td class="px-4 py-3 font-semibold text-gray-900">${formatCurrency(item.valor || 0)}</td>
+        <td class="px-4 py-3 font-semibold text-gray-900">
+          <p>${formatMoney(item.valor || 0)}</p>
+          ${item.valorVenda ? `<p class="text-xs font-normal text-gray-500">Venda: ${formatMoney(item.valorVenda)}</p>` : ''}
+        </td>
         <td class="px-4 py-3 text-gray-600">${item.pagamento || '--'}</td>
       `;
       body.appendChild(row);
