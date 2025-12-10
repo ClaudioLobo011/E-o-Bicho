@@ -1064,6 +1064,32 @@ const normalizeSaleRecordPayload = (record) => {
   const discountValue = safeNumber(record.discountValue ?? record.desconto ?? 0, 0);
   const discountLabel = normalizeString(record.discountLabel);
   const additionValue = safeNumber(record.additionValue ?? record.acrescimo ?? 0, 0);
+  const totalBruto = safeNumber(
+    record.totalBruto ??
+      record.totalProdutos ??
+      record.receiptSnapshot?.totais?.totalBruto ??
+      record.receiptSnapshot?.totais?.bruto ??
+      record.receiptSnapshot?.totais?.totalProdutos ??
+      0,
+    0
+  );
+  const totalLiquido = safeNumber(
+    record.totalLiquido ??
+      record.total ??
+      record.totalVenda ??
+      record.totalGeral ??
+      record.valorTotal ??
+      record.totalAmount ??
+      record.receiptSnapshot?.totais?.totalLiquido ??
+      record.receiptSnapshot?.totais?.liquido ??
+      record.receiptSnapshot?.totais?.total ??
+      record.receiptSnapshot?.totais?.totalVenda ??
+      record.receiptSnapshot?.totais?.totalGeral ??
+      record.receiptSnapshot?.totais?.pago ??
+      0,
+    0
+  );
+  const total = totalLiquido || safeNumber(record.total ?? record.totalAmount ?? record.valorTotal ?? 0, 0);
   const createdAt = safeDate(record.createdAt) || new Date();
   const createdAtLabel = normalizeString(record.createdAtLabel);
   const fiscalStatus = normalizeString(record.fiscalStatus);
@@ -1136,6 +1162,9 @@ const normalizeSaleRecordPayload = (record) => {
     discountValue,
     discountLabel,
     additionValue,
+    total,
+    totalLiquido,
+    totalBruto,
     createdAt,
     createdAtLabel,
     receiptSnapshot: record.receiptSnapshot || null,
