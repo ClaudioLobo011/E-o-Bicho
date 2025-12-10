@@ -416,10 +416,11 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
           if (!matchSellerToUser(sale, user) || isCancelled) continue;
 
           const productTotal = deriveProductTotal(sale);
-          const saleTotal = deriveSaleTotal(sale) ?? findSaleTotal(state, sale) ?? productTotal;
-          const commissionValue = formatCurrency(productTotal * (comissaoPercent / 100));
+          const saleTotal = deriveSaleTotal(sale) ?? findSaleTotal(state, sale);
+          const commissionBase = saleTotal ?? productTotal;
+          const commissionValue = formatCurrency(commissionBase * (comissaoPercent / 100));
           const saleDate = sale.createdAt || sale.createdAtLabel || sale.fiscalEmittedAt;
-          const hasSaleTotal = saleTotal !== null && saleTotal !== undefined;
+          const hasSaleTotal = commissionBase !== null && commissionBase !== undefined;
 
           pdvEntries.push({
             categoria: 'produtos',
@@ -433,7 +434,7 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
             pago: commissionValue,
             pendente: 0,
             pagamento: hasSaleTotal
-              ? `Comissão ${comissaoPercent}% sobre venda de R$ ${formatCurrency(saleTotal)}`
+              ? `Comissão ${comissaoPercent}% sobre venda de R$ ${formatCurrency(commissionBase)}`
               : `Comissão ${comissaoPercent}%`,
           });
         }
