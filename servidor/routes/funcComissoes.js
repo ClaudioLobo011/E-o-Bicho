@@ -72,7 +72,7 @@ function deriveInstallmentStatus(installments = []) {
   return 'pendente';
 }
 
-function buildServiceEntry(receivable) {
+function buildServiceEntry(receivable, comissaoServicoPercent = 0) {
   const installments = Array.isArray(receivable?.installments) ? receivable.installments : [];
   const paidInstallments = installments.filter((item) => normalize(item?.status) === 'received');
   const pendingInstallments = installments.filter((item) => normalize(item?.status) !== 'received');
@@ -112,6 +112,15 @@ function buildServiceEntry(receivable) {
 
   const categoria = detectReceivableCategory(receivable);
 
+  const comissaoPercent = sanitizeMoney(
+    typeof comissaoServicoPercent === 'string'
+      ? comissaoServicoPercent.replace('%', '').trim()
+      : comissaoServicoPercent,
+    0,
+  );
+
+  const comissaoServico = sanitizeMoney(totalValue * (comissaoPercent / 100), 0);
+
   return {
     categoria,
     data: formatDateBR(receivable?.dueDate || receivable?.issueDate || receivable?.createdAt),
@@ -125,8 +134,11 @@ function buildServiceEntry(receivable) {
       || 'Cliente',
     origem: receivable?.accountingAccount?.name || receivable?.document || 'N/A',
     status,
-    valor: totalValue,
+    valor: comissaoServico,
     valorVenda: totalValue,
+    comissaoVenda: 0,
+    comissaoServico,
+    comissaoTotal: comissaoServico,
     pago: paidValue,
     pendente: pendingValue,
     pagamento,
@@ -186,6 +198,8 @@ function itemIsProduct(item = {}) {
 }
 
 function saleIsServiceFromAgenda(sale = {}) {
+  const snapshotMeta = sale.receiptSnapshot?.meta || {};
+
   const originHints = [
     sale.type,
     sale.typeLabel,
@@ -197,6 +211,12 @@ function saleIsServiceFromAgenda(sale = {}) {
     sale.receiptSnapshot?.origem,
     sale.receiptSnapshot?.origin,
     sale.receiptSnapshot?.originLabel,
+    snapshotMeta.origin,
+    snapshotMeta.originLabel,
+    snapshotMeta.source,
+    snapshotMeta.sourceLabel,
+    snapshotMeta.channel,
+    snapshotMeta.channelLabel,
   ]
     .map((value) => normalize(value))
     .filter(Boolean)
@@ -210,6 +230,14 @@ function saleIsServiceFromAgenda(sale = {}) {
     sale.agendamento,
     sale.agendamentoId,
     sale.fromAppointment,
+    sale.receiptSnapshot?.appointment,
+    sale.receiptSnapshot?.appointmentId,
+    sale.receiptSnapshot?.agendamento,
+    sale.receiptSnapshot?.agendamentoId,
+    snapshotMeta.appointment,
+    snapshotMeta.appointmentId,
+    snapshotMeta.agendamento,
+    snapshotMeta.agendamentoId,
   ].some(Boolean);
 
   if (appointmentFlags) return true;
@@ -393,6 +421,12 @@ function buildProductEntries(states = [], user = {}, comissaoPercent = 0, comiss
         status: commissionValue > 0 ? 'pago' : 'aguardando',
         valor: commissionValue,
         valorVenda: saleTotal,
+        comissaoVenda: isServiceSale ? 0 : commissionValue,
+        comissaoServico: isServiceSale ? commissionValue : 0,
+        comissaoTotal: sanitizeMoney(
+          (isServiceSale ? commissionValue : 0) + (isServiceSale ? 0 : commissionValue),
+          commissionValue,
+        ),
         pago: commissionValue,
         pendente: 0,
         pagamento: paymentLabel,
@@ -510,7 +544,7 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
       0,
     );
 
-    const servicosHistorico = receivables.map((item) => buildServiceEntry(item));
+    const servicosHistorico = receivables.map((item) => buildServiceEntry(item, comissaoServicoPercent));
     const produtosHistorico = comissaoPercent > 0 || comissaoServicoPercent > 0
       ? buildProductEntries(pdvStates, user, comissaoPercent, comissaoServicoPercent)
       : [];
