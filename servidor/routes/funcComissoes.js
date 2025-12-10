@@ -218,27 +218,35 @@ function deriveProductTotal(sale = {}) {
 
 function deriveSaleTotal(sale = {}) {
   const totals = sale?.receiptSnapshot?.totais || sale?.totais || {};
+  const candidates = [
+    sale.total,
+    sale.totalAmount,
+    sale.valorTotal,
+    sale.totalVenda,
+    sale.totalGeral,
+    totals?.liquido,
+    totals?.total,
+    totals?.totalGeral,
+    totals?.pago,
+    totals?.valorTotal,
+    totals?.totalVenda,
+    totals?.bruto,
+  ];
+  for (const candidate of candidates) {
+    const parsed = numeric(candidate, null);
+    if (parsed !== null) return parsed;
+  }
 
-  const totalFromReceivables = Array.isArray(sale.receivables) && sale.receivables.length
-    ? sale.receivables.reduce((sum, receivable) => sum + numeric(receivable?.value, 0), 0)
-    : null;
+  if (Array.isArray(sale.items) && sale.items.length > 0) {
+    const sum = sale.items.reduce((acc, item) => {
+      const qty = numeric(item?.quantity ?? item?.quantidade, 0);
+      const price = numeric(item?.unitPrice ?? item?.valor, 0);
+      return acc + qty * price;
+    }, 0);
+    if (sum > 0) return sum;
+  }
 
-  return firstNumber(
-    [
-      sale.totalLiquido,
-      totals?.totalLiquido,
-      totals?.liquido,
-      totalFromReceivables,
-      sale.total,
-      totals?.total,
-      sale.totalBruto,
-      totals?.totalBruto,
-      sale.totalAmount,
-      sale.valorTotal,
-      sale.totalVenda,
-    ],
-    null,
-  );
+  return 0;
 }
 
 function findSaleTotal(state = {}, sale = {}) {
@@ -416,10 +424,11 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
           if (!matchSellerToUser(sale, user) || isCancelled) continue;
 
           const productTotal = deriveProductTotal(sale);
-          const saleTotal = deriveSaleTotal(sale) ?? findSaleTotal(state, sale) ?? productTotal;
-          const commissionValue = formatCurrency(productTotal * (comissaoPercent / 100));
+          const saleTotal = deriveSaleTotal(sale) ?? findSaleTotal(state, sale);
+          const commissionBase = saleTotal ?? productTotal;
+          const commissionValue = formatCurrency(commissionBase * (comissaoPercent / 100));
           const saleDate = sale.createdAt || sale.createdAtLabel || sale.fiscalEmittedAt;
-          const hasSaleTotal = saleTotal !== null && saleTotal !== undefined;
+          const hasSaleTotal = commissionBase !== null && commissionBase !== undefined;
 
           pdvEntries.push({
             categoria: 'produtos',
@@ -433,7 +442,7 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
             pago: commissionValue,
             pendente: 0,
             pagamento: hasSaleTotal
-              ? `Comissão ${comissaoPercent}% sobre venda de R$ ${formatCurrency(saleTotal)}`
+              ? `Comissão ${comissaoPercent}% sobre venda de R$ ${formatCurrency(commissionBase)}`
               : `Comissão ${comissaoPercent}%`,
           });
         }
