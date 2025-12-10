@@ -186,6 +186,8 @@ function itemIsProduct(item = {}) {
 }
 
 function saleIsServiceFromAgenda(sale = {}) {
+  const snapshotMeta = sale.receiptSnapshot?.meta || {};
+
   const originHints = [
     sale.type,
     sale.typeLabel,
@@ -197,6 +199,12 @@ function saleIsServiceFromAgenda(sale = {}) {
     sale.receiptSnapshot?.origem,
     sale.receiptSnapshot?.origin,
     sale.receiptSnapshot?.originLabel,
+    snapshotMeta.origin,
+    snapshotMeta.originLabel,
+    snapshotMeta.source,
+    snapshotMeta.sourceLabel,
+    snapshotMeta.channel,
+    snapshotMeta.channelLabel,
   ]
     .map((value) => normalize(value))
     .filter(Boolean)
@@ -210,6 +218,14 @@ function saleIsServiceFromAgenda(sale = {}) {
     sale.agendamento,
     sale.agendamentoId,
     sale.fromAppointment,
+    sale.receiptSnapshot?.appointment,
+    sale.receiptSnapshot?.appointmentId,
+    sale.receiptSnapshot?.agendamento,
+    sale.receiptSnapshot?.agendamentoId,
+    snapshotMeta.appointment,
+    snapshotMeta.appointmentId,
+    snapshotMeta.agendamento,
+    snapshotMeta.agendamentoId,
   ].some(Boolean);
 
   if (appointmentFlags) return true;
