@@ -144,7 +144,10 @@
         <td class="px-4 py-3">${item.cliente || '--'}</td>
         <td class="px-4 py-3">${item.origem || '--'}</td>
         <td class="px-4 py-3">${statusBadge(item.status)}</td>
-        <td class="px-4 py-3 font-semibold text-gray-900">${formatCurrency(item.valor || 0)}</td>
+        <td class="px-4 py-3 font-semibold text-gray-900">
+          <p>${formatCurrency(item.valor || 0)}</p>
+          ${item.valorVenda ? `<p class="text-xs font-normal text-gray-500">Venda: ${formatCurrency(item.valorVenda)}</p>` : ''}
+        </td>
         <td class="px-4 py-3 text-gray-600">${item.pagamento || '--'}</td>
       `;
       body.appendChild(row);

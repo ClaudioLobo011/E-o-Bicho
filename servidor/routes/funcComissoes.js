@@ -9,6 +9,8 @@ const PdvState = require('../models/PdvState');
 const router = express.Router();
 const requireStaff = authorizeRoles('funcionario', 'admin', 'admin_master');
 
+const currencyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+
 function toLower(value = '') {
   return String(value || '').toLowerCase();
 }
@@ -36,6 +38,10 @@ function detectCategoria(receivable) {
 function formatCurrency(value = 0) {
   const numeric = Number.isFinite(value) ? value : 0;
   return Math.round(numeric * 100) / 100;
+}
+
+function formatCurrencyLabel(value = 0) {
+  return currencyFormatter.format(formatCurrency(value));
 }
 
 function brDate(value) {
@@ -449,12 +455,15 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
           const isCancelled = normalize(sale.status) === 'cancelled' || normalize(sale.status) === 'cancelado';
           if (!matchSellerToUser(sale, user) || isCancelled) continue;
 
-          const productTotal = deriveProductTotal(sale);
-          const saleTotal = deriveSaleNetTotal(sale) ?? findSaleTotal(state, sale);
-          const commissionBase = saleTotal ?? productTotal;
-          const commissionValue = formatCurrency(commissionBase * (comissaoPercent / 100));
-          const saleDate = sale.createdAt || sale.createdAtLabel || sale.fiscalEmittedAt;
-          const hasSaleTotal = commissionBase !== null && commissionBase !== undefined;
+      const productTotal = deriveProductTotal(sale);
+      const resolvedSaleTotal = [deriveSaleNetTotal(sale), findSaleTotal(state, sale), productTotal]
+        .map((value) => numeric(value, null))
+        .find((value) => value && value > 0);
+
+      const saleValue = formatCurrency(resolvedSaleTotal || 0);
+      const commissionValue = formatCurrency(saleValue * (comissaoPercent / 100));
+      const saleDate = sale.createdAt || sale.createdAtLabel || sale.fiscalEmittedAt;
+      const hasSaleTotal = Boolean(resolvedSaleTotal);
 
           pdvEntries.push({
             categoria: 'produtos',
@@ -465,10 +474,11 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
             origem: 'PDV',
             status: 'pago',
             valor: commissionValue,
+            valorVenda: saleValue,
             pago: commissionValue,
             pendente: 0,
             pagamento: hasSaleTotal
-              ? `Comissão ${comissaoPercent}% sobre venda de R$ ${formatCurrency(commissionBase)}`
+              ? `Comissão ${comissaoPercent}% sobre venda de ${formatCurrencyLabel(resolvedSaleTotal)}`
               : `Comissão ${comissaoPercent}%`,
           });
         }
