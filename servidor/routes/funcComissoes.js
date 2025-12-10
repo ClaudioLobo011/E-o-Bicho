@@ -111,6 +111,15 @@ function numeric(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function firstNumber(candidates = [], fallback = null) {
+  for (const candidate of candidates) {
+    const parsed = numeric(candidate, null);
+    if (parsed !== null) return parsed;
+  }
+
+  return fallback;
+}
+
 function deriveItemQuantity(item = {}) {
   const candidates = [
     item.quantity,
@@ -205,6 +214,65 @@ function deriveProductTotal(sale = {}) {
   }
 
   return 0;
+}
+
+function deriveSaleTotal(sale = {}) {
+  const totals = sale?.receiptSnapshot?.totais || sale?.totais || {};
+
+  const totalFromReceivables = Array.isArray(sale.receivables) && sale.receivables.length
+    ? sale.receivables.reduce((sum, receivable) => sum + numeric(receivable?.value, 0), 0)
+    : null;
+
+  return firstNumber(
+    [
+      sale.totalLiquido,
+      totals?.totalLiquido,
+      totals?.liquido,
+      totalFromReceivables,
+      sale.total,
+      totals?.total,
+      sale.totalBruto,
+      totals?.totalBruto,
+      sale.totalAmount,
+      sale.valorTotal,
+      sale.totalVenda,
+    ],
+    null,
+  );
+}
+
+function findSaleTotal(state = {}, sale = {}) {
+  const receivables = Array.isArray(state.accountsReceivable) ? state.accountsReceivable : [];
+  if (!receivables.length) return null;
+
+  const saleId = normalize(sale.id);
+  const saleCode = normalize(sale.saleCode || sale.saleCodeLabel);
+
+  const matchableFields = (receivable = {}) => [
+    receivable.id,
+    receivable.saleId,
+    receivable.saleCode,
+    receivable.saleCodeLabel,
+    receivable.document,
+    receivable.documentNumber,
+  ].map(normalize);
+
+  const matches = receivables.filter((receivable) => {
+    const fields = matchableFields(receivable);
+    return (
+      (saleCode && fields.includes(saleCode))
+      || (saleId && fields.includes(saleId))
+    );
+  });
+
+  if (!matches.length) return null;
+
+  const total = matches.reduce(
+    (sum, receivable) => sum + numeric(receivable.value, 0),
+    0,
+  );
+
+  return formatCurrency(total);
 }
 
 function buildHistoricoEntry(receivable) {
@@ -316,7 +384,13 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
       return res.status(404).json({ message: 'Usuário não encontrado.' });
     }
 
-    const comissaoPercent = numeric(user.userGroup?.comissaoPercent, 0);
+    const comissaoPercentRaw = user.userGroup?.comissaoPercent;
+    const comissaoPercent = numeric(
+      typeof comissaoPercentRaw === 'string'
+        ? comissaoPercentRaw.replace('%', '').trim()
+        : comissaoPercentRaw,
+      0,
+    );
 
     const receivables = await AccountReceivable.find({ responsible: userId })
       .populate('customer', 'nomeCompleto nomeContato razaoSocial email')
@@ -332,7 +406,7 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
     }
 
     if (comissaoPercent > 0) {
-      const states = await PdvState.find({}, 'completedSales').lean();
+      const states = await PdvState.find({}, 'completedSales accountsReceivable').lean();
       const pdvEntries = [];
 
       for (const state of states) {
@@ -342,8 +416,10 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
           if (!matchSellerToUser(sale, user) || isCancelled) continue;
 
           const productTotal = deriveProductTotal(sale);
+          const saleTotal = deriveSaleTotal(sale) ?? findSaleTotal(state, sale) ?? productTotal;
           const commissionValue = formatCurrency(productTotal * (comissaoPercent / 100));
           const saleDate = sale.createdAt || sale.createdAtLabel || sale.fiscalEmittedAt;
+          const hasSaleTotal = saleTotal !== null && saleTotal !== undefined;
 
           pdvEntries.push({
             categoria: 'produtos',
@@ -356,7 +432,9 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
             valor: commissionValue,
             pago: commissionValue,
             pendente: 0,
-            pagamento: `Comissão ${comissaoPercent}% sobre R$ ${formatCurrency(productTotal)}`,
+            pagamento: hasSaleTotal
+              ? `Comissão ${comissaoPercent}% sobre venda de R$ ${formatCurrency(saleTotal)}`
+              : `Comissão ${comissaoPercent}%`,
           });
         }
       }
