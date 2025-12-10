@@ -5,8 +5,24 @@
   const tabs = document.querySelectorAll('[data-comissoes-tab]');
   const views = document.querySelectorAll('[data-comissoes-view]');
 
+  function parseCurrencyValue(value, fallback = 0) {
+    if (Number.isFinite(value)) return value;
+    if (typeof value === 'string') {
+      const cleaned = value
+        .replace(/\s+/g, '')
+        .replace(/[R$r$\s]/gi, '')
+        .replace(/\./g, '')
+        .replace(',', '.');
+      const parsed = Number(cleaned);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+
   function formatCurrency(value = 0) {
-    const numeric = Number.isFinite(value) ? value : 0;
+    const numeric = parseCurrencyValue(value, 0);
     return currencyFormatter.format(numeric);
   }
 

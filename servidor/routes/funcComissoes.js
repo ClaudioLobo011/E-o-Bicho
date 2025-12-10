@@ -102,7 +102,10 @@ function numeric(value, fallback = 0) {
   }
 
   if (typeof value === 'string') {
-    const normalized = value.trim();
+    const normalized = value
+      .replace(/\s+/g, '')
+      .replace(/[R$r$\s]/gi, '')
+      .trim();
     if (!normalized) return fallback;
 
     const sanitized = normalized.includes(',')
