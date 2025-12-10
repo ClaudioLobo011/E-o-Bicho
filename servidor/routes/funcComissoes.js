@@ -185,6 +185,44 @@ function itemIsProduct(item = {}) {
   return Boolean(productHints);
 }
 
+function saleIsServiceFromAgenda(sale = {}) {
+  const originHints = [
+    sale.type,
+    sale.typeLabel,
+    sale.channel,
+    sale.channelLabel,
+    sale.origin,
+    sale.source,
+    sale.sourceLabel,
+    sale.receiptSnapshot?.origem,
+    sale.receiptSnapshot?.origin,
+    sale.receiptSnapshot?.originLabel,
+  ]
+    .map((value) => normalize(value))
+    .filter(Boolean)
+    .join(' ');
+
+  if (originHints.includes('agenda') || originHints.includes('servi')) return true;
+
+  const appointmentFlags = [
+    sale.appointment,
+    sale.appointmentId,
+    sale.agendamento,
+    sale.agendamentoId,
+    sale.fromAppointment,
+  ].some(Boolean);
+
+  if (appointmentFlags) return true;
+
+  const items = getSaleItems(sale);
+  if (!items.length) return false;
+
+  const hasProductItems = items.some((item) => itemIsProduct(item));
+  const hasServiceItems = items.some((item) => !itemIsProduct(item));
+
+  return hasServiceItems && !hasProductItems;
+}
+
 function deriveItemQuantity(item = {}) {
   const candidates = [
     item.quantity,
@@ -220,11 +258,15 @@ function deriveItemUnitPrice(item = {}) {
   return 0;
 }
 
+function getSaleItems(sale = {}) {
+  if (Array.isArray(sale.itemsSnapshot?.items)) return sale.itemsSnapshot.items;
+  if (Array.isArray(sale.itemsSnapshot?.itens)) return sale.itemsSnapshot.itens;
+  if (Array.isArray(sale.items)) return sale.items;
+  return [];
+}
+
 function deriveSaleTotalFromItems(sale = {}) {
-  const items = Array.isArray(sale.itemsSnapshot?.items) ? sale.itemsSnapshot.items
-    : Array.isArray(sale.itemsSnapshot?.itens) ? sale.itemsSnapshot.itens
-      : Array.isArray(sale.items) ? sale.items
-        : [];
+  const items = getSaleItems(sale);
 
   if (!items.length) return null;
 
@@ -318,7 +360,7 @@ function resolveSaleTotal(sale = {}, state = {}) {
   return 0;
 }
 
-function buildProductEntries(states = [], user = {}, comissaoPercent = 0) {
+function buildProductEntries(states = [], user = {}, comissaoPercent = 0, comissaoServicoPercent = 0) {
   const entries = [];
 
   for (const state of states) {
@@ -329,13 +371,17 @@ function buildProductEntries(states = [], user = {}, comissaoPercent = 0) {
       const cancelled = ['cancelado', 'cancelled'].includes(status);
       if (cancelled || !matchSellerToUser(sale, user)) continue;
 
+      const items = getSaleItems(sale);
+      const isServiceSale = saleIsServiceFromAgenda(sale);
+      const commissionPercent = isServiceSale ? comissaoServicoPercent : comissaoPercent;
+
       const saleTotal = resolveSaleTotal(sale, state);
-      const commissionValue = sanitizeMoney(saleTotal * (comissaoPercent / 100), 0);
+      const commissionValue = sanitizeMoney(saleTotal * (commissionPercent / 100), 0);
 
       const saleDate = sale.createdAt || sale.createdAtLabel || sale.fiscalEmittedAt || state.createdAt;
       const paymentLabel = saleTotal > 0
-        ? `Comissão ${comissaoPercent}% sobre venda de ${formatMoney(saleTotal)}`
-        : `Comissão ${comissaoPercent}%`;
+        ? `Comissão ${commissionPercent}% sobre ${isServiceSale ? 'serviço' : 'venda'} de ${formatMoney(saleTotal)}`
+        : `Comissão ${commissionPercent}%`;
 
       entries.push({
         categoria: 'produtos',
@@ -343,7 +389,7 @@ function buildProductEntries(states = [], user = {}, comissaoPercent = 0) {
         codigo: sale.saleCode || sale.saleCodeLabel || sale.id || '--',
         descricao: sale.typeLabel || 'Venda PDV',
         cliente: sale.customerName || 'Cliente PDV',
-        origem: 'PDV',
+        origem: isServiceSale ? 'PDV (Serviço)' : 'PDV',
         status: commissionValue > 0 ? 'pago' : 'aguardando',
         valor: commissionValue,
         valorVenda: saleTotal,
@@ -437,7 +483,7 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
 
     const [user, receivables, pdvStates] = await Promise.all([
       User.findById(userId)
-        .populate({ path: 'userGroup', model: UserGroup, select: 'nome comissaoPercent' })
+        .populate({ path: 'userGroup', model: UserGroup, select: 'nome comissaoPercent comissaoServicoPercent' })
         .lean(),
       AccountReceivable.find({ responsible: userId })
         .populate('customer', 'nomeCompleto nomeContato razaoSocial email')
@@ -450,16 +496,23 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
     if (!user) return res.status(404).json({ message: 'Usuário não encontrado.' });
 
     const comissaoPercentRaw = user.userGroup?.comissaoPercent;
+    const comissaoServicoPercentRaw = user.userGroup?.comissaoServicoPercent;
     const comissaoPercent = sanitizeMoney(
       typeof comissaoPercentRaw === 'string'
         ? comissaoPercentRaw.replace('%', '').trim()
         : comissaoPercentRaw,
       0,
     );
+    const comissaoServicoPercent = sanitizeMoney(
+      typeof comissaoServicoPercentRaw === 'string'
+        ? comissaoServicoPercentRaw.replace('%', '').trim()
+        : comissaoServicoPercentRaw,
+      0,
+    );
 
     const servicosHistorico = receivables.map((item) => buildServiceEntry(item));
-    const produtosHistorico = comissaoPercent > 0
-      ? buildProductEntries(pdvStates, user, comissaoPercent)
+    const produtosHistorico = comissaoPercent > 0 || comissaoServicoPercent > 0
+      ? buildProductEntries(pdvStates, user, comissaoPercent, comissaoServicoPercent)
       : [];
 
     const result = {};
