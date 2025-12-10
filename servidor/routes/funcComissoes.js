@@ -252,6 +252,16 @@ function deriveSaleNetTotal(sale = {}) {
   const parsedCandidate = firstNumber(candidates, null);
   if (parsedCandidate !== null) return parsedCandidate;
 
+  const receivables = Array.isArray(sale.receivables) ? sale.receivables : [];
+  if (receivables.length) {
+    const sumReceivables = receivables.reduce(
+      (acc, item) => acc + numeric(item?.value || item?.valor, 0),
+      0,
+    );
+
+    if (sumReceivables > 0) return sumReceivables;
+  }
+
   const items = getSaleItems(sale);
   if (items.length > 0) {
     const sum = items.reduce((acc, item) => {
