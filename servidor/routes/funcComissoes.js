@@ -316,7 +316,13 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
       return res.status(404).json({ message: 'Usuário não encontrado.' });
     }
 
-    const comissaoPercent = numeric(user.userGroup?.comissaoPercent, 0);
+    const comissaoPercentRaw = user.userGroup?.comissaoPercent;
+    const comissaoPercent = numeric(
+      typeof comissaoPercentRaw === 'string'
+        ? comissaoPercentRaw.replace('%', '').trim()
+        : comissaoPercentRaw,
+      0,
+    );
 
     const receivables = await AccountReceivable.find({ responsible: userId })
       .populate('customer', 'nomeCompleto nomeContato razaoSocial email')
