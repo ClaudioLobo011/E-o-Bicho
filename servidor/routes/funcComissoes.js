@@ -91,6 +91,22 @@ function matchSellerToUser(sale = {}, user = {}) {
 }
 
 function numeric(value, fallback = 0) {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : fallback;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim();
+    if (!normalized) return fallback;
+
+    const sanitized = normalized.includes(',')
+      ? normalized.replace(/\./g, '').replace(',', '.')
+      : normalized;
+
+    const parsed = Number(sanitized);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
