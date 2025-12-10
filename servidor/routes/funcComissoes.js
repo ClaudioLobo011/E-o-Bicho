@@ -220,10 +220,12 @@ function deriveSaleTotal(sale = {}) {
   const totals = sale?.receiptSnapshot?.totais || sale?.totais || {};
   const candidates = [
     sale.total,
+    sale.totalLiquido,
     sale.totalAmount,
     sale.valorTotal,
     sale.totalVenda,
     sale.totalGeral,
+    totals?.totalLiquido,
     totals?.liquido,
     totals?.total,
     totals?.totalGeral,
