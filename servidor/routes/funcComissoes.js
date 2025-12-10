@@ -111,6 +111,15 @@ function numeric(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function firstNumber(candidates = [], fallback = null) {
+  for (const candidate of candidates) {
+    const parsed = numeric(candidate, null);
+    if (parsed !== null) return parsed;
+  }
+
+  return fallback;
+}
+
 function deriveItemQuantity(item = {}) {
   const candidates = [
     item.quantity,
@@ -205,6 +214,31 @@ function deriveProductTotal(sale = {}) {
   }
 
   return 0;
+}
+
+function deriveSaleTotal(sale = {}) {
+  const totals = sale?.receiptSnapshot?.totais || sale?.totais || {};
+
+  const totalFromReceivables = Array.isArray(sale.receivables) && sale.receivables.length
+    ? sale.receivables.reduce((sum, receivable) => sum + numeric(receivable?.value, 0), 0)
+    : null;
+
+  return firstNumber(
+    [
+      sale.totalLiquido,
+      totals?.totalLiquido,
+      totals?.liquido,
+      totalFromReceivables,
+      sale.total,
+      totals?.total,
+      sale.totalBruto,
+      totals?.totalBruto,
+      sale.totalAmount,
+      sale.valorTotal,
+      sale.totalVenda,
+    ],
+    null,
+  );
 }
 
 function findSaleTotal(state = {}, sale = {}) {
@@ -382,7 +416,7 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
           if (!matchSellerToUser(sale, user) || isCancelled) continue;
 
           const productTotal = deriveProductTotal(sale);
-          const saleTotal = findSaleTotal(state, sale) ?? productTotal;
+          const saleTotal = deriveSaleTotal(sale) ?? findSaleTotal(state, sale) ?? productTotal;
           const commissionValue = formatCurrency(productTotal * (comissaoPercent / 100));
           const saleDate = sale.createdAt || sale.createdAtLabel || sale.fiscalEmittedAt;
           const hasSaleTotal = saleTotal !== null && saleTotal !== undefined;
