@@ -141,7 +141,7 @@
     body.innerHTML = '';
 
     if (!Array.isArray(historico) || !historico.length) {
-      body.innerHTML = '<tr><td colspan="7" class="px-4 py-4 text-center text-gray-500">Nenhum registro encontrado.</td></tr>';
+      body.innerHTML = '<tr><td colspan="9" class="px-4 py-4 text-center text-gray-500">Nenhum registro encontrado.</td></tr>';
       if (info) info.textContent = '';
       return;
     }
@@ -149,6 +149,12 @@
     historico.forEach((item) => {
       const row = document.createElement('tr');
       row.className = 'hover:bg-gray-50';
+      const comissaoVenda = parseMoney(item.comissaoVenda ?? 0, 0);
+      const comissaoServico = parseMoney(item.comissaoServico ?? 0, 0);
+      const comissaoTotal = parseMoney(
+        item.comissaoTotal ?? item.valor ?? comissaoVenda + comissaoServico,
+        0,
+      );
       row.innerHTML = `
         <td class="px-4 py-3">${item.data || '--'}</td>
         <td class="px-4 py-3">
@@ -158,8 +164,10 @@
         <td class="px-4 py-3">${item.cliente || '--'}</td>
         <td class="px-4 py-3">${item.origem || '--'}</td>
         <td class="px-4 py-3">${statusBadge(item.status)}</td>
+        <td class="px-4 py-3 font-semibold text-gray-900">${formatMoney(comissaoVenda)}</td>
+        <td class="px-4 py-3 font-semibold text-gray-900">${formatMoney(comissaoServico)}</td>
         <td class="px-4 py-3 font-semibold text-gray-900">
-          <p>${formatMoney(item.valor || 0)}</p>
+          <p>${formatMoney(comissaoTotal)}</p>
           ${item.valorVenda ? `<p class="text-xs font-normal text-gray-500">Venda: ${formatMoney(item.valorVenda)}</p>` : ''}
         </td>
         <td class="px-4 py-3 text-gray-600">${item.pagamento || '--'}</td>
