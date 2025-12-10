@@ -216,11 +216,11 @@ function deriveProductTotal(sale = {}) {
   return 0;
 }
 
-function deriveSaleTotal(sale = {}) {
+function deriveSaleNetTotal(sale = {}) {
   const totals = sale?.receiptSnapshot?.totais || sale?.totais || {};
   const candidates = [
-    sale.total,
     sale.totalLiquido,
+    sale.total,
     sale.totalAmount,
     sale.valorTotal,
     sale.totalVenda,
@@ -234,10 +234,9 @@ function deriveSaleTotal(sale = {}) {
     totals?.totalVenda,
     totals?.bruto,
   ];
-  for (const candidate of candidates) {
-    const parsed = numeric(candidate, null);
-    if (parsed !== null) return parsed;
-  }
+
+  const parsedCandidate = firstNumber(candidates, null);
+  if (parsedCandidate !== null) return parsedCandidate;
 
   if (Array.isArray(sale.items) && sale.items.length > 0) {
     const sum = sale.items.reduce((acc, item) => {
@@ -248,7 +247,7 @@ function deriveSaleTotal(sale = {}) {
     if (sum > 0) return sum;
   }
 
-  return 0;
+  return null;
 }
 
 function findSaleTotal(state = {}, sale = {}) {
@@ -426,7 +425,7 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
           if (!matchSellerToUser(sale, user) || isCancelled) continue;
 
           const productTotal = deriveProductTotal(sale);
-          const saleTotal = deriveSaleTotal(sale) ?? findSaleTotal(state, sale);
+          const saleTotal = deriveSaleNetTotal(sale) ?? findSaleTotal(state, sale);
           const commissionBase = saleTotal ?? productTotal;
           const commissionValue = formatCurrency(commissionBase * (comissaoPercent / 100));
           const saleDate = sale.createdAt || sale.createdAtLabel || sale.fiscalEmittedAt;
