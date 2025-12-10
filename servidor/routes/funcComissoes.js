@@ -135,6 +135,18 @@ function deriveItemQuantity(item = {}) {
   return 1;
 }
 
+function getSaleItems(sale = {}) {
+  const candidates = [
+    sale.items,
+    sale.itemsSnapshot,
+    sale.itemsSnapshot?.items,
+    sale.itemsSnapshot?.itens,
+  ];
+
+  const firstArray = candidates.find((value) => Array.isArray(value) && value.length);
+  return Array.isArray(firstArray) ? firstArray : [];
+}
+
 function deriveItemUnitPrice(item = {}) {
   const candidates = [
     item.unitPrice,
@@ -173,7 +185,7 @@ function isProductItem(item = {}) {
 }
 
 function deriveProductTotal(sale = {}) {
-  const items = Array.isArray(sale.items) ? sale.items : [];
+  const items = getSaleItems(sale);
   const productItems = items.filter(isProductItem);
   const baseItems = productItems.length ? productItems : items;
 
@@ -187,11 +199,12 @@ function deriveProductTotal(sale = {}) {
     if (sum > 0) return sum;
   }
 
-  const totals = sale?.receiptSnapshot?.totais || sale?.totais || {};
+  const totals = sale?.receiptSnapshot?.totais || sale?.totais || sale?.itemsSnapshot?.totais || {};
   const candidates = [
     sale.total,
     sale.totalLiquido,
     sale.totalBruto,
+    sale.totalSale,
     sale.totalAmount,
     sale.valorTotal,
     sale.totalVenda,
@@ -217,10 +230,11 @@ function deriveProductTotal(sale = {}) {
 }
 
 function deriveSaleNetTotal(sale = {}) {
-  const totals = sale?.receiptSnapshot?.totais || sale?.totais || {};
+  const totals = sale?.receiptSnapshot?.totais || sale?.totais || sale?.itemsSnapshot?.totais || {};
   const candidates = [
     sale.totalLiquido,
     sale.total,
+    sale.totalSale,
     sale.totalAmount,
     sale.valorTotal,
     sale.totalVenda,
@@ -238,8 +252,9 @@ function deriveSaleNetTotal(sale = {}) {
   const parsedCandidate = firstNumber(candidates, null);
   if (parsedCandidate !== null) return parsedCandidate;
 
-  if (Array.isArray(sale.items) && sale.items.length > 0) {
-    const sum = sale.items.reduce((acc, item) => {
+  const items = getSaleItems(sale);
+  if (items.length > 0) {
+    const sum = items.reduce((acc, item) => {
       const qty = numeric(item?.quantity ?? item?.quantidade, 0);
       const price = numeric(item?.unitPrice ?? item?.valor, 0);
       return acc + qty * price;
