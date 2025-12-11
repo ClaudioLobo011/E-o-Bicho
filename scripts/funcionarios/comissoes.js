@@ -190,13 +190,13 @@
 
   async function init() {
     tabs.forEach((tab) => tab.addEventListener('click', () => toggleView(tab.dataset.comissoesTab)));
-    toggleView('servicos');
+    toggleView('produtos');
 
     const data = await fetchComissoes();
     if (!data) return;
 
-    renderView('servicos', data.servicos);
     renderView('produtos', data.produtos);
+    renderView('servicos', data.servicos);
   }
 
   init();

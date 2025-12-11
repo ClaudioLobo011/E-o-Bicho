@@ -1,569 +1,588 @@
 const express = require('express');
-const authorizeRoles = require('../middlewares/authorizeRoles');
+const mongoose = require('mongoose');
+
 const authMiddleware = require('../middlewares/authMiddleware');
-const AccountReceivable = require('../models/AccountReceivable');
-const User = require('../models/User');
-const UserGroup = require('../models/UserGroup');
+const authorizeRoles = require('../middlewares/authorizeRoles');
 const PdvState = require('../models/PdvState');
+const User = require('../models/User');
+const Product = require('../models/Product');
+const Service = require('../models/Service');
+const UserGroup = require('../models/UserGroup');
 
 const router = express.Router();
 const requireStaff = authorizeRoles('funcionario', 'admin', 'admin_master');
 
-const currencyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+const DEFAULT_WINDOW_DAYS = 90;
 
-function sanitizeMoney(value, fallback = 0) {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : fallback;
-  }
+const emptyResumo = () => ({
+  totalGerado: 0,
+  aReceber: 0,
+  pagas: 0,
+  media: 0,
+  resumoPeriodo: {
+    vendasComComissao: 0,
+    taxaAprovacao: 0,
+    tempoMedioLiberacao: null,
+    bonificacoes: 0,
+    cancelamentos: 0,
+  },
+});
 
-  if (typeof value === 'string') {
-    const cleaned = value
-      .replace(/[^0-9,.-]+/g, '')
-      .replace(/\.(?=\d{3}(?:\D|$))/g, '')
-      .replace(',', '.');
-    const parsed = Number(cleaned);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  }
+const emptyView = () => ({
+  resumo: emptyResumo(),
+  proximosPagamentos: [],
+  historico: [],
+});
 
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
+const parseNumber = (value) => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (value === null || value === undefined) return null;
+  const normalized = String(value)
+    .trim()
+    .replace(/\s+/g, '')
+    .replace(/\.(?=\d{3}(?:\D|$))/g, '')
+    .replace(',', '.')
+    .replace(/[^\d.-]/g, '')
+    .replace(/(?!^)-/g, '');
+  if (!normalized || normalized === '-' || normalized === '.') return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+};
 
-function formatMoney(value = 0) {
-  return currencyFormatter.format(sanitizeMoney(value, 0));
-}
+const normalizeDigits = (value) => {
+  if (value === null || value === undefined) return '';
+  const str = String(value);
+  const digits = str.replace(/\D/g, '');
+  return digits;
+};
 
-function formatDateBR(value) {
-  if (!value) return '';
+const normalizeStatus = (status) => {
+  const value = (status || '').toString().toLowerCase();
+  if (['completed', 'concluido', 'concluida', 'pago', 'paid'].includes(value)) return 'pago';
+  if (['pending', 'pendente'].includes(value)) return 'pendente';
+  if (['cancelado', 'cancelada', 'canceled', 'cancelled'].includes(value)) return 'cancelado';
+  if (['aguardando', 'awaiting', 'em_andamento', 'processing'].includes(value)) return 'aguardando';
+  return value || 'aguardando';
+};
+
+const normalizeName = (value = '') => {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+};
+
+const formatDate = (value) => {
+  if (!value) return '--';
   const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  return new Intl.DateTimeFormat('pt-BR').format(date);
-}
+  if (Number.isNaN(date.getTime())) return '--';
+  return date.toLocaleDateString('pt-BR');
+};
 
-function normalize(value = '') {
-  return String(value || '').trim().toLowerCase();
-}
+const toStartOfDay = (value) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setHours(0, 0, 0, 0);
+  return date;
+};
 
-function detectReceivableCategory(receivable) {
-  const text = [
-    receivable?.document,
-    receivable?.documentNumber,
-    receivable?.notes,
-    receivable?.accountingAccount?.name,
-    receivable?.accountingAccount?.code,
-  ]
-    .map((part) => normalize(part))
-    .join(' ');
+const toEndOfDay = (value) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setHours(23, 59, 59, 999);
+  return date;
+};
 
-  if (text.includes('produt')) return 'produtos';
-  if (text.includes('servi')) return 'servicos';
-  return 'servicos';
-}
+const collectSaleItems = (sale = {}) => {
+  const candidates = [
+    sale.items,
+    sale.receiptSnapshot?.items,
+    sale.receiptSnapshot?.itens,
+    sale.receiptSnapshot?.products,
+    sale.receiptSnapshot?.produtos,
+    sale.receiptSnapshot?.cart?.items,
+    sale.receiptSnapshot?.cart?.itens,
+    sale.receiptSnapshot?.cart?.products,
+    sale.receiptSnapshot?.cart?.produtos,
+    sale.itemsSnapshot,
+    sale.itemsSnapshot?.items,
+    sale.itemsSnapshot?.itens,
+    sale.fiscalItemsSnapshot,
+    sale.fiscalItemsSnapshot?.items,
+    sale.fiscalItemsSnapshot?.itens,
+  ];
 
-function deriveInstallmentStatus(installments = []) {
-  if (!Array.isArray(installments) || installments.length === 0) return 'pendente';
-  const paid = installments.some((item) => normalize(item?.status) === 'received');
-  const cancelled = installments.some((item) => ['cancelled', 'uncollectible'].includes(normalize(item?.status)));
-  const pending = installments.some((item) => !item?.status || normalize(item?.status) === 'pending');
+  for (const entry of candidates) {
+    if (!Array.isArray(entry) || !entry.length) continue;
+    const filtered = entry.filter((item) => item && typeof item === 'object');
+    if (filtered.length) return filtered;
+  }
 
-  if (cancelled) return 'cancelado';
-  if (paid && pending) return 'aguardando';
-  if (paid) return 'pago';
-  return 'pendente';
-}
+  return [];
+};
 
-function buildServiceEntry(receivable, comissaoServicoPercent = 0) {
-  const installments = Array.isArray(receivable?.installments) ? receivable.installments : [];
-  const paidInstallments = installments.filter((item) => normalize(item?.status) === 'received');
-  const pendingInstallments = installments.filter((item) => normalize(item?.status) !== 'received');
-
-  const status = deriveInstallmentStatus(installments);
-  const totalValue = sanitizeMoney(
-    receivable?.totalValue
-      ?? receivable?.valorTotal
-      ?? receivable?.valor
-      ?? receivable?.total
-      ?? receivable?.amount
-      ?? 0,
-    0,
-  );
-
-  const paidValue = paidInstallments.reduce(
-    (sum, item) => sum + sanitizeMoney(item?.paidValue ?? item?.value ?? item?.valor ?? 0, 0),
-    0,
-  );
-  const pendingValue = pendingInstallments.reduce(
-    (sum, item) => sum + sanitizeMoney(item?.value ?? item?.valor ?? 0, 0),
-    0,
-  );
-
-  const paidDates = paidInstallments
-    .map((item) => (item?.paidDate ? new Date(item.paidDate) : null))
-    .filter((date) => date && !Number.isNaN(date.getTime()))
-    .sort((a, b) => b - a);
-  const nextDue = pendingInstallments
-    .map((item) => (item?.dueDate ? new Date(item.dueDate) : null))
-    .filter((date) => date && !Number.isNaN(date.getTime()))
-    .sort((a, b) => a - b)[0];
-
-  const pagamento = status === 'pago'
-    ? (paidDates.length ? `Pago em ${formatDateBR(paidDates[0])}` : 'Pago')
-    : (nextDue ? `Previsto para ${formatDateBR(nextDue)}` : 'Sem previsão');
-
-  const categoria = detectReceivableCategory(receivable);
-
-  const comissaoPercent = sanitizeMoney(
-    typeof comissaoServicoPercent === 'string'
-      ? comissaoServicoPercent.replace('%', '').trim()
-      : comissaoServicoPercent,
-    0,
-  );
-
-  const comissaoServico = sanitizeMoney(totalValue * (comissaoPercent / 100), 0);
-
-  return {
-    categoria,
-    data: formatDateBR(receivable?.dueDate || receivable?.issueDate || receivable?.createdAt),
-    codigo: receivable?.code || receivable?._id?.toString().slice(-6) || '--',
-    descricao: receivable?.document || receivable?.notes || 'Recebível',
-    cliente:
-      receivable?.customer?.nomeCompleto
-      || receivable?.customer?.nomeContato
-      || receivable?.customer?.razaoSocial
-      || receivable?.customerName
-      || 'Cliente',
-    origem: receivable?.accountingAccount?.name || receivable?.document || 'N/A',
-    status,
-    valor: comissaoServico,
-    valorVenda: totalValue,
-    comissaoVenda: 0,
-    comissaoServico,
-    comissaoTotal: comissaoServico,
-    pago: paidValue,
-    pendente: pendingValue,
-    pagamento,
-  };
-}
-
-function matchSellerToUser(sale = {}, user = {}) {
-  const seller = sale?.seller || {};
-  const saleHints = [
-    seller.id,
-    seller._id,
-    seller.userId,
-    seller.codigo,
-    seller.codigoCliente,
-    seller.email,
-    seller.nome,
-    seller.name,
-    sale.sellerCode,
-    sale.sellerName,
-  ]
-    .map((value) => normalize(value))
-    .filter(Boolean);
-
-  const userHints = [
-    user?._id,
-    user?.id,
-    user?.codigoCliente,
-    user?.email,
-    user?.nomeCompleto,
-    user?.nomeContato,
-  ]
-    .map((value) => normalize(value))
-    .filter(Boolean);
-
-  return saleHints.some((hint) => userHints.includes(hint));
-}
-
-function itemIsProduct(item = {}) {
-  const type = normalize(
-    item.type
-      || item.tipo
-      || item.itemType
-      || item.categoria
-      || item.category
-      || item.grupo
-      || item.group,
-  );
-
-  if (type.includes('serv')) return false;
-  if (type.includes('produt')) return true;
-
-  const productHints = [item.product, item.productId, item.produtoId, item.idProduto]
-    .map((value) => value || '')
-    .join('');
-
-  return Boolean(productHints);
-}
-
-function saleIsServiceFromAgenda(sale = {}) {
-  const snapshotMeta = sale.receiptSnapshot?.meta || {};
-
-  const originHints = [
-    sale.type,
-    sale.typeLabel,
-    sale.channel,
-    sale.channelLabel,
-    sale.origin,
-    sale.source,
-    sale.sourceLabel,
-    sale.receiptSnapshot?.origem,
-    sale.receiptSnapshot?.origin,
-    sale.receiptSnapshot?.originLabel,
-    snapshotMeta.origin,
-    snapshotMeta.originLabel,
-    snapshotMeta.source,
-    snapshotMeta.sourceLabel,
-    snapshotMeta.channel,
-    snapshotMeta.channelLabel,
-  ]
-    .map((value) => normalize(value))
-    .filter(Boolean)
-    .join(' ');
-
-  if (originHints.includes('agenda') || originHints.includes('servi')) return true;
-
-  const appointmentFlags = [
-    sale.appointment,
-    sale.appointmentId,
-    sale.agendamento,
-    sale.agendamentoId,
-    sale.fromAppointment,
-    sale.receiptSnapshot?.appointment,
-    sale.receiptSnapshot?.appointmentId,
-    sale.receiptSnapshot?.agendamento,
-    sale.receiptSnapshot?.agendamentoId,
-    snapshotMeta.appointment,
-    snapshotMeta.appointmentId,
-    snapshotMeta.agendamento,
-    snapshotMeta.agendamentoId,
-  ].some(Boolean);
-
-  if (appointmentFlags) return true;
-
-  const items = getSaleItems(sale);
-  if (!items.length) return false;
-
-  const hasProductItems = items.some((item) => itemIsProduct(item));
-  const hasServiceItems = items.some((item) => !itemIsProduct(item));
-
-  return hasServiceItems && !hasProductItems;
-}
-
-function deriveItemQuantity(item = {}) {
+const deriveItemQuantity = (item = {}) => {
   const candidates = [
     item.quantity,
     item.quantidade,
-    item.qnt,
-    item.qtd,
     item.qty,
+    item.qtd,
+    item.amount,
+    item.quantityLabel,
   ];
-
   for (const candidate of candidates) {
-    const parsed = sanitizeMoney(candidate, null);
+    const parsed = parseNumber(candidate);
     if (parsed !== null) return parsed;
   }
-
   return 1;
-}
+};
 
-function deriveItemUnitPrice(item = {}) {
+const deriveItemUnitPrice = (item = {}) => {
   const candidates = [
     item.unitPrice,
+    item.valorUnitario,
+    item.precoUnitario,
     item.valor,
-    item.price,
     item.preco,
-    item.valorTotal,
-    item.total,
+    item.price,
+    item.unit_value,
+    item.unit,
+    item.unitLabel,
+    item.precoLabel,
+    item.valorLabel,
   ];
-
   for (const candidate of candidates) {
-    const parsed = sanitizeMoney(candidate, null);
+    const parsed = parseNumber(candidate);
     if (parsed !== null) return parsed;
   }
+  return null;
+};
 
-  return 0;
-}
+const deriveItemTotal = (item = {}) => {
+  const candidates = [
+    item.totalPrice,
+    item.subtotal,
+    item.total,
+    item.totalValue,
+    item.valorTotal,
+    item.precoTotal,
+    item.totalLabel,
+  ];
+  for (const candidate of candidates) {
+    const parsed = parseNumber(candidate);
+    if (parsed !== null) return parsed;
+  }
+  const qty = deriveItemQuantity(item) || 0;
+  const unit = deriveItemUnitPrice(item);
+  return unit !== null ? qty * unit : 0;
+};
 
-function getSaleItems(sale = {}) {
-  if (Array.isArray(sale.itemsSnapshot?.items)) return sale.itemsSnapshot.items;
-  if (Array.isArray(sale.itemsSnapshot?.itens)) return sale.itemsSnapshot.itens;
-  if (Array.isArray(sale.items)) return sale.items;
-  return [];
-}
-
-function deriveSaleTotalFromItems(sale = {}) {
-  const items = getSaleItems(sale);
-
-  if (!items.length) return null;
-
-  const productItems = items.filter(itemIsProduct);
-  const baseItems = productItems.length ? productItems : items;
-
-  const sum = baseItems.reduce((total, item) => {
-    const qty = deriveItemQuantity(item);
-    const price = deriveItemUnitPrice(item);
-    return total + qty * price;
-  }, 0);
-
-  return sum > 0 ? sum : null;
-}
-
-function collectSaleTotals(sale = {}) {
-  const totals = sale?.receiptSnapshot?.totais || sale?.totais || sale?.itemsSnapshot?.totais || {};
+const deriveSaleTotal = (sale = {}) => {
+  const totals = sale?.receiptSnapshot?.totais || sale?.totais || {};
   const candidates = [
     sale.total,
-    sale.totalLiquido,
-    sale.totalBruto,
-    sale.totalSale,
     sale.totalAmount,
     sale.valorTotal,
     sale.totalVenda,
     sale.totalGeral,
-    sale.receiptSnapshot?.total,
-    sale.receiptSnapshot?.totalLiquido,
-    sale.receiptSnapshot?.valorTotal,
-    sale.receiptSnapshot?.totalBruto,
-    totals?.totalLiquido,
     totals?.liquido,
     totals?.total,
     totals?.totalGeral,
-    totals?.totalBruto,
     totals?.pago,
     totals?.valorTotal,
     totals?.totalVenda,
-    totals?.totalPagar,
     totals?.bruto,
+  ];
+  for (const candidate of candidates) {
+    const parsed = parseNumber(candidate);
+    if (parsed !== null) return parsed;
+  }
+
+  const items = collectSaleItems(sale);
+  if (!items.length) return 0;
+  return items.reduce((acc, item) => acc + deriveItemTotal(item), 0);
+};
+
+const extractItemObjectId = (item = {}) => {
+  const candidates = [
+    item.productId,
+    item.product_id,
+    item.produtoId,
+    item.produto_id,
+    item.serviceId,
+    item.service_id,
+    item.servico,
+    item.servicoId,
+    item.servico_id,
+    item.id,
+    item._id,
+    item.product?._id,
+    item.produto?._id,
+    item.productSnapshot?._id,
+    item.produtoSnapshot?._id,
   ];
 
   for (const candidate of candidates) {
-    const parsed = sanitizeMoney(candidate, null);
-    if (parsed !== null && parsed > 0) return parsed;
+    if (!candidate) continue;
+    const str = String(candidate);
+    if (mongoose.Types.ObjectId.isValid(str)) return str;
   }
 
   return null;
-}
+};
 
-function resolveSaleTotal(sale = {}, state = {}) {
-  const directTotals = collectSaleTotals(sale);
-  if (directTotals) return directTotals;
+const normalizePaymentLabel = (sale = {}) => {
+  const labels = new Set();
 
   const receivables = Array.isArray(sale.receivables) ? sale.receivables : [];
-  if (receivables.length) {
-    const receivableSum = receivables.reduce(
-      (acc, item) => acc + sanitizeMoney(item?.value ?? item?.valor ?? item?.formattedValue ?? 0, 0),
-      0,
-    );
-    if (receivableSum > 0) return receivableSum;
-  }
+  receivables.forEach((entry) => {
+    if (entry?.paymentMethodLabel) labels.add(String(entry.paymentMethodLabel));
+    else if (entry?.paymentMethodId) labels.add(String(entry.paymentMethodId));
+    else if (entry?.paymentLabel) labels.add(String(entry.paymentLabel));
+  });
 
-  const accountsReceivable = Array.isArray(state.accountsReceivable) ? state.accountsReceivable : [];
-  const saleId = normalize(sale.id);
-  const saleCode = normalize(sale.saleCode || sale.saleCodeLabel);
+  const paymentTags = Array.isArray(sale.paymentTags) ? sale.paymentTags : [];
+  paymentTags.forEach((tag) => labels.add(String(tag)));
 
-  if (accountsReceivable.length && (saleId || saleCode)) {
-    const matches = accountsReceivable.filter((receivable) => {
-      const fields = [
-        receivable.id,
-        receivable.saleId,
-        receivable.saleCode,
-        receivable.saleCodeLabel,
-        receivable.document,
-        receivable.documentNumber,
-      ].map((value) => normalize(value));
-
-      return (saleCode && fields.includes(saleCode)) || (saleId && fields.includes(saleId));
+  const snapshotPayments = sale.receiptSnapshot?.pagamentos || sale.receiptSnapshot?.payments || [];
+  if (Array.isArray(snapshotPayments)) {
+    snapshotPayments.forEach((payment) => {
+      if (payment?.label) labels.add(String(payment.label));
+      else if (payment?.nome) labels.add(String(payment.nome));
+      else if (payment?.tipo) labels.add(String(payment.tipo));
     });
+  }
 
-    if (matches.length) {
-      const total = matches.reduce((sum, receivable) => sum + sanitizeMoney(receivable.value, 0), 0);
-      if (total > 0) return total;
+  return labels.size ? Array.from(labels).slice(0, 3).join(', ') : 'N/D';
+};
+
+const belongsToSeller = (sale = {}, { sellerIds, sellerCodes, operatorName }) => {
+  const seller = sale?.seller || {};
+  const idCandidates = [
+    seller._id,
+    seller.id,
+    seller._id?.toString?.(),
+    seller.id?.toString?.(),
+    sale.sellerId,
+  ].map((v) => (v ? String(v) : ''));
+
+  for (const candidate of idCandidates) {
+    if (candidate && sellerIds.has(candidate)) return true;
+  }
+
+  const codeCandidates = [
+    sale.sellerCode,
+    seller.codigo,
+    seller.codigoCliente,
+    seller.id,
+    seller._id,
+  ]
+    .map(normalizeDigits)
+    .filter(Boolean);
+
+  const hasSellerInfo = idCandidates.some(Boolean) || codeCandidates.some(Boolean);
+
+  for (const code of codeCandidates) {
+    if (sellerCodes.has(code)) return true;
+  }
+
+  // Somente se nÃ£o houver seller definido, cair para operador
+  if (!hasSellerInfo) {
+    const operator = normalizeName(sale.receiptSnapshot?.meta?.operador || sale.sellerName || '');
+    if (operator && operatorName && operator === operatorName) {
+      return true;
     }
   }
 
-  const itemsTotal = deriveSaleTotalFromItems(sale);
-  if (itemsTotal) return itemsTotal;
+  return false;
+};
 
-  return 0;
-}
+const buildResumo = (records = []) => {
+  const resumo = emptyResumo();
+  if (!records.length) return resumo;
 
-function buildProductEntries(states = [], user = {}, comissaoPercent = 0, comissaoServicoPercent = 0) {
-  const entries = [];
+  let total = 0;
+  let aReceber = 0;
+  let pagas = 0;
+  let cancelamentos = 0;
+  let aprovados = 0;
+  let diasLiberacaoSoma = 0;
+  let diasLiberacaoCount = 0;
 
-  for (const state of states) {
-    const sales = Array.isArray(state.completedSales) ? state.completedSales : [];
-
-    for (const sale of sales) {
-      const status = normalize(sale.status);
-      const cancelled = ['cancelado', 'cancelled'].includes(status);
-      if (cancelled || !matchSellerToUser(sale, user)) continue;
-
-      const items = getSaleItems(sale);
-      const isServiceSale = saleIsServiceFromAgenda(sale);
-      const commissionPercent = isServiceSale ? comissaoServicoPercent : comissaoPercent;
-
-      const saleTotal = resolveSaleTotal(sale, state);
-      const commissionValue = sanitizeMoney(saleTotal * (commissionPercent / 100), 0);
-
-      const saleDate = sale.createdAt || sale.createdAtLabel || sale.fiscalEmittedAt || state.createdAt;
-      const paymentLabel = saleTotal > 0
-        ? `Comissão ${commissionPercent}% sobre ${isServiceSale ? 'serviço' : 'venda'} de ${formatMoney(saleTotal)}`
-        : `Comissão ${commissionPercent}%`;
-
-      entries.push({
-        categoria: 'produtos',
-        data: formatDateBR(saleDate || Date.now()),
-        codigo: sale.saleCode || sale.saleCodeLabel || sale.id || '--',
-        descricao: sale.typeLabel || 'Venda PDV',
-        cliente: sale.customerName || 'Cliente PDV',
-        origem: isServiceSale ? 'PDV (Serviço)' : 'PDV',
-        status: commissionValue > 0 ? 'pago' : 'aguardando',
-        valor: commissionValue,
-        valorVenda: saleTotal,
-        comissaoVenda: isServiceSale ? 0 : commissionValue,
-        comissaoServico: isServiceSale ? commissionValue : 0,
-        comissaoTotal: sanitizeMoney(
-          (isServiceSale ? commissionValue : 0) + (isServiceSale ? 0 : commissionValue),
-          commissionValue,
-        ),
-        pago: commissionValue,
-        pendente: 0,
-        pagamento: paymentLabel,
-      });
-    }
-  }
-
-  return entries;
-}
-
-function buildResumo(historico = []) {
-  const totalGerado = historico.reduce((sum, item) => sum + sanitizeMoney(item.valor, 0), 0);
-  const pagas = historico.reduce(
-    (sum, item) => sum + sanitizeMoney(item.pago ?? (item.valor - item.pendente), 0),
-    0,
-  );
-  const aReceber = historico.reduce((sum, item) => sum + sanitizeMoney(item.pendente, 0), 0);
-  const media = historico.length ? totalGerado / historico.length : 0;
-
-  const canceladas = historico.filter((item) => normalize(item.status) === 'cancelado').length;
-  const aprovadas = historico.filter((item) => normalize(item.status) === 'pago').length;
-
-  const tempos = historico
-    .map((item) => {
-      if (normalize(item.status) !== 'pago' || !item.pagamento?.includes('Pago em')) return null;
-      const paidDate = item.pagamento.replace(/[^0-9/]/g, '').trim();
-      const [day, month, year] = paidDate.split('/').map(Number);
-      const paid = new Date(year, month - 1, day);
-
-      const parts = (item.data || '').split('/').map(Number);
-      if (parts.length === 3) {
-        const issued = new Date(parts[2], parts[1] - 1, parts[0]);
-        if (!Number.isNaN(issued.getTime()) && !Number.isNaN(paid.getTime())) {
-          const diff = Math.max(0, paid - issued);
-          return Math.round(diff / (1000 * 60 * 60 * 24));
-        }
+  records.forEach((item) => {
+    const valor = parseNumber(item.comissaoTotal) || 0;
+    total += valor;
+    const status = normalizeStatus(item.status);
+    if (status === 'pago') {
+      pagas += valor;
+      aprovados += 1;
+      if (item._createdAt instanceof Date && !Number.isNaN(item._createdAt.getTime())) {
+        const diff = Date.now() - item._createdAt.getTime();
+        diasLiberacaoSoma += diff / (1000 * 60 * 60 * 24);
+        diasLiberacaoCount += 1;
       }
-      return null;
-    })
-    .filter((value) => typeof value === 'number');
+    } else if (status === 'cancelado') {
+      cancelamentos += 1;
+    } else {
+      aReceber += valor;
+    }
+  });
 
-  const tempoMedio = tempos.length
-    ? Math.round(tempos.reduce((sum, value) => sum + value, 0) / tempos.length)
+  resumo.totalGerado = total;
+  resumo.aReceber = aReceber;
+  resumo.pagas = pagas;
+  resumo.media = records.length ? total / records.length : 0;
+  resumo.resumoPeriodo.vendasComComissao = records.length;
+  resumo.resumoPeriodo.taxaAprovacao = records.length
+    ? Math.round((aprovados / records.length) * 100)
     : 0;
+  resumo.resumoPeriodo.tempoMedioLiberacao =
+    diasLiberacaoCount > 0 ? Math.round(diasLiberacaoSoma / diasLiberacaoCount) : null;
+  resumo.resumoPeriodo.cancelamentos = cancelamentos;
 
-  return {
-    totalGerado,
-    aReceber,
-    pagas,
-    media,
-    resumoPeriodo: {
-      vendasComComissao: historico.length,
-      taxaAprovacao: historico.length ? Math.round((aprovadas / historico.length) * 100) : 0,
-      tempoMedioLiberacao: tempoMedio,
-      bonificacoes: 0,
-      cancelamentos: canceladas,
-    },
-  };
-}
+  return resumo;
+};
 
-function buildProximosPagamentos(historico = []) {
-  return historico
-    .flatMap((item) => {
-      if (!item.pendente) return [];
-      return {
-        titulo: `${item.data || 'Data'} • ${item.descricao}`.trim(),
-        valor: item.pendente,
-        status: normalize(item.status) === 'pago' ? 'confirmado' : 'pendente',
-        info: item.pagamento,
-        data: item.data,
-      };
+const buildProximos = (records = []) => {
+  const pendentes = records
+    .filter((item) => {
+      const status = normalizeStatus(item.status);
+      return status !== 'pago' && status !== 'cancelado';
     })
     .sort((a, b) => {
-      const dateA = a.data ? new Date(a.data.split('/').reverse().join('-')) : null;
-      const dateB = b.data ? new Date(b.data.split('/').reverse().join('-')) : null;
-      if (dateA && dateB) return dateA - dateB;
-      if (dateA) return -1;
-      if (dateB) return 1;
-      return 0;
+      const da = a._createdAt ? a._createdAt.getTime() : 0;
+      const db = b._createdAt ? b._createdAt.getTime() : 0;
+      return da - db;
     })
     .slice(0, 5);
-}
+
+  return pendentes.map((item) => ({
+    titulo: item.codigo ? `Venda ${item.codigo}` : 'Venda',
+    valor: parseNumber(item.comissaoTotal) || 0,
+    status: 'pendente',
+    info: item.pagamento || 'Aguardando liberaÇõÇœo',
+  }));
+};
+
+const buildViewPayload = (records = []) => {
+  const historico = records
+    .sort((a, b) => {
+      const da = a._createdAt ? a._createdAt.getTime() : 0;
+      const db = b._createdAt ? b._createdAt.getTime() : 0;
+      return db - da;
+    })
+    .map((item) => {
+      const { _createdAt, valorProdutos, valorServicos, ...rest } = item;
+      return rest;
+    });
+
+  return {
+    resumo: buildResumo(records),
+    proximosPagamentos: buildProximos(records),
+    historico,
+  };
+};
 
 router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
   try {
-    const userId = req.user?.id || req.user?._id;
-    if (!userId) return res.status(401).json({ message: 'Usuário não autenticado.' });
+    const user = await User.findById(req.user?.id || req.user?._id)
+      .select('nomeCompleto nomeContato razaoSocial codigoCliente userGroup')
+      .lean();
 
-    const [user, receivables, pdvStates] = await Promise.all([
-      User.findById(userId)
-        .populate({ path: 'userGroup', model: UserGroup, select: 'nome comissaoPercent comissaoServicoPercent' })
-        .lean(),
-      AccountReceivable.find({ responsible: userId })
-        .populate('customer', 'nomeCompleto nomeContato razaoSocial email')
-        .populate('accountingAccount', 'name code')
-        .sort({ createdAt: -1 })
-        .lean(),
-      PdvState.find({}, 'completedSales accountsReceivable createdAt').lean(),
+    if (!user) {
+      return res.status(404).json({ message: 'UsuÇ­rio nÇœo encontrado' });
+    }
+
+    let userGroup = null;
+    if (user.userGroup) {
+      userGroup = await UserGroup.findById(user.userGroup)
+        .select('comissaoPercent comissaoServicoPercent')
+        .lean();
+    }
+
+    const comissaoPercent = Number(userGroup?.comissaoPercent ?? 0);
+    const comissaoServicoPercent = Number(userGroup?.comissaoServicoPercent ?? 0);
+
+    const sellerIds = new Set([String(user._id)]);
+    const sellerCodes = new Set();
+    if (user.codigoCliente) sellerCodes.add(normalizeDigits(user.codigoCliente));
+
+    const dias = Math.min(
+      180,
+      Math.max(
+        7,
+        parseInt(req.query?.dias, 10) ||
+          parseInt(req.query?.days, 10) ||
+          DEFAULT_WINDOW_DAYS
+      )
+    );
+    const startDate =
+      toStartOfDay(req.query?.start) ||
+      toStartOfDay(new Date(Date.now() - dias * 24 * 60 * 60 * 1000));
+    const endDate = req.query?.end ? toEndOfDay(req.query.end) : null;
+
+    const dateMatch = {};
+    if (startDate) dateMatch.$gte = startDate;
+    if (endDate) dateMatch.$lte = endDate;
+
+    const pipeline = [
+      { $match: { 'completedSales.0': { $exists: true } } },
+      { $project: { completedSales: 1 } },
+      { $unwind: '$completedSales' },
+    ];
+
+    if (Object.keys(dateMatch).length) {
+      pipeline.push({ $match: { 'completedSales.createdAt': dateMatch } });
+    }
+
+    const aggregated = await PdvState.aggregate(pipeline).allowDiskUse(true);
+
+    const normalizedUserName = normalizeName(
+      user.nomeCompleto || user.nomeContato || user.razaoSocial || user.email || ''
+    );
+
+    const sales = aggregated
+      .map((entry) => ({
+        ...(entry.completedSales || {}),
+        _pdvStateId: entry._id,
+      }))
+      .filter((sale) => belongsToSeller(sale, { sellerIds, sellerCodes, operatorName: normalizedUserName }));
+
+    console.log(
+      '[funcComissoes]',
+      { userId: String(user._id), dias, salesTotal: aggregated.length, salesMatched: sales.length },
+    );
+
+    if (!sales.length) {
+      const payload = { servicos: emptyView(), produtos: emptyView() };
+      if (req.query?.debug === '1') {
+        payload.debug = { aggregated: aggregated.length, matched: sales.length };
+      }
+      return res.json(payload);
+    }
+
+    const itemIdSet = new Set();
+    sales.forEach((sale) => {
+      collectSaleItems(sale).forEach((item) => {
+        const oid = extractItemObjectId(item);
+        if (oid) itemIdSet.add(oid);
+      });
+    });
+
+    const ids = Array.from(itemIdSet);
+    const [Services, products] = await Promise.all([
+      ids.length ? Service.find({ _id: { $in: ids } }).select('_id nome valor').lean() : [],
+      ids.length ? Product.find({ _id: { $in: ids } }).select('_id nome venda').lean() : [],
     ]);
 
-    if (!user) return res.status(404).json({ message: 'Usuário não encontrado.' });
+    const ServiceIdSet = new Set(Services.map((svc) => String(svc._id)));
+    const productIdSet = new Set(products.map((prod) => String(prod._id)));
 
-    const comissaoPercentRaw = user.userGroup?.comissaoPercent;
-    const comissaoServicoPercentRaw = user.userGroup?.comissaoServicoPercent;
-    const comissaoPercent = sanitizeMoney(
-      typeof comissaoPercentRaw === 'string'
-        ? comissaoPercentRaw.replace('%', '').trim()
-        : comissaoPercentRaw,
-      0,
-    );
-    const comissaoServicoPercent = sanitizeMoney(
-      typeof comissaoServicoPercentRaw === 'string'
-        ? comissaoServicoPercentRaw.replace('%', '').trim()
-        : comissaoServicoPercentRaw,
-      0,
-    );
+    const historicoBase = sales.map((sale) => {
+      const items = collectSaleItems(sale);
+      let valorProdutos = 0;
+      let valorServicos = 0;
+      const itemNames = [];
 
-    const servicosHistorico = receivables.map((item) => buildServiceEntry(item, comissaoServicoPercent));
-    const produtosHistorico = comissaoPercent > 0 || comissaoServicoPercent > 0
-      ? buildProductEntries(pdvStates, user, comissaoPercent, comissaoServicoPercent)
-      : [];
+      items.forEach((item) => {
+        const total = deriveItemTotal(item);
+        const oid = extractItemObjectId(item);
+        if (oid && ServiceIdSet.has(oid)) {
+          valorServicos += total;
+        } else if (oid && productIdSet.has(oid)) {
+          valorProdutos += total;
+        } else if (item.productSnapshot || item.product || item.produto) {
+          valorProdutos += total;
+        } else {
+          valorServicos += total;
+        }
 
-    const result = {};
-    [['servicos', servicosHistorico], ['produtos', produtosHistorico]].forEach(([categoria, historico]) => {
-      const resumo = buildResumo(historico);
-      result[categoria] = {
-        resumo,
-        historico,
-        proximosPagamentos: buildProximosPagamentos(historico),
+        const name =
+          item.nome ||
+          item.descricao ||
+          item.name ||
+          item.productSnapshot?.nome ||
+          item.productSnapshot?.descricao ||
+          item.product?.nome ||
+          item.produto?.nome ||
+          '';
+        if (name) itemNames.push(name);
+      });
+
+      const vendaBase = valorProdutos;
+      const servicoBase = valorServicos;
+      const comissaoVenda = vendaBase * (comissaoPercent / 100);
+      const comissaoServico = servicoBase * (comissaoServicoPercent / 100);
+      const comissaoTotal = comissaoVenda + comissaoServico;
+
+      const createdAt = sale.createdAt ? new Date(sale.createdAt) : null;
+      const status = normalizeStatus(sale.status);
+      const paymentLabel = normalizePaymentLabel(sale);
+      const origemLabel = valorProdutos > 0 && valorServicos > 0
+        ? 'Produtos + Servicos'
+        : valorServicos > 0
+        ? 'Servicos'
+        : 'Produtos';
+
+      const descricao = itemNames.length ? itemNames.slice(0, 3).join(', ') : sale.typeLabel || 'Venda';
+      const valorVenda = deriveSaleTotal(sale) || vendaBase + servicoBase;
+
+      return {
+        _createdAt: createdAt,
+        codigo: sale.saleCode || sale.saleCodeLabel || sale.id || '',
+        data: formatDate(createdAt),
+        descricao,
+        cliente: sale.customerName || 'Cliente nao informado',
+        origem: origemLabel,
+        status,
+        comissaoVenda,
+        comissaoServico,
+        comissaoTotal,
+        valorVenda,
+        pagamento: paymentLabel,
+        valorProdutos,
+        valorServicos,
       };
     });
 
-    res.json(result);
+    // Para a tela atual (Vendas), exibimos uma linha por venda com os dois tipos de comissão.
+    const produtosView = buildViewPayload(historicoBase);
+    const servicosView = emptyView();
+
+    const response = {
+      servicos: servicosView,
+      produtos: produtosView,
+    };
+
+    if (req.query?.debug === '1') {
+      response.debug = {
+        aggregated: aggregated.length,
+        matched: sales.length,
+        servicoCount: historicoBase.filter((it) => (it.valorServicos || 0) > 0).length,
+        produtoCount: historicoBase.filter((it) => (it.valorProdutos || 0) > 0).length,
+        produtosViewCount: produtosView.historico.length,
+        servicosViewCount: servicosView.historico.length,
+      };
+    }
+
+    return res.json(response);
   } catch (error) {
-    console.error('[Comissões] Erro ao buscar comissões:', error);
-    res.status(500).json({ message: 'Erro ao buscar comissões.' });
+    console.error('[funcComissoes] Falha ao calcular comissÇœes', error);
+    return res.status(500).json({ message: 'NÇœo foi possÇðvel calcular as comissÇæes.' });
   }
 });
 
 module.exports = router;
+
+
+
+
+
+
+
+
+
+
+
+
