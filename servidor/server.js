@@ -78,6 +78,7 @@ const routes = [
 routes.push({ path: '/api/func', file: './routes/funcAgenda' });
 routes.push({ path: '/api/func', file: './routes/funcVet' });
 routes.push({ path: '/api/func', file: './routes/funcComissoes' });
+routes.push({ path: '/api', file: './routes/adminComissoesFechamentos' });
 
 // Carrega cada rota
 routes.forEach(r => app.use(r.path, require(r.file)));

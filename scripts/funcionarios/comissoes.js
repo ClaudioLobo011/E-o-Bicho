@@ -78,8 +78,12 @@
 
   function renderResumo(view, resumo = {}) {
     const prefix = view === 'produtos' ? 'produtos' : 'servicos';
-    document.getElementById(`${prefix}-total-gerado`).textContent = formatMoney(resumo.totalGerado || 0);
-    document.getElementById(`${prefix}-total-variacao`).textContent = resumo.totalGerado ? '+0%' : '--';
+    const total = parseMoney(
+      resumo.totalPrevisto ?? resumo.totalGerado ?? 0,
+      0,
+    );
+    document.getElementById(`${prefix}-total-gerado`).textContent = formatMoney(total);
+    document.getElementById(`${prefix}-total-variacao`).textContent = total ? '+0%' : '--';
     document.getElementById(`${prefix}-a-receber`).textContent = formatMoney(resumo.aReceber || 0);
     document.getElementById(`${prefix}-pagas`).textContent = formatMoney(resumo.pagas || 0);
     document.getElementById(`${prefix}-media`).textContent = formatMoney(resumo.media || 0);
@@ -138,10 +142,12 @@
   function renderHistorico(view, historico = []) {
     const body = document.getElementById(`${view}-historico-body`);
     const info = document.getElementById(`${view}-historico-info`);
+    const isServicos = view === 'servicos';
+    const colSpan = isServicos ? 8 : 9;
     body.innerHTML = '';
 
     if (!Array.isArray(historico) || !historico.length) {
-      body.innerHTML = '<tr><td colspan="9" class="px-4 py-4 text-center text-gray-500">Nenhum registro encontrado.</td></tr>';
+      body.innerHTML = `<tr><td colspan="${colSpan}" class="px-4 py-4 text-center text-gray-500">Nenhum registro encontrado.</td></tr>`;
       if (info) info.textContent = '';
       return;
     }
@@ -155,23 +161,34 @@
         item.comissaoTotal ?? item.valor ?? comissaoVenda + comissaoServico,
         0,
       );
-      row.innerHTML = `
-        <td class="px-4 py-3">${item.data || '--'}</td>
-        <td class="px-4 py-3">
+      const cells = [
+        `<td class="px-4 py-3">${item.data || '--'}</td>`,
+        `<td class="px-4 py-3">
           <p class="font-semibold text-gray-900">${item.codigo || '--'}</p>
           <p class="text-xs text-gray-500">${item.descricao || ''}</p>
-        </td>
-        <td class="px-4 py-3">${item.cliente || '--'}</td>
-        <td class="px-4 py-3">${item.origem || '--'}</td>
-        <td class="px-4 py-3">${statusBadge(item.status)}</td>
-        <td class="px-4 py-3 font-semibold text-gray-900">${formatMoney(comissaoVenda)}</td>
-        <td class="px-4 py-3 font-semibold text-gray-900">${formatMoney(comissaoServico)}</td>
-        <td class="px-4 py-3 font-semibold text-gray-900">
+        </td>`,
+        `<td class="px-4 py-3">${item.cliente || '--'}</td>`,
+        `<td class="px-4 py-3">${item.origem || '--'}</td>`,
+        `<td class="px-4 py-3">${statusBadge(item.status)}</td>`,
+      ];
+      if (!isServicos) {
+        cells.push(
+          `<td class="px-4 py-3 font-semibold text-gray-900">${formatMoney(comissaoVenda)}</td>`,
+        );
+      }
+      cells.push(
+        `<td class="px-4 py-3 font-semibold text-gray-900">${formatMoney(comissaoServico)}</td>`,
+        `<td class="px-4 py-3 font-semibold text-gray-900">
           <p>${formatMoney(comissaoTotal)}</p>
-          ${item.valorVenda ? `<p class="text-xs font-normal text-gray-500">Venda: ${formatMoney(item.valorVenda)}</p>` : ''}
-        </td>
-        <td class="px-4 py-3 text-gray-600">${item.pagamento || '--'}</td>
-      `;
+          ${
+            item.valorVenda
+              ? `<p class="text-xs font-normal text-gray-500">Venda: ${formatMoney(item.valorVenda)}</p>`
+              : ''
+          }
+        </td>`,
+        `<td class="px-4 py-3 text-gray-600">${item.pagamento || '--'}</td>`,
+      );
+      row.innerHTML = cells.join('');
       body.appendChild(row);
     });
 

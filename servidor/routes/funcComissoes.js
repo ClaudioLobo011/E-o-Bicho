@@ -7,6 +7,7 @@ const PdvState = require('../models/PdvState');
 const User = require('../models/User');
 const Product = require('../models/Product');
 const Service = require('../models/Service');
+const Appointment = require('../models/Appointment');
 const UserGroup = require('../models/UserGroup');
 
 const router = express.Router();
@@ -16,6 +17,7 @@ const DEFAULT_WINDOW_DAYS = 90;
 
 const emptyResumo = () => ({
   totalGerado: 0,
+  totalPrevisto: 0,
   aReceber: 0,
   pagas: 0,
   media: 0,
@@ -71,6 +73,40 @@ const normalizeName = (value = '') => {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .trim();
+};
+
+const SERVICE_STATUS_VALUES = new Set(['agendado', 'em_espera', 'em_atendimento', 'finalizado']);
+
+const normalizeServiceStatus = (status, fallback = 'agendado') => {
+  if (!status) return fallback;
+  const normalized = String(status)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase()
+    .replace(/[-\s]+/g, '_');
+  return SERVICE_STATUS_VALUES.has(normalized) ? normalized : fallback;
+};
+
+const isServicoFinalizado = (status) => normalizeServiceStatus(status) === 'finalizado';
+
+const pickCustomerName = (customer = {}) => {
+  if (!customer || typeof customer !== 'object') return 'Cliente nao informado';
+  const name =
+    customer.nomeCompleto ||
+    customer.nomeContato ||
+    customer.razaoSocial ||
+    customer.nomeFantasia ||
+    customer.email;
+  return name || 'Cliente nao informado';
+};
+
+const pickAppointmentCode = (appt = {}) => {
+  if (appt.codigoVenda) return String(appt.codigoVenda);
+  if (appt.saleCode) return String(appt.saleCode);
+  if (appt.codigo) return String(appt.codigo);
+  if (appt._id) return String(appt._id);
+  return '--';
 };
 
 const formatDate = (value) => {
@@ -298,9 +334,205 @@ const belongsToSeller = (sale = {}, { sellerIds, sellerCodes, operatorName }) =>
   return false;
 };
 
-const buildResumo = (records = []) => {
+const collectServicoItems = (appointment = {}) => {
+  if (!appointment || typeof appointment !== 'object') return [];
+  const items = Array.isArray(appointment.itens) ? appointment.itens : [];
+  return items.filter((item) => item && typeof item === 'object');
+};
+
+const collectServicoNomes = (appointment = {}, scopedItems = []) => {
+  const names = [];
+  const source = scopedItems.length ? scopedItems : collectServicoItems(appointment);
+  source.forEach((item) => {
+    const name = item?.servico?.nome || item?.nome || '';
+    if (name) names.push(name);
+  });
+  if (!names.length && appointment.servico?.nome) {
+    names.push(appointment.servico.nome);
+  }
+  return names;
+};
+
+const resolveServicoItemsForUser = (appointment = {}, userId = '') => {
+  const normalizedId = userId ? String(userId) : '';
+  if (!normalizedId) return { items: [], matchedByTopLevel: false };
+
+  const items = collectServicoItems(appointment);
+  const assigned = items.filter((item) => {
+    const pid = item?.profissional?._id || item?.profissional;
+    return pid && String(pid) === normalizedId;
+  });
+
+  const topMatches =
+    appointment.profissional &&
+    String(appointment.profissional?._id || appointment.profissional) === normalizedId;
+
+  if (assigned.length) return { items: assigned, matchedByTopLevel: topMatches };
+  if (topMatches) return { items, matchedByTopLevel: true };
+  return { items: [], matchedByTopLevel: false };
+};
+
+const mapAppointmentToServicoRecord = (
+  appointment = {},
+  { userId } = {},
+) => {
+  const normalizedUserId = userId ? String(userId) : '';
+  const { items, matchedByTopLevel } = resolveServicoItemsForUser(appointment, normalizedUserId);
+  if (!items.length && !matchedByTopLevel) return null;
+
+  const getItemPercent = (item) => {
+    const raw =
+      item?.servico?.grupo?.comissaoPercent ??
+      item?.servico?.comissaoPercent ??
+      item?.grupo?.comissaoPercent ??
+      item?.comissaoPercent ??
+      appointment?.servico?.grupo?.comissaoPercent ??
+      0;
+    const parsed = parseNumber(raw);
+    return parsed !== null ? parsed : 0;
+  };
+
+  const valorServico = items.length
+    ? items.reduce((sum, item) => sum + (parseNumber(item.valor) || 0), 0)
+    : parseNumber(appointment.valor) || 0;
+
+  const comissaoServico = items.length
+    ? items.reduce((sum, item) => {
+        const base = parseNumber(item.valor) || 0;
+        const percent = getItemPercent(item);
+        return sum + base * (percent / 100);
+      }, 0)
+    : valorServico * ((parseNumber(appointment?.servico?.grupo?.comissaoPercent) || 0) / 100);
+  const isFinalizado = items.length
+    ? items.every((it) => isServicoFinalizado(it.status))
+    : isServicoFinalizado(appointment.status);
+  const isPago = !!(appointment.pago || appointment.codigoVenda);
+  const aReceber = (isFinalizado && !isPago) || (isPago && !isFinalizado);
+  const servicoNomes = collectServicoNomes(appointment, items);
+  const createdAt = appointment.scheduledAt || appointment.createdAt || appointment._createdAt;
+
+  return {
+    _createdAt: createdAt ? new Date(createdAt) : null,
+    data: formatDate(createdAt),
+    codigo: pickAppointmentCode(appointment),
+    descricao: servicoNomes.join(', '),
+    cliente: pickCustomerName(appointment.cliente),
+    origem: 'Agenda de Servicos',
+    status: isFinalizado ? 'finalizado' : normalizeServiceStatus(appointment.status || 'agendado'),
+    comissaoVenda: 0,
+    comissaoServico,
+    comissaoTotal: comissaoServico,
+    valorVenda: valorServico,
+    pagamento: isPago ? 'Pago' : 'Pendente',
+    isFinalizado,
+    pago: isPago,
+    aReceber,
+  };
+};
+
+const buildServicosRecords = (appointments = [], opts = {}) => {
+  const records = [];
+  appointments.forEach((appt) => {
+    const mapped = mapAppointmentToServicoRecord(appt, opts);
+    if (mapped) records.push(mapped);
+  });
+  return records;
+};
+
+const buildServicosResumo = (records = []) => {
   const resumo = emptyResumo();
   if (!records.length) return resumo;
+
+  const totalPrevisto = records.reduce((sum, r) => sum + (parseNumber(r.comissaoTotal) || 0), 0);
+  const pagos = records.filter((r) => r.isFinalizado && r.pago);
+  const aReceber = pagos.reduce((sum, r) => sum + (parseNumber(r.comissaoTotal) || 0), 0);
+
+  const ultimaPaga = pagos
+    .slice()
+    .sort((a, b) => {
+      const da = a._createdAt ? new Date(a._createdAt).getTime() : 0;
+      const db = b._createdAt ? new Date(b._createdAt).getTime() : 0;
+      return db - da;
+    })
+    .map((r) => parseNumber(r.comissaoTotal) || 0)[0] || 0;
+
+  let diasLiberacaoSoma = 0;
+  let diasLiberacaoCount = 0;
+  pagos.forEach((r) => {
+    if (
+      r.isFinalizado &&
+      r.pago &&
+      r._createdAt instanceof Date &&
+      !Number.isNaN(r._createdAt.getTime())
+    ) {
+      const diff = Date.now() - r._createdAt.getTime();
+      diasLiberacaoSoma += diff / (1000 * 60 * 60 * 24);
+      diasLiberacaoCount += 1;
+    }
+  });
+
+  resumo.totalPrevisto = totalPrevisto;
+  resumo.totalGerado = totalPrevisto;
+  resumo.aReceber = aReceber;
+  resumo.pagas = ultimaPaga;
+  resumo.media = records.length ? totalPrevisto / records.length : 0;
+  resumo.resumoPeriodo.vendasComComissao = records.length;
+  const pagasCount = pagos.length;
+  resumo.resumoPeriodo.taxaAprovacao = records.length
+    ? Math.round((pagasCount / records.length) * 100)
+    : 0;
+  resumo.resumoPeriodo.tempoMedioLiberacao =
+    diasLiberacaoCount > 0 ? Math.round(diasLiberacaoSoma / diasLiberacaoCount) : null;
+
+  return resumo;
+};
+
+const buildServicosProximos = (records = []) => {
+  const pendentes = records
+    .filter((r) => r.aReceber)
+    .sort((a, b) => {
+      const da = a._createdAt ? new Date(a._createdAt).getTime() : 0;
+      const db = b._createdAt ? new Date(b._createdAt).getTime() : 0;
+      return da - db;
+    })
+    .slice(0, 5);
+
+  return pendentes.map((item) => ({
+    titulo: item.descricao || 'Atendimento',
+    valor: parseNumber(item.comissaoTotal) || 0,
+    status: 'pendente',
+    info: item.pagamento || 'Aguardando liberacao',
+  }));
+};
+
+const buildServicosViewPayload = (records = []) => {
+  const historico = (records || [])
+    .slice()
+    .sort((a, b) => {
+      const da = a._createdAt ? new Date(a._createdAt).getTime() : 0;
+      const db = b._createdAt ? new Date(b._createdAt).getTime() : 0;
+      return db - da;
+    })
+    .map((item) => {
+      const { _createdAt, ...rest } = item;
+      return rest;
+    });
+
+  return {
+    resumo: buildServicosResumo(records),
+    proximosPagamentos: buildServicosProximos(records),
+    historico,
+  };
+};
+
+const buildResumo = (records = [], opts = {}) => {
+  const { mode = 'default' } = opts;
+  const resumo = emptyResumo();
+  if (!records.length) return resumo;
+
+  const entries = mode === 'produtos'
+    ? records.filter((item) => normalizeStatus(item.status) !== 'cancelado')
+    : records;
 
   let total = 0;
   let aReceber = 0;
@@ -310,32 +542,53 @@ const buildResumo = (records = []) => {
   let diasLiberacaoSoma = 0;
   let diasLiberacaoCount = 0;
 
-  records.forEach((item) => {
+  entries.forEach((item) => {
     const valor = parseNumber(item.comissaoTotal) || 0;
-    total += valor;
     const status = normalizeStatus(item.status);
-    if (status === 'pago') {
-      pagas += valor;
-      aprovados += 1;
-      if (item._createdAt instanceof Date && !Number.isNaN(item._createdAt.getTime())) {
-        const diff = Date.now() - item._createdAt.getTime();
-        diasLiberacaoSoma += diff / (1000 * 60 * 60 * 24);
-        diasLiberacaoCount += 1;
-      }
-    } else if (status === 'cancelado') {
+
+    if (status === 'cancelado') {
       cancelamentos += 1;
+      return;
+    }
+
+    total += valor;
+
+    if (mode === 'produtos') {
+      if (status === 'pago') {
+        aReceber += valor; // vendas pagas (cliente), aguardando repasse
+        pagas += valor; // mantemos pagas como pago por compatibilidade
+        aprovados += 1;
+        if (item._createdAt instanceof Date && !Number.isNaN(item._createdAt.getTime())) {
+          const diff = Date.now() - item._createdAt.getTime();
+          diasLiberacaoSoma += diff / (1000 * 60 * 60 * 24);
+          diasLiberacaoCount += 1;
+        }
+      }
     } else {
-      aReceber += valor;
+      if (status === 'pago') {
+        pagas += valor;
+        aprovados += 1;
+        if (item._createdAt instanceof Date && !Number.isNaN(item._createdAt.getTime())) {
+          const diff = Date.now() - item._createdAt.getTime();
+          diasLiberacaoSoma += diff / (1000 * 60 * 60 * 24);
+          diasLiberacaoCount += 1;
+        }
+      } else if (status === 'cancelado') {
+        cancelamentos += 1;
+      } else {
+        aReceber += valor;
+      }
     }
   });
 
+  resumo.totalPrevisto = total;
   resumo.totalGerado = total;
   resumo.aReceber = aReceber;
   resumo.pagas = pagas;
-  resumo.media = records.length ? total / records.length : 0;
-  resumo.resumoPeriodo.vendasComComissao = records.length;
-  resumo.resumoPeriodo.taxaAprovacao = records.length
-    ? Math.round((aprovados / records.length) * 100)
+  resumo.media = entries.length ? total / entries.length : 0;
+  resumo.resumoPeriodo.vendasComComissao = entries.length;
+  resumo.resumoPeriodo.taxaAprovacao = entries.length
+    ? Math.round((aprovados / entries.length) * 100)
     : 0;
   resumo.resumoPeriodo.tempoMedioLiberacao =
     diasLiberacaoCount > 0 ? Math.round(diasLiberacaoSoma / diasLiberacaoCount) : null;
@@ -365,7 +618,7 @@ const buildProximos = (records = []) => {
   }));
 };
 
-const buildViewPayload = (records = []) => {
+const buildViewPayload = (records = [], opts = {}) => {
   const historico = records
     .sort((a, b) => {
       const da = a._createdAt ? a._createdAt.getTime() : 0;
@@ -378,7 +631,7 @@ const buildViewPayload = (records = []) => {
     });
 
   return {
-    resumo: buildResumo(records),
+    resumo: buildResumo(records, opts),
     proximosPagamentos: buildProximos(records),
     historico,
   };
@@ -453,14 +706,6 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
       '[funcComissoes]',
       { userId: String(user._id), dias, salesTotal: aggregated.length, salesMatched: sales.length },
     );
-
-    if (!sales.length) {
-      const payload = { servicos: emptyView(), produtos: emptyView() };
-      if (req.query?.debug === '1') {
-        payload.debug = { aggregated: aggregated.length, matched: sales.length };
-      }
-      return res.json(payload);
-    }
 
     const itemIdSet = new Set();
     sales.forEach((sale) => {
@@ -547,8 +792,51 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
     });
 
     // Para a tela atual (Vendas), exibimos uma linha por venda com os dois tipos de comissão.
-    const produtosView = buildViewPayload(historicoBase);
-    const servicosView = emptyView();
+    const produtosView = buildViewPayload(historicoBase, { mode: 'produtos' });
+
+    const serviceDateMatch = {};
+    if (startDate) serviceDateMatch.$gte = startDate;
+    if (endDate) serviceDateMatch.$lte = endDate;
+
+    const profissionalId =
+      mongoose.Types.ObjectId.isValid(String(user._id))
+        ? new mongoose.Types.ObjectId(String(user._id))
+        : null;
+
+    const serviceQuery = {};
+    if (Object.keys(serviceDateMatch).length) serviceQuery.scheduledAt = serviceDateMatch;
+    if (profissionalId) {
+      serviceQuery.$or = [
+        { profissional: profissionalId },
+        { 'itens.profissional': profissionalId },
+      ];
+    }
+
+    const appointments = profissionalId
+      ? await Appointment.find(serviceQuery)
+          .select(
+            'scheduledAt createdAt itens valor pago codigoVenda status profissional cliente servico',
+          )
+          .populate('cliente', 'nomeCompleto nomeContato razaoSocial nomeFantasia email')
+          .populate({
+            path: 'itens.servico',
+            select: 'nome grupo comissaoPercent',
+            populate: { path: 'grupo', select: 'nome comissaoPercent' },
+          })
+          .populate({
+            path: 'servico',
+            select: 'nome grupo comissaoPercent',
+            populate: { path: 'grupo', select: 'nome comissaoPercent' },
+          })
+          .lean()
+      : [];
+
+    const servicoRecords = buildServicosRecords(appointments, {
+      userId: user._id,
+      comissaoServicoPercent,
+    });
+
+    const servicosView = buildServicosViewPayload(servicoRecords);
 
     const response = {
       servicos: servicosView,
@@ -563,6 +851,7 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
         produtoCount: historicoBase.filter((it) => (it.valorProdutos || 0) > 0).length,
         produtosViewCount: produtosView.historico.length,
         servicosViewCount: servicosView.historico.length,
+        servicosFetchCount: appointments.length,
       };
     }
 
