@@ -1,0 +1,18 @@
+{
+    "sourceFile": ".gitignore",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1765481921317,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1765481921317,
+            "name": "Commit-0",
+            "content": "node_modules\r\ndist\r\nbuild\r\n.next\r\n.out\r\ncoverage\r\n.env\r\n.env.*\r\n*.log\r\n.pyc\r\n__pycache__/\r\n.DS_Store\r\n.vercel\r\n.vscode\r\n.idea\r\nThumbs.db\r\nBancoLocalViewer"
+        }
+    ]
+}

@@ -317,18 +317,19 @@ const belongsToSeller = (sale = {}, { sellerIds, sellerCodes, operatorName }) =>
     .map(normalizeDigits)
     .filter(Boolean);
 
-  const hasSellerInfo = idCandidates.some(Boolean) || codeCandidates.some(Boolean);
-
   for (const code of codeCandidates) {
     if (sellerCodes.has(code)) return true;
   }
 
-  // Somente se nÃ£o houver seller definido, cair para operador
-  if (!hasSellerInfo) {
-    const operator = normalizeName(sale.receiptSnapshot?.meta?.operador || sale.sellerName || '');
-    if (operator && operatorName && operator === operatorName) {
-      return true;
-    }
+  const operator = normalizeName(
+    sale.receiptSnapshot?.meta?.operador ||
+      sale.sellerName ||
+      seller.nome ||
+      seller.name ||
+      '',
+  );
+  if (operator && operatorName && operator === operatorName) {
+    return true;
   }
 
   return false;
@@ -679,11 +680,16 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
     if (startDate) dateMatch.$gte = startDate;
     if (endDate) dateMatch.$lte = endDate;
 
-    const pipeline = [
+    const pipeline = [];
+    if (req.query?.store && mongoose.Types.ObjectId.isValid(String(req.query.store))) {
+      pipeline.push({ $match: { empresa: new mongoose.Types.ObjectId(String(req.query.store)) } });
+    }
+
+    pipeline.push(
       { $match: { 'completedSales.0': { $exists: true } } },
       { $project: { completedSales: 1 } },
       { $unwind: '$completedSales' },
-    ];
+    );
 
     if (Object.keys(dateMatch).length) {
       pipeline.push({ $match: { 'completedSales.createdAt': dateMatch } });
@@ -728,19 +734,48 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
       const items = collectSaleItems(sale);
       let valorProdutos = 0;
       let valorServicos = 0;
+      let comissaoProdutos = 0;
+      let comissaoServicos = 0;
+      let hasItemProdPercent = false;
+      let hasItemSvcPercent = false;
       const itemNames = [];
+
+      const prodPercentDefault = comissaoPercent || 0;
+      const svcPercentDefault = comissaoServicoPercent || 0;
+      const resolvePercent = (item = {}) => {
+        const candidate =
+          item.comissaoPercent ??
+          item.comissao ??
+          item.comissaoVenda ??
+          item.comissaoVendaPercent ??
+          item.commission ??
+          item.commissionPercent ??
+          item.percentualComissao ??
+          item.percentualComissaoVenda;
+        if (candidate === undefined || candidate === null || candidate === '') return null;
+        const parsed = parseNumber(candidate);
+        return Number.isFinite(parsed) ? parsed : null;
+      };
 
       items.forEach((item) => {
         const total = deriveItemTotal(item);
         const oid = extractItemObjectId(item);
-        if (oid && ServiceIdSet.has(oid)) {
+        const isServicoId = oid && ServiceIdSet.has(oid);
+        const isProdutoId = oid && productIdSet.has(oid);
+        const isProdutoSnapshot = item.productSnapshot || item.product || item.produto;
+        const isServico = isServicoId || (!isProdutoId && !isProdutoSnapshot);
+        if (isServico) {
           valorServicos += total;
-        } else if (oid && productIdSet.has(oid)) {
-          valorProdutos += total;
-        } else if (item.productSnapshot || item.product || item.produto) {
-          valorProdutos += total;
+          const percent = resolvePercent(item);
+          const applied = percent !== null ? percent : svcPercentDefault;
+          if (percent !== null) hasItemSvcPercent = true;
+          comissaoServicos += total * (applied / 100);
         } else {
-          valorServicos += total;
+          valorProdutos += total;
+          const percent = resolvePercent(item);
+          const applied = percent !== null ? percent : prodPercentDefault;
+          if (percent !== null) hasItemProdPercent = true;
+          comissaoProdutos += total * (applied / 100);
         }
 
         const name =
@@ -757,8 +792,8 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
 
       const vendaBase = valorProdutos;
       const servicoBase = valorServicos;
-      const comissaoVenda = vendaBase * (comissaoPercent / 100);
-      const comissaoServico = servicoBase * (comissaoServicoPercent / 100);
+      const comissaoVenda = hasItemProdPercent ? comissaoProdutos : vendaBase * (comissaoPercent / 100);
+      const comissaoServico = hasItemSvcPercent ? comissaoServicos : servicoBase * (comissaoServicoPercent / 100);
       const comissaoTotal = comissaoVenda + comissaoServico;
 
       const createdAt = sale.createdAt ? new Date(sale.createdAt) : null;
@@ -863,10 +898,6 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
 });
 
 module.exports = router;
-
-
-
-
 
 
 

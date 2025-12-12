@@ -4,6 +4,7 @@
   let filteredList = [];
   let closingsData = [];
   let pendentesList = [];
+  let pendentesAllList = [];
   let stores = [];
 
   const el = (id) => document.getElementById(id);
@@ -11,16 +12,82 @@
   const formatMonthLabel = (date) =>
     date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).replace(/^./, (c) => c.toUpperCase());
 
-  function parsePeriodoMonth(item) {
-    if (item.periodoInicio) {
-      const d = new Date(item.periodoInicio);
-      return Number.isNaN(d.getTime()) ? null : d;
+  function formatInputDate(date) {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+    return date.toISOString().slice(0, 10);
+  }
+
+  function formatInputTime(date) {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+    const hh = String(date.getHours()).padStart(2, '0');
+    const mm = String(date.getMinutes()).padStart(2, '0');
+    return `${hh}:${mm}`;
+  }
+
+  function formatDateNoTZ(value) {
+    if (!value) return '--';
+
+    // Para strings (com ou sem horário), pegamos apenas a parte YYYY-MM-DD e formatamos manualmente.
+    if (typeof value === 'string') {
+      const match = value.match(/(\d{4})-(\d{2})-(\d{2})/);
+      if (match) {
+        const [, y, m, d] = match;
+        return `${d}/${m}/${y}`;
+      }
     }
-    const match = /(\d{2})\/(\d{2})\/(\d{4})/.exec(String(item.periodo || ''));
-    if (!match) return null;
-    const [, dd, mm, yyyy] = match;
-    const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
-    return Number.isNaN(d.getTime()) ? null : d;
+
+    // Para Date (ou timestamp), usamos componentes UTC para evitar deslocamento de fuso.
+    const d = value instanceof Date ? value : new Date(value);
+    if (!(d instanceof Date) || Number.isNaN(d.getTime())) return '--';
+    const year = d.getUTCFullYear();
+    const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    return `${day}/${month}/${year}`;
+  }
+
+  function setPeriodoDefaults(refDate = new Date()) {
+    const start = new Date(refDate.getFullYear(), refDate.getMonth(), 1);
+    const end = new Date(refDate.getFullYear(), refDate.getMonth() + 1, 0);
+    currentMonth = new Date(refDate.getFullYear(), refDate.getMonth(), 1);
+    const ini = el('filtro-inicio');
+    const fim = el('filtro-fim');
+    if (ini) ini.value = formatInputDate(start);
+    if (fim) fim.value = formatInputDate(end);
+    atualizaMesLabel();
+  }
+
+  function toYmd(value) {
+    if (!value) return '';
+    // Quando vier com horário (ISO completo), usamos a data local (getFullYear/getMonth/getDate)
+    // para evitar avanços/retrocessos de dia por causa de fuso.
+    if (typeof value === 'string') {
+      if (value.includes('T')) {
+        const d = new Date(value);
+        if (!Number.isNaN(d.getTime())) {
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          return `${y}-${m}-${day}`;
+        }
+      }
+      const m = value.match(/(\d{4})-(\d{2})-(\d{2})/);
+      if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+    }
+    const d = value instanceof Date ? value : new Date(value);
+    if (!(d instanceof Date) || Number.isNaN(d.getTime())) return '';
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  function toDateParamMidday(date) {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    // Coloca meio-dia para evitar mudança de dia por fuso quando o backend normaliza para 00:00
+    return `${y}-${m}-${d}T12:00:00`;
   }
 
   function renderKpis(list) {
@@ -69,8 +136,8 @@
     tbody.innerHTML = '';
 
     if (!list.length) {
-      if (card) card.classList.add('hidden');
-      tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-4 text-center text-gray-500">Nenhum fechamento encontrado.</td></tr>';
+      if (card) card.classList.remove('hidden');
+      tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-4 text-center text-gray-500">Nenhum fechamento encontrado.</td></tr>';
       if (info) info.textContent = '0 registros';
       return;
     }
@@ -81,47 +148,131 @@
       tr.className = 'hover:bg-gray-50';
       tr.innerHTML = `
         <td class="px-4 py-3">
-          <p class="font-semibold text-gray-900">${item.profissionalNome || item.profissional || '—'}</p>
-          <p class="text-xs text-gray-500">${item.storeNome || '—'}</p>
+          <p class="font-semibold text-gray-900">${item.profissionalNome || item.profissional || '--'}</p>
+          <p class="text-xs text-gray-500">${item.storeNome || '--'}</p>
         </td>
-        <td class="px-4 py-3">${item.tipo || 'Vendas/Serviços'}</td>
+        <td class="px-4 py-3">${item.tipo || 'Vendas/Servicos'}</td>
         <td class="px-4 py-3 text-gray-700">${item.periodo || formatPeriodo(item)}</td>
         <td class="px-4 py-3 font-semibold text-gray-900">${formatMoney(item.previsto || item.totalPeriodo || 0)}</td>
         <td class="px-4 py-3 font-semibold text-gray-900">${formatMoney(item.pago || item.totalPago || 0)}</td>
         <td class="px-4 py-3">${statusBadge(item.status)}</td>
         <td class="px-4 py-3 text-gray-700">
-          <p>${item.proximo || item.meioPagamento || '—'}</p>
-          <p class="text-xs text-gray-500">Prev: ${item.previsaoPagamento ? new Date(item.previsaoPagamento).toLocaleDateString('pt-BR') : '—'}</p>
+          <p>${item.proximo || item.meioPagamento || '--'}</p>
+          <p class="text-xs text-gray-500">Prev: ${item.previsaoPagamento ? new Date(item.previsaoPagamento).toLocaleDateString('pt-BR') : '--'}</p>
+        </td>
+        <td class="px-4 py-3">
+          <button
+            class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 fechar-repasse"
+            data-profissional="${item.profissional || ''}"
+            data-inicio="${toYmd(item.periodoInicio) || ''}"
+            data-fim="${toYmd(item.periodoFim) || ''}"
+          >
+            <i class="fas fa-lock"></i>
+            Fechar
+          </button>
         </td>
       `;
       tbody.appendChild(tr);
     });
 
     if (info) info.textContent = `Mostrando ${list.length} registro(s)`;
-  }
 
-  function renderCardsPendentes(list) {
-    const wrap = el('cards-pendentes');
-    if (!wrap) return;
-    wrap.innerHTML = '';
-
-    const pendentes = new Map();
-    list.forEach((item) => {
-      const vendas = item.pendenteVendas ?? item.totalVendas ?? 0;
-      const servicos = item.pendenteServicos ?? item.totalServicos ?? 0;
-      const falta = (item.pendente ?? item.totalPendente ?? (vendas + servicos)) || 0;
-      if (falta <= 0) return;
-      const key = item.profissionalNome || item.profissional || 'Sem nome';
-      pendentes.set(key, {
-        vendas,
-        servicos,
+    tbody.querySelectorAll('.fechar-repasse').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const profissionalId = btn.getAttribute('data-profissional') || '';
+        const inicio = btn.getAttribute('data-inicio') || '';
+        const fim = btn.getAttribute('data-fim') || '';
+        preencherModalFechamento(profissionalId, inicio, fim);
+        openModal();
       });
     });
+  }
 
-    if (!pendentes.size) {
-      wrap.innerHTML = '<div class="col-span-full text-center text-gray-500 text-sm">Nenhuma comissão pendente.</div>';
-      return;
+function preencherModalFechamento(profissionalId, inicio, fim) {
+    const funcionarioSelect = el('fechamento-funcionario');
+    if (funcionarioSelect && profissionalId) {
+      funcionarioSelect.value = profissionalId;
     }
+    const inicioInput = el('fechamento-inicio');
+    const fimInput = el('fechamento-fim');
+    const toInputValue = (val) => {
+      if (!val) return '';
+      if (typeof val === 'string') {
+        const m = val.match(/(\d{4})-(\d{2})-(\d{2})/);
+        if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+      }
+      const d = val instanceof Date ? val : new Date(val);
+      return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
+    };
+    if (inicioInput && inicio) inicioInput.value = toInputValue(inicio);
+    if (fimInput && fim) fimInput.value = toInputValue(fim);
+    atualizaModalKpis();
+  }
+
+function renderCardsPendentes(list) {
+  const wrap = el('cards-pendentes');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+
+  const parseVal = (value) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+  };
+
+    const pickValor = (item, keys) => {
+      for (const key of keys) {
+        if (Object.prototype.hasOwnProperty.call(item, key)) {
+          const val = parseVal(item[key]);
+          if (val) return val;
+        }
+    }
+    return 0;
+  };
+
+  // Usa lista histórica completa (todos os períodos) se já carregada.
+  const source = pendentesAllList.length ? pendentesAllList : list;
+
+  const pendentes = new Map();
+  source.forEach((item) => {
+    const servicos = pickValor(item, [
+      'pendenteServicos',
+      'totalServicos',
+      'comissaoServicos',
+      'comissaoServico',
+        'aReceberServicos',
+        'valorServicos',
+      ]);
+      let vendas = pickValor(item, [
+        'pendenteVendas',
+        'totalVendas',
+        'comissaoVendas',
+        'comissaoVenda',
+        'aReceberVendas',
+        'totalProdutos',
+        'pendenteProdutos',
+        'valorProdutos',
+      ]);
+
+      const total = parseVal(item.pendente ?? item.totalPendente ?? vendas + servicos);
+
+      // Se vendas nÇõo vier preenchido mas o total estÇ combinando, calcula diferenÃ§a.
+      if (!vendas && total && servicos && total > servicos) {
+        vendas = total - servicos;
+      }
+
+      if (total <= 0 && vendas <= 0 && servicos <= 0) return;
+      const key = item.profissionalNome || item.profissional || 'Sem nome';
+      const atual = pendentes.get(key) || { vendas: 0, servicos: 0 };
+      pendentes.set(key, {
+        vendas: atual.vendas + vendas,
+        servicos: atual.servicos + servicos,
+      });
+  });
+
+  if (!pendentes.size) {
+    wrap.innerHTML = '<div class="col-span-full text-center text-gray-500 text-sm">Nenhuma comissão pendente.</div>';
+    return;
+  }
 
     Array.from(pendentes.entries()).forEach(([nome, valores]) => {
       const card = document.createElement('div');
@@ -147,34 +298,44 @@
   }
 
   function getPeriodoRange() {
-    const val = el('filtro-periodo')?.value || 'mes';
+    const parseDate = (value) => {
+      if (!value) return null;
+      if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        const [y, m, d] = value.split('-').map((v) => Number(v));
+        const dt = new Date(y, m - 1, d, 0, 0, 0, 0); // interpreta como data local sem deslocar fuso
+        return Number.isNaN(dt.getTime()) ? null : dt;
+      }
+      const d = new Date(value);
+      return Number.isNaN(d.getTime()) ? null : d;
+    };
+    const inicio = parseDate(el('filtro-inicio')?.value);
+    const fim = parseDate(el('filtro-fim')?.value);
     const now = new Date();
-    let days = 30;
-    if (val === 'trim') days = 90;
-    if (val === 'ano') days = 365;
-    const start = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+    const start = inicio || new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = fim || new Date(now.getFullYear(), now.getMonth() + 1, 0);
     start.setHours(0, 0, 0, 0);
-    const end = new Date();
     end.setHours(23, 59, 59, 999);
     return { start, end };
   }
 
   function formatPeriodo(item) {
     if (item.periodoInicio) {
-      const ini = new Date(item.periodoInicio);
-      const fim = item.periodoFim ? new Date(item.periodoFim) : ini;
-      const iniStr = !Number.isNaN(ini.getTime()) ? ini.toLocaleDateString('pt-BR') : '—';
-      const fimStr = !Number.isNaN(fim.getTime()) ? fim.toLocaleDateString('pt-BR') : '—';
+      const iniStr = formatDateNoTZ(item.periodoInicio);
+      const fimStr = item.periodoFim ? formatDateNoTZ(item.periodoFim) : iniStr;
       return `${iniStr} a ${fimStr}`;
     }
-    return item.periodo || '—';
+    return item.periodo || '--';
   }
 
   function filtraPorMes(list) {
+    const { start, end } = getPeriodoRange();
     return list.filter((item) => {
-      const d = parsePeriodoMonth(item);
-      if (!d) return true;
-      return d.getMonth() === currentMonth.getMonth() && d.getFullYear() === currentMonth.getFullYear();
+      const ini = item.periodoInicio ? new Date(item.periodoInicio) : null;
+      const fim = item.periodoFim ? new Date(item.periodoFim) : ini;
+      if (!ini && !fim) return true;
+      const iniTime = ini ? ini.getTime() : 0;
+      const fimTime = fim ? fim.getTime() : iniTime;
+      return !(fimTime < start.getTime() || iniTime > end.getTime());
     });
   }
 
@@ -184,7 +345,7 @@
     const store = el('empresa-select')?.value || '';
 
     let base = closingsData.length ? closingsData : [];
-    let filtrados = filtraPorMes(base.slice());
+    let filtrados = base.slice();
     if (status) {
       filtrados = filtrados.filter((item) => String(item.status).toLowerCase() === status);
     }
@@ -210,27 +371,39 @@
     el('btn-limpar')?.addEventListener('click', () => {
       if (el('filtro-status')) el('filtro-status').value = '';
       if (el('filtro-busca')) el('filtro-busca').value = '';
+      setPeriodoDefaults(new Date());
+      fetchFechamentos();
+      fetchPendentes();
       aplicaFiltros();
+    });
+    el('filtro-inicio')?.addEventListener('change', () => {
+      const { start } = getPeriodoRange();
+      currentMonth = start || new Date();
+      atualizaMesLabel();
+      fetchFechamentos();
+      fetchPendentes();
+    });
+    el('filtro-fim')?.addEventListener('change', () => {
+      fetchFechamentos();
+      fetchPendentes();
     });
     el('mes-anterior')?.addEventListener('click', () => {
-      currentMonth.setMonth(currentMonth.getMonth() - 1);
-      atualizaMesLabel();
-      aplicaFiltros();
+      const newDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
+      setPeriodoDefaults(newDate);
+      fetchFechamentos();
+      fetchPendentes();
     });
     el('mes-proximo')?.addEventListener('click', () => {
-      currentMonth.setMonth(currentMonth.getMonth() + 1);
-      atualizaMesLabel();
-      aplicaFiltros();
+      const newDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
+      setPeriodoDefaults(newDate);
+      fetchFechamentos();
+      fetchPendentes();
     });
     el('btn-novo-fechamento')?.addEventListener('click', openModal);
     document.querySelectorAll('[data-fechamento-close]')?.forEach((btn) =>
       btn.addEventListener('click', closeModal)
     );
     el('fechamento-salvar')?.addEventListener('click', salvarFechamento);
-    el('filtro-periodo')?.addEventListener('change', () => {
-      fetchPendentes();
-      aplicaFiltros();
-    });
     el('empresa-select')?.addEventListener('change', () => {
       fetchFechamentos();
       fetchPendentes();
@@ -247,6 +420,14 @@
     if (!modal) return;
     modal.classList.remove('hidden');
     document.body.classList.add('overflow-hidden');
+
+    // Preenche previsão de pagamento com data/hora atual ao abrir
+    const now = new Date();
+    const prevData = el('fechamento-prev');
+    const prevHora = el('fechamento-prev-hora');
+    if (prevData) prevData.value = formatInputDate(now);
+    if (prevHora) prevHora.value = formatInputTime(now);
+
     atualizaModalKpis();
   }
 
@@ -258,17 +439,53 @@
   }
 
   function atualizaModalKpis() {
-    const base = filteredList.length ? filteredList : [];
-    const totalPendente = base.reduce(
-      (sum, item) => sum + (item.pendente ?? item.totalPendente ?? Math.max((item.previsto || 0) - (item.pago || 0), 0)),
-      0,
-    );
-    const totalPeriodo = base.reduce((sum, item) => sum + (item.previsto || item.totalPeriodo || 0), 0);
+    const funcionarioId = el('fechamento-funcionario')?.value || '';
+
+    const parseDateInput = (value) => {
+      if (!value) return null;
+      if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        const [y, m, d] = value.split('-').map((v) => Number(v));
+        const dt = new Date(y, m - 1, d);
+        return Number.isNaN(dt.getTime()) ? null : dt;
+      }
+      const dt = new Date(value);
+      return Number.isNaN(dt.getTime()) ? null : dt;
+    };
+
+    const inicio = parseDateInput(el('fechamento-inicio')?.value);
+    const fim = parseDateInput(el('fechamento-fim')?.value);
+
+    // KPI Total (não pagos): soma do pendente do profissional selecionado
+    const pendenteBase =
+      (pendentesAllList.length ? pendentesAllList : pendentesList).filter(
+        (p) => !funcionarioId || String(p.profissional) === String(funcionarioId),
+      );
+
+    const pendenteFuncionario = pendenteBase.reduce((sum, p) => {
+      const base =
+        p.totalPendente ??
+        (p.pendenteServicos || 0) + (p.pendenteVendas || 0) ??
+        Math.max((p.totalPeriodo || 0) - (p.totalPago || 0), 0);
+      return sum + (Number(base) || 0);
+    }, 0);
+
+    // KPI Total período: soma dos fechamentos do período para o profissional selecionado
+    const totalPeriodo = closingsData
+      .filter((item) => {
+        if (funcionarioId && String(item.profissional) !== String(funcionarioId)) return false;
+        if (!inicio || !fim) return true;
+        const iniItem = item.periodoInicio ? new Date(item.periodoInicio) : null;
+        const fimItem = item.periodoFim ? new Date(item.periodoFim) : iniItem;
+        if (!iniItem || !fimItem || Number.isNaN(iniItem) || Number.isNaN(fimItem)) return true;
+        return !(fimItem < inicio || iniItem > fim);
+      })
+      .reduce((sum, item) => sum + (item.previsto || item.totalPeriodo || 0), 0);
+
     const set = (id, value) => {
       const node = el(id);
       if (node) node.textContent = value;
     };
-    set('fechamento-kpi-pendente', formatMoney(totalPendente));
+    set('fechamento-kpi-pendente', formatMoney(pendenteFuncionario));
     set('fechamento-kpi-periodo', formatMoney(totalPeriodo));
   }
 
@@ -281,7 +498,13 @@
       stores = Array.isArray(data) ? data : [];
       const select = el('empresa-select');
       if (select) {
-        select.innerHTML = '<option value="">Todas</option>' + stores.map((s) => `<option value="${s._id}">${s.nome}</option>`).join('');
+        if (!stores.length) {
+          select.innerHTML = '<option value="">Nenhuma empresa disponível</option>';
+          select.value = '';
+        } else {
+          select.innerHTML = stores.map((s) => `<option value="${s._id}">${s.nome}</option>`).join('');
+          select.value = stores[0]?._id || '';
+        }
       }
     } catch (e) {
       console.error('fetchStores', e);
@@ -317,8 +540,11 @@
   async function fetchFechamentos() {
     try {
       const store = el('empresa-select')?.value || '';
+      const { start, end } = getPeriodoRange();
       const params = new URLSearchParams();
       if (store) params.set('store', store);
+      if (start) params.set('start', toDateParamMidday(start));
+      if (end) params.set('end', toDateParamMidday(end));
       const resp = await fetch(`${API_CONFIG.BASE_URL}/admin/comissoes/fechamentos?${params.toString()}`, {
         headers: authHeaders(),
       });
@@ -334,25 +560,40 @@
     }
   }
 
-  async function fetchPendentes() {
+  async function fetchPendentes({ all = false } = {}) {
     try {
       const store = el('empresa-select')?.value || '';
       const { start, end } = getPeriodoRange();
       const params = new URLSearchParams();
       if (store) params.set('store', store);
-      params.set('start', start.toISOString());
-      params.set('end', end.toISOString());
+      if (!all) {
+        params.set('start', toDateParamMidday(start));
+        params.set('end', toDateParamMidday(end));
+      } else {
+        // busca histórica ampla
+        params.set('start', '2000-01-01T12:00:00');
+        params.set('end', toDateParamMidday(new Date()));
+      }
       const resp = await fetch(
         `${API_CONFIG.BASE_URL}/admin/comissoes/fechamentos/pendentes?${params.toString()}`,
         { headers: authHeaders() },
       );
       const data = await resp.json();
-      pendentesList = Array.isArray(data) ? data : [];
-      renderCardsPendentes(pendentesList);
+      const parsed = Array.isArray(data) ? data : [];
+      if (all) {
+        pendentesAllList = parsed;
+      } else {
+        pendentesList = parsed;
+        renderCardsPendentes(pendentesList);
+      }
     } catch (e) {
       console.error('fetchPendentes', e);
-      pendentesList = [];
-      renderCardsPendentes([]);
+      if (all) {
+        pendentesAllList = [];
+      } else {
+        pendentesList = [];
+        renderCardsPendentes([]);
+      }
     }
   }
 
@@ -361,6 +602,7 @@
     const inicio = el('fechamento-inicio')?.value || '';
     const fim = el('fechamento-fim')?.value || '';
     const previsao = el('fechamento-prev')?.value || '';
+    const previsaoHora = el('fechamento-prev-hora')?.value || '';
     const meio = el('fechamento-meio')?.value || '';
     const store = el('empresa-select')?.value || '';
     if (!funcionario || !inicio || !fim) {
@@ -378,7 +620,7 @@
           profissionalId: funcionario,
           inicio,
           fim,
-          previsaoPagamento: previsao || null,
+          previsaoPagamento: previsao ? `${previsao}${previsaoHora ? `T${previsaoHora}` : ''}` : null,
           meioPagamento: meio || '',
           storeId: store || null,
         }),
@@ -406,11 +648,15 @@
   }
 
   function init() {
+    setPeriodoDefaults(new Date());
     atualizaMesLabel();
     bindActions();
-    fetchStores().then(() => fetchFechamentos());
+    fetchStores().then(() => {
+      fetchFechamentos();
+      fetchPendentes();
+      fetchPendentes({ all: true });
+    });
     fetchFuncionarios();
-    fetchPendentes();
   }
 
   if (document.readyState === 'loading') {

@@ -29,9 +29,7 @@
               <label class="flex items-center gap-2 text-sm text-gray-700">
                 <span class="text-xs font-semibold uppercase tracking-wide text-gray-500">Empresa</span>
                 <select id="empresa-select" class="rounded-lg border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-primary focus:ring-primary">
-                  <option value="">Todas</option>
-                  <option value="empresa-1">Empresa 1</option>
-                  <option value="empresa-2">Empresa 2</option>
+                  <option value="">Selecione</option>
                 </select>
               </label>
               <button id="btn-novo-fechamento" class="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white shadow hover:bg-primary/90">
@@ -96,14 +94,13 @@
                       <option value="pago">Pago</option>
                     </select>
                   </label>
-                  <label class="text-sm text-gray-700">
+                  <div class="text-sm text-gray-700">
                     <span class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Período</span>
-                    <select id="filtro-periodo" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-primary focus:ring-primary">
-                      <option value="mes">Últimos 30 dias</option>
-                      <option value="trim">Últimos 90 dias</option>
-                      <option value="ano">Ano atual</option>
-                    </select>
-                  </label>
+                    <div class="grid grid-cols-2 gap-2">
+                      <input id="filtro-inicio" type="date" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-primary focus:ring-primary">
+                      <input id="filtro-fim" type="date" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-primary focus:ring-primary">
+                    </div>
+                  </div>
                   <label class="text-sm text-gray-700">
                     <span class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Busca</span>
                     <div class="relative">
@@ -170,11 +167,12 @@
                       <th class="px-4 py-3 text-left">Pago</th>
                       <th class="px-4 py-3 text-left">Status</th>
                       <th class="px-4 py-3 text-left">Próximo passo</th>
+                      <th class="px-4 py-3 text-left">Ações</th>
                     </tr>
                   </thead>
                   <tbody id="fechamento-tbody" class="divide-y divide-gray-100 bg-white text-sm text-gray-700">
                     <tr>
-                      <td colspan="7" class="px-4 py-4 text-center text-gray-500">Carregando...</td>
+                      <td colspan="8" class="px-4 py-4 text-center text-gray-500">Carregando...</td>
                     </tr>
                   </tbody>
                 </table>
@@ -251,12 +249,16 @@
             </article>
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <label class="text-sm text-gray-700">
+          <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
+            <label class="text-sm text-gray-700 md:col-span-5">
               <span class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Previsão de pagamento</span>
               <input id="fechamento-prev" type="date" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-primary focus:ring-primary">
             </label>
-            <label class="text-sm text-gray-700">
+            <label class="text-sm text-gray-700 md:col-span-3">
+              <span class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Hora</span>
+              <input id="fechamento-prev-hora" type="time" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-primary focus:ring-primary">
+            </label>
+            <label class="text-sm text-gray-700 md:col-span-4">
               <span class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Meio de pagamento</span>
               <select id="fechamento-meio" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-primary focus:ring-primary">
                 <option value="">Selecione</option>
