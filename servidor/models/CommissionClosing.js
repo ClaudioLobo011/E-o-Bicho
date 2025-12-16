@@ -16,6 +16,7 @@ const CommissionClosingSchema = new Schema(
     totalPago: { type: Number, default: 0 },
     previsaoPagamento: { type: Date, default: null },
     meioPagamento: { type: String, trim: true, default: '' },
+    payable: { type: Schema.Types.ObjectId, ref: 'AccountPayable', default: null },
     status: {
       type: String,
       enum: ['pendente', 'agendado', 'pago'],

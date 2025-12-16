@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
   const API_BASE =
     (typeof API_CONFIG !== 'undefined' && API_CONFIG && API_CONFIG.BASE_URL) || '/api';
   const PAYABLES_API = `${API_BASE}/accounts-payable`;
@@ -28,7 +28,6 @@
     currentEditing: null,
     isSaving: false,
     agenda: {
-      rangeDays: 7,
       loading: false,
       periodStart: null,
       periodEnd: null,
@@ -40,7 +39,7 @@
         paidThisMonth: { totalValue: 0, installments: 0 },
       },
       items: [],
-      emptyMessage: 'Nenhum pagamento previsto para o período selecionado.',
+      emptyMessage: 'Nenhum pagamento previsto para o perÃ­odo selecionado.',
       filterStatus: 'all',
     },
   };
@@ -73,7 +72,9 @@
     saveButton: document.getElementById('payable-save'),
     clearButton: document.getElementById('payable-clear'),
     carrierList: document.getElementById('carrier-bank-list'),
-    agendaRange: document.getElementById('agenda-range'),
+    agendaStart: document.getElementById('agenda-start'),
+    agendaEnd: document.getElementById('agenda-end'),
+    agendaApply: document.getElementById('agenda-apply'),
     agendaPeriodLabel: document.getElementById('agenda-period-label'),
     agendaUpcomingValue: document.getElementById('agenda-upcoming-value'),
     agendaUpcomingCount: document.getElementById('agenda-upcoming-count'),
@@ -203,11 +204,32 @@
 
   function parseDateInputValue(value) {
     if (!value) return null;
-    const [year, month, day] = String(value).split('-').map((part) => Number.parseInt(part, 10));
-    if (!year || !month || !day) return null;
-    const date = new Date(Date.UTC(year, month - 1, day));
-    if (Number.isNaN(date.getTime())) return null;
-    return date;
+    const trimmed = String(value).trim();
+    if (!trimmed) return null;
+
+    // ISO (yyyy-mm-dd)
+    const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (isoMatch) {
+      const [, y, m, d] = isoMatch.map((part) => Number.parseInt(part, 10));
+      if (y && m && d) {
+        const date = new Date(Date.UTC(y, m - 1, d));
+        if (!Number.isNaN(date.getTime())) return date;
+      }
+    }
+
+    // BR (dd/mm/yyyy)
+    const brMatch = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (brMatch) {
+      const [, d, m, y] = brMatch.map((part) => Number.parseInt(part, 10));
+      if (y && m && d) {
+        const date = new Date(Date.UTC(y, m - 1, d));
+        if (!Number.isNaN(date.getTime())) return date;
+      }
+    }
+
+    const parsed = new Date(trimmed);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate()));
   }
 
   function formatDateInputValue(value) {
@@ -443,7 +465,7 @@
     if (!elements.saveButton) return;
     if (isEditing) {
       elements.saveButton.innerHTML =
-        '<i class="fas fa-pen-to-square"></i> Atualizar lançamento';
+        '<i class="fas fa-pen-to-square"></i> Atualizar lanÃ§amento';
     } else if (originalSaveButtonHTML) {
       elements.saveButton.innerHTML = originalSaveButtonHTML;
     }
@@ -635,13 +657,13 @@
       });
       if (!response.ok) {
         if (response.status === 404) {
-          throw new Error('Conta a pagar não encontrada.');
+          throw new Error('Conta a pagar nÃ£o encontrada.');
         }
         if (response.status === 401) {
-          notify('Sua sessão expirou. Faça login novamente para continuar.', 'error');
+          notify('Sua sessÃ£o expirou. FaÃ§a login novamente para continuar.', 'error');
         }
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData?.message || `Erro ao carregar o lançamento (${response.status}).`);
+        throw new Error(errorData?.message || `Erro ao carregar o lanÃ§amento (${response.status}).`);
       }
       const data = await response.json();
       const normalized = normalizePayable(data);
@@ -657,7 +679,7 @@
 
   function updateAgendaPeriodLabel() {
     if (!elements.agendaPeriodLabel) return;
-    const { periodStart, periodEnd, rangeDays } = state.agenda;
+    const { periodStart, periodEnd } = state.agenda;
     if (periodStart instanceof Date && periodEnd instanceof Date) {
       const startValid = !Number.isNaN(periodStart.getTime());
       const endValid = !Number.isNaN(periodEnd.getTime());
@@ -666,10 +688,7 @@
         return;
       }
     }
-    const range = Number.isFinite(rangeDays) && rangeDays > 0
-      ? rangeDays
-      : Number.parseInt(elements.agendaRange?.value || '7', 10) || 7;
-    elements.agendaPeriodLabel.textContent = `Pagamentos nos próximos ${range} dias`;
+    elements.agendaPeriodLabel.textContent = 'Selecione um periodo para filtrar a agenda';
   }
 
   function renderAgendaSummary() {
@@ -748,7 +767,7 @@
             'Nenhum pagamento encontrado para o filtro selecionado.';
         } else {
           elements.agendaEmpty.textContent =
-            state.agenda.emptyMessage || 'Nenhum pagamento previsto para o período selecionado.';
+            state.agenda.emptyMessage || 'Nenhum pagamento previsto para o perÃ­odo selecionado.';
         }
         elements.agendaEmpty.classList.remove('hidden');
       }
@@ -967,7 +986,7 @@
       }
       const data = await response.json();
       if (!Array.isArray(data)) {
-        throw new Error('Lista de bancos inválida');
+        throw new Error('Lista de bancos invÃ¡lida');
       }
       state.banks = data
         .filter((item) => item && item.code && item.name)
@@ -975,7 +994,7 @@
       populateBanksList(state.banks);
     } catch (error) {
       console.error('accounts-payable:loadBanks', error);
-      notify('Não foi possível carregar a lista de bancos para o campo portador.', 'warning');
+      notify('NÃ£o foi possÃ­vel carregar a lista de bancos para o campo portador.', 'warning');
     }
   }
 
@@ -991,9 +1010,12 @@
       state.companies = Array.isArray(data?.companies) ? data.companies : [];
       const options = state.companies.map((company) => ({
         value: company._id,
-        label: company.document ? `${company.name} • ${company.document}` : company.name,
+        label: company.document ? `${company.name} â€¢ ${company.document}` : company.name,
       }));
-      setSelectOptions(elements.company, options, options.length ? 'Selecione a empresa responsável' : 'Nenhuma empresa encontrada');
+      const placeholder = options.length
+        ? 'Selecione a empresa respons\u00e1vel'
+        : 'Nenhuma empresa vinculada ao seu usu\u00e1rio';
+      setSelectOptions(elements.company, options, placeholder);
     } catch (error) {
       console.error('accounts-payable:loadCompanies', error);
       notify(error.message || 'Erro ao carregar as empresas.', 'error');
@@ -1011,7 +1033,7 @@
 
     try {
       setLoadingSelect(elements.bankAccount, 'Carregando contas correntes...');
-      setLoadingSelect(elements.ledgerAccount, 'Carregando contas contábeis...');
+      setLoadingSelect(elements.ledgerAccount, 'Carregando contas contÃ¡beis...');
       setLoadingSelect(elements.paymentMethod, 'Carregando meios de pagamento...');
 
       const response = await fetch(`${PAYABLES_API}/options?company=${companyId}`, {
@@ -1019,7 +1041,7 @@
       });
       if (!response.ok) {
         if (response.status === 401) {
-          notify('Sua sessão expirou. Faça login novamente.', 'error');
+          notify('Sua sessÃ£o expirou. FaÃ§a login novamente.', 'error');
         }
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData?.message || `Erro ao carregar dados da empresa (${response.status})`);
@@ -1044,7 +1066,7 @@
       setSelectOptions(
         elements.ledgerAccount,
         state.ledgerAccounts,
-        state.ledgerAccounts.length ? 'Selecione a conta contábil' : 'Nenhuma conta contábil disponível'
+        state.ledgerAccounts.length ? 'Selecione a conta contÃ¡bil' : 'Nenhuma conta contÃ¡bil disponÃ­vel'
       );
       setSelectOptions(
         elements.paymentMethod,
@@ -1053,9 +1075,9 @@
       );
     } catch (error) {
       console.error('accounts-payable:loadCompanyResources', error);
-      notify(error.message || 'Não foi possível carregar os dados da empresa.', 'error');
+      notify(error.message || 'NÃ£o foi possÃ­vel carregar os dados da empresa.', 'error');
       setSelectOptions(elements.bankAccount, [], 'Nenhuma conta corrente encontrada');
-      setSelectOptions(elements.ledgerAccount, [], 'Nenhuma conta contábil disponível');
+      setSelectOptions(elements.ledgerAccount, [], 'Nenhuma conta contÃ¡bil disponÃ­vel');
       setSelectOptions(elements.paymentMethod, [], 'Nenhum meio de pagamento cadastrado');
     }
   }
@@ -1089,7 +1111,7 @@
       if (item.document) parts.push(item.document);
       if (item.email) parts.push(item.email);
       if (item.mobile) parts.push(item.mobile);
-      meta.textContent = parts.join(' • ');
+      meta.textContent = parts.join(' â€¢ ');
       button.appendChild(title);
       if (parts.length) button.appendChild(meta);
       button.addEventListener('click', () => {
@@ -1120,7 +1142,7 @@
       });
       if (!response.ok) {
         if (response.status === 401) {
-          notify('Sua sessão expirou. Faça login novamente para buscar clientes e fornecedores.', 'error');
+          notify('Sua sessÃ£o expirou. FaÃ§a login novamente para buscar clientes e fornecedores.', 'error');
         }
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData?.message || `Erro ao buscar clientes e fornecedores (${response.status})`);
@@ -1130,7 +1152,7 @@
       renderPartySuggestions(state.partySuggestions);
     } catch (error) {
       console.error('accounts-payable:fetchPartySuggestions', error);
-      notify(error.message || 'Não foi possível buscar clientes e fornecedores.', 'error');
+      notify(error.message || 'NÃ£o foi possÃ­vel buscar clientes e fornecedores.', 'error');
     }
   }
 
@@ -1289,7 +1311,7 @@
     state.previewInstallments.splice(index, 1);
     state.previewInstallments.forEach((installment, idx) => {
       if (installment && typeof installment === 'object') {
-        // Garante numeração sequencial após remoções
+        // Garante numeraÃ§Ã£o sequencial apÃ³s remoÃ§Ãµes
         // eslint-disable-next-line no-param-reassign
         installment.number = idx + 1;
       }
@@ -1347,7 +1369,7 @@
       event.preventDefault();
     }
     if (state.isSaving) {
-      notify('Aguarde o término do salvamento antes de limpar o formulário.', 'warning');
+      notify('Aguarde o tÃ©rmino do salvamento antes de limpar o formulÃ¡rio.', 'warning');
       return;
     }
 
@@ -1368,10 +1390,10 @@
       await loadCompanyResources('');
       state.agenda.filterStatus = 'all';
       await loadAgenda();
-      notify('Formulário limpo para um novo lançamento.', 'info');
+      notify('FormulÃ¡rio limpo para um novo lanÃ§amento.', 'info');
     } catch (error) {
       console.error('accounts-payable:handleClearForm', error);
-      notify('Formulário limpo, mas não foi possível recarregar todos os dados auxiliares.', 'warning');
+      notify('FormulÃ¡rio limpo, mas nÃ£o foi possÃ­vel recarregar todos os dados auxiliares.', 'warning');
     }
   }
 
@@ -1494,8 +1516,8 @@
 
         const descriptionCell = document.createElement('td');
         descriptionCell.className = 'px-4 py-3 text-sm text-gray-700';
-        const installmentLabel = installment.number ? ` • Parcela ${installment.number}` : '';
-        descriptionCell.textContent = `${payable.code || 'Título'}${installmentLabel}`;
+        const installmentLabel = installment.number ? ` â€¢ Parcela ${installment.number}` : '';
+        descriptionCell.textContent = `${payable.code || 'TÃ­tulo'}${installmentLabel}`;
         row.appendChild(descriptionCell);
 
         const documentCell = document.createElement('td');
@@ -1625,19 +1647,19 @@
 
   async function handleEditPayable(payableId, installmentNumber) {
     if (!payableId) {
-      notify('Não foi possível identificar o lançamento selecionado.', 'warning');
+      notify('NÃ£o foi possÃ­vel identificar o lanÃ§amento selecionado.', 'warning');
       return;
     }
     try {
       const payable = await fetchPayableById(payableId, { force: true });
       if (!payable) {
-        notify('Conta a pagar não encontrada.', 'error');
+        notify('Conta a pagar nÃ£o encontrada.', 'error');
         return;
       }
       await enterEditMode(payable, { focusInstallmentNumber: installmentNumber || null });
-      notify('Lançamento carregado para edição.', 'info');
+      notify('LanÃ§amento carregado para ediÃ§Ã£o.', 'info');
     } catch (error) {
-      notify(error.message || 'Não foi possível carregar o lançamento selecionado.', 'error');
+      notify(error.message || 'NÃ£o foi possÃ­vel carregar o lanÃ§amento selecionado.', 'error');
     }
   }
 
@@ -1658,10 +1680,10 @@
     }
     if (!response.ok) {
       if (response.status === 401) {
-        notify('Sua sessão expirou. Faça login novamente para excluir o lançamento.', 'error');
+        notify('Sua sessÃ£o expirou. FaÃ§a login novamente para excluir o lanÃ§amento.', 'error');
       }
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData?.message || `Erro ao excluir o lançamento (${response.status}).`);
+      throw new Error(errorData?.message || `Erro ao excluir o lanÃ§amento (${response.status}).`);
     }
     const data = await response.json();
     return data;
@@ -1669,19 +1691,19 @@
 
   async function handleDeletePayable(payableId, installmentNumber) {
     if (!payableId) {
-      notify('Não foi possível identificar o lançamento selecionado.', 'warning');
+      notify('NÃ£o foi possÃ­vel identificar o lanÃ§amento selecionado.', 'warning');
       return;
     }
     try {
       const payable = await fetchPayableById(payableId, { force: false });
       if (!payable) {
-        notify('Conta a pagar não encontrada.', 'error');
+        notify('Conta a pagar nÃ£o encontrada.', 'error');
         return;
       }
 
       const confirmRemoval = await confirmDialog({
-        title: 'Excluir lançamento',
-        message: 'Deseja realmente excluir este lançamento de contas a pagar?',
+        title: 'Excluir lanÃ§amento',
+        message: 'Deseja realmente excluir este lanÃ§amento de contas a pagar?',
         confirmText: 'Excluir',
         cancelText: 'Cancelar',
       });
@@ -1693,7 +1715,7 @@
         const deleteAll = await confirmDialog({
           title: 'Excluir parcelas',
           message:
-            'Excluir todas as parcelas deste lançamento? Escolha "Excluir todas" para remover o título completo ou "Somente esta" para remover apenas a parcela atual.',
+            'Excluir todas as parcelas deste lanÃ§amento? Escolha "Excluir todas" para remover o tÃ­tulo completo ou "Somente esta" para remover apenas a parcela atual.',
           confirmText: 'Excluir todas',
           cancelText: 'Somente esta',
         });
@@ -1702,7 +1724,7 @@
           await performDeletePayable(payableId, { deleteAll: true });
           removePayableFromCache(payableId);
           exitEditMode(state.currentEditing?.id === payableId);
-          notify('Lançamento excluído com sucesso.', 'success');
+          notify('LanÃ§amento excluÃ­do com sucesso.', 'success');
         } else {
           const confirmSingle = await confirmDialog({
             title: 'Excluir parcela',
@@ -1723,31 +1745,31 @@
             if (state.currentEditing?.id === payableId) {
               await enterEditMode(normalized, { focusInstallmentNumber: null });
             }
-            notify('Parcela excluída com sucesso.', 'success');
+            notify('Parcela excluÃ­da com sucesso.', 'success');
           } else {
             removePayableFromCache(payableId);
             exitEditMode(state.currentEditing?.id === payableId);
-            notify('Lançamento excluído.', 'success');
+            notify('LanÃ§amento excluÃ­do.', 'success');
           }
         }
       } else {
         await performDeletePayable(payableId, { deleteAll: true });
         removePayableFromCache(payableId);
         exitEditMode(state.currentEditing?.id === payableId);
-        notify('Lançamento excluído com sucesso.', 'success');
+        notify('LanÃ§amento excluÃ­do com sucesso.', 'success');
       }
 
       await loadAgenda();
       await loadHistory();
     } catch (error) {
       console.error('accounts-payable:handleDeletePayable', error);
-      notify(error.message || 'Não foi possível excluir o lançamento selecionado.', 'error');
+      notify(error.message || 'NÃ£o foi possÃ­vel excluir o lanÃ§amento selecionado.', 'error');
     }
   }
 
   async function updateInstallmentStatus(payableId, installmentNumber, targetStatus) {
     if (!payableId || !Number.isFinite(installmentNumber)) {
-      throw new Error('Parcela inválida para atualização.');
+      throw new Error('Parcela invÃ¡lida para atualizaÃ§Ã£o.');
     }
 
     const url = `${PAYABLES_API}/${payableId}/installments/${installmentNumber}/status`;
@@ -1759,7 +1781,7 @@
 
     if (!response.ok) {
       if (response.status === 401) {
-        notify('Sua sessão expirou. Faça login novamente para atualizar o status.', 'error');
+        notify('Sua sessÃ£o expirou. FaÃ§a login novamente para atualizar o status.', 'error');
       }
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData?.message || `Erro ao atualizar o status (${response.status}).`);
@@ -1775,7 +1797,7 @@
 
   async function handleInstallmentStatusAction(context, targetStatus) {
     if (!context?.payableId || !Number.isFinite(context.installmentNumber)) {
-      notify('Não foi possível identificar a parcela selecionada.', 'warning');
+      notify('NÃ£o foi possÃ­vel identificar a parcela selecionada.', 'warning');
       return;
     }
 
@@ -1882,10 +1904,10 @@
       });
       if (!response.ok) {
         if (response.status === 401) {
-          notify('Sua sessão expirou. Faça login novamente para carregar o histórico.', 'error');
+          notify('Sua sessÃ£o expirou. FaÃ§a login novamente para carregar o histÃ³rico.', 'error');
         }
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData?.message || `Erro ao carregar histórico (${response.status})`);
+        throw new Error(errorData?.message || `Erro ao carregar histÃ³rico (${response.status})`);
       }
       const data = await response.json();
       const payables = Array.isArray(data?.payables) ? data.payables.map(normalizePayable) : [];
@@ -1894,22 +1916,54 @@
       renderHistory();
     } catch (error) {
       console.error('accounts-payable:loadHistory', error);
-      notify(error.message || 'Erro ao carregar o histórico de contas a pagar.', 'error');
+      notify(error.message || 'Erro ao carregar o histÃ³rico de contas a pagar.', 'error');
     }
   }
 
+
   async function loadAgenda() {
-    const selectedRange = Number.parseInt(elements.agendaRange?.value || '', 10);
-    const rangeDays = Number.isFinite(selectedRange) && selectedRange > 0 ? selectedRange : state.agenda.rangeDays || 7;
-    state.agenda.rangeDays = rangeDays;
+    const DEFAULT_RANGE_DAYS = 30;
+    const rawStart = parseDateInputValue(elements.agendaStart?.value);
+    const rawEnd = parseDateInputValue(elements.agendaEnd?.value);
+
+    let periodStart = rawStart;
+    let periodEnd = rawEnd;
+
+    if (!periodStart && !periodEnd) {
+      const today = new Date();
+      periodStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+      periodEnd = new Date(periodStart);
+      periodEnd.setUTCDate(periodEnd.getUTCDate() + (DEFAULT_RANGE_DAYS - 1));
+    } else if (periodStart && !periodEnd) {
+      periodEnd = new Date(periodStart);
+      periodEnd.setUTCDate(periodEnd.getUTCDate() + (DEFAULT_RANGE_DAYS - 1));
+    } else if (!periodStart && periodEnd) {
+      periodStart = new Date(periodEnd);
+      periodStart.setUTCDate(periodStart.getUTCDate() - (DEFAULT_RANGE_DAYS - 1));
+    }
+
+    if (elements.agendaStart && periodStart) {
+      elements.agendaStart.value = formatDateInputValue(periodStart);
+    }
+    if (elements.agendaEnd && periodEnd) {
+      elements.agendaEnd.value = formatDateInputValue(periodEnd);
+    }
+
+    state.agenda.periodStart = periodStart;
+    state.agenda.periodEnd = periodEnd;
 
     state.agenda.loading = true;
-    state.agenda.emptyMessage = 'Nenhum pagamento previsto para o período selecionado.';
+    state.agenda.emptyMessage = 'Nenhum pagamento previsto para o periodo selecionado.';
     renderAgenda();
 
     try {
       const params = new URLSearchParams();
-      params.set('range', String(rangeDays));
+      if (periodStart) {
+        params.set('start', formatDateInputValue(periodStart));
+      }
+      if (periodEnd) {
+        params.set('end', formatDateInputValue(periodEnd));
+      }
       const companyId = elements.company?.value;
       if (companyId) {
         params.set('company', companyId);
@@ -1919,7 +1973,7 @@
       });
       if (!response.ok) {
         if (response.status === 401) {
-          notify('Sua sessão expirou. Faça login novamente para visualizar a agenda de pagamentos.', 'error');
+          notify('Sua sessao expirou. Faca login novamente para visualizar a agenda de pagamentos.', 'error');
         }
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData?.message || `Erro ao carregar a agenda de pagamentos (${response.status})`);
@@ -1950,39 +2004,32 @@
             })
         : [];
 
-      if (Number.isFinite(data?.rangeDays) && data.rangeDays > 0) {
-        state.agenda.rangeDays = data.rangeDays;
-        if (elements.agendaRange) {
-          const matchingOption = Array.from(elements.agendaRange.options || []).find(
-            (option) => Number.parseInt(option.value, 10) === data.rangeDays
-          );
-          if (matchingOption) {
-            elements.agendaRange.value = matchingOption.value;
-          }
-        }
-      }
+      const apiPeriodStart = data?.periodStart ? new Date(data.periodStart) : null;
+      const apiPeriodEnd = data?.periodEnd ? new Date(data.periodEnd) : null;
 
-      state.agenda.periodStart = data?.periodStart ? new Date(data.periodStart) : null;
-      state.agenda.periodEnd = data?.periodEnd ? new Date(data.periodEnd) : null;
+      state.agenda.periodStart =
+        apiPeriodStart instanceof Date && !Number.isNaN(apiPeriodStart.getTime()) ? apiPeriodStart : periodStart;
+      state.agenda.periodEnd =
+        apiPeriodEnd instanceof Date && !Number.isNaN(apiPeriodEnd.getTime()) ? apiPeriodEnd : periodEnd;
 
       const computedSummary = buildAgendaSummaryFromItems(mappedItems, {
         periodStart: state.agenda.periodStart,
         periodEnd: state.agenda.periodEnd,
       });
 
-      const overrideKeys = mappedItems.length ? ['upcoming', 'pending', 'protest', 'cancelled'] : [];
+      const overrideKeys = ['upcoming', 'pending', 'protest', 'cancelled'];
       state.agenda.summary = mergeAgendaSummaries(apiSummary, computedSummary, { overrideKeys });
 
       state.agenda.items = mappedItems;
       renderAgenda();
     } catch (error) {
       console.error('accounts-payable:loadAgenda', error);
-      notify(error.message || 'Não foi possível carregar a agenda de pagamentos.', 'error');
+      notify(error.message || 'Nao foi possivel carregar a agenda de pagamentos.', 'error');
       state.agenda.summary = createEmptyAgendaSummary();
       state.agenda.items = [];
       state.agenda.periodStart = null;
       state.agenda.periodEnd = null;
-      state.agenda.emptyMessage = 'Não foi possível carregar a agenda de pagamentos.';
+      state.agenda.emptyMessage = 'Nao foi possivel carregar a agenda de pagamentos.';
       renderAgenda();
     } finally {
       state.agenda.loading = false;
@@ -1999,7 +2046,7 @@
     if (event) event.preventDefault();
     const preview = buildInstallmentsPreview();
     if (!preview.length) {
-      notify('Informe valor, emissão, vencimento e quantidade de parcelas para gerar a pré-visualização.', 'warning');
+      notify('Informe valor, emissÃ£o, vencimento e quantidade de parcelas para gerar a prÃ©-visualizaÃ§Ã£o.', 'warning');
       renderPreview();
       return;
     }
@@ -2030,7 +2077,7 @@
 
     const companyId = elements.company?.value;
     if (!companyId) {
-      notify('Selecione a empresa de origem do lançamento.', 'warning');
+      notify('Selecione a empresa de origem do lanÃ§amento.', 'warning');
       elements.company?.focus();
       return;
     }
@@ -2038,12 +2085,12 @@
     const bankAccountId = elements.bankAccount?.value;
     const ledgerAccountId = elements.ledgerAccount?.value;
     if (!bankAccountId || !ledgerAccountId) {
-      notify('Selecione a conta corrente e a conta contábil antes de salvar.', 'warning');
+      notify('Selecione a conta corrente e a conta contÃ¡bil antes de salvar.', 'warning');
       return;
     }
 
     if (!state.previewInstallments.length) {
-      notify('Gere e ajuste as parcelas antes de salvar o lançamento.', 'warning');
+      notify('Gere e ajuste as parcelas antes de salvar o lanÃ§amento.', 'warning');
       return;
     }
 
@@ -2051,7 +2098,7 @@
     const totalFromInstallments = installments.reduce((acc, item) => acc + parseCurrency(item.value), 0);
     const totalValue = parseCurrency(elements.totalAmount?.value);
     if (Math.abs(totalValue - totalFromInstallments) > 0.01) {
-      notify('O valor total deve ser igual à soma das parcelas.', 'warning');
+      notify('O valor total deve ser igual Ã  soma das parcelas.', 'warning');
       return;
     }
 
@@ -2091,7 +2138,7 @@
       });
       if (!response.ok) {
         if (response.status === 401) {
-          notify('Sua sessão expirou. Faça login novamente para salvar o lançamento.', 'error');
+          notify('Sua sessÃ£o expirou. FaÃ§a login novamente para salvar o lanÃ§amento.', 'error');
         }
         const errorData = await response.json().catch(() => ({}));
         throw new Error(
@@ -2121,7 +2168,7 @@
       await loadAgenda();
     } catch (error) {
       console.error('accounts-payable:handleSave', error);
-      notify(error.message || 'Não foi possível salvar a conta a pagar.', 'error');
+      notify(error.message || 'NÃ£o foi possÃ­vel salvar a conta a pagar.', 'error');
     } finally {
       state.isSaving = false;
       elements.saveButton?.classList.remove('opacity-70', 'pointer-events-none');
@@ -2189,9 +2236,9 @@
         installment.accountingAccount = selected;
       });
     });
-    elements.agendaRange?.addEventListener('change', () => {
-      loadAgenda();
-    });
+    elements.agendaStart?.addEventListener('change', () => loadAgenda());
+    elements.agendaEnd?.addEventListener('change', () => loadAgenda());
+    elements.agendaApply?.addEventListener('click', () => loadAgenda());
     elements.agendaFilters?.addEventListener('click', handleAgendaFilterClick);
     elements.agendaTableBody?.addEventListener('click', handleAgendaTableClick);
     elements.historyBody?.addEventListener('click', handleHistoryTableClick);
@@ -2214,3 +2261,4 @@
 
   document.addEventListener('DOMContentLoaded', initialize);
 })();
+

@@ -24,6 +24,27 @@ const normalizeString = (value) => {
 
 const normalizeLower = (value) => normalizeString(value).toLowerCase();
 
+const resolveUserStoreAccess = async (userId) => {
+  if (!userId) return { allowedStoreIds: [], allowAllStores: false };
+  const user = await User.findById(userId).select('empresaPrincipal empresas role').lean();
+  if (!user) return { allowedStoreIds: [], allowAllStores: false };
+
+  const markedCompanies = Array.isArray(user.empresas)
+    ? user.empresas
+        .map((id) => (mongoose.Types.ObjectId.isValid(id) ? String(id) : null))
+        .filter(Boolean)
+    : [];
+
+  const allowedStoreIds =
+    markedCompanies.length > 0
+      ? Array.from(new Set(markedCompanies))
+      : user.empresaPrincipal && mongoose.Types.ObjectId.isValid(user.empresaPrincipal)
+      ? [String(user.empresaPrincipal)]
+      : [];
+
+  return { allowedStoreIds, allowAllStores: false };
+};
+
 function normalizeStatusToken(value) {
   if (typeof value !== 'string') return '';
   const trimmed = value.trim();
@@ -118,8 +139,30 @@ const parseDate = (value) => {
   if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
   const normalized = normalizeString(value);
   if (!normalized) return null;
+
+  // ISO yyyy-mm-dd or yyyy/mm/dd
+  const isoMatch = normalized.match(/^(\d{4})[-/](\d{2})[-/](\d{2})$/);
+  if (isoMatch) {
+    const [, y, m, d] = isoMatch.map((part) => Number.parseInt(part, 10));
+    const parsed = new Date(Date.UTC(y, m - 1, d));
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  // BR dd/mm/yyyy
+  const brMatch = normalized.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (brMatch) {
+    const [, d, m, y] = brMatch.map((part) => Number.parseInt(part, 10));
+    const parsed = new Date(Date.UTC(y, m - 1, d));
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
   const parsed = new Date(normalized);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const startOfDayUTC = (date) => {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 };
 
 const formatCurrency = (value) => Math.round(Number(value || 0) * 100) / 100;
@@ -537,8 +580,23 @@ router.get(
   async (req, res) => {
     try {
       const { company } = req.query;
+      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req.user?.id);
+      const allowedCompanyIds = allowAllStores
+        ? null
+        : allowedStoreIds.map((id) => String(id)).filter(Boolean);
+
+      const companyAllowed =
+        allowAllStores ||
+        !company ||
+        (Array.isArray(allowedCompanyIds) &&
+          allowedCompanyIds.length > 0 &&
+          allowedCompanyIds.includes(String(company)));
 
       if (company && mongoose.Types.ObjectId.isValid(company)) {
+        if (!companyAllowed) {
+          return res.status(403).json({ message: 'Você não tem acesso à empresa selecionada.' });
+        }
+
         const [bankAccounts, accountingAccounts, paymentMethods] = await Promise.all([
           BankAccount.find({ company })
             .sort({ alias: 1, bankName: 1 })
@@ -564,13 +622,30 @@ router.get(
             name: method.name,
             type: method.type,
           })),
+          allowedCompanyIds: allowAllStores ? null : allowedCompanyIds,
         });
       }
 
-      const companies = await Store.find({}, 'nome nomeFantasia razaoSocial cnpj')
-        .sort({ nomeFantasia: 1, nome: 1 });
+      if (!allowAllStores && (!Array.isArray(allowedCompanyIds) || allowedCompanyIds.length === 0)) {
+        return res.json({
+          allowedCompanyIds: [],
+          companies: [],
+        });
+      }
+
+      const companyFilter = allowAllStores
+        ? {}
+        : allowedCompanyIds.length
+          ? { _id: { $in: allowedCompanyIds } }
+          : { _id: { $in: [] } };
+
+      const companies = await Store.find(companyFilter, 'nome nomeFantasia razaoSocial cnpj').sort({
+        nomeFantasia: 1,
+        nome: 1,
+      });
 
       res.json({
+        allowedCompanyIds: allowAllStores ? null : allowedCompanyIds,
         companies: companies.map((companyDoc) => ({
           _id: companyDoc._id,
           name: buildCompanyName(companyDoc),
@@ -673,18 +748,74 @@ router.get(
   authorizeRoles(...AUTH_ROLES),
   async (req, res) => {
     try {
-      const rangeDays = clampAgendaRange(req.query.range);
+      const defaultRangeDays = clampAgendaRange(req.query.range ?? 30);
+      const MS_PER_DAY = 24 * 60 * 60 * 1000;
       const match = {};
       const { company } = req.query;
+      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req.user?.id);
 
       if (company && mongoose.Types.ObjectId.isValid(company)) {
+        const allowed =
+          allowAllStores ||
+          (Array.isArray(allowedStoreIds) && allowedStoreIds.length > 0 && allowedStoreIds.includes(String(company)));
+        if (!allowed) {
+          return res.status(403).json({ message: 'Você não tem acesso à empresa selecionada.' });
+        }
         match.company = company;
+      } else if (!allowAllStores) {
+        if (Array.isArray(allowedStoreIds) && allowedStoreIds.length > 0) {
+          match.company = { $in: allowedStoreIds };
+        } else {
+          return res.json({
+            rangeDays: defaultRangeDays,
+            periodStart: null,
+            periodEnd: null,
+            summary: {
+              upcoming: { totalValue: 0, installments: 0 },
+              pending: { totalValue: 0, installments: 0 },
+              paidThisMonth: { totalValue: 0, installments: 0 },
+            },
+            items: [],
+          });
+        }
       }
 
+      const rawStart = startOfDayUTC(parseDate(req.query.start));
+      const rawEnd = startOfDayUTC(parseDate(req.query.end));
+
       const now = new Date();
-      const periodStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-      const periodEndExclusive = new Date(periodStart);
-      periodEndExclusive.setUTCDate(periodEndExclusive.getUTCDate() + rangeDays);
+      const todayUtc = startOfDayUTC(now);
+
+      let periodStart = rawStart;
+      let periodEndExclusive = rawEnd ? new Date(rawEnd) : null;
+      if (periodEndExclusive) {
+        periodEndExclusive.setUTCDate(periodEndExclusive.getUTCDate() + 1);
+      }
+
+      let rangeDays = defaultRangeDays;
+
+      if (periodStart && periodEndExclusive) {
+        if (periodEndExclusive <= periodStart) {
+          periodEndExclusive = new Date(periodStart);
+          periodEndExclusive.setUTCDate(periodEndExclusive.getUTCDate() + defaultRangeDays);
+          rangeDays = defaultRangeDays;
+        } else {
+          rangeDays = Math.max(1, Math.round((periodEndExclusive - periodStart) / MS_PER_DAY));
+        }
+      } else if (periodStart && !periodEndExclusive) {
+        periodEndExclusive = new Date(periodStart);
+        periodEndExclusive.setUTCDate(periodEndExclusive.getUTCDate() + defaultRangeDays);
+        rangeDays = defaultRangeDays;
+      } else if (!periodStart && periodEndExclusive) {
+        periodStart = new Date(periodEndExclusive);
+        periodStart.setUTCDate(periodStart.getUTCDate() - defaultRangeDays);
+        rangeDays = defaultRangeDays;
+      } else {
+        periodStart = todayUtc;
+        periodEndExclusive = new Date(periodStart);
+        periodEndExclusive.setUTCDate(periodEndExclusive.getUTCDate() + defaultRangeDays);
+        rangeDays = defaultRangeDays;
+      }
 
       const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
       const monthEndExclusive = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));

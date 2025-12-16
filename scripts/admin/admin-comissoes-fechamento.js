@@ -1,10 +1,14 @@
-(function () {
+﻿(function () {
   const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
   let currentMonth = new Date();
   let filteredList = [];
   let closingsData = [];
   let pendentesList = [];
   let pendentesAllList = [];
+  let configAccounts = [];
+  let configSelected = null;
+  let configBankAccounts = [];
+  let configBankSelected = null;
   let stores = [];
 
   const el = (id) => document.getElementById(id);
@@ -36,12 +40,12 @@
       }
     }
 
-    // Para Date (ou timestamp), usamos componentes UTC para evitar deslocamento de fuso.
+    // Para Date (ou timestamp), usamos componentes locais para manter o dia visivel igual ao escolhido.
     const d = value instanceof Date ? value : new Date(value);
     if (!(d instanceof Date) || Number.isNaN(d.getTime())) return '--';
-    const year = d.getUTCFullYear();
-    const month = String(d.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(d.getUTCDate()).padStart(2, '0');
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
     return `${day}/${month}/${year}`;
   }
 
@@ -146,6 +150,39 @@
     list.forEach((item) => {
       const tr = document.createElement('tr');
       tr.className = 'hover:bg-gray-50';
+      const isSynthetic = !item.id || String(item.id).startsWith('dyn-');
+      const previsto = Number(item.previsto || item.totalPeriodo || 0);
+      const actionButtons = isSynthetic
+        ? `
+          <button
+            class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 fechar-repasse"
+            data-profissional="${item.profissional || ''}"
+            data-inicio="${toYmd(item.periodoInicio) || ''}"
+            data-fim="${toYmd(item.periodoFim) || ''}"
+          >
+            <i class="fas fa-lock"></i>
+            Fechar
+          </button>
+        `
+        : `
+          <div class="flex flex-wrap gap-2">
+            <button
+              class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 btn-pagar"
+              data-id="${item.id}"
+              data-total="${previsto}"
+            >
+              <i class="fas fa-money-check-alt"></i>
+              Pagar
+            </button>
+            <button
+              class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 btn-reabrir"
+              data-id="${item.id}"
+            >
+              <i class="fas fa-rotate-left"></i>
+              Reabrir
+            </button>
+          </div>
+        `;
       tr.innerHTML = `
         <td class="px-4 py-3">
           <p class="font-semibold text-gray-900">${item.profissionalNome || item.profissional || '--'}</p>
@@ -161,15 +198,7 @@
           <p class="text-xs text-gray-500">Prev: ${item.previsaoPagamento ? new Date(item.previsaoPagamento).toLocaleDateString('pt-BR') : '--'}</p>
         </td>
         <td class="px-4 py-3">
-          <button
-            class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 fechar-repasse"
-            data-profissional="${item.profissional || ''}"
-            data-inicio="${toYmd(item.periodoInicio) || ''}"
-            data-fim="${toYmd(item.periodoFim) || ''}"
-          >
-            <i class="fas fa-lock"></i>
-            Fechar
-          </button>
+          ${actionButtons}
         </td>
       `;
       tbody.appendChild(tr);
@@ -184,6 +213,23 @@
         const fim = btn.getAttribute('data-fim') || '';
         preencherModalFechamento(profissionalId, inicio, fim);
         openModal();
+      });
+    });
+
+    tbody.querySelectorAll('.btn-pagar').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id') || '';
+        const total = Number(btn.getAttribute('data-total') || '0');
+        if (!id) return;
+        marcarFechamentoPago(id, total);
+      });
+    });
+
+    tbody.querySelectorAll('.btn-reabrir').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id') || '';
+        if (!id) return;
+        reabrirFechamento(id);
       });
     });
   }
@@ -219,85 +265,96 @@ function renderCardsPendentes(list) {
     return Number.isFinite(n) ? n : 0;
   };
 
-    const pickValor = (item, keys) => {
-      for (const key of keys) {
-        if (Object.prototype.hasOwnProperty.call(item, key)) {
-          const val = parseVal(item[key]);
-          if (val) return val;
-        }
+  const pickValor = (item, keys) => {
+    for (const key of keys) {
+      if (Object.prototype.hasOwnProperty.call(item, key)) {
+        const val = parseVal(item[key]);
+        if (val) return val;
+      }
     }
     return 0;
   };
 
-  // Usa lista histórica completa (todos os períodos) se já carregada.
-  const source = pendentesAllList.length ? pendentesAllList : list;
+  const source = pendentesAllList.length ? pendentesAllList : Array.isArray(list) ? list : [];
 
   const pendentes = new Map();
   source.forEach((item) => {
-    const servicos = pickValor(item, [
+    let servicos = pickValor(item, [
       'pendenteServicos',
+      'aReceberServicos',
       'totalServicos',
       'comissaoServicos',
       'comissaoServico',
-        'aReceberServicos',
-        'valorServicos',
-      ]);
-      let vendas = pickValor(item, [
-        'pendenteVendas',
-        'totalVendas',
-        'comissaoVendas',
-        'comissaoVenda',
-        'aReceberVendas',
-        'totalProdutos',
-        'pendenteProdutos',
-        'valorProdutos',
-      ]);
+      'valorServicos',
+    ]);
+    let vendas = pickValor(item, [
+      'pendenteVendas',
+      'aReceberVendas',
+      'totalVendas',
+      'comissaoVendas',
+      'comissaoVenda',
+      'totalProdutos',
+      'pendenteProdutos',
+      'valorProdutos',
+    ]);
 
-      const total = parseVal(item.pendente ?? item.totalPendente ?? vendas + servicos);
+    const totalPend = parseVal(item.pendente ?? item.totalPendente ?? 0);
+    const totalPeriodo = parseVal(item.totalPeriodo ?? 0);
+    const totalPago = parseVal(item.totalPago ?? 0);
+    const fallbackPend = Math.max(totalPeriodo - totalPago, 0);
+    const pendTotal = totalPend || fallbackPend || vendas + servicos;
 
-      // Se vendas nÇõo vier preenchido mas o total estÇ combinando, calcula diferenÃ§a.
-      if (!vendas && total && servicos && total > servicos) {
-        vendas = total - servicos;
-      }
+    if (!vendas && pendTotal && servicos && pendTotal > servicos) {
+      vendas = pendTotal - servicos;
+    }
+    if (!servicos && vendas && pendTotal > vendas) {
+      const residual = pendTotal - vendas;
+      servicos = residual > 0 ? residual : 0;
+    }
+    if (!vendas && !servicos && pendTotal) {
+      vendas = pendTotal;
+    }
 
-      if (total <= 0 && vendas <= 0 && servicos <= 0) return;
-      const key = item.profissionalNome || item.profissional || 'Sem nome';
-      const atual = pendentes.get(key) || { vendas: 0, servicos: 0 };
-      pendentes.set(key, {
-        vendas: atual.vendas + vendas,
-        servicos: atual.servicos + servicos,
-      });
+    const total = parseVal((vendas || 0) + (servicos || 0));
+    if (total <= 0 && vendas <= 0 && servicos <= 0) return;
+
+    const key = item.profissionalNome || item.profissional || 'Sem nome';
+    const atual = pendentes.get(key) || { vendas: 0, servicos: 0 };
+    pendentes.set(key, {
+      vendas: atual.vendas + (vendas || 0),
+      servicos: atual.servicos + (servicos || 0),
+    });
   });
 
   if (!pendentes.size) {
-    wrap.innerHTML = '<div class="col-span-full text-center text-gray-500 text-sm">Nenhuma comissão pendente.</div>';
+    wrap.innerHTML = '<div class="col-span-full text-center text-gray-500 text-sm">Nenhuma comissao pendente.</div>';
     return;
   }
 
-    Array.from(pendentes.entries()).forEach(([nome, valores]) => {
-      const card = document.createElement('div');
-      card.className = 'rounded-xl border border-gray-100 bg-white p-4 shadow-sm flex flex-col gap-2';
-      card.innerHTML = `
-        <div class="flex items-center justify-between">
-          <p class="font-semibold text-gray-800">${nome}</p>
-          <span class="text-xs font-semibold uppercase tracking-wide text-amber-600">Pendente</span>
+  Array.from(pendentes.entries()).forEach(([nome, valores]) => {
+    const card = document.createElement('div');
+    card.className = 'rounded-xl border border-gray-100 bg-white p-4 shadow-sm flex flex-col gap-2';
+    card.innerHTML = `
+      <div class="flex items-center justify-between">
+        <p class="font-semibold text-gray-800">${nome}</p>
+        <span class="text-xs font-semibold uppercase tracking-wide text-amber-600">Pendente</span>
+      </div>
+      <div class="grid grid-cols-2 gap-2 text-sm">
+        <div class="rounded-lg bg-amber-50 px-3 py-2">
+          <p class="text-xs uppercase tracking-wide text-amber-700 font-semibold">Comissao Vendas</p>
+          <p class="text-base font-bold text-amber-900">${formatMoney(valores.vendas)}</p>
         </div>
-        <div class="grid grid-cols-2 gap-2 text-sm">
-          <div class="rounded-lg bg-amber-50 px-3 py-2">
-            <p class="text-xs uppercase tracking-wide text-amber-700 font-semibold">Comissão Vendas</p>
-            <p class="text-base font-bold text-amber-900">${formatMoney(valores.vendas)}</p>
-          </div>
-          <div class="rounded-lg bg-blue-50 px-3 py-2">
-            <p class="text-xs uppercase tracking-wide text-blue-700 font-semibold">Comissão Serviços</p>
-            <p class="text-base font-bold text-blue-900">${formatMoney(valores.servicos)}</p>
-          </div>
+        <div class="rounded-lg bg-blue-50 px-3 py-2">
+          <p class="text-xs uppercase tracking-wide text-blue-700 font-semibold">Comissao Servicos</p>
+          <p class="text-base font-bold text-blue-900">${formatMoney(valores.servicos)}</p>
         </div>
-      `;
-      wrap.appendChild(card);
-    });
-  }
+      </div>
+    `;
+    wrap.appendChild(card);
+  });
+}
 
-  function getPeriodoRange() {
+function getPeriodoRange() {
     const parseDate = (value) => {
       if (!value) return null;
       if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -382,37 +439,142 @@ function renderCardsPendentes(list) {
       atualizaMesLabel();
       fetchFechamentos();
       fetchPendentes();
+      fetchPendentes({ all: true });
     });
     el('filtro-fim')?.addEventListener('change', () => {
       fetchFechamentos();
       fetchPendentes();
+      fetchPendentes({ all: true });
     });
     el('mes-anterior')?.addEventListener('click', () => {
       const newDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
       setPeriodoDefaults(newDate);
       fetchFechamentos();
       fetchPendentes();
+      fetchPendentes({ all: true });
     });
     el('mes-proximo')?.addEventListener('click', () => {
       const newDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
       setPeriodoDefaults(newDate);
       fetchFechamentos();
       fetchPendentes();
+      fetchPendentes({ all: true });
     });
     el('btn-novo-fechamento')?.addEventListener('click', openModal);
+    el('btn-configuracoes')?.addEventListener('click', openConfigModal);
     document.querySelectorAll('[data-fechamento-close]')?.forEach((btn) =>
       btn.addEventListener('click', closeModal)
     );
+    document.querySelectorAll('[data-config-close]')?.forEach((btn) =>
+      btn.addEventListener('click', closeConfigModal)
+    );
     el('fechamento-salvar')?.addEventListener('click', salvarFechamento);
+    el('config-salvar')?.addEventListener('click', salvarConfig);
     el('empresa-select')?.addEventListener('change', () => {
       fetchFechamentos();
       fetchPendentes();
+      fetchPendentes({ all: true });
+      const store = el('empresa-select')?.value || '';
+      if (store) loadConfigForStore(store);
     });
   }
 
   function atualizaMesLabel() {
     const label = el('mes-label');
     if (label) label.textContent = formatMonthLabel(currentMonth);
+  }
+
+  async function loadConfigForStore(storeId) {
+    if (!storeId) return;
+    try {
+      const resp = await fetch(`${API_CONFIG.BASE_URL}/admin/comissoes/config/data?store=${storeId}`, {
+        headers: authHeaders(),
+      });
+      const data = await resp.json();
+      configAccounts = Array.isArray(data?.accounts) ? data.accounts : [];
+      configSelected = data?.config?.accountingAccount || '';
+      configBankAccounts = Array.isArray(data?.bankAccounts) ? data.bankAccounts : [];
+      configBankSelected = data?.config?.bankAccount || '';
+
+      const select = el('config-accounting');
+      if (select) {
+        select.innerHTML =
+          '<option value="">Selecione</option>' +
+          configAccounts.map((acc) => `<option value="${acc._id}">${acc.code || ''} - ${acc.name || ''}</option>`).join('');
+        select.value = configSelected || '';
+      }
+      const selectBank = el('config-bankaccount');
+      if (selectBank) {
+        selectBank.innerHTML =
+          '<option value="">Selecione</option>' +
+          configBankAccounts
+            .map(
+              (b) =>
+                `<option value="${b._id}">${b.alias || b.bankName || 'Conta'} (${b.bankCode || ''} Ag.${b.agency || ''} Cc.${b.accountNumber || ''}${b.accountDigit ? '-' + b.accountDigit : ''})</option>`,
+            )
+            .join('');
+        selectBank.value = configBankSelected || '';
+      }
+      const empresaNome = el('config-empresa-nome');
+      if (empresaNome) {
+        const storeOption = el('empresa-select')?.selectedOptions?.[0];
+        empresaNome.textContent = storeOption ? storeOption.textContent : 'Empresa selecionada';
+      }
+    } catch (e) {
+      console.error('loadConfigForStore', e);
+    }
+  }
+
+  function openConfigModal() {
+    const store = el('empresa-select')?.value || '';
+    loadConfigForStore(store);
+    const modal = el('modal-configuracoes');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+  }
+
+  function closeConfigModal() {
+    const modal = el('modal-configuracoes');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    document.body.classList.remove('overflow-hidden');
+  }
+
+  async function salvarConfig() {
+    const store = el('empresa-select')?.value || '';
+    const accounting = el('config-accounting')?.value || '';
+    const bankAcc = el('config-bankaccount')?.value || '';
+    if (!store) {
+      alert('Selecione uma empresa para configurar.');
+      return;
+    }
+    try {
+      const resp = await fetch(`${API_CONFIG.BASE_URL}/admin/comissoes/config`, {
+        method: 'POST',
+        headers: {
+          ...authHeaders(),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          storeId: store,
+          accountingAccount: accounting || null,
+          bankAccount: bankAcc || null,
+        }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.message || 'Erro ao salvar configuração');
+      }
+      const data = await resp.json();
+      configSelected = data?.accountingAccount || '';
+      const select = el('config-accounting');
+      if (select) select.value = configSelected;
+      closeConfigModal();
+    } catch (e) {
+      console.error('salvarConfig', e);
+      alert(e.message || 'Erro ao salvar configuração');
+    }
   }
 
   function openModal() {
@@ -597,6 +759,55 @@ function renderCardsPendentes(list) {
     }
   }
 
+  async function marcarFechamentoPago(id, totalPrevisto = 0) {
+    try {
+      const payload = {
+        status: 'pago',
+        totalPago: Number.isFinite(totalPrevisto) ? totalPrevisto : 0,
+      };
+      const resp = await fetch(`${API_CONFIG.BASE_URL}/admin/comissoes/fechamentos/${id}`, {
+        method: 'PUT',
+        headers: {
+          ...authHeaders(),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.message || 'Erro ao marcar pagamento');
+      }
+      await fetchFechamentos();
+      await fetchPendentes();
+      await fetchPendentes({ all: true });
+    } catch (e) {
+      console.error('marcarFechamentoPago', e);
+      alert(e.message || 'Erro ao marcar pagamento');
+    }
+  }
+
+  async function reabrirFechamento(id) {
+    if (!id) return;
+    const confirmar = window.confirm('Reabrir vai excluir o fechamento e a conta a pagar gerada. Continuar?');
+    if (!confirmar) return;
+    try {
+      const resp = await fetch(`${API_CONFIG.BASE_URL}/admin/comissoes/fechamentos/${id}`, {
+        method: 'DELETE',
+        headers: authHeaders(),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.message || 'Erro ao reabrir fechamento');
+      }
+      await fetchFechamentos();
+      await fetchPendentes();
+      await fetchPendentes({ all: true });
+    } catch (e) {
+      console.error('reabrirFechamento', e);
+      alert(e.message || 'Erro ao reabrir fechamento');
+    }
+  }
+
   async function salvarFechamento() {
     const funcionario = el('fechamento-funcionario')?.value || '';
     const inicio = el('fechamento-inicio')?.value || '';
@@ -655,6 +866,8 @@ function renderCardsPendentes(list) {
       fetchFechamentos();
       fetchPendentes();
       fetchPendentes({ all: true });
+      const store = el('empresa-select')?.value || '';
+      if (store) loadConfigForStore(store);
     });
     fetchFuncionarios();
   }

@@ -1011,7 +1011,10 @@
         value: company._id,
         label: company.name,
       }));
-      setSelectOptions(elements.company, companyOptions, 'Selecione...');
+      const companyPlaceholder = companyOptions.length
+        ? 'Selecione...'
+        : 'Nenhuma empresa vinculada ao seu usuário';
+      setSelectOptions(elements.company, companyOptions, companyPlaceholder);
       elements.company.disabled = companyOptions.length === 0;
 
       const customerOptions = state.customers.map((customer) => ({

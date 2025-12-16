@@ -6,6 +6,7 @@ const router = express.Router();
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 const CommissionClosing = require('../models/CommissionClosing');
+const CommissionConfig = require('../models/CommissionConfig');
 const PdvState = require('../models/PdvState');
 const User = require('../models/User');
 const UserGroup = require('../models/UserGroup');
@@ -13,6 +14,9 @@ const Product = require('../models/Product');
 const Service = require('../models/Service');
 const Appointment = require('../models/Appointment');
 const Store = require('../models/Store');
+const AccountingAccount = require('../models/AccountingAccount');
+const BankAccount = require('../models/BankAccount');
+const AccountPayable = require('../models/AccountPayable');
 
 const ADMIN_ROLES = ['admin', 'admin_master'];
 const DEFAULT_WINDOW_DAYS = 90;
@@ -32,16 +36,33 @@ const emptyTotals = () => ({
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ''));
 
+const parseDateUtcMidnight = (value) => {
+  if (!value) return null;
+  if (typeof value === 'string') {
+    const m = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) {
+      const y = Number(m[1]);
+      const mo = Number(m[2]) - 1;
+      const d = Number(m[3]);
+      const dt = new Date(y, mo, d, 0, 0, 0, 0);
+      return Number.isNaN(dt.getTime()) ? null : dt;
+    }
+  }
+  const dt = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+};
+
+// Datas para calculo (mantem o fuso local)
 const toStartOfDay = (value) => {
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
+  const date = parseDateUtcMidnight(value);
+  if (!date) return null;
   date.setHours(0, 0, 0, 0);
   return date;
 };
 
 const toEndOfDay = (value) => {
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
+  const date = parseDateUtcMidnight(value);
+  if (!date) return null;
   date.setHours(23, 59, 59, 999);
   return date;
 };
@@ -65,6 +86,99 @@ const resolveUserStoreAccess = async (userId) => {
   const allowAllStores = user.role === 'admin_master' && allowedStoreIds.length === 0;
 
   return { allowedStoreIds, allowAllStores };
+};
+
+const generatePayableCode = () => `COM-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+
+const syncPayableForClosing = async ({ closing, totals }) => {
+  if (!closing || !closing.store || !closing.profissional) return null;
+  const totalPendente = Number(totals?.totalPendente || closing.totalPendente || 0);
+  if (totalPendente <= 0) return null;
+
+  const config = await CommissionConfig.findOne({ store: closing.store }).lean();
+  if (!config || !config.accountingAccount || !config.bankAccount) {
+    throw new Error('Configure conta contábil e conta corrente na engrenagem antes de fechar comissões.');
+  }
+
+  const [accountingExists, bankExists] = await Promise.all([
+    AccountingAccount.exists({
+      _id: config.accountingAccount,
+      paymentNature: 'contas_pagar',
+      companies: closing.store,
+    }),
+    BankAccount.exists({ _id: config.bankAccount, company: closing.store }),
+  ]);
+  if (!accountingExists) throw new Error('Conta contábil configurada é inválida para a empresa.');
+  if (!bankExists) throw new Error('Conta corrente configurada é inválida para a empresa.');
+
+  const dueDate = closing.previsaoPagamento || closing.periodoFim || new Date();
+  let payable = closing.payable ? await AccountPayable.findById(closing.payable) : null;
+
+  if (!payable) {
+    let code = generatePayableCode();
+    let exists = await AccountPayable.exists({ code });
+    while (exists) {
+      code = generatePayableCode();
+      // eslint-disable-next-line no-await-in-loop
+      exists = await AccountPayable.exists({ code });
+    }
+    payable = new AccountPayable({
+      code,
+      company: closing.store,
+      partyType: 'User',
+      party: closing.profissional,
+      installmentsCount: 1,
+      issueDate: new Date(),
+      dueDate,
+      totalValue: totalPendente,
+      bankAccount: config.bankAccount,
+      accountingAccount: config.accountingAccount,
+      notes: `Fechamento de comissão ${closing._id || ''} (${closing.periodoInicio || ''} a ${closing.periodoFim || ''})`,
+      installments: [
+        {
+          number: 1,
+          issueDate: new Date(),
+          dueDate,
+          value: totalPendente,
+          bankAccount: config.bankAccount,
+          accountingAccount: config.accountingAccount,
+          status: 'pending',
+        },
+      ],
+    });
+  } else {
+    payable.company = closing.store;
+    payable.partyType = 'User';
+    payable.party = closing.profissional;
+    payable.dueDate = dueDate;
+    payable.totalValue = totalPendente;
+    payable.bankAccount = config.bankAccount;
+    payable.accountingAccount = config.accountingAccount;
+    // Atualiza/gera parcela única
+    if (!Array.isArray(payable.installments) || payable.installments.length === 0) {
+      payable.installments = [
+        {
+          number: 1,
+          issueDate: new Date(),
+          dueDate,
+          value: totalPendente,
+          bankAccount: config.bankAccount,
+          accountingAccount: config.accountingAccount,
+          status: closing.status === 'pago' ? 'paid' : 'pending',
+        },
+      ];
+    } else {
+      const inst = payable.installments[0];
+      inst.dueDate = dueDate;
+      inst.value = totalPendente;
+      inst.bankAccount = config.bankAccount;
+      inst.accountingAccount = config.accountingAccount;
+      inst.status = closing.status === 'pago' ? 'paid' : inst.status || 'pending';
+    }
+  }
+
+  await payable.save();
+  return payable;
 };
 
 const parseNumber = (value) => {
@@ -820,6 +934,136 @@ router.get(
   },
 );
 
+// Configuração de contas contábeis por empresa (usado no modal de engrenagem)
+router.get(
+  '/admin/comissoes/config/data',
+  requireAuth,
+  authorizeRoles(...ADMIN_ROLES),
+  async (req, res) => {
+    try {
+      const requestedStoreId =
+        req.query?.store && isValidObjectId(req.query.store) ? String(req.query.store) : null;
+      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req.user?.id);
+      const allowedStoreSet = new Set(allowedStoreIds);
+      if (!allowAllStores && (!requestedStoreId || !allowedStoreSet.has(requestedStoreId))) {
+        return res.status(403).json({ message: 'Empresa nao permitida para o usuario.' });
+      }
+      const storeId = requestedStoreId || (allowAllStores ? null : allowedStoreIds[0]);
+      if (!storeId) return res.status(400).json({ message: 'Informe a empresa.' });
+
+      const [accounts, bankAccounts, config] = await Promise.all([
+        AccountingAccount.find({
+          paymentNature: 'contas_pagar',
+          companies: storeId,
+        })
+          .select('name code _id')
+          .sort({ code: 1 })
+          .lean(),
+        BankAccount.find({ company: storeId })
+          .select('alias bankName bankCode agency accountNumber accountDigit _id')
+          .sort({ alias: 1, bankName: 1 })
+          .lean(),
+        CommissionConfig.findOne({ store: storeId }).lean(),
+      ]);
+
+      return res.json({
+        config: config
+          ? {
+              accountingAccount: config.accountingAccount ? String(config.accountingAccount) : null,
+              bankAccount: config.bankAccount ? String(config.bankAccount) : null,
+              updatedAt: config.updatedAt || config.createdAt || null,
+            }
+          : null,
+        accounts: accounts.map((a) => ({
+          _id: a._id,
+          name: a.name,
+          code: a.code,
+        })),
+        bankAccounts: bankAccounts.map((b) => ({
+          _id: b._id,
+          alias: b.alias,
+          bankName: b.bankName,
+          bankCode: b.bankCode,
+          agency: b.agency,
+          accountNumber: b.accountNumber,
+          accountDigit: b.accountDigit,
+        })),
+      });
+    } catch (error) {
+      console.error('[adminComissoesFechamentos] config/data', error);
+      return res.status(500).json({ message: 'Nao foi possivel carregar configuracao.' });
+    }
+  },
+);
+
+router.post(
+  '/admin/comissoes/config',
+  requireAuth,
+  authorizeRoles(...ADMIN_ROLES),
+  async (req, res) => {
+    try {
+      const { storeId, accountingAccount, bankAccount } = req.body || {};
+      if (!storeId || !isValidObjectId(storeId)) {
+        return res.status(400).json({ message: 'Informe a empresa.' });
+      }
+      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req.user?.id);
+      const allowedStoreSet = new Set(allowedStoreIds);
+      if (!allowAllStores && !allowedStoreSet.has(String(storeId))) {
+        return res.status(403).json({ message: 'Empresa nao permitida para o usuario.' });
+      }
+
+      let accountingAccountId = null;
+      if (accountingAccount) {
+        if (!isValidObjectId(accountingAccount)) {
+          return res.status(400).json({ message: 'Conta contabil invalida.' });
+        }
+        const exists = await AccountingAccount.findOne({
+          _id: accountingAccount,
+          paymentNature: 'contas_pagar',
+          companies: storeId,
+        }).lean();
+        if (!exists) {
+          return res.status(404).json({ message: 'Conta contabil nao encontrada para a empresa.' });
+        }
+        accountingAccountId = accountingAccount;
+      }
+
+      let bankAccountId = null;
+      if (bankAccount) {
+        if (!isValidObjectId(bankAccount)) {
+          return res.status(400).json({ message: 'Conta corrente invalida.' });
+        }
+        const existsBank = await BankAccount.findOne({ _id: bankAccount, company: storeId }).lean();
+        if (!existsBank) {
+          return res.status(404).json({ message: 'Conta corrente nao encontrada para a empresa.' });
+        }
+        bankAccountId = bankAccount;
+      }
+
+      const config = await CommissionConfig.findOneAndUpdate(
+        { store: storeId },
+        {
+          store: storeId,
+          accountingAccount: accountingAccountId,
+          bankAccount: bankAccountId,
+          updatedBy: req.user?.id || null,
+          $setOnInsert: { createdBy: req.user?.id || null },
+        },
+        { upsert: true, new: true },
+      ).lean();
+
+      return res.json({
+        accountingAccount: config.accountingAccount ? String(config.accountingAccount) : null,
+        bankAccount: config.bankAccount ? String(config.bankAccount) : null,
+        updatedAt: config.updatedAt || config.createdAt || null,
+      });
+    } catch (error) {
+      console.error('[adminComissoesFechamentos] save config', error);
+      return res.status(500).json({ message: 'Nao foi possivel salvar configuracao.' });
+    }
+  },
+);
+
 router.get(
   '/admin/comissoes/fechamentos',
   requireAuth,
@@ -842,19 +1086,19 @@ router.get(
       const storeId =
         requestedStoreId ||
         (!allowAllStores && allowedStoreIds.length ? allowedStoreIds[0] : null);
-      const start =
+      const startLocal =
         toStartOfDay(req.query?.start) ||
         toStartOfDay(new Date(Date.now() - DEFAULT_WINDOW_DAYS * 24 * 60 * 60 * 1000));
-      const end = req.query?.end ? toEndOfDay(req.query.end) : toEndOfDay(new Date());
+      const endLocal = req.query?.end ? toEndOfDay(req.query.end) : toEndOfDay(new Date());
       const debug = req.query?.debug === '1';
 
       const filter = {};
       if (storeId) filter.store = storeId;
       else if (!allowAllStores && allowedStoreIds.length) filter.store = { $in: allowedStoreIds };
-      if (start || end) {
+      if (startLocal || endLocal) {
         filter.$and = [
-          { periodoInicio: { $lte: end } },
-          { periodoFim: { $gte: start } },
+          { periodoInicio: { $lte: endLocal } },
+          { periodoFim: { $gte: startLocal } },
         ];
       }
 
@@ -943,8 +1187,8 @@ router.get(
           // eslint-disable-next-line no-await-in-loop
           const summary = await computeCommissionSummaryForUser({
             user: profissional,
-            startDate: start,
-            endDate: end,
+            startDate: startLocal,
+            endDate: endLocal,
             storeId: storeKey,
             debug,
           });
@@ -960,9 +1204,9 @@ router.get(
             profissionalNome: pickUserName(profissional),
             store: storeKey || null,
             storeNome: storeNamesById.get(storeKey) || '',
-            periodoInicio: start,
-            periodoFim: end,
-            periodo: formatPeriod(start, end),
+            periodoInicio: startLocal,
+            periodoFim: endLocal,
+            periodo: formatPeriod(startLocal, endLocal),
             previsto: totals.totalPeriodo,
             pago: 0,
             pendente: totals.totalPendente,
@@ -987,7 +1231,7 @@ router.get(
         return res.json({
           items: payload,
           debug: {
-            period: { start, end },
+            period: { start: startLocal, end: endLocal },
             storeId,
             count: payload.length,
             professionals: profissionais.length,
@@ -1051,14 +1295,52 @@ router.get(
         });
 
         const totals = summary.totals || emptyTotals();
-        if (!totals.totalPendente) continue;
+        // Desconta fechamentos pagos do perÇðodo/loja
+        const closingFilter = {
+          profissional: profissional._id,
+          status: 'pago',
+        };
+        if (storeId) closingFilter.store = storeId;
+        closingFilter.$and = [
+          { periodoInicio: { $lte: end } },
+          { periodoFim: { $gte: start } },
+        ];
+
+        // eslint-disable-next-line no-await-in-loop
+        const paidClosings = await CommissionClosing.find(closingFilter)
+          .select('totalPago totalPeriodo')
+          .lean();
+        const paidSum = paidClosings.reduce(
+          (acc, c) => acc + (Number(c.totalPago) || Number(c.totalPeriodo) || 0),
+          0,
+        );
+
+        let totalPendente = totals.totalPendente;
+        let pendenteVendas = totals.pendenteVendas;
+        let pendenteServicos = totals.pendenteServicos;
+
+        if (paidSum > 0) {
+          const base = Math.max(totalPendente, pendenteVendas + pendenteServicos);
+          const remaining = Math.max(base - paidSum, 0);
+          if (pendenteVendas + pendenteServicos > 0) {
+            const ratio = pendenteVendas / (pendenteVendas + pendenteServicos);
+            pendenteVendas = Math.max(remaining * ratio, 0);
+            pendenteServicos = Math.max(remaining - pendenteVendas, 0);
+          } else {
+            pendenteVendas = remaining;
+            pendenteServicos = 0;
+          }
+          totalPendente = remaining;
+        }
+
+        if (!totalPendente) continue;
 
         result.push({
           profissional: profissional._id,
           profissionalNome: pickUserName(profissional),
-          totalPendente: totals.totalPendente,
-          pendenteServicos: totals.pendenteServicos,
-          pendenteVendas: totals.pendenteVendas,
+          totalPendente,
+          pendenteServicos,
+          pendenteVendas,
           totalServicos: totals.totalServicos,
           totalVendas: totals.totalVendas,
           totalPago: totals.totalPago,
@@ -1095,9 +1377,9 @@ router.post(
       const safeStoreId =
         requestedStoreId ||
         (!allowAllStores && allowedStoreIds.length ? allowedStoreIds[0] : null);
-      const startDate = toStartOfDay(inicio);
-      const endDate = toEndOfDay(fim);
-      if (!startDate || !endDate) {
+      const startDateLocal = toStartOfDay(inicio);
+      const endDateLocal = toEndOfDay(fim);
+      if (!startDateLocal || !endDateLocal) {
         return res.status(400).json({ message: 'Periodo invalido.' });
       }
 
@@ -1115,8 +1397,8 @@ router.post(
         store: safeStoreId,
         $or: [
           {
-            periodoInicio: { $lte: endDate },
-            periodoFim: { $gte: startDate },
+            periodoInicio: { $lte: endDateLocal },
+            periodoFim: { $gte: startDateLocal },
           },
         ],
       };
@@ -1129,22 +1411,22 @@ router.post(
         });
       }
 
-      const summary = await computeCommissionSummaryForUser({
-        user: profissional,
-        startDate,
-        endDate,
-        storeId: safeStoreId,
-      });
+        const summary = await computeCommissionSummaryForUser({
+          user: profissional,
+          startDate: startDateLocal,
+          endDate: endDateLocal,
+          storeId: safeStoreId,
+        });
 
-      const totals = summary.totals || emptyTotals();
-      const payload = {
-        profissional: profissional._id,
-        store: safeStoreId,
-        periodoInicio: startDate,
-        periodoFim: endDate,
-        totalPeriodo: totals.totalPeriodo,
-        totalPendente: totals.totalPendente,
-        totalVendas: totals.totalVendas,
+        const totals = summary.totals || emptyTotals();
+        const payload = {
+          profissional: profissional._id,
+          store: safeStoreId,
+          periodoInicio: startDateLocal,
+          periodoFim: endDateLocal,
+          totalPeriodo: totals.totalPeriodo,
+          totalPendente: totals.totalPendente,
+          totalVendas: totals.totalVendas,
         totalServicos: totals.totalServicos,
         pendenteVendas: totals.pendenteVendas,
         pendenteServicos: totals.pendenteServicos,
@@ -1156,6 +1438,39 @@ router.post(
       };
 
       const created = await CommissionClosing.create(payload);
+      try {
+        const payable = await syncPayableForClosing({ closing: created, totals });
+        if (payable) {
+          created.payable = payable._id;
+          await created.save();
+        }
+      } catch (syncErr) {
+        console.error('[adminComissoesFechamentos] payable sync error', syncErr);
+        return res.status(201).json({
+          id: created._id,
+          profissional: created.profissional,
+          periodoInicio: created.periodoInicio,
+          periodoFim: created.periodoFim,
+          totalPeriodo: created.totalPeriodo,
+          totalPendente: created.totalPendente,
+          totalVendas: created.totalVendas,
+          totalServicos: created.totalServicos,
+          pendenteVendas: created.pendenteVendas,
+          pendenteServicos: created.pendenteServicos,
+          totalPago: created.totalPago,
+          status: created.status,
+          previsaoPagamento: created.previsaoPagamento,
+          meioPagamento: created.meioPagamento,
+          store: created.store,
+          profissionalNome: pickUserName(profissional),
+          periodo: formatPeriod(created.periodoInicio, created.periodoFim),
+          payable: created.payable || null,
+          warning:
+            syncErr.message ||
+            'Não foi possível gerar contas a pagar. Configure conta contábil e conta corrente na engrenagem.',
+          debug: req.query?.debug === '1' ? summary.debug : undefined,
+        });
+      }
 
       return res.status(201).json({
         id: created._id,
@@ -1175,6 +1490,7 @@ router.post(
         store: created.store,
         profissionalNome: pickUserName(profissional),
         periodo: formatPeriod(created.periodoInicio, created.periodoFim),
+        payable: created.payable || null,
         debug: req.query?.debug === '1' ? summary.debug : undefined,
       });
     } catch (error) {
@@ -1239,6 +1555,17 @@ router.put(
       Object.assign(closing, update);
       await closing.save();
 
+      try {
+        const totals = { totalPendente: closing.totalPendente };
+        const payable = await syncPayableForClosing({ closing, totals });
+        if (payable && !closing.payable) {
+          closing.payable = payable._id;
+          await closing.save();
+        }
+      } catch (err) {
+        console.error('[adminComissoesFechamentos] payable sync on update', err);
+      }
+
       return res.json({
         id: closing._id,
         status: closing.status,
@@ -1246,10 +1573,53 @@ router.put(
         totalPendente: closing.totalPendente,
         previsaoPagamento: closing.previsaoPagamento,
         meioPagamento: closing.meioPagamento,
+        payable: closing.payable || null,
       });
     } catch (error) {
       console.error('[adminComissoesFechamentos] update', error);
       return res.status(500).json({ message: 'Nao foi possivel atualizar fechamento.' });
+    }
+  },
+);
+
+router.delete(
+  '/admin/comissoes/fechamentos/:id',
+  requireAuth,
+  authorizeRoles(...ADMIN_ROLES),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      if (!isValidObjectId(id)) {
+        return res.status(400).json({ message: 'Fechamento invalido.' });
+      }
+
+      const closing = await CommissionClosing.findById(id);
+      if (!closing) return res.status(404).json({ message: 'Fechamento nao encontrado.' });
+
+      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req.user?.id);
+      const allowedStoreSet = new Set(allowedStoreIds.map((v) => String(v)));
+      if (!allowAllStores && allowedStoreSet.size) {
+        const closingStore = closing.store ? String(closing.store) : null;
+        if (!closingStore || !allowedStoreSet.has(closingStore)) {
+          return res.status(403).json({ message: 'Empresa nao permitida para o usuario.' });
+        }
+      }
+
+      let deletedPayable = null;
+      if (closing.payable) {
+        await AccountPayable.deleteOne({ _id: closing.payable });
+        deletedPayable = closing.payable;
+      }
+
+      await CommissionClosing.deleteOne({ _id: id });
+
+      return res.json({
+        deletedId: id,
+        deletedPayable,
+      });
+    } catch (error) {
+      console.error('[adminComissoesFechamentos] delete', error);
+      return res.status(500).json({ message: 'Nao foi possivel reabrir fechamento.' });
     }
   },
 );

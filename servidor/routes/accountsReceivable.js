@@ -20,6 +20,27 @@ function normalizeString(value) {
   return '';
 }
 
+const resolveUserStoreAccess = async (userId) => {
+  if (!userId) return { allowedStoreIds: [], allowAllStores: false };
+  const user = await User.findById(userId).select('empresaPrincipal empresas role').lean();
+  if (!user) return { allowedStoreIds: [], allowAllStores: false };
+
+  const markedCompanies = Array.isArray(user.empresas)
+    ? user.empresas
+        .map((id) => (mongoose.Types.ObjectId.isValid(id) ? String(id) : null))
+        .filter(Boolean)
+    : [];
+
+  const allowedStoreIds =
+    markedCompanies.length > 0
+      ? Array.from(new Set(markedCompanies))
+      : user.empresaPrincipal && mongoose.Types.ObjectId.isValid(user.empresaPrincipal)
+      ? [String(user.empresaPrincipal)]
+      : [];
+
+  return { allowedStoreIds, allowAllStores: false };
+};
+
 function parseBoolean(value, fallback = false) {
   if (typeof value === 'boolean') return value;
   const normalized = normalizeString(value).toLowerCase();
@@ -669,13 +690,30 @@ router.get(
   authorizeRoles(...AUTH_ROLES),
   async (req, res) => {
     try {
+      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req.user?.id);
+      const allowedCompanyIds = allowAllStores
+        ? null
+        : allowedStoreIds.map((id) => String(id)).filter(Boolean);
+
+      if (!allowAllStores && (!Array.isArray(allowedCompanyIds) || allowedCompanyIds.length === 0)) {
+        return res.json({
+          allowedCompanyIds: [],
+          companies: [],
+          customers: [],
+          employees: [],
+        });
+      }
+
+      const companyFilter = allowAllStores ? {} : { _id: { $in: allowedCompanyIds } };
+
       const [companies, customers, employees] = await Promise.all([
-        Store.find({}, 'nome nomeFantasia razaoSocial cnpj').sort({ nomeFantasia: 1, nome: 1 }),
+        Store.find(companyFilter, 'nome nomeFantasia razaoSocial cnpj').sort({ nomeFantasia: 1, nome: 1 }),
         User.find({}, 'nomeCompleto razaoSocial email cpf cnpj role').sort({ nomeCompleto: 1, razaoSocial: 1 }),
         User.find({ role: 'funcionario' }, 'nomeCompleto razaoSocial email role').sort({ nomeCompleto: 1, razaoSocial: 1 }),
       ]);
 
       res.json({
+        allowedCompanyIds: allowAllStores ? null : allowedCompanyIds,
         companies: companies.map((company) => ({
           _id: company._id,
           name: buildCompanyName(company),
@@ -706,10 +744,25 @@ router.get(
   async (req, res) => {
     try {
       const { company, customer, party } = req.query;
+      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req.user?.id);
       const filter = {};
+
       if (company && mongoose.Types.ObjectId.isValid(company)) {
+        const allowed =
+          allowAllStores ||
+          (Array.isArray(allowedStoreIds) && allowedStoreIds.length > 0 && allowedStoreIds.includes(String(company)));
+        if (!allowed) {
+          return res.status(403).json({ message: 'Você não tem acesso à empresa selecionada.' });
+        }
         filter.company = company;
+      } else if (!allowAllStores) {
+        if (Array.isArray(allowedStoreIds) && allowedStoreIds.length > 0) {
+          filter.company = { $in: allowedStoreIds };
+        } else {
+          return res.json({ receivables: [], summary: summarizeReceivables([]) });
+        }
       }
+
       const customerParam = normalizeString(customer || party);
       if (customerParam && mongoose.Types.ObjectId.isValid(customerParam)) {
         filter.customer = customerParam;

@@ -9,6 +9,7 @@ const Product = require('../models/Product');
 const Service = require('../models/Service');
 const Appointment = require('../models/Appointment');
 const UserGroup = require('../models/UserGroup');
+const CommissionClosing = require('../models/CommissionClosing');
 
 const router = express.Router();
 const requireStaff = authorizeRoles('funcionario', 'admin', 'admin_master');
@@ -114,6 +115,17 @@ const formatDate = (value) => {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return '--';
   return date.toLocaleDateString('pt-BR');
+};
+
+// Ajusta datas salvas em UTC para exibir apenas a parte de data, evitando regressão de 1 dia
+const formatDateNoTzShift = (value) => {
+  if (!value) return '--';
+  const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+  if (Number.isNaN(date.getTime())) return '--';
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${day}/${month}/${year}`;
 };
 
 const toStartOfDay = (value) => {
@@ -488,7 +500,7 @@ const buildServicosResumo = (records = []) => {
   return resumo;
 };
 
-const buildServicosProximos = (records = []) => {
+const buildServicosProximos = (records = [], extra = []) => {
   const pendentes = records
     .filter((r) => r.aReceber)
     .sort((a, b) => {
@@ -496,17 +508,24 @@ const buildServicosProximos = (records = []) => {
       const db = b._createdAt ? new Date(b._createdAt).getTime() : 0;
       return da - db;
     })
+    .slice(0, 5)
+    .map((item) => ({
+      titulo: item.descricao || 'Atendimento',
+      valor: parseNumber(item.comissaoTotal) || 0,
+      status: 'pendente',
+      info: item.pagamento || 'Aguardando liberacao',
+      _sortDate: item._createdAt ? new Date(item._createdAt).getTime() : 0,
+    }));
+
+  const merged = [...pendentes, ...extra]
+    .sort((a, b) => (a._sortDate || 0) - (b._sortDate || 0))
     .slice(0, 5);
 
-  return pendentes.map((item) => ({
-    titulo: item.descricao || 'Atendimento',
-    valor: parseNumber(item.comissaoTotal) || 0,
-    status: 'pendente',
-    info: item.pagamento || 'Aguardando liberacao',
-  }));
+  return merged.map(({ _sortDate, ...rest }) => rest);
 };
 
-const buildServicosViewPayload = (records = []) => {
+const buildServicosViewPayload = (records = [], opts = {}) => {
+  const { extraProximos = [], closingsKpi = null } = opts;
   const historico = (records || [])
     .slice()
     .sort((a, b) => {
@@ -519,17 +538,24 @@ const buildServicosViewPayload = (records = []) => {
       return rest;
     });
 
+  const resumo = buildServicosResumo(records);
+  if (closingsKpi && (closingsKpi.aReceber || closingsKpi.pagasTotal || closingsKpi.lastPaid)) {
+    resumo.pagas = closingsKpi.lastPaid || 0;
+    resumo.aReceber = Math.max(resumo.aReceber - closingsKpi.pagasTotal, 0) + closingsKpi.aReceber;
+    resumo.totalPrevisto = Math.max(resumo.totalPrevisto, closingsKpi.total);
+    resumo.totalGerado = Math.max(resumo.totalGerado, closingsKpi.total);
+  }
+
   return {
-    resumo: buildServicosResumo(records),
-    proximosPagamentos: buildServicosProximos(records),
+    resumo,
+    proximosPagamentos: buildServicosProximos(records, extraProximos),
     historico,
   };
 };
 
 const buildResumo = (records = [], opts = {}) => {
-  const { mode = 'default' } = opts;
+  const { mode = 'default', closingsKpi = null } = opts;
   const resumo = emptyResumo();
-  if (!records.length) return resumo;
 
   const entries = mode === 'produtos'
     ? records.filter((item) => normalizeStatus(item.status) !== 'cancelado')
@@ -595,10 +621,90 @@ const buildResumo = (records = [], opts = {}) => {
     diasLiberacaoCount > 0 ? Math.round(diasLiberacaoSoma / diasLiberacaoCount) : null;
   resumo.resumoPeriodo.cancelamentos = cancelamentos;
 
+  if (closingsKpi && (closingsKpi.aReceber || closingsKpi.pagas)) {
+    // Ajusta KPIs com base nos fechamentos (repasses)
+    resumo.aReceber = Math.max(resumo.aReceber - closingsKpi.pagasTotal, 0) + closingsKpi.aReceber;
+    resumo.pagas = closingsKpi.lastPaid || 0;
+    resumo.totalPrevisto = Math.max(resumo.totalPrevisto, closingsKpi.total);
+    resumo.totalGerado = Math.max(resumo.totalGerado, closingsKpi.total);
+    // totalPrevisto permanece baseado nas comissões, não nos fechamentos
+  }
+
   return resumo;
 };
 
-const buildProximos = (records = []) => {
+const mapClosingsToProximos = (closings = []) => {
+  return (closings || []).map((closing) => {
+    const baseDate = closing.previsaoPagamento
+      ? new Date(closing.previsaoPagamento)
+      : closing.periodoFim
+      ? new Date(closing.periodoFim)
+      : new Date(closing.createdAt || Date.now());
+
+    const status = normalizeStatus(closing.status);
+    const valorPago = parseNumber(closing.totalPago) || 0;
+    const valorPend = parseNumber(closing.totalPendente) || 0;
+    const valorPrev = parseNumber(closing.totalPeriodo) || 0;
+    const valor = status === 'pago' ? (valorPago || valorPrev || valorPend) : (valorPend || valorPrev);
+
+    const periodoLabel =
+      closing.periodoInicio && closing.periodoFim
+        ? `${formatDateNoTzShift(closing.periodoInicio)} a ${formatDateNoTzShift(closing.periodoFim)}`
+        : '';
+
+    let info = '';
+    if (status === 'pago') {
+      const pagoEm = closing.updatedAt || closing.previsaoPagamento || closing.periodoFim || closing.createdAt;
+      info = `Pago: ${formatDateNoTzShift(pagoEm)}`;
+    } else if (closing.previsaoPagamento) {
+      info = `Prev: ${formatDateNoTzShift(closing.previsaoPagamento)}`;
+    } else {
+      info = formatDateNoTzShift(baseDate);
+    }
+
+    return {
+      titulo: 'Fechamento',
+      valor,
+      status: status || 'pendente',
+      info,
+      periodoLabel,
+      _sortDate: baseDate instanceof Date ? baseDate.getTime() : 0,
+    };
+  });
+};
+
+const summarizeClosingsForKpi = (closings = []) => {
+  return closings.reduce(
+    (acc, closing) => {
+      const status = normalizeStatus(closing.status);
+      const pend = parseNumber(closing.totalPendente) || 0;
+      const prev = parseNumber(closing.totalPeriodo) || 0;
+      const pago = parseNumber(closing.totalPago) || 0;
+      if (status === 'pago') {
+        const paidVal = pago || prev || pend;
+        acc.pagasTotal += paidVal;
+        const refDate =
+          closing.updatedAt ||
+          closing.previsaoPagamento ||
+          closing.periodoFim ||
+          closing.createdAt ||
+          null;
+        const refTime = refDate ? new Date(refDate).getTime() : 0;
+        if (refTime >= acc.lastPaidTime) {
+          acc.lastPaidTime = refTime;
+          acc.lastPaid = paidVal;
+        }
+      } else {
+        acc.aReceber += pend || prev;
+      }
+      acc.total += prev || pend || pago;
+      return acc;
+    },
+    { total: 0, aReceber: 0, pagasTotal: 0, lastPaid: 0, lastPaidTime: 0 },
+  );
+};
+
+const buildProximos = (records = [], extra = []) => {
   const pendentes = records
     .filter((item) => {
       const status = normalizeStatus(item.status);
@@ -609,17 +715,24 @@ const buildProximos = (records = []) => {
       const db = b._createdAt ? b._createdAt.getTime() : 0;
       return da - db;
     })
+    .slice(0, 5)
+    .map((item) => ({
+      titulo: item.codigo ? `Venda ${item.codigo}` : 'Venda',
+      valor: parseNumber(item.comissaoTotal) || 0,
+      status: 'pendente',
+      info: item.pagamento || 'Aguardando liberacao',
+      _sortDate: item._createdAt ? item._createdAt.getTime() : 0,
+    }));
+
+  const merged = [...pendentes, ...extra]
+    .sort((a, b) => (a._sortDate || 0) - (b._sortDate || 0))
     .slice(0, 5);
 
-  return pendentes.map((item) => ({
-    titulo: item.codigo ? `Venda ${item.codigo}` : 'Venda',
-    valor: parseNumber(item.comissaoTotal) || 0,
-    status: 'pendente',
-    info: item.pagamento || 'Aguardando liberaÇõÇœo',
-  }));
+  return merged.map(({ _sortDate, ...rest }) => rest);
 };
 
 const buildViewPayload = (records = [], opts = {}) => {
+  const { extraProximos = [], closingsKpi = null } = opts;
   const historico = records
     .sort((a, b) => {
       const da = a._createdAt ? a._createdAt.getTime() : 0;
@@ -632,8 +745,8 @@ const buildViewPayload = (records = [], opts = {}) => {
     });
 
   return {
-    resumo: buildResumo(records, opts),
-    proximosPagamentos: buildProximos(records),
+    resumo: buildResumo(records, { ...opts, closingsKpi }),
+    proximosPagamentos: buildProximos(records, extraProximos),
     historico,
   };
 };
@@ -826,8 +939,23 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
       };
     });
 
+    const closingFilter = {
+      profissional: user._id,
+      status: { $in: ['pendente', 'agendado', 'pago'] },
+    };
+    if (req.query?.store && mongoose.Types.ObjectId.isValid(String(req.query.store))) {
+      closingFilter.store = new mongoose.Types.ObjectId(String(req.query.store));
+    }
+
+    const closings = await CommissionClosing.find(closingFilter)
+      .select('periodoInicio periodoFim totalPeriodo totalPendente totalPago previsaoPagamento status createdAt updatedAt')
+      .sort({ previsaoPagamento: 1, periodoFim: 1, createdAt: 1 })
+      .lean();
+    const extraProximos = mapClosingsToProximos(closings);
+    const closingsKpi = summarizeClosingsForKpi(closings);
+
     // Para a tela atual (Vendas), exibimos uma linha por venda com os dois tipos de comissão.
-    const produtosView = buildViewPayload(historicoBase, { mode: 'produtos' });
+    const produtosView = buildViewPayload(historicoBase, { mode: 'produtos', extraProximos, closingsKpi });
 
     const serviceDateMatch = {};
     if (startDate) serviceDateMatch.$gte = startDate;
@@ -871,7 +999,7 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
       comissaoServicoPercent,
     });
 
-    const servicosView = buildServicosViewPayload(servicoRecords);
+    const servicosView = buildServicosViewPayload(servicoRecords, { extraProximos, closingsKpi });
 
     const response = {
       servicos: servicosView,
@@ -898,11 +1026,3 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
 });
 
 module.exports = router;
-
-
-
-
-
-
-
-

@@ -83,7 +83,7 @@
       0,
     );
     document.getElementById(`${prefix}-total-gerado`).textContent = formatMoney(total);
-    document.getElementById(`${prefix}-total-variacao`).textContent = total ? '+0%' : '--';
+    document.getElementById(`${prefix}-total-variacao`).textContent = '--';
     document.getElementById(`${prefix}-a-receber`).textContent = formatMoney(resumo.aReceber || 0);
     document.getElementById(`${prefix}-pagas`).textContent = formatMoney(resumo.pagas || 0);
     document.getElementById(`${prefix}-media`).textContent = formatMoney(resumo.media || 0);
@@ -99,8 +99,25 @@
     }
 
     proximos.forEach((item) => {
-      const dotClass = item.status === 'confirmado' ? 'bg-emerald-500' : 'bg-amber-500';
-      const valueClass = item.status === 'confirmado' ? 'text-emerald-600' : 'text-amber-600';
+      const status = String(item.status || '').toLowerCase();
+      const dotClass =
+        status === 'pago' || status === 'confirmado'
+          ? 'bg-emerald-500'
+          : status === 'agendado'
+          ? 'bg-sky-500'
+          : 'bg-amber-500';
+      const valueClass =
+        status === 'pago' || status === 'confirmado'
+          ? 'text-emerald-600'
+          : status === 'agendado'
+          ? 'text-sky-600'
+          : 'text-amber-600';
+
+      const detailLines = [];
+      if (item.periodoLabel) detailLines.push(item.periodoLabel);
+      if (item.info) detailLines.push(item.info);
+      if (!detailLines.length) detailLines.push('Sem detalhes adicionais');
+
       const wrapper = document.createElement('div');
       wrapper.className = 'flex items-start gap-3 rounded-lg border border-gray-100 p-3';
       wrapper.innerHTML = `
@@ -110,7 +127,9 @@
             <p class="text-sm font-semibold text-gray-800">${item.titulo}</p>
             <span class="text-sm font-semibold ${valueClass}">${formatMoney(item.valor || 0)}</span>
           </div>
-          <p class="text-xs text-gray-500">${item.info || 'Sem detalhes adicionais'}</p>
+          ${detailLines
+            .map((line) => `<p class="text-xs text-gray-500">${line}</p>`)
+            .join('')}
         </div>
       `;
       list.appendChild(wrapper);

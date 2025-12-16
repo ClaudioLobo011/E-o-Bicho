@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
@@ -31,7 +31,7 @@
         </header>
 
         <form id="payable-form" class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
-          <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+          <div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
             <div>
               <label for="payable-code" class="block text-sm font-medium text-gray-700 mb-1">Código</label>
               <input type="text" id="payable-code" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: CP-2024-00001">
@@ -46,6 +46,12 @@
                   <div class="py-3 text-center text-xs text-gray-500">Digite ao menos 3 caracteres para buscar.</div>
                 </div>
               </div>
+            </div>
+            <div>
+              <label for="payable-origin-company" class="block text-sm font-medium text-gray-700 mb-1">Empresa de origem <span class="text-red-500">*</span></label>
+              <select id="payable-origin-company" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
+                <option value="">Carregando empresas...</option>
+              </select>
             </div>
             <div>
               <label for="payable-issue-date" class="block text-sm font-medium text-gray-700 mb-1">Emissão</label>
@@ -84,14 +90,8 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
-            <div class="lg:col-span-2">
-              <label for="payable-origin-company" class="block text-sm font-medium text-gray-700 mb-1">Empresa de origem <span class="text-red-500">*</span></label>
-              <select id="payable-origin-company" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
-                <option value="">Carregando empresas...</option>
-              </select>
-            </div>
-            <div class="lg:col-span-2 flex items-end justify-end">
+          <div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
+            <div class="lg:col-span-5 flex items-end justify-end">
               <button type="button" id="payable-generate" class="inline-flex w-full lg:w-auto items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90">
                 <i class="fas fa-calculator"></i>
                 Gerar parcelas
@@ -222,11 +222,18 @@
               <p class="text-sm text-gray-600">Priorize compromissos e acompanhe pagamentos críticos.</p>
             </div>
             <div class="flex flex-wrap items-center gap-2">
-              <select id="agenda-range" class="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                <option value="7">Próximos 7 dias</option>
-                <option value="15">Próximos 15 dias</option>
-                <option value="30">Próximos 30 dias</option>
-              </select>
+              <label class="text-sm text-gray-700 flex items-center gap-2">
+                <span class="text-xs font-semibold uppercase tracking-wide text-gray-500">Início</span>
+                <input type="date" id="agenda-start" class="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+              </label>
+              <label class="text-sm text-gray-700 flex items-center gap-2">
+                <span class="text-xs font-semibold uppercase tracking-wide text-gray-500">Fim</span>
+                <input type="date" id="agenda-end" class="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+              </label>
+              <button type="button" id="agenda-apply" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
+                <i class="fas fa-rotate"></i>
+                Aplicar
+              </button>
               <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
                 <i class="fas fa-file-export"></i>
                 Exportar
@@ -236,7 +243,7 @@
 
           <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
             <div class="rounded-xl border border-sky-100 bg-sky-50 p-4">
-              <span id="agenda-period-label" class="text-xs font-semibold uppercase tracking-wide text-sky-700">Pagamentos nos próximos 7 dias</span>
+              <span id="agenda-period-label" class="text-xs font-semibold uppercase tracking-wide text-sky-700">Selecione um periodo para filtrar</span>
               <p id="agenda-upcoming-value" class="mt-2 text-2xl font-bold text-sky-800">R$ 0,00</p>
               <p id="agenda-upcoming-count" class="text-xs text-sky-700">0 parcelas previstas</p>
             </div>
