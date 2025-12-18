@@ -1,0 +1,100 @@
+const axios = require('axios');
+const ExternalIntegration = require('../models/ExternalIntegration');
+const { decryptText } = require('../utils/certificates');
+const { getAccessToken } = require('./ifoodClient');
+
+const POLL_INTERVAL_MS = 30 * 1000;
+const EVENT_POLL_PATH = process.env.IFOOD_EVENTS_POLL_PATH || '/events/v1.0/events:polling';
+const EVENT_ACK_PATH = process.env.IFOOD_EVENTS_ACK_PATH || '/events/v1.0/events/acknowledgment';
+
+const decryptCredentials = (encrypted) => {
+  if (!encrypted) return {};
+  try {
+    const raw = decryptText(encrypted);
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+};
+
+async function pollMerchant(credentials) {
+  const { clientId, clientSecret, merchantId } = credentials || {};
+  if (!clientId || !clientSecret || !merchantId) {
+    throw new Error('Credenciais do iFood ausentes para polling de eventos.');
+  }
+
+  const token = await getAccessToken({ clientId, clientSecret });
+  const base = process.env.IFOOD_API_BASE || 'https://merchant-api.ifood.com.br';
+  const pollUrl = `${base}${EVENT_POLL_PATH}`;
+  const ackUrl = `${base}${EVENT_ACK_PATH}`;
+
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    'x-polling-merchants': merchantId,
+  };
+
+  const resp = await axios.get(pollUrl, {
+    headers,
+    timeout: 10000,
+    validateStatus: (status) => [200, 204].includes(status),
+  });
+
+  if (resp.status === 204 || !Array.isArray(resp.data) || resp.data.length === 0) {
+    return;
+  }
+
+  const events = resp.data;
+  await axios.post(ackUrl, events, { headers, timeout: 10000 });
+  console.info('[ifood:events]', { merchantId, count: events.length });
+}
+
+async function pollOnce() {
+  const integrations = await ExternalIntegration.find({
+    'providers.ifood.enabled': true,
+    'providers.ifood.hasCredentials': true,
+  }).select('+providers.ifood.encryptedCredentials');
+
+  for (const integration of integrations) {
+    const creds = decryptCredentials(integration?.providers?.ifood?.encryptedCredentials);
+    const merchantId = creds?.merchantId || creds?.merchantID;
+    const clientId = creds?.clientId;
+    const clientSecret = creds?.clientSecret;
+
+    if (!merchantId || !clientId || !clientSecret) {
+      continue;
+    }
+
+    try {
+      await pollMerchant({ clientId, clientSecret, merchantId });
+    } catch (err) {
+      console.warn('[ifood:events][erro]', {
+        storeId: integration.store?.toString?.() || '',
+        merchantId,
+        message: err?.message,
+        status: err?.response?.status,
+        data: err?.response?.data,
+      });
+    }
+  }
+}
+
+function startIfoodStatusPoller() {
+  let inFlight = false;
+  const loop = async () => {
+    if (inFlight) return;
+    inFlight = true;
+    try {
+      await pollOnce();
+    } catch (err) {
+      console.warn('[ifood:events][loop-error]', err?.message);
+    } finally {
+      inFlight = false;
+      setTimeout(loop, POLL_INTERVAL_MS);
+    }
+  };
+  loop();
+}
+
+module.exports = {
+  startIfoodStatusPoller,
+};

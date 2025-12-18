@@ -666,6 +666,9 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
             naoMostrarNoSite: payload.naoMostrarNoSite === undefined
                 ? true
                 : Boolean(payload.naoMostrarNoSite),
+            enviarParaIfood: payload.enviarParaIfood === undefined
+                ? false
+                : Boolean(payload.enviarParaIfood),
             inativo: Boolean(payload.inativo),
             codigosComplementares: Array.isArray(payload.codigosComplementares)
                 ? payload.codigosComplementares.map((code) => normalizeString(code)).filter(Boolean)
@@ -1478,6 +1481,9 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
         }
         if (payload.naoMostrarNoSite !== undefined) {
             updatePayload.naoMostrarNoSite = Boolean(payload.naoMostrarNoSite);
+        }
+        if (payload.enviarParaIfood !== undefined) {
+            updatePayload.enviarParaIfood = Boolean(payload.enviarParaIfood);
         }
 
         updatePayload.fornecedores = fornecedores;

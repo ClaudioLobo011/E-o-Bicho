@@ -37,6 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const unitSelect = document.getElementById('unidade');
     const inactiveCheckbox = document.getElementById('inativo');
     const hideOnSiteCheckbox = document.getElementById('hide-on-site');
+    const sendToIfoodCheckbox = document.getElementById('send-to-ifood');
     const fractionedCheckbox = document.getElementById('fractioned-toggle');
     const fractionTabTrigger = document.getElementById('tab-fraction-trigger');
     const fractionTabPanel = document.getElementById('tab-fraction');
@@ -826,6 +827,7 @@ document.addEventListener('DOMContentLoaded', () => {
             fiscal: generalFiscal,
             fiscalPorEmpresa: fiscalPerCompanyPayload,
             naoMostrarNoSite: Boolean(hideOnSiteCheckbox?.checked),
+            enviarParaIfood: Boolean(sendToIfoodCheckbox?.checked),
             inativo: Boolean(inactiveCheckbox?.checked),
             dataCadastro: dataCadastroValue ? dataCadastroValue : null,
             dataVigencia: dataVigenciaValue ? dataVigenciaValue : null,
@@ -3469,6 +3471,9 @@ document.addEventListener('DOMContentLoaded', () => {
             naoMostrarNoSite: snapshot.naoMostrarNoSite !== undefined
                 ? Boolean(snapshot.naoMostrarNoSite)
                 : true,
+            enviarParaIfood: snapshot.enviarParaIfood !== undefined
+                ? Boolean(snapshot.enviarParaIfood)
+                : false,
             inativo: Boolean(snapshot.inativo),
             dataCadastro: snapshot.dataCadastro || snapshot.createdAt || null,
             dataVigencia: snapshot.dataVigencia || snapshot.vigencia || snapshot.updatedAt || null,
@@ -4212,6 +4217,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (hideOnSiteCheckbox) {
             hideOnSiteCheckbox.checked = true;
         }
+        if (sendToIfoodCheckbox) {
+            sendToIfoodCheckbox.checked = false;
+        }
 
         if (vigenciaInput) {
             vigenciaInput.value = getTodayDateString();
@@ -4350,6 +4358,10 @@ document.addEventListener('DOMContentLoaded', () => {
         setInputValue(
             hideOnSiteCheckbox,
             product.naoMostrarNoSite !== undefined ? product.naoMostrarNoSite : true,
+        );
+        setInputValue(
+            sendToIfoodCheckbox,
+            product.enviarParaIfood !== undefined ? product.enviarParaIfood : false,
         );
         if (unitSelect) {
             unitSelect.value = product.unidade || '';

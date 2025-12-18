@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin: Integrações Externas - E o Bicho</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="../../src/output.css">
+</head>
+<body class="bg-gray-100">
+  <div id="admin-header-placeholder"></div>
+
+  <main class="container mx-auto px-4 pt-1 pb-8 min-h-screen">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <aside class="md:col-span-4">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
+
+      <div class="md:col-span-4 space-y-6">
+        <div class="bg-white p-6 rounded-lg shadow">
+          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-wide text-primary">Integrações</p>
+              <h1 class="text-2xl font-bold text-gray-800">Integrações Externas</h1>
+              <p class="text-gray-600 mt-1">Centralize as credenciais e o monitoramento das integrações com 99Food, Uber Eats e iFood.</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+              <label for="integration-store-select" class="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                <i class="fas fa-building text-primary"></i>
+                <span>Empresa</span>
+              </label>
+              <select id="integration-store-select" class="min-w-[12rem] rounded-lg border-gray-300 text-sm focus:border-primary focus:ring-primary">
+                <option>Carregando...</option>
+              </select>
+              <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <i class="fas fa-signal"></i> Monitoramento ativo
+              </span>
+              <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-200">
+                <i class="fas fa-lock"></i> Webhooks assinados
+              </span>
+            </div>
+          </div>
+
+          <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div class="flex items-center justify-between p-4 border rounded-lg bg-white">
+              <div>
+                <p class="text-xs uppercase text-gray-500 font-semibold">Integrações ativas</p>
+                <p class="text-2xl font-bold text-gray-800" id="summary-active">0/3</p>
+              </div>
+              <span class="w-10 h-10 rounded-full bg-primary/10 text-primary grid place-items-center">
+                <i class="fas fa-plug"></i>
+              </span>
+            </div>
+            <div class="flex items-center justify-between p-4 border rounded-lg bg-white">
+              <div>
+                <p class="text-xs uppercase text-gray-500 font-semibold">Pedidos sincronizados hoje</p>
+                <p class="text-2xl font-bold text-gray-800" id="summary-orders">0</p>
+              </div>
+              <span class="w-10 h-10 rounded-full bg-amber-50 text-amber-600 grid place-items-center">
+                <i class="fas fa-clipboard-list"></i>
+              </span>
+            </div>
+            <div class="flex items-center justify-between p-4 border rounded-lg bg-white">
+              <div>
+                <p class="text-xs uppercase text-gray-500 font-semibold">Última sincronização</p>
+                <p class="text-lg font-semibold text-gray-800" id="summary-last-sync">Sem registros</p>
+              </div>
+              <span class="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 grid place-items-center">
+                <i class="fas fa-clock-rotate-left"></i>
+              </span>
+            </div>
+            <div class="flex items-center justify-between p-4 border rounded-lg bg-white">
+              <div>
+                <p class="text-xs uppercase text-gray-500 font-semibold">Ações pendentes</p>
+                <p class="text-2xl font-bold text-gray-800" id="summary-pending">0</p>
+              </div>
+              <span class="w-10 h-10 rounded-full bg-rose-50 text-rose-600 grid place-items-center">
+                <i class="fas fa-triangle-exclamation"></i>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div class="bg-white p-5 rounded-lg shadow lg:col-span-2">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-wide text-primary">Fluxo</p>
+                <h2 class="text-xl font-bold text-gray-800">Orquestração e SLAs</h2>
+                <p class="text-gray-600 text-sm mt-1">Defina como os pedidos entram na operação e como o cardápio é sincronizado.</p>
+              </div>
+              <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                <i class="fas fa-bolt"></i> Tempo real
+              </span>
+            </div>
+
+            <div class="mt-4 space-y-3">
+              <div class="flex items-center justify-between gap-3 p-3 border rounded-lg bg-gray-50">
+                <div>
+                  <p class="text-sm font-semibold text-gray-800">Aceitar pedidos automaticamente</p>
+                  <p class="text-xs text-gray-600">Confirmação imediata no PDV e disparo para a cozinha.</p>
+                </div>
+                <label class="inline-flex items-center gap-2 text-sm font-semibold text-gray-700">
+                  <input type="checkbox" class="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary" id="auto-approve-global" checked>
+                  Ativo
+                </label>
+              </div>
+              <div class="flex items-center justify-between gap-3 p-3 border rounded-lg bg-gray-50">
+                <div>
+                  <p class="text-sm font-semibold text-gray-800">Sincronização de cardápio</p>
+                  <p class="text-xs text-gray-600">Atualiza preços, disponibilidade e fotos a cada 30 minutos.</p>
+                </div>
+                <label class="inline-flex items-center gap-2 text-sm font-semibold text-gray-700">
+                  <input type="checkbox" class="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary" id="menu-sync-global" checked>
+                  Ativo
+                </label>
+              </div>
+              <div class="flex items-center justify-between gap-3 p-3 border rounded-lg bg-gray-50">
+                <div>
+                  <p class="text-sm font-semibold text-gray-800">Fallback de indisponibilidade</p>
+                  <p class="text-xs text-gray-600">Pausa a loja automaticamente se API ficar fora por mais de 3 minutos.</p>
+                </div>
+                <label class="inline-flex items-center gap-2 text-sm font-semibold text-gray-700">
+                  <input type="checkbox" class="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary" id="downtime-guard" checked>
+                  Ativo
+                </label>
+              </div>
+            </div>
+
+            <div class="mt-4 flex flex-wrap gap-3">
+              <button type="button" data-sync-all class="bg-primary hover:bg-secondary text-white font-semibold px-4 py-2 rounded-lg transition">Sincronizar todas agora</button>
+              <button type="button" data-open-health class="border border-gray-200 text-gray-700 hover:border-primary hover:text-primary font-semibold px-4 py-2 rounded-lg transition">Ver painel de saúde</button>
+            </div>
+          </div>
+
+          <div class="bg-white p-5 rounded-lg shadow">
+            <div class="flex items-start gap-3">
+              <div class="w-11 h-11 rounded-lg bg-primary/10 text-primary grid place-items-center">
+                <i class="fas fa-share-nodes text-lg"></i>
+              </div>
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-wide text-primary">Webhooks & Segurança</p>
+                <h2 class="text-xl font-bold text-gray-800">Callbacks assinados</h2>
+                <p class="text-gray-600 text-sm mt-1">Use este endpoint para receber eventos de pedidos, status e cardápio.</p>
+              </div>
+            </div>
+
+            <div class="mt-4 space-y-4">
+              <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <p class="text-xs text-gray-500 font-semibold uppercase">URL pública</p>
+                    <p id="webhook-url" class="font-mono text-sm text-gray-800 break-all">https://api.eobicho.com.br/webhooks/marketplaces</p>
+                  </div>
+                  <button type="button" data-copy-webhook class="px-3 py-2 rounded-md text-sm font-semibold bg-white border border-gray-200 hover:border-primary hover:text-primary transition">
+                    Copiar
+                  </button>
+                </div>
+              </div>
+
+              <div class="bg-primary/5 border border-primary/20 rounded-lg p-3">
+                <p class="text-xs font-semibold uppercase text-primary">Chave de assinatura</p>
+                <div class="flex items-center justify-between gap-3 mt-1">
+                  <span id="webhook-secret" class="font-mono text-sm text-primary">mpk_live_3f9a-238c</span>
+                  <button type="button" data-rotate-secret class="text-xs font-semibold text-primary hover:text-secondary transition">Gerar nova</button>
+                </div>
+              </div>
+
+              <div class="space-y-2 text-sm text-gray-700">
+                <div class="flex items-start gap-2">
+                  <i class="fas fa-shield-alt text-primary mt-0.5"></i>
+                  <p>Valide o header <code class="bg-gray-100 px-1 rounded text-xs">X-Marketplace-Signature</code> com a chave acima.</p>
+                </div>
+                <div class="flex items-start gap-2">
+                  <i class="fas fa-database text-primary mt-0.5"></i>
+                  <p>Eventos idempotentes: use <code class="bg-gray-100 px-1 rounded text-xs">X-Event-Id</code> para evitar duplicidade.</p>
+                </div>
+                <div class="flex items-start gap-2">
+                  <i class="fas fa-rotate text-primary mt-0.5"></i>
+                  <p>Timeout sugerido: 3s com 2 tentativas de retry exponencial.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+          <div class="bg-white p-5 rounded-lg shadow" data-integration-card data-provider="ifood">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-start gap-3">
+                <div class="w-11 h-11 rounded-lg bg-red-50 text-red-600 grid place-items-center">
+                  <i class="fas fa-burger text-lg"></i>
+                </div>
+                <div>
+                  <p class="text-xs uppercase font-semibold text-gray-500">Pedidos & cardápio</p>
+                  <h3 class="text-xl font-bold text-gray-800">iFood</h3>
+                  <p class="text-gray-600 text-sm">Receba pedidos, aceite automaticamente e mantenha o cardápio alinhado.</p>
+                </div>
+              </div>
+              <div class="flex flex-col items-end gap-2">
+                <span data-status-badge class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold border bg-gray-100 text-gray-700">Offline</span>
+                <label class="inline-flex items-center gap-2 text-sm font-semibold text-gray-700">
+                  <input type="checkbox" class="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary" data-toggle="active">
+                  Ativar
+                </label>
+              </div>
+            </div>
+
+            <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label for="ifood-client-id" class="text-sm font-semibold text-gray-700">Client ID</label>
+                <input id="ifood-client-id" data-field="clientId" class="mt-1 w-full rounded-md border-gray-300 text-sm focus:border-primary focus:ring-primary" placeholder="ex: ifd_cli_123" type="text">
+              </div>
+              <div>
+                <label for="ifood-client-secret" class="text-sm font-semibold text-gray-700">Client Secret</label>
+                <input id="ifood-client-secret" data-field="clientSecret" class="mt-1 w-full rounded-md border-gray-300 text-sm focus:border-primary focus:ring-primary" placeholder="••••••••" type="password">
+              </div>
+              <div>
+                <label for="ifood-merchant" class="text-sm font-semibold text-gray-700">Merchant ID</label>
+                <input id="ifood-merchant" data-field="merchantId" class="mt-1 w-full rounded-md border-gray-300 text-sm focus:border-primary focus:ring-primary" placeholder="ex: br-12345" type="text">
+              </div>
+              <div>
+                <label for="ifood-webhook" class="text-sm font-semibold text-gray-700">Webhook override (opcional)</label>
+                <input id="ifood-webhook" data-field="webhook" class="mt-1 w-full rounded-md border-gray-300 text-sm focus:border-primary focus:ring-primary" placeholder="https://..." type="url">
+              </div>
+            </div>
+
+            <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label class="inline-flex items-center gap-2 text-sm font-semibold text-gray-700">
+                <input type="checkbox" class="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary" data-toggle="autoAccept">
+                Aceitar pedidos automaticamente
+              </label>
+              <label class="inline-flex items-center gap-2 text-sm font-semibold text-gray-700">
+                <input type="checkbox" class="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary" data-toggle="syncMenu">
+                Sincronizar cardápio diariamente
+              </label>
+            </div>
+
+            <div class="mt-4 flex flex-wrap gap-3">
+              <button type="button" data-action="save" class="bg-primary hover:bg-secondary text-white font-semibold px-4 py-2 rounded-lg transition">Salvar credenciais</button>
+              <button type="button" data-action="test" class="border border-gray-200 text-gray-700 hover:border-primary hover:text-primary font-semibold px-4 py-2 rounded-lg transition">Testar conexão</button>
+              <button type="button" data-action="sync" class="border border-transparent text-primary bg-primary/10 hover:bg-primary/20 font-semibold px-4 py-2 rounded-lg transition">Sincronizar agora</button>
+            </div>
+
+            <div class="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div class="p-3 border rounded-lg bg-gray-50">
+                <p class="text-xs uppercase text-gray-500 font-semibold">Pedidos hoje</p>
+                <p class="text-xl font-bold text-gray-800" data-metric="ordersToday">0</p>
+              </div>
+              <div class="p-3 border rounded-lg bg-gray-50">
+                <p class="text-xs uppercase text-gray-500 font-semibold">Tempo médio prep.</p>
+                <p class="text-xl font-bold text-gray-800"><span data-metric="avgPrepTime">0</span> min</p>
+              </div>
+              <div class="p-3 border rounded-lg bg-gray-50">
+                <p class="text-xs uppercase text-gray-500 font-semibold">Rejeição</p>
+                <p class="text-xl font-bold text-gray-800"><span data-metric="rejectionRate">0</span>%</p>
+              </div>
+            </div>
+            <div class="mt-3 text-xs text-gray-600 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <span>Última sincronização: <span data-last-sync>Sem sincronização</span></span>
+              <span>Fila: <span data-metric="queue">-</span></span>
+            </div>
+          </div>
+
+          <div class="bg-white p-5 rounded-lg shadow" data-integration-card data-provider="ubereats">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-start gap-3">
+                <div class="w-11 h-11 rounded-lg bg-emerald-50 text-emerald-600 grid place-items-center">
+                  <i class="fas fa-motorcycle text-lg"></i>
+                </div>
+                <div>
+                  <p class="text-xs uppercase font-semibold text-gray-500">Entrega & logística</p>
+                  <h3 class="text-xl font-bold text-gray-800">Uber Eats</h3>
+                  <p class="text-gray-600 text-sm">Integre cardápio, receba pedidos e acompanhe o status de entrega.</p>
+                </div>
+              </div>
+              <div class="flex flex-col items-end gap-2">
+                <span data-status-badge class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold border bg-gray-100 text-gray-700">Offline</span>
+                <label class="inline-flex items-center gap-2 text-sm font-semibold text-gray-700">
+                  <input type="checkbox" class="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary" data-toggle="active">
+                  Ativar
+                </label>
+              </div>
+            </div>
+
+            <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label for="uber-store" class="text-sm font-semibold text-gray-700">Store UUID</label>
+                <input id="uber-store" data-field="storeId" class="mt-1 w-full rounded-md border-gray-300 text-sm focus:border-primary focus:ring-primary" placeholder="ex: 8d2c-1234" type="text">
+              </div>
+              <div>
+                <label for="uber-access" class="text-sm font-semibold text-gray-700">Access Token</label>
+                <input id="uber-access" data-field="accessToken" class="mt-1 w-full rounded-md border-gray-300 text-sm focus:border-primary focus:ring-primary" placeholder="••••••••" type="password">
+              </div>
+              <div>
+                <label for="uber-refresh" class="text-sm font-semibold text-gray-700">Refresh Token</label>
+                <input id="uber-refresh" data-field="refreshToken" class="mt-1 w-full rounded-md border-gray-300 text-sm focus:border-primary focus:ring-primary" placeholder="••••••••" type="password">
+              </div>
+              <div>
+                <label for="uber-callback" class="text-sm font-semibold text-gray-700">Callback (opcional)</label>
+                <input id="uber-callback" data-field="callback" class="mt-1 w-full rounded-md border-gray-300 text-sm focus:border-primary focus:ring-primary" placeholder="https://..." type="url">
+              </div>
+            </div>
+
+            <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label class="inline-flex items-center gap-2 text-sm font-semibold text-gray-700">
+                <input type="checkbox" class="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary" data-toggle="autoAccept">
+                Aceitar pedidos automaticamente
+              </label>
+              <label class="inline-flex items-center gap-2 text-sm font-semibold text-gray-700">
+                <input type="checkbox" class="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary" data-toggle="syncMenu">
+                Atualizar estoque e preço
+              </label>
+            </div>
+
+            <div class="mt-4 flex flex-wrap gap-3">
+              <button type="button" data-action="save" class="bg-primary hover:bg-secondary text-white font-semibold px-4 py-2 rounded-lg transition">Salvar credenciais</button>
+              <button type="button" data-action="test" class="border border-gray-200 text-gray-700 hover:border-primary hover:text-primary font-semibold px-4 py-2 rounded-lg transition">Testar conexão</button>
+              <button type="button" data-action="sync" class="border border-transparent text-primary bg-primary/10 hover:bg-primary/20 font-semibold px-4 py-2 rounded-lg transition">Sincronizar agora</button>
+            </div>
+
+            <div class="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div class="p-3 border rounded-lg bg-gray-50">
+                <p class="text-xs uppercase text-gray-500 font-semibold">Pedidos hoje</p>
+                <p class="text-xl font-bold text-gray-800" data-metric="ordersToday">0</p>
+              </div>
+              <div class="p-3 border rounded-lg bg-gray-50">
+                <p class="text-xs uppercase text-gray-500 font-semibold">Tempo médio prep.</p>
+                <p class="text-xl font-bold text-gray-800"><span data-metric="avgPrepTime">0</span> min</p>
+              </div>
+              <div class="p-3 border rounded-lg bg-gray-50">
+                <p class="text-xs uppercase text-gray-500 font-semibold">Rejeição</p>
+                <p class="text-xl font-bold text-gray-800"><span data-metric="rejectionRate">0</span>%</p>
+              </div>
+            </div>
+            <div class="mt-3 text-xs text-gray-600 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <span>Última sincronização: <span data-last-sync>Sem sincronização</span></span>
+              <span>Fila: <span data-metric="queue">-</span></span>
+            </div>
+          </div>
+
+          <div class="bg-white p-5 rounded-lg shadow" data-integration-card data-provider="ninetyNineFood">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-start gap-3">
+                <div class="w-11 h-11 rounded-lg bg-amber-50 text-amber-600 grid place-items-center">
+                  <i class="fas fa-utensils text-lg"></i>
+                </div>
+                <div>
+                  <p class="text-xs uppercase font-semibold text-gray-500">Marketplace</p>
+                  <h3 class="text-xl font-bold text-gray-800">99Food</h3>
+                  <p class="text-gray-600 text-sm">Canais externos com sincronização rápida de catálogo e status.</p>
+                </div>
+              </div>
+              <div class="flex flex-col items-end gap-2">
+                <span data-status-badge class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold border bg-gray-100 text-gray-700">Offline</span>
+                <label class="inline-flex items-center gap-2 text-sm font-semibold text-gray-700">
+                  <input type="checkbox" class="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary" data-toggle="active">
+                  Ativar
+                </label>
+              </div>
+            </div>
+
+            <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label for="nfood-store" class="text-sm font-semibold text-gray-700">Store Code</label>
+                <input id="nfood-store" data-field="storeCode" class="mt-1 w-full rounded-md border-gray-300 text-sm focus:border-primary focus:ring-primary" placeholder="ex: 99-12345" type="text">
+              </div>
+              <div>
+                <label for="nfood-api" class="text-sm font-semibold text-gray-700">API Key</label>
+                <input id="nfood-api" data-field="apiKey" class="mt-1 w-full rounded-md border-gray-300 text-sm focus:border-primary focus:ring-primary" placeholder="••••••••" type="password">
+              </div>
+              <div>
+                <label for="nfood-webhook" class="text-sm font-semibold text-gray-700">Webhook (opcional)</label>
+                <input id="nfood-webhook" data-field="webhook" class="mt-1 w-full rounded-md border-gray-300 text-sm focus:border-primary focus:ring-primary" placeholder="https://..." type="url">
+              </div>
+            </div>
+
+            <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label class="inline-flex items-center gap-2 text-sm font-semibold text-gray-700">
+                <input type="checkbox" class="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary" data-toggle="autoAccept">
+                Aceitar pedidos automaticamente
+              </label>
+              <label class="inline-flex items-center gap-2 text-sm font-semibold text-gray-700">
+                <input type="checkbox" class="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary" data-toggle="syncMenu">
+                Enviar cardápio 1x ao dia
+              </label>
+            </div>
+
+            <div class="mt-4 flex flex-wrap gap-3">
+              <button type="button" data-action="save" class="bg-primary hover:bg-secondary text-white font-semibold px-4 py-2 rounded-lg transition">Salvar credenciais</button>
+              <button type="button" data-action="test" class="border border-gray-200 text-gray-700 hover:border-primary hover:text-primary font-semibold px-4 py-2 rounded-lg transition">Testar conexão</button>
+              <button type="button" data-action="sync" class="border border-transparent text-primary bg-primary/10 hover:bg-primary/20 font-semibold px-4 py-2 rounded-lg transition">Sincronizar agora</button>
+            </div>
+
+            <div class="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div class="p-3 border rounded-lg bg-gray-50">
+                <p class="text-xs uppercase text-gray-500 font-semibold">Pedidos hoje</p>
+                <p class="text-xl font-bold text-gray-800" data-metric="ordersToday">0</p>
+              </div>
+              <div class="p-3 border rounded-lg bg-gray-50">
+                <p class="text-xs uppercase text-gray-500 font-semibold">Tempo médio prep.</p>
+                <p class="text-xl font-bold text-gray-800"><span data-metric="avgPrepTime">0</span> min</p>
+              </div>
+              <div class="p-3 border rounded-lg bg-gray-50">
+                <p class="text-xs uppercase text-gray-500 font-semibold">Rejeição</p>
+                <p class="text-xl font-bold text-gray-800"><span data-metric="rejectionRate">0</span>%</p>
+              </div>
+            </div>
+            <div class="mt-3 text-xs text-gray-600 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <span>Última sincronização: <span data-last-sync>Sem sincronização</span></span>
+              <span>Fila: <span data-metric="queue">-</span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div id="admin-footer-placeholder"></div>
+  <div id="modal-placeholder"></div>
+  <div id="confirm-modal-placeholder"></div>
+
+  <script>var basePath = '../../';</script>
+  <script src="../../scripts/core/config.js"></script>
+  <script src="../../scripts/core/ui.js"></script>
+  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/admin/admin.js"></script>
+  <script src="../../scripts/admin/admin-integracoes-externos.js"></script>
+  <script src="/scripts/common/modal-bridge.js"></script>
+</body>
+</html>

@@ -4,10 +4,14 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const dotenv = require('dotenv');
+
+// Carrega variáveis de ambiente antes de importar módulos que dependem delas
+dotenv.config();
+
 const { verifyMailer } = require('./utils/mailer');
 const connectDB = require('./config/db');
+const { startIfoodStatusPoller } = require('./services/ifoodStatusPoller');
 
-dotenv.config();
 connectDB();
 verifyMailer();
 
@@ -18,10 +22,15 @@ const io = new Server(server, { cors: { origin: '*', methods: ['GET', 'POST'] } 
 const BODY_PARSER_LIMIT = '10mb';
 
 
-
 // Middleware
 app.set('socketio', io);
-app.use(express.json({ limit: BODY_PARSER_LIMIT }));
+app.use(express.json({
+  limit: BODY_PARSER_LIMIT,
+  verify: (req, _res, buf) => {
+    // guarda o raw para validação de assinatura (webhooks)
+    req.rawBody = buf;
+  }
+}));
 app.use(express.urlencoded({ extended: true, limit: BODY_PARSER_LIMIT }));
 app.use(cors());
 app.use(express.static('public'));
@@ -72,6 +81,9 @@ const routes = [
   { path: '/api/profile', file: './routes/profile' },
   { path: '/api/email', file: './routes/email' },
   { path: '/api/search', file: './routes/search' },
+  { path: '/api/integrations/external', file: './routes/integrationsExternal' },
+  { path: '/webhooks', file: './routes/webhooks' },
+  { path: '/', file: './routes/webhooks' }, // expõe /webhook e /webhooks/marketplaces na raiz para validação iFood
 ];
 
 // Registrar rotas adicionais (Agenda - funcionários)
@@ -131,3 +143,4 @@ io.on('connection', (socket) => {
 // Inicialização do servidor
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
+startIfoodStatusPoller();

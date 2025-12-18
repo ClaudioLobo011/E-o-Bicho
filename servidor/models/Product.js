@@ -162,6 +162,10 @@ const productSchema = new mongoose.Schema({
         type: Boolean,
         default: true,
     },
+    enviarParaIfood: {
+        type: Boolean,
+        default: false,
+    },
     inativo: {
         type: Boolean,
         default: false

@@ -930,13 +930,22 @@
                             <div id="tab-integration" class="hidden space-y-5 px-4 pb-5 pt-4" role="tabpanel" aria-labelledby="tab-integration-trigger" aria-hidden="true">
                                 <div class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm space-y-4">
                                     <p class="text-xs text-gray-500">Configure os parâmetros de exibição para integrações externas e para o site.</p>
-                                    <label class="inline-flex items-start gap-3 text-xs font-semibold text-gray-700">
-                                        <input type="checkbox" id="hide-on-site" name="naoMostrarNoSite" class="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/20" checked>
-                                        <span>
-                                            Não mostrar no Site
-                                            <span class="mt-1 block text-[11px] font-normal text-gray-500">Se marcado, o produto não aparece nas buscas ou nas páginas do site.</span>
-                                        </span>
-                                    </label>
+                                    <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                                        <label class="inline-flex items-start gap-3 text-xs font-semibold text-gray-700">
+                                            <input type="checkbox" id="hide-on-site" name="naoMostrarNoSite" class="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/20" checked>
+                                            <span>
+                                                Não mostrar no Site
+                                                <span class="mt-1 block text-[11px] font-normal text-gray-500">Se marcado, o produto não aparece nas buscas ou nas páginas do site.</span>
+                                            </span>
+                                        </label>
+                                        <label class="inline-flex items-start gap-3 text-xs font-semibold text-gray-700">
+                                            <input type="checkbox" id="send-to-ifood" name="enviarParaIfood" class="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/20">
+                                            <span>
+                                                Enviar para o iFood
+                                                <span class="mt-1 block text-[11px] font-normal text-gray-500">Se marcado, o produto será incluído nas integrações do iFood.</span>
+                                            </span>
+                                        </label>
+                                    </div>
                                 </div>
                             </div>
                         </div>
