@@ -107,6 +107,42 @@ document.addEventListener('DOMContentLoaded', () => {
     let allProducts = []; // Será partilhado por todas as abas que precisam da lista completa
     let promoProducts = [];
     let debounceTimer;
+    const buildAuthHeaders = () => {
+        const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
+        const token = loggedInUser?.token;
+        return token ? { Authorization: `Bearer ${token}` } : {};
+    };
+    const fetchAllProducts = async () => {
+        const headers = buildAuthHeaders();
+        const limit = 1000;
+        let page = 1;
+        let pages = 1;
+        let collected = [];
+
+        while (page <= pages) {
+            const response = await fetch(`${API_CONFIG.BASE_URL}/products?limit=${limit}&page=${page}&includeHidden=true`, { headers });
+            const payload = await response.json();
+            const pageProducts = Array.isArray(payload?.products)
+                ? payload.products
+                : Array.isArray(payload)
+                    ? payload
+                    : [];
+
+            collected = collected.concat(pageProducts);
+
+            if (Number.isFinite(Number(payload?.pages)) && Number(payload.pages) > 0) {
+                pages = Number(payload.pages);
+            } else if (pageProducts.length < limit) {
+                break;
+            } else if (Number.isFinite(Number(payload?.total))) {
+                pages = Math.ceil(Number(payload.total) / limit);
+            }
+
+            page += 1;
+        }
+
+        return collected;
+    };
 
     const renderPromoAvailableList = () => {
         const searchTerm = promoSearchInput.value.toLowerCase();
@@ -145,11 +181,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const initializePromoTab = async () => {
         if (!promoAvailableList) return;
         try {
-            const [allProductsRes, promoProductsRes] = await Promise.all([
-                fetch(`${API_CONFIG.BASE_URL}/products?limit=5000`),
+            const [allProductsResult, promoProductsRes] = await Promise.all([
+                fetchAllProducts(),
                 fetch(`${API_CONFIG.BASE_URL}/promocoes/produtos`)
             ]);
-            allProducts = (await allProductsRes.json()).products;
+            allProducts = allProductsResult;
             promoProducts = await promoProductsRes.json();
             updatePromoLists();
         } catch (error) {
@@ -350,8 +386,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             // ▼▼▼ A LINHA QUE FALTAVA: Buscar TODOS os produtos (partilhado com a outra aba) ▼▼▼
             if (allProducts.length === 0) {
-                const allProductsRes = await fetch(`${API_CONFIG.BASE_URL}/products?limit=5000`);
-                allProducts = (await allProductsRes.json()).products;
+                allProducts = await fetchAllProducts();
             }
             
             const res = await fetch(`${API_CONFIG.BASE_URL}/promocoes/condicional`);

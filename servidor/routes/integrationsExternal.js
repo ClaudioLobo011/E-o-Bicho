@@ -1,12 +1,10 @@
-const express = require('express');
+﻿const express = require('express');
 const mongoose = require('mongoose');
 const router = express.Router();
 const ExternalIntegration = require('../models/ExternalIntegration');
 const Store = require('../models/Store');
-const Product = require('../models/Product');
-const Deposit = require('../models/Deposit');
 const { encryptText, decryptText } = require('../utils/certificates');
-const ifoodClient = require('../services/ifoodClient');
+const { syncIfoodCatalogForStore } = require('../services/ifoodCatalogSync');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 
@@ -25,7 +23,6 @@ const toNumber = (value) => {
   const n = Number(value);
   return Number.isFinite(n) ? n : undefined;
 };
-
 function decryptCredentials(encrypted) {
   if (!encrypted) return {};
   try {
@@ -132,69 +129,6 @@ async function findIntegration(storeId) {
   return ExternalIntegration.findOne({ store: storeId }).select(SECRET_SELECT);
 }
 
-function computeStockForStore(product = {}, depositIds = new Set()) {
-  if (!Array.isArray(product.estoques) || !product.estoques.length || !depositIds.size) {
-    return 0;
-  }
-  return product.estoques.reduce((sum, entry) => {
-    const depositId = entry?.deposito;
-    const normalized = depositId && typeof depositId.toString === 'function' ? depositId.toString() : depositId;
-    if (normalized && depositIds.has(String(normalized))) {
-      const qty = Number(entry?.quantidade);
-      return sum + (Number.isFinite(qty) ? qty : 0);
-    }
-    return sum;
-  }, 0);
-}
-
-async function buildIfoodPayload({ storeId }) {
-  const publicBase = (process.env.R2_PUBLIC_BASE_URL || '').replace(/\/+$/, '');
-  const resolveImageUrl = (product = {}) => {
-    const candidates = [];
-    if (product.imagemPrincipal) candidates.push(product.imagemPrincipal);
-    if (Array.isArray(product.imagens)) candidates.push(...product.imagens);
-
-    for (const img of candidates) {
-      if (!img) continue;
-      const url = img.toString().trim();
-      if (!url) continue;
-      if (/^https?:\/\//i.test(url)) return url;
-      if (publicBase) return `${publicBase}/${url.replace(/^\/+/, '')}`;
-    }
-    return null;
-  };
-
-  const deposits = await Deposit.find({ empresa: storeId }).select('_id nome').lean();
-  const depositIds = new Set(deposits.map((d) => d._id.toString()));
-
-  const products = await Product.find({
-    enviarParaIfood: true,
-    inativo: { $ne: true },
-  }).lean();
-
-  const items = products.map((product) => ({
-    id: product._id?.toString(),
-    sku: product.cod,
-    barcode: product.codbarras,
-    name: product.nome,
-    description: product.descricao || '',
-    price: Number(product.venda) || 0,
-    unit: product.unidade || '',
-    stock: computeStockForStore(product, depositIds),
-    categories: Array.isArray(product.categorias) ? product.categorias.map((c) => (c?.toString ? c.toString() : c)) : [],
-    imageUrl: resolveImageUrl(product),
-  }));
-
-  return {
-    items,
-    deposits,
-    totals: {
-      products: products.length,
-      withStock: items.filter((p) => p.stock > 0).length,
-    },
-  };
-}
-
 router.get('/:storeId', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
   try {
     const { storeId } = req.params;
@@ -268,57 +202,45 @@ router.post('/:storeId/ifood/sync', requireAuth, authorizeRoles('admin', 'admin_
   try {
     const { storeId } = req.params;
     if (!mongoose.Types.ObjectId.isValid(storeId)) {
-      return res.status(400).json({ message: 'Identificador de loja inválido.' });
+      return res.status(400).json({ message: 'Identificador de loja invalido.' });
     }
 
     const integration = await findIntegration(storeId);
     if (!integration) {
-      return res.status(404).json({ message: 'Integração não configurada para esta empresa.' });
+      return res.status(404).json({ message: 'Integracao nao configurada para esta empresa.' });
     }
 
-    const provider = integration.providers?.ifood || {};
-    if (!provider.enabled) {
-      return res.status(400).json({ message: 'Ative o iFood antes de sincronizar.' });
-    }
-    if (!provider.hasCredentials || !provider.encryptedCredentials) {
-      return res.status(400).json({ message: 'Credenciais do iFood não encontradas.' });
-    }
+    const resetCatalogInput = req.body?.resetCatalog ?? req.query?.resetCatalog;
+    const resetCatalogRequested = resetCatalogInput !== undefined ? toBoolean(resetCatalogInput) : undefined;
 
-    const credentials = decryptCredentials(provider.encryptedCredentials);
-    const { clientId, clientSecret, merchantId } = credentials;
-    if (!clientId || !clientSecret || !merchantId) {
-      return res.status(400).json({ message: 'Preencha Client ID, Client Secret e Merchant ID para sincronizar.' });
-    }
-
-    const payload = await buildIfoodPayload({ storeId });
-
-    // Envio real para o iFood
-    const sendResult = await ifoodClient.pushCatalog(credentials, payload);
-
-    console.info('[ifood:sync] catálogo enviado', {
+    const result = await syncIfoodCatalogForStore({
       storeId,
-      products: payload?.items?.length || 0,
-      merchantId,
-      synced: sendResult?.synced,
+      integration,
+      resetCatalogRequested,
     });
-
-    const now = new Date();
-    provider.lastSync = now;
-    provider.status = 'ok';
-    provider.queue = `Catálogo enviado (${payload.items.length} itens)`;
-    integration.markModified('providers.ifood');
-    await integration.save();
+    const { itemsToSend, totalToSend, sendResult, now } = result;
 
     const response = buildResponse(integration);
     return res.json({
       ...response,
-      message: sendResult?.message || `Sincronização enviada para o iFood (${payload.items.length} produtos).`,
-      synced: sendResult?.synced ?? payload.items.length,
+      message: sendResult?.message || ('Sincronizacao enviada para o iFood (' + totalToSend + ' produtos).'),
+      synced: (sendResult?.created ?? 0) + (sendResult?.updated ?? 0),
       lastSync: now.toISOString(),
-      preview: payload.items.slice(0, 20),
+      preview: itemsToSend.slice(0, 20),
     });
   } catch (error) {
     console.error('Erro ao sincronizar iFood:', error);
+    const message = error?.message;
+    const userErrors = new Set([
+      'Ative o iFood antes de sincronizar.',
+      'Credenciais do iFood nao encontradas.',
+      'Preencha Client ID, Client Secret e Merchant ID para sincronizar.',
+      'Integracao nao configurada para esta empresa.',
+      'Identificador de loja invalido.',
+    ]);
+    if (message && userErrors.has(message)) {
+      return res.status(400).json({ message });
+    }
     return res.status(500).json({ message: 'Erro ao sincronizar com o iFood.' });
   }
 });

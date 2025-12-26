@@ -1,16 +1,16 @@
 const axios = require('axios');
 
-// Cliente simples para a API do iFood (catalogo/petshop)
-// Depende de variaveis de ambiente para flexibilidade de sandbox/prod:
-// IFOOD_API_BASE: ex. https://merchant-api.ifood.com.br
-// IFOOD_OAUTH_PATH: ex. /oauth/token
-// IFOOD_ITEMS_PATH: ex. /v1.0/merchants/{merchantId}/items
+// Cliente para operações de catálogo (item) no iFood.
+// Variáveis de ambiente aceitas:
+// - IFOOD_API_BASE (ex.: https://merchant-api.ifood.com.br)
+// - IFOOD_OAUTH_PATH (ex.: /authentication/v1.0/oauth/token)
+// - IFOOD_ITEMS_PATH (ex.: /item/v1.0/ingestion/{merchantId})
+// - IFOOD_RESET_CATALOG (ex.: true|false)
 
 const API_BASE = process.env.IFOOD_API_BASE || 'https://merchant-api.ifood.com.br';
-const OAUTH_PATH = process.env.IFOOD_OAUTH_PATH || '/oauth/token';
-// Endpoint de ingestão de itens (homologação indica /item/v1.0/ingestion/{merchantId}?reset=false)
+const OAUTH_PATH = process.env.IFOOD_OAUTH_PATH || '/authentication/v1.0/oauth/token';
 const ITEMS_PATH_TEMPLATE = process.env.IFOOD_ITEMS_PATH || '/item/v1.0/ingestion/{merchantId}';
-const ITEMS_RESET_PARAM = process.env.IFOOD_ITEMS_RESET || 'false'; // reset=true/false
+const DEFAULT_RESET_CATALOG = process.env.IFOOD_RESET_CATALOG || 'false';
 
 async function getAccessToken({ clientId, clientSecret }) {
   if (!clientId || !clientSecret) {
@@ -19,10 +19,8 @@ async function getAccessToken({ clientId, clientSecret }) {
 
   const url = `${API_BASE}${OAUTH_PATH}`;
   const params = new URLSearchParams();
-  // Alguns docs do iFood usam camelCase (grantType), então enviamos ambos.
   params.append('grant_type', 'client_credentials');
   params.append('grantType', 'client_credentials');
-  // Envia nas duas convenções: snake_case e camelCase
   params.append('client_id', clientId);
   params.append('client_secret', clientSecret);
   params.append('clientId', clientId);
@@ -43,7 +41,6 @@ async function getAccessToken({ clientId, clientSecret }) {
     if (!token) {
       throw new Error(`Token do iFood não retornado: ${JSON.stringify(resp.data)}`);
     }
-
     return token;
   } catch (error) {
     const detail = error?.response?.data || error?.message || 'Erro desconhecido no OAuth do iFood';
@@ -51,35 +48,204 @@ async function getAccessToken({ clientId, clientSecret }) {
   }
 }
 
-function buildItemPayload(item) {
-  const normalizedUnit = (() => {
-    const raw = (item.unit || '').toString().trim().toUpperCase();
-    if (!raw) return 'UN';
-    if (raw === 'SC') return 'UN'; // normaliza saco/embalagem para unidade
-    return raw;
-  })();
+function normalizeUnit(unit) {
+  const raw = (unit || '').toString().trim().toUpperCase();
+  if (!raw) return 'UN';
+  if (raw === 'SC') return 'UN';
+  return raw;
+}
 
-  return {
+const isTruthy = (value) => value === true || value === 'true' || value === 1 || value === '1';
+
+const hasContent = (value) => {
+  if (value === undefined || value === null) return false;
+  if (typeof value === 'string') return value.trim() !== '';
+  return true;
+};
+
+const assignIf = (target, key, value) => {
+  if (hasContent(value)) {
+    target[key] = value;
+  }
+};
+
+const buildCategorization = (input) => {
+  if (!input || typeof input !== 'object') return null;
+  const result = {};
+  assignIf(result, 'department', input.department);
+  assignIf(result, 'category', input.category);
+  assignIf(result, 'subCategory', input.subCategory);
+  return Object.keys(result).length ? result : null;
+};
+
+const buildMultiple = (item = {}) => {
+  const source = item.multiple && typeof item.multiple === 'object' ? item.multiple : {};
+  const result = {};
+  assignIf(result, 'originalEan', source.originalEan ?? item.originalEan);
+  const quantity = Number(source.quantity ?? item.quantity);
+  if (Number.isFinite(quantity)) {
+    result.quantity = quantity;
+  }
+  return Object.keys(result).length ? result : null;
+};
+
+function buildFullItemPayload(item = {}) {
+  const payload = {
     barcode: item.barcode,
     name: item.name,
-    plu: item.sku,
-    active: true,
-    inventory: { stock: Number(item.stock) || 0 },
-    details: {
-      categorization: { department: null, category: null, subCategory: null },
-      brand: null,
-      unit: normalizedUnit,
-      volume: null,
-      imageUrl: null,
-      description: item.description || '',
-      nearExpiration: true,
-      family: null,
-    },
-    prices: { price: Number(item.price) || 0, promotionPrice: null },
-    scalePrices: null,
-    multiple: null,
-    channels: null,
   };
+
+  assignIf(payload, 'plu', item.sku ?? item.plu);
+
+  const active = typeof item.active === 'boolean' ? item.active : true;
+  payload.active = active;
+
+  const details = {};
+  const categorization = buildCategorization(item.categorization || item.details?.categorization);
+  if (categorization) {
+    details.categorization = categorization;
+  }
+  assignIf(details, 'brand', item.brand);
+  assignIf(details, 'volume', item.volume);
+  const unit = item.unit ? normalizeUnit(item.unit) : null;
+  if (hasContent(unit)) {
+    details.unit = unit;
+  }
+  assignIf(details, 'imageUrl', item.imageUrl);
+  assignIf(details, 'description', item.description);
+  if (typeof item.nearExpiration === 'boolean') {
+    details.nearExpiration = item.nearExpiration;
+  }
+  if (Object.keys(details).length) {
+    payload.details = details;
+  }
+
+  const price = Number(item.price);
+  if (Number.isFinite(price)) {
+    payload.prices = { price };
+  }
+
+  const stock = Number(item.stock);
+  if (Number.isFinite(stock)) {
+    payload.inventory = { stock };
+  }
+
+  const multiple = buildMultiple(item);
+  if (multiple) {
+    payload.multiple = multiple;
+  }
+
+  assignIf(payload, 'channels', item.channels);
+
+  return payload;
+}
+
+function buildPatchItemPayload(item = {}) {
+  const payload = buildFullItemPayload(item);
+  delete payload.active;
+  return payload;
+}
+
+const normalizeInventoryStock = (item = {}) => {
+  const normalized = { ...item };
+  if (normalized.stock !== undefined) {
+    const inv = normalized.inventory || {};
+    if (inv.stock === undefined) {
+      normalized.inventory = { ...inv, stock: normalized.stock };
+    }
+    delete normalized.stock;
+  }
+  return normalized;
+};
+
+async function sendBatches({ url, method, token, items, mapFn }) {
+  const batchSize = 30;
+  let sent = 0;
+
+  const collectIngestionErrors = (data) => {
+    const errors = [];
+    if (!data) return errors;
+
+    if (Array.isArray(data)) {
+      data.forEach((entry) => {
+        if (Array.isArray(entry?.errors) && entry.errors.length) {
+          errors.push(
+            ...entry.errors.map((err) => ({
+              ...err,
+              itemId: entry?.id,
+              barcode: entry?.barcode,
+            })),
+          );
+        } else if (entry?.error) {
+          errors.push({
+            ...entry.error,
+            itemId: entry?.id,
+            barcode: entry?.barcode,
+          });
+        }
+      });
+    } else if (Array.isArray(data?.errors)) {
+      errors.push(...data.errors);
+    }
+
+    return errors;
+  };
+
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items
+      .slice(i, i + batchSize)
+      .map(mapFn)
+      .map(normalizeInventoryStock);
+    const sample = batch.slice(0, 5);
+    const samplePreview = JSON.stringify(sample, null, 2);
+    console.info(`[ifood:catalog][${method.toUpperCase()}]`, {
+      url,
+      batch: batch.length,
+      sample: samplePreview,
+    });
+    try {
+      const resp = await axios({
+        method,
+        url,
+        data: batch,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 15000,
+      });
+      const errors = collectIngestionErrors(resp?.data);
+      if (errors.length) {
+        console.error(`[ifood:catalog][${method.toUpperCase()}][errors]`, {
+          url,
+          errors,
+        });
+        throw new Error(`Falha no envio iFood (${method}) - itens com erro`);
+      }
+      sent += batch.length;
+    } catch (err) {
+      console.log('STATUS:', err.response?.status);
+      console.log('DATA:', JSON.stringify(err.response?.data, null, 2));
+      console.log('ERRORS:', JSON.stringify(err.response?.data?.errors, null, 2));
+      throw err;
+    }
+  }
+
+  return sent;
+}
+
+async function sendResetCatalog({ url, token }) {
+  console.info('[ifood:catalog][RESET]', { url });
+  await axios({
+    method: 'post',
+    url,
+    data: [],
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    timeout: 15000,
+  });
 }
 
 async function pushCatalog(credentials, payload) {
@@ -89,39 +255,69 @@ async function pushCatalog(credentials, payload) {
   }
 
   const token = await getAccessToken({ clientId, clientSecret });
-  const items = Array.isArray(payload?.items) ? payload.items : [];
-  if (!items.length) {
-    return { synced: 0, message: 'Nenhum item marcado para envio.' };
+  const postItems = Array.isArray(payload?.newItems) ? payload.newItems : [];
+  const patchItems = Array.isArray(payload?.updateItems) ? payload.updateItems : [];
+  const resetCatalog = isTruthy(payload?.resetCatalog ?? DEFAULT_RESET_CATALOG);
+
+  console.info('[ifood:catalog][payload]', {
+    merchantId,
+    newItems: postItems.length,
+    updateItems: patchItems.length,
+    resetCatalog,
+  });
+
+  const allItems = [...postItems, ...patchItems];
+
+  if (!allItems.length && !resetCatalog) {
+    return { created: 0, updated: 0, message: 'Nenhum item marcado para envio.' };
   }
 
   const path = ITEMS_PATH_TEMPLATE.replace('{merchantId}', merchantId);
-  // Exemplo direto: https://merchant-api.ifood.com.br/item/v1.0/ingestion/{merchantId}?reset=false
-  const url = `${API_BASE}${path}?reset=${encodeURIComponent(ITEMS_RESET_PARAM)}`;
+  const baseUrl = `${API_BASE}${path}`;
+  const postUrl = resetCatalog ? `${baseUrl}?reset=true` : baseUrl;
 
-  // Envia em lotes pequenos para evitar timeouts (ajuste conforme doc/limites)
-  const batchSize = 30;
-  let sent = 0;
+  let created = 0;
+  let updated = 0;
 
-  for (let i = 0; i < items.length; i += batchSize) {
-    const batch = items.slice(i, i + batchSize).map(buildItemPayload);
-    try {
-      await axios.post(url, batch, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        timeout: 15000,
-      });
-    } catch (err) {
-      console.log('STATUS:', err.response?.status);
-      console.log('DATA:', JSON.stringify(err.response?.data, null, 2));
-      console.log('ERRORS:', JSON.stringify(err.response?.data?.errors, null, 2));
-      throw err;
+  if (resetCatalog) {
+    if (!allItems.length) {
+      await sendResetCatalog({ url: postUrl, token });
+      const message = 'Catalogo resetado no iFood (reset=true, sem itens).';
+      return { created, updated, message };
     }
-    sent += batch.length;
+    created = await sendBatches({
+      url: postUrl,
+      method: 'post',
+      token,
+      items: allItems,
+      mapFn: buildFullItemPayload,
+    });
+    const message = `Itens enviados ao iFood via POST (reset=true): ${created}`;
+    return { created, updated, message };
   }
 
-  return { synced: sent, message: `Itens enviados ao iFood: ${sent}` };
+  if (postItems.length) {
+    created = await sendBatches({
+      url: postUrl,
+      method: 'post',
+      token,
+      items: postItems,
+      mapFn: buildFullItemPayload,
+    });
+  }
+
+  if (patchItems.length) {
+    updated = await sendBatches({
+      url: baseUrl,
+      method: 'patch',
+      token,
+      items: patchItems,
+      mapFn: buildPatchItemPayload,
+    });
+  }
+
+  const message = `Itens enviados ao iFood via POST: ${created}, PATCH: ${updated}`;
+  return { created, updated, message };
 }
 
 module.exports = {

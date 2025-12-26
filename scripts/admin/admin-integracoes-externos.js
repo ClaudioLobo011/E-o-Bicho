@@ -3,6 +3,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const WEBHOOK_URL = 'https://api.eobicho.com.br/webhooks/marketplaces';
   const API_BASE = API_CONFIG.BASE_URL;
   const PROVIDERS = ['ifood', 'ubereats', 'ninetyNineFood'];
+  const IFOOD_MENU_SYNC_INTERVAL_MS = 30 * 60 * 1000;
   const storeSelect = document.getElementById('integration-store-select');
 
   const defaultState = {
@@ -72,6 +73,8 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   let state = loadState();
+  let ifoodMenuSyncInterval = null;
+  let ifoodMenuSyncInFlight = false;
 
   bindWebhookCard();
   setupGlobalToggles();
@@ -398,6 +401,9 @@ document.addEventListener('DOMContentLoaded', () => {
             data.syncMenu = prev;
           }
           renderCard(provider);
+          if (provider === 'ifood') {
+            syncIfoodMenuSchedule({ immediate: data.syncMenu });
+          }
         });
       }
 
@@ -585,6 +591,44 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function shouldAutoSyncIfoodMenu() {
+    return Boolean(state?.ifood?.syncMenu);
+  }
+
+  function clearIfoodMenuSyncSchedule() {
+    if (!ifoodMenuSyncInterval) return;
+    window.clearInterval(ifoodMenuSyncInterval);
+    ifoodMenuSyncInterval = null;
+  }
+
+  async function triggerIfoodMenuSync() {
+    if (ifoodMenuSyncInFlight) return;
+    if (!shouldAutoSyncIfoodMenu()) return;
+    if (!state.selectedStoreId || !state.ifood?.enabled) return;
+    ifoodMenuSyncInFlight = true;
+    try {
+      await syncIntegration('ifood', { silent: true });
+    } finally {
+      ifoodMenuSyncInFlight = false;
+    }
+  }
+
+  function syncIfoodMenuSchedule({ immediate = false } = {}) {
+    if (!shouldAutoSyncIfoodMenu()) {
+      clearIfoodMenuSyncSchedule();
+      return;
+    }
+    if (!ifoodMenuSyncInterval) {
+      ifoodMenuSyncInterval = window.setInterval(
+        () => void triggerIfoodMenuSync(),
+        IFOOD_MENU_SYNC_INTERVAL_MS
+      );
+    }
+    if (immediate) {
+      void triggerIfoodMenuSync();
+    }
+  }
+
   async function fetchIntegrationForStore(storeId) {
     if (!storeId) return;
     try {
@@ -650,6 +694,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderGlobalToggles();
     refreshCards();
     updateSummary();
+    syncIfoodMenuSchedule();
 
     // Garantir que os toggles reflitam o estado final após merge
     setTimeout(() => {

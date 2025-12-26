@@ -1,4 +1,4 @@
-(() => {
+﻿(() => {
   const API_BASE =
     (typeof API_CONFIG !== 'undefined' && API_CONFIG && API_CONFIG.BASE_URL) || '/api';
   const SERVER_URL =
@@ -156,6 +156,7 @@
     deliveryAddressFormVisible: false,
     deliverySelectedAddressId: '',
     deliverySelectedAddress: null,
+    deliveryStatusOverride: null,
     activeFinalizeContext: null,
     saleStateBackup: null,
     saleCodeIdentifier: '',
@@ -266,6 +267,11 @@
     { id: 'finalizado', label: 'Finalizado' },
   ];
   const deliveryStatusOrder = deliveryStatusSteps.map((step) => step.id);
+  const resolveDeliveryStatusOverride = (statusId) => {
+    if (!statusId) return '';
+    const normalized = String(statusId);
+    return deliveryStatusOrder.includes(normalized) ? normalized : '';
+  };
   let finalizeModalDefaults = { title: '', subtitle: '', confirm: '' };
   let deliveryAddressesController = null;
   let statePersistTimeout = null;
@@ -821,7 +827,7 @@
     if (address.cep) {
       parts.push(`CEP: ${formatCep(address.cep)}`);
     }
-    return parts.filter(Boolean).join(' • ');
+    return parts.filter(Boolean).join(' - ');
   };
 
   const resolveCustomerAddressRecord = (cliente) => {
@@ -1190,6 +1196,9 @@
         product.codbarras ||
         '',
       promocao: product.promocao ? { ...product.promocao } : null,
+      promocaoCondicional: product.promocaoCondicional
+        ? { ...product.promocaoCondicional }
+        : null,
       precoClube: product.precoClube || null,
       venda: product.venda,
       precoVenda: product.precoVenda,
@@ -1516,6 +1525,66 @@
     const pagoValor = pagamentoItems.reduce((sum, item) => sum + safeNumber(item.valor), 0);
     const trocoValor = Math.max(0, pagoValor - liquidoValor);
 
+    const promotionTotals = {
+      general: 0,
+      conditional: 0,
+      club: 0,
+    };
+
+    saleItems.forEach((item) => {
+      if (item?.usePromotion === false) {
+        return;
+      }
+      const basePrice = safeNumber(item?.valorBase ?? item?.valor ?? item?.preco ?? 0);
+      const finalPrice = safeNumber(item?.valor ?? item?.preco ?? 0);
+      if (basePrice <= finalPrice) {
+        return;
+      }
+      const quantity = Math.max(0, safeNumber(item?.quantidade ?? 0));
+      if (!quantity) {
+        return;
+      }
+      const promoType = item?.promoType || '';
+      const discount = Math.max(0, (basePrice - finalPrice) * quantity);
+      if (!discount || !promoType) {
+        return;
+      }
+      if (promoType === 'general') {
+        promotionTotals.general += discount;
+      } else if (promoType === 'conditional') {
+        promotionTotals.conditional += discount;
+      } else if (promoType === 'club') {
+        promotionTotals.club += discount;
+      }
+    });
+
+    const promotionEntries = [];
+    if (promotionTotals.general > 0) {
+      promotionEntries.push({
+        label: 'Desconto promocao geral',
+        value: promotionTotals.general,
+        formatted: formatCurrency(promotionTotals.general),
+      });
+    }
+    if (promotionTotals.conditional > 0) {
+      promotionEntries.push({
+        label: 'Desconto promocao condicional',
+        value: promotionTotals.conditional,
+        formatted: formatCurrency(promotionTotals.conditional),
+      });
+    }
+    if (promotionTotals.club > 0) {
+      promotionEntries.push({
+        label: 'Desconto preco clube',
+        value: promotionTotals.club,
+        formatted: formatCurrency(promotionTotals.club),
+      });
+    }
+    const promotionTotal =
+      safeNumber(promotionTotals.general) +
+      safeNumber(promotionTotals.conditional) +
+      safeNumber(promotionTotals.club);
+
     const clienteAddress = resolveCustomerAddressRecord(state.vendaCliente);
 
     const cliente = state.vendaCliente
@@ -1576,6 +1645,10 @@
         pago: formatCurrency(pagoValor),
         troco: formatCurrency(trocoValor),
         trocoValor,
+      },
+      descontosPromocao: {
+        total: promotionTotal,
+        entries: promotionEntries,
       },
       pagamentos: {
         items: pagamentoItems,
@@ -2372,40 +2445,102 @@
     return clubPrice > 0 && clubPrice < base;
   };
 
-  const getPromotionPricing = (product) => {
+  const getConditionalPromotionPrice = (product, quantity, basePrice) => {
+    if (!product?.promocaoCondicional || !product.promocaoCondicional.ativa) return null;
+    const effectiveBase = safeNumber(basePrice);
+    if (!effectiveBase || effectiveBase <= 0) return null;
+    const normalizedQuantity = Math.max(1, Math.trunc(Number(quantity) || 1));
+    const conditional = product.promocaoCondicional;
+    if (conditional.tipo === 'acima_de') {
+      const min = Math.max(1, Math.trunc(Number(conditional.quantidadeMinima) || 0));
+      const desconto = safeNumber(conditional.descontoPorcentagem);
+      if (!min || normalizedQuantity < min || desconto <= 0) return null;
+      const discounted = Math.max(effectiveBase - effectiveBase * (desconto / 100), 0);
+      return discounted > 0 && discounted < effectiveBase ? discounted : null;
+    }
+    if (conditional.tipo === 'leve_pague') {
+      const leve = Math.max(1, Math.trunc(Number(conditional.leve) || 0));
+      const pague = Math.max(0, Math.trunc(Number(conditional.pague) || 0));
+      if (!leve || normalizedQuantity < leve || pague <= 0 || pague > leve) return null;
+      const promoPacks = Math.floor(normalizedQuantity / leve);
+      const paidItems = promoPacks * pague;
+      const remainingItems = normalizedQuantity % leve;
+      const totalPrice = (paidItems + remainingItems) * effectiveBase;
+      const effectivePrice = totalPrice / normalizedQuantity;
+      return effectivePrice > 0 && effectivePrice < effectiveBase ? effectivePrice : null;
+    }
+    return null;
+  };
+
+  const getPromotionPricing = (product, quantity = 1) => {
     const basePrice = getBasePrice(product);
     if (!product) {
-      return { basePrice, promoPrice: basePrice, hasPromotion: false, canApply: false };
-    }
-
-    if (hasGeneralPromotion(product)) {
-      const desconto = basePrice * (safeNumber(product.promocao.porcentagem) / 100);
-      const promoPrice = Math.max(basePrice - desconto, 0);
       return {
         basePrice,
-        promoPrice,
-        hasPromotion: promoPrice < basePrice,
-        canApply: canApplyGeneralPromotion(),
+        promoPrice: basePrice,
+        hasPromotion: false,
+        canApply: false,
+        promoType: null,
       };
     }
 
-    if (hasClubPromotion(product)) {
-      const promoPrice = safeNumber(product.precoClube);
-      return { basePrice, promoPrice, hasPromotion: true, canApply: true };
+    const generalActive = hasGeneralPromotion(product);
+    const canApplyGeneral = generalActive && canApplyGeneralPromotion();
+    const generalPrice = generalActive
+      ? Math.max(basePrice - basePrice * (safeNumber(product.promocao.porcentagem) / 100), 0)
+      : null;
+
+    const conditionalPrice = getConditionalPromotionPrice(product, quantity, basePrice);
+    const conditionalActive = conditionalPrice != null;
+
+    const clubActive = hasClubPromotion(product);
+    const clubPrice = clubActive ? safeNumber(product.precoClube) : null;
+
+    let promoType = null;
+    let promoPrice = basePrice;
+    let canApply = false;
+
+    if (clubActive) {
+      promoType = 'club';
+      promoPrice = clubPrice;
+      canApply = true;
     }
 
-    return { basePrice, promoPrice: basePrice, hasPromotion: false, canApply: false };
+    if (conditionalActive) {
+      if (!promoType || conditionalPrice < promoPrice) {
+        promoType = 'conditional';
+        promoPrice = conditionalPrice;
+        canApply = true;
+      }
+    }
+
+    if (generalActive) {
+      if (canApplyGeneral) {
+        if (!promoType || generalPrice < promoPrice) {
+          promoType = 'general';
+          promoPrice = generalPrice;
+          canApply = true;
+        }
+      } else if (!promoType) {
+        promoType = 'general';
+        promoPrice = generalPrice;
+        canApply = false;
+      }
+    }
+
+    const hasPromotion = Boolean(promoType && promoPrice < basePrice);
+    return { basePrice, promoPrice, hasPromotion, canApply, promoType };
   };
 
-  const getFinalPrice = (product, usePromotion = true) => {
-    const pricing = getPromotionPricing(product);
+  const getFinalPrice = (product, usePromotion = true, quantity = 1) => {
+    const pricing = getPromotionPricing(product, quantity);
     if (!usePromotion || !pricing.hasPromotion) return pricing.basePrice;
     if (!pricing.canApply) return pricing.basePrice;
     return pricing.promoPrice;
   };
 
-  const getItemPricing = (product, usePromotion = true) => {
-    const pricing = getPromotionPricing(product);
+  const getItemPricing = (product, usePromotion = true, quantity = 1) => {
+    const pricing = getPromotionPricing(product, quantity);
     const promotionRequested = Boolean(usePromotion && pricing.hasPromotion);
     const promotionActive = promotionRequested && pricing.canApply;
     const valor = promotionActive ? pricing.promoPrice : pricing.basePrice;
@@ -2415,6 +2550,8 @@
       valorPromocional: pricing.hasPromotion ? pricing.promoPrice : null,
       hasPromotion: pricing.hasPromotion,
       promotionActive,
+      canApply: pricing.canApply,
+      promoType: pricing.promoType,
     };
   };
 
@@ -3087,9 +3224,11 @@
     const name = product?.nome || product?.descricao || 'Produto sem nome';
     const code = getProductCode(product);
     const barcode = getProductBarcode(product);
-    const pricing = getPromotionPricing(product);
-    const basePrice = pricing.basePrice;
-    const finalPrice = getFinalPrice(product);
+    const quantity = Math.max(1, Math.trunc(state.quantidade));
+    state.quantidade = quantity;
+    const pricing = getItemPricing(product, true, quantity);
+    const basePrice = pricing.valorBase;
+    const finalPrice = pricing.valor;
     const generalPromo = hasGeneralPromotion(product);
     const showGeneralWarning = generalPromo && !canApplyGeneralPromotion();
     if (elements.selectedName) {
@@ -3113,18 +3252,22 @@
       }
     }
     if (elements.selectedPromoBadge) {
-      if (generalPromo) {
-        elements.selectedPromoBadge.textContent = 'Promoção geral';
-      } else {
-        elements.selectedPromoBadge.textContent = 'Promoção ativa';
+      let promoLabel = 'Promocao ativa';
+      if (pricing.promoType === 'general') {
+        promoLabel = 'Promocao geral';
+      } else if (pricing.promoType === 'conditional') {
+        promoLabel = 'Promocao condicional';
+      } else if (pricing.promoType === 'club') {
+        promoLabel = 'Preco clube';
       }
+      elements.selectedPromoBadge.textContent = promoLabel;
       elements.selectedPromoBadge.classList.toggle('hidden', !pricing.hasPromotion);
     }
     if (elements.selectedGeneralWarning) {
       elements.selectedGeneralWarning.classList.toggle('hidden', !showGeneralWarning);
     }
     if (elements.itemQuantity) {
-      elements.itemQuantity.value = state.quantidade;
+      elements.itemQuantity.value = quantity;
     }
     updateItemTotals();
   };
@@ -3132,7 +3275,7 @@
   const updateItemTotals = () => {
     const product = state.selectedProduct;
     const quantidade = Math.max(1, Math.trunc(state.quantidade));
-    const pricing = product ? getItemPricing(product) : { valor: 0 };
+    const pricing = product ? getItemPricing(product, true, quantidade) : { valor: 0 };
     const unitPrice = pricing.valor;
     const total = unitPrice * quantidade;
     if (elements.itemValue) {
@@ -3201,18 +3344,20 @@
           generalPromo: Boolean(item.generalPromo && state.vendaCliente),
           valorBase: item.valorBase ?? item.valor,
           valorPromocional: item.valorPromocional ?? null,
+          promoType: item.promoType || null,
           usePromotion: false,
         };
       }
       const snapshot = item.productSnapshot;
       const wantsPromotion = item.usePromotion !== false;
-      const pricing = getItemPricing(snapshot, wantsPromotion);
+      const pricing = getItemPricing(snapshot, wantsPromotion, item.quantidade);
       const usePromotion = pricing.hasPromotion ? wantsPromotion : false;
       return {
         ...item,
         valor: pricing.valor,
         valorBase: pricing.valorBase,
         valorPromocional: pricing.valorPromocional,
+        promoType: pricing.promoType || null,
         usePromotion,
         subtotal: pricing.valor * item.quantidade,
         generalPromo: hasGeneralPromotion(snapshot),
@@ -4856,13 +5001,34 @@
     }
   };
 
-  const buildCustomerRegistrationUrl = () => {
+  const buildCustomerRegistrationUrl = (prefill = {}) => {
     const url = new URL(CUSTOMER_REGISTRATION_RELATIVE_URL, window.location.href);
     url.searchParams.set('from', 'pdv');
     const storeId = normalizeId(state.selectedStore || state.activePdvStoreId || '');
     if (storeId) {
       url.searchParams.set('storeId', storeId);
     }
+    const addParam = (key, value) => {
+      if (value == null) return;
+      const trimmed = String(value).trim();
+      if (!trimmed) return;
+      url.searchParams.set(key, trimmed);
+    };
+    const address = prefill?.address || {};
+    addParam('prefillSource', prefill?.source);
+    addParam('prefillName', prefill?.name);
+    addParam('prefillDocument', prefill?.document);
+    addParam('prefillPhone', prefill?.phone);
+    addParam('prefillEmail', prefill?.email);
+    addParam('prefillCep', address?.cep);
+    addParam('prefillStreet', address?.street);
+    addParam('prefillNumber', address?.number);
+    addParam('prefillNeighborhood', address?.neighborhood);
+    addParam('prefillCity', address?.city);
+    addParam('prefillState', address?.state);
+    addParam('prefillComplement', address?.complement);
+    addParam('prefillReference', address?.reference);
+    addParam('prefillCountry', address?.country);
     return url.toString();
   };
 
@@ -4884,8 +5050,8 @@
     elements.customerRegisterFrame.style.height = `${clamped}px`;
   };
 
-  const openCustomerRegisterModal = () => {
-    const url = buildCustomerRegistrationUrl();
+  const openCustomerRegisterModal = (prefill = {}) => {
+    const url = buildCustomerRegistrationUrl(prefill);
     if (!elements.customerRegisterModal || !elements.customerRegisterFrame) {
       window.open(url, '_blank', 'noopener');
       return;
@@ -4980,7 +5146,10 @@
       const promoPrice =
         item.valorPromocional != null ? safeNumber(item.valorPromocional) : basePrice;
       const promotionAvailable = promoPrice < basePrice;
-      const promotionBlocked = Boolean(item.generalPromo && !state.vendaCliente);
+      const promoType = item.promoType || null;
+      const promotionBlocked = promoType
+        ? promoType === 'general' && !state.vendaCliente
+        : Boolean(item.generalPromo && !state.vendaCliente);
       const promotionEnabled = promotionAvailable && item.usePromotion !== false;
       const promotionActive = promotionEnabled && !promotionBlocked;
       const generalNotice = !state.vendaCliente && item.generalPromo
@@ -5586,9 +5755,14 @@
     items = [],
     desconto = 0,
     acrescimo = 0,
-    saleCode = ''
+    saleCode = '',
+    options = {}
   ) => {
     const nowIso = new Date().toISOString();
+    const statusOverride = resolveDeliveryStatusOverride(
+      options.status || options.statusOverride
+    );
+    const orderStatus = statusOverride || 'registrado';
     const clienteBase = snapshot?.cliente || {};
     const customerDetails = state.vendaCliente ? { ...state.vendaCliente } : null;
     const customerId = resolveCustomerId(customerDetails);
@@ -5613,7 +5787,7 @@
       clienteBase.endereco || resolveCustomerAddressRecord(state.vendaCliente)?.formatted || '';
     const order = {
       id: createUid(),
-      status: 'registrado',
+      status: orderStatus,
       createdAt: nowIso,
       updatedAt: nowIso,
       statusUpdatedAt: nowIso,
@@ -5845,6 +6019,7 @@
     seller: state.selectedSeller ? { ...state.selectedSeller } : null,
     sellerCode: state.selectedSeller ? getSellerCode(state.selectedSeller) : '',
     sellerName: state.selectedSeller ? getSellerDisplayName(state.selectedSeller) : '',
+    deliveryStatusOverride: state.deliveryStatusOverride,
   });
 
   const applySaleStateSnapshot = (snapshot = {}) => {
@@ -5860,6 +6035,10 @@
       ? { ...snapshot.selectedProduct }
       : null;
     state.quantidade = snapshot.quantidade && snapshot.quantidade > 0 ? snapshot.quantidade : 1;
+    if (Object.prototype.hasOwnProperty.call(snapshot, 'deliveryStatusOverride')) {
+      const override = resolveDeliveryStatusOverride(snapshot.deliveryStatusOverride);
+      state.deliveryStatusOverride = override || null;
+    }
     updateSelectedProductView();
     const snapshotCustomer = snapshot.vendaCliente || null;
     const snapshotPet = snapshotCustomer ? snapshot.vendaPet || null : null;
@@ -8057,6 +8236,7 @@
     state.vendaPagamentos = [];
     state.vendaDesconto = 0;
     state.vendaAcrescimo = 0;
+    state.deliveryStatusOverride = null;
     setSaleCustomer(null, null);
     clearSelectedProduct();
     clearSaleSearchAreas();
@@ -8157,6 +8337,7 @@
     state.vendaPagamentos = [];
     state.vendaDesconto = 0;
     state.vendaAcrescimo = 0;
+    state.deliveryStatusOverride = null;
     setSaleCustomer(null, null);
     clearSelectedProduct();
     clearSaleSearchAreas();
@@ -8334,6 +8515,7 @@
       deliveryAddress: state.deliverySelectedAddress,
       saleCode,
     });
+    const statusOverride = resolveDeliveryStatusOverride(state.deliveryStatusOverride);
     const orderRecord = createDeliveryOrderRecord(
       saleSnapshot,
       state.deliverySelectedAddress,
@@ -8342,7 +8524,8 @@
       itensSnapshot,
       state.vendaDesconto,
       state.vendaAcrescimo,
-      saleCode
+      saleCode,
+      { status: statusOverride }
     );
     const saleReceivables = buildSaleReceivables({
       payments: pagamentosVenda,
@@ -8382,6 +8565,7 @@
     state.vendaPagamentos = [];
     state.vendaDesconto = 0;
     state.vendaAcrescimo = 0;
+    state.deliveryStatusOverride = null;
     setSaleCustomer(null, null);
     clearSelectedProduct();
     clearSaleSearchAreas();
@@ -10818,11 +11002,32 @@
           .join('')
       : '<tr><td colspan="3" class="nfce-compact__empty">Nenhum item informado.</td></tr>';
 
+    const promoRows = Array.isArray(snapshot.descontosPromocao?.entries)
+      ? snapshot.descontosPromocao.entries
+          .map((entry) => {
+            const label = entry?.label || 'Desconto promocao';
+            const valueLabel = entry?.formatted || entry?.value;
+            if (!valueLabel) {
+              return null;
+            }
+            const normalizedValue = String(valueLabel).trim();
+            if (!normalizedValue) {
+              return null;
+            }
+            return {
+              label,
+              value: normalizedValue.startsWith('-') ? normalizedValue : `- ${normalizedValue}`,
+            };
+          })
+          .filter(Boolean)
+      : [];
+
     const totalsRows = [
       totais.bruto ? { label: 'Subtotal', value: totais.bruto } : null,
       totais.desconto
         ? { label: 'Desconto', value: totais.desconto.trim().startsWith('-') ? totais.desconto : `- ${totais.desconto}` }
         : null,
+      ...promoRows,
       totais.acrescimo
         ? { label: 'Acréscimos', value: totais.acrescimo.trim().startsWith('+') ? totais.acrescimo : totais.acrescimo }
         : null,
@@ -11193,6 +11398,22 @@
       });
     }
 
+    const promoEntries = Array.isArray(snapshot.descontosPromocao?.entries)
+      ? snapshot.descontosPromocao.entries
+      : [];
+
+    promoEntries.forEach((entry) => {
+      const label = entry?.label || 'Desconto promocao';
+      const valueLabel = normalizeCurrency(entry?.formatted || entry?.value).trim();
+      if (!valueLabel) {
+        return;
+      }
+      totalsEntries.push({
+        label,
+        value: valueLabel.startsWith('-') ? valueLabel : `- ${valueLabel}`,
+      });
+    });
+
     const acrescimoValue = normalizeCurrency(snapshot.totais?.acrescimo).trim();
     if (snapshot.totais?.acrescimoValor > 0 && acrescimoValue) {
       totalsEntries.push({ label: 'Acréscimos', value: acrescimoValue });
@@ -11358,11 +11579,32 @@
       )
       .join('');
 
+    const promoRows = Array.isArray(snapshot.descontosPromocao?.entries)
+      ? snapshot.descontosPromocao.entries
+          .map((entry) => {
+            const label = entry?.label || 'Desconto promocao';
+            const valueLabel = entry?.formatted || entry?.value;
+            if (!valueLabel) {
+              return null;
+            }
+            const normalizedValue = String(valueLabel).trim();
+            if (!normalizedValue) {
+              return null;
+            }
+            return {
+              label,
+              value: normalizedValue.startsWith('-') ? normalizedValue : `- ${normalizedValue}`,
+            };
+          })
+          .filter(Boolean)
+      : [];
+
     const totalsRows = [
       { label: 'Subtotal', value: snapshot.totais.bruto },
       snapshot.totais.descontoValor > 0
         ? { label: 'Descontos', value: `- ${snapshot.totais.desconto}` }
         : null,
+      ...promoRows,
       snapshot.totais.acrescimoValor > 0
         ? { label: 'Acréscimos', value: snapshot.totais.acrescimo }
         : null,
@@ -14314,6 +14556,7 @@
     state.vendaPagamentos = [];
     state.vendaDesconto = 0;
     state.vendaAcrescimo = 0;
+    state.deliveryStatusOverride = null;
     state.saleCodeIdentifier = '';
     state.saleCodeSequence = 1;
     state.currentSaleCode = '';
@@ -14927,6 +15170,8 @@
         `${API_BASE}/products?search=${encodeURIComponent(normalized)}&limit=8&includeHidden=true&audience=pdv`;
       const payload = await fetchWithOptionalAuth(endpoint, {
         token,
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-store' },
         signal: state.searchController.signal,
         errorMessage: 'Não foi possível buscar produtos.',
       });
@@ -14970,6 +15215,8 @@
         `${API_BASE}/products?search=${encodeURIComponent(normalized)}&limit=6&includeHidden=true&audience=pdv`;
       const payload = await fetchWithOptionalAuth(endpoint, {
         token,
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-store' },
         errorMessage: 'Não foi possível buscar o produto pelo código informado.',
       });
       const products = Array.isArray(payload?.products)
@@ -14983,6 +15230,31 @@
       console.error('Erro ao buscar produto por código de barras no PDV:', error);
       throw error;
     }
+  };
+
+  const fetchProductById = async (productId) => {
+    if (!productId) return null;
+    try {
+      const token = getToken();
+      const endpoint = `${API_BASE}/products/${encodeURIComponent(productId)}`;
+      const payload = await fetchWithOptionalAuth(endpoint, {
+        token,
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-store' },
+        errorMessage: 'Nao foi possivel buscar o produto pelo id.',
+      });
+      return payload || null;
+    } catch (error) {
+      console.error('Erro ao buscar produto por id no PDV:', error);
+      return null;
+    }
+  };
+
+  const resolveFreshProduct = async (product) => {
+    const productId = product?._id || product?.id;
+    if (!productId) return product;
+    const refreshed = await fetchProductById(productId);
+    return refreshed || product;
   };
 
   const selectProduct = (index) => {
@@ -15003,7 +15275,7 @@
   const appendProductToSale = (product, quantidade = 1) => {
     if (!product) return false;
     const quantidadeFinal = Math.max(1, Math.trunc(Number(quantidade) || 1));
-    const pricing = getItemPricing(product);
+    const pricing = getItemPricing(product, true, quantidadeFinal);
     const usePromotion = pricing.hasPromotion;
     const subtotal = pricing.valor * quantidadeFinal;
     const codigo = getProductCode(product);
@@ -15022,19 +15294,20 @@
       const current = state.itens[existingIndex];
       const shouldUsePromotion =
         current.usePromotion !== undefined ? current.usePromotion : usePromotion;
-      const currentPricing = getItemPricing(product, shouldUsePromotion);
       current.quantidade += quantidadeFinal;
+      const currentPricing = getItemPricing(product, shouldUsePromotion, current.quantidade);
       current.valorBase = currentPricing.valorBase;
       current.valorPromocional = currentPricing.valorPromocional;
       current.usePromotion = currentPricing.hasPromotion ? shouldUsePromotion : false;
       current.valor = currentPricing.valor;
       current.subtotal = current.quantidade * current.valor;
+      current.promoType = currentPricing.promoType || null;
       current.codigoInterno = codigoInterno || current.codigoInterno;
       current.codigoBarras = codigoBarras || current.codigoBarras;
       current.generalPromo = generalPromo;
       current.productSnapshot = snapshot;
     } else {
-      const pricingToApply = getItemPricing(product, usePromotion);
+      const pricingToApply = getItemPricing(product, usePromotion, quantidadeFinal);
       state.itens.push({
         id: product._id || product.id || codigo || String(Date.now()),
         codigo,
@@ -15047,6 +15320,7 @@
         usePromotion: pricingToApply.hasPromotion ? usePromotion : false,
         valor: pricingToApply.valor,
         subtotal,
+        promoType: pricingToApply.promoType || null,
         generalPromo,
         productSnapshot: snapshot,
       });
@@ -15057,7 +15331,7 @@
     return true;
   };
 
-  const addItemToList = () => {
+  const addItemToList = async () => {
     if (!state.selectedProduct) {
       notify('Selecione um produto para adicionar à venda.', 'warning');
       return;
@@ -15067,7 +15341,11 @@
       Math.trunc(Number(elements.itemQuantity?.value || state.quantidade || 1))
     );
     state.quantidade = quantidade;
-    const product = state.selectedProduct;
+    const product = await resolveFreshProduct(state.selectedProduct);
+    if (product && product !== state.selectedProduct) {
+      state.selectedProduct = product;
+      updateSelectedProductView();
+    }
     appendProductToSale(product, quantidade);
   };
 
@@ -15108,14 +15386,15 @@
       state.searchResults = [];
     };
 
-    const applySelectionAndAppend = (product) => {
-      state.selectedProduct = product;
+    const applySelectionAndAppend = async (product) => {
+      const refreshedProduct = await resolveFreshProduct(product);
+      state.selectedProduct = refreshedProduct;
       state.quantidade = 1;
       if (elements.itemQuantity) {
         elements.itemQuantity.value = 1;
       }
       updateSelectedProductView();
-      appendProductToSale(product, 1);
+      appendProductToSale(refreshedProduct, 1);
       clearSearchOverlay();
       if (elements.searchInput) {
         elements.searchInput.value = '';
@@ -15124,7 +15403,7 @@
     };
 
     if (matchesProduct(state.selectedProduct)) {
-      applySelectionAndAppend(state.selectedProduct);
+      await applySelectionAndAppend(state.selectedProduct);
       return;
     }
 
@@ -15134,7 +15413,7 @@
         state.searchResults.find((item) => (item?.nome || '').toLowerCase() === lowerTerm) ||
         null;
       if (fromResults) {
-        applySelectionAndAppend(fromResults);
+        await applySelectionAndAppend(fromResults);
         return;
       }
     }
@@ -15147,7 +15426,7 @@
         notify('Nenhum produto encontrado para o código informado.', 'warning');
         return;
       }
-      applySelectionAndAppend(product);
+      await applySelectionAndAppend(product);
     } catch (error) {
       console.error('Falha ao adicionar produto pela busca no PDV:', error);
       notify('Falha ao buscar o produto informado.', 'error');
@@ -15298,7 +15577,7 @@
       const snapshot = item.productSnapshot || null;
       const target = snapshot || item;
       const nextUsePromotion = !(item.usePromotion !== false);
-      const pricing = getItemPricing(target, nextUsePromotion);
+      const pricing = getItemPricing(target, nextUsePromotion, item.quantidade);
       const usePromotion = pricing.hasPromotion ? nextUsePromotion : false;
       state.itens[index] = {
         ...item,
@@ -15307,6 +15586,7 @@
         valorPromocional: pricing.valorPromocional,
         subtotal: pricing.valor * item.quantidade,
         usePromotion,
+        promoType: pricing.promoType || null,
         generalPromo: snapshot ? hasGeneralPromotion(snapshot) : Boolean(item.generalPromo),
       };
       renderItemsList();
@@ -15339,7 +15619,7 @@
     if (elements.itemQuantity) {
       elements.itemQuantity.value = newValue;
     }
-    updateItemTotals();
+    updateSelectedProductView();
   };
 
   const handleQuantityInput = () => {
@@ -15348,7 +15628,7 @@
     if (elements.itemQuantity) {
       elements.itemQuantity.value = value;
     }
-    updateItemTotals();
+    updateSelectedProductView();
   };
 
   const handleActionClick = (event) => {
@@ -15706,7 +15986,7 @@
       button.addEventListener('click', handleCustomerTabClick);
     });
     elements.customerModal?.addEventListener('keydown', handleCustomerModalKeydown);
-    elements.customerRegisterButton?.addEventListener('click', openCustomerRegisterModal);
+    elements.customerRegisterButton?.addEventListener('click', () => openCustomerRegisterModal());
     elements.customerRegisterClose?.addEventListener('click', closeCustomerRegisterModal);
     elements.customerRegisterBackdrop?.addEventListener('click', closeCustomerRegisterModal);
     elements.customerRegisterModal?.addEventListener('keydown', handleCustomerRegisterModalKeydown);
@@ -15827,4 +16107,781 @@
   };
 
   document.addEventListener('DOMContentLoaded', init);
+
+  // --- iFood modal (Pedidos com abas) ---
+  const ifoodModal = document.getElementById('ifood-orders-modal');
+  const ifoodBtn = document.getElementById('ifood-open-orders-btn');
+  const ifoodNotifDot = document.getElementById('ifood-notification-dot');
+  const ifoodCloseButtons = [
+    document.getElementById('ifood-modal-close'),
+    document.getElementById('ifood-modal-close-footer'),
+  ];
+  const ifoodTabButtons = document.querySelectorAll('.ifood-tab-btn');
+  const ifoodListEl = document.getElementById('ifood-orders-list');
+  const ifoodLoadingEl = document.getElementById('ifood-orders-loading');
+  const ifoodErrorEl = document.getElementById('ifood-orders-error');
+  const ifoodEmptyEl = document.getElementById('ifood-orders-empty');
+  let ifoodActiveTab = 'pedidos';
+  let ifoodBuckets = { awaiting: [], separation: [], packing: [], concluded: [], canceled: [] };
+  let ifoodRefreshInFlight = false;
+  const ifoodCustomerCache = new Map();
+  const ifoodOrderPrefillMap = new Map();
+  const ifoodOrderImportMap = new Map();
+
+  const resolveIfoodCustomerDocument = (order = {}) => {
+    const customer = order?.customer || {};
+    return (
+      customer?.documentNumber ||
+      customer?.document ||
+      customer?.documento ||
+      customer?.cpf ||
+      customer?.cnpj ||
+      order?.customerDocument ||
+      ''
+    );
+  };
+
+  const resolveIfoodCustomerPhone = (order = {}) => {
+    const customer = order?.customer || {};
+    const phone = customer?.phone || {};
+    return (
+      phone?.number ||
+      customer?.phoneNumber ||
+      customer?.telefone ||
+      customer?.celular ||
+      order?.customerPhone ||
+      order?.phone ||
+      ''
+    );
+  };
+
+  const resolveIfoodCustomerEmail = (order = {}) => {
+    const customer = order?.customer || {};
+    return (
+      customer?.email ||
+      order?.customerEmail ||
+      ''
+    );
+  };
+
+  const buildIfoodCustomerPrefill = (order = {}) => {
+    const customerName = order?.customerName || order?.customer?.name || '';
+    const document = normalizeDocumentDigits(resolveIfoodCustomerDocument(order));
+    const phone = onlyDigits(resolveIfoodCustomerPhone(order));
+    const email = resolveIfoodCustomerEmail(order);
+    const deliveryAddress = order?.delivery?.deliveryAddress || {};
+    return {
+      source: 'ifood',
+      name: customerName,
+      document,
+      phone,
+      email,
+      address: {
+        cep: deliveryAddress?.postalCode || deliveryAddress?.postal_code || '',
+        street: deliveryAddress?.streetName || deliveryAddress?.formattedAddress || '',
+        number: deliveryAddress?.streetNumber || '',
+        neighborhood: deliveryAddress?.neighborhood || '',
+        city: deliveryAddress?.city || '',
+        state: deliveryAddress?.state || '',
+        complement: deliveryAddress?.complement || '',
+        reference: deliveryAddress?.reference || '',
+        country: deliveryAddress?.country || '',
+      },
+    };
+  };
+
+  const resolveIfoodMoneyValue = (raw) => {
+    if (raw == null) return null;
+    if (typeof raw === 'object') {
+      if (raw.value != null) return resolveIfoodMoneyValue(raw.value);
+      if (raw.amount != null) return resolveIfoodMoneyValue(raw.amount);
+    }
+    const num = Number(raw);
+    if (!Number.isFinite(num)) return null;
+    if (Number.isInteger(num) && Math.abs(num) >= 100) return num / 100;
+    return num;
+  };
+
+  const sumIfoodFeesValue = (raw) => {
+    if (raw == null) return 0;
+    if (Array.isArray(raw)) {
+      return raw.reduce((sum, fee) => {
+        const resolved = resolveIfoodMoneyValue(fee?.value ?? fee?.amount ?? fee);
+        return sum + (resolved || 0);
+      }, 0);
+    }
+    return resolveIfoodMoneyValue(raw) || 0;
+  };
+
+  const resolveIfoodFeesValue = (order = {}) => {
+    const summary = order?.totalSummary || {};
+    const deliveryFee = resolveIfoodMoneyValue(
+      summary?.deliveryFee ?? order?.deliveryFee ?? order?.total?.deliveryFee
+    );
+    const additionalFees = sumIfoodFeesValue(
+      summary?.additionalFees ?? order?.additionalFees ?? order?.total?.additionalFees
+    );
+    const totalFees = (deliveryFee || 0) + additionalFees;
+    return totalFees > 0 ? totalFees : 0;
+  };
+
+  const buildIfoodFeeItem = (order = {}, orderKey = '') => {
+    const feeValue = resolveIfoodFeesValue(order);
+    if (!(feeValue > 0)) return null;
+    const idBase = orderKey || order?.id || order?.code || Date.now();
+    return {
+      id: `ifood-fee-${idBase}`,
+      codigo: 'TAXA-IFOOD',
+      codigoInterno: 'TAXA-IFOOD',
+      codigoBarras: '',
+      nome: 'Taxa Ifood',
+      quantidade: 1,
+      valor: feeValue,
+      valorBase: feeValue,
+      valorPromocional: null,
+      usePromotion: false,
+      subtotal: feeValue,
+      generalPromo: false,
+      unidade: 'UN',
+    };
+  };
+
+  const normalizeIfoodPaymentMatch = (value) =>
+    normalizeKeyword(value).replace(/[^a-z0-9]/g, '');
+
+  const isIfoodPaymentMethod = (method) => {
+    if (!method) return false;
+    const candidates = [method.label, method.code, ...(method.aliases || [])].filter(Boolean);
+    return candidates.some((value) => normalizeIfoodPaymentMatch(value).includes('ifood'));
+  };
+
+  const findIfoodPaymentMethod = () =>
+    state.paymentMethods.find((method) => isIfoodPaymentMethod(method)) || null;
+
+  const isIfoodPrepaidPayment = (order = {}) => {
+    const payments = order?.payments || order?.payment || {};
+    const prepaid =
+      payments?.prepaid ??
+      payments?.isPrepaid ??
+      order?.prepaid ??
+      order?.isPrepaid ??
+      order?.paid ??
+      order?.paymentPrepaid ??
+      null;
+    return prepaid === true;
+  };
+
+  const buildIfoodPaymentEntry = () => {
+    const total = getSaleTotalLiquido();
+    if (!(total > 0)) return null;
+    const method = findIfoodPaymentMethod();
+    return {
+      uid: createUid(),
+      id: method?.id || 'ifood',
+      label: method?.label || 'Ifood',
+      parcelas: 1,
+      valor: total,
+      type: method?.type || 'avista',
+    };
+  };
+
+  const buildIfoodSaleItems = async (order = {}, orderKey = '') => {
+    const rawItems = Array.isArray(order?.items) ? order.items : [];
+    const productCache = new Map();
+    const resolveProductByLookup = async (lookupValue) => {
+      const normalized = normalizeBarcodeValue(lookupValue);
+      if (!normalized) return null;
+      if (productCache.has(normalized)) {
+        return productCache.get(normalized);
+      }
+      try {
+        const product = await fetchProductByBarcode(normalized);
+        productCache.set(normalized, product || null);
+        return product || null;
+      } catch (error) {
+        console.warn('Falha ao validar produto do iFood pelo codigo:', error);
+        productCache.set(normalized, null);
+        return null;
+      }
+    };
+
+    const items = [];
+    for (let index = 0; index < rawItems.length; index += 1) {
+      const item = rawItems[index];
+      const quantity = safeNumber(item?.quantity);
+      const normalizedQuantity = quantity > 0 ? quantity : 1;
+      const unitPriceRaw = safeNumber(
+        item?.unitPrice ??
+          item?.price ??
+          item?.valor ??
+          item?.value ??
+          item?.unit_value
+      );
+      const totalPriceRaw = safeNumber(
+        item?.totalPrice ??
+          item?.total ??
+          item?.totalValue ??
+          item?.total_value ??
+          item?.amount
+      );
+      let resolvedUnitPrice =
+        unitPriceRaw > 0
+          ? unitPriceRaw
+          : totalPriceRaw > 0
+            ? totalPriceRaw / normalizedQuantity
+            : 0;
+      let resolvedTotal =
+        totalPriceRaw > 0 ? totalPriceRaw : resolvedUnitPrice * normalizedQuantity;
+      const code =
+        item?.externalCode ||
+        item?.plu ||
+        item?.barcode ||
+        item?.ean ||
+        item?.sku ||
+        item?.code ||
+        item?.id ||
+        '';
+      const barcode = item?.barcode || item?.ean || '';
+      const name =
+        item?.name ||
+        item?.description ||
+        item?.title ||
+        `Item ${index + 1}`;
+      const unitLabel = item?.unit || item?.unidade || item?.unitLabel || '';
+      const normalizedItem = {
+        id: item?.id || `${order?.id || order?.code || 'ifood'}:${index}`,
+        codigo: code,
+        codigoInterno: code,
+        codigoBarras: barcode || code,
+        nome: name,
+        quantidade: normalizedQuantity,
+        valor: resolvedUnitPrice,
+        valorBase: resolvedUnitPrice,
+        valorPromocional: null,
+        usePromotion: false,
+        subtotal: resolvedTotal,
+        generalPromo: false,
+        unidade: unitLabel,
+      };
+      const lookupCandidates = [
+        barcode,
+        item?.externalCode,
+        item?.plu,
+        item?.sku,
+        item?.code,
+      ].filter(Boolean);
+      let matchedProduct = null;
+      for (const candidate of lookupCandidates) {
+        matchedProduct = await resolveProductByLookup(candidate);
+        if (matchedProduct) break;
+      }
+      if (matchedProduct) {
+        const productCode = getProductCode(matchedProduct);
+        const productBarcode = getProductBarcode(matchedProduct);
+        const productUnit =
+          matchedProduct?.unidade ||
+          matchedProduct?.unit ||
+          matchedProduct?.unidadeMedida ||
+          '';
+        const productId = matchedProduct?._id || matchedProduct?.id || '';
+        if (productId) {
+          normalizedItem.id = productId;
+        }
+        normalizedItem.codigo = productCode || normalizedItem.codigo;
+        normalizedItem.codigoInterno =
+          matchedProduct?.codigoInterno ||
+          matchedProduct?.codInterno ||
+          productCode ||
+          normalizedItem.codigoInterno ||
+          normalizedItem.codigo;
+        normalizedItem.codigoBarras = productBarcode || normalizedItem.codigoBarras;
+        normalizedItem.nome = matchedProduct?.nome || normalizedItem.nome;
+        if (productUnit) {
+          normalizedItem.unidade = productUnit;
+        }
+        if (!(resolvedUnitPrice > 0)) {
+          const fallbackPrice = getBasePrice(matchedProduct);
+          if (fallbackPrice > 0) {
+            resolvedUnitPrice = fallbackPrice;
+            resolvedTotal = fallbackPrice * normalizedQuantity;
+            normalizedItem.valor = resolvedUnitPrice;
+            normalizedItem.valorBase = resolvedUnitPrice;
+            normalizedItem.subtotal = resolvedTotal;
+          }
+        }
+      }
+      if (normalizedItem && normalizedItem.nome) {
+        items.push(normalizedItem);
+      }
+    }
+
+    const feeItem = buildIfoodFeeItem(order, orderKey);
+    if (feeItem && items.length) {
+      items.push(feeItem);
+    }
+    return items;
+  };
+
+  const buildIfoodDeliveryAddress = (order = {}, orderKey = '') => {
+    const deliveryAddress = order?.delivery?.deliveryAddress || {};
+    const candidate = {
+      id: `ifood-${orderKey || order?.id || order?.code || Date.now()}`,
+      apelido: 'iFood',
+      cep: deliveryAddress?.postalCode || deliveryAddress?.postal_code || '',
+      logradouro: deliveryAddress?.streetName || deliveryAddress?.formattedAddress || '',
+      numero: deliveryAddress?.streetNumber || '',
+      complemento: deliveryAddress?.complement || '',
+      bairro: deliveryAddress?.neighborhood || '',
+      cidade: deliveryAddress?.city || '',
+      uf: (deliveryAddress?.state || '').toString().toUpperCase(),
+    };
+    const hasValue = ['cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'uf'].some(
+      (field) => candidate[field] && String(candidate[field]).trim()
+    );
+    if (!hasValue) return null;
+    return normalizeCustomerAddressRecord(candidate, 0);
+  };
+
+  const ensureIfoodDeliverySelection = async (order, orderKey) => {
+    const normalized = buildIfoodDeliveryAddress(order, orderKey);
+    if (!normalized) return false;
+    await loadDeliveryAddresses();
+    const matchesAddress = (item) => {
+      if (!item) return false;
+      if (item.formatted && normalized.formatted && item.formatted === normalized.formatted) {
+        return true;
+      }
+      return (
+        item.cep &&
+        normalized.cep &&
+        item.cep === normalized.cep &&
+        item.numero === normalized.numero &&
+        item.logradouro === normalized.logradouro
+      );
+    };
+    let selected = state.deliveryAddresses.find((item) => matchesAddress(item)) || null;
+    if (!selected) {
+      state.deliveryAddresses.unshift({ ...normalized, isDefault: true });
+      selected = normalized;
+    }
+    state.deliverySelectedAddressId = selected.id;
+    state.deliverySelectedAddress = { ...selected };
+    const customerId = resolveCustomerId(state.vendaCliente);
+    if (customerId) {
+      customerAddressesCache.set(
+        customerId,
+        state.deliveryAddresses.map((item) => ({ ...item }))
+      );
+    }
+    renderDeliveryAddresses();
+    return true;
+  };
+
+  const applyIfoodOrderToSale = async (order, orderKey) => {
+    if (!order) return false;
+    const itemsToApply = await buildIfoodSaleItems(order, orderKey);
+    if (!itemsToApply.length) {
+      notify('Pedido do iFood sem itens para importar.', 'info');
+      return false;
+    }
+    const hasItems = state.itens.length > 0;
+    if (hasItems) {
+      const confirmed = window.confirm(
+        'Os itens atuais da venda serao substituidos pelo pedido do iFood. Deseja continuar?'
+      );
+      if (!confirmed) return false;
+    }
+    applySaleStateSnapshot({
+      itens: itemsToApply,
+      vendaPagamentos: [],
+      vendaDesconto: 0,
+      vendaAcrescimo: 0,
+      selectedProduct: null,
+      quantidade: 1,
+    });
+    state.vendaPagamentos = [];
+    state.vendaDesconto = 0;
+    state.vendaAcrescimo = 0;
+    state.deliverySelectedAddressId = '';
+    state.deliverySelectedAddress = null;
+    if (isIfoodPrepaidPayment(order)) {
+      const paymentEntry = buildIfoodPaymentEntry();
+      if (paymentEntry) {
+        state.vendaPagamentos = [paymentEntry];
+      }
+    }
+
+    const documentValue = resolveIfoodCustomerDocument(order) || '';
+    const documentDigits = normalizeDocumentDigits(documentValue);
+    let customer = null;
+    if (documentDigits) {
+      customer = await fetchDeliveryCustomerByDocument(documentDigits);
+    }
+    if (!customer) {
+      notify('Cliente do pedido iFood nao encontrado.', 'warning');
+      return false;
+    }
+    const customerForSale = { ...customer };
+    const inlineAddress = buildIfoodDeliveryAddress(order, orderKey);
+    if (inlineAddress) {
+      const existingInline = extractInlineCustomerAddresses(customerForSale)
+        .map((item, index) => normalizeCustomerAddressRecord(item, index))
+        .filter(Boolean)
+        .some((item) => item.formatted === inlineAddress.formatted);
+      if (!existingInline) {
+        if (!Array.isArray(customerForSale.enderecos)) {
+          customerForSale.enderecos = [];
+        }
+        customerForSale.enderecos.push({ ...inlineAddress });
+      }
+    }
+    setSaleCustomer(customerForSale, null);
+    renderItemsList();
+    renderSalePaymentsPreview();
+    updateFinalizeButton();
+    updateSaleSummary();
+    clearSaleSearchAreas();
+    setActiveTab('pdv-tab');
+
+    const hasDelivery = await ensureIfoodDeliverySelection(order, orderKey);
+    if (hasDelivery && elements.deliveryAddressModal) {
+      if (!state.caixaAberto) {
+        notify('Pedido importado. Abra o caixa para registrar o delivery.', 'info');
+      } else {
+        setDeliveryAddressFormVisible(false);
+        resetDeliveryAddressForm();
+        elements.deliveryAddressModal.classList.remove('hidden');
+        document.body.classList.add('overflow-hidden');
+      }
+    }
+
+    state.deliveryStatusOverride = 'emSeparacao';
+    notify('Pedido do iFood importado para o PDV.', 'success');
+    return true;
+  };
+
+  const getIfoodCustomerRegistration = async (document) => {
+    const digits = normalizeDocumentDigits(document);
+    if (!digits || digits.length !== 11) {
+      return false;
+    }
+    if (ifoodCustomerCache.has(digits)) {
+      const cached = ifoodCustomerCache.get(digits);
+      if (cached === true || cached === false) return cached;
+      if (cached && typeof cached.then === 'function') return cached;
+    }
+    const lookupPromise = fetchDeliveryCustomerByDocument(digits)
+      .then((customer) => {
+        const registered = !!customer;
+        ifoodCustomerCache.set(digits, registered);
+        return registered;
+      })
+      .catch((error) => {
+        console.warn('Erro ao verificar cliente iFood:', error);
+        ifoodCustomerCache.set(digits, false);
+        return false;
+      });
+    ifoodCustomerCache.set(digits, lookupPromise);
+    return lookupPromise;
+  };
+
+  const highlightIfoodTabs = () => {
+    ifoodTabButtons.forEach((btn) => {
+      if (!btn) return;
+      const isActive = btn.dataset.ifoodTab === ifoodActiveTab;
+      btn.classList.toggle('border-primary', isActive);
+      btn.classList.toggle('text-primary', isActive);
+      btn.classList.toggle('bg-primary/10', isActive);
+      btn.classList.toggle('shadow-sm', isActive);
+    });
+  };
+
+  const toggleIfoodModal = (show) => {
+    if (!ifoodModal) return;
+    ifoodModal.classList.toggle('hidden', !show);
+    if (!show) {
+      if (ifoodNotifDot) ifoodNotifDot.classList.add('hidden');
+      ifoodActiveTab = 'pedidos';
+      highlightIfoodTabs();
+      ifoodLoadingEl?.classList.remove('hidden');
+      ifoodErrorEl?.classList.add('hidden');
+      ifoodEmptyEl?.classList.add('hidden');
+      ifoodListEl?.classList.add('hidden');
+      if (ifoodListEl) ifoodListEl.innerHTML = '';
+    }
+  };
+
+  const renderIfoodOrders = async (buckets = {}) => {
+    if (!ifoodListEl || !ifoodLoadingEl || !ifoodEmptyEl) return;
+    ifoodBuckets = {
+      awaiting: buckets.awaiting || [],
+      separation: buckets.separation || [],
+      packing: buckets.packing || [],
+      concluded: buckets.concluded || [],
+      canceled: buckets.canceled || [],
+    };
+    const listByTab = {
+      pedidos: ifoodBuckets.awaiting,
+      separacao: ifoodBuckets.separation,
+      empacotar: ifoodBuckets.packing,
+      concluidos: ifoodBuckets.concluded,
+      cancelados: ifoodBuckets.canceled,
+    };
+    const accentByTab = {
+      pedidos: 'text-primary',
+      separacao: 'text-amber-600',
+      empacotar: 'text-blue-600',
+      concluidos: 'text-emerald-600',
+      cancelados: 'text-red-600',
+    };
+    const statusLabels = {
+      PLC: 'Novo (PLACED)',
+      PLACED: 'Novo (PLACED)',
+      CFM: 'Confirmado',
+      CONFIRMED: 'Confirmado',
+      SPS: 'Separação iniciada',
+      SEPARATION_STARTED: 'Separação iniciada',
+      SPE: 'Separação concluída',
+      SEPARATION_END: 'Separação concluída',
+      SEPARATION_ENDED: 'Separação concluída',
+      RTP: 'Pronto para retirada',
+      READY_TO_PICKUP: 'Pronto para retirada',
+      DSP: 'Despachado',
+      DISPATCHED: 'Despachado',
+      CON: 'Concluído',
+      CONCLUDED: 'Concluído',
+      CAN: 'Cancelado',
+      CANCELLED: 'Cancelado',
+    };
+
+    const items = listByTab[ifoodActiveTab] || [];
+    highlightIfoodTabs();
+    ifoodLoadingEl?.classList.add('hidden');
+    ifoodOrderPrefillMap.clear();
+    ifoodOrderImportMap.clear();
+
+    if (!items.length) {
+      ifoodEmptyEl?.classList.remove('hidden');
+      ifoodListEl?.classList.add('hidden');
+      return;
+    }
+
+    ifoodEmptyEl?.classList.add('hidden');
+    ifoodListEl?.classList.remove('hidden');
+    if (ifoodListEl) ifoodListEl.innerHTML = '';
+
+    const accent = accentByTab[ifoodActiveTab] || 'text-gray-600';
+    const documents = items
+      .map((order) => resolveIfoodCustomerDocument(order))
+      .map((doc) => normalizeDocumentDigits(doc))
+      .filter((doc) => doc && doc.length === 11);
+    const uniqueDocuments = Array.from(new Set(documents));
+    const registrationByDocument = new Map();
+    if (uniqueDocuments.length) {
+      await Promise.all(
+        uniqueDocuments.map(async (doc) => {
+          const registered = await getIfoodCustomerRegistration(doc);
+          registrationByDocument.set(doc, registered);
+        })
+      );
+    }
+
+    const cards = items
+      .map((order, index) => {
+        const orderKey =
+          String(order?.id || order?.code || order?.orderId || order?.resourceId || '') ||
+          `ifood-${ifoodActiveTab}-${index}`;
+        ifoodOrderPrefillMap.set(orderKey, buildIfoodCustomerPrefill(order));
+        ifoodOrderImportMap.set(orderKey, order);
+        const code = order?.code || order?.id || '-';
+        const created = order?.createdAt || '';
+        const displayDate = created ? new Date(created).toLocaleString('pt-BR') : '';
+        const amountText = Number.isFinite(order?.total) ? formatCurrency(order.total) : '';
+        const status = (order?.rawStatus || order?.status || '').toUpperCase();
+        const statusText = statusLabels[status] || status || '-';
+        const customerName =
+          order?.customerName ||
+          order?.customer?.name ||
+          '';
+        const customerDoc = resolveIfoodCustomerDocument(order) || '';
+        const customerLine = [customerName, customerDoc].filter(Boolean).join(' - ');
+        const customerDocDigits = normalizeDocumentDigits(customerDoc);
+        const customerRegistered = customerDocDigits
+          ? registrationByDocument.get(customerDocDigits) === true
+          : false;
+        const canImport =
+          customerRegistered && ['SPE', 'SEPARATION_END', 'SEPARATION_ENDED'].includes(status);
+        const customerTag = customerRegistered
+          ? `<div class="mt-1 flex flex-col items-end gap-1">
+              <p class="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Cliente cadastrado</p>
+              ${
+                canImport
+                  ? `<button type="button" class="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700 transition hover:bg-sky-100" data-ifood-import data-order-id="${orderKey}">Importar</button>`
+                  : ''
+              }
+            </div>`
+          : `<button type="button" class="mt-1 inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-semibold text-rose-700 transition hover:bg-rose-100" data-ifood-register data-order-id="${orderKey}">Cadastrar</button>`;
+        return `
+          <div class="py-3 flex items-start justify-between gap-3">
+            <div>
+              <p class="text-sm font-semibold text-gray-800">Pedido: ${code}</p>
+              <p class="text-xs text-gray-500">${displayDate}</p>
+              <p class="text-xs text-gray-500">${customerLine}</p>
+              <p class="text-[11px] text-gray-400">${order?.address || ''}</p>
+            </div>
+            <div class="text-right">
+              <p class="text-sm font-semibold text-gray-800">${amountText}</p>
+              <p class="text-[11px] font-semibold ${accent}">${statusText}</p>
+              ${customerTag}
+            </div>
+          </div>
+        `;
+      })
+      .join('');
+
+    ifoodListEl.innerHTML = cards;
+  };
+
+  ifoodListEl?.addEventListener('click', async (event) => {
+    const element = event.target instanceof Element ? event.target : null;
+    const importButton = element ? element.closest('[data-ifood-import]') : null;
+    if (importButton) {
+      event.preventDefault();
+      const orderId = importButton.dataset.orderId || '';
+      const order = ifoodOrderImportMap.get(orderId);
+      if (!order) {
+        notify('Nao foi possivel localizar o pedido do iFood.', 'error');
+        return;
+      }
+      const wasDisabled = importButton.disabled;
+      const hadCursorWait = importButton.classList.contains('cursor-wait');
+      const hadOpacity = importButton.classList.contains('opacity-60');
+      if (!wasDisabled) {
+        importButton.disabled = true;
+        if (!hadCursorWait) {
+          importButton.classList.add('cursor-wait');
+        }
+        if (!hadOpacity) {
+          importButton.classList.add('opacity-60');
+        }
+      }
+      let applied = false;
+      try {
+        applied = await applyIfoodOrderToSale(order, orderId);
+        if (applied) {
+          toggleIfoodModal(false);
+        }
+      } catch (error) {
+        console.error('Erro ao importar pedido do iFood:', error);
+        notify('Nao foi possivel importar o pedido do iFood.', 'error');
+      } finally {
+        if (!applied && importButton.isConnected) {
+          importButton.disabled = wasDisabled;
+          if (!wasDisabled) {
+            if (!hadCursorWait) {
+              importButton.classList.remove('cursor-wait');
+            }
+            if (!hadOpacity) {
+              importButton.classList.remove('opacity-60');
+            }
+          }
+        }
+      }
+      return;
+    }
+
+    const registerButton = element ? element.closest('[data-ifood-register]') : null;
+    if (!registerButton) return;
+    event.preventDefault();
+    const orderId = registerButton.dataset.orderId || '';
+    const prefill = ifoodOrderPrefillMap.get(orderId);
+    if (prefill) {
+      openCustomerRegisterModal(prefill);
+      return;
+    }
+    openCustomerRegisterModal();
+  });
+
+  const fetchIfoodOrders = async () => {
+    if (ifoodRefreshInFlight) return;
+    ifoodRefreshInFlight = true;
+    if (!state?.selectedStore) {
+      if (typeof showToast === 'function')
+        showToast('Selecione uma empresa para buscar pedidos do iFood.', 'warning', 4000);
+      ifoodRefreshInFlight = false;
+      return;
+    }
+    if (!ifoodLoadingEl || !ifoodErrorEl || !ifoodEmptyEl || !ifoodListEl) return;
+    ifoodLoadingEl.classList.remove('hidden');
+    ifoodErrorEl.classList.add('hidden');
+    ifoodEmptyEl.classList.add('hidden');
+    ifoodListEl.classList.add('hidden');
+
+    try {
+      const token = JSON.parse(localStorage.getItem('loggedInUser') || 'null')?.token;
+      if (!token) throw new Error('Sessão expirada.');
+      const resp = await fetch(
+        `${API_BASE}/ifood/orders/open?storeId=${encodeURIComponent(state.selectedStore)}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      const payload = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(payload?.message || 'Falha ao buscar pedidos do iFood.');
+      await renderIfoodOrders(payload || {});
+    } catch (err) {
+      ifoodLoadingEl.classList.add('hidden');
+      ifoodListEl?.classList.add('hidden');
+      ifoodEmptyEl?.classList.add('hidden');
+      ifoodErrorEl?.classList.remove('hidden');
+      ifoodErrorEl.textContent = err?.message || 'Erro ao carregar pedidos do iFood.';
+    }
+    ifoodRefreshInFlight = false;
+  };
+
+  ifoodTabButtons.forEach((btn) =>
+    btn?.addEventListener('click', () => {
+      const tab = btn?.dataset?.ifoodTab;
+      if (!tab) return;
+      ifoodActiveTab = tab;
+      highlightIfoodTabs();
+      renderIfoodOrders(ifoodBuckets).catch((error) => {
+        console.error('Erro ao renderizar pedidos do iFood:', error);
+      });
+    })
+  );
+
+  if (ifoodBtn && ifoodModal) {
+    ifoodBtn.addEventListener('click', () => {
+      toggleIfoodModal(true);
+      fetchIfoodOrders();
+    });
+  }
+  ifoodCloseButtons.forEach((btn) => btn?.addEventListener('click', () => toggleIfoodModal(false)));
+  ifoodModal?.addEventListener('click', (e) => {
+    if (e.target === ifoodModal) toggleIfoodModal(false);
+  });
+
+  // SSE: atualizar modal quando servidor receber eventos do iFood
+  try {
+    const streamUrl = `${SERVER_URL || ''}/api/ifood/stream`;
+    const evtSource = new EventSource(streamUrl);
+    evtSource.addEventListener('message', (event) => {
+      try {
+        const data = JSON.parse(event.data || '{}');
+        if (data?.type === 'ifood-events' && !ifoodModal.classList.contains('hidden')) {
+          console.debug('[ifood][sse] evento recebido, atualizando modal', data);
+          fetchIfoodOrders();
+        } else if (data?.type === 'ifood-events' && ifoodModal.classList.contains('hidden')) {
+          if (ifoodNotifDot) ifoodNotifDot.classList.remove('hidden');
+        }
+      } catch (_) {
+        // ignore parse errors
+      }
+    });
+  } catch (_) {
+    // SSE não suportado
+  }
 })();
+
+

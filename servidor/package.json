@@ -19,7 +19,9 @@
     "products:migrate-images:dry-run": "node scripts/migrate-product-images.js --dry-run",
     "products:sync-drive": "node scripts/sync-product-images-drive.js",
     "products:sync-drive:dry-run": "node scripts/sync-product-images-drive.js --dry-run",
-    "products:show-image-root": "node scripts/show-product-image-root.js"
+    "products:show-image-root": "node scripts/show-product-image-root.js",
+    "images:update-prefix": "node scripts/update-image-prefix.js",
+    "images:update-prefix:dry-run": "node scripts/update-image-prefix.js --dry-run"
   },
   "keywords": [],
   "author": "",

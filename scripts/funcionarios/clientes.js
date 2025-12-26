@@ -742,6 +742,94 @@
       resetPendencias();
     }
 
+    function getPrefillContext() {
+      const params = new URLSearchParams(window.location.search || '');
+      const readParam = (key) => (params.get(key) || '').trim();
+      const prefill = {
+        name: readParam('prefillName'),
+        document: readParam('prefillDocument'),
+        phone: readParam('prefillPhone'),
+        email: readParam('prefillEmail'),
+        cep: readParam('prefillCep'),
+        street: readParam('prefillStreet'),
+        number: readParam('prefillNumber'),
+        neighborhood: readParam('prefillNeighborhood'),
+        city: readParam('prefillCity'),
+        state: readParam('prefillState'),
+        complement: readParam('prefillComplement'),
+        reference: readParam('prefillReference'),
+        country: readParam('prefillCountry'),
+      };
+      const storeId = readParam('storeId');
+      const hasPrefill = Object.values(prefill).some((value) => value);
+      return {
+        prefill: hasPrefill ? prefill : null,
+        storeId: storeId || '',
+      };
+    }
+
+    function applyPrefillContext(context = null) {
+      if (!context) return;
+      const { prefill, storeId } = context;
+      if (storeId) {
+        elements.selectEmpresa.value = storeId;
+      }
+      if (!prefill) return;
+
+      const documentDigits = onlyDigits(prefill.document);
+      const nameValue = prefill.name || '';
+      elements.selectTipo.value = 'pessoa_fisica';
+      switchTipo('pessoa_fisica');
+      if (nameValue) {
+        elements.inputNome.value = nameValue;
+      }
+      if (documentDigits) {
+        elements.inputCpf.value = documentDigits.length === 11
+          ? formatCpf(documentDigits)
+          : documentDigits;
+      }
+      if (prefill.email) {
+        elements.contato.email.value = prefill.email;
+      }
+      const phoneDigits = onlyDigits(prefill.phone);
+      if (phoneDigits) {
+        const formattedPhone = formatPhone(phoneDigits);
+        if (phoneDigits.length >= 11) {
+          elements.contato.celular.value = formattedPhone;
+        } else {
+          elements.contato.telefone.value = formattedPhone;
+        }
+      }
+
+      const cepDigits = onlyDigits(prefill.cep);
+      if (cepDigits) {
+        elements.endereco.cep.value = formatCep(cepDigits);
+      }
+      if (prefill.street) {
+        elements.endereco.logradouro.value = prefill.street;
+      }
+      if (prefill.number) {
+        elements.endereco.numero.value = prefill.number;
+      }
+      const complemento = [prefill.complement, prefill.reference].filter(Boolean).join(' - ');
+      if (complemento) {
+        elements.endereco.complemento.value = complemento;
+      }
+      if (prefill.neighborhood) {
+        elements.endereco.bairro.value = prefill.neighborhood;
+      }
+      if (prefill.city) {
+        elements.endereco.cidade.value = prefill.city;
+      }
+      const uf = (prefill.state || '').trim().toUpperCase();
+      if (uf && UF_CODE_MAP[uf]) {
+        elements.endereco.codUf.value = UF_CODE_MAP[uf];
+      }
+      if (prefill.country) {
+        elements.endereco.pais.value = prefill.country;
+      }
+    }
+
     async function loadEmpresas() {
       try {
         const lojas = await fetch(`${API_BASE}/stores`).then((r) => r.json());
@@ -1317,8 +1405,11 @@
       elements.pendencias.limiteCredito.addEventListener('blur', handleLimiteCreditoBlur);
     }
 
+    const prefillContext = getPrefillContext();
     clearForm();
-    loadEmpresas();
+    loadEmpresas().then(() => {
+      applyPrefillContext(prefillContext);
+    });
     loadClientes();
   });
 })();

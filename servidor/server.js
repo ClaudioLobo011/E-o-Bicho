@@ -11,6 +11,7 @@ dotenv.config();
 const { verifyMailer } = require('./utils/mailer');
 const connectDB = require('./config/db');
 const { startIfoodStatusPoller } = require('./services/ifoodStatusPoller');
+const { startIfoodMenuScheduler } = require('./services/ifoodMenuScheduler');
 
 connectDB();
 verifyMailer();
@@ -91,9 +92,16 @@ routes.push({ path: '/api/func', file: './routes/funcAgenda' });
 routes.push({ path: '/api/func', file: './routes/funcVet' });
 routes.push({ path: '/api/func', file: './routes/funcComissoes' });
 routes.push({ path: '/api', file: './routes/adminComissoesFechamentos' });
+routes.push({ path: '/api/ifood', file: './routes/ifoodOrders' });
 
 // Carrega cada rota
 routes.forEach(r => app.use(r.path, require(r.file)));
+try {
+  const ifoodStream = require('./routes/ifoodOrdersStream');
+  app.use('/api/ifood', ifoodStream);
+} catch (_) {
+  console.warn('Não foi possível registrar stream do iFood');
+}
 
 // WebSockets
 function sanitizeRoomKey(room) {
@@ -144,3 +152,4 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
 startIfoodStatusPoller();
+startIfoodMenuScheduler();

@@ -954,7 +954,11 @@ router.get('/destaques', async (req, res) => {
         const destaques = await Product.find({
             isDestaque: true,
             naoMostrarNoSite: { $ne: true },
-        }).sort({ destaqueOrder: 1 });
+        })
+            .sort({ destaqueOrder: 1 })
+            .lean();
+
+        destaques.forEach(applyProductImageUrls);
         res.json(destaques);
     } catch (error) {
         res.status(500).json({ message: 'Erro ao buscar produtos em destaque.' });
