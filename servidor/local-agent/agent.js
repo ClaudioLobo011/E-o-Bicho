@@ -301,9 +301,10 @@ async function printHtmlWithEdge(htmlPath, printerName, copies) {
     '--disable-renderer-backgrounding',
     '--disable-features=CalculateNativeWinOcclusion',
     `--user-data-dir=${userDataDir}`,
-    `--app=${fileUrl}`,
+    '--new-window',
     '--window-position=-32000,-32000',
     '--window-size=800,600',
+    fileUrl,
   ];
 
   const defaultPrinter = await getDefaultPrinter().catch(() => '');
