@@ -56,3 +56,4 @@ Troubleshooting
 - If you see print-timeout in agent.err, increase printWaitMs and verify Edge is not stuck open.
 - If Edge is left open, close it and retry. The agent will kill Edge on timeout.
 - Verify printers with GET /printers and use the exact name.
+- If hidden mode does not print, reinstall so the task runs interactively (Run only when user is logged on).
