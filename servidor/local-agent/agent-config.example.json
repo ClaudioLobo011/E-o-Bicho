@@ -3,7 +3,7 @@
   "port": 17305,
   "edgePath": "",
   "edgeProfileDir": "./edge-profile",
-  "printWaitMs": 45000,
+  "printWaitMs": 90000,
   "queueMax": 50,
   "maxCopies": 10,
   "maxBodyBytes": 10485760,

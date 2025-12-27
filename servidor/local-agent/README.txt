@@ -46,7 +46,7 @@ Config
 - host, port: where the agent listens
 - edgePath: custom path to msedge.exe (optional)
 - edgeProfileDir: persistent Edge profile directory (default ./edge-profile)
-- printWaitMs: time to wait for each print job (ms)
+- printWaitMs: time to wait for each print job (ms). Increase if the printer is slow.
 - queueMax: maximum queued jobs before rejecting new ones
 - maxCopies: maximum allowed copies per job
 - maxBodyBytes: max request size in bytes
