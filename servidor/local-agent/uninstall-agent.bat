@@ -5,8 +5,10 @@ set TASK_NAME=EoBicho PDV Local Agent
 schtasks /Delete /F /TN "%TASK_NAME%" >nul 2>&1
 
 set "AGENT_PORT=17305"
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr /R /C:":%AGENT_PORT% .*LISTENING"') do (
-  taskkill /PID %%a /T /F >nul 2>&1
+for /f "tokens=1,2,3,4,5" %%a in ('netstat -ano ^| findstr /I ":%AGENT_PORT%"') do (
+  if /I "%%d"=="LISTENING" (
+    taskkill /PID %%e /T /F >nul 2>&1
+  )
 )
 
 if /i "%1"=="--clean" (
