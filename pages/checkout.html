@@ -6,6 +6,26 @@
     <title>Meu Carrinho - E o Bicho</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     <link rel="stylesheet" href="../src/output.css">
+    <style>
+        .payment-doc-row {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        @media (min-width: 640px) {
+            .payment-doc-row {
+                flex-direction: row;
+            }
+            .payment-doc-type {
+                flex: 0 0 88px;
+                max-width: 88px;
+            }
+            .payment-doc-number {
+                flex: 1 1 auto;
+                min-width: 0;
+            }
+        }
+    </style>
 </head>
 <body class="bg-gray-100">
 
@@ -25,12 +45,15 @@
     <main class="container mx-auto px-4 py-8">
         <h1 class="text-3xl font-bold text-gray-800 mb-2">Meu Carrinho</h1>
         <div class="flex items-center text-sm text-gray-600 mb-6">
-            <span class="font-bold text-primary">1. Sacola</span>
+            <span id="checkout-step-1" class="font-bold text-primary">1. Sacola</span>
             <i class="fas fa-chevron-right text-xs mx-2 text-gray-400"></i>
-            <span class="text-gray-400">2. Pagamento</span>
+            <span id="checkout-step-2" class="text-gray-400">2. Pagamento</span>
         </div>
-        
-        <div class="flex flex-col lg:flex-row gap-8 items-start">
+
+        <div id="checkout-step-viewport" style="overflow-x: hidden;">
+            <div id="checkout-step-track" class="flex transition-transform duration-500 ease-in-out" style="width: 200%;">
+                <section class="w-1/2 shrink-0">
+                    <div class="flex flex-col lg:flex-row gap-8 items-start">
             
             <div class="lg:w-2/3 w-full">
                 <div class="bg-white p-2 rounded-lg shadow">
@@ -175,7 +198,7 @@
                                 <span id="summary-total" class="text-gray-800">R$ 0,00</span>
                             </div>
                         </div>
-                    <button class="mt-6 w-full bg-primary text-white py-3 rounded-lg font-bold hover:bg-secondary transition-colors">
+                    <button id="checkout-go-payment" class="mt-6 w-full bg-primary text-white py-3 rounded-lg font-bold hover:bg-secondary transition-colors">
                         Ir para o pagamento
                     </button>
                     <a href="/index.html" class="block text-center mt-3 w-full border border-primary text-primary py-3 rounded-lg font-bold hover:bg-primary/10 transition-colors">
@@ -204,6 +227,117 @@
 
             </div>
         </div>
+                </section>
+                <section class="w-1/2 shrink-0">
+                    <div class="flex flex-col gap-8">
+                        <div class="flex flex-col gap-6 lg:flex-row lg:items-start">
+                            <div class="w-full lg:w-2/3">
+                                <div class="bg-white p-6 rounded-lg shadow">
+                                    <div class="flex items-start gap-3">
+                                        <span class="w-10 h-10 rounded-full bg-primary/10 text-primary grid place-items-center">
+                                            <i class="fas fa-credit-card"></i>
+                                        </span>
+                                        <div>
+                                            <h2 class="text-2xl font-bold text-gray-800">Pagamento</h2>
+                                            <p class="text-gray-600 mt-1">Checkout transparente do Mercado Pago.</p>
+                                        </div>
+                                    </div>
+                                    <div class="mt-6 space-y-4">
+                                        <div>
+                                            <label for="payment-card-number" class="block text-sm font-medium text-gray-700">Numero do Cartao</label>
+                                            <input id="payment-card-number" type="text" inputmode="numeric" placeholder="0000 0000 0000 0000"
+                                                class="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                                        </div>
+                                        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                            <div>
+                                                <label for="payment-expiry" class="block text-sm font-medium text-gray-700">Data de Vencimento</label>
+                                                <input id="payment-expiry" type="text" inputmode="numeric" placeholder="MM/AA"
+                                                    class="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                                            </div>
+                                            <div>
+                                                <label for="payment-cvv" class="block text-sm font-medium text-gray-700">Codigo de seguranca</label>
+                                                <input id="payment-cvv" type="text" inputmode="numeric" placeholder="123"
+                                                    class="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label for="payment-holder-name" class="block text-sm font-medium text-gray-700">Nome do titular como aparece no cartao</label>
+                                            <input id="payment-holder-name" type="text" placeholder="Nome completo"
+                                                class="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700">Documento do titular</label>
+                                            <div class="mt-2 payment-doc-row">
+                                                <select id="payment-doc-type" class="payment-doc-type w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                                                    <option value="cpf">CPF</option>
+                                                    <option value="cnpj">CNPJ</option>
+                                                </select>
+                                                <input id="payment-doc-number" type="text" inputmode="numeric" placeholder="Digite o documento"
+                                                    class="payment-doc-number w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                                            </div>
+                                        </div>
+                                        <div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                                            <p class="text-sm font-semibold text-gray-700">Preencha seus dados</p>
+                                            <label for="payment-email" class="mt-3 block text-sm font-medium text-gray-700">E-mail</label>
+                                            <input id="payment-email" type="email" placeholder="voce@email.com"
+                                                class="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                                        </div>
+                                        <button id="payment-submit" class="w-full rounded-lg bg-primary py-3 text-sm font-bold text-white hover:bg-secondary transition-colors">
+                                            Concluir Pagamento
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="w-full lg:w-1/3">
+                                <div class="bg-white p-6 rounded-lg shadow">
+                                    <h3 class="text-lg font-bold text-gray-800">Resumo</h3>
+                                    <div class="mt-4 space-y-4 text-sm">
+                                        <div>
+                                            <p class="font-semibold text-gray-700">Dados do cliente</p>
+                                            <p id="payment-summary-name" class="text-gray-600">Nao informado</p>
+                                            <p id="payment-summary-email" class="text-gray-600">Nao informado</p>
+                                            <p id="payment-summary-phone" class="text-gray-600">Nao informado</p>
+                                        </div>
+                                        <div>
+                                            <p class="font-semibold text-gray-700">Endereco</p>
+                                            <p id="payment-summary-address" class="text-gray-600 whitespace-pre-line">Nao informado</p>
+                                        </div>
+                                        <div>
+                                            <p class="font-semibold text-gray-700">Forma de entrega selecionado</p>
+                                            <div class="flex items-center justify-between text-gray-600">
+                                                <span id="payment-summary-delivery-type">Nao definido</span>
+                                                <span id="payment-summary-delivery-cost">-</span>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <p class="font-semibold text-gray-700">Totais</p>
+                                            <div class="mt-2 space-y-1">
+                                                <div class="flex justify-between text-gray-600">
+                                                    <span>Subtotal (<span id="summary-item-count-2">0</span> itens)</span>
+                                                    <span id="summary-subtotal-2">R$ 0,00</span>
+                                                </div>
+                                                <div class="flex justify-between text-gray-600">
+                                                    <span>Descontos</span>
+                                                    <span id="summary-discounts-2">- R$ 0,00</span>
+                                                </div>
+                                                <div class="flex justify-between text-gray-600">
+                                                    <span>Entrega</span>
+                                                    <span id="summary-delivery-2">A calcular</span>
+                                                </div>
+                                                <div class="flex justify-between font-semibold text-gray-800 pt-2 border-t">
+                                                    <span>Total</span>
+                                                    <span id="summary-total-2">R$ 0,00</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
     </main>
 
     <footer class="container mx-auto py-6 px-4">
@@ -220,6 +354,8 @@
 <script src="../scripts/core/main.js"></script>     <!-- injeta header/footer/cart e os MODAIS -->
 <script src="../scripts/core/ui.js"></script>       <!-- ESTE arquivo -->
 <script src="../scripts/cartManager.js"></script>
+<script src="https://unpkg.com/imask"></script>
+<script src="https://sdk.mercadopago.com/js/v2"></script>
 <script src="../scripts/checkout.js"></script>
 <script src="../scripts/addressSidebar.js"></script>
     </body>

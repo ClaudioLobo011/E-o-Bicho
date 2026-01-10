@@ -30,6 +30,7 @@ const externalIntegrationSchema = new mongoose.Schema({
     ifood: { type: providerSchema, default: () => ({}) },
     ubereats: { type: providerSchema, default: () => ({}) },
     ninetyNineFood: { type: providerSchema, default: () => ({}) },
+    mercadopago: { type: providerSchema, default: () => ({}) },
   },
 }, {
   timestamps: true,

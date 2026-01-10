@@ -84,9 +84,11 @@ const routes = [
   { path: '/api/email', file: './routes/email' },
   { path: '/api/search', file: './routes/search' },
   { path: '/api/integrations/external', file: './routes/integrationsExternal' },
+  { path: '/api/mercadopago', file: './routes/mercadoPago' },
   { path: '/api/integrations/whatsapp', file: './routes/integrationsWhatsapp' },
   { path: '/webhooks/whatsapp', file: './routes/whatsappWebhooks' },
   { path: '/webhook/whatsapp', file: './routes/whatsappWebhooks' },
+  { path: '/webhooks/mercadopago', file: './routes/mercadoPagoWebhooks' },
   { path: '/webhooks', file: './routes/webhooks' },
   { path: '/', file: './routes/webhooks' }, // expõe /webhook e /webhooks/marketplaces na raiz para validação iFood
 ];

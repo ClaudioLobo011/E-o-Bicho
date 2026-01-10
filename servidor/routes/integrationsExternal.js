@@ -12,10 +12,11 @@ const PROVIDER_FIELDS = {
   ifood: ['clientId', 'clientSecret', 'merchantId', 'webhook'],
   ubereats: ['storeId', 'accessToken', 'refreshToken', 'callback'],
   ninetyNineFood: ['storeCode', 'apiKey', 'webhook'],
+  mercadopago: ['publicKey', 'accessToken', 'webhook'],
 };
 
 const SECRET_SELECT =
-  '+webhookSecretEncrypted +providers.ifood.encryptedCredentials +providers.ubereats.encryptedCredentials +providers.ninetyNineFood.encryptedCredentials';
+  '+webhookSecretEncrypted +providers.ifood.encryptedCredentials +providers.ubereats.encryptedCredentials +providers.ninetyNineFood.encryptedCredentials +providers.mercadopago.encryptedCredentials';
 
 const sanitizeString = (value) => (typeof value === 'string' ? value.trim() : '');
 const toBoolean = (value) => value === true || value === 'true' || value === 1 || value === '1';
@@ -71,6 +72,7 @@ function buildResponse(doc) {
       ifood: buildProviderResponse(doc.providers?.ifood, true),
       ubereats: buildProviderResponse(doc.providers?.ubereats, true),
       ninetyNineFood: buildProviderResponse(doc.providers?.ninetyNineFood, true),
+      mercadopago: buildProviderResponse(doc.providers?.mercadopago, true),
     },
   };
 }

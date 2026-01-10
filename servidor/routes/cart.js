@@ -3,6 +3,7 @@ const router = express.Router();
 const User = require('../models/User');
 const mongoose = require('mongoose');
 const requireAuth = require('../middlewares/requireAuth');
+const { applyProductImageUrls } = require('../utils/productImageUrl');
 
 // Função auxiliar para calcular o carrinho com a hierarquia de promoções
 async function getCalculatedCart(userId) {
@@ -12,6 +13,7 @@ async function getCalculatedCart(userId) {
     const cartWithEffectivePrices = user.cart.map(item => {
         const product = item.product;
         if (!product) return null;
+        applyProductImageUrls(product);
 
         let bestPrice = product.venda;
         let appliedPromoText = null;

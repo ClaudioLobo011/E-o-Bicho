@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin: Mercado Pago - E o Bicho</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="../../src/output.css">
+</head>
+<body class="bg-gray-100">
+  <div id="admin-header-placeholder"></div>
+
+  <main class="container mx-auto px-4 pt-1 pb-8 min-h-screen">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <aside class="md:col-span-4">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
+
+      <div class="md:col-span-4 space-y-6">
+        <section class="bg-white p-6 rounded-lg shadow">
+          <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div class="space-y-2">
+              <nav aria-label="Breadcrumb" class="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                <span class="inline-flex items-center gap-2 text-primary"><i class="fas fa-plug"></i> Integracoes</span>
+                <i class="fas fa-angle-right text-gray-400"></i>
+                <span class="text-gray-600">Pagamentos</span>
+                <i class="fas fa-angle-right text-gray-400"></i>
+                <span class="text-gray-600">Mercado Pago</span>
+              </nav>
+              <div>
+                <h1 class="text-2xl font-bold text-gray-800">Mercado Pago</h1>
+                <p class="text-gray-600 mt-1">Configure as credenciais e o webhook de pagamentos por empresa.</p>
+              </div>
+            </div>
+            <div class="flex w-full flex-col gap-3 lg:max-w-md">
+              <label for="mercadopago-store-select" class="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                <i class="fas fa-building text-primary"></i>
+                <span>Empresa</span>
+              </label>
+              <select id="mercadopago-store-select" class="w-full rounded-lg border-gray-300 text-sm focus:border-primary focus:ring-primary">
+                <option>Carregando...</option>
+              </select>
+              <div id="mercadopago-summary-card" class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+                <div class="flex items-center justify-between gap-2">
+                  <div>
+                    <p class="text-xs uppercase text-gray-500 font-semibold">Status da integracao</p>
+                    <p class="font-semibold text-gray-800" data-mercadopago-status>Desativada</p>
+                  </div>
+                  <span class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200" data-mercadopago-badge>
+                    Pendente
+                  </span>
+                </div>
+                <p class="mt-2 text-xs text-gray-600">Use as credenciais oficiais do Mercado Pago da empresa selecionada.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <section class="bg-white p-5 rounded-lg shadow lg:col-span-2">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-wide text-primary">Credenciais</p>
+                <h2 class="text-xl font-bold text-gray-800">Chaves do Mercado Pago</h2>
+                <p class="text-sm text-gray-600 mt-1">Informe as chaves de producao para receber notificacoes e validar pagamentos.</p>
+              </div>
+              <label class="inline-flex items-center gap-2 text-sm font-semibold text-gray-700">
+                <input id="mercadopago-enabled" type="checkbox" class="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary">
+                Ativar
+              </label>
+            </div>
+
+            <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label for="mercadopago-public-key" class="block text-sm font-semibold text-gray-700">Public Key</label>
+                <input id="mercadopago-public-key" type="text" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="APP_USR-xxxxxxxx">
+              </div>
+              <div>
+                <label for="mercadopago-access-token" class="block text-sm font-semibold text-gray-700">Access Token</label>
+                <div class="mt-1 flex gap-2">
+                  <input id="mercadopago-access-token" type="password" class="flex-1 min-w-0 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="EAA...">
+                  <button type="button" id="mercadopago-token-toggle" class="px-3 py-2 rounded-md text-sm font-semibold bg-white border border-gray-200 hover:border-primary hover:text-primary transition" aria-label="Mostrar token">
+                    <i class="fas fa-eye"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-5 flex flex-wrap gap-3">
+              <button type="button" id="mercadopago-save-btn" class="bg-primary hover:bg-secondary text-white font-semibold px-4 py-2 rounded-lg transition">
+                Salvar credenciais
+              </button>
+              <span id="mercadopago-save-status" class="text-xs text-gray-500"></span>
+            </div>
+          </section>
+
+          <section class="bg-white p-5 rounded-lg shadow">
+            <div class="flex items-start gap-3">
+              <div class="w-11 h-11 rounded-lg bg-primary/10 text-primary grid place-items-center">
+                <i class="fas fa-link text-lg"></i>
+              </div>
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-wide text-primary">Webhook</p>
+                <h2 class="text-xl font-bold text-gray-800">URL de notificacao</h2>
+                <p class="text-sm text-gray-600 mt-1">Configure esta URL no painel do Mercado Pago para receber eventos.</p>
+              </div>
+            </div>
+
+            <div class="mt-4 space-y-3">
+              <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <p class="text-xs text-gray-500 font-semibold uppercase">URL publica</p>
+                    <p id="mercadopago-webhook-url" class="font-mono text-sm text-gray-800 break-all">https://callback.peteobicho.com.br/webhooks/mercadopago</p>
+                  </div>
+                  <button type="button" id="mercadopago-copy-webhook" class="px-3 py-2 rounded-md text-sm font-semibold bg-white border border-gray-200 hover:border-primary hover:text-primary transition">
+                    Copiar
+                  </button>
+                </div>
+              </div>
+
+              <div class="text-xs text-gray-600 space-y-2">
+                <div class="flex items-start gap-2">
+                  <i class="fas fa-circle-info text-primary mt-0.5"></i>
+                  <p>Use o modo de notificacoes para pagamentos e eventos de cobranca.</p>
+                </div>
+                <div class="flex items-start gap-2">
+                  <i class="fas fa-shield text-primary mt-0.5"></i>
+                  <p>Mantenha o Access Token em sigilo e valide as notificacoes no backend.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div id="modal-placeholder"></div>
+  <div id="confirm-modal-placeholder"></div>
+  <div id="admin-footer-placeholder"></div>
+
+  <script>var basePath = '../../';</script>
+  <script src="../../scripts/core/config.js"></script>
+  <script src="../../scripts/core/ui.js"></script>
+  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/admin/admin.js"></script>
+  <script src="../../scripts/admin/admin-integracoes-mercado-pago.js"></script>
+  <script src="/scripts/common/modal-bridge.js"></script>
+</body>
+</html>
