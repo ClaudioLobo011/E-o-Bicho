@@ -331,12 +331,6 @@ async function fetchOrderDetailWithRetry(orderId, headers, baseUrl, detailPath) 
         validateStatus: (s) => [200, 404].includes(s),
       });
       if (resp.status === 200) {
-        console.info('[ifood:orders][detail][received]', {
-          orderId,
-          displayId: resp.data?.displayId,
-          customer: resp.data?.customer,
-          total: resp.data?.total,
-        });
         return resp.data;
       }
       // 404: espera e tenta novamente
@@ -350,7 +344,7 @@ async function fetchOrderDetailWithRetry(orderId, headers, baseUrl, detailPath) 
         await sleep(backoff);
         continue;
       }
-      console.warn('[ifood:orders][detail][fail]', {
+      console.error('[ifood:orders][detail][fail]', {
         orderId,
         status: err?.response?.status,
         data: err?.response?.data,
@@ -359,7 +353,7 @@ async function fetchOrderDetailWithRetry(orderId, headers, baseUrl, detailPath) 
     }
   }
 
-  console.warn('[ifood:orders][detail][fail]', { orderId, status: 404, data: 'timeout after retries' });
+  console.error('[ifood:orders][detail][fail]', { orderId, status: 404, data: 'timeout after retries' });
   return null;
 }
 
@@ -407,26 +401,12 @@ router.get('/orders/open', requireAuth, authorizeRoles('admin', 'admin_master'),
     });
 
     const polled = pollResp.status === 204 || !Array.isArray(pollResp.data) ? [] : pollResp.data;
-    console.info('[ifood:orders][poll]', {
-      storeId,
-      merchantId,
-      status: pollResp.status,
-      polled: polled.length,
-      cached: cachedEvents.length,
-    });
 
     // MantÃ©m somente eventos de status de pedido
     const statusEvents = (polled || []).filter(
       (evt) => (evt?.group || '').toUpperCase() === 'ORDER_STATUS'
     );
     const mergedEvents = mergeEvents(cacheKey, statusEvents);
-    console.info('[ifood:orders][dump]', {
-      storeId,
-      merchantId,
-      cached: JSON.parse(JSON.stringify(cachedEvents)),
-      polled: JSON.parse(JSON.stringify(statusEvents)),
-      merged: JSON.parse(JSON.stringify(mergedEvents)),
-    });
 
     if (!mergedEvents.length) {
       return res.json({ awaiting: [], separation: [], packing: [], concluded: [], canceled: [], raw: [] });
@@ -476,11 +456,10 @@ router.get('/orders/open', requireAuth, authorizeRoles('admin', 'admin_master'),
       if (!id) return normalizeOrderDetail({}, evt);
       const detail = await fetchOrderDetailWithRetry(id, headers, ORDER_BASE, ORDER_DETAIL_PATH);
       if (!detail) {
-        console.warn('[ifood:orders][detail][fail]', { orderId: id, status: null, data: 'no detail' });
+        console.error('[ifood:orders][detail][fail]', { orderId: id, status: null, data: 'no detail' });
         return normalizeOrderDetail({}, evt);
       }
       const normalized = normalizeOrderDetail(detail, evt);
-      console.info('[ifood:orders][normalized]', normalized);
       return normalized;
     });
 

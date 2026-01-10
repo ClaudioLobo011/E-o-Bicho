@@ -6,10 +6,12 @@ const { STAFF_TYPES } = require('../models/ServiceGroup');
 
 const authMiddleware = require('../middlewares/authMiddleware');
 
+const STAFF_ROLES = new Set(['funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master']);
+
 // === MANTER O MESMO PADRÃO DAS ROTAS DE ADMIN ===
 function requireAdmin(req, res, next) {
   const role = req.user?.role;
-  if (role === 'admin' || role === 'admin_master') return next();
+  if (role && STAFF_ROLES.has(role)) return next();
   return res.status(403).json({ message: 'Acesso negado. Apenas administradores.' });
 }
 

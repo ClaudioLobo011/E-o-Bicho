@@ -333,6 +333,8 @@ const generateProductFiscalReport = (product, store, context = {}) => {
 
   return {
     productId: product?._id,
+    cod: product?.cod,
+    codbarras: product?.codbarras,
     nome: product?.nome,
     ncm: product?.ncm,
     tipoProduto: product?.tipoProduto,

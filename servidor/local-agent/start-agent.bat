@@ -2,18 +2,21 @@
 setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 
-set "NODE_EXE="
-for /f "delims=" %%i in ('where node 2^>nul') do (
-  set "NODE_EXE=%%i"
-  goto :node_found
+set "AGENT_EXE=%~dp0pdv-local-agent.exe"
+set "BUILD_SCRIPT=%~dp0build-agent.bat"
+set "AGENT_PORT=17305"
+
+if not exist "%AGENT_EXE%" (
+  if exist "%BUILD_SCRIPT%" (
+    call "%BUILD_SCRIPT%"
+    if errorlevel 1 exit /b 1
+  ) else (
+    echo Agente nao encontrado. Execute build-agent.bat para compilar.
+    pause
+    exit /b 1
+  )
 )
 
-echo Node.js nao encontrado. Instale o Node.js e tente novamente.
-pause
-exit /b 1
-
-:node_found
-set "AGENT_PORT=17305"
 set "AGENT_PID="
 for /f "tokens=1,2,3,4,5" %%a in ('netstat -ano ^| findstr /I ":%AGENT_PORT%"') do (
   if /I "%%d"=="LISTENING" (
@@ -39,8 +42,8 @@ if /i "%1"=="--hidden" (
       )
     )
   )
-  powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -WindowStyle Hidden -FilePath '%NODE_EXE%' -ArgumentList '--unhandled-rejections=strict','%~dp0agent.js' -WorkingDirectory '%~dp0' -RedirectStandardOutput '%~dp0agent.log' -RedirectStandardError '%~dp0agent.err'"
+  powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -WindowStyle Hidden -FilePath '%AGENT_EXE%' -ArgumentList '--config','%~dp0agent-config.json' -WorkingDirectory '%~dp0' -RedirectStandardOutput '%~dp0agent.log' -RedirectStandardError '%~dp0agent.err'"
   exit /b 0
 )
 
-"%NODE_EXE%" --unhandled-rejections=strict "%~dp0agent.js"
+"%AGENT_EXE%" --config "%~dp0agent-config.json"

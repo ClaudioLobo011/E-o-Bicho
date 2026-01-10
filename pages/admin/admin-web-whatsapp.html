@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin: Web Whatsapp - E o Bicho</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+  <link rel="stylesheet" href="../../src/output.css" />
+</head>
+<body class="bg-gray-100">
+  <div id="admin-header-placeholder"></div>
+
+  <main class="w-full px-4 pt-1 pb-8 min-h-screen">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <aside class="md:col-span-4">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
+
+      <div class="md:col-span-4 flex flex-col gap-6 min-h-0" style="height: calc(100vh - 100px);">
+        <section class="bg-white p-6 rounded-lg shadow">
+          <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div class="space-y-2">
+              <nav aria-label="Breadcrumb" class="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                <span class="inline-flex items-center gap-2 text-primary"><i class="fas fa-shopping-cart"></i> Ecommerce</span>
+                <i class="fas fa-angle-right text-gray-400"></i>
+                <span class="text-gray-600">Web Whatsapp</span>
+              </nav>
+              <div>
+                <h1 class="text-2xl font-bold text-gray-800">Web Whatsapp</h1>
+                <p class="text-gray-600 mt-1">Centralize as conversas, envie mensagens e acompanhe o historico.</p>
+              </div>
+            </div>
+            <div class="flex flex-wrap items-end gap-3">
+              <div class="flex flex-col gap-1">
+                <label for="web-whatsapp-company-select" class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Empresa</label>
+                <select id="web-whatsapp-company-select" class="w-full sm:w-56 rounded-lg border-gray-300 text-sm focus:border-primary focus:ring-primary">
+                  <option>Carregando...</option>
+                </select>
+              </div>
+              <div class="flex flex-col gap-1">
+                <label for="web-whatsapp-number-select" class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Numero</label>
+                <select id="web-whatsapp-number-select" class="w-full sm:w-56 rounded-lg border-gray-300 text-sm focus:border-primary focus:ring-primary">
+                  <option value="">Selecione uma empresa</option>
+                </select>
+              </div>
+              <span id="web-whatsapp-connection-badge" class="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                <i class="fas fa-circle text-[8px]"></i>
+                <span data-status-text>Conectado</span>
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <section class="bg-white p-4 md:p-6 rounded-lg shadow flex flex-col flex-1 min-h-0 h-full">
+          <div class="flex flex-col md:flex-row gap-4 flex-1 min-h-0 h-full">
+            <aside class="rounded-lg border border-gray-200 bg-white flex flex-col items-center px-1.5 py-3 min-h-0 h-full md:w-14 md:flex-shrink-0">
+              <div class="flex flex-col items-center gap-4">
+                <button type="button" class="h-10 w-10 rounded-2xl border border-gray-200 bg-gray-50 text-gray-600 hover:border-primary hover:text-primary transition" aria-label="Conversas" title="Conversas">
+                  <i class="fas fa-comments"></i>
+                </button>
+                <button type="button" class="h-10 w-10 rounded-2xl border border-gray-200 bg-gray-50 text-gray-600 hover:border-primary hover:text-primary transition" aria-label="Ligacoes" title="Ligacoes">
+                  <i class="fas fa-phone"></i>
+                </button>
+                <button type="button" class="h-10 w-10 rounded-2xl border border-gray-200 bg-gray-50 text-gray-600 hover:border-primary hover:text-primary transition" aria-label="Status" title="Status">
+                  <i class="fas fa-circle-dot"></i>
+                </button>
+                <button type="button" class="h-10 w-10 rounded-2xl border border-gray-200 bg-gray-50 text-gray-600 hover:border-primary hover:text-primary transition" aria-label="Transmissoes" title="Transmissoes">
+                  <i class="fas fa-bullhorn"></i>
+                </button>
+                <button type="button" class="h-10 w-10 rounded-2xl border border-gray-200 bg-gray-50 text-gray-600 hover:border-primary hover:text-primary transition" aria-label="Grupos" title="Grupos">
+                  <i class="fas fa-users"></i>
+                </button>
+              </div>
+
+              <div class="w-8 h-px bg-gray-200/60 my-4"></div>
+
+              <button type="button" class="h-10 w-10 rounded-2xl border border-gray-200 bg-gray-50 text-gray-600 hover:border-primary hover:text-primary transition" aria-label="Arquivadas" title="Arquivadas">
+                <i class="fas fa-box-archive"></i>
+              </button>
+
+              <div class="mt-auto flex flex-col items-center gap-4 pt-6">
+                <button type="button" class="h-10 w-10 rounded-2xl border border-gray-200 bg-gray-50 text-gray-600 hover:border-primary hover:text-primary transition" aria-label="Midias" title="Midias">
+                  <i class="fas fa-photo-film"></i>
+                </button>
+                <div class="w-8 h-px bg-gray-200/60"></div>
+                <button type="button" class="h-10 w-10 rounded-2xl border border-gray-200 bg-gray-50 text-gray-600 hover:border-primary hover:text-primary transition" aria-label="Configuracoes" title="Configuracoes">
+                  <i class="fas fa-gear"></i>
+                </button>
+                <button type="button" id="web-whatsapp-my-profile" class="h-10 w-10 rounded-full border border-gray-200 bg-white overflow-hidden" aria-label="Meu perfil" title="Meu perfil">
+                  <img src="/public/image/placeholder.svg" alt="Meu perfil" class="h-full w-full object-cover" />
+                </button>
+              </div>
+            </aside>
+
+            <aside class="rounded-lg border border-gray-200 bg-gray-50 flex flex-col min-h-0 h-full md:w-64 md:flex-shrink-0">
+              <div class="p-4 border-b border-gray-200">
+                <div class="flex items-center justify-between gap-3">
+                  <div class="flex items-center gap-3">
+                    <div class="h-10 w-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                      <i class="fa-brands fa-whatsapp text-lg"></i>
+                    </div>
+                    <div>
+                      <p class="text-sm font-semibold text-gray-800">Conversas</p>
+                      <p class="text-xs text-gray-500">Ultimas interacoes</p>
+                    </div>
+                  </div>
+                  <div class="flex flex-col items-center justify-center gap-2">
+                    <button type="button" class="h-8 w-8 rounded-full border border-gray-200 bg-white text-gray-500 hover:border-primary hover:text-primary transition" aria-label="Mais opcoes" title="Mais opcoes">
+                      <i class="fas fa-ellipsis-vertical text-xs"></i>
+                    </button>
+                    <button type="button" id="web-whatsapp-new-conversation" class="h-8 w-8 rounded-full border border-gray-200 bg-white text-gray-500 hover:border-primary hover:text-primary transition" aria-label="Nova conversa" title="Nova conversa">
+                      <i class="fas fa-pen-to-square text-xs"></i>
+                    </button>
+                  </div>
+                </div>
+                <div class="mt-4 relative">
+                  <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+                  <input id="web-whatsapp-search" type="text" class="w-full rounded-lg border border-gray-200 bg-white py-2 pl-8 pr-3 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Buscar conversa" />
+                </div>
+              </div>
+
+              <div id="web-whatsapp-conversations" class="flex-1 min-h-0 overflow-y-auto p-3 space-y-2"></div>
+              <div id="web-whatsapp-conversations-empty" class="hidden px-4 pb-4 text-xs text-gray-500">
+                Nenhuma conversa encontrada.
+              </div>
+            </aside>
+
+            <div id="web-whatsapp-chat-panel" class="rounded-lg border border-gray-200 bg-white flex flex-col min-h-0 h-full md:flex-1 relative overflow-hidden">
+              <header id="web-whatsapp-chat-header" class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-4 py-3">
+                <div class="flex items-center gap-3">
+                  <img id="web-whatsapp-chat-avatar" src="/public/image/placeholder.svg" alt="Cliente" class="h-11 w-11 rounded-full object-cover bg-gray-100" />
+                  <div>
+                    <div id="web-whatsapp-chat-name-wrap" class="flex flex-wrap items-center gap-2">
+                      <p id="web-whatsapp-chat-name" class="text-sm font-semibold text-gray-800 cursor-pointer hover:text-primary transition">Selecione uma conversa</p>
+                      <div id="web-whatsapp-chat-tags" class="flex items-center gap-1"></div>
+                    </div>
+                    <p id="web-whatsapp-chat-status" class="text-xs text-gray-500">Aguardando selecao</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2 text-gray-500">
+                  <button type="button" class="h-9 w-9 rounded-full border border-gray-200 bg-white hover:border-primary hover:text-primary transition" aria-label="Ligacao por video">
+                    <i class="fas fa-video"></i>
+                  </button>
+                  <button type="button" class="h-9 w-9 rounded-full border border-gray-200 bg-white hover:border-primary hover:text-primary transition" aria-label="Ligacao por telefone">
+                    <i class="fas fa-phone"></i>
+                  </button>
+                  <button type="button" class="h-9 w-9 rounded-full border border-gray-200 bg-white hover:border-primary hover:text-primary transition" aria-label="Buscar mensagem">
+                    <i class="fas fa-search"></i>
+                  </button>
+                  <button type="button" id="web-whatsapp-chat-menu" class="h-9 w-9 rounded-full border border-gray-200 bg-white hover:border-primary hover:text-primary transition" aria-label="Mais opcoes">
+                    <i class="fas fa-ellipsis-vertical"></i>
+                  </button>
+                </div>
+              </header>
+
+              <div id="web-whatsapp-dropzone" class="pointer-events-none absolute inset-0 z-20 hidden items-center justify-center bg-emerald-900">
+                <div class="mx-6 flex h-72 w-full max-w-3xl items-center justify-center rounded-3xl border-2 border-dashed border-emerald-300/60 bg-emerald-950/40 text-lg font-semibold text-emerald-100">
+                  Arraste arquivo aqui
+                </div>
+              </div>
+
+              <div id="web-whatsapp-file-preview-modal" class="absolute inset-0 z-50 hidden flex-col bg-secondary text-white" style="background-color: color-mix(in srgb, var(--color-secondary) 50%, var(--color-dark));" role="dialog" aria-modal="true" aria-label="Previsualizacao de arquivo">
+                <div class="flex items-center justify-between border-b border-primary/20 px-6 py-4">
+                  <div>
+                    <p id="web-whatsapp-file-preview-title" class="text-sm font-semibold text-white">Arquivo</p>
+                    <p id="web-whatsapp-file-preview-subtitle" class="text-xs text-white/60">---</p>
+                  </div>
+                  <button type="button" id="web-whatsapp-file-preview-close" class="h-9 w-9 rounded-full border border-primary/30 text-white/70 hover:text-white hover:border-primary transition" aria-label="Fechar previsualizacao">
+                    <i class="fas fa-times"></i>
+                  </button>
+                </div>
+                <div class="flex-1 px-6 py-5">
+                  <div id="web-whatsapp-file-preview-content" class="flex h-full items-center justify-center rounded-2xl border border-dashed border-primary/30 bg-dark p-4"></div>
+                </div>
+                <div class="border-t border-primary/20 px-6 py-4">
+                  <div class="space-y-4">
+                    <input id="web-whatsapp-file-preview-caption" type="text" class="w-full rounded-2xl border border-primary/30 bg-dark px-4 py-2 text-sm text-white placeholder:text-white/60 focus:border-primary focus:ring-2 focus:ring-primary/30" placeholder="Digite uma mensagem" />
+                    <div class="flex items-center gap-3">
+                      <div id="web-whatsapp-file-preview-list" class="flex flex-1 items-center gap-2 overflow-x-auto"></div>
+                      <button type="button" id="web-whatsapp-file-preview-add" class="h-11 w-11 rounded-xl border border-primary/40 bg-dark text-white/70 hover:text-white hover:border-primary transition" aria-label="Adicionar mais arquivos">
+                        <i class="fas fa-plus text-sm"></i>
+                      </button>
+                      <button type="button" id="web-whatsapp-file-preview-send" class="h-11 w-11 rounded-full bg-dark text-white hover:bg-secondary transition" aria-label="Enviar arquivo">
+                        <i class="fas fa-paper-plane text-sm"></i>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div id="web-whatsapp-messages" class="flex-1 min-h-0 overflow-y-auto px-4 py-5 space-y-4 bg-gradient-to-b from-gray-50 via-white to-white"></div>
+
+              <footer id="web-whatsapp-chat-footer" class="border-t border-gray-100 bg-gray-50 px-4 py-3">
+                <div class="flex items-end gap-2">
+                  <button type="button" id="web-whatsapp-attach" class="h-10 w-10 rounded-full border border-gray-200 bg-white hover:border-primary hover:text-primary transition" aria-label="Enviar anexos">
+                    <i class="fas fa-plus"></i>
+                  </button>
+                  <button type="button" id="web-whatsapp-emoji" class="h-10 w-10 rounded-full border border-gray-200 bg-white hover:border-primary hover:text-primary transition" aria-label="Abrir emojis">
+                    <i class="far fa-smile"></i>
+                  </button>
+                  <div id="web-whatsapp-input-wrap" class="flex-1">
+                    <textarea id="web-whatsapp-input" rows="1" class="w-full resize-none rounded-2xl border border-gray-200 bg-white px-4 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Digite uma mensagem..."></textarea>
+                  </div>
+                  <div id="web-whatsapp-recording-bar" class="hidden flex-1 h-10 grid grid-cols-3 items-center gap-2 rounded-2xl border border-primary/40 bg-primary/10 px-3 py-1 text-sm text-primary shadow-sm">
+                    <div class="flex items-center gap-2 min-w-0">
+                      <button type="button" id="web-whatsapp-recording-play" class="h-8 w-8 rounded-full border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 transition" aria-label="Ouvir gravacao">
+                        <i class="fas fa-play text-xs"></i>
+                      </button>
+                      <div class="flex-1 flex items-center gap-2 px-1 min-w-0">
+                        <span id="web-whatsapp-recording-dot" class="h-2 w-2 rounded-full bg-primary"></span>
+                        <div id="web-whatsapp-recording-wave" class="flex-1 flex items-end gap-1 min-w-0" aria-hidden="true"></div>
+                      </div>
+                    </div>
+                    <button type="button" id="web-whatsapp-recording-cancel" class="h-8 w-8 rounded-full border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 transition" aria-label="Cancelar gravacao">
+                      <i class="fas fa-trash text-xs"></i>
+                    </button>
+                    <div class="flex items-center justify-end gap-2 min-w-0">
+                      <button type="button" id="web-whatsapp-recording-toggle" class="h-8 w-8 rounded-full border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 transition" aria-label="Pausar gravacao">
+                        <i class="fas fa-pause text-xs"></i>
+                      </button>
+                      <span id="web-whatsapp-recording-time" class="text-sm font-semibold text-primary tabular-nums">00:00</span>
+                    </div>
+                  </div>
+                  <input id="web-whatsapp-audio-input" type="file" accept="audio/*" class="hidden" />
+                  <input id="web-whatsapp-media-input" type="file" multiple accept=".png,.jpg,.jpeg,image/png,image/jpeg" class="hidden" />
+                  <input id="web-whatsapp-document-input" type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.xml,.json,.zip,.7z,.rar,application/pdf,application/msword,application/vnd.ms-excel,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/json,application/xml,application/csv,application/zip,application/x-zip-compressed,application/x-7z-compressed,application/x-rar-compressed,application/vnd.rar,text/plain,text/csv,text/xml" class="hidden" />
+                  <button type="button" id="web-whatsapp-send" class="h-10 w-10 rounded-full border border-gray-200 bg-white text-gray-600 hover:border-primary hover:text-primary transition" aria-label="Enviar audio">
+                    <i class="fas fa-microphone" data-icon-mic></i>
+                    <i class="fas fa-paper-plane hidden" data-icon-send></i>
+                  </button>
+                </div>
+              </footer>
+
+              <aside id="web-whatsapp-profile-panel" class="absolute inset-y-0 right-0 w-80 sm:w-[22rem] bg-white border-l border-gray-200 shadow-lg translate-x-full transition-transform duration-300 ease-out flex flex-col">
+                <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+                  <h3 class="text-sm font-semibold text-gray-800">Perfil do contato</h3>
+                  <button type="button" id="web-whatsapp-profile-close" class="h-8 w-8 rounded-full border border-gray-200 text-gray-500 hover:border-primary hover:text-primary transition" aria-label="Fechar perfil">
+                    <i class="fas fa-times"></i>
+                  </button>
+                </div>
+                <div class="flex-1 overflow-y-auto p-4 space-y-4">
+                  <div class="flex flex-col items-center text-center gap-2">
+                    <img id="web-whatsapp-profile-avatar" src="/public/image/placeholder.svg" alt="Cliente" class="h-20 w-20 rounded-full object-cover bg-gray-100" />
+                    <div>
+                      <p id="web-whatsapp-profile-name" class="text-sm font-semibold text-gray-800">--</p>
+                      <p id="web-whatsapp-profile-phone" class="text-xs text-gray-500">--</p>
+                    </div>
+                    <div class="flex items-center justify-center gap-2 pt-1">
+                      <button type="button" class="h-9 w-9 rounded-full border border-gray-200 text-gray-500 hover:border-primary hover:text-primary transition" aria-label="Pesquisar mensagens">
+                        <i class="fas fa-search"></i>
+                      </button>
+                      <button type="button" class="h-9 w-9 rounded-full border border-gray-200 text-gray-500 hover:border-primary hover:text-primary transition" aria-label="Ligacao por video">
+                        <i class="fas fa-video"></i>
+                      </button>
+                      <button type="button" class="h-9 w-9 rounded-full border border-gray-200 text-gray-500 hover:border-primary hover:text-primary transition" aria-label="Ligacao por voz">
+                        <i class="fas fa-phone"></i>
+                      </button>
+                    </div>
+                    <div class="w-full pt-2 text-left">
+                      <p class="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Recado</p>
+                      <textarea rows="3" class="mt-2 w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Escreva um recado..."></textarea>
+                    </div>
+                    <div class="w-full pt-3 space-y-2 text-left">
+                      <div class="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2">
+                        <div class="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                          <i class="fas fa-photo-film text-gray-500"></i>
+                          <span>Midias, Links e Docs</span>
+                        </div>
+                        <span id="web-whatsapp-profile-media-count" class="text-xs font-semibold text-gray-500">0</span>
+                      </div>
+                      <div class="grid grid-cols-2 gap-2">
+                        <img id="web-whatsapp-profile-media-1" src="/public/image/placeholder.svg" alt="Midia recente" class="h-20 w-full rounded-lg object-cover border border-gray-200 bg-gray-50" />
+                        <img id="web-whatsapp-profile-media-2" src="/public/image/placeholder.svg" alt="Midia recente" class="h-20 w-full rounded-lg object-cover border border-gray-200 bg-gray-50" />
+                      </div>
+                    </div>
+                    <div class="w-full pt-3 text-left">
+                      <div class="space-y-1">
+                        <button type="button" class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
+                          <i class="fas fa-star text-gray-500"></i>
+                          <span>Mensagens Favoritas</span>
+                        </button>
+                        <button type="button" class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
+                          <i class="fas fa-gear text-gray-500"></i>
+                          <span>Configuracoes e Notificacoes</span>
+                        </button>
+                        <button type="button" class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
+                          <i class="fas fa-clock text-gray-500"></i>
+                          <span>Mensagens Temporarias</span>
+                        </button>
+                        <button type="button" class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
+                          <i class="fas fa-shield-halved text-gray-500"></i>
+                          <span>Privacidade Avancada da Conversa</span>
+                        </button>
+                      </div>
+                      <div class="w-full h-px bg-gray-200/70 my-3"></div>
+                      <div class="space-y-1">
+                        <button type="button" class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
+                          <i class="fas fa-bookmark text-gray-500"></i>
+                          <span>Adicionar aos Favoritos</span>
+                        </button>
+                        <button type="button" class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
+                          <i class="fas fa-ban text-gray-500"></i>
+                          <span id="web-whatsapp-profile-block-label">Bloquear (Contato)</span>
+                        </button>
+                        <button type="button" id="web-whatsapp-delete-conversation" class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
+                          <i class="fas fa-trash text-gray-500"></i>
+                          <span>Apagar conversa</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </aside>
+
+              <aside id="web-whatsapp-business-profile-panel" class="absolute inset-y-0 right-0 w-80 sm:w-[22rem] bg-white border-l border-gray-200 shadow-lg translate-x-full transition-transform duration-300 ease-out flex flex-col">
+                <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+                  <h3 class="text-sm font-semibold text-gray-800">Perfil</h3>
+                  <div class="flex items-center gap-2">
+                    <button type="button" id="web-whatsapp-business-edit" class="h-8 w-8 rounded-full border border-gray-200 text-gray-500 hover:border-primary hover:text-primary transition" aria-label="Editar perfil">
+                      <i class="fas fa-pen"></i>
+                    </button>
+                    <button type="button" id="web-whatsapp-business-close" class="h-8 w-8 rounded-full border border-gray-200 text-gray-500 hover:border-primary hover:text-primary transition" aria-label="Fechar perfil">
+                      <i class="fas fa-times"></i>
+                    </button>
+                  </div>
+                </div>
+                <div class="flex-1 overflow-y-auto p-4 space-y-4">
+                  <div class="flex flex-col items-center text-center gap-2">
+                    <div class="relative group">
+                      <img id="web-whatsapp-business-avatar" src="/public/image/placeholder.svg" alt="Perfil empresarial" class="h-20 w-20 rounded-full object-cover bg-gray-100 border border-gray-200" />
+                      <input id="web-whatsapp-business-avatar-input" type="file" accept="image/*" class="hidden" />
+                      <label for="web-whatsapp-business-avatar-input" class="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 text-white opacity-0 transition-opacity duration-150 group-hover:opacity-100 cursor-pointer" aria-label="Editar imagem do perfil">
+                        <i class="fas fa-pen"></i>
+                      </label>
+                    </div>
+                    <div>
+                      <p id="web-whatsapp-business-name" class="text-sm font-semibold text-gray-800">--</p>
+                      <p id="web-whatsapp-business-number" class="text-xs text-gray-500">--</p>
+                    </div>
+                  </div>
+                  <div class="space-y-3">
+                    <div>
+                      <label for="web-whatsapp-business-about" class="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Sobre</label>
+                      <input id="web-whatsapp-business-about" type="text" class="mt-2 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Sobre a empresa" disabled />
+                    </div>
+                    <div>
+                      <label for="web-whatsapp-business-address" class="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Endereco</label>
+                      <input id="web-whatsapp-business-address" type="text" class="mt-2 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Endereco comercial" disabled />
+                    </div>
+                    <div>
+                      <label for="web-whatsapp-business-description" class="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Descricao</label>
+                      <textarea id="web-whatsapp-business-description" rows="3" class="mt-2 w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Descricao da empresa" disabled></textarea>
+                    </div>
+                    <div>
+                      <label for="web-whatsapp-business-email" class="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Email</label>
+                      <input id="web-whatsapp-business-email" type="email" class="mt-2 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="email@empresa.com" disabled />
+                    </div>
+                    <div>
+                      <label for="web-whatsapp-business-websites" class="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Websites</label>
+                      <textarea id="web-whatsapp-business-websites" rows="2" class="mt-2 w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="https://empresa.com.br" disabled></textarea>
+                    </div>
+                    <div>
+                      <label for="web-whatsapp-business-vertical" class="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Vertical</label>
+                      <input id="web-whatsapp-business-vertical" type="text" class="mt-2 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="RETAIL" disabled />
+                    </div>
+                  </div>
+                </div>
+                <div id="web-whatsapp-business-actions" class="hidden border-t border-gray-200 bg-gray-50 px-4 py-3">
+                  <div class="flex items-center justify-end gap-2">
+                    <button type="button" id="web-whatsapp-business-cancel" class="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 hover:border-primary hover:text-primary transition">Cancelar</button>
+                    <button type="button" id="web-whatsapp-business-save" class="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-secondary transition">Salvar</button>
+                  </div>
+                </div>
+              </aside>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <div id="modal-placeholder"></div>
+  <div id="confirm-modal-placeholder"></div>
+  <div id="admin-footer-placeholder"></div>
+
+  <div id="web-whatsapp-pets-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-label="Pets do cliente">
+    <div class="w-full max-w-2xl rounded-2xl bg-white shadow-xl">
+      <div class="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+        <div>
+          <p class="text-xs uppercase tracking-wide text-gray-500">Pets</p>
+          <h3 id="web-whatsapp-pets-title" class="text-lg font-semibold text-gray-800">Pets do cliente</h3>
+        </div>
+        <button type="button" id="web-whatsapp-pets-close" class="h-9 w-9 rounded-full border border-gray-200 text-gray-500 hover:border-primary hover:text-primary transition" aria-label="Fechar pets">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="max-h-[60vh] overflow-y-auto px-5 py-4 space-y-3">
+        <div id="web-whatsapp-pets-loading" class="hidden rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-500">Carregando pets...</div>
+        <div id="web-whatsapp-pets-empty" class="hidden rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-500">Nenhum pet cadastrado.</div>
+        <div id="web-whatsapp-pets-list" class="space-y-3"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="web-whatsapp-address-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-label="Enderecos do cliente">
+    <div class="w-full max-w-2xl rounded-2xl bg-white shadow-xl">
+      <div class="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+        <div>
+          <p class="text-xs uppercase tracking-wide text-gray-500">Enderecos</p>
+          <h3 id="web-whatsapp-address-title" class="text-lg font-semibold text-gray-800">Enderecos do cliente</h3>
+        </div>
+        <button type="button" id="web-whatsapp-address-close" class="h-9 w-9 rounded-full border border-gray-200 text-gray-500 hover:border-primary hover:text-primary transition" aria-label="Fechar enderecos">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="max-h-[60vh] overflow-y-auto px-5 py-4 space-y-3">
+        <div id="web-whatsapp-address-loading" class="hidden rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-500">Carregando enderecos...</div>
+        <div id="web-whatsapp-address-empty" class="hidden rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-500">Nenhum endereco cadastrado.</div>
+        <div id="web-whatsapp-address-list" class="space-y-3"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="web-whatsapp-new-conversation-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-label="Nova conversa">
+    <div class="w-full max-w-lg rounded-2xl border border-gray-200 bg-white shadow-lg">
+      <div class="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+        <h3 class="text-lg font-semibold text-gray-800">Nova conversa</h3>
+        <button type="button" id="web-whatsapp-new-conversation-close" class="h-9 w-9 rounded-full border border-gray-200 text-gray-500 hover:border-primary hover:text-primary transition" aria-label="Fechar nova conversa">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="p-5 space-y-4">
+        <div class="relative">
+          <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+          <input id="web-whatsapp-new-conversation-search" type="text" class="w-full rounded-lg border border-gray-200 bg-white py-2 pl-8 pr-3 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Buscar nome ou numero" />
+        </div>
+        <div id="web-whatsapp-new-conversation-loading" class="hidden rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-500">Carregando contatos...</div>
+        <div id="web-whatsapp-new-conversation-empty" class="hidden rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-500">Nenhum contato encontrado.</div>
+        <div id="web-whatsapp-new-conversation-list" class="space-y-2 max-h-[60vh] overflow-y-auto"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="web-whatsapp-share-contacts-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-label="Compartilhar contatos">
+    <div class="w-full max-w-lg rounded-2xl border border-gray-200 bg-white shadow-lg">
+      <div class="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+        <div>
+          <p class="text-xs uppercase tracking-wide text-gray-500">Contato</p>
+          <h3 class="text-lg font-semibold text-gray-800">Compartilhar contatos</h3>
+        </div>
+        <button type="button" id="web-whatsapp-share-contacts-close" class="h-9 w-9 rounded-full border border-gray-200 text-gray-500 hover:border-primary hover:text-primary transition" aria-label="Fechar compartilhamento">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="p-5 space-y-4">
+        <div class="relative">
+          <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+          <input id="web-whatsapp-share-contacts-search" type="text" class="w-full rounded-lg border border-gray-200 bg-white py-2 pl-8 pr-3 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Buscar contatos" />
+        </div>
+        <div id="web-whatsapp-share-contacts-loading" class="hidden rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-500">Carregando contatos...</div>
+        <div id="web-whatsapp-share-contacts-empty" class="hidden rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-500">Nenhum contato encontrado.</div>
+        <div id="web-whatsapp-share-contacts-list" class="space-y-2 max-h-[55vh] overflow-y-auto"></div>
+      </div>
+      <div id="web-whatsapp-share-contacts-footer" class="hidden border-t border-gray-200 px-5 py-4">
+        <div class="flex items-center justify-between gap-3">
+          <span id="web-whatsapp-share-contacts-count" class="text-xs text-gray-500">0 selecionados</span>
+          <button type="button" id="web-whatsapp-share-contacts-send" class="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-secondary transition">
+            <i class="fas fa-paper-plane mr-2"></i>Enviar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="web-whatsapp-contacts-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-label="Contatos compartilhados">
+    <div class="w-full max-w-lg rounded-2xl border border-gray-200 bg-white shadow-lg">
+      <div class="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+        <h3 id="web-whatsapp-contacts-title" class="text-lg font-semibold text-gray-800">Contatos</h3>
+        <button type="button" id="web-whatsapp-contacts-close" class="h-9 w-9 rounded-full border border-gray-200 text-gray-500 hover:border-primary hover:text-primary transition" aria-label="Fechar contatos">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="max-h-[60vh] overflow-y-auto px-5 py-4 space-y-3">
+        <div id="web-whatsapp-contacts-empty" class="hidden rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-500">Nenhum contato encontrado.</div>
+        <div id="web-whatsapp-contacts-list" class="space-y-3"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>var basePath = '../../';</script>
+  <script src="../../scripts/core/config.js"></script>
+  <script src="../../scripts/core/ui.js"></script>
+  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/admin/admin.js"></script>
+  <script src="../../scripts/admin/admin-web-whatsapp.js"></script>
+  <script src="/scripts/common/modal-bridge.js"></script>
+</body>
+</html>

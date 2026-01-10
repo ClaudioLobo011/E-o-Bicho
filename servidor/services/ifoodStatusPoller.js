@@ -4,7 +4,6 @@ const { decryptText } = require('../utils/certificates');
 const { getAccessToken } = require('./ifoodClient');
 const { mergeEvents } = require('./ifoodEventsCache');
 const { broadcast } = require('./ifoodSse');
-const util = require('util');
 
 const POLL_INTERVAL_MS = 30 * 1000;
 const EVENT_POLL_PATH = process.env.IFOOD_EVENTS_POLL_PATH || '/events/v1.0/events:polling';
@@ -44,9 +43,8 @@ async function autoAcceptOrders(events = [], headers, baseUrl) {
           validateStatus: (s) => [200, 202, 204].includes(s),
         }
       );
-      console.info('[ifood:autoAccept][ok]', { orderId });
     } catch (err) {
-      console.warn('[ifood:autoAccept][fail]', {
+      console.error('[ifood:autoAccept][fail]', {
         orderId,
         status: err?.response?.status,
         data: err?.response?.data,
@@ -84,16 +82,11 @@ async function pollMerchant(credentials) {
   const events = resp.data;
   // Guarda no cache compartilhado e faz ACK para nÃ£o repetir
   mergeEvents(merchantId, events);
-  console.info(
-    '[ifood:events][dump]',
-    util.inspect({ merchantId, events }, { depth: null, colors: false })
-  );
   if (autoAccept) {
     await autoAcceptOrders(events, headers, base);
   }
   await axios.post(ackUrl, events, { headers, timeout: 10000 });
   broadcast({ type: 'ifood-events', merchantId, events });
-  console.info('[ifood:events]', { merchantId, count: events.length });
 }
 
 async function pollOnce() {
@@ -116,7 +109,7 @@ async function pollOnce() {
     try {
       await pollMerchant({ clientId, clientSecret, merchantId, autoAccept });
     } catch (err) {
-      console.warn('[ifood:events][erro]', {
+      console.error('[ifood:events][erro]', {
         storeId: integration.store?.toString?.() || '',
         merchantId,
         message: err?.message,
@@ -135,7 +128,7 @@ function startIfoodStatusPoller() {
     try {
       await pollOnce();
     } catch (err) {
-      console.warn('[ifood:events][loop-error]', err?.message);
+      console.error('[ifood:events][loop-error]', err?.message);
     } finally {
       inFlight = false;
       setTimeout(loop, POLL_INTERVAL_MS);

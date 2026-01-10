@@ -1,4 +1,5 @@
-const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { Readable } = require('stream');
 const path = require('path');
 
 const accessKeyId = (process.env.R2_ACCESS_KEY_ID || '').trim();
@@ -105,6 +106,38 @@ async function uploadBufferToR2(buffer, { key, contentType }) {
     };
 }
 
+async function streamToBuffer(stream) {
+    if (!stream) return Buffer.alloc(0);
+    if (Buffer.isBuffer(stream)) return stream;
+    if (stream instanceof Uint8Array) return Buffer.from(stream);
+    return new Promise((resolve, reject) => {
+        const chunks = [];
+        const readable = stream instanceof Readable ? stream : Readable.from(stream);
+        readable.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+        readable.on('error', reject);
+        readable.on('end', () => resolve(Buffer.concat(chunks)));
+    });
+}
+
+async function getObjectFromR2(key) {
+    const client = getClient();
+    if (!client) throw new Error('Cloudflare R2 não está configurado.');
+
+    const normalizedKey = normalizeKey(key);
+    if (!normalizedKey) return null;
+
+    const command = new GetObjectCommand({ Bucket: bucket, Key: normalizedKey });
+    const response = await client.send(command);
+    const buffer = await streamToBuffer(response.Body);
+
+    return {
+        key: normalizedKey,
+        buffer,
+        contentType: response.ContentType || 'application/octet-stream',
+        contentLength: response.ContentLength || buffer.length,
+    };
+}
+
 async function deleteObjectFromR2(key) {
     const client = getClient();
     if (!client) return;
@@ -119,6 +152,7 @@ async function deleteObjectFromR2(key) {
 module.exports = {
     isR2Configured,
     uploadBufferToR2,
+    getObjectFromR2,
     deleteObjectFromR2,
     buildPublicUrl,
     parseKeyFromPublicUrl,

@@ -3,6 +3,88 @@
     (typeof API_CONFIG !== 'undefined' && API_CONFIG && API_CONFIG.BASE_URL) || '/api';
   const SERVER_URL =
     (typeof API_CONFIG !== 'undefined' && API_CONFIG && API_CONFIG.SERVER_URL) || '';
+  const LOCAL_AGENT_BASE_URL = (
+    typeof window !== 'undefined' && window.PDV_LOCAL_AGENT_URL
+      ? window.PDV_LOCAL_AGENT_URL
+      : 'http://127.0.0.1:17305'
+  ).replace(/\/+$/, '');
+  const LOCAL_AGENT_PACKAGE_URLS = (() => {
+    if (typeof window === 'undefined') return [];
+    const origin = window.location.origin;
+    const liveServerHostnames = new Set(['127.0.0.1', 'localhost']);
+    const isLiveServer =
+      liveServerHostnames.has(window.location.hostname) &&
+      String(window.location.port || '') === '5500';
+    const fallbackCandidates = isLiveServer
+      ? [
+          `${origin}/public/downloads/pdv-local-agent.zip`,
+          `${origin}/downloads/pdv-local-agent.zip`,
+        ]
+      : [
+          `${origin}/downloads/pdv-local-agent.zip`,
+          `${origin}/public/downloads/pdv-local-agent.zip`,
+        ];
+    const candidates = [
+      window.PDV_LOCAL_AGENT_PACKAGE_URL,
+      window.PDV_LOCAL_AGENT_DOWNLOAD_URL,
+      ...fallbackCandidates,
+    ]
+      .filter((value) => typeof value === 'string' && value.trim());
+    return Array.from(new Set(candidates));
+  })();
+  const LOCAL_AGENT_INSTALLER_URLS = (() => {
+    if (typeof window === 'undefined') return [];
+    const origin = window.location.origin;
+    const liveServerHostnames = new Set(['127.0.0.1', 'localhost']);
+    const isLiveServer =
+      liveServerHostnames.has(window.location.hostname) &&
+      String(window.location.port || '') === '5500';
+    const fallbackCandidates = isLiveServer
+      ? [
+          `${origin}/public/downloads/pdv-local-agent-setup.exe`,
+          `${origin}/downloads/pdv-local-agent-setup.exe`,
+        ]
+      : [
+          `${origin}/downloads/pdv-local-agent-setup.exe`,
+          `${origin}/public/downloads/pdv-local-agent-setup.exe`,
+        ];
+    const candidates = [window.PDV_LOCAL_AGENT_INSTALLER_URL, ...fallbackCandidates]
+      .filter((value) => typeof value === 'string' && value.trim());
+    return Array.from(new Set(candidates));
+  })();
+  const LOCAL_AGENT_VERSION_URLS = (() => {
+    if (typeof window === 'undefined') return [];
+    const origin = window.location.origin;
+    const liveServerHostnames = new Set(['127.0.0.1', 'localhost']);
+    const isLiveServer =
+      liveServerHostnames.has(window.location.hostname) &&
+      String(window.location.port || '') === '5500';
+    const fallbackCandidates = isLiveServer
+      ? [
+          `${origin}/public/downloads/pdv-local-agent-version.json`,
+          `${origin}/downloads/pdv-local-agent-version.json`,
+        ]
+      : [
+          `${origin}/downloads/pdv-local-agent-version.json`,
+          `${origin}/public/downloads/pdv-local-agent-version.json`,
+        ];
+    const candidates = [window.PDV_LOCAL_AGENT_VERSION_URL, ...fallbackCandidates]
+      .filter((value) => typeof value === 'string' && value.trim());
+    return Array.from(new Set(candidates));
+  })();
+  const LOCAL_AGENT_HEALTH_TIMEOUT_MS = 1200;
+  const LOCAL_AGENT_PRINT_TIMEOUT_MS = 30000;
+  const LOCAL_AGENT_UPDATE_TTL_MS = 5 * 60 * 1000;
+  const localAgentUpdateState = {
+    lastCheckedAt: 0,
+    localVersion: '',
+    latestVersion: '',
+    downloadUrl: '',
+    installerUrl: '',
+    hasUpdate: false,
+    promptedVersion: '',
+  };
+  let lastLocalAgentHealth = null;
 
   const PDV_NO_CUSTOMER_LABEL = 'Sem Cliente na Venda';
   const RECEIVABLES_RESIDUAL_THRESHOLD = 0.009;
@@ -91,6 +173,7 @@
     caixaAberto: false,
     allowApuradoEdit: false,
     printPreferences: { fechamento: 'PM', venda: 'PM' },
+    printerSettings: { venda: null, orcamento: null, contas: null, caixa: null },
     selectedAction: null,
     searchResults: [],
     selectedProduct: null,
@@ -1097,6 +1180,41 @@
     return fallback;
   };
 
+  const normalizePaperWidth = (value) => {
+    const raw = value ? String(value).trim().toLowerCase() : '';
+    if (!raw) return '80mm';
+    if (raw === '80' || raw === '80mm') return '80mm';
+    if (raw === '58' || raw === '58mm') return '58mm';
+    return '80mm';
+  };
+
+  const normalizePrinterType = (value) => {
+    const raw = value ? String(value).trim().toLowerCase() : '';
+    if (!raw) return 'bematech';
+    if (raw === 'bematech' || raw === 'elgin') return raw;
+    return 'bematech';
+  };
+
+  const normalizePrinterConfig = (printer) => {
+    if (!printer || typeof printer !== 'object') return null;
+    const nome = typeof printer.nome === 'string' ? printer.nome.trim() : '';
+    if (!nome) return null;
+    const viasValue = Number(printer.vias);
+    const vias = Number.isFinite(viasValue) && viasValue >= 1 ? Math.min(Math.trunc(viasValue), 10) : 1;
+    const larguraPapel = normalizePaperWidth(printer.larguraPapel || printer.largura);
+    const tipoImpressora = normalizePrinterType(printer.tipoImpressora || printer.tipo || printer.printerType);
+    return { nome, vias, larguraPapel, tipoImpressora };
+  };
+
+  const resolvePrinterConfigForType = (type) => {
+    const settings = state.printerSettings || {};
+    if (type === 'fechamento') return settings.caixa || null;
+    if (type === 'venda') return settings.venda || null;
+    if (type === 'orcamento') return settings.orcamento || null;
+    if (type === 'contas') return settings.contas || null;
+    return null;
+  };
+
   const resolvePrintVariant = (mode) =>
     mode === 'F' || mode === 'PF' ? 'fiscal' : 'matricial';
 
@@ -1337,13 +1455,87 @@
       store?.razaoSocial ||
       store?.razao ||
       store?.fantasia ||
-      '—'
+      '-'
     );
+  };
+
+  const getStoreIdentityInfo = () => {
+    const store = findStoreById(state.selectedStore);
+    const company = store?.empresa && typeof store.empresa === 'object' ? store.empresa : {};
+    const pickValue = (...candidates) => {
+      for (const candidate of candidates) {
+        if (typeof candidate === 'string' && candidate.trim()) {
+          return candidate.trim();
+        }
+      }
+      return '';
+    };
+
+    const name = pickValue(
+      store?.nomeFantasia,
+      store?.nome,
+      company?.nomeFantasia,
+      company?.nome,
+      store?.razaoSocial,
+      company?.razaoSocial,
+      store?.razao,
+      store?.fantasia
+    );
+
+    const cnpj = pickValue(store?.cnpj, company?.cnpj);
+    const cpf = pickValue(store?.cpf, company?.cpf);
+    const ie = pickValue(store?.inscricaoEstadual, store?.ie, company?.inscricaoEstadual, company?.ie);
+    const docParts = [];
+    if (cnpj) {
+      docParts.push(`CNPJ: ${cnpj}`);
+    } else if (cpf) {
+      docParts.push(`CPF: ${cpf}`);
+    }
+    if (ie) {
+      docParts.push(`IE: ${ie}`);
+    }
+    const documentsLine = docParts.join(' ');
+
+    const street = pickValue(
+      store?.logradouro,
+      store?.endereco,
+      store?.rua,
+      company?.logradouro,
+      company?.endereco,
+      company?.rua
+    );
+    const number = pickValue(store?.numero, store?.num, company?.numero, company?.num);
+    const baseAddress = [street, number].filter(Boolean).join(', ');
+    const neighborhood = pickValue(store?.bairro, company?.bairro, store?.distrito, company?.distrito);
+    const city = pickValue(
+      store?.cidade,
+      store?.municipio,
+      company?.cidade,
+      company?.municipio,
+      store?.city,
+      company?.city
+    );
+    const stateUf = pickValue(store?.uf, store?.estado, company?.uf, company?.estado);
+    const cityLine = [city, stateUf].filter(Boolean).join(' - ');
+    const cep = pickValue(store?.cep, company?.cep);
+    const addressParts = [
+      baseAddress,
+      neighborhood,
+      cityLine,
+      cep ? `CEP: ${cep}` : '',
+    ].filter(Boolean);
+    const addressLine = addressParts.join(' - ');
+
+    return {
+      name,
+      documentsLine,
+      addressLine,
+    };
   };
 
   const getPdvLabel = () => {
     const pdv = findPdvById(state.selectedPdv);
-    return pdv?.nome || pdv?.codigo || pdv?.identificador || pdv?._id || '—';
+    return pdv?.nome || pdv?.codigo || pdv?.identificador || pdv?._id || '-';
   };
 
   const formatPrintLine = (label, value, width = 58) => {
@@ -1477,9 +1669,17 @@
       return null;
     }
 
-    const nowLabel = toDateLabel(new Date().toISOString());
-    const operatorName = getLoggedUserName();
+    const nowLabel = options.dateLabel || toDateLabel(new Date().toISOString());
+    const operatorName = options.operatorName || getLoggedUserName();
     const saleCode = options.saleCode || state.currentSaleCode || '';
+    const storeLabel = options.storeLabel || getStoreLabel();
+    const pdvLabel = options.pdvLabel || getPdvLabel();
+    const discountSource =
+      options.desconto ?? options.discount ?? state.vendaDesconto;
+    const additionSource =
+      options.acrescimo ?? options.addition ?? state.vendaAcrescimo;
+    const customerSource = options.customer || state.vendaCliente;
+    const petSource = options.pet || state.vendaPet;
 
     const normalizeQuantity = (value) => {
       const number = safeNumber(value);
@@ -1489,29 +1689,36 @@
       });
     };
 
+    const resolveItemCode = (item) => {
+      const candidates = [
+        item?.codigoInterno,
+        item?.codInterno,
+        item?.codigoBarras,
+        item?.codigoProduto,
+        item?.codigo,
+      ];
+      for (const candidate of candidates) {
+        if (candidate == null) continue;
+        const value = String(candidate).trim();
+        if (value) return value;
+      }
+      return '';
+    };
+
     const itens = saleItems.map((item, index) => {
-      const codes = [];
-      if (item.codigoInterno) {
-        codes.push(`Int.: ${item.codigoInterno}`);
-      }
-      if (item.codigoBarras) {
-        codes.push(`Barras: ${item.codigoBarras}`);
-      }
-      if (!codes.length && item.codigo) {
-        codes.push(`Cód.: ${item.codigo}`);
-      }
+      const code = resolveItemCode(item);
       return {
         index: String(index + 1).padStart(2, '0'),
         nome: item.nome || 'Item da venda',
-        codigo: codes.join(' • '),
+        codigo: code,
         quantidade: normalizeQuantity(item.quantidade || 0),
         unitario: formatCurrency(item.valor || item.preco || 0),
         subtotal: formatCurrency(item.subtotal || 0),
       };
     });
 
-    const descontoValor = Math.max(0, safeNumber(state.vendaDesconto));
-    const acrescimoValor = Math.max(0, safeNumber(state.vendaAcrescimo));
+    const descontoValor = Math.max(0, safeNumber(discountSource));
+    const acrescimoValor = Math.max(0, safeNumber(additionSource));
     const bruto = saleItems.reduce((sum, item) => sum + safeNumber(item.subtotal), 0);
     const liquidoValor = Math.max(0, bruto + acrescimoValor - descontoValor);
     const pagamentoItems = (Array.isArray(payments) ? payments : []).map((payment) => {
@@ -1585,26 +1792,26 @@
       safeNumber(promotionTotals.conditional) +
       safeNumber(promotionTotals.club);
 
-    const clienteAddress = resolveCustomerAddressRecord(state.vendaCliente);
+    const clienteAddress = resolveCustomerAddressRecord(customerSource);
 
-    const cliente = state.vendaCliente
+    const cliente = customerSource
       ? {
           nome:
-            state.vendaCliente.nome ||
-            state.vendaCliente.razaoSocial ||
-            state.vendaCliente.fantasia ||
+            customerSource.nome ||
+            customerSource.razaoSocial ||
+            customerSource.fantasia ||
             'Cliente',
           documento:
-            state.vendaCliente.cpf ||
-            state.vendaCliente.cnpj ||
-            state.vendaCliente.documento ||
+            customerSource.cpf ||
+            customerSource.cnpj ||
+            customerSource.documento ||
             '',
           contato:
-            state.vendaCliente.telefone ||
-            state.vendaCliente.celular ||
-            state.vendaCliente.email ||
+            customerSource.telefone ||
+            customerSource.celular ||
+            customerSource.email ||
             '',
-          pet: state.vendaPet?.nome || '',
+          pet: petSource?.nome || '',
           endereco: clienteAddress?.formatted || '',
         }
       : null;
@@ -1626,8 +1833,8 @@
 
     return {
       meta: {
-        store: getStoreLabel(),
-        pdv: getPdvLabel(),
+        store: storeLabel,
+        pdv: pdvLabel,
         data: nowLabel,
         operador: operatorName,
         saleCode,
@@ -1656,6 +1863,32 @@
         formattedTotal: formatCurrency(pagoValor),
       },
     };
+  };
+
+  const buildBudgetReceiptSnapshot = (budget) => {
+    if (!budget || typeof budget !== 'object') {
+      return null;
+    }
+    const items = Array.isArray(budget.items) ? budget.items : [];
+    if (!items.length) {
+      return null;
+    }
+    const payments = Array.isArray(budget.payments) ? budget.payments : [];
+    const operatorName =
+      budget.sellerName ||
+      budget.seller?.nome ||
+      budget.seller?.name ||
+      getLoggedUserName();
+    const dateSource = budget.updatedAt || budget.createdAt || '';
+    return getSaleReceiptSnapshot(items, payments, {
+      saleCode: budget.code || '',
+      dateLabel: dateSource ? toDateLabel(dateSource) : undefined,
+      operatorName,
+      customer: budget.customer || null,
+      pet: budget.pet || null,
+      discount: budget.discount,
+      addition: budget.addition,
+    });
   };
 
   const toDateLabel = (isoString) => {
@@ -2569,6 +2802,7 @@
     elements.printControls = document.getElementById('pdv-print-controls');
     elements.fullscreenToggle = document.getElementById('pdv-fullscreen-toggle');
     elements.fullscreenLabel = document.getElementById('pdv-fullscreen-label');
+    elements.agentUpdateButton = document.getElementById('pdv-agent-update-button');
     elements.companyLabel = document.getElementById('pdv-company-label');
     elements.pdvLabel = document.getElementById('pdv-name-label');
     elements.selectedInfo = document.getElementById('pdv-selected-info');
@@ -2714,6 +2948,7 @@
     elements.budgetEmpty = document.getElementById('pdv-budget-empty');
     elements.budgetDetailsHint = document.getElementById('pdv-budget-details-hint');
     elements.budgetImport = document.getElementById('pdv-budget-import');
+    elements.budgetPrint = document.getElementById('pdv-budget-print');
     elements.budgetDelete = document.getElementById('pdv-budget-delete');
     elements.budgetCode = document.getElementById('pdv-budget-code');
     elements.budgetCustomer = document.getElementById('pdv-budget-customer');
@@ -5081,6 +5316,30 @@
     }, 120);
   };
 
+  const getCustomerIdFromUrl = () => {
+    if (typeof window === 'undefined') return '';
+    const params = new URLSearchParams(window.location.search || '');
+    return (params.get('clienteId') || params.get('customerId') || '').trim();
+  };
+
+  const applyCustomerFromUrl = async () => {
+    const customerId = getCustomerIdFromUrl();
+    if (!customerId) return;
+    const token = getToken();
+    try {
+      const customer = await fetchWithOptionalAuth(`${API_BASE}/func/clientes/${customerId}`, {
+        token,
+        errorMessage: 'Nao foi possivel carregar o cliente informado.',
+      });
+      if (!customer) return;
+      setSaleCustomer(customer, null);
+      notify('Cliente vinculado ao PDV.', 'success');
+    } catch (error) {
+      console.error('Erro ao carregar cliente do PDV via URL:', error);
+      notify(error.message || 'Nao foi possivel carregar o cliente informado.', 'error');
+    }
+  };
+
   const closeCustomerRegisterModal = () => {
     if (!elements.customerRegisterModal) return;
     elements.customerRegisterModal.classList.add('hidden');
@@ -7248,6 +7507,20 @@
     renderBudgets();
     scheduleStatePersist({ immediate: true });
     notify('Orçamento excluído com sucesso.', 'success');
+  };
+
+  const handleBudgetPrint = () => {
+    const budget = findBudgetById(state.selectedBudgetId);
+    if (!budget) {
+      notify('Selecione um orçamento para imprimir.', 'info');
+      return;
+    }
+    const snapshot = buildBudgetReceiptSnapshot(budget);
+    if (!snapshot) {
+      notify('Nenhum dado disponível para imprimir o orçamento.', 'warning');
+      return;
+    }
+    handleConfiguredPrint('orcamento', { snapshot, budget });
   };
 
   const handleFinalizeButtonClick = () => {
@@ -10905,7 +11178,16 @@
       return '<main class="receipt"><p class="receipt-empty">Documento fiscal indisponível para impressão.</p></main>';
     }
 
-    const { identificacao = {}, emitente = {}, destinatario, entrega, itens = [], totais = {}, qrCode = {} } = data;
+    const {
+      identificacao = {},
+      emitente = {},
+      destinatario,
+      entrega,
+      itens = [],
+      totais = {},
+      qrCode = {},
+      snapshot = null,
+    } = data;
     const ambienteLabel = formatEnvironmentLabel(identificacao.ambiente);
     const companyPrimaryName = emitente.nomeFantasia || emitente.razaoSocial || 'Emitente não informado';
     const companySecondaryName =
@@ -11002,7 +11284,7 @@
           .join('')
       : '<tr><td colspan="3" class="nfce-compact__empty">Nenhum item informado.</td></tr>';
 
-    const promoRows = Array.isArray(snapshot.descontosPromocao?.entries)
+    const promoRows = Array.isArray(snapshot?.descontosPromocao?.entries)
       ? snapshot.descontosPromocao.entries
           .map((entry) => {
             const label = entry?.label || 'Desconto promocao';
@@ -11231,7 +11513,7 @@
       </main>`;
   };
 
-  const buildMatricialReceiptMarkup = (snapshot) => {
+  const buildMatricialReceiptMarkup = (snapshot, options = {}) => {
     if (!snapshot) {
       return '<main class="receipt"><p class="receipt-empty">Nenhuma venda disponível para impressão.</p></main>';
     }
@@ -11345,6 +11627,9 @@
       : '';
 
     const headerDetails = [];
+    if (options.title) {
+      headerDetails.push(options.title);
+    }
     if (snapshot.meta?.store && snapshot.meta.store !== companyPrimaryName) {
       headerDetails.push(snapshot.meta.store);
     }
@@ -11543,16 +11828,17 @@
       </main>`;
   };
 
-  const buildSaleReceiptMarkup = (snapshot, variant) => {
+  const buildSaleReceiptMarkup = (snapshot, variant, options = {}) => {
     if (!snapshot) {
       return '<main class="receipt"><p class="receipt-empty">Nenhuma venda disponível para impressão.</p></main>';
     }
 
     if (variant === 'matricial') {
-      return buildMatricialReceiptMarkup(snapshot);
+      return buildMatricialReceiptMarkup(snapshot, { title: options.title });
     }
 
-    const badgeLabel = variant === 'fiscal' ? 'Fiscal' : 'Matricial';
+    const badgeLabel = options.badgeLabel || (variant === 'fiscal' ? 'Fiscal' : 'Matricial');
+    const documentTitle = options.title || 'Comprovante de venda';
     const metaLines = [
       snapshot.meta.store,
       `PDV: ${snapshot.meta.pdv}`,
@@ -11678,7 +11964,7 @@
     return `
       <main class="receipt">
         <header class="receipt__header">
-          <h1 class="receipt__title">Comprovante de venda</h1>
+          <h1 class="receipt__title">${escapeHtml(documentTitle)}</h1>
           <span class="receipt__badge">${escapeHtml(badgeLabel)}</span>
         </header>
         <section class="receipt__meta">${metaLines}</section>
@@ -11711,6 +11997,482 @@
           <p>Volte sempre.</p>
         </footer>
       </main>`;
+  };
+
+  const buildReceiptLogoPlaceholder = () => ({
+    enabled: false,
+    label: 'Em desenvolvimento',
+  });
+
+  const buildNfceReceiptJson = (
+    data,
+    { title, paperWidth, fallbackSnapshot, qrCodePayload, qrCodeDataUrl, printerType } = {}
+  ) => {
+    let source = data;
+    if (!source && fallbackSnapshot) {
+      source = {
+        identificacao: {
+          dataEmissao: fallbackSnapshot.meta?.data || '',
+        },
+        emitente: {
+          nomeFantasia: fallbackSnapshot.meta?.store || '',
+        },
+        destinatario: fallbackSnapshot.cliente
+          ? {
+              nome: fallbackSnapshot.cliente.nome || '',
+              documento: fallbackSnapshot.cliente.documento || '',
+              endereco: fallbackSnapshot.cliente.endereco || '',
+              logradouro: '',
+              numero: '',
+              complemento: '',
+              bairro: '',
+              municipio: '',
+              uf: '',
+              cep: '',
+            }
+          : null,
+        itens: Array.isArray(fallbackSnapshot.itens)
+          ? fallbackSnapshot.itens.map((item, index) => ({
+              numero: item.index || String(index + 1),
+              descricao: item.nome || 'Item',
+              codigos: item.codigo || '',
+              quantidade: item.quantidade || '',
+              unitario: item.unitario || '',
+              total: item.subtotal || '',
+            }))
+          : [],
+        totais: {
+          bruto: fallbackSnapshot.totais?.bruto || '',
+          desconto: fallbackSnapshot.totais?.desconto || '',
+          descontoValor: fallbackSnapshot.totais?.descontoValor || '',
+          acrescimo: fallbackSnapshot.totais?.acrescimo || '',
+          acrescimoValor: fallbackSnapshot.totais?.acrescimoValor || '',
+          liquido: fallbackSnapshot.totais?.liquido || '',
+          pago: fallbackSnapshot.totais?.pago || '',
+          troco: fallbackSnapshot.totais?.troco || '',
+          trocoValor: fallbackSnapshot.totais?.trocoValor || '',
+        },
+        pagamentos: {
+          items: Array.isArray(fallbackSnapshot.pagamentos?.items)
+            ? fallbackSnapshot.pagamentos.items.map((payment) => ({
+                descricao: payment.label || 'Pagamento',
+                valor: payment.formatted || '',
+              }))
+            : [],
+        },
+        qrCode: qrCodePayload ? { payload: qrCodePayload } : {},
+        snapshot: fallbackSnapshot,
+      };
+    }
+
+    if (!source) {
+      return null;
+    }
+
+    const identificacao = source.identificacao || {};
+    const emitente = source.emitente || {};
+    const destinatario = source.destinatario || null;
+    const itens = Array.isArray(source.itens) ? source.itens : [];
+    const totais = source.totais || {};
+    const pagamentos = source.pagamentos || {};
+    const qrCode = source.qrCode || {};
+    const snapshot = source.snapshot || null;
+    const storeIdentity = getStoreIdentityInfo();
+
+    const parseAmount = (value) => {
+      if (value == null) return 0;
+      if (typeof value === 'number') {
+        return Number.isFinite(value) ? value : 0;
+      }
+      const raw = String(value).trim();
+      if (!raw) return 0;
+      let cleaned = raw.replace(/[^\d,.-]/g, '');
+      if (!cleaned) return 0;
+      if (cleaned.indexOf(',') >= 0) {
+        cleaned = cleaned.replace(/\./g, '').replace(',', '.');
+      }
+      const number = Number(cleaned);
+      return Number.isFinite(number) ? number : 0;
+    };
+
+    const extractConsultaUrl = (payload) => {
+      if (!payload) return '';
+      const raw = String(payload).trim();
+      if (!raw) return '';
+      const match = raw.match(/https?:\/\/\S+/i);
+      if (!match) return '';
+      try {
+        const url = new URL(match[0]);
+        return `${url.origin}${url.pathname}`;
+      } catch (_) {
+        return '';
+      }
+    };
+
+    const buildCustomerAddress = (customer) => {
+      if (!customer) return '';
+      if (typeof customer.endereco === 'string' && customer.endereco.trim()) {
+        return customer.endereco.trim();
+      }
+      const parts = [];
+      const base = [customer.logradouro, customer.numero].filter(Boolean).join(', ');
+      if (base) parts.push(base);
+      if (customer.complemento) parts.push(customer.complemento);
+      if (customer.bairro) parts.push(customer.bairro);
+      const cityUf = [customer.municipio, customer.uf].filter(Boolean).join(' - ');
+      if (cityUf) parts.push(cityUf);
+      if (customer.cep) parts.push(`CEP: ${customer.cep}`);
+      return parts.join(' - ');
+    };
+
+    const storeName =
+      emitente.nomeFantasia ||
+      emitente.razaoSocial ||
+      storeIdentity.name ||
+      snapshot?.meta?.store ||
+      '';
+
+    const logoLines = [];
+    const cnpjIe = [
+      emitente.cnpj ? `CNPJ: ${emitente.cnpj}` : '',
+      emitente.inscricaoEstadual ? `IE: ${emitente.inscricaoEstadual}` : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+    const documentLine = cnpjIe || storeIdentity.documentsLine;
+    if (documentLine) {
+      logoLines.push(documentLine);
+    }
+    const emitenteAddressParts = [];
+    const emitenteBase = [emitente.logradouro || emitente.endereco, emitente.numero]
+      .filter(Boolean)
+      .join(', ');
+    if (emitenteBase) emitenteAddressParts.push(emitenteBase);
+    if (emitente.bairro) emitenteAddressParts.push(emitente.bairro);
+    const emitenteCityUf = [emitente.municipio, emitente.uf].filter(Boolean).join(' - ');
+    if (emitenteCityUf) emitenteAddressParts.push(emitenteCityUf);
+    if (emitente.cep) emitenteAddressParts.push(`CEP: ${emitente.cep}`);
+    const addressLine = emitenteAddressParts.length
+      ? emitenteAddressParts.join(' - ')
+      : storeIdentity.addressLine;
+    if (addressLine) {
+      logoLines.push(addressLine);
+    }
+
+    const fallbackCustomer = snapshot?.cliente || null;
+    const fallbackDelivery = snapshot?.delivery || null;
+    const fallbackAddress =
+      fallbackCustomer?.endereco ||
+      fallbackDelivery?.formatted ||
+      fallbackDelivery?.address ||
+      '';
+    const customerAddress = buildCustomerAddress(destinatario) || fallbackAddress || '';
+    const customerDocument =
+      destinatario?.documento ||
+      destinatario?.document ||
+      fallbackCustomer?.documento ||
+      '';
+    const customerName = destinatario?.nome || fallbackCustomer?.nome || '';
+
+    const qrPayload = qrCodePayload || qrCode?.payload || '';
+    const qrImage = qrCodeDataUrl || qrCode?.image || '';
+
+    const consultaUrl = extractConsultaUrl(qrPayload);
+
+    const promoEntries = Array.isArray(snapshot?.descontosPromocao?.entries)
+      ? snapshot.descontosPromocao.entries
+          .map((entry) => ({
+            label: entry?.label || 'Desconto promocao',
+            value: entry?.formatted || entry?.value || '',
+            amount: parseAmount(entry?.value),
+          }))
+          .filter((entry) => entry.value)
+      : [];
+
+    const normalizedPaperWidth = normalizePaperWidth(paperWidth);
+    const useWideColumns = normalizedPaperWidth === '80mm';
+    const columns = useWideColumns ? 56 : 42;
+    const font = 'B';
+    const normalizedPrinterType = normalizePrinterType(printerType);
+
+    const payload = {
+      version: 1,
+      type: 'nfce',
+      title: title || 'Cupom fiscal NFC-e',
+      variant: 'danfe',
+      paperWidth: normalizedPaperWidth,
+      columns,
+      font,
+      printerType: normalizedPrinterType,
+      logo: logoLines.length ? { enabled: false, label: logoLines.join('\n') } : null,
+      meta: {
+        store: storeName,
+        date: formatXmlDateTime(identificacao.dataEmissao || identificacao.dataRegistro),
+        fiscalNumber: identificacao.numeroFiscal || '',
+        fiscalSerie: identificacao.serieFiscal || '',
+        accessKey: identificacao.accessKey || '',
+        protocol: identificacao.protocolo || '',
+        environment: identificacao.ambiente || '',
+        consultaUrl,
+      },
+      items: itens.map((item, index) => ({
+        index: item.numero || String(index + 1),
+        name: item.descricao || 'Item',
+        code: item.codigos || '',
+        quantity: item.quantidade || '',
+        unitPrice: item.unitario || '',
+        total: item.total || '',
+      })),
+      totals: {
+        subtotal: totais.bruto || '',
+        discount: totais.desconto || '',
+        discountValue: parseAmount(totais.descontoValor || totais.desconto),
+        addition: totais.acrescimo || totais.acrescimoValor || '',
+        additionValue: parseAmount(totais.acrescimoValor || totais.acrescimo),
+        total: totais.liquido || '',
+        paid: totais.pago || '',
+        change: totais.troco || '',
+        changeValue: parseAmount(totais.trocoValor || totais.troco),
+        promotions: promoEntries,
+      },
+      payments: Array.isArray(pagamentos.items)
+        ? pagamentos.items.map((payment) => ({
+            label: payment.descricao || payment.label || 'Pagamento',
+            value: payment.valor || payment.value || '',
+            amount: parseAmount(payment.valor || payment.value),
+          }))
+        : [],
+      qrCode: qrPayload || qrImage ? { payload: qrPayload, image: qrImage } : null,
+    };
+
+    if (customerName || customerDocument || customerAddress) {
+      payload.customer = {
+        name: customerName,
+        document: customerDocument,
+        address: customerAddress,
+      };
+    }
+
+    return payload;
+  };
+
+  const buildSaleReceiptJson = (
+    snapshot,
+    {
+      title,
+      variant = 'matricial',
+      paperWidth,
+      qrCodeDataUrl,
+      qrCodePayload,
+      printerType,
+      useDanfeLayout = false,
+    } = {}
+  ) => {
+    if (!snapshot) {
+      return null;
+    }
+
+    const normalizedPaperWidth = normalizePaperWidth(paperWidth);
+    const useCompactDanfe = Boolean(useDanfeLayout);
+    const danfeColumns = useCompactDanfe ? (normalizedPaperWidth === '80mm' ? 56 : 42) : 0;
+    const danfeFont = useCompactDanfe ? 'B' : '';
+    const storeIdentity = getStoreIdentityInfo();
+    const danfeLogoLines = [];
+    if (storeIdentity.documentsLine) {
+      danfeLogoLines.push(storeIdentity.documentsLine);
+    }
+    if (storeIdentity.addressLine) {
+      danfeLogoLines.push(storeIdentity.addressLine);
+    }
+    const danfeLogo = danfeLogoLines.length
+      ? { enabled: false, label: danfeLogoLines.join('\n') }
+      : null;
+
+    const promoEntries = Array.isArray(snapshot.descontosPromocao?.entries)
+      ? snapshot.descontosPromocao.entries
+          .map((entry) => ({
+            label: entry?.label || 'Desconto promocao',
+            value: entry?.formatted || entry?.value || '',
+            amount: safeNumber(entry?.value),
+          }))
+          .filter((entry) => entry.value)
+      : [];
+
+    const payload = {
+      version: 1,
+      type: 'venda',
+      title: title || 'Comprovante de venda',
+      variant,
+      paperWidth: normalizedPaperWidth,
+      columns: danfeColumns,
+      font: danfeFont,
+      printerType: normalizePrinterType(printerType),
+      logo: useCompactDanfe ? danfeLogo : buildReceiptLogoPlaceholder(),
+      meta: {
+        store: snapshot.meta?.store || '',
+        pdv: snapshot.meta?.pdv || '',
+        saleCode: snapshot.meta?.saleCode || '',
+        operator: snapshot.meta?.operador || '',
+        date: snapshot.meta?.data || '',
+      },
+      items: Array.isArray(snapshot.itens)
+        ? snapshot.itens.map((item) => ({
+            index: item.index || '',
+            name: item.nome || 'Item',
+            code: item.codigo || '',
+            quantity: item.quantidade || '',
+            unitPrice: item.unitario || '',
+            total: item.subtotal || '',
+          }))
+        : [],
+      totals: {
+        subtotal: snapshot.totais?.bruto || '',
+        discount: snapshot.totais?.desconto || '',
+        discountValue: safeNumber(snapshot.totais?.descontoValor),
+        addition: snapshot.totais?.acrescimo || '',
+        additionValue: safeNumber(snapshot.totais?.acrescimoValor),
+        total: snapshot.totais?.liquido || '',
+        paid: snapshot.totais?.pago || '',
+        change: snapshot.totais?.troco || '',
+        changeValue: safeNumber(snapshot.totais?.trocoValor),
+        promotions: promoEntries,
+      },
+      payments: Array.isArray(snapshot.pagamentos?.items)
+        ? snapshot.pagamentos.items.map((payment) => ({
+            label: payment.label || 'Pagamento',
+            value: payment.formatted || '',
+            amount: safeNumber(payment.valor),
+          }))
+        : [],
+      footer: {
+        lines: ['Obrigado pela preferencia! Volte sempre.'],
+      },
+    };
+
+    if (snapshot.cliente) {
+      const customerAddress =
+        snapshot.cliente.endereco ||
+        snapshot.delivery?.formatted ||
+        '';
+      payload.customer = {
+        name: snapshot.cliente.nome || '',
+        document: snapshot.cliente.documento || '',
+        contact: snapshot.cliente.contato || '',
+        address: customerAddress,
+        pet: snapshot.cliente.pet || '',
+      };
+    }
+
+    if (snapshot.delivery) {
+      payload.delivery = {
+        label: snapshot.delivery.apelido || '',
+        address: snapshot.delivery.formatted || '',
+        cep: snapshot.delivery.cep || '',
+        logradouro: snapshot.delivery.logradouro || '',
+        numero: snapshot.delivery.numero || '',
+        complemento: snapshot.delivery.complemento || '',
+        bairro: snapshot.delivery.bairro || '',
+        cidade: snapshot.delivery.cidade || '',
+        uf: snapshot.delivery.uf || '',
+      };
+    }
+
+    const qrCode = {};
+    if (qrCodePayload) {
+      qrCode.payload = qrCodePayload;
+    }
+    if (qrCodeDataUrl) {
+      qrCode.image = qrCodeDataUrl;
+    }
+    if (Object.keys(qrCode).length) {
+      payload.qrCode = qrCode;
+    }
+
+    return payload;
+  };
+
+  const buildFechamentoReceiptJson = (
+    snapshot,
+    { title, variant = 'matricial', paperWidth, fallbackText, printerType } = {}
+  ) => {
+    if (!snapshot) {
+      return null;
+    }
+
+    const resumoRecebimentosCliente =
+      snapshot.resumo?.recebimentosCliente?.formatted ||
+      formatCurrency(snapshot.resumo?.recebimentosCliente?.value || 0);
+
+    const mapRows = (items = []) =>
+      items.map((item) => ({
+        label: item.label || '',
+        value: item.formattedValue || '',
+        amount: safeNumber(item.value),
+      }));
+
+    return {
+      version: 1,
+      type: 'fechamento',
+      title: title || 'Fechamento de Caixa',
+      variant,
+      paperWidth: normalizePaperWidth(paperWidth),
+      printerType: normalizePrinterType(printerType),
+      logo: buildReceiptLogoPlaceholder(),
+      meta: {
+        store: snapshot.meta?.store || '',
+        pdv: snapshot.meta?.pdv || '',
+        openedAt: snapshot.meta?.abertura || '',
+        closedAt: snapshot.meta?.fechamento || '',
+      },
+      summary: {
+        abertura: snapshot.resumo?.abertura || { value: 0, formatted: formatCurrency(0) },
+        recebido: snapshot.resumo?.recebido || { value: 0, formatted: formatCurrency(0) },
+        recebimentosCliente: {
+          value: snapshot.resumo?.recebimentosCliente?.value || 0,
+          formatted: resumoRecebimentosCliente,
+        },
+        saldo: snapshot.resumo?.saldo || { value: 0, formatted: formatCurrency(0) },
+      },
+      recebimentos: {
+        items: mapRows(snapshot.recebimentos?.items),
+        total: safeNumber(snapshot.recebimentos?.total),
+        formattedTotal: snapshot.recebimentos?.formattedTotal || '',
+      },
+      previsto: {
+        items: mapRows(snapshot.previsto?.items),
+        total: safeNumber(snapshot.previsto?.total),
+        formattedTotal: snapshot.previsto?.formattedTotal || '',
+      },
+      apurado: {
+        items: mapRows(snapshot.apurado?.items),
+        total: safeNumber(snapshot.apurado?.total),
+        formattedTotal: snapshot.apurado?.formattedTotal || '',
+      },
+      fallbackText: fallbackText || '',
+    };
+  };
+
+  const buildBudgetReceiptJson = (snapshot, budget, options = {}) => {
+    const payload = buildSaleReceiptJson(snapshot, options);
+    if (!payload) {
+      return null;
+    }
+    payload.type = 'orcamento';
+    payload.title = options.title || 'Orçamento';
+    if (budget && typeof budget === 'object') {
+      payload.budget = {
+        code: budget.code || '',
+        validityDays: budget.validityDays || 0,
+        validUntil: budget.validUntil ? toDateLabel(budget.validUntil) : '',
+        status: budget.status || '',
+      };
+      payload.meta = {
+        ...payload.meta,
+        budgetCode: budget.code || '',
+        validUntil: budget.validUntil ? toDateLabel(budget.validUntil) : '',
+      };
+    }
+    return payload;
   };
 
   const printHtmlDocument = (documentHtml, { logPrefix = 'documento' } = {}) => {
@@ -11872,37 +12634,472 @@
     }
   };
 
+  const fetchWithTimeout = async (url, options = {}, timeoutMs = LOCAL_AGENT_HEALTH_TIMEOUT_MS) => {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, { ...options, signal: controller.signal });
+      return response;
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
+  };
+
+  const parseVersionParts = (value) => {
+    if (!value) return [];
+    const matches = String(value).match(/\d+/g);
+    return matches ? matches.map((part) => Number(part)) : [];
+  };
+
+  const compareVersions = (left, right) => {
+    const leftParts = parseVersionParts(left);
+    const rightParts = parseVersionParts(right);
+    const maxLength = Math.max(leftParts.length, rightParts.length);
+    if (!maxLength) {
+      if (!left && !right) return 0;
+      return String(left).localeCompare(String(right));
+    }
+    for (let index = 0; index < maxLength; index += 1) {
+      const a = leftParts[index] || 0;
+      const b = rightParts[index] || 0;
+      if (a > b) return 1;
+      if (a < b) return -1;
+    }
+    return 0;
+  };
+
+  const fetchLocalAgentHealth = async () => {
+    if (!LOCAL_AGENT_BASE_URL) return null;
+    try {
+      const response = await fetchWithTimeout(
+        `${LOCAL_AGENT_BASE_URL}/health`,
+        {
+          method: 'GET',
+          cache: 'no-store',
+        },
+        LOCAL_AGENT_HEALTH_TIMEOUT_MS
+      );
+      if (!response.ok) {
+        return null;
+      }
+      const payload = await response.json().catch(() => null);
+      if (!payload?.ok) {
+        return null;
+      }
+      return payload;
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const resolveAgentDownloadUrl = (value) => {
+    if (!value) return '';
+    const raw = String(value).trim();
+    if (!raw) return '';
+    if (/^https?:\/\//i.test(raw)) {
+      return raw;
+    }
+    if (typeof window === 'undefined') {
+      return raw;
+    }
+    const origin = window.location.origin || '';
+    if (raw.startsWith('/')) {
+      return `${origin}${raw}`;
+    }
+    return `${origin}/${raw}`;
+  };
+
+  const resolveAvailableUrl = async (urls = []) => {
+    const candidates = Array.isArray(urls) ? urls : [];
+    for (const raw of candidates) {
+      const url = resolveAgentDownloadUrl(raw);
+      if (!url) {
+        continue;
+      }
+      try {
+        const response = await fetchWithTimeout(
+          url,
+          { method: 'HEAD', cache: 'no-store' },
+          LOCAL_AGENT_HEALTH_TIMEOUT_MS
+        );
+        if (response.ok) {
+          return url;
+        }
+      } catch (_) {
+        /* ignore */
+      }
+    }
+    return resolveAgentDownloadUrl(candidates[0]) || '';
+  };
+
+  const checkLocalAgent = async () => {
+    lastLocalAgentHealth = await fetchLocalAgentHealth();
+    return Boolean(lastLocalAgentHealth?.ok);
+  };
+
+  const fetchLatestAgentVersion = async () => {
+    if (typeof window === 'undefined' || !LOCAL_AGENT_VERSION_URLS.length) {
+      return null;
+    }
+    for (const url of LOCAL_AGENT_VERSION_URLS) {
+      try {
+        const response = await fetchWithTimeout(
+          url,
+          { method: 'GET', cache: 'no-store' },
+          LOCAL_AGENT_HEALTH_TIMEOUT_MS
+        );
+        if (!response.ok) {
+          continue;
+        }
+        const raw = await response.text();
+        if (!raw) {
+          continue;
+        }
+        let payload = null;
+        try {
+          payload = JSON.parse(raw);
+        } catch (_) {
+          payload = null;
+        }
+        if (payload && payload.version) {
+          return {
+            version: String(payload.version).trim(),
+            downloadUrl: payload.downloadUrl || payload.url || '',
+          };
+        }
+        const version = raw.trim();
+        if (version) {
+          return { version, downloadUrl: '' };
+        }
+      } catch (_) {
+        /* ignore */
+      }
+    }
+    return null;
+  };
+
+  const getLocalAgentUpdateInfo = async ({ force = false, health } = {}) => {
+    const now = Date.now();
+    if (
+      !force &&
+      localAgentUpdateState.lastCheckedAt &&
+      now - localAgentUpdateState.lastCheckedAt < LOCAL_AGENT_UPDATE_TTL_MS
+    ) {
+      return localAgentUpdateState;
+    }
+    const resolvedHealth = health || lastLocalAgentHealth || (await fetchLocalAgentHealth());
+    const localVersion = resolvedHealth?.version || '';
+    const latestInfo = await fetchLatestAgentVersion();
+    const latestVersion = latestInfo?.version || '';
+    const packageUrl =
+      resolveAgentDownloadUrl(latestInfo?.downloadUrl) ||
+      (await resolveAvailableUrl(LOCAL_AGENT_PACKAGE_URLS));
+    const installerUrl = await resolveAvailableUrl(LOCAL_AGENT_INSTALLER_URLS);
+    const hasUpdate =
+      latestVersion && localVersion ? compareVersions(latestVersion, localVersion) > 0 : false;
+    Object.assign(localAgentUpdateState, {
+      lastCheckedAt: now,
+      localVersion,
+      latestVersion,
+      downloadUrl: packageUrl,
+      installerUrl,
+      hasUpdate,
+    });
+    return localAgentUpdateState;
+  };
+
+  const triggerLocalAgentDownload = async () => {
+    if (typeof window === 'undefined') return;
+    const installerUrl = await resolveAvailableUrl(LOCAL_AGENT_INSTALLER_URLS);
+    if (installerUrl) {
+      window.location.href = installerUrl;
+      return;
+    }
+    const packageUrl = await resolveAvailableUrl(LOCAL_AGENT_PACKAGE_URLS);
+    if (packageUrl) {
+      window.location.href = packageUrl;
+    }
+  };
+
+  const triggerLocalAgentUpdate = async (updateInfo = {}) => {
+    const packageUrl =
+      resolveAgentDownloadUrl(updateInfo.downloadUrl) ||
+      localAgentUpdateState.downloadUrl ||
+      (await resolveAvailableUrl(LOCAL_AGENT_PACKAGE_URLS));
+    const installerUrl =
+      resolveAgentDownloadUrl(updateInfo.installerUrl) ||
+      localAgentUpdateState.installerUrl ||
+      (await resolveAvailableUrl(LOCAL_AGENT_INSTALLER_URLS));
+    if (LOCAL_AGENT_BASE_URL) {
+      try {
+        const response = await fetchWithTimeout(
+          `${LOCAL_AGENT_BASE_URL}/update`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ downloadUrl: packageUrl }),
+          },
+          LOCAL_AGENT_HEALTH_TIMEOUT_MS
+        );
+        const payload = await response.json().catch(() => null);
+        if (response.ok && payload?.ok) {
+          notify('Atualizacao do agente iniciada. O agente sera reiniciado.', 'info');
+          return true;
+        }
+      } catch (_) {
+        /* ignore */
+      }
+    }
+    if (installerUrl) {
+      window.location.href = installerUrl;
+      return false;
+    }
+    await triggerLocalAgentDownload();
+    return false;
+  };
+
+  const promptLocalAgentInstall = ({ fallbackHtml, logPrefix }) => {
+    const message =
+      'Agente local nao encontrado. Baixe e instale o agente para imprimir direto na impressora.';
+    if (typeof window?.showModal === 'function') {
+      window.showModal({
+        title: 'Instalar agente local',
+        message,
+        confirmText: 'Baixar',
+        cancelText: 'Imprimir no navegador',
+        onConfirm: () => {
+          void triggerLocalAgentDownload();
+        },
+        onCancel: () => {
+          if (fallbackHtml) {
+            printHtmlDocument(fallbackHtml, { logPrefix });
+          }
+        },
+      });
+      return;
+    }
+    const confirmed = window.confirm(message);
+    if (confirmed) {
+      triggerLocalAgentDownload();
+    } else if (fallbackHtml) {
+      printHtmlDocument(fallbackHtml, { logPrefix });
+    }
+  };
+
+  const promptLocalAgentUpdate = ({ currentVersion, latestVersion, downloadUrl } = {}) =>
+    new Promise((resolve) => {
+      const currentLabel = currentVersion || 'desconhecida';
+      const latestLabel = latestVersion || 'disponivel';
+      const message =
+        `Atualizacao do agente local disponivel (instalada ${currentLabel} -> ${latestLabel}). ` +
+        'Deseja atualizar agora? O agente sera reiniciado.';
+      const handleConfirm = () => {
+        void triggerLocalAgentUpdate({ downloadUrl });
+        resolve(false);
+      };
+      const handleCancel = () => resolve(true);
+      if (typeof window?.showModal === 'function') {
+        window.showModal({
+          title: 'Atualizar agente local',
+          message,
+          confirmText: 'Baixar atualizacao',
+          cancelText: 'Agora nao',
+          onConfirm: handleConfirm,
+          onCancel: handleCancel,
+        });
+        return;
+      }
+      const confirmed = window.confirm(message);
+      if (confirmed) {
+        handleConfirm();
+      } else {
+        handleCancel();
+      }
+    });
+
+  const ensureLocalAgentUpdated = async ({ forcePrompt = false } = {}) => {
+    const info = await getLocalAgentUpdateInfo({ health: lastLocalAgentHealth });
+    if (!info?.latestVersion || !info?.localVersion || !info?.hasUpdate) {
+      return true;
+    }
+    if (!forcePrompt && info.latestVersion === localAgentUpdateState.promptedVersion) {
+      return true;
+    }
+    localAgentUpdateState.promptedVersion = info.latestVersion;
+    return promptLocalAgentUpdate({
+      currentVersion: info.localVersion,
+      latestVersion: info.latestVersion,
+      downloadUrl: info.downloadUrl,
+    });
+  };
+
+  const handleAgentUpdateClick = async () => {
+    const ready = await checkLocalAgent();
+    if (!ready) {
+      promptLocalAgentInstall({ fallbackHtml: null, logPrefix: 'agente local' });
+      return;
+    }
+    const info = await getLocalAgentUpdateInfo({ force: true, health: lastLocalAgentHealth });
+    if (!info?.latestVersion) {
+      notify('Nao foi possivel verificar atualizacao do agente.', 'warning');
+      return;
+    }
+    if (!info.hasUpdate) {
+      notify('Agente local ja esta atualizado.', 'success');
+      return;
+    }
+    localAgentUpdateState.promptedVersion = info.latestVersion;
+    await promptLocalAgentUpdate({
+      currentVersion: info.localVersion,
+      latestVersion: info.latestVersion,
+      downloadUrl: info.downloadUrl,
+    });
+  };
+
+  const printViaLocalAgent = async ({
+    html,
+    printerName,
+    copies,
+    jobName,
+    fallbackHtml,
+    logPrefix,
+  }) => {
+    const ready = await checkLocalAgent();
+    if (!ready) {
+      promptLocalAgentInstall({ fallbackHtml, logPrefix });
+      return false;
+    }
+    const canProceed = await ensureLocalAgentUpdated();
+    if (!canProceed) {
+      return false;
+    }
+    try {
+      const response = await fetchWithTimeout(
+        `${LOCAL_AGENT_BASE_URL}/print`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            html,
+            printerName,
+            copies,
+            jobName,
+          }),
+        },
+        LOCAL_AGENT_PRINT_TIMEOUT_MS
+      );
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || payload?.ok !== true) {
+        throw new Error(payload?.error || 'print-failed');
+      }
+      notify('Impressao enviada para a impressora.', 'success');
+      return true;
+    } catch (error) {
+      console.error('Falha ao imprimir via agente local:', error);
+      notify('Falha ao imprimir via agente local. Abrindo impressao no navegador.', 'warning');
+      if (fallbackHtml) {
+        printHtmlDocument(fallbackHtml, { logPrefix });
+      }
+      return false;
+    }
+  };
+
+  const printViaLocalAgentJson = async ({
+    payload,
+    printerName,
+    copies,
+    jobName,
+    fallbackHtml,
+    logPrefix,
+  }) => {
+    if (!payload) {
+      return false;
+    }
+    const ready = await checkLocalAgent();
+    if (!ready) {
+      promptLocalAgentInstall({ fallbackHtml, logPrefix });
+      return false;
+    }
+    const canProceed = await ensureLocalAgentUpdated();
+    if (!canProceed) {
+      return false;
+    }
+    try {
+      const response = await fetchWithTimeout(
+        `${LOCAL_AGENT_BASE_URL}/print-json`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            document: payload,
+            printerName,
+            copies,
+            jobName,
+          }),
+        },
+        LOCAL_AGENT_PRINT_TIMEOUT_MS
+      );
+      const result = await response.json().catch(() => null);
+      if (!response.ok || result?.ok !== true) {
+        throw new Error(result?.error || 'print-json-failed');
+      }
+      notify('Impressao enviada para a impressora.', 'success');
+      return true;
+    } catch (error) {
+      console.error('Falha ao imprimir via agente local (json):', error);
+      notify('Falha ao imprimir via agente local. Abrindo impressao no navegador.', 'warning');
+      if (fallbackHtml) {
+        return printViaLocalAgent({
+          html: fallbackHtml,
+          printerName,
+          copies,
+          jobName,
+          fallbackHtml,
+          logPrefix,
+        });
+      }
+      return false;
+    }
+  };
+
   const printReceipt = (
     type,
     variant,
-    { snapshot, fallbackText, xmlContent, qrCodeDataUrl, qrCodePayload } = {}
+    { snapshot, budget, fallbackText, xmlContent, qrCodeDataUrl, qrCodePayload } = {}
   ) => {
     const resolvedVariant = variant || 'matricial';
     let bodyHtml = '';
     let title = '';
+    let receiptSnapshot = null;
+    let fallbackSummary = fallbackText || '';
+    let fiscalData = null;
 
     if (type === 'fechamento') {
-      const effectiveSnapshot = snapshot || getFechamentoSnapshot();
-      if (!effectiveSnapshot) {
+      receiptSnapshot = snapshot || getFechamentoSnapshot();
+      if (!receiptSnapshot) {
         notify('Nenhum dado disponível para imprimir o fechamento.', 'warning');
         return false;
       }
-      bodyHtml = buildFechamentoReceiptMarkup(effectiveSnapshot, resolvedVariant, fallbackText || buildSummaryPrint(effectiveSnapshot));
+      fallbackSummary = fallbackSummary || buildSummaryPrint(receiptSnapshot);
+      bodyHtml = buildFechamentoReceiptMarkup(receiptSnapshot, resolvedVariant, fallbackSummary);
       title = 'Fechamento do caixa';
     } else if (type === 'venda') {
-      const effectiveSnapshot = snapshot || getSaleReceiptSnapshot();
-      if (!effectiveSnapshot) {
+      receiptSnapshot = snapshot || getSaleReceiptSnapshot();
+      if (!receiptSnapshot) {
         notify('Nenhum dado disponível para imprimir a venda.', 'warning');
         return false;
       }
       let markup = '';
       if (resolvedVariant === 'fiscal') {
         const xmlSource =
-          xmlContent || (effectiveSnapshot && typeof effectiveSnapshot === 'object'
-            ? effectiveSnapshot.fiscalXmlContent || effectiveSnapshot.xml || ''
+          xmlContent || (receiptSnapshot && typeof receiptSnapshot === 'object'
+            ? receiptSnapshot.fiscalXmlContent || receiptSnapshot.xml || ''
             : '');
-        const fiscalData = parseFiscalXmlDocument(xmlSource);
+        fiscalData = parseFiscalXmlDocument(xmlSource);
         if (fiscalData) {
+          if (receiptSnapshot) {
+            fiscalData.snapshot = receiptSnapshot;
+          }
           if (!fiscalData.qrCode?.image && qrCodeDataUrl) {
             fiscalData.qrCode = { ...fiscalData.qrCode, image: qrCodeDataUrl };
           }
@@ -11913,15 +13110,103 @@
         }
       }
       if (!markup) {
-        markup = buildSaleReceiptMarkup(effectiveSnapshot, resolvedVariant);
+        markup = buildSaleReceiptMarkup(receiptSnapshot, resolvedVariant);
       }
       bodyHtml = markup;
       title = resolvedVariant === 'fiscal' ? 'Cupom fiscal NFC-e' : 'Comprovante de venda';
+    } else if (type === 'orcamento') {
+      const budgetSnapshot = snapshot || buildBudgetReceiptSnapshot(budget);
+      if (!budgetSnapshot) {
+        notify('Nenhum dado disponível para imprimir o orçamento.', 'warning');
+        return false;
+      }
+      receiptSnapshot = budgetSnapshot;
+      const budgetCode = budget?.code ? ` ${budget.code}` : '';
+      const budgetTitle = `Orçamento${budgetCode}`;
+      bodyHtml = buildSaleReceiptMarkup(receiptSnapshot, resolvedVariant, {
+        title: budgetTitle,
+        badgeLabel: 'Orçamento',
+      });
+      title = budgetTitle;
     } else {
       return false;
     }
 
     const documentHtml = createReceiptDocument({ title, variant: resolvedVariant, body: bodyHtml });
+    const printerConfig = resolvePrinterConfigForType(type);
+    if (printerConfig?.nome) {
+      const paperWidth = printerConfig.larguraPapel || '80mm';
+      const printerType = printerConfig.tipoImpressora || 'bematech';
+      if (resolvedVariant === 'fiscal') {
+        const nfcePayload = buildNfceReceiptJson(fiscalData, {
+          title,
+          paperWidth,
+          fallbackSnapshot: receiptSnapshot,
+          qrCodePayload,
+          qrCodeDataUrl,
+          printerType,
+        });
+        if (nfcePayload) {
+          void printViaLocalAgentJson({
+            payload: nfcePayload,
+            printerName: printerConfig.nome,
+            copies: printerConfig.vias || 1,
+            jobName: title,
+            fallbackHtml: documentHtml,
+            logPrefix: title.toLowerCase(),
+          });
+          return true;
+        }
+        return printHtmlDocument(documentHtml, { logPrefix: title.toLowerCase() });
+      }
+      if (resolvedVariant !== 'fiscal') {
+        const jsonPayload =
+          type === 'fechamento'
+            ? buildFechamentoReceiptJson(receiptSnapshot, {
+                title,
+                variant: resolvedVariant,
+                paperWidth,
+                fallbackText: fallbackSummary,
+                printerType,
+              })
+            : type === 'orcamento'
+            ? buildBudgetReceiptJson(receiptSnapshot, budget, {
+                title,
+                variant: resolvedVariant,
+                paperWidth,
+                printerType,
+              })
+            : buildSaleReceiptJson(receiptSnapshot, {
+                title,
+                variant: resolvedVariant,
+                paperWidth,
+                qrCodeDataUrl,
+                qrCodePayload,
+                printerType,
+                useDanfeLayout: resolvedVariant === 'matricial',
+              });
+        if (jsonPayload) {
+          void printViaLocalAgentJson({
+            payload: jsonPayload,
+            printerName: printerConfig.nome,
+            copies: printerConfig.vias || 1,
+            jobName: title,
+            fallbackHtml: documentHtml,
+            logPrefix: title.toLowerCase(),
+          });
+          return true;
+        }
+      }
+      void printViaLocalAgent({
+        html: documentHtml,
+        printerName: printerConfig.nome,
+        copies: printerConfig.vias || 1,
+        jobName: title,
+        fallbackHtml: documentHtml,
+        logPrefix: title.toLowerCase(),
+      });
+      return true;
+    }
     return printHtmlDocument(documentHtml, { logPrefix: title.toLowerCase() });
   };
 
@@ -12573,6 +13858,10 @@
         elements.budgetImport.textContent = budgetImportDefaultLabel;
         elements.budgetImport.title = 'Importe este orçamento para o PDV.';
       }
+    }
+    if (elements.budgetPrint) {
+      elements.budgetPrint.disabled = !hasBudget;
+      elements.budgetPrint.title = hasBudget ? 'Imprimir este orçamento.' : '';
     }
     if (elements.budgetDelete) {
       elements.budgetDelete.disabled = !hasBudget;
@@ -14586,6 +15875,7 @@
     state.modalSelectedPet = null;
     state.modalActiveTab = 'cliente';
     state.printPreferences = { fechamento: 'PM', venda: 'PM' };
+    state.printerSettings = { venda: null, orcamento: null, contas: null, caixa: null };
     state.deliveryOrders = [];
     state.completedSales = [];
     state.budgets = [];
@@ -14776,7 +16066,7 @@
     const token = getToken();
     let payload;
     try {
-      payload = await fetchWithOptionalAuth(`${API_BASE}/stores`, {
+      payload = await fetchWithOptionalAuth(`${API_BASE}/stores/allowed`, {
         token,
         errorMessage: 'Não foi possível carregar as empresas cadastradas.',
       });
@@ -14950,6 +16240,12 @@
       contaContabilReceber: normalizeFinanceReference(financeConfig.contaContabilReceber),
     };
     const impressaoConfig = pdv?.configuracoesImpressao || {};
+    state.printerSettings = {
+      venda: normalizePrinterConfig(impressaoConfig.impressoraVenda),
+      orcamento: normalizePrinterConfig(impressaoConfig.impressoraOrcamento),
+      contas: normalizePrinterConfig(impressaoConfig.impressoraContasReceber),
+      caixa: normalizePrinterConfig(impressaoConfig.impressoraCaixa),
+    };
     const fechamentoMode = normalizePrintMode(
       impressaoConfig.fechamento ||
         impressaoConfig.modoFechamento ||
@@ -15879,6 +17175,7 @@
     elements.actionConfirm?.addEventListener('click', handleActionConfirm);
     elements.printControls?.addEventListener('click', handlePrintToggleClick);
     elements.fullscreenToggle?.addEventListener('click', handleFullscreenToggle);
+    elements.agentUpdateButton?.addEventListener('click', handleAgentUpdateClick);
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
     document.addEventListener('mozfullscreenchange', handleFullscreenChange);
@@ -15961,6 +17258,7 @@
     elements.salesEnd?.addEventListener('change', handleSalesDateChange);
     elements.budgetList?.addEventListener('click', handleBudgetListClick);
     elements.budgetImport?.addEventListener('click', handleBudgetImport);
+    elements.budgetPrint?.addEventListener('click', handleBudgetPrint);
     elements.budgetDelete?.addEventListener('click', handleBudgetDelete);
     elements.budgetModalConfirm?.addEventListener('click', confirmBudgetValidity);
     elements.budgetModalCancel?.addEventListener('click', () => closeBudgetModal());
@@ -16099,6 +17397,7 @@
       if (state.stores.length === 0) {
         updateSelectionHint('Cadastre uma empresa para habilitar o PDV.');
       }
+      await applyCustomerFromUrl();
     } catch (error) {
       console.error('Erro ao carregar empresas para o PDV:', error);
       notify(error.message || 'Erro ao carregar a lista de empresas.', 'error');

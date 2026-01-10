@@ -86,6 +86,41 @@ function decrypt(payload) {
   } catch { return ''; }
 }
 
+function digitsOnly(value) {
+  return String(value || '').replace(/\D+/g, '');
+}
+
+function formatCpf(digits) {
+  if (digits.length !== 11) return digits;
+  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+}
+
+function formatCnpj(digits) {
+  if (digits.length !== 14) return digits;
+  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
+}
+
+function buildIdentifierQuery(identifier) {
+  const raw = String(identifier || '').trim();
+  if (!raw) return null;
+
+  const or = [{ email: raw.toLowerCase() }];
+  const isEmail = raw.includes('@');
+  const digits = digitsOnly(raw);
+
+  if (!isEmail && digits) {
+    if (digits.length === 11) {
+      const formatted = formatCpf(digits);
+      or.push({ cpf: raw }, { cpf: digits }, { cpf: formatted });
+    } else if (digits.length === 14) {
+      const formatted = formatCnpj(digits);
+      or.push({ cnpj: raw }, { cnpj: digits }, { cnpj: formatted });
+    }
+  }
+
+  return { $or: or };
+}
+
 const registerValidationRules = [
   body('nomeCompleto').if(body('tipoConta').equals('pessoa_fisica')).notEmpty().withMessage('O nome completo é obrigatório.').isLength({ min: 3 }).withMessage('O nome deve ter pelo menos 3 caracteres.'),
   body('razaoSocial').if(body('tipoConta').equals('pessoa_juridica')).notEmpty().withMessage('A razão social é obrigatória.'),
@@ -187,9 +222,8 @@ router.post('/register', registerValidationRules, async (req, res) => {
 router.post('/login', async (req, res) => {
     const { identifier, senha } = req.body;
     try {
-        const user = await User.findOne({
-            $or: [{ email: identifier }, { cpf: identifier }, { cnpj: identifier }]
-        });
+        const query = buildIdentifierQuery(identifier);
+        const user = query ? await User.findOne(query) : null;
 
         if (!user || !(await bcrypt.compare(senha, user.senha))) {
             return res.status(400).json({ message: 'Credenciais inválidas.' });
@@ -436,8 +470,9 @@ router.post('/password/change', requireAuth, async (req, res) => {
 
 // ========================= Quick Access (Login Rápido) =========================
 function findUserByIdentifier(identifier) {
-  const q = { $or: [ { email: identifier?.toLowerCase?.() }, { cpf: identifier }, { cnpj: identifier } ] };
-  return User.findOne(q);
+  const query = buildIdentifierQuery(identifier);
+  if (!query) return null;
+  return User.findOne(query);
 }
 
 // GET /api/auth/quick/options?identifier=...

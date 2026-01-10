@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin: Gerenciamento de Cargos - E o Bicho</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+  <link rel="stylesheet" href="../../src/output.css" />
+</head>
+<body class="bg-gray-100">
+  <div id="admin-header-placeholder"></div>
+
+  <main class="container mx-auto px-4 pt-1 pb-8 min-h-screen">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <aside class="md:col-span-4">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
+
+      <section class="md:col-span-4">
+        <div class="bg-white rounded-lg shadow p-6 space-y-6">
+          <header class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div class="flex items-start gap-3">
+              <div class="h-12 w-12 rounded-full bg-sky-50 flex items-center justify-center">
+                <i class="fas fa-user-gear text-sky-500 text-xl"></i>
+              </div>
+              <div>
+                <h1 class="text-2xl font-bold text-gray-800">Gerenciamento de Cargos</h1>
+                <p class="text-gray-600 mt-1">Defina o cargo e as empresas permitidas para cada colaborador.</p>
+              </div>
+            </div>
+            <div id="cargo-users-count" class="text-xs text-gray-500">0 franqueados/franqueadores encontrados</div>
+          </header>
+
+          <div class="flex items-center justify-end">
+            <button id="cargo-add-btn" class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700">
+              <i class="fa-solid fa-plus"></i>
+              Adicionar
+            </button>
+          </div>
+
+          <div id="cargo-users-cards" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"></div>
+          <div id="cargo-users-empty" class="hidden rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 text-center text-sm text-gray-600">
+            Nenhum franqueado ou franqueador encontrado.
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <div id="cargo-modal" class="fixed inset-0 z-[999] hidden">
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-modal></div>
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-start sm:py-10">
+      <div data-cargo-modal-card class="relative w-full max-w-2xl transform-gpu rounded-2xl bg-white shadow-2xl transition-all duration-200 ease-out opacity-0 scale-95">
+        <header class="flex items-start justify-between border-b border-gray-100 px-5 py-4">
+          <div>
+            <h2 class="text-lg font-semibold text-gray-900">Editar cargo</h2>
+            <p class="text-xs text-gray-500 mt-1">Atualize o cargo e as empresas permitidas.</p>
+          </div>
+          <button id="cargo-modal-close" class="inline-flex items-center justify-center rounded-full border border-gray-200 p-1.5 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700">
+            <span class="sr-only">Fechar modal</span>
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </header>
+        <div class="px-5 py-4 space-y-4">
+          <div class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+            <p id="cargo-user-name" class="text-sm font-semibold text-gray-800">-</p>
+            <p id="cargo-user-email" class="text-xs text-gray-500">-</p>
+            <p id="cargo-user-role" class="text-xs text-gray-500 mt-1">Cargo atual: -</p>
+          </div>
+
+          <div>
+            <label for="cargo-role-select" class="block text-sm font-semibold text-gray-700 mb-1">Novo cargo</label>
+            <select id="cargo-role-select" class="w-full rounded-lg border-gray-300 text-sm focus:border-primary focus:ring-primary">
+              <option value="franqueado">Franqueado</option>
+              <option value="franqueador">Franqueador</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-2">Empresas permitidas</label>
+            <div id="cargo-companies" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
+            <p id="cargo-companies-feedback" class="text-xs text-gray-500 mt-2">Selecione uma ou mais empresas.</p>
+          </div>
+        </div>
+        <footer class="flex items-center justify-end gap-3 border-t border-gray-100 px-5 py-4">
+          <button id="cargo-modal-cancel" type="button" class="inline-flex items-center justify-center rounded-lg border border-gray-200 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-700 transition hover:bg-gray-50">Cancelar</button>
+          <button id="cargo-modal-save" type="button" class="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-emerald-700">Salvar</button>
+        </footer>
+      </div>
+    </div>
+  </div>
+
+  <div id="cargo-remove-modal" class="fixed inset-0 z-[999] hidden">
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-remove-close></div>
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-start sm:py-10">
+      <div data-remove-modal-card class="relative w-full max-w-md transform-gpu rounded-2xl bg-white shadow-2xl transition-all duration-200 ease-out opacity-0 scale-95">
+        <header class="flex items-start justify-between border-b border-gray-100 px-5 py-4">
+          <div class="flex items-start gap-3">
+            <span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+            </span>
+            <div>
+              <h2 class="text-lg font-semibold text-gray-900">Remover do quadro</h2>
+              <p class="text-xs text-gray-500 mt-1">Selecione a acao desejada.</p>
+            </div>
+          </div>
+          <button id="cargo-remove-close" class="inline-flex items-center justify-center rounded-full border border-gray-200 p-1.5 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700">
+            <span class="sr-only">Fechar modal</span>
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </header>
+        <div class="px-5 py-4">
+          <p id="cargo-remove-user" class="text-sm font-semibold text-gray-800">-</p>
+          <p class="text-xs text-gray-500 mt-2">Funcionario: retorna ao cargo funcionario. Remover: volta a ser cliente.</p>
+        </div>
+        <footer class="flex flex-wrap items-center justify-end gap-2 border-t border-gray-100 px-5 py-4">
+          <button id="cargo-remove-cancel" type="button" class="inline-flex items-center justify-center rounded-lg border border-gray-200 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-700 transition hover:bg-gray-50">
+            Cancelar
+          </button>
+          <button id="cargo-remove-funcionario" type="button" class="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-emerald-700">
+            Funcion&aacute;rio
+          </button>
+          <button id="cargo-remove-cliente" type="button" class="inline-flex items-center justify-center rounded-lg border border-red-200 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-red-600 transition hover:bg-red-50">
+            Remover
+          </button>
+        </footer>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-placeholder"></div>
+  <div id="confirm-modal-placeholder"></div>
+  <div id="admin-footer-placeholder"></div>
+
+  <script>var basePath = '../../';</script>
+  <script src="../../scripts/core/config.js"></script>
+  <script src="../../scripts/core/ui.js"></script>
+  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/admin/admin.js"></script>
+  <script src="../../scripts/admin/admin-gerenciamento-cargos.js"></script>
+  <script src="/scripts/common/modal-bridge.js"></script>
+</body>
+</html>

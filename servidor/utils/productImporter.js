@@ -26,6 +26,7 @@ const COLUMN_KEYS = {
     stock: ['Estoque', 'estoque', 'Qtd'],
     inactive: ['Inativo (Sim, Não)', 'Inativo', 'inativo'],
     ncm: ['NCM', 'ncm'],
+    vigencia: ['Data de Vigência', 'Data de Vigencia', 'Vigencia', 'vigencia', 'dataVigencia'],
     unit: ['UN', 'Unidade', 'unidade', 'Un.', 'un', 'Unidad']
 };
 
@@ -66,6 +67,58 @@ const parseBoolean = (value) => {
 
     const normalized = value.toString().trim().toLowerCase();
     return ['sim', 's', '1', 'true'].includes(normalized);
+};
+
+const parseExcelSerialDate = (value) => {
+    if (!Number.isFinite(value)) {
+        return null;
+    }
+    if (xlsx?.SSF && typeof xlsx.SSF.parse_date_code === 'function') {
+        const parsed = xlsx.SSF.parse_date_code(value);
+        if (parsed && parsed.y && parsed.m && parsed.d) {
+            const date = new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d, parsed.H || 0, parsed.M || 0, parsed.S || 0));
+            return Number.isNaN(date.getTime()) ? null : date;
+        }
+    }
+    const excelEpoch = Date.UTC(1899, 11, 30);
+    const date = new Date(excelEpoch + Math.round(value * 86400000));
+    return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const parseDateValue = (value) => {
+    if (value === undefined || value === null || value === '') {
+        return null;
+    }
+    if (value instanceof Date) {
+        return Number.isNaN(value.getTime()) ? null : value;
+    }
+    if (typeof value === 'number') {
+        return parseExcelSerialDate(value);
+    }
+    const trimmed = value.toString().trim();
+    if (!trimmed) {
+        return null;
+    }
+    const brMatch = trimmed.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})$/);
+    if (brMatch) {
+        const day = Number(brMatch[1]);
+        const month = Number(brMatch[2]);
+        let year = Number(brMatch[3]);
+        if (year < 100) {
+            year += 2000;
+        }
+        const date = new Date(year, month - 1, day);
+        return Number.isNaN(date.getTime()) ? null : date;
+    }
+    const numeric = Number(trimmed.replace(',', '.'));
+    if (Number.isFinite(numeric)) {
+        const asSerial = parseExcelSerialDate(numeric);
+        if (asSerial) {
+            return asSerial;
+        }
+    }
+    const parsed = new Date(trimmed);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
 const findValueInRow = (row, keys) => {
@@ -128,6 +181,9 @@ const parseProductsFromBuffer = (buffer) => {
         const rawInactive = findValueInRow(row, COLUMN_KEYS.inactive);
         const rawNcm = sanitizeString(findValueInRow(row, COLUMN_KEYS.ncm));
         const rawUnit = sanitizeString(findValueInRow(row, COLUMN_KEYS.unit));
+        const rawVigencia = findValueInRow(row, COLUMN_KEYS.vigencia);
+        const hasVigenciaColumn = rawVigencia !== undefined;
+        const parsedVigencia = parseDateValue(rawVigencia);
 
         if (!rawCode) {
             warnings.push(`Linha ${rowNumber}: Código obrigatório não informado. Registro ignorado.`);
@@ -144,7 +200,11 @@ const parseProductsFromBuffer = (buffer) => {
             return;
         }
 
-        products.push({
+        if (hasVigenciaColumn && rawVigencia !== null && rawVigencia !== '' && !parsedVigencia) {
+            warnings.push(`Linha ${rowNumber}: Data de Vigência inválida. Valor ignorado.`);
+        }
+
+        const productEntry = {
             cod: rawCode,
             codbarras: rawBarcode,
             nome: rawName,
@@ -155,7 +215,14 @@ const parseProductsFromBuffer = (buffer) => {
             inativo: parseBoolean(rawInactive),
             ncm: rawNcm,
             unidade: rawUnit
-        });
+        };
+
+        if (hasVigenciaColumn) {
+            productEntry.dataVigencia = parsedVigencia;
+            productEntry.vigenciaProvided = true;
+        }
+
+        products.push(productEntry);
     });
 
     return { products, warnings };
@@ -258,6 +325,7 @@ const importProducts = async (socket, productsFromExcel, options = {}) => {
                 venda: product.venda,
                 marca: product.marca || '',
                 ncm: product.ncm || '',
+                dataVigencia: product.dataVigencia || null,
                 inativo: Boolean(product.inativo),
                 searchableString: normalizeText(`${product.nome} ${product.cod} ${product.marca || ''} ${product.codbarras}`),
                 unidade: effectiveUnit,
@@ -266,6 +334,10 @@ const importProducts = async (socket, productsFromExcel, options = {}) => {
                 estoques: normalizedStocks,
                 stock: totalStock
             };
+
+            if (!product.vigenciaProvided) {
+                delete updateData.dataVigencia;
+            }
 
             if (imagePathsForDB.length > 0) {
                 productsWithImagesCount++;

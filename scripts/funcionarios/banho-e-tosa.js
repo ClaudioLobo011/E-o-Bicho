@@ -1,4 +1,4 @@
-(function () {
+(async function () {
   const TOAST_DEDUP_KEY = '__agendaToastState';
   const TOAST_DEDUP_WINDOW = 1200;
 
@@ -22,6 +22,25 @@
 
   // Helper para requisições com token
   const token = JSON.parse(localStorage.getItem('loggedInUser') || 'null')?.token || null;
+  async function fetchVerifiedRole() {
+    if (!token) return '';
+    try {
+      const resp = await fetch(`${API_CONFIG.BASE_URL}/auth/check`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!resp.ok) return '';
+      const data = await resp.json();
+      const role = data?.role || '';
+      if (role) {
+        const cached = JSON.parse(localStorage.getItem('loggedInUser') || 'null') || {};
+        localStorage.setItem('loggedInUser', JSON.stringify({ ...cached, role }));
+      }
+      return role;
+    } catch (_) {
+      return '';
+    }
+  }
+  const verifiedRole = await fetchVerifiedRole();
   function api(url, opts = {}) {
     return fetch(`${API_CONFIG.BASE_URL}${url}`, {
       ...opts,
@@ -35,9 +54,7 @@
 
   // --- Permissões / Lock helpers ---
   function getCurrentRole() {
-    try {
-      return JSON.parse(localStorage.getItem('loggedInUser') || 'null')?.role || 'cliente';
-    } catch (_) { return 'cliente'; }
+    return verifiedRole || 'cliente';
   }
   function isPrivilegedRole() {
     const r = getCurrentRole();

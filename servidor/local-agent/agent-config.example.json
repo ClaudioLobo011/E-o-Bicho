@@ -1,12 +1,13 @@
 {
   "host": "127.0.0.1",
   "port": 17305,
-  "edgePath": "",
-  "edgeProfileDir": "./edge-profile",
-  "printWaitMs": 90000,
+  "printWaitMs": 45000,
   "queueMax": 50,
   "maxCopies": 10,
   "maxBodyBytes": 10485760,
+  "paperWidth": "80mm",
+  "codePage": "cp860",
+  "defaultPrinter": "",
   "printerAliases": {
     "PDV-IMPRESSORA": "Microsoft Print to PDF"
   }

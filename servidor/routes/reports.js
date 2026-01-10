@@ -1,6 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const PdvState = require('../models/PdvState');
+const User = require('../models/User');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 
@@ -42,6 +43,35 @@ const parseDate = (value, endOfDay = false) => {
 const toObjectId = (value) => {
   if (!value || !mongoose.Types.ObjectId.isValid(value)) return null;
   return new mongoose.Types.ObjectId(value);
+};
+
+const normalizeStoreId = (value) => {
+  if (!value) return '';
+  const raw = typeof value === 'object' && value._id ? value._id : value;
+  const str = String(raw || '').trim();
+  return mongoose.Types.ObjectId.isValid(str) ? str : '';
+};
+
+const resolveUserStoreAccess = async (userId) => {
+  if (!userId) return { allowedStoreIds: [], allowAllStores: false };
+  const user = await User.findById(userId).select('empresaPrincipal empresas role').lean();
+  if (!user) return { allowedStoreIds: [], allowAllStores: false };
+
+  const markedCompanies = Array.isArray(user.empresas)
+    ? user.empresas
+        .map((id) => normalizeStoreId(id))
+        .filter(Boolean)
+    : [];
+
+  if (markedCompanies.length > 0) {
+    return { allowedStoreIds: Array.from(new Set(markedCompanies)), allowAllStores: false };
+  }
+
+  const primary = normalizeStoreId(user.empresaPrincipal);
+  const allowedStoreIds = primary ? [primary] : [];
+  const allowAllStores = false;
+
+  return { allowedStoreIds, allowAllStores };
 };
 
 const parseNumber = (value) => {
@@ -90,12 +120,59 @@ const collectSaleItems = (sale = {}) => {
 };
 
 const deriveItemQuantity = (item = {}) => {
-  const candidates = [item.quantity, item.quantidade, item.qty, item.qtd, item.amount];
+  const candidates = [
+    item.quantity,
+    item.quantidade,
+    item.qty,
+    item.qtd,
+    item.amount,
+    item.quantityLabel,
+  ];
   for (const candidate of candidates) {
     const parsed = parseNumber(candidate);
     if (parsed !== null) return parsed;
   }
   return 1;
+};
+
+const deriveItemUnitPrice = (item = {}) => {
+  const candidates = [
+    item.unitPrice,
+    item.valorUnitario,
+    item.precoUnitario,
+    item.valor,
+    item.preco,
+    item.price,
+    item.unit_value,
+    item.unit,
+    item.unitLabel,
+    item.precoLabel,
+    item.valorLabel,
+  ];
+  for (const candidate of candidates) {
+    const parsed = parseNumber(candidate);
+    if (parsed !== null) return parsed;
+  }
+  return null;
+};
+
+const deriveItemTotal = (item = {}) => {
+  const candidates = [
+    item.totalPrice,
+    item.subtotal,
+    item.total,
+    item.totalValue,
+    item.valorTotal,
+    item.precoTotal,
+    item.totalLabel,
+  ];
+  for (const candidate of candidates) {
+    const parsed = parseNumber(candidate);
+    if (parsed !== null) return parsed;
+  }
+  const quantity = deriveItemQuantity(item) || 0;
+  const unitPrice = deriveItemUnitPrice(item);
+  return unitPrice !== null ? quantity * unitPrice : 0;
 };
 
 const deriveItemUnitCost = (item = {}) => {
@@ -234,13 +311,9 @@ const deriveSaleCost = (sale = {}) => {
 };
 
 const deriveSaleTotal = (sale = {}) => {
-  const totals = sale?.receiptSnapshot?.totais || {};
+  const totals = sale?.receiptSnapshot?.totais || sale?.totais || {};
   const candidates = [
-    sale.total,
-    sale.totalAmount,
-    sale.valorTotal,
-    sale.totalVenda,
-    sale.totalGeral,
+    totals?.totalLiquido,
     totals?.liquido,
     totals?.total,
     totals?.totalGeral,
@@ -248,22 +321,33 @@ const deriveSaleTotal = (sale = {}) => {
     totals?.valorTotal,
     totals?.totalVenda,
     totals?.bruto,
+    totals?.totalBruto,
+    sale.totalLiquido,
+    sale.totalBruto,
+    sale.totalProdutos,
+    sale.total,
+    sale.totalAmount,
+    sale.valorTotal,
+    sale.totalVenda,
+    sale.totalGeral,
   ];
+
+  let zeroCandidate = null;
+
   for (const candidate of candidates) {
     const parsed = parseNumber(candidate);
-    if (parsed !== null) return parsed;
+    if (parsed === null) continue;
+    if (parsed !== 0) return parsed;
+    if (zeroCandidate === null) zeroCandidate = 0;
   }
 
-  if (Array.isArray(sale.items) && sale.items.length > 0) {
-    const sum = sale.items.reduce((acc, item) => {
-      const qty = parseNumber(item?.quantity) ?? parseNumber(item?.quantidade) ?? 0;
-      const price = parseNumber(item?.unitPrice) ?? parseNumber(item?.valor) ?? 0;
-      return acc + qty * price;
-    }, 0);
-    if (sum > 0) return sum;
+  const items = collectSaleItems(sale);
+  if (items.length) {
+    const sum = items.reduce((acc, item) => acc + deriveItemTotal(item), 0);
+    if (sum !== 0) return sum;
   }
 
-  return 0;
+  return zeroCandidate ?? 0;
 };
 
 const deriveSaleMarkup = (totalValue, costValue) => {
@@ -342,6 +426,49 @@ const deriveFiscalTypeLabel = (sale = {}) => {
   return 'NFe';
 };
 
+const normalizeName = (value) => {
+  if (typeof value !== 'string') return '';
+  return value.trim();
+};
+
+const pickFirstName = (...values) => {
+  for (const value of values) {
+    const normalized = normalizeName(value);
+    if (normalized) return normalized;
+  }
+  return '';
+};
+
+const deriveSellerName = (sale = {}) => {
+  const seller = sale?.seller || {};
+  const meta = sale?.receiptSnapshot?.meta || {};
+  return pickFirstName(
+    sale.sellerName,
+    sale.vendedorNome,
+    seller.nome,
+    seller.name,
+    seller.fullName,
+    meta.vendedor,
+    meta.vendedorNome,
+    meta.nomeVendedor,
+    meta.sellerName
+  );
+};
+
+const deriveOperatorName = (sale = {}) => {
+  const meta = sale?.receiptSnapshot?.meta || {};
+  return pickFirstName(
+    sale.operatorName,
+    sale.operator,
+    meta.operador,
+    meta.operadorNome,
+    meta.nomeOperador,
+    meta.usuario,
+    meta.userName,
+    meta.atendente
+  );
+};
+
 const calculateMarginPercentage = (sales = []) => {
   const totals = sales.reduce(
     (acc, record) => {
@@ -407,9 +534,43 @@ router.get(
         if (endDate) saleMatch['completedSales.createdAt'].$lte = endDate;
       }
 
+      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req.user?.id);
+      const allowedStoreObjectIds = allowAllStores
+        ? []
+        : allowedStoreIds.map((id) => new mongoose.Types.ObjectId(id));
+
       const storeObjectId = toObjectId(storeId);
       if (storeObjectId) {
+        if (!allowAllStores) {
+          const allowedSet = new Set(allowedStoreIds);
+          if (!allowedSet.has(String(storeObjectId))) {
+            return res.status(403).json({ message: 'Empresa nao permitida para o usuario.' });
+          }
+        }
         baseMatch.empresa = storeObjectId;
+      } else if (!allowAllStores) {
+        if (!allowedStoreObjectIds.length) {
+          return res.json({
+            sales: [],
+            pagination: {
+              total: 0,
+              page,
+              pageSize,
+              totalPages: 1,
+            },
+            metrics: {
+              totalValue: 0,
+              averageTicket: 0,
+              completedCount: 0,
+              totalChange: null,
+              averageTicketChange: null,
+              completedChange: 0,
+              marginAverage: null,
+              marginChange: null,
+            },
+          });
+        }
+        baseMatch.empresa = { $in: allowedStoreObjectIds };
       }
 
       const pdvObjectId = toObjectId(pdvId);
@@ -484,7 +645,7 @@ router.get(
         const totalValue = deriveSaleTotal(sale);
         const costValue = deriveSaleCost(sale);
         const fiscalTypeLabel = deriveFiscalTypeLabel(sale);
-        const sellerName = (sale.sellerName || sale.vendedorNome || sale.seller?.nome || sale.seller?.name || '').trim();
+        const sellerName = deriveSellerName(sale) || deriveOperatorName(sale);
         const sellerCode =
           sale.sellerCode ||
           sale.vendedorCodigo ||

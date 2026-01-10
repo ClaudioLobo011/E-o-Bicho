@@ -761,18 +761,24 @@
         country: readParam('prefillCountry'),
       };
       const storeId = readParam('storeId');
+      const clienteId = readParam('clienteId') || readParam('customerId');
       const hasPrefill = Object.values(prefill).some((value) => value);
       return {
         prefill: hasPrefill ? prefill : null,
         storeId: storeId || '',
+        clienteId: clienteId || '',
       };
     }
 
     function applyPrefillContext(context = null) {
       if (!context) return;
-      const { prefill, storeId } = context;
+      const { prefill, storeId, clienteId } = context;
       if (storeId) {
         elements.selectEmpresa.value = storeId;
+      }
+      if (clienteId) {
+        loadCliente(clienteId);
+        return;
       }
       if (!prefill) return;
 
@@ -943,7 +949,10 @@
               <td class="px-4 py-3 align-top text-sm text-gray-700">${cliente.empresa || '—'}</td>
               <td class="px-4 py-3 align-top text-sm text-gray-700">${contato || '—'}</td>
               <td class="px-4 py-3 align-top text-right text-sm">
-                <button data-id="${cliente._id}" class="btn-editar-cliente px-3 py-1.5 rounded bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700">Editar</button>
+                <div class="flex flex-wrap justify-end gap-2">
+                  <button data-id="${cliente._id}" class="btn-editar-cliente px-3 py-1.5 rounded bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700">Editar</button>
+                  <button data-id="${cliente._id}" class="btn-excluir-cliente px-3 py-1.5 rounded border border-red-200 text-red-600 text-xs font-medium hover:bg-red-50">Excluir</button>
+                </div>
               </td>
             </tr>
           `;
@@ -1205,6 +1214,24 @@
       }
     }
 
+    async function removerCliente(id) {
+      if (!id) return;
+      const confirmar = window.confirm('Deseja excluir este cliente? Esta acao nao pode ser desfeita.');
+      if (!confirmar) return;
+      const paginaAtual = state.pagination.page || 1;
+      try {
+        await apiFetch(`/func/clientes/${id}`, { method: 'DELETE' });
+        notify('Cliente removido.', 'success');
+        if (state.currentClienteId === id) {
+          clearForm();
+        }
+        await loadClientes(paginaAtual);
+      } catch (err) {
+        console.error('Erro ao remover cliente', err);
+        notify(err.message || 'Erro ao remover cliente.', 'error');
+      }
+    }
+
     async function consultarCep(value) {
       const digits = onlyDigits(value);
       if (digits.length !== 8) return;
@@ -1364,6 +1391,13 @@
     });
 
     elements.tabelaBody.addEventListener('click', (event) => {
+      const deleteButton = event.target.closest('.btn-excluir-cliente');
+      if (deleteButton) {
+        const id = deleteButton.dataset.id;
+        if (!id) return;
+        removerCliente(id);
+        return;
+      }
       const button = event.target.closest('.btn-editar-cliente');
       if (!button) return;
       const id = button.dataset.id;

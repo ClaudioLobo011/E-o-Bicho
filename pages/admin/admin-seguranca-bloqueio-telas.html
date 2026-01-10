@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin: Bloqueio de Telas - E o Bicho</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+  <link rel="stylesheet" href="../../src/output.css" />
+</head>
+<body class="bg-gray-100">
+  <div id="admin-header-placeholder"></div>
+
+  <main class="container mx-auto px-4 pt-1 pb-8 min-h-screen">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <aside class="md:col-span-4">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
+
+      <section class="md:col-span-4">
+        <div class="bg-white rounded-lg shadow p-6 space-y-6">
+          <header class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div class="flex items-start gap-3">
+              <div class="h-12 w-12 rounded-full bg-red-50 flex items-center justify-center">
+                <i class="fas fa-ban text-red-500 text-xl"></i>
+              </div>
+              <div>
+                <h1 class="text-2xl font-bold text-gray-800">Bloqueio de Telas</h1>
+                <p class="text-gray-600 mt-1">Defina quais telas devem ficar indisponíveis por perfil, loja ou usuário.</p>
+              </div>
+            </div>
+            <span class="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
+              <i class="fas fa-lock"></i>
+              Em configuração
+            </span>
+          </header>
+
+          <div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <label for="security-company-select" class="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+              <i class="fas fa-building text-primary"></i>
+              <span>Empresa</span>
+            </label>
+            <select id="security-company-select" class="w-full rounded-lg border-gray-300 text-sm focus:border-primary focus:ring-primary">
+              <option>Carregando...</option>
+            </select>
+            <p id="security-company-feedback" class="mt-2 text-xs text-gray-500">Somente empresas vinculadas ao seu usuario.</p>
+          </div>
+
+          <div class="grid gap-4 md:grid-cols-3">
+            <article class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <p class="text-xs uppercase tracking-wide text-gray-500">Perfis impactados</p>
+              <p class="text-lg font-semibold text-gray-800 mt-1">0</p>
+              <p class="text-xs text-gray-500 mt-1">Nenhum perfil definido até o momento.</p>
+            </article>
+            <article class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <p class="text-xs uppercase tracking-wide text-gray-500">Telas bloqueadas</p>
+              <p class="text-lg font-semibold text-gray-800 mt-1">0</p>
+              <p class="text-xs text-gray-500 mt-1">Selecione as telas para ativar o bloqueio.</p>
+            </article>
+            <article class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <p class="text-xs uppercase tracking-wide text-gray-500">Última atualização</p>
+          <p class="text-lg font-semibold text-gray-800 mt-1">--</p>
+              <p class="text-xs text-gray-500 mt-1">Sem registros recentes.</p>
+            </article>
+          </div>
+
+          <section class="space-y-3">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Telas do Menu Administrativo</h2>
+              <p class="text-sm text-gray-500">Selecione as acoes para cada tela listada no menu.</p>
+            </div>
+            <div class="overflow-x-auto rounded-lg border border-gray-200">
+              <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-600">
+                  <tr>
+                    <th scope="col" class="px-4 py-3 text-left">Tela</th>
+                    <th scope="col" class="px-4 py-3 text-right">Acoes</th>
+                  </tr>
+                </thead>
+                <tbody id="security-screens-body" class="divide-y divide-gray-100 bg-white"></tbody>
+              </table>
+            </div>
+            <div id="security-screens-empty" class="hidden rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 text-center text-sm text-gray-600">
+              Nenhuma tela encontrada no menu administrativo.
+            </div>
+          </section>
+
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <div id="modal-placeholder"></div>
+  <div id="confirm-modal-placeholder"></div>
+  <div id="admin-footer-placeholder"></div>
+
+  <script>var basePath = '../../';</script>
+  <script src="../../scripts/core/config.js"></script>
+  <script src="../../scripts/core/ui.js"></script>
+  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/admin/admin.js"></script>
+  <script src="../../scripts/admin/admin-seguranca-bloqueio-telas.js"></script>
+  <script src="/scripts/common/modal-bridge.js"></script>
+</body>
+</html>

@@ -52,6 +52,17 @@ document.addEventListener('DOMContentLoaded', () => {
         return Number(value || 0).toLocaleString('pt-BR');
     };
 
+    const formatDate = (value) => {
+        if (!value) {
+            return '-';
+        }
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return '-';
+        }
+        return date.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+    };
+
     const formatUnit = (value) => {
         if (!value) {
             return '-';
@@ -124,13 +135,23 @@ document.addEventListener('DOMContentLoaded', () => {
             companySelect.disabled = true;
             companySelect.innerHTML = '<option value="">Carregando empresas...</option>';
 
-            const response = await fetch(`${API_CONFIG.BASE_URL}/stores`);
+            const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
+            const token = loggedInUser?.token;
+            const response = await fetch(`${API_CONFIG.BASE_URL}/stores/allowed`, {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+            });
             if (!response.ok) {
                 throw new Error('Falha ao carregar empresas');
             }
 
             const data = await response.json();
-            companies = Array.isArray(data) ? data : [];
+            companies = Array.isArray(data)
+                ? data
+                : Array.isArray(data?.stores)
+                    ? data.stores
+                    : Array.isArray(data?.data?.stores)
+                        ? data.data.stores
+                        : [];
 
             if (!companies.length) {
                 depositHelper?.classList.remove('text-gray-500');
@@ -303,7 +324,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (previewData.length === 0) {
             const emptyRow = document.createElement('tr');
-            emptyRow.innerHTML = '<td colspan="9" class="px-2 py-4 text-center text-xs text-gray-500">Selecione um arquivo para visualizar os produtos.</td>';
+            emptyRow.innerHTML = '<td colspan="10" class="px-2 py-4 text-center text-xs text-gray-500">Selecione um arquivo para visualizar os produtos.</td>';
             previewTable.appendChild(emptyRow);
             previewCount.textContent = '0 produtos carregados';
             paginationControls.innerHTML = '';
@@ -326,6 +347,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td class="px-2 py-2 text-gray-600">${item.nome}</td>
                 <td class="px-2 py-2 text-center text-gray-600">${formatUnit(item.unidade)}</td>
                 <td class="px-2 py-2 text-gray-600">${item.ncm || '-'}</td>
+                <td class="px-2 py-2 text-gray-600">${formatDate(item.dataVigencia)}</td>
                 <td class="px-2 py-2 text-right text-gray-700">${formatCurrency(item.custo)}</td>
                 <td class="px-2 py-2 text-right text-gray-700">${formatCurrency(item.venda)}</td>
                 <td class="px-2 py-2 text-right text-gray-700">${formatNumber(item.stock)}</td>
@@ -404,7 +426,7 @@ document.addEventListener('DOMContentLoaded', () => {
         isPreviewLoading = true;
         updateStartButtonState();
 
-        previewTable.innerHTML = '<tr><td colspan="9" class="px-2 py-4 text-center text-xs text-gray-500">Carregando pré-visualização...</td></tr>';
+        previewTable.innerHTML = '<tr><td colspan="10" class="px-2 py-4 text-center text-xs text-gray-500">Carregando pré-visualização...</td></tr>';
         paginationControls.innerHTML = '';
         previewCount.textContent = 'Carregando...';
         updateWarnings([]);
@@ -441,7 +463,7 @@ document.addEventListener('DOMContentLoaded', () => {
             updateWarnings(Array.isArray(data.warnings) ? data.warnings : []);
 
             if (previewData.length === 0) {
-                previewTable.innerHTML = '<tr><td colspan="9" class="px-2 py-4 text-center text-xs text-gray-500">Nenhum produto válido encontrado na planilha.</td></tr>';
+                previewTable.innerHTML = '<tr><td colspan="10" class="px-2 py-4 text-center text-xs text-gray-500">Nenhum produto válido encontrado na planilha.</td></tr>';
                 previewCount.textContent = '0 produtos carregados';
                 paginationControls.innerHTML = '';
                 return;
@@ -451,7 +473,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             previewData = [];
             currentPage = 1;
-            previewTable.innerHTML = `<tr><td colspan="9" class="px-2 py-4 text-center text-xs text-red-500">${error.message}</td></tr>`;
+            previewTable.innerHTML = `<tr><td colspan="10" class="px-2 py-4 text-center text-xs text-red-500">${error.message}</td></tr>`;
             previewCount.textContent = '0 produtos carregados';
             paginationControls.innerHTML = '';
             updateWarnings([]);

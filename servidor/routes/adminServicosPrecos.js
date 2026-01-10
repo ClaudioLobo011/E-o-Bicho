@@ -7,9 +7,11 @@ const Store = require('../models/Store');
 const ServiceBreedPrice = require('../models/ServiceBreedPrice');
 const authMiddleware = require('../middlewares/authMiddleware');
 
+const STAFF_ROLES = new Set(['funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master']);
+
 function requireAdmin(req, res, next) {
   const role = req.user?.role;
-  if (role === 'admin' || role === 'admin_master') return next();
+  if (role && STAFF_ROLES.has(role)) return next();
   return res.status(403).json({ message: 'Acesso negado. Apenas administradores.' });
 }
 
@@ -96,4 +98,3 @@ router.put('/bulk', authMiddleware, requireAdmin, async (req, res) => {
 });
 
 module.exports = router;
-

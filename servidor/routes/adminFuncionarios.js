@@ -9,7 +9,8 @@ const Store = require('../models/Store');
 const UserGroup = require('../models/UserGroup');
 
 // ----- helpers / policies -----
-const roleRank = { cliente: 0, funcionario: 1, admin: 2, admin_master: 3 };
+const STAFF_ROLES = ['funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master'];
+const roleRank = { cliente: 0, funcionario: 1, franqueado: 2, franqueador: 3, admin: 4, admin_master: 5 };
 const CURSO_SITUACOES = ['concluido', 'cursando'];
 const HORARIO_DIAS = ['segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado', 'domingo'];
 const HORARIO_TIPOS = ['jornada', 'escala'];
@@ -19,6 +20,32 @@ const HORARIO_MODALIDADES = [...HORARIO_MODALIDADES_JORNADA, ...HORARIO_MODALIDA
 const RACA_COR_OPCOES = ['nao_informar', 'indigena', 'branco', 'preto', 'amarelo', 'pardo'];
 const DEFICIENCIA_OPCOES = ['nao_portador', 'fisica', 'auditiva', 'visual', 'intelectual', 'multipla'];
 const ESTADO_CIVIL_OPCOES = ['solteiro', 'casado', 'separado', 'viuvo'];
+
+const normalizeStoreId = (value) => {
+  if (!value) return '';
+  const raw = typeof value === 'object' && value._id ? value._id : value;
+  const str = String(raw || '').trim();
+  return mongoose.Types.ObjectId.isValid(str) ? str : '';
+};
+
+const resolveUserStoreAccess = async (userId) => {
+  if (!userId) return { allowedStoreIds: [] };
+  const user = await User.findById(userId).select('empresaPrincipal empresas').lean();
+  if (!user) return { allowedStoreIds: [] };
+
+  const markedCompanies = Array.isArray(user.empresas)
+    ? user.empresas
+        .map((id) => normalizeStoreId(id))
+        .filter(Boolean)
+    : [];
+
+  if (markedCompanies.length > 0) {
+    return { allowedStoreIds: Array.from(new Set(markedCompanies)) };
+  }
+
+  const primary = normalizeStoreId(user.empresaPrincipal);
+  return { allowedStoreIds: primary ? [primary] : [] };
+};
 
 function parseCodigoCliente(raw) {
   if (raw === undefined || raw === null) return null;
@@ -313,20 +340,30 @@ function userToDTO(u) {
 
 function requireAdmin(req, res, next) {
   const role = req.user?.role;
-  if (role === 'admin' || role === 'admin_master') return next();
+  if (role && STAFF_ROLES.includes(role)) return next();
   return res.status(403).json({ message: 'Acesso negado. Apenas administradores.' });
 }
 
-function canChangeRole(actorRole, targetRole, desiredRole) {
-  const a = roleRank[actorRole] ?? -1;
-  const t = roleRank[targetRole] ?? -1;
-  const d = roleRank[desiredRole] ?? -1;
+function canAssignRole(actorRole, desiredRole) {
+  if (!actorRole || !desiredRole) return false;
+  if (!STAFF_ROLES.includes(desiredRole)) return false;
+  const actorRank = roleRank[actorRole];
+  const desiredRank = roleRank[desiredRole];
+  if (actorRank === undefined || desiredRank === undefined) return false;
   if (actorRole === 'admin_master') return true;
-  if (actorRole === 'admin') {
-    // admin só mexe em quem está abaixo e só pode definir "funcionario"
-    return t < roleRank.admin && d < roleRank.admin;
-  }
-  return false;
+  return actorRank > desiredRank;
+}
+
+function canChangeRole(actorRole, targetRole, desiredRole) {
+  if (!actorRole || !targetRole || !desiredRole) return false;
+  if (!STAFF_ROLES.includes(desiredRole)) return false;
+  const actorRank = roleRank[actorRole];
+  const targetRank = roleRank[targetRole];
+  const desiredRank = roleRank[desiredRole];
+  if (actorRank === undefined || targetRank === undefined || desiredRank === undefined) return false;
+  if (actorRole === 'admin_master') return true;
+  if (actorRank <= targetRank) return false;
+  return actorRank > desiredRank;
 }
 
 // ================== ROTAS ==================
@@ -334,9 +371,30 @@ function canChangeRole(actorRole, targetRole, desiredRole) {
 // LISTAR quadro (inclui admin_master, admin e funcionário) com ordenação
 router.get('/', authMiddleware, requireAdmin, async (req, res) => {
   try {
+    const queryStoreId = normalizeStoreId(req.query.storeId || req.query.companyId || req.query.empresa);
+    const { allowedStoreIds } = await resolveUserStoreAccess(req.user?.id);
+    let filter = { role: { $in: STAFF_ROLES } };
+
+    if (queryStoreId) {
+      if (!allowedStoreIds.length || !allowedStoreIds.includes(queryStoreId)) {
+        return res.status(403).json({ message: 'Acesso negado.' });
+      }
+      filter = {
+        ...filter,
+        $or: [{ empresas: queryStoreId }, { empresaPrincipal: queryStoreId }],
+      };
+    } else if (allowedStoreIds.length > 0) {
+      filter = {
+        ...filter,
+        $or: [{ empresas: { $in: allowedStoreIds } }, { empresaPrincipal: { $in: allowedStoreIds } }],
+      };
+    } else {
+      return res.json([]);
+    }
+
     const users = await User
       .find(
-        { role: { $in: ['admin_master', 'admin', 'funcionario'] } },
+        filter,
         'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas userGroup genero dataNascimento racaCor deficiencia estadoCivil situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios codigoCliente'
       )
       .populate('userGroup', 'nome codigo comissaoPercent')
@@ -382,7 +440,7 @@ router.get('/buscar-usuarios', authMiddleware, requireAdmin, async (req, res) =>
     }
 
     // base: NÃO trazer quem já está no quadro (funcionario, admin, admin_master)
-    const base = { role: { $nin: ['funcionario', 'admin', 'admin_master'] } };
+    const base = { role: { $nin: STAFF_ROLES } };
     const filter = or.length ? { ...base, $or: or } : base;
 
     const users = await User
@@ -405,14 +463,14 @@ router.get('/buscar-usuarios', authMiddleware, requireAdmin, async (req, res) =>
 // TRANSFORMAR usuário (policy aplicada)
 router.post('/transformar', authMiddleware, requireAdmin, async (req, res) => {
   try {
-    const { userId, role = 'funcionario' } = req.body;
+    const { userId, role = 'funcionario', empresas, empresaId } = req.body;
     if (!userId) return res.status(400).json({ message: 'userId é obrigatório.' });
-    if (!['funcionario', 'admin', 'admin_master'].includes(role)) {
+    if (!STAFF_ROLES.includes(role)) {
       return res.status(400).json({ message: 'Cargo inválido.' });
     }
 
     const actorRole = req.user?.role;
-    const target = await User.findById(userId, 'role');
+    const target = await User.findById(userId, 'role empresas empresaPrincipal');
     if (!target) return res.status(404).json({ message: 'Usuário não encontrado.' });
 
     if (!canChangeRole(actorRole, target.role, role)) {
@@ -420,6 +478,43 @@ router.post('/transformar', authMiddleware, requireAdmin, async (req, res) => {
     }
 
     target.role = role;
+
+    const requestedEmpresas = Array.isArray(empresas)
+      ? empresas
+      : (empresaId ? [empresaId] : []);
+    const normalizedEmpresas = requestedEmpresas
+      .map((id) => normalizeStoreId(id))
+      .filter(Boolean);
+    const replaceEmpresas = req.body?.replaceEmpresas === true;
+
+    if (normalizedEmpresas.length > 0 || replaceEmpresas) {
+      const { allowedStoreIds } = await resolveUserStoreAccess(req.user?.id);
+      const allowedSet = new Set(allowedStoreIds || []);
+      const allowed = normalizedEmpresas.filter((id) => allowedSet.has(id));
+
+      if (allowed.length !== normalizedEmpresas.length) {
+        return res.status(403).json({ message: 'Acesso negado para a empresa informada.' });
+      }
+
+      if (replaceEmpresas) {
+        target.empresas = allowed;
+        if (target.empresas.length === 1) {
+          target.empresaPrincipal = target.empresas[0];
+        } else if (target.empresas.length === 0) {
+          target.empresaPrincipal = null;
+        }
+      } else {
+        const current = Array.isArray(target.empresas)
+          ? target.empresas.map((id) => normalizeStoreId(id)).filter(Boolean)
+          : [];
+        target.empresas = Array.from(new Set([...current, ...allowed]));
+
+        if (!target.empresaPrincipal && target.empresas.length === 1) {
+          target.empresaPrincipal = target.empresas[0];
+        }
+      }
+    }
+
     await target.save();
 
     const ret = await User.findById(
@@ -442,7 +537,7 @@ router.get('/:id', authMiddleware, requireAdmin, async (req, res) => {
         req.params.id,
         'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas userGroup genero dataNascimento racaCor deficiencia estadoCivil rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios codigoCliente'
       ).populate('userGroup', 'nome codigo comissaoPercent').lean();
-    if (!u || !['admin_master', 'admin', 'funcionario'].includes(u.role)) {
+    if (!u || !STAFF_ROLES.includes(u.role)) {
       return res.status(404).json({ message: 'Funcionário não encontrado.' });
     }
     res.json(userToDTO(u));
@@ -461,8 +556,11 @@ router.post('/', authMiddleware, requireAdmin, async (req, res) => {
       return res.status(400).json({ message: 'Email, senha e celular são obrigatórios.' });
     }
     const cargo = role || 'funcionario';
-    if (!['admin', 'funcionario'].includes(cargo)) {
-      return res.status(400).json({ message: 'Cargo inválido.' });
+    if (!STAFF_ROLES.includes(cargo)) {
+      return res.status(400).json({ message: 'Cargo invalido.' });
+    }
+    if (!canAssignRole(req.user?.role, cargo)) {
+      return res.status(403).json({ message: 'Voce nao tem permissao para definir este cargo.' });
     }
 
     const existe = await User.findOne({ email });
@@ -684,7 +782,7 @@ router.put('/:id', authMiddleware, requireAdmin, async (req, res) => {
     if (typeof telefone !== 'undefined') update.telefone = telefone || '';
 
     if (role) {
-      if (!['admin', 'funcionario', 'admin_master'].includes(role)) {
+      if (!STAFF_ROLES.includes(role)) {
         return res.status(400).json({ message: 'Cargo inválido.' });
       }
       if (!canChangeRole(req.user?.role, target.role, role)) {

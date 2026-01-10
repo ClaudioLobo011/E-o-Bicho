@@ -4,6 +4,8 @@ const ambientesPermitidos = ['homologacao', 'producao'];
 const opcoesImpressao = ['sim', 'nao', 'perguntar'];
 const perfisDesconto = ['funcionario', 'gerente', 'admin'];
 const tiposEmissao = ['matricial', 'fiscal', 'ambos'];
+const largurasPapel = ['80mm', '58mm'];
+const tiposImpressora = ['bematech', 'elgin'];
 
 const printerSchema = new mongoose.Schema(
   {
@@ -14,6 +16,8 @@ const printerSchema = new mongoose.Schema(
       max: [10, 'O número máximo de vias é 10.'],
       default: 1,
     },
+    larguraPapel: { type: String, enum: largurasPapel, default: '80mm' },
+    tipoImpressora: { type: String, enum: tiposImpressora, default: 'bematech' },
   },
   { _id: false }
 );

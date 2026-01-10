@@ -211,7 +211,7 @@ const userSchema = new Schema({
   },
   role: {
     type: String,
-    enum: ['admin_master', 'admin', 'funcionario', 'cliente'],
+    enum: ['admin_master', 'admin', 'franqueador', 'franqueado', 'funcionario', 'cliente'],
     default: 'cliente'
   },
 

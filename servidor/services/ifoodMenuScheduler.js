@@ -25,15 +25,9 @@ async function runOnce() {
     }
 
     try {
-      const result = await syncIfoodCatalogForStore({ storeId, integration });
-      console.info('[ifood:menu-sync][ok]', {
-        storeId,
-        products: result.totalToSend,
-        created: result.sendResult?.created,
-        updated: result.sendResult?.updated,
-      });
+      await syncIfoodCatalogForStore({ storeId, integration });
     } catch (err) {
-      console.warn('[ifood:menu-sync][fail]', {
+      console.error('[ifood:menu-sync][fail]', {
         storeId,
         message: err?.message,
         status: err?.response?.status,
@@ -46,7 +40,6 @@ async function runOnce() {
 function startIfoodMenuScheduler() {
   let inFlight = false;
   const intervalMs = resolveIntervalMs();
-  console.info('[ifood:menu-sync][start]', { intervalMs });
 
   const loop = async () => {
     if (inFlight) {
@@ -57,7 +50,7 @@ function startIfoodMenuScheduler() {
     try {
       await runOnce();
     } catch (err) {
-      console.warn('[ifood:menu-sync][loop-error]', err?.message);
+      console.error('[ifood:menu-sync][loop-error]', err?.message);
     } finally {
       inFlight = false;
       setTimeout(loop, intervalMs);

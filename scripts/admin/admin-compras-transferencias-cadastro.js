@@ -108,9 +108,17 @@
   }
 
   const allowedRolesLabels = {
+
     admin: 'Admin',
+
     admin_master: 'Admin Master',
+
     funcionario: 'Funcionário',
+
+    franqueado: 'Franqueado',
+
+    franqueador: 'Franqueador',
+
   };
 
   function getToken() {

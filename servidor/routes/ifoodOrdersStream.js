@@ -12,7 +12,6 @@ router.get('/stream', (req, res) => {
   res.flushHeaders?.();
   res.write('retry: 5000\n\n');
   addClient(res);
-  console.info('[ifood:sse][client-connected]');
 });
 
 module.exports = router;

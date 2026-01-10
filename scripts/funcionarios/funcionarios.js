@@ -1,4 +1,4 @@
-// Guarda de acesso: permite funcionario, admin e admin_master.
+// Guarda de acesso: permite funcionario, franqueado, franqueador, admin e admin_master.
 // Esconde o conteúdo até validar o papel do usuário.
 (async function () {
   try {
@@ -26,10 +26,16 @@
     }
 
     const data = await resp.json();
-    const role = data?.role || cached?.role;
+    const role = data?.role;
+    if (!role) {
+      console.error('[Funcionarios] Role nao retornada pelo backend.');
+      alert('Nao foi possivel validar sua permissao. Faca login novamente.');
+      window.location.replace('/pages/login.html');
+      return;
+    }
 
-    // Apenas funcionario, admin e admin_master entram.
-    if (!['funcionario', 'admin', 'admin_master'].includes(role)) {
+    // Apenas funcionario, franqueado, franqueador, admin e admin_master entram.
+    if (!['funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master'].includes(role)) {
       console.error('[Funcionários] Acesso negado para o papel:', role);
       alert('Acesso restrito aos Funcionários.');
       window.location.replace('/index.html');

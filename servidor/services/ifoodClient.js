@@ -196,13 +196,6 @@ async function sendBatches({ url, method, token, items, mapFn }) {
       .slice(i, i + batchSize)
       .map(mapFn)
       .map(normalizeInventoryStock);
-    const sample = batch.slice(0, 5);
-    const samplePreview = JSON.stringify(sample, null, 2);
-    console.info(`[ifood:catalog][${method.toUpperCase()}]`, {
-      url,
-      batch: batch.length,
-      sample: samplePreview,
-    });
     try {
       const resp = await axios({
         method,
@@ -224,9 +217,11 @@ async function sendBatches({ url, method, token, items, mapFn }) {
       }
       sent += batch.length;
     } catch (err) {
-      console.log('STATUS:', err.response?.status);
-      console.log('DATA:', JSON.stringify(err.response?.data, null, 2));
-      console.log('ERRORS:', JSON.stringify(err.response?.data?.errors, null, 2));
+      console.error('ifood:catalog:error', {
+        status: err.response?.status || null,
+        data: err.response?.data || null,
+        errors: err.response?.data?.errors || null,
+      });
       throw err;
     }
   }
@@ -235,7 +230,6 @@ async function sendBatches({ url, method, token, items, mapFn }) {
 }
 
 async function sendResetCatalog({ url, token }) {
-  console.info('[ifood:catalog][RESET]', { url });
   await axios({
     method: 'post',
     url,
@@ -258,13 +252,6 @@ async function pushCatalog(credentials, payload) {
   const postItems = Array.isArray(payload?.newItems) ? payload.newItems : [];
   const patchItems = Array.isArray(payload?.updateItems) ? payload.updateItems : [];
   const resetCatalog = isTruthy(payload?.resetCatalog ?? DEFAULT_RESET_CATALOG);
-
-  console.info('[ifood:catalog][payload]', {
-    merchantId,
-    newItems: postItems.length,
-    updateItems: patchItems.length,
-    resetCatalog,
-  });
 
   const allItems = [...postItems, ...patchItems];
 

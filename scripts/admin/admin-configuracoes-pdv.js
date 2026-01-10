@@ -61,18 +61,26 @@
       venda: {
         nome: document.getElementById('impressora-venda-nome'),
         vias: document.getElementById('impressora-venda-vias'),
+        largura: document.getElementById('impressora-venda-largura'),
+        tipo: document.getElementById('impressora-venda-tipo'),
       },
       orcamento: {
         nome: document.getElementById('impressora-orcamento-nome'),
         vias: document.getElementById('impressora-orcamento-vias'),
+        largura: document.getElementById('impressora-orcamento-largura'),
+        tipo: document.getElementById('impressora-orcamento-tipo'),
       },
       contas: {
         nome: document.getElementById('impressora-contas-nome'),
         vias: document.getElementById('impressora-contas-vias'),
+        largura: document.getElementById('impressora-contas-largura'),
+        tipo: document.getElementById('impressora-contas-tipo'),
       },
       caixa: {
         nome: document.getElementById('impressora-caixa-nome'),
         vias: document.getElementById('impressora-caixa-vias'),
+        largura: document.getElementById('impressora-caixa-largura'),
+        tipo: document.getElementById('impressora-caixa-tipo'),
       },
     };
   };
@@ -130,13 +138,30 @@
     }
   };
 
+  const normalizePaperWidth = (value) => {
+    const raw = value ? String(value).trim().toLowerCase() : '';
+    if (!raw) return '80mm';
+    if (raw === '80' || raw === '80mm') return '80mm';
+    if (raw === '58' || raw === '58mm') return '58mm';
+    return null;
+  };
+
+  const normalizePrinterType = (value) => {
+    const raw = value ? String(value).trim().toLowerCase() : '';
+    if (!raw) return 'bematech';
+    if (raw === 'bematech' || raw === 'elgin') return raw;
+    return null;
+  };
+
   const clearForm = () => {
     resetRadios('input[name="sempre-imprimir"]', 'perguntar');
     resetRadios('input[name="tipo-emissao"]', 'fiscal');
 
-    Object.values(elements.printerInputs).forEach(({ nome, vias }) => {
+    Object.values(elements.printerInputs).forEach(({ nome, vias, largura, tipo }) => {
       if (nome) nome.value = '';
       if (vias) vias.value = '';
+      if (largura) largura.value = '80mm';
+      if (tipo) tipo.value = 'bematech';
     });
 
     document.querySelectorAll('.desconto-checkbox').forEach((checkbox) => {
@@ -436,9 +461,17 @@
 
   const fillPrinterInputs = (printer, inputs) => {
     if (!inputs) return;
-    const { nome, vias } = inputs;
+    const { nome, vias, largura, tipo } = inputs;
     if (nome) nome.value = printer?.nome || '';
     if (vias) vias.value = printer?.vias || '';
+    if (largura) {
+      largura.value = normalizePaperWidth(printer?.larguraPapel || printer?.largura) || '80mm';
+    }
+    if (tipo) {
+      tipo.value =
+        normalizePrinterType(printer?.tipoImpressora || printer?.tipo || printer?.printerType) ||
+        'bematech';
+    }
   };
 
   const populateForm = (pdv) => {
@@ -533,7 +566,7 @@
     });
   };
 
-  const readPrinterConfig = ({ nome, vias }, label) => {
+  const readPrinterConfig = ({ nome, vias, largura, tipo }, label) => {
     const nomeValue = nome?.value.trim() || '';
     const viasValue = vias?.value.trim() || '';
 
@@ -564,7 +597,24 @@
       viasNumber = inteiro;
     }
 
-    return { ok: true, value: { nome: nomeValue, vias: viasNumber } };
+    const larguraValue = normalizePaperWidth(largura?.value);
+    if (!larguraValue) {
+      notify(`Selecione uma largura valida para a ${label}.`, 'warning');
+      largura?.focus();
+      return { ok: false };
+    }
+
+    const tipoValue = normalizePrinterType(tipo?.value);
+    if (!tipoValue) {
+      notify(`Selecione o tipo da ${label}.`, 'warning');
+      tipo?.focus();
+      return { ok: false };
+    }
+
+    return {
+      ok: true,
+      value: { nome: nomeValue, vias: viasNumber, larguraPapel: larguraValue, tipoImpressora: tipoValue },
+    };
   };
 
   const collectFormData = () => {

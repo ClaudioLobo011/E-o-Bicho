@@ -27,6 +27,8 @@ const perfisDesconto = ['funcionario', 'gerente', 'admin'];
 const perfisDescontoSet = new Set(perfisDesconto);
 const tiposEmissao = ['matricial', 'fiscal', 'ambos'];
 const tiposEmissaoSet = new Set(tiposEmissao);
+const tiposImpressora = ['bematech', 'elgin'];
+const tiposImpressoraSet = new Set(tiposImpressora);
 
 let qrCodeModulePromise;
 
@@ -201,6 +203,23 @@ const parseCopias = (value, { allowNull = true } = {}) => {
   return inteiro;
 };
 
+const parsePaperWidth = (value) => {
+  const normalized = normalizeString(value).toLowerCase();
+  if (!normalized) return null;
+  if (normalized === '80' || normalized === '80mm') return '80mm';
+  if (normalized === '58' || normalized === '58mm') return '58mm';
+  throw createValidationError('Selecione uma largura valida para a impressora.');
+};
+
+const parsePrinterType = (value) => {
+  const normalized = normalizeString(value).toLowerCase();
+  if (!normalized) return 'bematech';
+  if (!tiposImpressoraSet.has(normalized)) {
+    throw createValidationError('Selecione um tipo de impressora valido.');
+  }
+  return normalized;
+};
+
 const buildPrinterPayload = (payload) => {
   if (!payload) return null;
 
@@ -213,9 +232,17 @@ const buildPrinterPayload = (payload) => {
     return null;
   }
 
+  const larguraPapel =
+    parsePaperWidth(payload.larguraPapel ?? payload.largura ?? payload.paperWidth) || '80mm';
+  const tipoImpressora = parsePrinterType(
+    payload.tipoImpressora ?? payload.tipo ?? payload.printerType
+  );
+
   return {
     nome,
     vias: vias ?? 1,
+    larguraPapel,
+    tipoImpressora,
   };
 };
 

@@ -12,7 +12,6 @@ for /f "tokens=1,2,3,4,5" %%a in ('netstat -ano ^| findstr /I ":%AGENT_PORT%"') 
 )
 
 if /i "%1"=="--clean" (
-  rmdir /s /q "%~dp0edge-profile" >nul 2>&1
   del /q "%~dp0agent.log" "%~dp0agent.err" >nul 2>&1
 )
 

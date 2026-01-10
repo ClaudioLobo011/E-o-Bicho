@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin: Integracoes WhatsApp - E o Bicho</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="../../src/output.css">
+</head>
+<body class="bg-gray-100">
+  <div id="admin-header-placeholder"></div>
+
+  <main class="container mx-auto px-4 pt-1 pb-8 min-h-screen">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <aside class="md:col-span-4">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
+
+      <div class="md:col-span-4 space-y-6">
+        <section class="bg-white p-6 rounded-lg shadow">
+          <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div class="space-y-2">
+              <nav aria-label="Breadcrumb" class="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                <span class="inline-flex items-center gap-2 text-primary"><i class="fas fa-plug"></i> Integracoes</span>
+                <i class="fas fa-angle-right text-gray-400"></i>
+                <span class="text-gray-600">WhatsApp</span>
+              </nav>
+              <div>
+                <h1 class="text-2xl font-bold text-gray-800">WhatsApp</h1>
+                <p class="text-gray-600 mt-1">Configure e teste a integracao do WhatsApp por empresa.</p>
+              </div>
+            </div>
+            <div class="flex w-full flex-col gap-3 lg:max-w-md">
+              <label for="whatsapp-company-select" class="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                <i class="fas fa-building text-primary"></i>
+                <span>Empresa</span>
+              </label>
+              <select id="whatsapp-company-select" class="w-full rounded-lg border-gray-300 text-sm focus:border-primary focus:ring-primary">
+                <option>Carregando...</option>
+              </select>
+              <div id="company-summary-card" class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+                <div class="flex items-center justify-between gap-2">
+                  <div>
+                    <p class="text-xs uppercase text-gray-500 font-semibold">Empresa selecionada</p>
+                    <p class="font-semibold text-gray-800" data-company-name>--</p>
+                  </div>
+                  <span class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold" data-company-status>--</span>
+                </div>
+                <div class="mt-2 text-xs text-gray-600">
+                  <span data-company-cnpj>--</span>
+                </div>
+                <div class="mt-1 text-xs text-gray-600">
+                  <span data-company-numbers>0</span> numeros vinculados
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="bg-white p-5 rounded-lg shadow">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-wide text-primary">Numeros conectados</p>
+              <h2 class="text-xl font-bold text-gray-800">Numeros do WhatsApp</h2>
+              <p class="text-sm text-gray-600 mt-1">Gerencie varios numeros por empresa e acompanhe o status.</p>
+            </div>
+            <button type="button" id="add-whatsapp-number-btn" class="bg-primary hover:bg-secondary text-white font-semibold px-4 py-2 rounded-lg transition">
+              Adicionar numero
+            </button>
+          </div>
+
+          <div class="mt-4 overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Numero / Nome</th>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Status</th>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">App / API</th>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Ultima atividade</th>
+                  <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Acoes</th>
+                </tr>
+              </thead>
+              <tbody id="whatsapp-numbers-table-body" class="divide-y divide-gray-100 bg-white"></tbody>
+            </table>
+          </div>
+
+          <div id="whatsapp-numbers-empty" class="hidden mt-4 rounded-lg border border-dashed border-gray-200 bg-gray-50 p-4 text-center text-sm text-gray-600">
+            Nenhum numero vinculado para esta empresa.
+          </div>
+        </section>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <section class="bg-white p-5 rounded-lg shadow">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-wide text-primary">App Meta</p>
+                <h2 class="text-xl font-bold text-gray-800">Credenciais do aplicativo</h2>
+                <p class="text-sm text-gray-600 mt-1">Informe os tokens do app da Meta para envio e recebimento de webhooks.</p>
+              </div>
+              <span id="whatsapp-status-badge" class="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold border">--</span>
+            </div>
+
+            <p id="whatsapp-status-description" class="mt-3 text-xs text-gray-600">--</p>
+
+            <div class="mt-4 space-y-4">
+              <div class="grid grid-cols-1 gap-4">
+                <div>
+                  <label for="whatsapp-app-id" class="block text-sm font-semibold text-gray-700">App ID (Meta)</label>
+                  <input id="whatsapp-app-id" type="text" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="ex: 1234567890">
+                </div>
+                <div>
+                  <label for="whatsapp-app-secret" class="block text-sm font-semibold text-gray-700">App Secret</label>
+                  <input id="whatsapp-app-secret" type="password" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="********">
+                </div>
+                <div>
+                  <label for="whatsapp-waba-id" class="block text-sm font-semibold text-gray-700">WABA ID</label>
+                  <input id="whatsapp-waba-id" type="text" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="ex: 10987654321">
+                </div>
+                <div>
+                  <label for="whatsapp-access-token" class="block text-sm font-semibold text-gray-700">Token de acesso</label>
+                  <div class="mt-1 flex gap-2">
+                    <input id="whatsapp-access-token" type="password" class="flex-1 min-w-0 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="EAAG...">
+                    <button type="button" data-copy-access-token class="px-3 py-2 rounded-md text-sm font-semibold bg-white border border-gray-200 hover:border-primary hover:text-primary transition">
+                      Copiar
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label for="whatsapp-verify-token" class="block text-sm font-semibold text-gray-700">Verify Token (webhook)</label>
+                  <div class="mt-1 flex gap-2">
+                    <input id="whatsapp-verify-token" type="text" class="flex-1 min-w-0 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="ex: petebicho_wh">
+                    <button type="button" data-copy-verify-token class="px-3 py-2 rounded-md text-sm font-semibold bg-white border border-gray-200 hover:border-primary hover:text-primary transition">
+                      Copiar
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <p class="text-xs uppercase text-gray-500 font-semibold">Webhook URL</p>
+                    <p id="whatsapp-webhook-url" class="font-mono text-sm text-gray-800 break-all">https://callback.peteobicho.com.br/webhooks/whatsapp</p>
+                  </div>
+                  <button type="button" data-copy-webhook class="px-3 py-2 rounded-md text-sm font-semibold bg-white border border-gray-200 hover:border-primary hover:text-primary transition">
+                    Copiar
+                  </button>
+                </div>
+              </div>
+
+              <div class="flex flex-wrap gap-3">
+                <button type="button" id="whatsapp-save-tokens" class="bg-primary hover:bg-secondary text-white font-semibold px-4 py-2 rounded-lg transition">Salvar tokens</button>
+                <button type="button" id="whatsapp-verify-webhooks" class="border border-primary text-primary hover:bg-primary/10 font-semibold px-4 py-2 rounded-lg transition">
+                  Verificacoes
+                </button>
+              </div>
+
+              <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 flex items-start gap-2">
+                <i class="fas fa-circle-info mt-0.5"></i>
+                <span>Tokens salvos no banco e usados para enviar e validar webhooks.</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="bg-white p-5 rounded-lg shadow lg:col-span-2">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-wide text-primary">Testes</p>
+                <h2 class="text-xl font-bold text-gray-800">Testes de mensagem</h2>
+                <p class="text-sm text-gray-600 mt-1">Envie mensagens de teste e simule recebimentos.</p>
+              </div>
+            </div>
+
+            <div class="mt-4">
+              <div class="flex flex-wrap gap-2 border-b border-gray-200 pb-2" role="tablist">
+                <button type="button" class="whatsapp-tab-button rounded-lg border border-primary bg-primary/10 px-4 py-2 text-sm font-semibold text-primary" data-whatsapp-tab="send" aria-selected="true">Enviar mensagem</button>
+                <button type="button" class="whatsapp-tab-button rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 hover:text-primary" data-whatsapp-tab="receive" aria-selected="false">Simular recebimento</button>
+              </div>
+
+              <div class="mt-4 space-y-4" data-whatsapp-panel="send">
+                <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div>
+                    <label for="whatsapp-send-origin" class="block text-sm font-semibold text-gray-700">Numero de origem</label>
+                    <select id="whatsapp-send-origin" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                      <option value="">Selecione um numero</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="whatsapp-send-destination" class="block text-sm font-semibold text-gray-700">Destino (telefone)</label>
+                    <input id="whatsapp-send-destination" type="text" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="+55 11 90000-0000">
+                  </div>
+                </div>
+                <div>
+                  <label for="whatsapp-send-message" class="block text-sm font-semibold text-gray-700">Mensagem</label>
+                  <textarea id="whatsapp-send-message" rows="4" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Digite a mensagem de teste..."></textarea>
+                </div>
+                <div class="flex flex-wrap gap-3">
+                  <button type="button" id="whatsapp-send-btn" class="bg-primary hover:bg-secondary text-white font-semibold px-4 py-2 rounded-lg transition">Enviar teste</button>
+                  <button type="button" id="whatsapp-send-clear" class="border border-gray-200 text-gray-700 hover:border-primary hover:text-primary font-semibold px-4 py-2 rounded-lg transition">Limpar</button>
+                </div>
+              </div>
+
+              <div class="mt-4 space-y-4 hidden" data-whatsapp-panel="receive">
+                <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div>
+                    <label for="whatsapp-receive-destination" class="block text-sm font-semibold text-gray-700">Numero de destino</label>
+                    <select id="whatsapp-receive-destination" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                      <option value="">Selecione um numero</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="whatsapp-receive-origin" class="block text-sm font-semibold text-gray-700">Origem (telefone do cliente)</label>
+                    <input id="whatsapp-receive-origin" type="text" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="+55 11 95555-0000">
+                  </div>
+                </div>
+                <div>
+                  <label for="whatsapp-receive-message" class="block text-sm font-semibold text-gray-700">Mensagem recebida</label>
+                  <textarea id="whatsapp-receive-message" rows="4" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Mensagem simulada pelo cliente..."></textarea>
+                </div>
+                <div class="flex flex-wrap gap-3">
+                  <button type="button" id="whatsapp-receive-btn" class="bg-primary hover:bg-secondary text-white font-semibold px-4 py-2 rounded-lg transition">Simular recebimento</button>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div class="bg-white p-5 rounded-lg shadow">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-wide text-primary">Logs</p>
+                <h2 class="text-lg font-bold text-gray-800">Log de envios</h2>
+              </div>
+              <div class="w-full max-w-xs">
+                <label for="whatsapp-outgoing-filter" class="sr-only">Buscar envios</label>
+                <input id="whatsapp-outgoing-filter" type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Buscar...">
+              </div>
+            </div>
+            <div class="mt-4 overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th scope="col" class="px-3 py-2 text-left font-semibold text-gray-700">Data/hora</th>
+                    <th scope="col" class="px-3 py-2 text-left font-semibold text-gray-700">Numero</th>
+                    <th scope="col" class="px-3 py-2 text-left font-semibold text-gray-700">Destino</th>
+                    <th scope="col" class="px-3 py-2 text-left font-semibold text-gray-700">Mensagem</th>
+                    <th scope="col" class="px-3 py-2 text-left font-semibold text-gray-700">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="whatsapp-outgoing-body" class="divide-y divide-gray-100 bg-white"></tbody>
+              </table>
+            </div>
+            <div id="whatsapp-outgoing-empty" class="hidden mt-4 rounded-lg border border-dashed border-gray-200 bg-gray-50 p-4 text-center text-sm text-gray-600">
+              Nenhum envio registrado para esta empresa.
+            </div>
+          </div>
+
+          <div class="bg-white p-5 rounded-lg shadow">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-wide text-primary">Logs</p>
+                <h2 class="text-lg font-bold text-gray-800">Log de recebidos</h2>
+              </div>
+              <div class="w-full max-w-xs">
+                <label for="whatsapp-incoming-filter" class="sr-only">Buscar recebidos</label>
+                <input id="whatsapp-incoming-filter" type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Buscar...">
+              </div>
+            </div>
+            <div class="mt-4 overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th scope="col" class="px-3 py-2 text-left font-semibold text-gray-700">Data/hora</th>
+                    <th scope="col" class="px-3 py-2 text-left font-semibold text-gray-700">Numero</th>
+                    <th scope="col" class="px-3 py-2 text-left font-semibold text-gray-700">Origem</th>
+                    <th scope="col" class="px-3 py-2 text-left font-semibold text-gray-700">Mensagem</th>
+                    <th scope="col" class="px-3 py-2 text-left font-semibold text-gray-700">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="whatsapp-incoming-body" class="divide-y divide-gray-100 bg-white"></tbody>
+              </table>
+            </div>
+            <div id="whatsapp-incoming-empty" class="hidden mt-4 rounded-lg border border-dashed border-gray-200 bg-gray-50 p-4 text-center text-sm text-gray-600">
+              Nenhum recebimento registrado para esta empresa.
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <div id="whatsapp-number-modal" class="fixed inset-0 z-[999] hidden">
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-whatsapp-modal-close></div>
+    <div class="relative mx-auto flex min-h-full items-center justify-center p-4">
+      <div class="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+        <form id="whatsapp-number-form" class="flex flex-col">
+          <div class="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+            <h3 id="whatsapp-number-modal-title" class="text-lg font-semibold text-gray-800">Adicionar numero</h3>
+            <button type="button" class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700" data-whatsapp-modal-close>&times;</button>
+          </div>
+          <div class="px-5 py-4 space-y-4">
+            <div>
+              <label for="whatsapp-number-name" class="block text-sm font-semibold text-gray-700">Nome do numero</label>
+              <input id="whatsapp-number-name" type="text" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: Atendimento Central" required>
+            </div>
+            <div>
+              <label for="whatsapp-number-phone" class="block text-sm font-semibold text-gray-700">Numero</label>
+              <input id="whatsapp-number-phone" type="text" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="+55 11 99999-0000" required>
+            </div>
+            <div>
+              <label for="whatsapp-number-phone-id" class="block text-sm font-semibold text-gray-700">Phone Number ID</label>
+              <input id="whatsapp-number-phone-id" type="text" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="ex: 104859302911" required>
+            </div>
+            <div>
+              <label for="whatsapp-number-pin" class="block text-sm font-semibold text-gray-700">PIN (6 digitos)</label>
+              <div class="mt-1 flex gap-2">
+                <input id="whatsapp-number-pin" type="password" inputmode="numeric" maxlength="6" autocomplete="off" class="flex-1 min-w-0 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="******">
+                <button type="button" data-whatsapp-pin-toggle class="px-3 py-2 rounded-md text-sm font-semibold bg-white border border-gray-200 hover:border-primary hover:text-primary transition" aria-label="Mostrar PIN">
+                  <i class="fas fa-eye"></i>
+                </button>
+              </div>
+            </div>
+            <div>
+              <label for="whatsapp-number-provider" class="block text-sm font-semibold text-gray-700">API / App</label>
+              <select id="whatsapp-number-provider" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
+                <option value="">Selecione...</option>
+                <option value="Meta Cloud API">Meta Cloud API</option>
+              </select>
+            </div>
+          </div>
+          <div class="flex items-center justify-end gap-3 border-t border-gray-100 bg-gray-50 px-5 py-3">
+            <button type="button" class="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:border-primary hover:text-primary" data-whatsapp-modal-close>Cancelar</button>
+            <button type="submit" class="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-secondary">Salvar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-placeholder"></div>
+  <div id="confirm-modal-placeholder"></div>
+  <div id="admin-footer-placeholder"></div>
+
+  <script>var basePath = '../../';</script>
+  <script src="../../scripts/core/config.js"></script>
+  <script src="../../scripts/core/ui.js"></script>
+  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/admin/admin.js"></script>
+  <script src="../../scripts/admin/admin-integracoes-whatsapp.js"></script>
+  <script src="/scripts/common/modal-bridge.js"></script>
+</body>
+</html>

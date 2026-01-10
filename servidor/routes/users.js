@@ -4,11 +4,13 @@ const User = require('../models/User');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 
+const STAFF_ROLES = new Set(['funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master']);
+
 // GET /api/users/:id - Buscar dados de um utilizador
 router.get('/:id', requireAuth, async (req, res) => {
     try {
         // Se não for admin, só pode buscar o próprio perfil
-        if (req.user.role !== 'admin' && req.user.role !== 'admin_master' && req.user.id !== req.params.id) {
+        if (!STAFF_ROLES.has(req.user.role) && req.user.id !== req.params.id) {
             return res.status(403).json({ message: 'Acesso negado.' });
         }
 
@@ -27,7 +29,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 router.put('/:id', requireAuth, async (req, res) => {
     try {
         // Se não for admin, só pode atualizar o próprio perfil
-        if (req.user.role !== 'admin' && req.user.role !== 'admin_master' && req.user.id !== req.params.id) {
+        if (!STAFF_ROLES.has(req.user.role) && req.user.id !== req.params.id) {
             return res.status(403).json({ message: 'Acesso negado.' });
         }
 

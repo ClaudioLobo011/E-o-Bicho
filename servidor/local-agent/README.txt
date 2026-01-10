@@ -1,59 +1,76 @@
 PDV Local Agent (Windows)
 =========================
 
-This agent runs on the PDV machine and receives print jobs from the browser.
-It prints receipts to a specific printer name without opening the print dialog.
-The /print endpoint responds immediately and prints in background (queue, 1 job at a time).
+Agente local para impressao direta em impressoras termicas (ESC/POS) sem abrir
+janela de visualizacao. O agente recebe JSON estruturado e imprime via driver
+local em fila (1 job por vez).
 
-Requirements
+Requisitos
 - Windows 10/11
-- Node.js 18+ installed
-- Microsoft Edge installed (used to print HTML in kiosk mode)
+- .NET Framework 4.8 instalado (padrao no Windows 10/11)
 
-Quick start
-1) Copy this folder to the PDV machine.
-2) Run install-agent.bat to create a startup task (hidden).
-3) The agent will listen on http://127.0.0.1:17305
+Instalacao rapida
+1) Copie esta pasta para o computador do PDV.
+2) (Opcional) Crie agent-config.json baseado no agent-config.example.json.
+3) Execute install-agent.bat (cria tarefa e inicia em segundo plano).
 
-Manual start
-- Run start-agent.bat (visible console)
-- Run start-agent.bat --hidden (background)
+Instalacao por setup.exe
+1) Baixe o arquivo pdv-local-agent-setup.exe.
+2) Execute (duplo clique). Ele instala/atualiza em %LOCALAPPDATA%\PdvLocalAgent.
+3) O agente inicia automaticamente em segundo plano.
 
-Logs (hidden mode)
-- agent.log
-- agent.err
+Execucao manual
+- start-agent.bat (console visivel)
+- start-agent.bat --hidden (segundo plano)
+- build-agent.bat (compila o exe caso nao exista)
+
+Logs
+- agent.log (informacoes)
+- agent.err (erros)
 
 API
-- GET /health -> { ok: true, version }
+- GET /health -> { ok: true, version, queue }
 - GET /printers -> { ok: true, printers: [...] }
-- GET /queue -> { ok: true, queued: <number>, active: {...}|null }
+- GET /queue -> { ok: true, jobs: [...] }
 - GET /jobs/<id> -> { ok: true, job: {...} }
-- POST /print -> { ok: true, queued: true, jobId }
-  Payload:
-  {
-    "html": "<html>...</html>",
-    "printerName": "MP-4200 TH",
-    "copies": 1,
-    "jobName": "Comprovante de venda"
+- POST /print-json -> { ok: true, queued: true, jobId }
+
+Exemplo de payload /print-json
+{
+  "printerName": "MP-4200 TH",
+  "copies": 1,
+  "jobName": "Comprovante de venda",
+  "document": {
+    "version": 1,
+    "type": "venda",
+    "title": "Comprovante de venda",
+    "paperWidth": "80mm",
+    "logo": { "enabled": false, "label": "Em desenvolvimento" },
+    "meta": { "store": "Pet Shop", "pdv": "01", "saleCode": "123", "operator": "Caixa", "date": "01/01/2025 10:30" },
+    "items": [
+      { "index": "01", "name": "Racao", "code": "789", "quantity": "1", "unitPrice": "R$ 10,00", "total": "R$ 10,00" }
+    ],
+    "totals": { "subtotal": "R$ 10,00", "total": "R$ 10,00", "paid": "R$ 10,00", "change": "R$ 0,00" },
+    "payments": [ { "label": "Dinheiro", "value": "R$ 10,00" } ]
   }
+}
 
-Uninstall
-- Run uninstall-agent.bat
-- Run uninstall-agent.bat --clean to remove edge-profile and logs
+Config (agent-config.json)
+- host, port: endereco e porta de escuta
+- printWaitMs: timeout por job (ms, minimo 2000, maximo 120000)
+- queueMax: maximo de jobs enfileirados
+- maxCopies: limite de vias por job
+- maxBodyBytes: limite de payload
+- paperWidth: "80mm" ou "58mm"
+- codePage: cp860 (padrao), cp850, cp1252, cp437
+- defaultPrinter: nome da impressora padrao (opcional)
+- printerAliases: alias -> nome real da impressora
 
-Config
-- Optional: create agent-config.json based on agent-config.example.json
-- host, port: where the agent listens
-- edgePath: custom path to msedge.exe (optional)
-- edgeProfileDir: persistent Edge profile directory (default ./edge-profile)
-- printWaitMs: time to wait for each print job (ms). Increase if the printer is slow.
-- queueMax: maximum queued jobs before rejecting new ones
-- maxCopies: maximum allowed copies per job
-- maxBodyBytes: max request size in bytes
-- printerAliases: map a shared alias to the local printer name
+Desinstalar
+- uninstall-agent.bat
+- uninstall-agent.bat --clean (remove logs)
 
 Troubleshooting
-- If you see print-timeout in agent.err, increase printWaitMs and verify Edge is not stuck open.
-- If Edge is left open, close it and retry. The agent will kill Edge on timeout.
-- Verify printers with GET /printers and use the exact name.
-- If hidden mode does not print, reinstall so the task runs interactively (Run only when user is logged on).
+- Se aparecer print-timeout, aumente printWaitMs.
+- Confirme o nome da impressora em GET /printers.
+- Para acentos incorretos, ajuste codePage (ex: cp850 ou cp1252).

@@ -90,11 +90,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const modalSearch = document.getElementById('modal-search-user');
   const searchInput = document.getElementById('search-term');
   const searchResults = document.getElementById('search-results');
+  const companySelect = document.getElementById('funcionarios-company-select');
+  const companyFeedback = document.getElementById('funcionarios-company-feedback');
 
   // Auth
   const cached = JSON.parse(localStorage.getItem('loggedInUser') || 'null');
   const token = cached?.token || '';
-  let ACTOR_ROLE = cached?.role || null;
+  let ACTOR_ROLE = null;
   let gruposUsuariosDisponiveis = [];
 
   const API = {
@@ -108,14 +110,23 @@ document.addEventListener('DOMContentLoaded', () => {
     transform: `${API_CONFIG.BASE_URL}/admin/funcionarios/transformar`,
     authCheck: `${API_CONFIG.BASE_URL}/auth/check`,
     userGroups: `${API_CONFIG.BASE_URL}/admin/grupos-usuarios`,
+    storesAllowed: `${API_CONFIG.BASE_URL}/stores/allowed`,
   };
 
   const ROLE_LABEL = {
+
     funcionario: 'Funcionário',
+
+    franqueado: 'Franqueado',
+
+    franqueador: 'Franqueador',
+
     admin: 'Administrador',
+
     admin_master: 'Admin Master',
+
   };
-  const roleRank = { cliente: 0, funcionario: 1, admin: 2, admin_master: 3 };
+  const roleRank = { cliente: 0, funcionario: 1, franqueado: 2, franqueador: 3, admin: 4, admin_master: 5 };
   function getEmpresaNomeById(id) {
     if (!id || !Array.isArray(empresasDisponiveis)) return '';
     const found = empresasDisponiveis.find((empresa) => empresa?._id === id || empresa?.id === id);
@@ -143,6 +154,23 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   const funcTableColumns = [
     {
+      key: 'codigo',
+      label: 'Codigo',
+      minWidth: 48,
+      maxAutoWidth: 72,
+      headerClass: 'px-3 py-2',
+      cellClass: 'px-3 py-2.5 text-[11px] text-gray-700',
+      getDisplay: (f) => {
+        const value = f?.codigo ?? f?.codigoCliente ?? f?.codigo_cliente;
+        return value !== null && value !== undefined && value !== '' ? String(value) : '-';
+      },
+      getComparable: (f) => {
+        const raw = f?.codigo ?? f?.codigoCliente ?? f?.codigo_cliente;
+        const parsed = Number.parseInt(raw, 10);
+        return Number.isNaN(parsed) ? -1 : parsed;
+      },
+    },
+    {
       key: 'nome',
       label: 'Nome',
       minWidth: 72,
@@ -161,11 +189,24 @@ document.addEventListener('DOMContentLoaded', () => {
       getComparable: (f) => (f.email || '').toLowerCase(),
     },
     {
+      key: 'documento',
+      label: 'CPF/CNPJ',
+      minWidth: 96,
+      headerClass: 'px-3 py-2',
+      cellClass: 'px-3 py-2.5 text-[11px] text-gray-700',
+      getDisplay: (f) => f.cpf || f.cnpj || '-',
+      getComparable: (f) => {
+        const doc = f.cpf || f.cnpj || '';
+        return onlyDigits(doc);
+      },
+    },
+    {
       key: 'role',
       label: 'Cargo',
       minWidth: 60,
+      maxAutoWidth: 120,
       headerClass: 'px-3 py-2',
-      cellClass: 'px-3 py-2.5 capitalize text-[11px] text-gray-700',
+      cellClass: 'px-3 py-2.5 capitalize text-[11px] text-gray-700 truncate',
       getDisplay: (f) => ROLE_LABEL[f.role] || f.role || '-',
       getComparable: (f) => roleRank[f.role] ?? -1,
     },
@@ -195,6 +236,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const funcTableElements = {
     wrapper: null,
     counter: null,
+    columnSelectorWrap: null,
+    columnSelectorButton: null,
+    columnSelectorPanel: null,
     table: null,
     tableHead: null,
     tableBody: null,
@@ -207,9 +251,119 @@ document.addEventListener('DOMContentLoaded', () => {
     sort: { key: null, direction: null },
     openPopover: null,
     columnWidths: {},
+    autoColumnWidths: {},
+    columnVisibility: {},
   };
   let funcActivePopover = null;
   let funcActivePopoverCleanup = null;
+  let funcColumnSelectorCleanup = null;
+  const FUNC_COLUMNS_STORAGE_KEY = 'eobicho-func-columns';
+  const FUNC_COMPANY_STORAGE_KEY = 'eobicho-func-company';
+
+  const getLoggedUserId = () => {
+    try {
+      const user = JSON.parse(localStorage.getItem('loggedInUser') || 'null');
+      return user?.id || user?._id || '';
+    } catch {
+      return '';
+    }
+  };
+
+  const getFuncColumnsStorageKey = () => {
+    const userId = getLoggedUserId();
+    return userId ? `${FUNC_COLUMNS_STORAGE_KEY}:${userId}` : FUNC_COLUMNS_STORAGE_KEY;
+  };
+
+  const loadFuncColumnVisibility = () => {
+    try {
+      const rawData = localStorage.getItem(getFuncColumnsStorageKey());
+      if (!rawData) return {};
+      const parsed = JSON.parse(rawData);
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  };
+
+  const saveFuncColumnVisibility = () => {
+    try {
+      localStorage.setItem(getFuncColumnsStorageKey(), JSON.stringify(funcTableState.columnVisibility || {}));
+    } catch {
+      // ignore storage errors
+    }
+  };
+
+  const getFuncCompanyStorageKey = () => {
+    const userId = getLoggedUserId();
+    return userId ? `${FUNC_COMPANY_STORAGE_KEY}:${userId}` : FUNC_COMPANY_STORAGE_KEY;
+  };
+
+  const getStoredCompanyId = () => {
+    try {
+      return localStorage.getItem(getFuncCompanyStorageKey()) || '';
+    } catch {
+      return '';
+    }
+  };
+
+  const setStoredCompanyId = (value) => {
+    try {
+      const key = getFuncCompanyStorageKey();
+      if (value) {
+        localStorage.setItem(key, value);
+      } else {
+        localStorage.removeItem(key);
+      }
+    } catch {
+      // ignore storage errors
+    }
+  };
+
+  const isFuncColumnVisible = (columnKey) => funcTableState.columnVisibility[columnKey] !== false;
+
+  const getVisibleFuncColumns = () =>
+    funcTableColumns.filter((column) => isFuncColumnVisible(column.key));
+
+  const getVisibleFuncColumnCount = (visibility) => {
+    const map = visibility || funcTableState.columnVisibility;
+    return funcTableColumns.reduce((count, column) => (map[column.key] === false ? count : count + 1), 0);
+  };
+
+  const setAllFuncColumnsVisible = () => {
+    funcTableColumns.forEach((column) => {
+      funcTableState.columnVisibility[column.key] = true;
+    });
+    saveFuncColumnVisibility();
+    renderColumnSelectorOptions();
+    renderTable(funcTableState.data);
+  };
+
+  const setFuncColumnVisibility = (columnKey, isVisible) => {
+    const next = { ...funcTableState.columnVisibility, [columnKey]: isVisible };
+    if (getVisibleFuncColumnCount(next) === 0) {
+      toastWarn('Selecione ao menos uma coluna.');
+      return false;
+    }
+    funcTableState.columnVisibility = next;
+    saveFuncColumnVisibility();
+    renderColumnSelectorOptions();
+    renderTable(funcTableState.data);
+    return true;
+  };
+
+  const initFuncColumnVisibility = () => {
+    const stored = loadFuncColumnVisibility();
+    funcTableColumns.forEach((column) => {
+      funcTableState.columnVisibility[column.key] = stored[column.key] !== false;
+    });
+    if (getVisibleFuncColumnCount() === 0) {
+      funcTableColumns.forEach((column) => {
+        funcTableState.columnVisibility[column.key] = true;
+      });
+    }
+  };
+
+  initFuncColumnVisibility();
 
   funcTableColumns.forEach((column) => {
     if (!column.disableFilter) {
@@ -220,6 +374,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   let enderecos = [];
   let empresasDisponiveis = [];
+  let empresasPermitidas = [];
   let enderecoEditandoIndex = null;
   let cursos = [];
   let cursoEditandoIndex = null;
@@ -1288,7 +1443,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function ensureActorRole() {
-    if (ACTOR_ROLE) return ACTOR_ROLE;
     try {
       const resp = await fetch(API.authCheck, { headers: headers() });
       if (resp.ok) {
@@ -1297,7 +1451,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const cur = JSON.parse(localStorage.getItem('loggedInUser') || 'null') || {};
         localStorage.setItem('loggedInUser', JSON.stringify({ ...cur, role: ACTOR_ROLE }));
       }
-    } catch {}
+    } catch {
+      ACTOR_ROLE = null;
+    }
     return ACTOR_ROLE;
   }
 
@@ -1307,8 +1463,11 @@ document.addEventListener('DOMContentLoaded', () => {
   function isModalOpen(m) { return m && !m.classList.contains('hidden'); }
 
   function optionsForActor(actorRole) {
-    if (actorRole === 'admin_master') return ['funcionario', 'admin', 'admin_master'];
-    if (actorRole === 'admin')        return ['funcionario', 'admin'];
+    if (actorRole === 'admin_master') return ['funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master'];
+    if (actorRole === 'admin')        return ['funcionario', 'franqueado', 'franqueador'];
+    if (actorRole === 'franqueador')  return ['funcionario', 'franqueado'];
+    if (actorRole === 'franqueado')   return ['funcionario'];
+    if (actorRole === 'funcionario')  return ['funcionario'];
     return [];
   }
 
@@ -1360,8 +1519,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function openModal(mode, data = null) {
-    const opts = optionsForActor(ACTOR_ROLE);
-    roleSelect.innerHTML = opts.map(v => `<option value="${v}">${ROLE_LABEL[v]}</option>`).join('');
+    let opts = optionsForActor(ACTOR_ROLE);
+    if (!opts.length && data?.role) {
+      opts = [data.role];
+    } else if (data?.role && !opts.includes(data.role)) {
+      opts = [data.role];
+    }
+    roleSelect.innerHTML = opts.map(v => `<option value="${v}">${ROLE_LABEL[v] || v}</option>`).join('');
     const codigoValor = normalizeCodigoCliente(
       data?.codigoCliente ?? data?.codigo ?? data?.codigoFuncionario ?? data?.matricula,
     );
@@ -1390,6 +1554,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (estadoCivilSelect) estadoCivilSelect.value = '';
       setEmpresaContratualValue('');
       roleSelect.value = opts[0] || 'funcionario';
+      roleSelect.disabled = opts.length <= 1;
       setSelectedGrupoUsuario('');
       passwordBar.style.width = '0%';
       setGruposSelected([]);
@@ -1449,6 +1614,7 @@ document.addEventListener('DOMContentLoaded', () => {
       setSelectValue(estadoCivilSelect, data.estadoCivil);
       setEmpresaContratualValue(empresaContratualValor, empresaContratualLabel);
       roleSelect.value = opts.includes(data.role) ? data.role : (opts[0] || 'funcionario');
+      roleSelect.disabled = opts.length <= 1;
       passwordBar.style.width = '0%';
       setGruposSelected(Array.isArray(data.grupos) ? data.grupos : []);
       setEmpresasSelected(Array.isArray(data.empresas) ? data.empresas : []);
@@ -1576,25 +1742,28 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
+  const FUNC_COLUMN_MIN_WIDTH = 32;
+
   const getFuncColumnMinWidth = (key) => {
     const column = funcTableColumns.find((col) => col.key === key);
-    return column?.minWidth || 32;
+    const declared = Number.isFinite(column?.minWidth) ? column.minWidth : FUNC_COLUMN_MIN_WIDTH;
+    return Math.min(declared, FUNC_COLUMN_MIN_WIDTH);
   };
 
   const ensureFuncTableLayout = () => {
     if (!funcTableElements.table) return;
     funcTableElements.table.style.tableLayout = 'fixed';
-    funcTableElements.table.style.width = 'max-content';
-    funcTableElements.table.style.minWidth = '100%';
+    funcTableElements.table.style.minWidth = '0';
   };
 
   const ensureFuncColGroup = () => {
     if (!funcTableElements.table) return null;
     let colgroup = funcTableElements.table.querySelector('colgroup[data-func-columns]');
+    const visibleColumns = getVisibleFuncColumns();
     if (!colgroup) {
       colgroup = document.createElement('colgroup');
       colgroup.dataset.funcColumns = 'true';
-      funcTableColumns.forEach((column) => {
+      visibleColumns.forEach((column) => {
         const col = document.createElement('col');
         col.dataset.columnKey = column.key;
         colgroup.appendChild(col);
@@ -1603,12 +1772,12 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       const columns = Array.from(colgroup.querySelectorAll('col'));
       const isOutdated =
-        columns.length !== funcTableColumns.length ||
-        columns.some((col, index) => col.dataset.columnKey !== funcTableColumns[index].key);
+        columns.length !== visibleColumns.length ||
+        columns.some((col, index) => col.dataset.columnKey !== visibleColumns[index]?.key);
 
       if (isOutdated) {
         colgroup.innerHTML = '';
-        funcTableColumns.forEach((column) => {
+        visibleColumns.forEach((column) => {
           const col = document.createElement('col');
           col.dataset.columnKey = column.key;
           colgroup.appendChild(col);
@@ -1627,8 +1796,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const resetFuncTableShell = () => {
     closeFuncionarioFilterPopover();
+    closeFuncColumnSelector();
+    if (funcColumnSelectorCleanup) {
+      funcColumnSelectorCleanup();
+      funcColumnSelectorCleanup = null;
+    }
     funcTableElements.wrapper = null;
     funcTableElements.counter = null;
+    funcTableElements.columnSelectorWrap = null;
+    funcTableElements.columnSelectorButton = null;
+    funcTableElements.columnSelectorPanel = null;
     funcTableElements.table = null;
     funcTableElements.tableHead = null;
     funcTableElements.tableBody = null;
@@ -1651,7 +1828,27 @@ document.addEventListener('DOMContentLoaded', () => {
     counter.className = 'inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1';
     counter.innerHTML = '<i class="fas fa-magnifying-glass"></i>Nenhum funcionário carregado';
 
-    header.appendChild(counter);
+    const headerActions = document.createElement('div');
+    headerActions.className = 'flex items-center gap-2';
+
+    const columnSelectorWrap = document.createElement('div');
+    columnSelectorWrap.className = 'relative';
+
+    const columnSelectorButton = document.createElement('button');
+    columnSelectorButton.type = 'button';
+    columnSelectorButton.className =
+      'inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 transition hover:border-gray-300 hover:text-gray-800';
+    columnSelectorButton.setAttribute('aria-expanded', 'false');
+    columnSelectorButton.innerHTML = '<i class="fas fa-table"></i>Colunas';
+
+    const columnSelectorPanel = document.createElement('div');
+    columnSelectorPanel.className =
+      'absolute right-0 top-full z-30 mt-2 w-56 rounded-lg border border-gray-200 bg-white p-3 text-xs text-gray-700 shadow-lg hidden';
+
+    columnSelectorWrap.append(columnSelectorButton, columnSelectorPanel);
+    headerActions.appendChild(columnSelectorWrap);
+
+    header.append(counter, headerActions);
 
     const shell = document.createElement('div');
     shell.className = 'overflow-hidden rounded-xl border border-gray-100';
@@ -1660,7 +1857,7 @@ document.addEventListener('DOMContentLoaded', () => {
     scroll.className = 'overflow-x-auto';
 
     const table = document.createElement('table');
-    table.className = 'min-w-full divide-y divide-gray-100 text-left text-[11px] leading-[1.35] text-gray-700';
+    table.className = 'divide-y divide-gray-100 text-left text-[11px] leading-[1.35] text-gray-700';
 
     const thead = document.createElement('thead');
     thead.className = 'bg-gray-50 text-left text-[10px] uppercase tracking-wide text-gray-500';
@@ -1677,6 +1874,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     funcTableElements.wrapper = wrapper;
     funcTableElements.counter = counter;
+    funcTableElements.columnSelectorWrap = columnSelectorWrap;
+    funcTableElements.columnSelectorButton = columnSelectorButton;
+    funcTableElements.columnSelectorPanel = columnSelectorPanel;
+    renderColumnSelectorOptions();
+    bindFuncColumnSelector();
     funcTableElements.table = table;
     funcTableElements.tableHead = thead;
     funcTableElements.tableBody = tbody;
@@ -1731,8 +1933,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const applyFuncionarioTableState = (items) => {
     const baseItems = Array.isArray(items) ? items : [];
+    const filterColumns = getVisibleFuncColumns().filter((column) => !column.disableFilter);
     const filtered = baseItems.filter((funcionario) => {
-      return funcTableColumns.every((column) => {
+      return filterColumns.every((column) => {
         if (column.disableFilter) return true;
         const term = funcTableState.filters[column.key] || '';
         const regex = buildFilterRegex(term);
@@ -1804,7 +2007,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderTable();
   };
 
-  const applyFuncColumnWidths = (syncFromDom = false) => {
+  const applyFuncColumnWidths = () => {
     if (!funcTableElements.tableHead) return;
 
     ensureFuncTableLayout();
@@ -1815,16 +2018,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const headerCells = Array.from(funcTableElements.tableHead.querySelectorAll('th[data-column-key]'));
 
+    let totalWidth = 0;
+
     headerCells.forEach((th) => {
       const columnKey = th.dataset.columnKey;
       const minWidth = getFuncColumnMinWidth(columnKey);
 
-      if (syncFromDom && !Number.isFinite(funcTableState.columnWidths[columnKey])) {
-        funcTableState.columnWidths[columnKey] = Math.max(minWidth, th.getBoundingClientRect().width);
-      }
-
       const storedWidth = funcTableState.columnWidths[columnKey];
-      const width = Number.isFinite(storedWidth) ? Math.max(minWidth, storedWidth) : minWidth;
+      const autoWidth = funcTableState.autoColumnWidths[columnKey];
+      const width = Number.isFinite(storedWidth)
+        ? Math.max(minWidth, storedWidth)
+        : Number.isFinite(autoWidth)
+          ? Math.max(minWidth, autoWidth)
+          : minWidth;
+      totalWidth += width;
 
       th.style.width = `${width}px`;
       th.style.minWidth = `${minWidth}px`;
@@ -1841,6 +2048,81 @@ document.addEventListener('DOMContentLoaded', () => {
         cell.style.minWidth = `${minWidth}px`;
       });
     });
+
+    if (funcTableElements.table) {
+      funcTableElements.table.style.width = `${Math.max(totalWidth, 1)}px`;
+    }
+  };
+
+  const autoSizeFuncColumns = () => {
+    if (!funcTableElements.table || !funcTableElements.tableHead) return;
+    const visibleColumns = getVisibleFuncColumns();
+    if (!visibleColumns.length) return;
+
+    const table = funcTableElements.table;
+    const tableHead = funcTableElements.tableHead;
+    const tableBody = funcTableElements.tableBody;
+
+    const previousLayout = table.style.tableLayout;
+    const previousWidth = table.style.width;
+    const previousMinWidth = table.style.minWidth;
+
+    table.style.tableLayout = 'auto';
+    table.style.width = 'max-content';
+    table.style.minWidth = '0';
+
+    const colgroup = ensureFuncColGroup();
+    const colEls = colgroup ? Array.from(colgroup.querySelectorAll('col')) : [];
+    colEls.forEach((col) => {
+      col.style.width = '';
+      col.style.minWidth = '';
+    });
+
+    visibleColumns.forEach((column) => {
+      const th = tableHead.querySelector(`th[data-column-key="${column.key}"]`);
+      if (th) {
+        th.style.width = '';
+        th.style.minWidth = '';
+        th.style.whiteSpace = 'nowrap';
+      }
+      const cells = tableBody?.querySelectorAll(`td[data-column-key="${column.key}"]`);
+      cells?.forEach((cell) => {
+        cell.style.width = '';
+        cell.style.minWidth = '';
+        cell.style.whiteSpace = 'nowrap';
+      });
+    });
+
+    const nextAutoWidths = {};
+    visibleColumns.forEach((column) => {
+      const minWidth = getFuncColumnMinWidth(column.key);
+      let maxWidth = minWidth;
+      let labelWidth = minWidth;
+      const labelRow = tableHead.querySelector(`[data-func-label-row="${column.key}"]`);
+      if (labelRow) {
+        labelRow.style.whiteSpace = 'nowrap';
+        labelWidth = Math.max(labelWidth, Math.ceil(labelRow.scrollWidth));
+        maxWidth = Math.max(maxWidth, labelWidth);
+      }
+      const cells = tableBody?.querySelectorAll(`td[data-column-key="${column.key}"]`);
+      cells?.forEach((cell) => {
+        cell.style.whiteSpace = 'nowrap';
+        maxWidth = Math.max(maxWidth, Math.ceil(cell.scrollWidth));
+      });
+      if (Number.isFinite(column.maxAutoWidth)) {
+        const cap = Math.max(labelWidth, column.maxAutoWidth);
+        maxWidth = Math.min(maxWidth, cap);
+      }
+      nextAutoWidths[column.key] = maxWidth;
+    });
+
+    funcTableState.autoColumnWidths = nextAutoWidths;
+
+    table.style.tableLayout = previousLayout;
+    table.style.width = previousWidth;
+    table.style.minWidth = previousMinWidth;
+
+    applyFuncColumnWidths();
   };
 
   const startFuncColumnResize = (column, th, startEvent) => {
@@ -2087,13 +2369,115 @@ document.addEventListener('DOMContentLoaded', () => {
     renderFuncionarioFilterPopover(column, anchor);
   };
 
+  function closeFuncColumnSelector() {
+    if (!funcTableElements.columnSelectorPanel || !funcTableElements.columnSelectorButton) return;
+    funcTableElements.columnSelectorPanel.classList.add('hidden');
+    funcTableElements.columnSelectorButton.setAttribute('aria-expanded', 'false');
+  }
+
+  function toggleFuncColumnSelector() {
+    if (!funcTableElements.columnSelectorPanel || !funcTableElements.columnSelectorButton) return;
+    const isHidden = funcTableElements.columnSelectorPanel.classList.contains('hidden');
+    if (isHidden) {
+      renderColumnSelectorOptions();
+      funcTableElements.columnSelectorPanel.classList.remove('hidden');
+      funcTableElements.columnSelectorButton.setAttribute('aria-expanded', 'true');
+    } else {
+      closeFuncColumnSelector();
+    }
+  }
+
+  function bindFuncColumnSelector() {
+    if (!funcTableElements.columnSelectorWrap || funcColumnSelectorCleanup) return;
+    const wrap = funcTableElements.columnSelectorWrap;
+    const button = funcTableElements.columnSelectorButton;
+    button?.addEventListener('click', (event) => {
+      event.preventDefault();
+      toggleFuncColumnSelector();
+    });
+
+    const handleClickOutside = (event) => {
+      if (!wrap.contains(event.target)) {
+        closeFuncColumnSelector();
+      }
+    };
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        closeFuncColumnSelector();
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    funcColumnSelectorCleanup = () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }
+
+  function renderColumnSelectorOptions() {
+    const panel = funcTableElements.columnSelectorPanel;
+    if (!panel) return;
+    panel.innerHTML = '';
+
+    const title = document.createElement('div');
+    title.className = 'text-[11px] font-semibold uppercase tracking-wide text-gray-500';
+    title.textContent = 'Colunas visiveis';
+
+    const list = document.createElement('div');
+    list.className = 'mt-2 space-y-2';
+
+    funcTableColumns.forEach((column) => {
+      const label = document.createElement('label');
+      label.className = 'flex items-center gap-2 text-xs text-gray-700';
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'rounded border-gray-300 text-emerald-600 focus:ring-emerald-500';
+      checkbox.checked = isFuncColumnVisible(column.key);
+      checkbox.addEventListener('change', () => {
+        const ok = setFuncColumnVisibility(column.key, checkbox.checked);
+        if (!ok) checkbox.checked = true;
+      });
+
+      const span = document.createElement('span');
+      span.textContent = column.label;
+
+      label.append(checkbox, span);
+      list.appendChild(label);
+    });
+
+    const helper = document.createElement('p');
+    helper.className = 'mt-2 text-[11px] text-gray-500';
+    helper.textContent = 'Selecione ao menos uma coluna.';
+
+    const actionRow = document.createElement('div');
+    actionRow.className = 'mt-3 flex items-center justify-between text-[11px]';
+
+    const showAllButton = document.createElement('button');
+    showAllButton.type = 'button';
+    showAllButton.className = 'font-semibold text-emerald-600 hover:text-emerald-700';
+    showAllButton.textContent = 'Mostrar todas';
+    showAllButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      setAllFuncColumnsVisible();
+    });
+
+    actionRow.appendChild(showAllButton);
+
+    panel.append(title, list, helper, actionRow);
+  }
+
   const buildFuncionarioTableHead = () => {
     if (!funcTableElements.tableHead) return;
     funcTableElements.tableHead.innerHTML = '';
 
     const row = document.createElement('tr');
 
-    funcTableColumns.forEach((column) => {
+    const visibleColumns = getVisibleFuncColumns();
+
+    visibleColumns.forEach((column) => {
       const th = document.createElement('th');
       th.dataset.columnKey = column.key;
       th.className = `${column.headerClass || ''} relative align-top bg-gray-50 whitespace-nowrap`;
@@ -2103,6 +2487,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const labelRow = document.createElement('div');
       labelRow.className = 'flex items-center justify-between gap-1';
+      labelRow.dataset.funcLabelRow = column.key;
 
       const label = document.createElement('span');
       label.textContent = column.label;
@@ -2133,7 +2518,7 @@ document.addEventListener('DOMContentLoaded', () => {
       wrapper.appendChild(labelRow);
 
       const filterRow = document.createElement('div');
-      filterRow.className = 'flex items-center gap-1';
+      filterRow.className = 'flex w-full items-center gap-1';
 
       if (!column.disableFilter) {
         const filter = document.createElement('input');
@@ -2141,7 +2526,7 @@ document.addEventListener('DOMContentLoaded', () => {
         filter.placeholder = 'Filtrar';
         filter.value = funcTableState.filters[column.key] || '';
         filter.className =
-          'flex-1 rounded border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20';
+          'flex-1 min-w-0 w-full rounded border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20';
         filter.addEventListener('input', (event) => {
           funcTableState.filters[column.key] = event.target.value || '';
           renderTable();
@@ -2184,7 +2569,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     funcTableElements.tableHead.appendChild(row);
     updateFuncSortIndicators();
-    applyFuncColumnWidths(true);
   };
 
   // Render com filtros, ordenação e redimensionamento
@@ -2199,18 +2583,19 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!funcTableElements.tableBody) return;
     funcTableElements.tableBody.innerHTML = '';
 
+    const visibleColumns = getVisibleFuncColumns();
     const visible = applyFuncionarioTableState(funcTableState.data);
 
     if (!visible.length) {
       const emptyRow = document.createElement('tr');
       const td = document.createElement('td');
-      td.colSpan = funcTableColumns.length;
+      td.colSpan = Math.max(1, visibleColumns.length);
       td.className = 'px-4 py-6 text-center text-gray-500';
       td.textContent = 'Nenhum funcionário cadastrado.';
       emptyRow.appendChild(td);
       funcTableElements.tableBody.appendChild(emptyRow);
       updateFuncionarioCounter(0);
-      applyFuncColumnWidths();
+      autoSizeFuncColumns();
       return;
     }
 
@@ -2218,7 +2603,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const row = document.createElement('tr');
       row.className = 'hover:bg-gray-50';
 
-      funcTableColumns.forEach((column) => {
+      visibleColumns.forEach((column) => {
         const cell = document.createElement('td');
         cell.dataset.columnKey = column.key;
         cell.className = column.cellClass || 'px-4 py-3';
@@ -2247,14 +2632,18 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     updateFuncionarioCounter(visible.length);
-    applyFuncColumnWidths();
+    autoSizeFuncColumns();
   }
 
   async function loadFuncionarios() {
     resetFuncTableShell();
     tabela.innerHTML = `<p class="text-gray-600">Carregando funcionários...</p>`;
     try {
-      const res = await fetch(API.list, { headers: headers() });
+      const selectedCompanyId = getSelectedCompanyId();
+      const url = selectedCompanyId
+        ? `${API.list}?storeId=${encodeURIComponent(selectedCompanyId)}`
+        : API.list;
+      const res = await fetch(url, { headers: headers() });
       if (!res.ok) throw new Error('Falha ao listar funcionários');
       renderTable(await res.json());
     } catch (e) {
@@ -2271,6 +2660,15 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     const allowed = optionsForActor(ACTOR_ROLE);
+    const defaultCompanyId = empresasPermitidas.length === 1 ? empresasPermitidas[0]._id : '';
+    const companyOptions = empresasPermitidas.length
+      ? ['<option value="">Empresa gerencial</option>',
+        ...empresasPermitidas.map((store) => {
+          const name = store?.nome || store?.razaoSocial || store?.nomeFantasia || 'Empresa sem nome';
+          const selected = store?._id === defaultCompanyId ? ' selected' : '';
+          return `<option value="${store._id}"${selected}>${name}</option>`;
+        })].join('')
+      : '<option value="">Sem empresas</option>';
 
     const html = items.slice(0, 5).map(u => {
       const nome = getNome(u) || '(Sem nome)';
@@ -2284,6 +2682,9 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="text-xs text-gray-500">${doc ? `Doc: ${doc}` : ''}</div>
           </div>
           <div class="flex items-center gap-2">
+            <select class="border rounded px-2 py-1 text-xs" data-company-select="${u._id}" ${empresasPermitidas.length ? '' : 'disabled'}>
+              ${companyOptions}
+            </select>
             <select class="border rounded px-2 py-1" data-role-select="${u._id}">
               ${opts}
             </select>
@@ -2391,22 +2792,104 @@ document.addEventListener('DOMContentLoaded', () => {
     selectGrupoUsuario.value = normalized;
   }
 
+  const setCompanyFeedback = (message, tone = 'info') => {
+    if (!companyFeedback) return;
+    const toneClass =
+      tone === 'error' ? 'text-red-600' : tone === 'warning' ? 'text-amber-600' : 'text-gray-500';
+    companyFeedback.className = `mt-2 text-xs ${toneClass}`;
+    companyFeedback.textContent = message || '';
+  };
+
+  const getSelectedCompanyId = () => {
+    if (!companySelect) return '';
+    return companySelect.value || '';
+  };
+
+  const buildAllowedCompanyOptions = (stores) => {
+    if (!companySelect) return;
+    if (!Array.isArray(stores) || stores.length === 0) {
+      companySelect.innerHTML = '<option value="">Nenhuma empresa vinculada</option>';
+      companySelect.disabled = true;
+      setStoredCompanyId('');
+      setCompanyFeedback('Nenhuma empresa vinculada ao seu usuario.', 'warning');
+      return;
+    }
+
+    const options = ['<option value="">Todas as empresas</option>'];
+    stores.forEach((store) => {
+      const name = store?.nome || store?.razaoSocial || store?.nomeFantasia || 'Empresa sem nome';
+      options.push(`<option value="${store._id}">${name}</option>`);
+    });
+
+    companySelect.innerHTML = options.join('');
+    companySelect.disabled = false;
+
+    const storedId = getStoredCompanyId();
+    const canReuse = storedId && stores.some((store) => store?._id === storedId);
+    const defaultId = canReuse ? storedId : (stores.length === 1 ? stores[0]._id : '');
+    companySelect.value = defaultId;
+    setStoredCompanyId(defaultId);
+    setCompanyFeedback('Empresas exibidas conforme permissao do usuario.', 'info');
+  };
+
+  async function loadAllowedCompanies() {
+    if (!companySelect) return;
+    companySelect.disabled = true;
+    companySelect.innerHTML = '<option value="">Carregando...</option>';
+    setCompanyFeedback('Carregando empresas...', 'info');
+
+    try {
+      const res = await fetch(API.storesAllowed, { headers: headers() });
+      if (!res.ok) throw new Error('Falha ao carregar empresas');
+      const data = await res.json().catch(() => ({}));
+      const stores = Array.isArray(data?.stores) ? data.stores : Array.isArray(data) ? data : [];
+      empresasPermitidas = stores;
+      buildAllowedCompanyOptions(stores);
+    } catch (err) {
+      console.error(err);
+      companySelect.innerHTML = '<option value="">Erro ao carregar empresas</option>';
+      companySelect.disabled = true;
+      setCompanyFeedback('Nao foi possivel carregar as empresas.', 'error');
+    }
+  }
+
   // --- Empresas (Lojas) ---
   async function loadEmpresasOptions() {
-    if (!empresasBox) return;
-    try {
-      const res = await fetch(`${API_CONFIG.BASE_URL}/stores`);
-      if (!res.ok) throw new Error('Falha ao carregar empresas');
-      const stores = await res.json();
-      empresasDisponiveis = Array.isArray(stores) ? stores : [];
-      empresasBox.innerHTML = empresasDisponiveis.map(s => `
-        <label class="inline-flex items-center gap-2">
-          <input type="checkbox" value="${s._id}" class="rounded border-gray-300">
-          <span>${s.nome || 'Sem nome'}</span>
-        </label>
-      `).join('');
+    if (!empresasBox && !empresaContratualSelect) return;
 
-      if (empresaContratualSelect) {
+    if (empresasBox) {
+      let allowedStores = Array.isArray(empresasPermitidas) ? empresasPermitidas : [];
+      try {
+        if (!allowedStores.length) {
+          const resAllowed = await fetch(API.storesAllowed, { headers: headers() });
+          if (!resAllowed.ok) throw new Error('Falha ao carregar empresas');
+          const data = await resAllowed.json().catch(() => ({}));
+          allowedStores = Array.isArray(data?.stores) ? data.stores : Array.isArray(data) ? data : [];
+          empresasPermitidas = allowedStores;
+        }
+
+        if (!allowedStores.length) {
+          empresasBox.innerHTML = '<p class="text-sm text-gray-500">Nenhuma empresa vinculada.</p>';
+        } else {
+          empresasBox.innerHTML = allowedStores.map((s) => `
+            <label class="inline-flex items-center gap-2">
+              <input type="checkbox" value="${s._id}" class="rounded border-gray-300">
+              <span>${s.nome || s.razaoSocial || s.nomeFantasia || 'Sem nome'}</span>
+            </label>
+          `).join('');
+        }
+      } catch (err) {
+        console.error(err);
+        empresasBox.innerHTML = '<p class="text-sm text-red-600">Erro ao carregar empresas.</p>';
+      }
+    }
+
+    if (empresaContratualSelect) {
+      try {
+        const res = await fetch(`${API_CONFIG.BASE_URL}/stores`);
+        if (!res.ok) throw new Error('Falha ao carregar empresas');
+        const stores = await res.json();
+        empresasDisponiveis = Array.isArray(stores) ? stores : [];
         const selected = empresaContratualSelect.dataset.selectedValue || '';
         const selectOptions = ['<option value="">Selecione uma empresa</option>',
           ...empresasDisponiveis.map(s => `<option value="${s._id}">${s.nome || 'Sem nome'}</option>`)
@@ -2414,11 +2897,8 @@ document.addEventListener('DOMContentLoaded', () => {
         empresaContratualSelect.innerHTML = selectOptions.join('');
         const selectedEmpresa = empresasDisponiveis.find((s) => s._id === selected);
         setEmpresaContratualValue(selected, selectedEmpresa?.nome || 'Empresa selecionada');
-      }
-    } catch (err) {
-      console.error(err);
-      empresasBox.innerHTML = '<p class="text-sm text-red-600">Erro ao carregar empresas.</p>';
-      if (empresaContratualSelect) {
+      } catch (err) {
+        console.error(err);
         empresaContratualSelect.innerHTML = '<option value="">Selecione uma empresa</option>';
       }
     }
@@ -2455,6 +2935,11 @@ document.addEventListener('DOMContentLoaded', () => {
     empresasBox.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = sel.has(cb.value));
   }
 
+  companySelect?.addEventListener('change', () => {
+    setStoredCompanyId(companySelect.value || '');
+    loadFuncionarios();
+  });
+
   searchInput.addEventListener('input', (e) => debouncedSearch(e.target.value));
 
   // transformar usuário (selecionado na busca)
@@ -2464,10 +2949,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const userId = btn.getAttribute('data-id');
     const select = searchResults.querySelector(`select[data-role-select="${userId}"]`);
     const newRole = select?.value || 'funcionario';
+    const companySelect = searchResults.querySelector(`select[data-company-select="${userId}"]`);
+    const empresaGerencial = companySelect?.value || '';
 
     btn.disabled = true;
     try {
-      const res = await fetch(API.transform, { method: 'POST', headers: headers(), body: JSON.stringify({ userId, role: newRole }) });
+      const payload = { userId, role: newRole };
+      if (empresaGerencial) payload.empresas = [empresaGerencial];
+      const res = await fetch(API.transform, { method: 'POST', headers: headers(), body: JSON.stringify(payload) });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.message || 'Falha ao transformar usuário.');
@@ -2728,6 +3217,7 @@ document.addEventListener('DOMContentLoaded', () => {
   (async () => {
     await ensureActorRole();
     await loadGruposUsuariosOptions();
+    await loadAllowedCompanies();
     await loadEmpresasOptions();
     await loadFuncionarios();
   })()

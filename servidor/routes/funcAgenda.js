@@ -14,7 +14,7 @@ const Store = require('../models/Store');
 const bcrypt = require('bcryptjs');
 const { randomBytes } = require('crypto');
 
-const requireStaff = authorizeRoles('funcionario', 'admin', 'admin_master');
+const requireStaff = authorizeRoles('funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master');
 
 function escapeRegex(s) { return String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 function userDisplayName(u) { return u?.nomeCompleto || u?.nomeContato || u?.razaoSocial || u?.email; }
@@ -1120,6 +1120,34 @@ router.put('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
   }
 });
 
+router.delete('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'ID invalido.' });
+    }
+    const cliente = await User.findById(id).select('role').lean();
+    if (!cliente) {
+      return res.status(404).json({ message: 'Cliente nao encontrado.' });
+    }
+    await ensureClienteEhEditavel(cliente);
+    if (cliente.role && cliente.role !== 'cliente') {
+      return res.status(403).json({ message: 'Apenas clientes podem ser removidos.' });
+    }
+
+    await Promise.all([
+      UserAddress.deleteMany({ user: id }),
+      Pet.deleteMany({ owner: id }),
+    ]);
+    await User.deleteOne({ _id: id });
+
+    res.json({ message: 'Cliente removido com sucesso.' });
+  } catch (err) {
+    console.error('DELETE /func/clientes/:id', err);
+    res.status(400).json({ message: err?.message || 'Erro ao remover cliente.' });
+  }
+});
+
 router.get('/clientes/:id/enderecos', authMiddleware, requireStaff, async (req, res) => {
   try {
     const { id } = req.params;
@@ -1428,6 +1456,72 @@ router.get('/clientes/buscar', authMiddleware, requireStaff, async (req, res) =>
   }
 });
 
+// ---------- CONTATOS COM WHATSAPP ----------
+router.get('/clientes/whatsapp', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    const limit = Math.min(parseInt(req.query.limit || '60', 10), 100);
+    const searchLimit = Math.min(limit * 3, 240);
+    const phoneFilter = [
+      { celular: { $exists: true, $ne: '' } },
+      { celularSecundario: { $exists: true, $ne: '' } },
+    ];
+
+    const query = { $and: [{ $or: phoneFilter }] };
+    if (q) {
+      const regex = new RegExp(escapeRegex(q), 'i');
+      const onlyDigits = q.replace(/\D/g, '');
+      const or = [
+        { nomeCompleto: regex },
+        { nomeContato: regex },
+        { razaoSocial: regex },
+        { apelido: regex },
+        { email: regex },
+      ];
+      if (onlyDigits.length >= 3) {
+        const phoneRegex = new RegExp(onlyDigits);
+        or.push({ celular: phoneRegex });
+        or.push({ celularSecundario: phoneRegex });
+      }
+      query.$and.push({ $or: or });
+    }
+
+    const users = await User.find(query)
+      .select('_id nomeCompleto nomeContato razaoSocial apelido email celular celularSecundario')
+      .sort({ nomeCompleto: 1, nomeContato: 1, razaoSocial: 1, apelido: 1 })
+      .limit(searchLimit)
+      .lean();
+
+    const seen = new Set();
+    const results = [];
+
+    const pushPhone = (user, value) => {
+      const raw = sanitizeString(value);
+      const digits = onlyDigits(raw);
+      if (!digits || digits.length < 8) return;
+      if (seen.has(digits)) return;
+      seen.add(digits);
+      results.push({
+        _id: user._id,
+        nome: userDisplayName(user),
+        phone: raw,
+        waId: digits,
+        isKnownUser: true,
+      });
+    };
+
+    users.forEach((user) => {
+      pushPhone(user, user.celular);
+      pushPhone(user, user.celularSecundario);
+    });
+
+    res.json(results.slice(0, limit));
+  } catch (e) {
+    console.error('GET /func/clientes/whatsapp', e);
+    res.status(500).json({ message: 'Erro ao buscar contatos' });
+  }
+});
+
 // ---------- PETS DO CLIENTE ----------
 router.get('/clientes/:id/pets', authMiddleware, requireStaff, async (req, res) => {
   try {
@@ -1564,7 +1658,7 @@ router.get('/profissionais/esteticistas', authMiddleware, requireStaff, async (r
   try {
     const { storeId } = req.query;
     const filter = {
-      role: { $in: ['funcionario', 'admin', 'admin_master'] },
+      role: { $in: ['funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master'] },
       grupos: 'esteticista'
     };
     if (storeId && mongoose.Types.ObjectId.isValid(storeId)) {
@@ -1591,7 +1685,7 @@ router.get('/profissionais', authMiddleware, requireStaff, async (req, res) => {
     let tipos = String(req.query.tipos || '').trim();
     const ALLOWED = ['esteticista','veterinario'];
     const tiposArr = tipos ? tipos.split(',').map(s => s.trim().toLowerCase()).filter(s => ALLOWED.includes(s)) : ALLOWED;
-    const filter = { role: { $in: ['funcionario','admin','admin_master'] }, grupos: { $in: tiposArr } };
+    const filter = { role: { $in: ['funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master'] }, grupos: { $in: tiposArr } };
     if (storeId && mongoose.Types.ObjectId.isValid(storeId)) filter.empresas = storeId;
     const users = await User.find(filter)
       .select('_id nomeCompleto nomeContato razaoSocial email grupos')

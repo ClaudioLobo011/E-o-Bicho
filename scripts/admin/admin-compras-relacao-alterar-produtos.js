@@ -448,6 +448,7 @@
       categoria: 'Categoria',
       fornecedor: 'Fornecedor',
       situacao: 'Situação',
+      ifood: 'Ifood',
       estoqueMin: 'Estoque mín.',
       estoqueMax: 'Estoque máx.',
     };
@@ -456,6 +457,9 @@
 
   function formatFilterValue(key, value) {
     if (key === 'situacao') {
+      return value === 'inativo' ? 'Inativo' : 'Ativo';
+    }
+    if (key === 'ifood') {
       return value === 'inativo' ? 'Inativo' : 'Ativo';
     }
     if ((key === 'estoqueMin' || key === 'estoqueMax') && value !== '') {
@@ -486,6 +490,7 @@
       categoria: formData.get('categoria') || '',
       fornecedor: formData.get('fornecedor') || '',
       situacao: formData.get('situacao') || '',
+      ifood: formData.get('ifood') || '',
       estoqueMin: formData.get('estoqueMin')?.trim() || '',
       estoqueMax: formData.get('estoqueMax')?.trim() || '',
     };

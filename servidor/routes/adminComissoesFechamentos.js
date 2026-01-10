@@ -1150,7 +1150,7 @@ router.get(
       });
 
       // Nenhum fechamento registrado: calcular dinamicamente por profissional no período.
-      const profissionais = await User.find({ role: { $in: ['funcionario', 'admin', 'admin_master'] } })
+      const profissionais = await User.find({ role: { $in: ['funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master'] } })
         .select('nomeCompleto nomeContato razaoSocial nome email userGroup codigoCliente')
         .populate('userGroup', 'comissaoPercent comissaoServicoPercent')
         .lean();
@@ -1279,7 +1279,7 @@ router.get(
         toStartOfDay(new Date(Date.now() - DEFAULT_WINDOW_DAYS * 24 * 60 * 60 * 1000));
       const end = req.query?.end ? toEndOfDay(req.query.end) : toEndOfDay(new Date());
 
-      const profissionais = await User.find({ role: { $in: ['funcionario', 'admin', 'admin_master'] } })
+      const profissionais = await User.find({ role: { $in: ['funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master'] } })
         .select('nomeCompleto nomeContato razaoSocial nome email userGroup codigoCliente')
         .populate('userGroup', 'comissaoPercent comissaoServicoPercent')
         .lean();

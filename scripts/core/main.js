@@ -1189,7 +1189,7 @@ function initializeFlyoutMenu() {
 }
 
 function checkAdminLink() {
-  return checkRoleLink('admin-link', ['funcionario','admin','admin_master']);
+  return checkRoleLink('admin-link', ['funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master']);
 }
 
 let __roleCachePromise = null;
@@ -1198,21 +1198,22 @@ async function __getUserRoleOnce() {
   __roleCachePromise = (async () => {
     let cached = null;
     try { cached = JSON.parse(localStorage.getItem('loggedInUser') || 'null'); } catch {}
-    let role = cached?.role;
-    // Se não houver role mas tiver token, confirma no backend
-    if (!role && cached?.token) {
-      try {
-        const resp = await fetch(`${API_CONFIG.BASE_URL}/auth/check`, {
-          headers: { Authorization: `Bearer ${cached.token}` },
-        });
-        if (resp.ok) {
-          const data = await resp.json();
-          role = data?.role || role;
-          localStorage.setItem('loggedInUser', JSON.stringify({ ...cached, role }));
-        }
-      } catch (_) {}
+    const token = cached?.token;
+    if (!token) return null;
+    try {
+      const resp = await fetch(`${API_CONFIG.BASE_URL}/auth/check`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      const role = data?.role || null;
+      if (role) {
+        localStorage.setItem('loggedInUser', JSON.stringify({ ...cached, role }));
+      }
+      return role;
+    } catch (_) {
+      return null;
     }
-    return role || null;
   })();
   return __roleCachePromise;
 }

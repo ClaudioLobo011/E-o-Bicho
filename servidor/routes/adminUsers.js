@@ -18,7 +18,7 @@ router.get('/', requireAuth, authorizeRoles('admin_master'), async (req, res) =>
 // Atualizar role de usuário (somente admin_master)
 router.put('/:id/role', requireAuth, authorizeRoles('admin_master'), async (req, res) => {
   const { role } = req.body;
-  if (!['admin_master', 'admin', 'funcionario', 'cliente'].includes(role)) {
+  if (!['admin_master', 'admin', 'franqueador', 'franqueado', 'funcionario', 'cliente'].includes(role)) {
     return res.status(400).json({ message: 'Role inválida' });
   }
   try {

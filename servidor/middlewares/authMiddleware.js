@@ -1,22 +1,32 @@
 const jwt = require('jsonwebtoken');
+const User = require('../models/User');
 
-function authMiddleware(req, res, next) {
+async function authMiddleware(req, res, next) {
     const authHeader = req.headers['authorization'];
     if (!authHeader) {
-        return res.status(401).json({ message: 'Token não fornecido' });
+        return res.status(401).json({ message: 'Token nao fornecido' });
     }
 
     const token = authHeader.split(' ')[1]; // formato: "Bearer xxx"
     if (!token) {
-        return res.status(401).json({ message: 'Token inválido' });
+        return res.status(401).json({ message: 'Token invalido' });
     }
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        req.user = decoded; // agora o usuário está disponível no req.user
+        const user = await User.findById(decoded.id).select('email role').lean();
+        if (!user) {
+            return res.status(401).json({ message: 'Usuario nao encontrado' });
+        }
+        req.user = {
+            id: user._id.toString(),
+            email: user.email,
+            role: user.role
+        };
         next();
     } catch (error) {
-        return res.status(403).json({ message: 'Token inválido ou expirado' });
+        console.error('authMiddleware:', error);
+        return res.status(403).json({ message: 'Token invalido ou expirado' });
     }
 }
 

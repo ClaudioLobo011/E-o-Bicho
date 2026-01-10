@@ -447,13 +447,14 @@
       return list;
     }
 
-    return fetch(API_BASE + '/stores', { headers: { 'Authorization': 'Bearer ' + getToken() } })
+    return fetch(API_BASE + '/stores/allowed', { headers: { 'Authorization': 'Bearer ' + getToken() } })
       .then(function (res) {
         if (!res.ok) throw new Error('HTTP ' + res.status);
         return res.json();
       })
       .then(function (payload) {
-        return applyList(payload);
+        var list = (payload && payload.stores) ? payload.stores : payload;
+        return applyList(list);
       })
       .catch(function (err) {
         console.warn('cadastro-servicos/precos: falha ao carregar lojas', err);

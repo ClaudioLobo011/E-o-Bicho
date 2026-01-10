@@ -4,10 +4,12 @@ const mongoose = require('mongoose');
 const UserAddress = require('../models/UserAddress');
 const requireAuth = require('../middlewares/requireAuth');
 
+const STAFF_ROLES = new Set(['funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master']);
+
 function canManageOtherAddresses(user, ownerId) {
   if (!user) return false;
   if (user.id === String(ownerId)) return true;
-  return user.role === 'admin_master' || user.role === 'admin';
+  return STAFF_ROLES.has(user.role);
 }
 
 // GET /api/addresses/:userId -> lista endereços do usuário

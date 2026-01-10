@@ -93,33 +93,97 @@
                                     <div class="p-4 border border-gray-200 rounded-lg space-y-3">
                                         <h3 class="text-sm font-semibold text-gray-700">Impressora de Venda</h3>
                                         <input type="text" id="impressora-venda-nome" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Nome ou endereço" data-config-field>
+                                        <div class="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label for="impressora-venda-vias" class="block text-xs font-medium text-gray-600 mb-1">Vias</label>
+                                                <input type="number" id="impressora-venda-vias" min="1" max="10" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-config-field>
+                                            </div>
+                                            <div>
+                                                <label for="impressora-venda-largura" class="block text-xs font-medium text-gray-600 mb-1">Largura</label>
+                                                <select id="impressora-venda-largura" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-config-field>
+                                                    <option value="80mm">80mm</option>
+                                                    <option value="58mm">58mm</option>
+                                                </select>
+                                            </div>
+                                        </div>
                                         <div>
-                                            <label for="impressora-venda-vias" class="block text-xs font-medium text-gray-600 mb-1">Vias</label>
-                                            <input type="number" id="impressora-venda-vias" min="1" max="10" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-config-field>
+                                            <label for="impressora-venda-tipo" class="block text-xs font-medium text-gray-600 mb-1">Tipo de impressora</label>
+                                            <select id="impressora-venda-tipo" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-config-field>
+                                                <option value="bematech">Bematech</option>
+                                                <option value="elgin">Elgin</option>
+                                            </select>
                                         </div>
                                     </div>
                                     <div class="p-4 border border-gray-200 rounded-lg space-y-3">
                                         <h3 class="text-sm font-semibold text-gray-700">Impressora de Orçamento</h3>
                                         <input type="text" id="impressora-orcamento-nome" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Nome ou endereço" data-config-field>
+                                        <div class="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label for="impressora-orcamento-vias" class="block text-xs font-medium text-gray-600 mb-1">Vias</label>
+                                                <input type="number" id="impressora-orcamento-vias" min="1" max="10" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-config-field>
+                                            </div>
+                                            <div>
+                                                <label for="impressora-orcamento-largura" class="block text-xs font-medium text-gray-600 mb-1">Largura</label>
+                                                <select id="impressora-orcamento-largura" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-config-field>
+                                                    <option value="80mm">80mm</option>
+                                                    <option value="58mm">58mm</option>
+                                                </select>
+                                            </div>
+                                        </div>
                                         <div>
-                                            <label for="impressora-orcamento-vias" class="block text-xs font-medium text-gray-600 mb-1">Vias</label>
-                                            <input type="number" id="impressora-orcamento-vias" min="1" max="10" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-config-field>
+                                            <label for="impressora-orcamento-tipo" class="block text-xs font-medium text-gray-600 mb-1">Tipo de impressora</label>
+                                            <select id="impressora-orcamento-tipo" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-config-field>
+                                                <option value="bematech">Bematech</option>
+                                                <option value="elgin">Elgin</option>
+                                            </select>
                                         </div>
                                     </div>
                                     <div class="p-4 border border-gray-200 rounded-lg space-y-3">
                                         <h3 class="text-sm font-semibold text-gray-700">Contas a Receber</h3>
                                         <input type="text" id="impressora-contas-nome" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Nome ou endereço" data-config-field>
+                                        <div class="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label for="impressora-contas-vias" class="block text-xs font-medium text-gray-600 mb-1">Vias</label>
+                                                <input type="number" id="impressora-contas-vias" min="1" max="10" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-config-field>
+                                            </div>
+                                            <div>
+                                                <label for="impressora-contas-largura" class="block text-xs font-medium text-gray-600 mb-1">Largura</label>
+                                                <select id="impressora-contas-largura" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-config-field>
+                                                    <option value="80mm">80mm</option>
+                                                    <option value="58mm">58mm</option>
+                                                </select>
+                                            </div>
+                                        </div>
                                         <div>
-                                            <label for="impressora-contas-vias" class="block text-xs font-medium text-gray-600 mb-1">Vias</label>
-                                            <input type="number" id="impressora-contas-vias" min="1" max="10" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-config-field>
+                                            <label for="impressora-contas-tipo" class="block text-xs font-medium text-gray-600 mb-1">Tipo de impressora</label>
+                                            <select id="impressora-contas-tipo" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-config-field>
+                                                <option value="bematech">Bematech</option>
+                                                <option value="elgin">Elgin</option>
+                                            </select>
                                         </div>
                                     </div>
                                     <div class="p-4 border border-gray-200 rounded-lg space-y-3">
                                         <h3 class="text-sm font-semibold text-gray-700">Impressora do Caixa</h3>
                                         <input type="text" id="impressora-caixa-nome" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Nome ou endereço" data-config-field>
+                                        <div class="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label for="impressora-caixa-vias" class="block text-xs font-medium text-gray-600 mb-1">Vias</label>
+                                                <input type="number" id="impressora-caixa-vias" min="1" max="10" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-config-field>
+                                            </div>
+                                            <div>
+                                                <label for="impressora-caixa-largura" class="block text-xs font-medium text-gray-600 mb-1">Largura</label>
+                                                <select id="impressora-caixa-largura" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-config-field>
+                                                    <option value="80mm">80mm</option>
+                                                    <option value="58mm">58mm</option>
+                                                </select>
+                                            </div>
+                                        </div>
                                         <div>
-                                            <label for="impressora-caixa-vias" class="block text-xs font-medium text-gray-600 mb-1">Vias</label>
-                                            <input type="number" id="impressora-caixa-vias" min="1" max="10" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-config-field>
+                                            <label for="impressora-caixa-tipo" class="block text-xs font-medium text-gray-600 mb-1">Tipo de impressora</label>
+                                            <select id="impressora-caixa-tipo" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-config-field>
+                                                <option value="bematech">Bematech</option>
+                                                <option value="elgin">Elgin</option>
+                                            </select>
                                         </div>
                                     </div>
                                 </div>

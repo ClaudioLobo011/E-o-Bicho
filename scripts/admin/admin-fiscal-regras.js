@@ -89,12 +89,18 @@
     if (!storeSelect) return;
     const selected = storeSelect.value;
     storeSelect.innerHTML = '<option value="">Selecione uma empresa</option>';
+    if (!Array.isArray(stores) || stores.length === 0) {
+      storeSelect.disabled = true;
+      currentStoreId = '';
+      return;
+    }
     stores.forEach((store) => {
       const option = document.createElement('option');
       option.value = store._id;
       option.textContent = store.nome || store.nomeFantasia || store.razaoSocial || 'Empresa sem nome';
       storeSelect.appendChild(option);
     });
+    storeSelect.disabled = false;
     if (selected) {
       storeSelect.value = selected;
     }
@@ -442,7 +448,7 @@
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="min-w-0">
               <p class="truncate text-sm font-semibold text-gray-800">${escapeValue(report.nome)}</p>
-              <p class="truncate text-xs text-gray-500">SKU ${escapeValue(report.productId)} • NCM ${escapeValue(report.ncm) || '—'}</p>
+              <p class="truncate text-xs text-gray-500">Codigo de barras ${escapeValue(report.codbarras || "-")} - NCM ${escapeValue(report.ncm) || "-"}</p>
             </div>
             <div class="flex flex-wrap items-center gap-3">
               <div class="flex items-center gap-2 text-xs text-gray-500">
@@ -662,16 +668,20 @@
 
   const fetchStores = async () => {
     try {
-      const response = await fetch(`${API_CONFIG.BASE_URL}/stores`);
-      if (!response.ok) throw new Error('Não foi possível carregar as empresas.');
+      const token = getToken();
+      const response = await fetch(`${API_CONFIG.BASE_URL}/stores/allowed`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!response.ok) throw new Error('Nao foi possivel carregar as empresas.');
       const payload = await response.json();
-      stores = Array.isArray(payload) ? payload : [];
+      const list = Array.isArray(payload?.stores) ? payload.stores : (Array.isArray(payload) ? payload : []);
+      stores = Array.isArray(list) ? list : [];
       populateStores();
     } catch (error) {
       console.error('Erro ao carregar empresas:', error);
       showModal({
         title: 'Erro',
-        message: error.message || 'Não foi possível carregar as empresas cadastradas.',
+        message: error.message || 'Nao foi possivel carregar as empresas cadastradas.',
         confirmText: 'Entendi',
       });
     }
@@ -915,3 +925,7 @@
     fetchStores();
   });
 })();
+
+
+
+

@@ -8,6 +8,36 @@ const _cachedUser = (() => {
 })();
 export const token = _cachedUser?.token || null;
 
+let verifiedRole = '';
+let verifiedRolePromise = null;
+
+async function fetchVerifiedRole() {
+  if (!token) return '';
+  try {
+    const resp = await fetch(`${API_CONFIG.BASE_URL}/auth/check`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!resp.ok) return '';
+    const data = await resp.json();
+    const role = data?.role || '';
+    verifiedRole = role;
+    if (role) {
+      const cached = JSON.parse(localStorage.getItem('loggedInUser') || 'null') || {};
+      localStorage.setItem('loggedInUser', JSON.stringify({ ...cached, role }));
+    }
+    return verifiedRole;
+  } catch (_) {
+    verifiedRole = '';
+    return '';
+  }
+}
+
+export function ensureVerifiedRole() {
+  if (verifiedRolePromise) return verifiedRolePromise;
+  verifiedRolePromise = fetchVerifiedRole();
+  return verifiedRolePromise;
+}
+
 export function api(path, opts = {}) {
   return fetch(`${API_CONFIG.BASE_URL}${path}`, {
     ...opts,
@@ -20,16 +50,13 @@ export function api(path, opts = {}) {
 }
 
 export function getCurrentRole() {
-  try {
-    return JSON.parse(localStorage.getItem('loggedInUser') || 'null')?.role || 'cliente';
-  } catch {
-    return 'cliente';
-  }
+  return verifiedRole || 'cliente';
 }
 export function isPrivilegedRole() {
   const r = getCurrentRole();
   return r === 'admin' || r === 'admin_master';
 }
+
 
 const TOAST_DEDUP_KEY = '__agendaToastState';
 const TOAST_DEDUP_WINDOW = 1200;

@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
   const STORAGE_KEY = 'eobicho_external_integrations_state';
-  const WEBHOOK_URL = 'https://api.eobicho.com.br/webhooks/marketplaces';
+  const WEBHOOK_URL = 'https://callback.peteobicho.com.br/webhooks/marketplaces';
   const API_BASE = API_CONFIG.BASE_URL;
   const PROVIDERS = ['ifood', 'ubereats', 'ninetyNineFood'];
   const IFOOD_MENU_SYNC_INTERVAL_MS = 30 * 60 * 1000;
@@ -428,6 +428,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
       }
 
+      const syncPostBtn = card.querySelector('[data-action="sync-post"]');
+      if (syncPostBtn) {
+        syncPostBtn.addEventListener('click', () => {
+          syncIntegration(provider, { forcePost: true });
+        });
+      }
+
       renderCard(provider);
     });
   }
@@ -538,18 +545,28 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    const button = document.querySelector(`[data-integration-card][data-provider="${provider}"] [data-action="sync"]`);
-    if (button) button.disabled = true;
+    const syncButtons = document.querySelectorAll(
+      `[data-integration-card][data-provider="${provider}"] [data-action="sync"], ` +
+        `[data-integration-card][data-provider="${provider}"] [data-action="sync-post"]`
+    );
+    syncButtons.forEach((btn) => {
+      btn.disabled = true;
+    });
 
     try {
-      data.queue = 'Sincronizando...';
+      const forcePost = options.forcePost === true;
+      data.queue = forcePost ? 'Sincronizando via POST...' : 'Sincronizando...';
       renderCard(provider);
 
       if (provider === 'ifood') {
-        const resp = await fetch(`${API_BASE}/integrations/external/${state.selectedStoreId}/ifood/sync`, {
+        const requestOptions = {
           method: 'POST',
           headers: authHeaders(),
-        });
+        };
+        if (forcePost) {
+          requestOptions.body = JSON.stringify({ forcePost: true });
+        }
+        const resp = await fetch(`${API_BASE}/integrations/external/${state.selectedStoreId}/ifood/sync`, requestOptions);
         const payload = await resp.json().catch(() => ({}));
         if (!resp.ok) {
           throw new Error(payload?.message || 'Erro ao sincronizar com o iFood.');
@@ -559,7 +576,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderCard(provider);
         updateSummary();
         if (!options.silent) {
-          notify(payload?.message || 'Sincronização enviada para o iFood.', 'success');
+          notify(payload?.message || (forcePost ? 'Sincronizacao via POST enviada para o iFood.' : 'Sincronizacao enviada para o iFood.'), 'success');
         }
         return;
       }
@@ -587,7 +604,9 @@ document.addEventListener('DOMContentLoaded', () => {
       renderCard(provider);
       notify(data.queue, 'error');
     } finally {
-      if (button) button.disabled = false;
+      syncButtons.forEach((btn) => {
+        btn.disabled = false;
+      });
     }
   }
 

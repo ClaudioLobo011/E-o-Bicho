@@ -85,6 +85,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const populateCompanySelect = () => {
         if (!companySelect) return;
         companySelect.innerHTML = '<option value="">Selecione a empresa</option>';
+        if (!state.stores.length) {
+            companySelect.setAttribute('disabled', 'disabled');
+            return;
+        }
+        companySelect.removeAttribute('disabled');
         state.stores.forEach((store) => {
             const option = document.createElement('option');
             option.value = store._id;
@@ -273,9 +278,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const fetchStores = async () => {
         try {
-            const response = await fetch(`${API_CONFIG.BASE_URL}/stores`);
+            const token = getToken();
+            if (!token) {
+                showModal({ title: 'Sessao expirada', message: 'Faca login novamente para continuar.', confirmText: 'OK' });
+                return;
+            }
+            const response = await fetch(`${API_CONFIG.BASE_URL}/stores/allowed`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
             if (!response.ok) throw new Error('Falha ao carregar empresas.');
-            state.stores = await response.json();
+            const data = await response.json().catch(() => ({}));
+            state.stores = Array.isArray(data?.stores) ? data.stores : Array.isArray(data) ? data : [];
             populateCompanySelect();
         } catch (error) {
             console.error('Erro ao carregar empresas:', error);

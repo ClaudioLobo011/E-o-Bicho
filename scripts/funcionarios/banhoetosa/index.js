@@ -1,5 +1,5 @@
 // Entry point for Banho e Tosa agenda (ESM)
-import './core.js';
+import { ensureVerifiedRole } from './core.js';
 import './filters.js';
 import './stores.js';
 import './profissionais.js';
@@ -11,7 +11,10 @@ import './print.js';
 import { attachGlobalActionHandlers } from './actions.js';
 import { initBanhoETosa } from './init.js';
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    await ensureVerifiedRole();
+  } catch (_) {}
   initBanhoETosa();
   attachGlobalActionHandlers();
 });

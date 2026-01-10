@@ -983,11 +983,18 @@
   };
 
   const fetchStores = async () => {
+    const token = getToken();
+    if (!token) {
+      console.warn('Relatorio vendas: token indisponivel.');
+      return;
+    }
     try {
-      const response = await fetch(`${API_BASE}/stores`);
+      const response = await fetch(`${API_BASE}/stores/allowed`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (!response.ok) throw new Error('Falha ao carregar lojas');
       const data = await response.json();
-      const stores = Array.isArray(data) ? data : Array.isArray(data?.stores) ? data.stores : [];
+      const stores = Array.isArray(data?.stores) ? data.stores : Array.isArray(data) ? data : [];
       state.stores = stores;
       if (elements.store) {
         const current = elements.store.value;

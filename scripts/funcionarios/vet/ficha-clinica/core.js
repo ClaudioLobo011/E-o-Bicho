@@ -13,6 +13,37 @@ export function getAuthToken() {
   return authToken;
 }
 
+let verifiedRole = '';
+let verifiedRolePromise = null;
+
+async function fetchVerifiedRole() {
+  const token = getAuthToken();
+  if (!token) return '';
+  try {
+    const resp = await fetch(`${API_CONFIG.BASE_URL}/auth/check`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!resp.ok) return '';
+    const data = await resp.json();
+    const role = data?.role || '';
+    verifiedRole = role;
+    if (role) {
+      const cached = JSON.parse(localStorage.getItem('loggedInUser') || 'null') || {};
+      localStorage.setItem('loggedInUser', JSON.stringify({ ...cached, role }));
+    }
+    return verifiedRole;
+  } catch (_) {
+    verifiedRole = '';
+    return '';
+  }
+}
+
+export function ensureVerifiedRole() {
+  if (verifiedRolePromise) return verifiedRolePromise;
+  verifiedRolePromise = fetchVerifiedRole();
+  return verifiedRolePromise;
+}
+
 export function api(path, opts = {}) {
   const token = getAuthToken();
   return fetch(`${API_CONFIG.BASE_URL}${path}`, {
@@ -59,13 +90,7 @@ export function formatPhone(value) {
 }
 
 export function getCurrentUserRole() {
-  try {
-    const cached = JSON.parse(localStorage.getItem('loggedInUser') || 'null');
-    const role = typeof cached?.role === 'string' ? cached.role : '';
-    return role || '';
-  } catch {
-    return '';
-  }
+  return verifiedRole || '';
 }
 
 export function getCurrentUserId() {

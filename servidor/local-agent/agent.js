@@ -9,7 +9,7 @@ const crypto = require('crypto');
 const DEFAULT_PORT = 17305;
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_MAX_BODY = 10 * 1024 * 1024;
-const DEFAULT_PRINT_WAIT_MS = 90000;
+const DEFAULT_PRINT_WAIT_MS = 45000;
 const DEFAULT_QUEUE_MAX = 50;
 const DEFAULT_MAX_COPIES = 10;
 const DEFAULT_EDGE_PROFILE_DIR = path.join(__dirname, 'edge-profile');
@@ -200,27 +200,14 @@ function injectAutoPrint(html) {
   const script = `
 <script>
 (() => {
-  let didPrint = false;
-  const triggerPrint = () => {
-    if (didPrint) return;
-    didPrint = true;
-    try { window.focus(); } catch (_) {}
-    try { window.print(); } catch (_) {}
-  };
-  const schedulePrint = (delayMs) => setTimeout(triggerPrint, delayMs);
-  if (document.readyState === 'interactive' || document.readyState === 'complete') {
-    schedulePrint(100);
-  } else {
-    document.addEventListener('DOMContentLoaded', () => schedulePrint(100), { once: true });
+  function schedulePrint() {
+    setTimeout(() => window.print(), 80);
   }
-  window.addEventListener('load', () => schedulePrint(120), { once: true });
-  schedulePrint(1500);
-  const safeClose = () => {
-    try { window.close(); } catch (_) {}
-    try { window.open('', '_self'); window.close(); } catch (_) {}
-  };
-  window.addEventListener('afterprint', () => setTimeout(safeClose, 200), { once: true });
-  setTimeout(safeClose, 30000);
+  window.addEventListener('load', schedulePrint);
+  window.addEventListener('afterprint', () => {
+    setTimeout(() => window.close(), 120);
+  });
+  setTimeout(() => window.close(), 15000);
 })();
 </script>
 `;
@@ -296,15 +283,10 @@ async function printHtmlWithEdge(htmlPath, printerName, copies) {
     '--no-default-browser-check',
     '--disable-extensions',
     '--disable-gpu',
-    '--disable-background-timer-throttling',
-    '--disable-backgrounding-occluded-windows',
-    '--disable-renderer-backgrounding',
-    '--disable-features=CalculateNativeWinOcclusion',
     `--user-data-dir=${userDataDir}`,
-    '--new-window',
+    `--app=${fileUrl}`,
     '--window-position=-32000,-32000',
     '--window-size=800,600',
-    fileUrl,
   ];
 
   const defaultPrinter = await getDefaultPrinter().catch(() => '');

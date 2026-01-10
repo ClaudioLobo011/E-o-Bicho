@@ -150,7 +150,7 @@
                 <div class="flex items-center justify-between gap-3">
                   <div>
                     <p class="text-xs text-gray-500 font-semibold uppercase">URL pública</p>
-                    <p id="webhook-url" class="font-mono text-sm text-gray-800 break-all">https://api.eobicho.com.br/webhooks/marketplaces</p>
+                    <p id="webhook-url" class="font-mono text-sm text-gray-800 break-all">https://callback.peteobicho.com.br/webhooks/marketplaces</p>
                   </div>
                   <button type="button" data-copy-webhook class="px-3 py-2 rounded-md text-sm font-semibold bg-white border border-gray-200 hover:border-primary hover:text-primary transition">
                     Copiar
@@ -236,11 +236,12 @@
               </label>
             </div>
 
-            <div class="mt-4 flex flex-wrap gap-3">
-              <button type="button" data-action="save" class="bg-primary hover:bg-secondary text-white font-semibold px-4 py-2 rounded-lg transition">Salvar credenciais</button>
-              <button type="button" data-action="test" class="border border-gray-200 text-gray-700 hover:border-primary hover:text-primary font-semibold px-4 py-2 rounded-lg transition">Testar conexão</button>
-              <button type="button" data-action="sync" class="border border-transparent text-primary bg-primary/10 hover:bg-primary/20 font-semibold px-4 py-2 rounded-lg transition">Sincronizar agora</button>
-            </div>
+              <div class="mt-4 flex flex-wrap gap-3">
+                <button type="button" data-action="save" class="bg-primary hover:bg-secondary text-white font-semibold px-4 py-2 rounded-lg transition">Salvar credenciais</button>
+                <button type="button" data-action="test" class="border border-gray-200 text-gray-700 hover:border-primary hover:text-primary font-semibold px-4 py-2 rounded-lg transition">Testar conexão</button>
+                <button type="button" data-action="sync" class="border border-transparent text-primary bg-primary/10 hover:bg-primary/20 font-semibold px-4 py-2 rounded-lg transition">Sincronizar agora</button>
+                <button type="button" data-action="sync-post" class="border border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 font-semibold px-4 py-2 rounded-lg transition">Sincronizar Via Post</button>
+              </div>
 
             <div class="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div class="p-3 border rounded-lg bg-gray-50">

@@ -2,11 +2,9 @@
 setlocal
 cd /d "%~dp0"
 
-where node >nul 2>&1
-if errorlevel 1 (
-  echo Node.js nao encontrado. Instale o Node.js e tente novamente.
-  pause
-  exit /b 1
+if not exist "%~dp0pdv-local-agent.exe" (
+  call "%~dp0build-agent.bat"
+  if errorlevel 1 exit /b 1
 )
 
 set TASK_NAME=EoBicho PDV Local Agent

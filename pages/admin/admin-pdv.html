@@ -15,6 +15,10 @@
         body.pdv-fullscreen-active #pdv-workspace {
             min-height: calc(100vh - 6rem);
         }
+
+        body.pdv-fullscreen-active #admin-header-placeholder {
+            display: none;
+        }
     </style>
 </head>
 <body class="bg-gray-100">
@@ -100,6 +104,13 @@
                                             </span>
                                             <span id="pdv-fullscreen-label" class="text-xs font-semibold text-gray-700">Ativar</span>
                                         </button>
+                                        <button type="button" id="pdv-agent-update-button" class="inline-flex items-center justify-between gap-3 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+                                            <span class="flex items-center gap-1.5">
+                                                <i class="fas fa-rotate-right text-[10px]"></i>
+                                                <span class="uppercase tracking-wide text-[10px] text-gray-400">Agente</span>
+                                            </span>
+                                            <span class="text-xs font-semibold text-gray-700">Atualizar</span>
+                                        </button>
                                     </div>
                                 </div>
                                 <p id="pdv-selected-info" class="text-sm text-gray-500">Configure o caixa para iniciar as vendas.</p>
@@ -140,7 +151,7 @@
                                                         <label for="pdv-product-search" class="block text-sm font-semibold text-gray-700 mb-1">Pesquisar produtos</label>
                                                         <div class="relative">
                                                             <input id="pdv-product-search" type="search" placeholder="Busque por código interno, código de barras ou nome" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" autocomplete="off">
-                                                            <div id="pdv-product-results" class="absolute left-0 right-0 top-full z-20 mt-2 hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg"></div>
+                                                            <div id="pdv-product-results" class="absolute left-0 right-0 top-full z-20 mt-2 hidden max-h-[400px] overflow-y-auto overflow-x-hidden rounded-xl border border-gray-200 bg-white shadow-lg"></div>
                                                         </div>
                                                         <p class="text-xs text-gray-500 mt-1">Os resultados são atualizados conforme a digitação, seguindo o mesmo critério de busca do site.</p>
                                                     </div>
@@ -392,6 +403,7 @@
                                                 </div>
                                                 <div class="flex flex-wrap gap-2">
                                                     <button id="pdv-budget-import" type="button" class="rounded-lg border border-gray-200 px-4 py-2 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60">Importar orçamento</button>
+                                                    <button id="pdv-budget-print" type="button" class="rounded-lg border border-gray-200 px-4 py-2 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60">Imprimir orçamento</button>
                                                     <button id="pdv-budget-delete" type="button" class="rounded-lg border border-red-200 px-4 py-2 text-xs font-semibold text-red-600 transition hover:border-red-500 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60">Excluir orçamento</button>
                                                 </div>
                                             </div>

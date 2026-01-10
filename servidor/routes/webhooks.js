@@ -128,14 +128,6 @@ async function handleWebhook(req, res) {
     }
 
     // Log leve para confirmar recebimento (evite em produção se contiver dados sensíveis)
-    console.info('[webhook:marketplaces]', {
-      method: req.method,
-      path: req.originalUrl,
-      merchantId,
-      eventId: req.headers['x-event-id'] || req.headers['x-request-id'] || '',
-      signature: req.headers['x-marketplace-signature'] || req.headers['x-hub-signature'] || req.headers['x-signature'] || req.headers['x-ifood-signature'] || '',
-    });
-
     // Aqui entraria o processamento dos eventos (fila/worker etc.)
     return res.status(200).json({ ok: true });
   } catch (error) {

@@ -281,6 +281,7 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
       categoria,
       fornecedor,
       situacao,
+      ifood,
       estoqueMin,
       estoqueMax,
     } = req.query;
@@ -378,6 +379,12 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
       filters.inativo = { $ne: true };
     } else if (situacao === 'inativo') {
       filters.inativo = true;
+    }
+
+    if (ifood === 'ativo') {
+      filters.enviarParaIfood = true;
+    } else if (ifood === 'inativo') {
+      filters.enviarParaIfood = { $ne: true };
     }
 
     if (columnFilters.sku) {
@@ -1411,6 +1418,10 @@ function applyUpdatesToProduct(product, updates, user) {
 
   if (hasEnabledField(updates, 'naoMostrarNoSite')) {
     product.naoMostrarNoSite = Boolean(getFieldValue(updates, 'naoMostrarNoSite'));
+  }
+
+  if (hasEnabledField(updates, 'enviarParaIfood')) {
+    product.enviarParaIfood = Boolean(getFieldValue(updates, 'enviarParaIfood'));
   }
 
   if (hasEnabledField(updates, 'ncm')) {

@@ -176,7 +176,7 @@ async function buildIfoodPayload({ storeId }) {
   };
 }
 
-async function syncIfoodCatalogForStore({ storeId, integration, resetCatalogRequested } = {}) {
+async function syncIfoodCatalogForStore({ storeId, integration, resetCatalogRequested, forcePostRequested } = {}) {
   if (!storeId) {
     throw new Error('Identificador de loja invalido.');
   }
@@ -211,25 +211,21 @@ async function syncIfoodCatalogForStore({ storeId, integration, resetCatalogRequ
     if (!barcode) {
       const skipped = { productId: item.id, barcode, name, reason: 'barcode vazio' };
       skippedItems.push(skipped);
-      console.info('[ifood:payload][skip]', skipped);
       return;
     }
     if (!name) {
       const skipped = { productId: item.id, barcode, name, reason: 'nome vazio' };
       skippedItems.push(skipped);
-      console.info('[ifood:payload][skip]', skipped);
       return;
     }
     if (!Number.isFinite(stock)) {
       const skipped = { productId: item.id, barcode, name, reason: 'stock invalido' };
       skippedItems.push(skipped);
-      console.info('[ifood:payload][skip]', skipped);
       return;
     }
     if (!Number.isFinite(price)) {
       const skipped = { productId: item.id, barcode, name, reason: 'price invalido' };
       skippedItems.push(skipped);
-      console.info('[ifood:payload][skip]', skipped);
       return;
     }
     validItems.push({ ...item, barcode, name, stock, price, active });
@@ -237,7 +233,12 @@ async function syncIfoodCatalogForStore({ storeId, integration, resetCatalogRequ
 
   const postItems = [];
   const patchItems = [];
+  const forcePost = forcePostRequested === true;
   validItems.forEach((item) => {
+    if (forcePost) {
+      postItems.push(item);
+      return;
+    }
     if (!item.integratedAt && item.active === false) {
       const skipped = {
         productId: item.id,
@@ -246,7 +247,6 @@ async function syncIfoodCatalogForStore({ storeId, integration, resetCatalogRequ
         reason: 'inactive without prior integration',
       };
       skippedItems.push(skipped);
-      console.info('[ifood:payload][skip]', skipped);
       return;
     }
     if (!item.integratedAt) {
@@ -264,10 +264,6 @@ async function syncIfoodCatalogForStore({ storeId, integration, resetCatalogRequ
     patchItems.push(item);
   });
 
-  if (skippedItems.length) {
-    console.info('[ifood:payload][skipped:summary]', { total: skippedItems.length });
-  }
-
   const itemsToSend = [...postItems, ...patchItems];
   const totalToSend = itemsToSend.length;
   const autoResetCatalog = (payload.items || []).length === 0;
@@ -283,14 +279,6 @@ async function syncIfoodCatalogForStore({ storeId, integration, resetCatalogRequ
     newItems: postItems,
     updateItems: patchItems,
     resetCatalog,
-  });
-
-  console.info('[ifood:sync] catalogo enviado', {
-    storeId,
-    products: totalToSend,
-    merchantId,
-    created: sendResult?.created,
-    updated: sendResult?.updated,
   });
 
   const now = new Date();

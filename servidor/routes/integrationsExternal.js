@@ -212,11 +212,14 @@ router.post('/:storeId/ifood/sync', requireAuth, authorizeRoles('admin', 'admin_
 
     const resetCatalogInput = req.body?.resetCatalog ?? req.query?.resetCatalog;
     const resetCatalogRequested = resetCatalogInput !== undefined ? toBoolean(resetCatalogInput) : undefined;
+    const forcePostInput = req.body?.forcePost ?? req.query?.forcePost;
+    const forcePostRequested = forcePostInput !== undefined ? toBoolean(forcePostInput) : false;
 
     const result = await syncIfoodCatalogForStore({
       storeId,
       integration,
       resetCatalogRequested,
+      forcePostRequested,
     });
     const { itemsToSend, totalToSend, sendResult, now } = result;
 

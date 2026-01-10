@@ -72,6 +72,7 @@ const routes = [
   { path: '/api/admin/users', file: './routes/adminUsers' },
   { path: '/api/admin/funcionarios', file: './routes/adminFuncionarios' },
   { path: '/api/admin/grupos-usuarios', file: './routes/adminUserGroups' },
+  { path: '/api/admin/screen-security', file: './routes/adminScreenSecurity' },
   { path: '/api/admin/servicos/grupos', file: './routes/adminServicosGrupos' },
   { path: '/api/admin/servicos/precos', file: './routes/adminServicosPrecos' },
   { path: '/api/admin/servicos', file: './routes/adminServicos' },
@@ -83,6 +84,9 @@ const routes = [
   { path: '/api/email', file: './routes/email' },
   { path: '/api/search', file: './routes/search' },
   { path: '/api/integrations/external', file: './routes/integrationsExternal' },
+  { path: '/api/integrations/whatsapp', file: './routes/integrationsWhatsapp' },
+  { path: '/webhooks/whatsapp', file: './routes/whatsappWebhooks' },
+  { path: '/webhook/whatsapp', file: './routes/whatsappWebhooks' },
   { path: '/webhooks', file: './routes/webhooks' },
   { path: '/', file: './routes/webhooks' }, // expõe /webhook e /webhooks/marketplaces na raiz para validação iFood
 ];
@@ -100,7 +104,7 @@ try {
   const ifoodStream = require('./routes/ifoodOrdersStream');
   app.use('/api/ifood', ifoodStream);
 } catch (_) {
-  console.warn('Não foi possível registrar stream do iFood');
+  console.error('Não foi possível registrar stream do iFood');
 }
 
 // WebSockets
@@ -113,9 +117,18 @@ function sanitizeRoomKey(room) {
   return trimmed;
 }
 
+function buildWhatsappRoomKey(storeId, phoneNumberId) {
+  const store = typeof storeId === 'string' ? storeId.trim() : '';
+  const phone = typeof phoneNumberId === 'string' ? phoneNumberId.trim() : '';
+  if (!/^[a-fA-F0-9]{24}$/.test(store)) return null;
+  if (!/^\d{6,}$/.test(phone)) return null;
+  return `whatsapp:store:${store}:number:${phone}`;
+}
+
 io.on('connection', (socket) => {
   console.log('Um utilizador conectou-se via WebSocket');
   const joinedRooms = new Set();
+  const joinedWhatsappRooms = new Set();
 
   socket.on('vet:ficha:join', (payload = {}) => {
     const room = sanitizeRoomKey(payload.room);
@@ -142,8 +155,23 @@ io.on('connection', (socket) => {
     socket.to(room).emit('vet:ficha:update', message);
   });
 
+  socket.on('whatsapp:join', (payload = {}) => {
+    const room = buildWhatsappRoomKey(payload.storeId, payload.phoneNumberId);
+    if (!room) return;
+    socket.join(room);
+    joinedWhatsappRooms.add(room);
+  });
+
+  socket.on('whatsapp:leave', (payload = {}) => {
+    const room = buildWhatsappRoomKey(payload.storeId, payload.phoneNumberId);
+    if (!room) return;
+    socket.leave(room);
+    joinedWhatsappRooms.delete(room);
+  });
+
   socket.on('disconnect', () => {
     joinedRooms.clear();
+    joinedWhatsappRooms.clear();
     console.log('Utilizador desconectou-se');
   });
 });
