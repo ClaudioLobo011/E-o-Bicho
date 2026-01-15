@@ -1,6 +1,7 @@
 (function () {
   const state = {
     stores: [],
+    allowedStores: [],
     deposits: [],
     responsaveis: [],
     items: [],
@@ -574,11 +575,12 @@
     return cnpj ? `${name} • CNPJ ${cnpj}` : name;
   }
 
-  function populateCompanySelect(select) {
+  function populateCompanySelect(select, stores = state.stores) {
     if (!select) return;
+    const list = Array.isArray(stores) ? stores : [];
     const previousValue = select.value;
     select.innerHTML = '<option value="">Selecione</option>';
-    state.stores.forEach((store) => {
+    list.forEach((store) => {
       const option = document.createElement('option');
       option.value = store._id;
       option.textContent = buildStoreLabel(store);
@@ -1263,9 +1265,14 @@
         throw new Error('Sessão expirada. Faça login novamente.');
       }
 
-      const response = await fetch(`${API_CONFIG.BASE_URL}/transfers/form-data`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const [response, allowedResponse] = await Promise.all([
+        fetch(`${API_CONFIG.BASE_URL}/transfers/form-data`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`${API_CONFIG.BASE_URL}/stores/allowed`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ]);
 
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
@@ -1273,12 +1280,22 @@
       }
 
       const data = await response.json();
+      const allowedPayload = await allowedResponse.json().catch(() => ({}));
+      if (!allowedResponse.ok) {
+        throw new Error(allowedPayload?.message || 'Nao foi possivel carregar as empresas permitidas.');
+      }
       state.stores = Array.isArray(data?.stores) ? data.stores : [];
       state.deposits = Array.isArray(data?.deposits) ? data.deposits : [];
       state.responsaveis = Array.isArray(data?.responsaveis) ? data.responsaveis : [];
+      const allowedStores = Array.isArray(allowedPayload?.stores)
+        ? allowedPayload.stores
+        : Array.isArray(allowedPayload)
+        ? allowedPayload
+        : [];
+      state.allowedStores = Array.isArray(allowedStores) ? allowedStores : [];
 
-      populateCompanySelect(selectors.originCompany);
-      populateCompanySelect(selectors.destinationCompany);
+      populateCompanySelect(selectors.originCompany, state.allowedStores);
+      populateCompanySelect(selectors.destinationCompany, state.stores);
       updateDepositSelect(selectors.originCompany, selectors.originDeposit);
       updateDepositSelect(selectors.destinationCompany, selectors.destinationDeposit);
       populateResponsibleList();

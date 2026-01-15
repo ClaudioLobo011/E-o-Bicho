@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin: CRM - E o Bicho</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="../../src/output.css">
+</head>
+<body class="bg-gray-100">
+  <div id="admin-header-placeholder"></div>
+
+  <main class="container mx-auto px-4 pt-1 pb-10 min-h-screen">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <aside class="md:col-span-4">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
+
+      <div class="md:col-span-4 space-y-6">
+        <section class="bg-white p-6 rounded-lg shadow">
+          <div class="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+            <div class="space-y-2">
+              <nav aria-label="Breadcrumb" class="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                <span class="inline-flex items-center gap-2 text-primary"><i class="fas fa-comments"></i>CRM</span>
+                <i class="fas fa-angle-right text-gray-400"></i>
+                <span class="text-gray-600">Mensagens WhatsApp</span>
+              </nav>
+              <div>
+                <h1 class="text-2xl font-bold text-gray-800">CRM de Comunicacao</h1>
+                <p class="text-gray-600 mt-1">Modelos prontos por tela e resumo das mensagens enviadas.</p>
+              </div>
+            </div>
+
+            <div class="flex w-full flex-col gap-3 xl:max-w-lg">
+              <label for="crm-store-select" class="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                <i class="fas fa-building text-primary"></i>
+                <span>Empresa</span>
+              </label>
+              <select id="crm-store-select" class="w-full rounded-lg border-gray-300 text-sm focus:border-primary focus:ring-primary">
+                <option value="">Selecione a empresa</option>
+              </select>
+              <div class="flex flex-wrap gap-2">
+                <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-secondary transition">
+                  <i class="fas fa-paper-plane"></i>
+                  Criar campanha
+                </button>
+                <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:border-primary hover:text-primary transition">
+                  <i class="fas fa-sliders"></i>
+                  Ajustes gerais
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="grid grid-cols-1 xl:grid-cols-12 gap-6">
+          <div class="xl:col-span-12 space-y-6">
+            <div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
+              <section class="bg-white p-6 rounded-lg shadow">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p class="text-xs font-semibold uppercase tracking-wide text-primary">Resumo</p>
+                    <h2 class="text-xl font-bold text-gray-800">Envios de mensagens</h2>
+                    <p class="text-sm text-gray-600 mt-1">Desempenho das automacoes e campanhas.</p>
+                  </div>
+                  <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-700 hover:border-primary hover:text-primary transition">
+                    <i class="fas fa-calendar"></i>
+                    Ultimos 7 dias
+                  </button>
+                </div>
+
+                <div class="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div class="rounded-lg border border-gray-200 p-4">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Mensagens enviadas</p>
+                    <p class="mt-2 text-2xl font-bold text-gray-800">0</p>
+                    <p class="mt-1 text-xs text-gray-500">Sem disparos no periodo.</p>
+                  </div>
+                  <div class="rounded-lg border border-gray-200 p-4">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Clientes impactados</p>
+                    <p class="mt-2 text-2xl font-bold text-gray-800">0</p>
+                    <p class="mt-1 text-xs text-gray-500">Nenhum cliente contatado.</p>
+                  </div>
+                  <div class="rounded-lg border border-gray-200 p-4">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Taxa de resposta</p>
+                    <p class="mt-2 text-2xl font-bold text-gray-800">0%</p>
+                    <p class="mt-1 text-xs text-gray-500">Aguardando interacoes.</p>
+                  </div>
+                  <div class="rounded-lg border border-gray-200 p-4">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Falhas no envio</p>
+                    <p class="mt-2 text-2xl font-bold text-gray-800">0</p>
+                    <p class="mt-1 text-xs text-gray-500">Nenhum erro registrado.</p>
+                  </div>
+                </div>
+
+                <div class="mt-6 grid gap-4">
+                  <div class="rounded-lg border border-gray-100 bg-gray-50 px-4 py-4">
+                    <div class="flex items-center justify-between text-xs font-semibold text-gray-600">
+                      <span>Agenda de Servicos</span>
+                      <span>0%</span>
+                    </div>
+                    <div class="mt-2 h-2 w-full rounded-full bg-gray-200">
+                      <div class="h-2 w-0 rounded-full bg-primary"></div>
+                    </div>
+                  </div>
+                  <div class="rounded-lg border border-gray-100 bg-gray-50 px-4 py-4">
+                    <div class="flex items-center justify-between text-xs font-semibold text-gray-600">
+                      <span>Produtos Continuo</span>
+                      <span>0%</span>
+                    </div>
+                    <div class="mt-2 h-2 w-full rounded-full bg-gray-200">
+                      <div class="h-2 w-0 rounded-full bg-amber-500"></div>
+                    </div>
+                  </div>
+                  <div class="rounded-lg border border-gray-100 bg-gray-50 px-4 py-4">
+                    <div class="flex items-center justify-between text-xs font-semibold text-gray-600">
+                      <span>Vacinas e cuidados</span>
+                      <span>0%</span>
+                    </div>
+                    <div class="mt-2 h-2 w-full rounded-full bg-gray-200">
+                      <div class="h-2 w-0 rounded-full bg-emerald-500"></div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="bg-white p-6 rounded-lg shadow">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <p class="text-xs font-semibold uppercase tracking-wide text-primary">Envios recentes</p>
+                    <h2 class="text-xl font-bold text-gray-800">Ultimas mensagens disparadas</h2>
+                  </div>
+                  <button type="button" class="text-sm font-semibold text-primary hover:underline">Ver historico</button>
+                </div>
+                <div class="mt-5 space-y-4">
+                  <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-100 p-4">
+                    <div>
+                      <p class="text-sm font-semibold text-gray-800">Claudio Henrique da Silva</p>
+                      <p class="text-xs text-gray-500">Agenda de Servicos - Status: Confirmado</p>
+                    </div>
+                    <span class="text-xs font-semibold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">Enviado</span>
+                  </div>
+                  <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-100 p-4">
+                    <div>
+                      <p class="text-sm font-semibold text-gray-800">Marina Souza</p>
+                      <p class="text-xs text-gray-500">Produtos Continuo - Renovacao de racao</p>
+                    </div>
+                    <span class="text-xs font-semibold text-amber-600 bg-amber-50 px-3 py-1 rounded-full">Agendado</span>
+                  </div>
+                  <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-100 p-4">
+                    <div>
+                      <p class="text-sm font-semibold text-gray-800">Carlos Mendes</p>
+                      <p class="text-xs text-gray-500">Avaliacao - Pos atendimento</p>
+                    </div>
+                    <span class="text-xs font-semibold text-gray-600 bg-gray-100 px-3 py-1 rounded-full">Pendente</span>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <section class="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+              <div class="rounded-lg bg-white p-6 shadow">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <p class="text-xs font-semibold uppercase tracking-wide text-primary">Vendas</p>
+                  <button type="button" class="text-xs font-semibold text-primary hover:underline">Detalhes</button>
+                </div>
+                <p class="mt-2 text-sm text-gray-600">Clientes com comunicacoes de produto continuo.</p>
+                <div class="mt-4 space-y-3">
+                  <div class="rounded-lg border border-gray-100 p-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p class="text-sm font-semibold text-gray-800">Claudio Henrique</p>
+                        <span class="mt-1 inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-600">Produto continuo</span>
+                      </div>
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span class="text-xs font-semibold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">Enviado</span>
+                        <button type="button" class="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-secondary transition">Enviar</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="rounded-lg border border-gray-100 p-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p class="text-sm font-semibold text-gray-800">Marina Souza</p>
+                        <span class="mt-1 inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-600">Produto continuo</span>
+                      </div>
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span class="text-xs font-semibold text-amber-600 bg-amber-50 px-3 py-1 rounded-full">Agendado</span>
+                        <button type="button" class="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-secondary transition">Enviar</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="rounded-lg border border-gray-100 p-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p class="text-sm font-semibold text-gray-800">Carlos Mendes</p>
+                        <span class="mt-1 inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-600">Produto continuo</span>
+                      </div>
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span class="text-xs font-semibold text-gray-600 bg-gray-100 px-3 py-1 rounded-full">Pendente</span>
+                        <button type="button" class="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-secondary transition">Enviar</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="rounded-lg bg-white p-6 shadow">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <p class="text-xs font-semibold uppercase tracking-wide text-primary">Consultorio</p>
+                  <button type="button" class="text-xs font-semibold text-primary hover:underline">Detalhes</button>
+                </div>
+                <p class="mt-2 text-sm text-gray-600">Alertas de retorno, exames e protocolos.</p>
+                <div class="mt-4 space-y-3">
+                  <div class="rounded-lg border border-gray-100 p-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p class="text-sm font-semibold text-gray-800">Ana Ribeiro</p>
+                        <div class="mt-1 flex flex-wrap gap-1">
+                          <span class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-600">Vacina</span>
+                          <span class="inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-600">Retorno</span>
+                        </div>
+                      </div>
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span class="text-xs font-semibold text-amber-600 bg-amber-50 px-3 py-1 rounded-full">Agendado</span>
+                        <button type="button" class="rounded-lg border border-primary px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10 transition">Agendar</button>
+                        <button type="button" class="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-secondary transition">Enviar</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="rounded-lg border border-gray-100 p-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p class="text-sm font-semibold text-gray-800">Claudio Henrique</p>
+                        <div class="mt-1 flex flex-wrap gap-1">
+                          <span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">protocolo</span>
+                        </div>
+                      </div>
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span class="text-xs font-semibold text-gray-600 bg-gray-100 px-3 py-1 rounded-full">Pendente</span>
+                        <button type="button" class="rounded-lg border border-primary px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10 transition">Agendar</button>
+                        <button type="button" class="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-secondary transition">Enviar</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="rounded-lg border border-gray-100 p-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p class="text-sm font-semibold text-gray-800">Marina Souza</p>
+                        <div class="mt-1 flex flex-wrap gap-1">
+                          <span class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-600">Vacina</span>
+                        </div>
+                      </div>
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span class="text-xs font-semibold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">Enviado</span>
+                        <button type="button" class="rounded-lg border border-primary px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10 transition">Agendar</button>
+                        <button type="button" class="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-secondary transition">Enviar</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="rounded-lg bg-white p-6 shadow">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <p class="text-xs font-semibold uppercase tracking-wide text-primary">Avaliacoes</p>
+                  <button type="button" class="text-xs font-semibold text-primary hover:underline">Detalhes</button>
+                </div>
+                <p class="mt-2 text-sm text-gray-600">Solicitacoes de feedback e notas recebidas.</p>
+                <div class="mt-4 flex flex-wrap items-center justify-between gap-2 text-sm text-gray-700">
+                  <span>Media atual</span>
+                  <span class="font-semibold text-gray-800">0,0</span>
+                </div>
+                <div class="mt-4 space-y-3">
+                  <div class="rounded-lg border border-gray-100 p-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p class="text-sm font-semibold text-gray-800">Claudio Henrique</p>
+                        <div class="mt-2 space-y-2 text-xs text-gray-500">
+                          <div class="flex items-center gap-2">
+                            <span>Servicos</span>
+                            <span class="flex items-center gap-1 text-amber-400">
+                              <i class="fas fa-star"></i>
+                              <i class="fas fa-star"></i>
+                              <i class="fas fa-star"></i>
+                              <i class="fas fa-star"></i>
+                              <i class="fas fa-star"></i>
+                            </span>
+                          </div>
+                          <div class="flex items-center gap-2">
+                            <span>Atendimento</span>
+                            <span class="flex items-center gap-1 text-amber-400">
+                              <i class="fas fa-star"></i>
+                              <i class="fas fa-star"></i>
+                              <i class="fas fa-star"></i>
+                              <i class="fas fa-star"></i>
+                              <i class="fas fa-star text-gray-300"></i>
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span class="text-xs font-semibold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">Avaliado</span>
+                        <button type="button" class="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-secondary transition">Enviar</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="rounded-lg border border-gray-100 p-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p class="text-sm font-semibold text-gray-800">Marina Souza</p>
+                        <div class="mt-2 space-y-2 text-xs text-gray-500">
+                          <div class="flex items-center gap-2">
+                            <span>Servicos</span>
+                            <span class="flex items-center gap-1 text-amber-400">
+                              <i class="fas fa-star"></i>
+                              <i class="fas fa-star"></i>
+                              <i class="fas fa-star"></i>
+                              <i class="fas fa-star text-gray-300"></i>
+                              <i class="fas fa-star text-gray-300"></i>
+                            </span>
+                          </div>
+                          <div class="flex items-center gap-2">
+                            <span>Atendimento</span>
+                            <span class="flex items-center gap-1 text-amber-400">
+                              <i class="fas fa-star"></i>
+                              <i class="fas fa-star"></i>
+                              <i class="fas fa-star"></i>
+                              <i class="fas fa-star"></i>
+                              <i class="fas fa-star text-gray-300"></i>
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span class="text-xs font-semibold text-amber-600 bg-amber-50 px-3 py-1 rounded-full">Agendado</span>
+                        <button type="button" class="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-secondary transition">Enviar</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="rounded-lg border border-gray-100 p-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p class="text-sm font-semibold text-gray-800">Carlos Mendes</p>
+                        <div class="mt-2 space-y-2 text-xs text-gray-500">
+                          <div class="flex items-center gap-2">
+                            <span>Servicos</span>
+                            <span class="flex items-center gap-1 text-gray-300">
+                              <i class="fas fa-star"></i>
+                              <i class="fas fa-star"></i>
+                              <i class="fas fa-star"></i>
+                              <i class="fas fa-star"></i>
+                              <i class="fas fa-star"></i>
+                            </span>
+                          </div>
+                          <div class="flex items-center gap-2">
+                            <span>Atendimento</span>
+                            <span class="flex items-center gap-1 text-gray-300">
+                              <i class="fas fa-star"></i>
+                              <i class="fas fa-star"></i>
+                              <i class="fas fa-star"></i>
+                              <i class="fas fa-star"></i>
+                              <i class="fas fa-star"></i>
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span class="text-xs font-semibold text-gray-600 bg-gray-100 px-3 py-1 rounded-full">Pendente</span>
+                        <button type="button" class="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-secondary transition">Enviar</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <div id="modal-placeholder"></div>
+  <div id="confirm-modal-placeholder"></div>
+  <div id="admin-footer-placeholder"></div>
+
+  <script>var basePath = '../../';</script>
+  <script src="../../scripts/core/config.js"></script>
+  <script src="../../scripts/core/ui.js"></script>
+  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/admin/admin.js"></script>
+  <script src="../../scripts/admin/admin-crm.js"></script>
+</body>
+</html>

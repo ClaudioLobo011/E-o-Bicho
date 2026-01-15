@@ -459,6 +459,9 @@ function renderConsultasSection(container, consultas) {
     card.appendChild(createDetailRow('Anamnese', consulta?.anamnese));
     card.appendChild(createDetailRow('Exame físico', consulta?.exameFisico));
     card.appendChild(createDetailRow('Diagnóstico', consulta?.diagnostico));
+    if (consulta?.retornoEm) {
+      card.appendChild(createDetailRow('Retorno', formatDateDisplay(consulta.retornoEm)));
+    }
     return card;
   });
 }

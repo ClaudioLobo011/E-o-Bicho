@@ -12,6 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let deposits = [];
     let stores = [];
     let editingDepositId = null;
+    let allowedStoreIds = new Set();
 
     const getToken = () => {
         try {
@@ -75,14 +76,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const renderDepositsTable = () => {
         if (!tableBody) return;
-        if (!deposits.length) {
+        const visibleDeposits = deposits.filter((deposit) => {
+            const empresaId = deposit?.empresa?._id || deposit?.empresa;
+            return !allowedStoreIds.size || (empresaId && allowedStoreIds.has(String(empresaId)));
+        });
+        if (!visibleDeposits.length) {
             tableBody.innerHTML = '';
             emptyState?.classList.remove('hidden');
             fillNextCode();
             return;
         }
         emptyState?.classList.add('hidden');
-        tableBody.innerHTML = deposits.map((deposit) => {
+        tableBody.innerHTML = visibleDeposits.map((deposit) => {
             const empresaNome = deposit?.empresa?.nome || deposit?.empresa?.nomeFantasia || '—';
             return `
                 <tr>
@@ -107,10 +112,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const fetchStores = async () => {
         try {
-            const response = await fetch(`${API_CONFIG.BASE_URL}/stores`);
+            const token = getToken();
+            const response = await fetch(`${API_CONFIG.BASE_URL}/stores/allowed`, {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+            });
             if (!response.ok) throw new Error('Falha ao carregar empresas.');
-            stores = await response.json();
+            const payload = await response.json();
+            stores = Array.isArray(payload?.stores) ? payload.stores : Array.isArray(payload) ? payload : [];
+            allowedStoreIds = new Set(stores.map((store) => String(store?._id)).filter(Boolean));
             populateCompanySelect();
+            renderDepositsTable();
         } catch (error) {
             console.error('Erro ao carregar empresas:', error);
             showModal({ title: 'Erro', message: error.message || 'Não foi possível carregar as empresas.', confirmText: 'Entendi' });
@@ -135,7 +146,13 @@ document.addEventListener('DOMContentLoaded', () => {
         idInput.value = deposit._id;
         codeInput.value = deposit.codigo || '';
         nameInput.value = deposit.nome || '';
-        companySelect.value = deposit?.empresa?._id || deposit?.empresa || '';
+        const empresaId = deposit?.empresa?._id || deposit?.empresa || '';
+        if (empresaId && allowedStoreIds.size && !allowedStoreIds.has(String(empresaId))) {
+            companySelect.value = '';
+            showModal({ title: 'Empresa não autorizada', message: 'Você não tem permissão para editar esta empresa.', confirmText: 'Entendi' });
+        } else {
+            companySelect.value = empresaId;
+        }
         submitLabel.textContent = 'Salvar alterações';
         cancelEditButton.classList.remove('hidden');
         window.scrollTo({ top: form.offsetTop - 120, behavior: 'smooth' });
@@ -204,6 +221,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (!payload.codigo || !payload.nome || !payload.empresa) {
             showModal({ title: 'Atenção', message: 'Preencha todos os campos obrigatórios.', confirmText: 'Entendi' });
+            return;
+        }
+        if (allowedStoreIds.size && !allowedStoreIds.has(String(payload.empresa))) {
+            showModal({ title: 'Empresa não autorizada', message: 'Você não tem permissão para usar esta empresa.', confirmText: 'Entendi' });
             return;
         }
 

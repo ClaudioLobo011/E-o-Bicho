@@ -203,6 +203,9 @@
     }
   };
 
+  const isStoreAllowed = (storeId) =>
+    state.stores.some((store) => store && store._id === storeId);
+
   const populatePdvSelect = () => {
     if (!elements.pdvSelect) return;
     const options = ['<option value="">Selecione um PDV</option>'];
@@ -344,12 +347,20 @@
   };
 
   const fetchStores = async () => {
-    const response = await fetch(`${API_BASE}/stores`);
+    const token = getToken();
+    const response = await fetch(`${API_BASE}/stores/allowed`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
     if (!response.ok) {
       throw new Error('Não foi possível carregar as empresas cadastradas.');
     }
     const payload = await response.json();
-    state.stores = Array.isArray(payload) ? payload : Array.isArray(payload?.stores) ? payload.stores : [];
+    const list = Array.isArray(payload?.stores)
+      ? payload.stores
+      : Array.isArray(payload)
+      ? payload
+      : [];
+    state.stores = Array.isArray(list) ? list : [];
     populateCompanySelect();
   };
 
@@ -716,6 +727,13 @@
 
   const handleCompanyChange = async () => {
     const value = elements.companySelect?.value || '';
+    if (value && !isStoreAllowed(value)) {
+      if (elements.companySelect) {
+        elements.companySelect.value = '';
+      }
+      notify('Você não tem permissão para configurar esta empresa.', 'error');
+      return;
+    }
     state.selectedStore = value;
     state.selectedPdv = '';
     clearForm();

@@ -1286,13 +1286,15 @@ function ensureExameModal() {
 
   const dropzone = document.createElement('label');
   dropzone.className = 'flex h-32 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-rose-300 bg-rose-50 text-sm text-rose-600 transition';
+  dropzone.setAttribute('tabindex', '0');
+  dropzone.setAttribute('role', 'button');
   dropzone.innerHTML = '<span id="vet-exame-dropzone-text">Arraste o arquivo aqui ou clique para selecionar</span><span id="vet-exame-dropzone-hint" class="text-xs text-rose-500">Formatos aceitos: PNG, JPG, JPEG ou PDF.</span>';
   fileWrapper.appendChild(dropzone);
 
   const fileInput = document.createElement('input');
   fileInput.type = 'file';
   fileInput.accept = ANEXO_ALLOWED_EXTENSIONS.join(',');
-  fileInput.className = 'hidden';
+  fileInput.className = 'sr-only';
   dropzone.appendChild(fileInput);
 
   const addBtn = document.createElement('button');
@@ -1394,11 +1396,24 @@ function ensureExameModal() {
     }
   });
 
+  const openFilePicker = () => {
+    if (fileInput.disabled) return;
+    if (typeof fileInput.showPicker === 'function') {
+      fileInput.showPicker();
+      return;
+    }
+    fileInput.click();
+  };
+
   dropzone.addEventListener('click', (event) => {
     event.preventDefault();
-    if (exameModal.fileInput) {
-      exameModal.fileInput.click();
-    }
+    openFilePicker();
+  });
+
+  dropzone.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    openFilePicker();
   });
 
   fileInput.addEventListener('change', (event) => {

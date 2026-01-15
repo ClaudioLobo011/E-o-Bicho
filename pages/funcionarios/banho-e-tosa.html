@@ -7,18 +7,18 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <link rel="stylesheet" href="../../src/output.css">
 </head>
-<body class="bg-gray-100">
+<body class="bg-gray-100 agenda-page">
   <div id="admin-header-placeholder"></div>
 
-  <main class="container mx-auto px-4 pt-1 pb-8 min-h-screen">
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+  <main class="agenda-main px-3 sm:px-4 lg:px-6 pt-1 pb-4 min-h-screen">
+    <div class="agenda-grid grid grid-cols-1 md:grid-cols-4 gap-6">
 
       <aside class="md:col-span-4">
         <div id="admin-sidebar-placeholder"></div>
       </aside>
 
-      <section class="md:col-span-4">
-        <div class="bg-white rounded-xl shadow-sm ring-1 ring-black/5">
+      <section class="agenda-section md:col-span-4">
+        <div class="agenda-shell bg-white rounded-xl shadow-sm ring-1 ring-black/5">
         <!-- Filtros -->
         <div class="agenda-toolbar px-6 py-4 border-b bg-white sticky top-0 z-20 no-print flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div class="flex items-center gap-3">
@@ -64,7 +64,7 @@
         </div>
 
         <!-- Grade da agenda (colunas por profissional) -->
-        <div id="agenda-wrapper" class="relative overflow-x-auto">
+        <div id="agenda-wrapper" class="agenda-scroll relative">
           <div id="agenda-list" class="min-w-[720px]"></div>
         </div>
         </div>

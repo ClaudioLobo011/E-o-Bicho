@@ -10,6 +10,7 @@ const horarioDiaSchema = new mongoose.Schema({
 const regimeTributarioEnum = ['simples', 'mei', 'normal'];
 
 const storeSchema = new mongoose.Schema({
+    codigo: { type: String, trim: true, unique: true, sparse: true },
     nome: { type: String, required: true, trim: true },
     nomeFantasia: { type: String, trim: true },
     razaoSocial: { type: String, trim: true },

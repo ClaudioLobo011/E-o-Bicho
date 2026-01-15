@@ -191,6 +191,7 @@
     customerSearchResults: [],
     customerSearchLoading: false,
     customerSearchQuery: '',
+    customerSearchTarget: 'sale',
     customerPets: [],
     customerPetsLoading: false,
     modalSelectedCliente: null,
@@ -240,6 +241,7 @@
     deliverySelectedAddressId: '',
     deliverySelectedAddress: null,
     deliveryStatusOverride: null,
+    saleSource: '',
     activeFinalizeContext: null,
     saleStateBackup: null,
     saleCodeIdentifier: '',
@@ -251,8 +253,10 @@
     sellerLookupError: '',
     selectedSeller: null,
     sellerSearchQuery: '',
+    sellerSearchTarget: 'main',
     deliveryFinalizingOrderId: '',
     finalizeProcessing: false,
+    skipInventoryForNextSale: false,
     completedSales: [],
     salesFilters: { start: getTodayIsoDate(), end: getTodayIsoDate() },
     budgets: [],
@@ -272,6 +276,23 @@
     fiscalEmissionModalOpen: false,
     activePdvStoreId: '',
     fullscreenActive: false,
+    exchangeModal: {
+      open: false,
+      saleId: '',
+      exchangeId: '',
+    },
+    exchangeHistory: {
+      open: false,
+      customer: null,
+      start: '',
+      end: '',
+      selectedSaleIds: [],
+    },
+    exchangeSale: {
+      open: false,
+      sale: null,
+      selectedItemIds: [],
+    },
     transferModal: {
       open: false,
       formLoading: false,
@@ -306,6 +327,8 @@
   const appointmentCache = new Map();
   const appointmentCustomerCache = new Map();
   const appointmentCustomerRequestCache = new Map();
+  const appointmentSalesCache = new Map();
+  const appointmentSalesRequestCache = new Map();
   const customerReceivablesCache = new Map();
   const customerReceivablesDetailsCache = new Map();
 
@@ -362,6 +385,7 @@
   let statePersistPending = false;
   let lastPersistSignature = '';
   const normalizeId = (value) => (value == null ? '' : String(value));
+  const isValidObjectId = (value) => /^[a-fA-F0-9]{24}$/.test(String(value || '').trim());
   const getDefaultPdvSelectionPreference = () => ({ storeId: '', pdvId: '' });
   const PDV_SELECTION_STORAGE_KEY = 'adminPdvSelection';
   const loadPdvSelectionPreference = () => {
@@ -696,6 +720,14 @@
   let transferProductSearchTimeout = null;
   let transferProductSearchController = null;
   let sellerLookupTimeout = null;
+  let exchangeSellerLookupTimeout = null;
+  let exchangeCustomerLookupTimeout = null;
+  let exchangeCustomerLookupController = null;
+  let exchangeHistoryLookupTimeout = null;
+  let exchangeHistoryLookupController = null;
+  let exchangeSaleLookupTimeout = null;
+  let exchangeSaveInFlight = false;
+  let exchangeFinalizeInFlight = false;
   let customerRegisterPreviousFocus = null;
   let customerRegisterFrameUrl = '';
   let customerRegisterFrameWindow = null;
@@ -1059,6 +1091,20 @@
     return `R$ ${number.toFixed(2).replace('.', ',')}`;
   };
 
+  const parseDecimalInput = (value) => {
+    if (value == null) return 0;
+    const raw = String(value).trim();
+    if (!raw) return 0;
+    const normalized = raw.replace(/\./g, '').replace(',', '.').replace(/[^\d.-]/g, '');
+    const number = Number(normalized);
+    return Number.isFinite(number) ? number : 0;
+  };
+
+  const formatDecimalValue = (value, decimals = 2) => {
+    const number = safeNumber(value);
+    return number.toFixed(decimals).replace('.', ',');
+  };
+
   const safeNumber = (value) => {
     const number = Number(value);
     return Number.isFinite(number) ? number : 0;
@@ -1396,6 +1442,13 @@
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+  };
+
+  const formatDateInputValue = (value) => {
+    if (!value) return '';
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toISOString().slice(0, 10);
   };
   const formatHourMinute = (value) => {
     if (!value) return '';
@@ -2624,19 +2677,20 @@
 
   const getProductCode = (product) => {
     return (
+      product?.cod ||
       product?.codigoInterno ||
       product?.codigo ||
       product?.codInterno ||
       product?.codigoReferencia ||
+      product?.referencia ||
       product?.sku ||
-      product?._id ||
-      product?.id ||
       ''
     );
   };
 
   const getProductBarcode = (product) => {
     return (
+      product?.codbarras ||
       product?.codigoBarras ||
       product?.codigoDeBarras ||
       product?.barras ||
@@ -2845,6 +2899,66 @@
     elements.itemsTotal = document.getElementById('pdv-items-total');
     elements.finalizeButton = document.getElementById('pdv-finalize-sale');
     elements.saleActionButtons = document.querySelectorAll('[data-sale-action]');
+    elements.exchangeModal = document.getElementById('pdv-exchange-modal');
+    elements.exchangeBackdrop =
+      elements.exchangeModal?.querySelector('[data-exchange-dismiss="backdrop"]') || null;
+    elements.exchangeClose =
+      elements.exchangeModal?.querySelector('[data-exchange-dismiss="close"]') || null;
+    elements.exchangeCode = document.getElementById('pdv-exchange-code');
+    elements.exchangeDate = document.getElementById('pdv-exchange-date');
+    elements.exchangeSeller = document.getElementById('pdv-exchange-seller');
+    elements.exchangeSellerName = document.getElementById('pdv-exchange-seller-name');
+    elements.exchangeType = document.getElementById('pdv-exchange-type');
+    elements.exchangeClient = document.getElementById('pdv-exchange-client');
+    elements.exchangeClientName = document.getElementById('pdv-exchange-client-name');
+    elements.exchangeReturnCode = document.getElementById('pdv-exchange-return-code');
+    elements.exchangeReturnDesc = document.getElementById('pdv-exchange-return-desc');
+    elements.exchangeReturnDeposit = document.getElementById('pdv-exchange-return-deposit');
+    elements.exchangeReturnQty = document.getElementById('pdv-exchange-return-qty');
+    elements.exchangeReturnUnit = document.getElementById('pdv-exchange-return-unit');
+    elements.exchangeReturnTotal = document.getElementById('pdv-exchange-return-total');
+    elements.exchangeTakeCode = document.getElementById('pdv-exchange-take-code');
+    elements.exchangeTakeDesc = document.getElementById('pdv-exchange-take-desc');
+    elements.exchangeTakeDeposit = document.getElementById('pdv-exchange-take-deposit');
+    elements.exchangeTakeQty = document.getElementById('pdv-exchange-take-qty');
+    elements.exchangeTakeUnit = document.getElementById('pdv-exchange-take-unit');
+    elements.exchangeTakeDiscount = document.getElementById('pdv-exchange-take-discount');
+    elements.exchangeTakeTotal = document.getElementById('pdv-exchange-take-total');
+    elements.exchangeReturnBody = document.getElementById('pdv-exchange-return-body');
+    elements.exchangeReturnEmpty = document.getElementById('pdv-exchange-return-empty');
+    elements.exchangeTakeBody = document.getElementById('pdv-exchange-take-body');
+    elements.exchangeTakeEmpty = document.getElementById('pdv-exchange-take-empty');
+    elements.exchangeReturnCount = document.getElementById('pdv-exchange-return-count');
+    elements.exchangeTakeCount = document.getElementById('pdv-exchange-take-count');
+    elements.exchangeDiff = document.getElementById('pdv-exchange-diff');
+    elements.exchangeNotes = document.getElementById('pdv-exchange-notes');
+    elements.exchangeSave = document.getElementById('pdv-exchange-save');
+    elements.exchangeDelete = document.getElementById('pdv-exchange-delete');
+    elements.exchangeFinish = document.getElementById('pdv-exchange-finish');
+    elements.exchangePrint = document.getElementById('pdv-exchange-print');
+    elements.exchangeExit = document.getElementById('pdv-exchange-exit');
+    elements.exchangeHistoryModal = document.getElementById('pdv-exchange-history-modal');
+    elements.exchangeHistoryBackdrop =
+      elements.exchangeHistoryModal?.querySelector('[data-exchange-history-dismiss="backdrop"]') || null;
+    elements.exchangeHistoryClose = document.getElementById('pdv-exchange-history-close');
+    elements.exchangeHistoryCloseFooter = document.getElementById('pdv-exchange-history-close-footer');
+    elements.exchangeHistoryImport = document.getElementById('pdv-exchange-history-import');
+    elements.exchangeHistoryClient = document.getElementById('pdv-exchange-history-client');
+    elements.exchangeHistoryClientName = document.getElementById('pdv-exchange-history-client-name');
+    elements.exchangeHistoryStart = document.getElementById('pdv-exchange-history-start');
+    elements.exchangeHistoryEnd = document.getElementById('pdv-exchange-history-end');
+    elements.exchangeHistoryBody = document.getElementById('pdv-exchange-history-body');
+    elements.exchangeHistoryEmpty = document.getElementById('pdv-exchange-history-empty');
+    elements.exchangeSaleModal = document.getElementById('pdv-exchange-sale-modal');
+    elements.exchangeSaleBackdrop =
+      elements.exchangeSaleModal?.querySelector('[data-exchange-sale-dismiss="backdrop"]') || null;
+    elements.exchangeSaleClose = document.getElementById('pdv-exchange-sale-close');
+    elements.exchangeSaleCloseFooter = document.getElementById('pdv-exchange-sale-close-footer');
+    elements.exchangeSaleImport = document.getElementById('pdv-exchange-sale-import');
+    elements.exchangeSaleCode = document.getElementById('pdv-exchange-sale-code');
+    elements.exchangeSaleInfo = document.getElementById('pdv-exchange-sale-info');
+    elements.exchangeSaleItemsBody = document.getElementById('pdv-exchange-sale-items-body');
+    elements.exchangeSaleItemsEmpty = document.getElementById('pdv-exchange-sale-items-empty');
 
     elements.customerOpenButton = document.getElementById('pdv-open-customer');
     elements.customerOpenButtonLabel = document.getElementById('pdv-open-customer-label');
@@ -2868,6 +2982,7 @@
     elements.customerResultsList = document.getElementById('pdv-customer-results');
     elements.customerResultsEmpty = document.getElementById('pdv-customer-results-empty');
     elements.customerResultsLoading = document.getElementById('pdv-customer-results-loading');
+    elements.customerResultsTable = document.getElementById('pdv-customer-results-table');
     elements.customerPetsList = document.getElementById('pdv-customer-pets');
     elements.customerPetsEmpty = document.getElementById('pdv-customer-pets-empty');
     elements.customerPetsLoading = document.getElementById('pdv-customer-pets-loading');
@@ -3671,9 +3786,13 @@
     if (elements.customerConfirm) {
       elements.customerConfirm.disabled = !hasSelection;
       elements.customerConfirm.classList.toggle('opacity-60', !hasSelection);
-      elements.customerConfirm.textContent = state.vendaCliente
-        ? 'Atualizar vínculo'
-        : 'Vincular cliente';
+      if (isExchangeCustomerSearchTarget(state.customerSearchTarget)) {
+        elements.customerConfirm.textContent = 'Selecionar cliente';
+      } else {
+        elements.customerConfirm.textContent = state.vendaCliente
+          ? 'Atualizar vínculo'
+          : 'Vincular cliente';
+      }
     }
     if (elements.customerClear) {
       elements.customerClear.disabled = !hasSelection;
@@ -3684,6 +3803,9 @@
   const renderCustomerSearchResults = () => {
     if (!elements.customerResultsList || !elements.customerResultsEmpty || !elements.customerResultsLoading) {
       return;
+    }
+    if (elements.customerResultsTable) {
+      elements.customerResultsTable.classList.add('hidden');
     }
     elements.customerResultsList.innerHTML = '';
     if (state.customerSearchLoading) {
@@ -3704,6 +3826,9 @@
       return;
     }
     elements.customerResultsEmpty.classList.add('hidden');
+    if (elements.customerResultsTable) {
+      elements.customerResultsTable.classList.remove('hidden');
+    }
     const fragment = document.createDocumentFragment();
     state.customerSearchResults.forEach((cliente) => {
       const isSelected = Boolean(state.modalSelectedCliente && state.modalSelectedCliente._id === cliente._id);
@@ -3711,17 +3836,18 @@
       button.type = 'button';
       button.setAttribute('data-customer-id', cliente._id);
       button.className = [
-        'w-full text-left rounded-lg border px-4 py-3 transition flex flex-col gap-1',
-        isSelected
-          ? 'border-primary bg-primary/5 text-primary'
-          : 'border-gray-200 text-gray-700 hover:border-primary hover:bg-primary/5',
+        'w-full text-left px-3 py-2 transition grid grid-cols-1 gap-2 text-[11px] md:grid-cols-6',
+        isSelected ? 'bg-primary/5 text-primary' : 'text-gray-700 hover:bg-primary/5',
       ].join(' ');
-      const documento = cliente.doc || cliente.cpf || cliente.cnpj || '';
-      const contato = [cliente.email, cliente.celular].filter(Boolean).join(' • ');
+      const codigo = getCustomerCode(cliente);
+      const nome = resolveCustomerName(cliente) || 'Cliente sem nome';
+      const documento = cliente.cpf || cliente.doc || cliente.cnpj || '';
+      const celular = cliente.celular || cliente.telefone || '';
       button.innerHTML = `
-        <span class="text-sm font-semibold">${cliente.nome || 'Cliente sem nome'}</span>
-        <span class="text-xs text-gray-500">${documento ? `Documento: ${documento}` : 'Documento não informado'}</span>
-        <span class="text-xs text-gray-500">${contato || 'Contato não informado'}</span>
+        <span class="md:col-span-1 font-semibold text-gray-800">${codigo || '-'}</span>
+        <span class="md:col-span-2 text-gray-800">${nome}</span>
+        <span class="md:col-span-1 text-gray-500">${documento || '-'}</span>
+        <span class="md:col-span-2 text-gray-500">${celular || '-'}</span>
       `;
       fragment.appendChild(button);
     });
@@ -3805,9 +3931,18 @@
   };
 
   const sanitizeSellerCode = (value) => String(value || '').replace(/\D/g, '');
+  const sanitizeCustomerCode = (value) => String(value || '').replace(/\D/g, '');
 
   const getSellerCode = (seller) =>
     sanitizeSellerCode(seller?.codigo || seller?.codigoCliente || seller?.id || '');
+
+  const getCustomerCode = (cliente) =>
+    sanitizeCustomerCode(cliente?.codigo || cliente?.codigoCliente || cliente?.id || '');
+
+  const isExchangeCustomerSearchTarget = (target) =>
+    target === 'exchange' || target === 'exchangeHistory';
+
+  const normalizeDocumentValue = (value) => String(value || '').replace(/\D/g, '');
 
   const getSellerDisplayName = (seller) => {
     const fullName = (seller?.nome || '').trim();
@@ -3952,8 +4087,9 @@
     });
   };
 
-  const openSellerSearchModal = async (query = '') => {
+  const openSellerSearchModal = async (query = '', target = 'main') => {
     if (!elements.sellerModal) return;
+    state.sellerSearchTarget = target || 'main';
     state.sellerSearchQuery = query || '';
     if (elements.sellerSearchInput) {
       elements.sellerSearchInput.value = query || '';
@@ -3976,6 +4112,7 @@
     if (!elements.sellerModal) return;
     elements.sellerModal.classList.add('hidden');
     state.sellerSearchQuery = '';
+    state.sellerSearchTarget = 'main';
     if (elements.sellerSearchInput) {
       elements.sellerSearchInput.value = '';
     }
@@ -3996,6 +4133,16 @@
     const seller = findSellerByCode(normalized) || state.sellers.find((entry) => getSellerCode(entry) === normalized);
     if (!seller || !normalized) {
       notify('Não foi possível selecionar este vendedor. Código inválido.', 'warning');
+      return;
+    }
+    if (state.sellerSearchTarget === 'exchange') {
+      if (elements.exchangeSeller) {
+        elements.exchangeSeller.value = normalized;
+      }
+      if (elements.exchangeSellerName) {
+        elements.exchangeSellerName.value = getSellerDisplayName(seller);
+      }
+      closeSellerSearchModal();
       return;
     }
     if (elements.sellerInput) {
@@ -4041,7 +4188,7 @@
         clearTimeout(sellerLookupTimeout);
         sellerLookupTimeout = null;
       }
-      openSellerSearchModal(trimmed);
+      openSellerSearchModal(trimmed, 'main');
       return;
     }
     const normalized = sanitizeSellerCode(value);
@@ -4062,6 +4209,1783 @@
     }
     const value = elements.sellerInput?.value || '';
     updateSellerSelection(value);
+  };
+
+  const updateExchangeSellerSelection = async (rawCode) => {
+    const normalized = sanitizeSellerCode(rawCode);
+    if (elements.exchangeSeller && elements.exchangeSeller.value !== normalized) {
+      elements.exchangeSeller.value = normalized;
+    }
+    if (!normalized) {
+      if (elements.exchangeSellerName) elements.exchangeSellerName.value = '';
+      return;
+    }
+    try {
+      await ensureSellerList();
+      const seller = findSellerByCode(normalized);
+      if (seller) {
+        if (elements.exchangeSellerName) {
+          elements.exchangeSellerName.value = getSellerDisplayName(seller);
+        }
+      } else {
+        notify('Nao foi encontrado um vendedor com este codigo.', 'warning');
+        if (elements.exchangeSeller) elements.exchangeSeller.value = '';
+        if (elements.exchangeSellerName) elements.exchangeSellerName.value = '';
+      }
+    } catch (error) {
+      if (elements.exchangeSeller) elements.exchangeSeller.value = '';
+      if (elements.exchangeSellerName) elements.exchangeSellerName.value = '';
+      notify(error?.message || 'Erro ao validar vendedor.', 'error');
+    }
+  };
+
+  const handleExchangeSellerInputChange = (event) => {
+    const value = event?.target?.value ?? '';
+    const trimmed = value.trim();
+    if (/\p{L}/u.test(value) || trimmed === '*') {
+      if (exchangeSellerLookupTimeout) {
+        clearTimeout(exchangeSellerLookupTimeout);
+        exchangeSellerLookupTimeout = null;
+      }
+      openSellerSearchModal(trimmed, 'exchange');
+      return;
+    }
+    const normalized = sanitizeSellerCode(value);
+    if (event?.target && value !== normalized) {
+      event.target.value = normalized;
+    }
+    if (exchangeSellerLookupTimeout) {
+      clearTimeout(exchangeSellerLookupTimeout);
+      exchangeSellerLookupTimeout = null;
+    }
+    exchangeSellerLookupTimeout = setTimeout(() => updateExchangeSellerSelection(normalized), 400);
+  };
+
+  const handleExchangeSellerInputBlur = () => {
+    if (exchangeSellerLookupTimeout) {
+      clearTimeout(exchangeSellerLookupTimeout);
+      exchangeSellerLookupTimeout = null;
+    }
+    const value = elements.exchangeSeller?.value || '';
+    updateExchangeSellerSelection(value);
+  };
+
+  const applyExchangeCustomerSelection = (cliente) => {
+    if (!cliente) return;
+    const code = getCustomerCode(cliente);
+    if (elements.exchangeClient) {
+      elements.exchangeClient.value = code;
+    }
+    if (elements.exchangeClientName) {
+      elements.exchangeClientName.value = resolveCustomerName(cliente);
+    }
+  };
+
+  const fetchCustomerByCode = async (code) => {
+    const query = sanitizeCustomerCode(code);
+    if (!query) return null;
+    if (exchangeCustomerLookupController) {
+      exchangeCustomerLookupController.abort();
+    }
+    const controller = new AbortController();
+    exchangeCustomerLookupController = controller;
+    try {
+      const token = getToken();
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const response = await fetch(
+        `${API_BASE}/func/clientes/buscar?q=${encodeURIComponent(query)}&limit=8`,
+        { headers, signal: controller.signal }
+      );
+      if (!response.ok) {
+        throw new Error('Nao foi possivel buscar clientes.');
+      }
+      const payload = await response.json();
+      const results = Array.isArray(payload) ? payload : [];
+      return results.find((cliente) => getCustomerCode(cliente) === query) || null;
+    } finally {
+      if (exchangeCustomerLookupController === controller) {
+        exchangeCustomerLookupController = null;
+      }
+    }
+  };
+
+  const updateExchangeCustomerSelection = async (rawCode) => {
+    const normalized = sanitizeCustomerCode(rawCode);
+    if (elements.exchangeClient && elements.exchangeClient.value !== normalized) {
+      elements.exchangeClient.value = normalized;
+    }
+    if (!normalized) {
+      if (elements.exchangeClientName) elements.exchangeClientName.value = '';
+      return;
+    }
+    try {
+      const cliente = await fetchCustomerByCode(normalized);
+      if (cliente) {
+        applyExchangeCustomerSelection(cliente);
+      } else {
+        notify('Nao foi encontrado um cliente com este codigo.', 'warning');
+        if (elements.exchangeClient) elements.exchangeClient.value = '';
+        if (elements.exchangeClientName) elements.exchangeClientName.value = '';
+      }
+    } catch (error) {
+      if (error?.name === 'AbortError') return;
+      notify(error?.message || 'Erro ao validar cliente.', 'error');
+      if (elements.exchangeClient) elements.exchangeClient.value = '';
+      if (elements.exchangeClientName) elements.exchangeClientName.value = '';
+    }
+  };
+
+  const handleExchangeCustomerInputChange = (event) => {
+    const value = event?.target?.value ?? '';
+    const trimmed = value.trim();
+    if (/\p{L}/u.test(value) || trimmed === '*') {
+      if (exchangeCustomerLookupTimeout) {
+        clearTimeout(exchangeCustomerLookupTimeout);
+        exchangeCustomerLookupTimeout = null;
+      }
+      openCustomerModal('exchange', trimmed);
+      return;
+    }
+    const normalized = sanitizeCustomerCode(value);
+    if (event?.target && value !== normalized) {
+      event.target.value = normalized;
+    }
+    if (exchangeCustomerLookupTimeout) {
+      clearTimeout(exchangeCustomerLookupTimeout);
+      exchangeCustomerLookupTimeout = null;
+    }
+    exchangeCustomerLookupTimeout = setTimeout(() => updateExchangeCustomerSelection(normalized), 400);
+  };
+
+  const handleExchangeCustomerInputBlur = () => {
+    if (exchangeCustomerLookupTimeout) {
+      clearTimeout(exchangeCustomerLookupTimeout);
+      exchangeCustomerLookupTimeout = null;
+    }
+    const value = elements.exchangeClient?.value || '';
+    updateExchangeCustomerSelection(value);
+  };
+
+  const clearExchangeHistoryCustomerFields = () => {
+    state.exchangeHistory.customer = null;
+    state.exchangeHistory.selectedSaleIds = [];
+    if (elements.exchangeHistoryClient) elements.exchangeHistoryClient.value = '';
+    if (elements.exchangeHistoryClientName) elements.exchangeHistoryClientName.value = '';
+  };
+
+  const applyExchangeHistoryCustomerSelection = (cliente) => {
+    if (!cliente) return;
+    state.exchangeHistory.customer = { ...cliente };
+    state.exchangeHistory.selectedSaleIds = [];
+    if (elements.exchangeHistoryClient) {
+      elements.exchangeHistoryClient.value = getCustomerCode(cliente);
+    }
+    if (elements.exchangeHistoryClientName) {
+      elements.exchangeHistoryClientName.value = resolveCustomerName(cliente);
+    }
+    renderExchangeHistoryTable();
+  };
+
+  const updateExchangeHistoryImportState = () => {
+    if (!elements.exchangeHistoryImport) return;
+    const hasSelection = (state.exchangeHistory.selectedSaleIds || []).length > 0;
+    elements.exchangeHistoryImport.disabled = !hasSelection;
+    elements.exchangeHistoryImport.classList.toggle('opacity-60', !hasSelection);
+    elements.exchangeHistoryImport.classList.toggle('cursor-not-allowed', !hasSelection);
+  };
+
+  const updateExchangeSaleImportState = () => {
+    if (!elements.exchangeSaleImport) return;
+    const hasSelection = (state.exchangeSale.selectedItemIds || []).length > 0;
+    elements.exchangeSaleImport.disabled = !hasSelection;
+    elements.exchangeSaleImport.classList.toggle('opacity-60', !hasSelection);
+    elements.exchangeSaleImport.classList.toggle('cursor-not-allowed', !hasSelection);
+  };
+
+  const fetchHistoryCustomerByCode = async (code) => {
+    const query = sanitizeCustomerCode(code);
+    if (!query) return null;
+    if (exchangeHistoryLookupController) {
+      exchangeHistoryLookupController.abort();
+    }
+    const controller = new AbortController();
+    exchangeHistoryLookupController = controller;
+    try {
+      const token = getToken();
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const response = await fetch(
+        `${API_BASE}/func/clientes/buscar?q=${encodeURIComponent(query)}&limit=8`,
+        { headers, signal: controller.signal }
+      );
+      if (!response.ok) {
+        throw new Error('Nao foi possivel buscar clientes.');
+      }
+      const payload = await response.json();
+      const results = Array.isArray(payload) ? payload : [];
+      return results.find((cliente) => getCustomerCode(cliente) === query) || null;
+    } finally {
+      if (exchangeHistoryLookupController === controller) {
+        exchangeHistoryLookupController = null;
+      }
+    }
+  };
+
+  const updateExchangeHistoryCustomerSelection = async (rawCode) => {
+    const normalized = sanitizeCustomerCode(rawCode);
+    if (elements.exchangeHistoryClient && elements.exchangeHistoryClient.value !== normalized) {
+      elements.exchangeHistoryClient.value = normalized;
+    }
+    if (!normalized) {
+      clearExchangeHistoryCustomerFields();
+      renderExchangeHistoryTable();
+      return;
+    }
+    try {
+      const cliente = await fetchHistoryCustomerByCode(normalized);
+      if (cliente) {
+        applyExchangeHistoryCustomerSelection(cliente);
+      } else {
+        notify('Nao foi encontrado um cliente com este codigo.', 'warning');
+        clearExchangeHistoryCustomerFields();
+        renderExchangeHistoryTable();
+      }
+    } catch (error) {
+      if (error?.name === 'AbortError') return;
+      notify(error?.message || 'Erro ao validar cliente.', 'error');
+      clearExchangeHistoryCustomerFields();
+      renderExchangeHistoryTable();
+    }
+  };
+
+  const handleExchangeHistoryCustomerInputChange = (event) => {
+    const value = event?.target?.value ?? '';
+    const trimmed = value.trim();
+    if (/\p{L}/u.test(value) || trimmed === '*') {
+      if (exchangeHistoryLookupTimeout) {
+        clearTimeout(exchangeHistoryLookupTimeout);
+        exchangeHistoryLookupTimeout = null;
+      }
+      openCustomerModal('exchangeHistory', trimmed);
+      return;
+    }
+    const normalized = sanitizeCustomerCode(value);
+    if (event?.target && value !== normalized) {
+      event.target.value = normalized;
+    }
+    if (exchangeHistoryLookupTimeout) {
+      clearTimeout(exchangeHistoryLookupTimeout);
+      exchangeHistoryLookupTimeout = null;
+    }
+    exchangeHistoryLookupTimeout = setTimeout(
+      () => updateExchangeHistoryCustomerSelection(normalized),
+      400
+    );
+  };
+
+  const handleExchangeHistoryCustomerInputBlur = () => {
+    if (exchangeHistoryLookupTimeout) {
+      clearTimeout(exchangeHistoryLookupTimeout);
+      exchangeHistoryLookupTimeout = null;
+    }
+    const value = elements.exchangeHistoryClient?.value || '';
+    updateExchangeHistoryCustomerSelection(value);
+  };
+
+  const getExchangeHistoryDefaultRange = () => {
+    const start = state.salesFilters?.start || getTodayIsoDate();
+    const end = state.salesFilters?.end || getTodayIsoDate();
+    return { start, end };
+  };
+
+  const getExchangeHistorySaleTotal = (sale) => {
+    if (!sale || typeof sale !== 'object') return 0;
+    const snapshotTotal =
+      sale.receiptSnapshot?.totais?.liquido ||
+      sale.receiptSnapshot?.totais?.total ||
+      sale.receiptSnapshot?.totais?.bruto ||
+      '';
+    if (snapshotTotal) {
+      return parseDecimalInput(snapshotTotal);
+    }
+    const items = Array.isArray(sale.items) ? sale.items : [];
+    return items.reduce((sum, item) => {
+      const value =
+        item?.total ??
+        item?.subtotal ??
+        item?.totalValue ??
+        item?.valorTotal ??
+        item?.totalLabel ??
+        0;
+      return sum + parseDecimalInput(value);
+    }, 0);
+  };
+
+  const getExchangeHistorySelectionKey = (sale, index) => {
+    if (!sale || typeof sale !== 'object') return `sale-${index}`;
+    const candidate = sale.id || sale.saleCode || sale.saleCodeLabel;
+    return candidate ? String(candidate) : `sale-${index}`;
+  };
+
+  const syncExchangeHistorySelection = (validKeys) => {
+    const selected = Array.isArray(state.exchangeHistory.selectedSaleIds)
+      ? state.exchangeHistory.selectedSaleIds
+      : [];
+    const filtered = selected.filter((key) => validKeys.has(key));
+    if (filtered.length !== selected.length) {
+      state.exchangeHistory.selectedSaleIds = filtered;
+    }
+  };
+
+  const isHistorySaleMatchingCustomer = (sale, customer) => {
+    if (!sale || !customer) return false;
+    const customerDoc = normalizeDocumentValue(resolveCustomerDocument(customer));
+    const saleDoc = normalizeDocumentValue(sale.customerDocument || '');
+    if (customerDoc && saleDoc) {
+      return customerDoc === saleDoc;
+    }
+    const customerName = normalizeKeyword(resolveCustomerName(customer));
+    const saleName = normalizeKeyword(sale.customerName || '');
+    if (!customerName || !saleName) return false;
+    return saleName.includes(customerName) || customerName.includes(saleName);
+  };
+
+  const getExchangeHistorySales = () => {
+    const customer = state.exchangeHistory.customer;
+    if (!customer) return [];
+    const sales = Array.isArray(state.completedSales) ? state.completedSales : [];
+    const startInput = parseDateInputValue(state.exchangeHistory.start || '');
+    const endInput = parseDateInputValue(state.exchangeHistory.end || '');
+    const start = startInput ? toStartOfDay(startInput) : null;
+    const end = endInput ? toEndOfDay(endInput) : null;
+    return sales
+      .filter((sale) => {
+        if (!isHistorySaleMatchingCustomer(sale, customer)) return false;
+        const createdAt = sale.createdAt ? new Date(sale.createdAt) : null;
+        if (!createdAt || Number.isNaN(createdAt.getTime())) return false;
+        return isDateWithinRange(createdAt, start, end);
+      })
+      .sort((a, b) => getTimeValue(b.createdAt) - getTimeValue(a.createdAt));
+  };
+
+  const getHistoryItemQuantityLabel = (item) => {
+    if (item?.quantityLabel) return String(item.quantityLabel);
+    const quantity = safeNumber(item?.quantidade ?? item?.qtd ?? item?.quantity ?? 0);
+    return quantity.toLocaleString('pt-BR', {
+      minimumFractionDigits: Number.isInteger(quantity) ? 0 : 2,
+      maximumFractionDigits: 3,
+    });
+  };
+
+  const getHistoryItemUnitLabel = (item) => {
+    if (item?.unitLabel) return String(item.unitLabel);
+    const unitValue = safeNumber(
+      item?.valorUnitario ?? item?.valor ?? item?.preco ?? item?.unit ?? item?.unitValue ?? 0
+    );
+    return formatCurrency(unitValue);
+  };
+
+  const getHistoryItemTotalLabel = (item) => {
+    if (item?.totalLabel) return String(item.totalLabel);
+    const quantity = safeNumber(item?.quantidade ?? item?.qtd ?? item?.quantity ?? 0);
+    const unitValue = safeNumber(
+      item?.valorUnitario ?? item?.valor ?? item?.preco ?? item?.unit ?? item?.unitValue ?? 0
+    );
+    const totalValue = safeNumber(
+      item?.total ?? item?.subtotal ?? item?.totalValue ?? item?.valorTotal ?? unitValue * quantity
+    );
+    return formatCurrency(totalValue);
+  };
+
+  const getExchangeHistoryItemCode = (item) => {
+    const candidates = [
+      item?.codigoInterno,
+      item?.codInterno,
+      item?.codigoBarras,
+      item?.codigoProduto,
+      item?.codigo,
+      item?.barcode,
+    ];
+    for (const candidate of candidates) {
+      if (candidate == null) continue;
+      const value = String(candidate).trim();
+      if (value) return value;
+    }
+    return '-';
+  };
+
+  const getExchangeHistoryItemDescription = (item) =>
+    item?.product || item?.nome || item?.descricao || item?.produto || 'Item da venda';
+
+  const appendExchangeRowFromValues = (type, values) => {
+    const isReturn = type === 'return';
+    const body = isReturn ? elements.exchangeReturnBody : elements.exchangeTakeBody;
+    if (!body || !values) return;
+    const code = String(values.code || '').trim() || '-';
+    const desc = String(values.desc || '').trim() || 'Item da venda';
+    const quantity = safeNumber(values.quantity);
+    const unitValue = safeNumber(values.unitValue);
+    const totalValue =
+      values.totalValue != null && values.totalValue !== ''
+        ? safeNumber(values.totalValue)
+        : quantity * unitValue;
+    const depositId = values.depositId ? String(values.depositId) : '';
+    const productId = values.productId ? String(values.productId) : '';
+    const resolvedDepositLabel = () => {
+      if (values.depositLabel) return values.depositLabel;
+      if (!depositId) return '';
+      const companyId = getExchangeCompanyId();
+      const deposits = companyId ? getTransferDepositsByCompany(companyId) : [];
+      const match = deposits.find((deposit) => deposit.id === depositId);
+      return match?.label || '';
+    };
+    const depositLabel = resolvedDepositLabel() || '-';
+    const discountValue = safeNumber(values.discountValue);
+    const row = document.createElement('tr');
+    row.className = 'text-[11px] text-gray-600';
+    if (isReturn) {
+      row.innerHTML = `
+        <td class="px-3 py-2">${escapeHtml(code)}</td>
+        <td class="px-3 py-2">${escapeHtml(desc)}</td>
+        <td class="px-3 py-2 text-right">${formatDecimalValue(quantity, 3)}</td>
+        <td class="px-3 py-2 text-right">${formatDecimalValue(unitValue, 2)}</td>
+        <td class="px-3 py-2 text-right">${formatDecimalValue(totalValue, 2)}</td>
+        <td class="px-3 py-2 text-right">${escapeHtml(depositLabel)}</td>
+      `;
+    } else {
+      row.innerHTML = `
+        <td class="px-3 py-2">${escapeHtml(code)}</td>
+        <td class="px-3 py-2">${escapeHtml(desc)}</td>
+        <td class="px-3 py-2 text-right">${formatDecimalValue(quantity, 3)}</td>
+        <td class="px-3 py-2 text-right">${formatDecimalValue(unitValue, 2)}</td>
+        <td class="px-3 py-2 text-right">${formatDecimalValue(totalValue, 2)}</td>
+        <td class="px-3 py-2 text-right">${formatDecimalValue(discountValue, 2)}</td>
+        <td class="px-3 py-2 text-right">${escapeHtml(depositLabel)}</td>
+      `;
+    }
+    row.dataset.total = formatDecimalValue(totalValue, 2);
+    if (depositId) row.dataset.depositId = depositId;
+    if (productId) row.dataset.productId = productId;
+    body.appendChild(row);
+  };
+
+  const getExchangeSaleItemKey = (item, index) => {
+    const candidate = item?.id || item?.codigoInterno || item?.codigo || item?.barcode || '';
+    const base = candidate ? String(candidate) : 'item';
+    return `${base}-${index}`;
+  };
+
+  const normalizeSaleCode = (value) => String(value || '').trim().toLowerCase();
+
+  const getSaleCodeCandidates = (sale) =>
+    [
+      sale?.saleCodeLabel,
+      sale?.saleCode,
+      sale?.receiptSnapshot?.meta?.saleCode,
+      sale?.receiptSnapshot?.saleCode,
+    ]
+      .filter(Boolean)
+      .map((candidate) => String(candidate));
+
+  const fetchCustomersByQuery = async (query) => {
+    const trimmed = String(query || '').trim();
+    if (!trimmed) return [];
+    const token = getToken();
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const response = await fetch(
+      `${API_BASE}/func/clientes/buscar?q=${encodeURIComponent(trimmed)}&limit=8`,
+      { headers }
+    );
+    if (!response.ok) {
+      throw new Error('Nao foi possivel buscar clientes.');
+    }
+    const payload = await response.json();
+    return Array.isArray(payload) ? payload : [];
+  };
+
+  const resolveCustomerByDocument = (customers, document) => {
+    const target = normalizeDocumentValue(document);
+    if (!target) return null;
+    return (
+      customers.find(
+        (cliente) => normalizeDocumentValue(resolveCustomerDocument(cliente)) === target
+      ) || null
+    );
+  };
+
+  const resolveCustomerByName = (customers, name) => {
+    const target = normalizeKeyword(name);
+    if (!target) return null;
+    return (
+      customers.find((cliente) => {
+        const candidate = normalizeKeyword(resolveCustomerName(cliente));
+        return candidate && (candidate === target || candidate.includes(target));
+      }) || null
+    );
+  };
+
+  const resolveExchangeCustomerFromSale = async (sale) => {
+    if (!sale) return;
+    const snapshotCustomer = sale.receiptSnapshot?.cliente || null;
+    const document =
+      normalizeDocumentValue(snapshotCustomer?.documento || sale.customerDocument || '') || '';
+    const name =
+      snapshotCustomer?.nome || snapshotCustomer?.razaoSocial || sale.customerName || '';
+    try {
+      let customers = [];
+      let customer = null;
+      if (document) {
+        customers = await fetchCustomersByQuery(document);
+        customer = resolveCustomerByDocument(customers, document);
+      }
+      if (!customer && name) {
+        customers = customers.length ? customers : await fetchCustomersByQuery(name);
+        customer = resolveCustomerByName(customers, name);
+      }
+      if (customer) {
+        applyExchangeCustomerSelection(customer);
+        return;
+      }
+      if (name) {
+        if (elements.exchangeClient) elements.exchangeClient.value = '';
+        if (elements.exchangeClientName) elements.exchangeClientName.value = name;
+      }
+    } catch (error) {
+      console.error('Erro ao localizar cliente da venda:', error);
+      if (name) {
+        if (elements.exchangeClient) elements.exchangeClient.value = '';
+        if (elements.exchangeClientName) elements.exchangeClientName.value = name;
+      }
+    }
+  };
+
+  const findExchangeSaleByCode = (rawCode) => {
+    const query = normalizeSaleCode(rawCode);
+    if (!query) return null;
+    const sales = Array.isArray(state.completedSales) ? state.completedSales : [];
+    let fallback = null;
+    for (const sale of sales) {
+      const candidates = getSaleCodeCandidates(sale);
+      for (const candidate of candidates) {
+        const normalizedCandidate = normalizeSaleCode(candidate);
+        if (!normalizedCandidate) continue;
+        if (normalizedCandidate === query) {
+          return sale;
+        }
+        if (!fallback && normalizedCandidate.includes(query)) {
+          fallback = sale;
+        }
+      }
+    }
+    return fallback;
+  };
+
+  const buildExchangeHistoryItemsMarkup = (items) => {
+    if (!Array.isArray(items) || !items.length) {
+      return '<tr><td colspan="4" class="px-3 py-3 text-center text-[11px] text-gray-500">Nenhum item registrado.</td></tr>';
+    }
+    return items
+      .map((item) => {
+        const name =
+          item?.product ||
+          item?.nome ||
+          item?.descricao ||
+          item?.produto ||
+          'Item da venda';
+        const quantityLabel = getHistoryItemQuantityLabel(item);
+        const unitLabel = getHistoryItemUnitLabel(item);
+        const totalLabel = getHistoryItemTotalLabel(item);
+        return `
+          <tr>
+            <td class="px-3 py-2 text-gray-700">${escapeHtml(name)}</td>
+            <td class="px-3 py-2 text-right text-gray-600">${escapeHtml(quantityLabel)}</td>
+            <td class="px-3 py-2 text-right text-gray-600">${escapeHtml(unitLabel)}</td>
+            <td class="px-3 py-2 text-right text-gray-700">${escapeHtml(totalLabel)}</td>
+          </tr>
+        `;
+      })
+      .join('');
+  };
+
+  const renderExchangeHistoryTable = () => {
+    if (!elements.exchangeHistoryBody || !elements.exchangeHistoryEmpty) return;
+    elements.exchangeHistoryBody.innerHTML = '';
+    const customer = state.exchangeHistory.customer;
+    const emptyCell = elements.exchangeHistoryEmpty.querySelector('td');
+    if (!customer) {
+      if (emptyCell) {
+        emptyCell.textContent = 'Selecione um cliente para visualizar as vendas.';
+      }
+      elements.exchangeHistoryEmpty.classList.remove('hidden');
+      return;
+    }
+    const sales = getExchangeHistorySales();
+    const hasSales = sales.length > 0;
+    if (!hasSales) {
+      if (emptyCell) {
+        emptyCell.textContent =
+          'Nenhuma venda encontrada para o cliente no periodo informado.';
+      }
+      elements.exchangeHistoryEmpty.classList.remove('hidden');
+      return;
+    }
+    elements.exchangeHistoryEmpty.classList.add('hidden');
+    const fragment = document.createDocumentFragment();
+    const validKeys = new Set();
+    const selectedSet = new Set(state.exchangeHistory.selectedSaleIds || []);
+    sales.forEach((sale, index) => {
+      const row = document.createElement('tr');
+      row.className = 'text-[11px] text-gray-600 cursor-pointer transition hover:bg-primary/5';
+      row.setAttribute('data-history-row', 'main');
+      row.setAttribute('data-history-index', String(index));
+      const selectionKey = getExchangeHistorySelectionKey(sale, index);
+      row.setAttribute('data-history-key', selectionKey);
+      validKeys.add(selectionKey);
+      const saleCode = sale.saleCodeLabel || sale.saleCode || '-';
+      const createdLabel =
+        sale.createdAtLabel || (sale.createdAt ? toDateLabel(sale.createdAt) : '-');
+      const itemCount = Array.isArray(sale.items) ? sale.items.length : 0;
+      const totalValue = getExchangeHistorySaleTotal(sale);
+      const sellerName =
+        sale.sellerName || (sale.seller ? getSellerDisplayName(sale.seller) : '') || '-';
+      const checkboxId = `pdv-history-sale-${selectionKey.replace(/[^a-zA-Z0-9_-]/g, '') || index}`;
+      const isChecked = selectedSet.has(selectionKey);
+      row.innerHTML = `
+        <td class="px-3 py-2 text-center">
+          <input id="${escapeHtml(checkboxId)}" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/50" data-history-select="${escapeHtml(
+            selectionKey
+          )}" ${isChecked ? 'checked' : ''}>
+        </td>
+        <td class="px-3 py-2 font-semibold text-gray-700">${escapeHtml(saleCode)}</td>
+        <td class="px-3 py-2 text-gray-600">${escapeHtml(createdLabel)}</td>
+        <td class="px-3 py-2 text-center text-gray-600">${escapeHtml(String(itemCount))}</td>
+        <td class="px-3 py-2 text-right text-gray-700">${escapeHtml(
+          formatCurrency(totalValue)
+        )}</td>
+        <td class="px-3 py-2 text-gray-600">${escapeHtml(sellerName)}</td>
+      `;
+      const detailRow = document.createElement('tr');
+      detailRow.className = 'hidden bg-white';
+      detailRow.setAttribute('data-history-row', 'detail');
+      detailRow.setAttribute('data-history-index', String(index));
+      const itemsMarkup = buildExchangeHistoryItemsMarkup(sale.items || []);
+      detailRow.innerHTML = `
+        <td colspan="6" class="px-3 pb-3">
+          <div class="mt-2 overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+            <table class="min-w-full divide-y divide-gray-200 text-[11px] text-gray-600">
+              <thead class="bg-gray-100 text-[10px] uppercase tracking-wide text-gray-500">
+                <tr>
+                  <th class="px-3 py-2 text-left font-semibold">Produto</th>
+                  <th class="px-3 py-2 text-right font-semibold">Qtde</th>
+                  <th class="px-3 py-2 text-right font-semibold">Unitario</th>
+                  <th class="px-3 py-2 text-right font-semibold">Total</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                ${itemsMarkup}
+              </tbody>
+            </table>
+          </div>
+        </td>
+      `;
+      fragment.appendChild(row);
+      fragment.appendChild(detailRow);
+    });
+    elements.exchangeHistoryBody.appendChild(fragment);
+    syncExchangeHistorySelection(validKeys);
+    updateExchangeHistoryImportState();
+  };
+
+  const openExchangeHistoryModal = () => {
+    if (!elements.exchangeHistoryModal) {
+      notify('Nao foi possivel abrir o modal de historico.', 'error');
+      return;
+    }
+    state.exchangeHistory.open = true;
+    const defaults = getExchangeHistoryDefaultRange();
+    if (!state.exchangeHistory.start) {
+      state.exchangeHistory.start = defaults.start;
+    }
+    if (!state.exchangeHistory.end) {
+      state.exchangeHistory.end = defaults.end;
+    }
+    if (elements.exchangeHistoryStart) {
+      elements.exchangeHistoryStart.value = state.exchangeHistory.start || '';
+    }
+    if (elements.exchangeHistoryEnd) {
+      elements.exchangeHistoryEnd.value = state.exchangeHistory.end || '';
+    }
+    if (elements.exchangeHistoryClient) {
+      elements.exchangeHistoryClient.value = state.exchangeHistory.customer
+        ? getCustomerCode(state.exchangeHistory.customer)
+        : '';
+    }
+    if (elements.exchangeHistoryClientName) {
+      elements.exchangeHistoryClientName.value = state.exchangeHistory.customer
+        ? resolveCustomerName(state.exchangeHistory.customer)
+        : '';
+    }
+    elements.exchangeHistoryModal.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+    renderExchangeHistoryTable();
+    updateExchangeHistoryImportState();
+    window.setTimeout(() => {
+      elements.exchangeHistoryClient?.focus();
+    }, 150);
+  };
+
+  const closeExchangeHistoryModal = () => {
+    state.exchangeHistory.open = false;
+    if (elements.exchangeHistoryModal) {
+      elements.exchangeHistoryModal.classList.add('hidden');
+    }
+    releaseBodyScrollIfNoModal();
+  };
+
+  const openExchangeSaleModal = () => {
+    if (!elements.exchangeSaleModal) {
+      notify('Nao foi possivel abrir o modal de vendas.', 'error');
+      return;
+    }
+    state.exchangeSale.open = true;
+    if (elements.exchangeSaleCode && !elements.exchangeSaleCode.value) {
+      elements.exchangeSaleCode.value = '';
+    }
+    updateExchangeSaleSelection(state.exchangeSale.sale, elements.exchangeSaleCode?.value || '', {
+      notifyOnMissing: false,
+    });
+    elements.exchangeSaleModal.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+    updateExchangeSaleImportState();
+    window.setTimeout(() => {
+      elements.exchangeSaleCode?.focus();
+    }, 150);
+  };
+
+  const closeExchangeSaleModal = () => {
+    state.exchangeSale.open = false;
+    if (elements.exchangeSaleModal) {
+      elements.exchangeSaleModal.classList.add('hidden');
+    }
+    releaseBodyScrollIfNoModal();
+  };
+
+  const handleExchangeHistoryDateChange = () => {
+    state.exchangeHistory.start = elements.exchangeHistoryStart?.value || '';
+    state.exchangeHistory.end = elements.exchangeHistoryEnd?.value || '';
+    renderExchangeHistoryTable();
+  };
+
+  const handleExchangeHistoryModalKeydown = (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeExchangeHistoryModal();
+    }
+  };
+
+  const handleExchangeSaleModalKeydown = (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeExchangeSaleModal();
+    }
+  };
+
+  const handleExchangeHistoryBodyClick = (event) => {
+    if (event.target.closest('input[type="checkbox"]')) {
+      return;
+    }
+    const row = event.target.closest('tr[data-history-row="main"]');
+    if (!row || !elements.exchangeHistoryBody?.contains(row)) return;
+    const detailRow = row.nextElementSibling;
+    if (!detailRow || detailRow.getAttribute('data-history-row') !== 'detail') return;
+    const isOpen = !detailRow.classList.contains('hidden');
+    detailRow.classList.toggle('hidden', isOpen);
+    row.classList.toggle('bg-primary/5', !isOpen);
+  };
+
+  const handleExchangeHistorySelectionChange = (event) => {
+    const checkbox = event.target.closest('input[data-history-select]');
+    if (!checkbox) return;
+    const key = checkbox.getAttribute('data-history-select') || '';
+    if (!key) return;
+    const selected = new Set(state.exchangeHistory.selectedSaleIds || []);
+    if (checkbox.checked) {
+      selected.add(key);
+    } else {
+      selected.delete(key);
+    }
+    state.exchangeHistory.selectedSaleIds = Array.from(selected);
+    updateExchangeHistoryImportState();
+  };
+
+  const getSelectedExchangeHistorySales = () => {
+    const selectedKeys = new Set(state.exchangeHistory.selectedSaleIds || []);
+    if (!selectedKeys.size) return [];
+    const sales = getExchangeHistorySales();
+    return sales.filter((sale, index) =>
+      selectedKeys.has(getExchangeHistorySelectionKey(sale, index))
+    );
+  };
+
+  const importExchangeHistorySales = () => {
+    const selectedSales = getSelectedExchangeHistorySales();
+    if (!selectedSales.length) {
+      notify('Selecione ao menos uma venda para importar.', 'warning');
+      return;
+    }
+    if (state.exchangeHistory.customer) {
+      applyExchangeCustomerSelection(state.exchangeHistory.customer);
+    }
+    const depositId = elements.exchangeReturnDeposit?.value || '';
+    const depositLabel =
+      elements.exchangeReturnDeposit?.options?.[
+        elements.exchangeReturnDeposit?.selectedIndex ?? 0
+      ]?.text || elements.exchangeReturnDeposit?.value || '-';
+    selectedSales.forEach((sale) => {
+      const items = Array.isArray(sale.items) ? sale.items : [];
+      items.forEach((item) => {
+        const quantityLabel = getHistoryItemQuantityLabel(item);
+        const unitLabel = getHistoryItemUnitLabel(item);
+        const totalLabel = getHistoryItemTotalLabel(item);
+        appendExchangeRowFromValues('return', {
+          code: getExchangeHistoryItemCode(item),
+          desc: getExchangeHistoryItemDescription(item),
+          quantity: parseDecimalInput(quantityLabel),
+          unitValue: parseDecimalInput(unitLabel),
+          totalValue: parseDecimalInput(totalLabel),
+          depositId,
+          depositLabel,
+        });
+      });
+    });
+    updateExchangeTableCounts();
+    closeExchangeHistoryModal();
+  };
+
+  const renderExchangeSaleItemsTable = () => {
+    if (!elements.exchangeSaleItemsBody || !elements.exchangeSaleItemsEmpty) return;
+    elements.exchangeSaleItemsBody.innerHTML = '';
+    const sale = state.exchangeSale.sale;
+    const emptyCell = elements.exchangeSaleItemsEmpty.querySelector('td');
+    if (!sale) {
+      if (emptyCell) {
+        emptyCell.textContent = 'Informe o codigo da venda para carregar os itens.';
+      }
+      elements.exchangeSaleItemsEmpty.classList.remove('hidden');
+      updateExchangeSaleImportState();
+      return;
+    }
+    const items = Array.isArray(sale.items) ? sale.items : [];
+    if (!items.length) {
+      if (emptyCell) {
+        emptyCell.textContent = 'Nenhum item encontrado para esta venda.';
+      }
+      elements.exchangeSaleItemsEmpty.classList.remove('hidden');
+      updateExchangeSaleImportState();
+      return;
+    }
+    elements.exchangeSaleItemsEmpty.classList.add('hidden');
+    const fragment = document.createDocumentFragment();
+    const selectedSet = new Set(state.exchangeSale.selectedItemIds || []);
+    items.forEach((item, index) => {
+      const row = document.createElement('tr');
+      row.className = 'text-[11px] text-gray-600';
+      const key = getExchangeSaleItemKey(item, index);
+      const checkboxId = `pdv-exchange-sale-item-${key.replace(/[^a-zA-Z0-9_-]/g, '') || index}`;
+      const isChecked = selectedSet.has(key);
+      row.innerHTML = `
+        <td class="px-3 py-2 text-center">
+          <input id="${escapeHtml(checkboxId)}" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/50" data-exchange-sale-select="${escapeHtml(
+            key
+          )}" ${isChecked ? 'checked' : ''}>
+        </td>
+        <td class="px-3 py-2 font-semibold text-gray-700">${escapeHtml(
+          getExchangeHistoryItemCode(item)
+        )}</td>
+        <td class="px-3 py-2 text-gray-700">${escapeHtml(getExchangeHistoryItemDescription(item))}</td>
+        <td class="px-3 py-2 text-right text-gray-600">${escapeHtml(
+          getHistoryItemQuantityLabel(item)
+        )}</td>
+        <td class="px-3 py-2 text-right text-gray-600">${escapeHtml(
+          getHistoryItemUnitLabel(item)
+        )}</td>
+        <td class="px-3 py-2 text-right text-gray-700">${escapeHtml(
+          getHistoryItemTotalLabel(item)
+        )}</td>
+      `;
+      fragment.appendChild(row);
+    });
+    elements.exchangeSaleItemsBody.appendChild(fragment);
+    updateExchangeSaleImportState();
+  };
+
+  const updateExchangeSaleSelection = (sale, code = '', { notifyOnMissing = false } = {}) => {
+    state.exchangeSale.sale = sale || null;
+    state.exchangeSale.selectedItemIds = [];
+    if (elements.exchangeSaleCode) {
+      const fallbackCode = sale ? sale.saleCodeLabel || sale.saleCode || '' : '';
+      elements.exchangeSaleCode.value = code || fallbackCode;
+    }
+    if (elements.exchangeSaleInfo) {
+      if (!sale) {
+        elements.exchangeSaleInfo.value = '';
+      } else {
+        const saleCode = sale.saleCodeLabel || sale.saleCode || '-';
+        const dateLabel = sale.createdAtLabel || toDateLabel(sale.createdAt);
+        const customerName = sale.customerName || 'Cliente nao informado';
+        elements.exchangeSaleInfo.value = `${saleCode} • ${dateLabel} • ${customerName}`;
+      }
+    }
+    renderExchangeSaleItemsTable();
+    if (!sale && notifyOnMissing && code) {
+      notify('Nenhuma venda encontrada para o codigo informado.', 'warning');
+    }
+  };
+
+  const handleExchangeSaleCodeLookup = (rawCode, { notifyOnMissing = false } = {}) => {
+    const trimmed = String(rawCode || '').trim();
+    if (!trimmed) {
+      updateExchangeSaleSelection(null, '', { notifyOnMissing: false });
+      return;
+    }
+    const sale = findExchangeSaleByCode(trimmed);
+    updateExchangeSaleSelection(sale, trimmed, { notifyOnMissing });
+  };
+
+  const handleExchangeSaleCodeInputChange = (event) => {
+    const value = event?.target?.value ?? '';
+    if (exchangeSaleLookupTimeout) {
+      clearTimeout(exchangeSaleLookupTimeout);
+      exchangeSaleLookupTimeout = null;
+    }
+    exchangeSaleLookupTimeout = setTimeout(() => {
+      handleExchangeSaleCodeLookup(value, { notifyOnMissing: false });
+    }, 300);
+  };
+
+  const handleExchangeSaleCodeInputBlur = () => {
+    if (exchangeSaleLookupTimeout) {
+      clearTimeout(exchangeSaleLookupTimeout);
+      exchangeSaleLookupTimeout = null;
+    }
+    const value = elements.exchangeSaleCode?.value || '';
+    handleExchangeSaleCodeLookup(value, { notifyOnMissing: true });
+  };
+
+  const handleExchangeSaleSelectionChange = (event) => {
+    const checkbox = event.target.closest('input[data-exchange-sale-select]');
+    if (!checkbox) return;
+    const key = checkbox.getAttribute('data-exchange-sale-select') || '';
+    if (!key) return;
+    const selected = new Set(state.exchangeSale.selectedItemIds || []);
+    if (checkbox.checked) {
+      selected.add(key);
+    } else {
+      selected.delete(key);
+    }
+    state.exchangeSale.selectedItemIds = Array.from(selected);
+    updateExchangeSaleImportState();
+  };
+
+  const importExchangeSaleItems = async () => {
+    const sale = state.exchangeSale.sale;
+    if (!sale) {
+      notify('Informe o codigo da venda para importar.', 'warning');
+      return;
+    }
+    const selectedSet = new Set(state.exchangeSale.selectedItemIds || []);
+    if (!selectedSet.size) {
+      notify('Selecione os produtos que deseja importar.', 'warning');
+      return;
+    }
+    await resolveExchangeCustomerFromSale(sale);
+    const items = Array.isArray(sale.items) ? sale.items : [];
+    const depositId = elements.exchangeReturnDeposit?.value || '';
+    const depositLabel =
+      elements.exchangeReturnDeposit?.options?.[
+        elements.exchangeReturnDeposit?.selectedIndex ?? 0
+      ]?.text || elements.exchangeReturnDeposit?.value || '-';
+    items.forEach((item, index) => {
+      const key = getExchangeSaleItemKey(item, index);
+      if (!selectedSet.has(key)) return;
+      appendExchangeRowFromValues('return', {
+        code: getExchangeHistoryItemCode(item),
+        desc: getExchangeHistoryItemDescription(item),
+        quantity: parseDecimalInput(getHistoryItemQuantityLabel(item)),
+        unitValue: parseDecimalInput(getHistoryItemUnitLabel(item)),
+        totalValue: parseDecimalInput(getHistoryItemTotalLabel(item)),
+        depositId,
+        depositLabel,
+      });
+    });
+    updateExchangeTableCounts();
+    closeExchangeSaleModal();
+  };
+
+  const handleExchangeTypeChange = (event) => {
+    const value = event?.target?.value || '';
+    if (value === 'historico') {
+      if (state.exchangeSale.open) {
+        closeExchangeSaleModal();
+      }
+      openExchangeHistoryModal();
+      return;
+    }
+    if (value === 'venda') {
+      if (state.exchangeHistory.open) {
+        closeExchangeHistoryModal();
+      }
+      openExchangeSaleModal();
+      return;
+    }
+    if (state.exchangeHistory.open) {
+      closeExchangeHistoryModal();
+    }
+    if (state.exchangeSale.open) {
+      closeExchangeSaleModal();
+    }
+  };
+
+  const getExchangeCompanyId = () => {
+    const pdv = findPdvById(state.selectedPdv);
+    const candidates = [state.activePdvStoreId, getPdvCompanyId(pdv), state.selectedStore];
+    for (const candidate of candidates) {
+      const id = extractNormalizedId(candidate);
+      if (id) return id;
+    }
+    return '';
+  };
+
+  const updateExchangeDepositOptions = () => {
+    const companyId = getExchangeCompanyId();
+    const deposits = companyId ? getTransferDepositsByCompany(companyId) : [];
+    const options = ['<option value="">Selecione o deposito</option>'];
+    deposits.forEach((deposit) => {
+      options.push(`<option value="${escapeHtml(deposit.id)}">${escapeHtml(deposit.label)}</option>`);
+    });
+    const selects = [elements.exchangeReturnDeposit, elements.exchangeTakeDeposit];
+    selects.forEach((select) => {
+      if (!select) return;
+      const currentValue = select.value;
+      select.innerHTML = options.join('');
+      if (currentValue && deposits.some((deposit) => deposit.id === currentValue)) {
+        select.value = currentValue;
+      } else {
+        select.value = deposits[0]?.id || '';
+      }
+      select.disabled = !deposits.length;
+    });
+  };
+
+  const resetExchangeProductFields = (fields) => {
+    if (!fields) return;
+    if (fields.desc) fields.desc.value = '';
+    if (fields.qty) fields.qty.value = '1,000';
+    if (fields.unit) fields.unit.value = '0,00';
+    if (fields.total) fields.total.value = '0,00';
+    if (fields.discount) fields.discount.value = '0,00';
+  };
+
+  const updateExchangeTotalsFromInputs = (fields) => {
+    if (!fields || !fields.total) return;
+    const quantity = parseDecimalInput(fields.qty?.value || '0');
+    const unitValue = parseDecimalInput(fields.unit?.value || '0');
+    const totalValue = quantity * unitValue;
+    fields.total.value = formatDecimalValue(totalValue, 2);
+  };
+
+  const applyExchangeProductSelection = (fields, product) => {
+    if (!fields || !product) return;
+    const quantity = 1;
+    const unitValue = getFinalPrice(product, true, quantity);
+    const totalValue = unitValue * quantity;
+    const description = product?.nome || product?.descricao || product?.produto || '';
+    if (fields.desc) fields.desc.value = description;
+    if (fields.qty) fields.qty.value = formatDecimalValue(quantity, 3);
+    if (fields.unit) fields.unit.value = formatDecimalValue(unitValue, 2);
+    if (fields.total) fields.total.value = formatDecimalValue(totalValue, 2);
+  };
+
+  const lookupExchangeProductByCode = async (rawValue, fields) => {
+    const normalized = normalizeBarcodeValue(rawValue);
+    if (!normalized) {
+      resetExchangeProductFields(fields);
+      if (fields?.code?.dataset) {
+        fields.code.dataset.productId = '';
+      }
+      return null;
+    }
+    if (fields?.code && fields.code.value !== normalized) {
+      fields.code.value = normalized;
+    }
+    try {
+      const product = await fetchProductByBarcode(normalized);
+      if (!product) {
+        notify('Nenhum produto encontrado para o codigo informado.', 'warning');
+        resetExchangeProductFields(fields);
+        if (fields?.code?.dataset) {
+          fields.code.dataset.productId = '';
+        }
+        return null;
+      }
+      applyExchangeProductSelection(fields, product);
+      if (fields?.code?.dataset) {
+        fields.code.dataset.productId = product._id || product.id || '';
+      }
+      return product;
+    } catch (error) {
+      notify(error?.message || 'Erro ao buscar produto.', 'error');
+      resetExchangeProductFields(fields);
+      if (fields?.code?.dataset) {
+        fields.code.dataset.productId = '';
+      }
+      return null;
+    }
+  };
+
+  const handleExchangeReturnCodeLookup = () =>
+    lookupExchangeProductByCode(elements.exchangeReturnCode?.value || '', {
+      code: elements.exchangeReturnCode,
+      desc: elements.exchangeReturnDesc,
+      qty: elements.exchangeReturnQty,
+      unit: elements.exchangeReturnUnit,
+      total: elements.exchangeReturnTotal,
+    });
+
+  const handleExchangeTakeCodeLookup = () =>
+    lookupExchangeProductByCode(elements.exchangeTakeCode?.value || '', {
+      code: elements.exchangeTakeCode,
+      desc: elements.exchangeTakeDesc,
+      qty: elements.exchangeTakeQty,
+      unit: elements.exchangeTakeUnit,
+      total: elements.exchangeTakeTotal,
+    });
+
+  const handleExchangeProductCodeKeydown = async (event, onLookup, onAdd) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    const product = await onLookup();
+    if (product && onAdd) {
+      onAdd();
+    }
+  };
+
+  const handleExchangeTotalKeydown = (event, type) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    appendExchangeRow(type);
+  };
+
+  const sumExchangeTotals = (body) => {
+    if (!body) return 0;
+    return Array.from(body.children).reduce((total, row) => {
+      const rowTotal = parseDecimalInput(row.dataset.total || '');
+      return total + safeNumber(rowTotal);
+    }, 0);
+  };
+
+  const updateExchangeTableCounts = () => {
+    const returned = elements.exchangeReturnBody?.children.length || 0;
+    const taken = elements.exchangeTakeBody?.children.length || 0;
+    if (elements.exchangeReturnEmpty) {
+      elements.exchangeReturnEmpty.classList.remove('hidden');
+      elements.exchangeReturnEmpty.classList.toggle('invisible', returned > 0);
+    }
+    if (elements.exchangeTakeEmpty) {
+      elements.exchangeTakeEmpty.classList.remove('hidden');
+      elements.exchangeTakeEmpty.classList.toggle('invisible', taken > 0);
+    }
+    setExchangeCounts(returned, taken);
+    const returnedTotal = sumExchangeTotals(elements.exchangeReturnBody);
+    const takenTotal = sumExchangeTotals(elements.exchangeTakeBody);
+    setExchangeDiff(returnedTotal - takenTotal);
+  };
+
+  const confirmExchangeRowRemoval = (row, type) => {
+    if (!row) return;
+    const title = 'Remover produto';
+    const message =
+      type === 'return'
+        ? 'Deseja remover este produto da lista de devolvidos?'
+        : 'Deseja remover este produto da lista de levados?';
+    if (typeof window?.showModal === 'function') {
+      window.showModal({
+        title,
+        message,
+        confirmText: 'Remover',
+        cancelText: 'Cancelar',
+        onConfirm: () => {
+          row.remove();
+          updateExchangeTableCounts();
+        },
+      });
+      return;
+    }
+    const confirmed = window.confirm(message);
+    if (!confirmed) return;
+    row.remove();
+    updateExchangeTableCounts();
+  };
+
+  const appendExchangeRow = (type) => {
+    const isReturn = type === 'return';
+    const body = isReturn ? elements.exchangeReturnBody : elements.exchangeTakeBody;
+    if (!body) return;
+    const codeInput = isReturn ? elements.exchangeReturnCode : elements.exchangeTakeCode;
+    const descInput = isReturn ? elements.exchangeReturnDesc : elements.exchangeTakeDesc;
+    const qtyInput = isReturn ? elements.exchangeReturnQty : elements.exchangeTakeQty;
+    const unitInput = isReturn ? elements.exchangeReturnUnit : elements.exchangeTakeUnit;
+    const totalInput = isReturn ? elements.exchangeReturnTotal : elements.exchangeTakeTotal;
+    const depositSelect = isReturn ? elements.exchangeReturnDeposit : elements.exchangeTakeDeposit;
+    const discountInput = isReturn ? null : elements.exchangeTakeDiscount;
+
+    const code = (codeInput?.value || '').trim();
+    const desc = (descInput?.value || '').trim();
+    if (!code) {
+      notify('Informe o codigo do produto.', 'warning');
+      return;
+    }
+    if (!desc) {
+      notify('Informe a descricao do produto.', 'warning');
+      return;
+    }
+
+    const quantity = parseDecimalInput(qtyInput?.value || '0');
+    const unitValue = parseDecimalInput(unitInput?.value || '0');
+    const totalValue = parseDecimalInput(totalInput?.value || '0');
+    const discountValue = parseDecimalInput(discountInput?.value || '0');
+    const depositId = depositSelect?.value || '';
+    const productId = codeInput?.dataset?.productId || '';
+    const depositLabel =
+      depositSelect?.options?.[depositSelect.selectedIndex]?.text ||
+      depositSelect?.value ||
+      '-';
+
+    const row = document.createElement('tr');
+    row.className = 'text-[11px] text-gray-600';
+    if (isReturn) {
+      row.innerHTML = `
+        <td class="px-3 py-2">${escapeHtml(code)}</td>
+        <td class="px-3 py-2">${escapeHtml(desc)}</td>
+        <td class="px-3 py-2 text-right">${formatDecimalValue(quantity, 3)}</td>
+        <td class="px-3 py-2 text-right">${formatDecimalValue(unitValue, 2)}</td>
+        <td class="px-3 py-2 text-right">${formatDecimalValue(totalValue, 2)}</td>
+        <td class="px-3 py-2 text-right">${escapeHtml(depositLabel)}</td>
+      `;
+    } else {
+      row.innerHTML = `
+        <td class="px-3 py-2">${escapeHtml(code)}</td>
+        <td class="px-3 py-2">${escapeHtml(desc)}</td>
+        <td class="px-3 py-2 text-right">${formatDecimalValue(quantity, 3)}</td>
+        <td class="px-3 py-2 text-right">${formatDecimalValue(unitValue, 2)}</td>
+        <td class="px-3 py-2 text-right">${formatDecimalValue(totalValue, 2)}</td>
+        <td class="px-3 py-2 text-right">${formatDecimalValue(discountValue, 2)}</td>
+        <td class="px-3 py-2 text-right">${escapeHtml(depositLabel)}</td>
+      `;
+    }
+    row.dataset.total = formatDecimalValue(totalValue, 2);
+    if (depositId) row.dataset.depositId = depositId;
+    if (productId) row.dataset.productId = productId;
+    body.appendChild(row);
+    if (codeInput) codeInput.value = '';
+    if (codeInput?.dataset) codeInput.dataset.productId = '';
+    resetExchangeProductFields({
+      desc: descInput,
+      qty: qtyInput,
+      unit: unitInput,
+      total: totalInput,
+      discount: discountInput,
+    });
+    updateExchangeTableCounts();
+    codeInput?.focus();
+  };
+
+  const getExchangeRowCells = (row) => Array.from(row?.querySelectorAll('td') || []);
+
+  const parseExchangeCellValue = (cell) => (cell?.textContent || '').trim();
+
+  const collectExchangeItemsFromTable = (body, type) => {
+    if (!body) return [];
+    const isReturn = type === 'return';
+    const rows = Array.from(body.querySelectorAll('tr'));
+    return rows
+      .map((row) => {
+        const cells = getExchangeRowCells(row);
+        const expected = isReturn ? 6 : 7;
+        if (cells.length < expected) return null;
+        const code = parseExchangeCellValue(cells[0]);
+        const description = parseExchangeCellValue(cells[1]);
+        const quantity = parseDecimalInput(parseExchangeCellValue(cells[2]));
+        const unitValue = parseDecimalInput(parseExchangeCellValue(cells[3]));
+        const totalValue = parseDecimalInput(parseExchangeCellValue(cells[4]));
+        const discountValue = isReturn
+          ? 0
+          : parseDecimalInput(parseExchangeCellValue(cells[5]));
+        const depositLabel = parseExchangeCellValue(cells[isReturn ? 5 : 6]);
+        const depositId = row.dataset.depositId || '';
+        const productId = row.dataset.productId || '';
+        if (!code && !description) return null;
+        return {
+          code,
+          description,
+          productId,
+          quantity,
+          unitValue,
+          totalValue,
+          discountValue,
+          depositId,
+          depositLabel,
+        };
+      })
+      .filter(Boolean);
+  };
+
+  const clearExchangeTables = () => {
+    if (elements.exchangeReturnBody) elements.exchangeReturnBody.innerHTML = '';
+    if (elements.exchangeTakeBody) elements.exchangeTakeBody.innerHTML = '';
+    if (elements.exchangeReturnEmpty) {
+      elements.exchangeReturnEmpty.classList.remove('hidden', 'invisible');
+    }
+    if (elements.exchangeTakeEmpty) {
+      elements.exchangeTakeEmpty.classList.remove('hidden', 'invisible');
+    }
+    setExchangeCounts(0, 0);
+    setExchangeDiff(0);
+  };
+
+  const applyExchangeItemsToTables = (returnedItems = [], takenItems = []) => {
+    clearExchangeTables();
+    returnedItems.forEach((item) => {
+      appendExchangeRowFromValues('return', {
+        code: item.code,
+        desc: item.description,
+        productId: item.productId,
+        quantity: item.quantity,
+        unitValue: item.unitValue,
+        totalValue: item.totalValue,
+        depositId: item.depositId,
+        depositLabel: item.depositLabel,
+      });
+    });
+    takenItems.forEach((item) => {
+      appendExchangeRowFromValues('take', {
+        code: item.code,
+        desc: item.description,
+        productId: item.productId,
+        quantity: item.quantity,
+        unitValue: item.unitValue,
+        totalValue: item.totalValue,
+        discountValue: item.discountValue,
+        depositId: item.depositId,
+        depositLabel: item.depositLabel,
+      });
+    });
+    updateExchangeTableCounts();
+  };
+
+  const applyExchangeRecord = (exchange) => {
+    if (!exchange || typeof exchange !== 'object') return;
+    state.exchangeModal.exchangeId = exchange.id || exchange._id || '';
+    if (elements.exchangeCode) {
+      elements.exchangeCode.value = exchange.code || exchange.number || '';
+    }
+    if (elements.exchangeDate) {
+      elements.exchangeDate.value = exchange.date
+        ? formatDateInputValue(exchange.date)
+        : getTodayIsoDate();
+    }
+    if (elements.exchangeType) {
+      const value = exchange.type || 'troca';
+      elements.exchangeType.value = value;
+    }
+    if (elements.exchangeSeller) {
+      elements.exchangeSeller.value = exchange.seller?.code || '';
+    }
+    if (elements.exchangeSellerName) {
+      elements.exchangeSellerName.value = exchange.seller?.name || '';
+    }
+    if (elements.exchangeClient) {
+      elements.exchangeClient.value = exchange.customer?.code || '';
+    }
+    if (elements.exchangeClientName) {
+      elements.exchangeClientName.value = exchange.customer?.name || '';
+    }
+    if (elements.exchangeNotes) {
+      elements.exchangeNotes.value = exchange.notes || '';
+    }
+    applyExchangeItemsToTables(exchange.returnedItems || [], exchange.takenItems || []);
+  };
+
+  const fetchExchangeByCode = async (code) => {
+    const trimmed = String(code || '').trim();
+    if (!trimmed) return null;
+    const token = getToken();
+    return fetchWithOptionalAuth(`${API_BASE}/exchanges/by-code/${encodeURIComponent(trimmed)}`, {
+      token,
+      errorMessage: 'Nao foi possivel localizar a troca.',
+    });
+  };
+
+  const handleExchangeCodeLookup = async (rawValue, { notifyOnMissing = false } = {}) => {
+    const trimmed = String(rawValue || '').trim();
+    if (!trimmed) {
+      state.exchangeModal.exchangeId = '';
+      return;
+    }
+    try {
+      const response = await fetchExchangeByCode(trimmed);
+      if (response?.exchange) {
+        applyExchangeRecord(response.exchange);
+        return;
+      }
+      clearExchangeFormFields();
+      if (notifyOnMissing) {
+        notify('Troca nao encontrada.', 'warning');
+      }
+    } catch (error) {
+      clearExchangeFormFields();
+      if (notifyOnMissing) {
+        notify(error?.message || 'Troca nao encontrada.', 'warning');
+      }
+    }
+  };
+
+  const setExchangeSaveLoading = (isLoading) => {
+    if (!elements.exchangeSave) return;
+    elements.exchangeSave.disabled = isLoading;
+    elements.exchangeSave.classList.toggle('opacity-60', isLoading);
+    elements.exchangeSave.classList.toggle('cursor-not-allowed', isLoading);
+  };
+
+  const setExchangeDeleteLoading = (isLoading) => {
+    if (!elements.exchangeDelete) return;
+    elements.exchangeDelete.disabled = isLoading;
+    elements.exchangeDelete.classList.toggle('opacity-60', isLoading);
+    elements.exchangeDelete.classList.toggle('cursor-not-allowed', isLoading);
+  };
+
+  const setExchangeFinishLoading = (isLoading) => {
+    if (!elements.exchangeFinish) return;
+    elements.exchangeFinish.disabled = isLoading;
+    elements.exchangeFinish.classList.toggle('opacity-60', isLoading);
+    elements.exchangeFinish.classList.toggle('cursor-not-allowed', isLoading);
+  };
+
+  const handleExchangeDelete = async () => {
+    if (!state.exchangeModal.exchangeId) {
+      notify('Nenhuma troca carregada para excluir.', 'warning');
+      return;
+    }
+    const confirmAction = () => true;
+    if (typeof window?.showModal === 'function') {
+      return window.showModal({
+        title: 'Excluir troca',
+        message: 'Tem certeza que deseja excluir esta troca?',
+        confirmText: 'Excluir',
+        cancelText: 'Cancelar',
+        onConfirm: () => handleExchangeDeleteConfirmed(),
+      });
+    }
+    if (!window.confirm('Tem certeza que deseja excluir esta troca?')) {
+      return;
+    }
+    return handleExchangeDeleteConfirmed();
+  };
+
+  const handleExchangeDeleteConfirmed = async () => {
+    if (!state.exchangeModal.exchangeId) return;
+    setExchangeDeleteLoading(true);
+    try {
+      const token = getToken();
+      await fetchWithOptionalAuth(
+        `${API_BASE}/exchanges/${encodeURIComponent(state.exchangeModal.exchangeId)}`,
+        {
+          method: 'DELETE',
+          token,
+          errorMessage: 'Nao foi possivel excluir a troca.',
+        }
+      );
+      clearExchangeFormFields();
+      notify('Troca excluida com sucesso.', 'success');
+    } catch (error) {
+      notify(error?.message || 'Erro ao excluir troca.', 'error');
+    } finally {
+      setExchangeDeleteLoading(false);
+    }
+  };
+
+  const handleExchangeSave = async () => {
+    if (exchangeSaveInFlight) return false;
+    exchangeSaveInFlight = true;
+    setExchangeSaveLoading(true);
+    let saved = false;
+    try {
+      const returnedItems = collectExchangeItemsFromTable(elements.exchangeReturnBody, 'return');
+      const takenItems = collectExchangeItemsFromTable(elements.exchangeTakeBody, 'take');
+      if (!returnedItems.length && !takenItems.length) {
+        notify('Adicione ao menos um produto na troca.', 'warning');
+        return false;
+      }
+      const returnedTotal = sumExchangeTotals(elements.exchangeReturnBody);
+      const takenTotal = sumExchangeTotals(elements.exchangeTakeBody);
+      const differenceValue = returnedTotal - takenTotal;
+      const payload = {
+        pdvId: state.selectedPdv || '',
+        companyId: getExchangeCompanyId(),
+        date: elements.exchangeDate?.value || '',
+        type: elements.exchangeType?.value || 'troca',
+        seller: {
+          code: elements.exchangeSeller?.value || '',
+          name: elements.exchangeSellerName?.value || '',
+        },
+        customer: {
+          code: elements.exchangeClient?.value || '',
+          name: elements.exchangeClientName?.value || '',
+        },
+        notes: elements.exchangeNotes?.value || '',
+        returnedItems,
+        takenItems,
+        differenceValue,
+      };
+      const token = getToken();
+      const isEditing = Boolean(state.exchangeModal.exchangeId);
+      const endpoint = isEditing
+        ? `${API_BASE}/exchanges/${encodeURIComponent(state.exchangeModal.exchangeId)}`
+        : `${API_BASE}/exchanges`;
+      const response = await fetchWithOptionalAuth(endpoint, {
+        method: isEditing ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        token,
+        errorMessage: 'Nao foi possivel salvar a troca.',
+      });
+      if (response?.exchange?.code && elements.exchangeCode) {
+        elements.exchangeCode.value = response.exchange.code;
+      }
+      if (response?.exchange?.id) {
+        state.exchangeModal.exchangeId = response.exchange.id;
+      }
+      notify('Troca salva com sucesso.', 'success');
+      saved = true;
+    } catch (error) {
+      if (error?.message) {
+        notify(error.message, 'error');
+      } else {
+        notify('Erro ao salvar troca.', 'error');
+      }
+    } finally {
+      exchangeSaveInFlight = false;
+      setExchangeSaveLoading(false);
+    }
+    return saved;
+  };
+
+  const finalizeExchangeInventory = async ({
+    returnedItems = [],
+    takenItems = [],
+    differenceValue = 0,
+  }) => {
+    if (!state.exchangeModal.exchangeId) {
+      throw new Error('Salve a troca antes de finalizar.');
+    }
+    const payload = {
+      pdvId: state.selectedPdv || '',
+      companyId: getExchangeCompanyId(),
+      returnedItems,
+      takenItems,
+      differenceValue,
+    };
+    const token = getToken();
+    return fetchWithOptionalAuth(
+      `${API_BASE}/exchanges/${encodeURIComponent(state.exchangeModal.exchangeId)}/finalize`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        token,
+        errorMessage: 'Nao foi possivel finalizar a troca.',
+      }
+    );
+  };
+
+  const buildExchangeSaleItems = async (items = []) => {
+    const saleItems = [];
+    for (let index = 0; index < items.length; index += 1) {
+      const item = items[index];
+      if (!item) continue;
+      const quantity = safeNumber(item.quantity);
+      const unitValue = safeNumber(item.unitValue);
+      if (!(quantity > 0)) continue;
+      const totalValue =
+        item.totalValue !== undefined && item.totalValue !== null
+          ? safeNumber(item.totalValue)
+          : quantity * unitValue;
+      const subtotal = Number.isFinite(totalValue) ? totalValue : quantity * unitValue;
+      let product = null;
+      if (item.productId) {
+        product = await fetchProductById(item.productId);
+      }
+      if (!product && item.code) {
+        product = await fetchProductByBarcode(item.code);
+      }
+      const codigo = item.code || (product ? getProductCode(product) : '');
+      const codigoInterno = product?.codigoInterno || product?.codInterno || codigo;
+      const codigoBarras = product ? getProductBarcode(product) : '';
+      const nome = product?.nome || item.description || 'Produto';
+      const snapshot = product ? buildProductSnapshot(product) : null;
+      saleItems.push({
+        id: product?._id || product?.id || codigo || `${Date.now()}-${index}`,
+        codigo,
+        codigoInterno,
+        codigoBarras,
+        nome,
+        quantidade: quantity,
+        valorBase: unitValue,
+        valorPromocional: null,
+        usePromotion: false,
+        valor: unitValue,
+        subtotal,
+        promoType: null,
+        generalPromo: false,
+        productSnapshot: snapshot,
+      });
+    }
+    return saleItems;
+  };
+
+  const prepareExchangeSale = async ({ takenItems = [], returnedTotal = 0 }) => {
+    const items = await buildExchangeSaleItems(takenItems);
+    if (!items.length) {
+      notify('Nenhum produto encontrado para gerar a venda da diferenca.', 'warning');
+      return false;
+    }
+    state.itens = items;
+    state.vendaPagamentos = [];
+    state.vendaDesconto = Math.max(0, safeNumber(returnedTotal));
+    state.vendaAcrescimo = 0;
+    state.saleSource = '';
+    state.skipInventoryForNextSale = true;
+    clearSelectedProduct();
+    clearSaleSearchAreas();
+    renderItemsList();
+    renderSalePaymentsPreview();
+    updateFinalizeButton();
+    updateSaleSummary();
+    return true;
+  };
+
+  const confirmExchangeSaleOverride = () => {
+    if (!state.itens.length) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      if (typeof window?.showModal === 'function') {
+        window.showModal({
+          title: 'Substituir venda atual?',
+          message:
+            'Existem itens em andamento no PDV. Deseja substituir pela venda da troca?',
+          confirmText: 'Substituir',
+          cancelText: 'Cancelar',
+          onConfirm: () => resolve(true),
+          onCancel: () => resolve(false),
+        });
+        return;
+      }
+      resolve(
+        window.confirm(
+          'Existem itens em andamento no PDV. Deseja substituir pela venda da troca?'
+        )
+      );
+    });
+  };
+
+  const canStartExchangeSale = () => {
+    if (!state.caixaAberto) {
+      notify('Abra o caixa para finalizar a troca com diferenca.', 'warning');
+      return false;
+    }
+    if (state.paymentMethodsLoading) {
+      notify('Aguarde o carregamento dos meios de pagamento.', 'info');
+      return false;
+    }
+    if (!state.paymentMethods.length) {
+      notify('Cadastre meios de pagamento para finalizar a diferenca.', 'warning');
+      return false;
+    }
+    return true;
+  };
+
+  const handleExchangeFinish = async () => {
+    if (exchangeFinalizeInFlight) return;
+    const returnedItems = collectExchangeItemsFromTable(elements.exchangeReturnBody, 'return');
+    const takenItems = collectExchangeItemsFromTable(elements.exchangeTakeBody, 'take');
+    if (!returnedItems.length && !takenItems.length) {
+      notify('Adicione ao menos um produto para finalizar a troca.', 'warning');
+      return;
+    }
+    const returnedTotal = sumExchangeTotals(elements.exchangeReturnBody);
+    const takenTotal = sumExchangeTotals(elements.exchangeTakeBody);
+    const differenceValue = returnedTotal - takenTotal;
+    const roundedDifference = Math.round(differenceValue * 100) / 100;
+    exchangeFinalizeInFlight = true;
+    setExchangeFinishLoading(true);
+    try {
+      if (!state.exchangeModal.exchangeId) {
+        const saved = await handleExchangeSave();
+        if (!saved) return;
+      }
+      if (roundedDifference < 0) {
+        if (!canStartExchangeSale()) return;
+        const allowOverride = await confirmExchangeSaleOverride();
+        if (!allowOverride) return;
+      }
+      await finalizeExchangeInventory({
+        returnedItems,
+        takenItems,
+        differenceValue: roundedDifference,
+      });
+      if (roundedDifference < 0) {
+        const customerCode = elements.exchangeClient?.value || '';
+        const customer = customerCode ? await fetchCustomerByCode(customerCode) : null;
+        if (customer) {
+          setSaleCustomer(customer, null);
+        } else if (elements.exchangeClientName?.value) {
+          setSaleCustomer(
+            {
+              codigo: customerCode,
+              nome: elements.exchangeClientName.value,
+            },
+            null
+          );
+        } else {
+          setSaleCustomer(null, null);
+        }
+        const sellerCode = elements.exchangeSeller?.value || '';
+        if (sellerCode) {
+          updateSellerSelection(sellerCode);
+        }
+        const prepared = await prepareExchangeSale({
+          takenItems,
+          returnedTotal,
+        });
+        if (!prepared) return;
+        closeExchangeModal();
+        openFinalizeModal('sale');
+        notify('Troca finalizada. Prossiga com o pagamento da diferenca.', 'success');
+        return;
+      }
+      state.skipInventoryForNextSale = false;
+      if (roundedDifference > 0) {
+        notify(
+          `Troca finalizada. Credito ao cliente de ${formatCurrency(roundedDifference)}.`,
+          'success'
+        );
+      } else {
+        notify('Troca finalizada sem diferenca.', 'success');
+      }
+    } catch (error) {
+      notify(error?.message || 'Erro ao finalizar a troca.', 'error');
+    } finally {
+      exchangeFinalizeInFlight = false;
+      setExchangeFinishLoading(false);
+    }
   };
 
   const isCrediarioReceivable = (entry) => {
@@ -5069,7 +6993,10 @@
   const setModalSelectedCliente = (cliente) => {
     state.modalSelectedCliente = cliente ? { ...cliente } : null;
     state.modalSelectedPet = null;
-    if (state.modalSelectedCliente && state.modalSelectedCliente._id) {
+    if (isExchangeCustomerSearchTarget(state.customerSearchTarget)) {
+      state.customerPets = [];
+      state.customerPetsLoading = false;
+    } else if (state.modalSelectedCliente && state.modalSelectedCliente._id) {
       const cached = customerPetsCache.get(state.modalSelectedCliente._id);
       if (cached) {
         state.customerPets = cached;
@@ -5089,19 +7016,26 @@
     updateCustomerModalActions();
   };
 
-  const openCustomerModal = () => {
+  const openCustomerModal = (target = 'sale', query = '') => {
     if (!elements.customerModal) return;
+    state.customerSearchTarget = target || 'sale';
     state.modalActiveTab = 'cliente';
-    state.customerSearchQuery = '';
+    state.customerSearchQuery = query || '';
     state.customerSearchResults = [];
     state.customerSearchLoading = false;
     state.customerPetsLoading = false;
     if (elements.customerSearchInput) {
-      elements.customerSearchInput.value = '';
+      elements.customerSearchInput.value = query || '';
     }
-    setModalSelectedCliente(state.vendaCliente ? { ...state.vendaCliente } : null);
+    const initialCliente = isExchangeCustomerSearchTarget(state.customerSearchTarget)
+      ? null
+      : state.vendaCliente
+      ? { ...state.vendaCliente }
+      : null;
+    setModalSelectedCliente(initialCliente);
     if (
       state.vendaPet &&
+      !isExchangeCustomerSearchTarget(state.customerSearchTarget) &&
       state.modalSelectedCliente &&
       state.modalSelectedCliente._id &&
       state.vendaCliente &&
@@ -5117,6 +7051,9 @@
     renderCustomerSearchResults();
     renderCustomerPets();
     updateCustomerModalActions();
+    if (state.customerSearchQuery) {
+      performCustomerSearch(state.customerSearchQuery);
+    }
     setTimeout(() => {
       elements.customerSearchInput?.focus();
     }, 150);
@@ -5125,6 +7062,7 @@
   const closeCustomerModal = () => {
     if (!elements.customerModal) return;
     elements.customerModal.classList.add('hidden');
+    state.customerSearchTarget = 'sale';
     releaseBodyScrollIfNoModal();
     if (customerSearchTimeout) {
       clearTimeout(customerSearchTimeout);
@@ -5200,6 +7138,16 @@
   const handleCustomerConfirm = () => {
     if (!state.modalSelectedCliente) {
       notify('Selecione um cliente para vincular à venda.', 'warning');
+      return;
+    }
+    if (state.customerSearchTarget === 'exchange') {
+      applyExchangeCustomerSelection(state.modalSelectedCliente);
+      closeCustomerModal();
+      return;
+    }
+    if (state.customerSearchTarget === 'exchangeHistory') {
+      applyExchangeHistoryCustomerSelection(state.modalSelectedCliente);
+      closeCustomerModal();
       return;
     }
     setSaleCustomer(state.modalSelectedCliente, state.modalSelectedPet);
@@ -5386,6 +7334,9 @@
       elements.itemsEmpty.classList.remove('hidden');
       elements.itemsCount.textContent = '0 itens';
       elements.itemsTotal.textContent = formatCurrency(0);
+      if (state.skipInventoryForNextSale) {
+        state.skipInventoryForNextSale = false;
+      }
       if (state.activeAppointmentId) {
         state.activeAppointmentId = '';
         renderAppointments();
@@ -8510,6 +10461,7 @@
     state.vendaDesconto = 0;
     state.vendaAcrescimo = 0;
     state.deliveryStatusOverride = null;
+    state.saleSource = '';
     setSaleCustomer(null, null);
     clearSelectedProduct();
     clearSaleSearchAreas();
@@ -8572,6 +10524,10 @@
       seller: state.selectedSeller,
     });
     if (saleRecord) {
+      if (state.skipInventoryForNextSale) {
+        saleRecord.inventoryProcessed = true;
+        saleRecord.inventoryProcessedAt = new Date().toISOString();
+      }
       saleRecord.cashContributions = cashContributions;
       saleRecord.receivables = saleReceivables.entries.map((entry) => ({ ...entry }));
       scheduleStatePersist();
@@ -8611,6 +10567,7 @@
     state.vendaDesconto = 0;
     state.vendaAcrescimo = 0;
     state.deliveryStatusOverride = null;
+    state.saleSource = '';
     setSaleCustomer(null, null);
     clearSelectedProduct();
     clearSaleSearchAreas();
@@ -8624,6 +10581,7 @@
       scheduleStatePersist({ immediate: true });
     }
     advanceSaleCode();
+    state.skipInventoryForNextSale = false;
     const preferences = state.printPreferences || {};
     const mode = normalizePrintMode(preferences.venda, 'PM');
     const shouldEmitFiscal = resolvePrintVariant(mode) === 'fiscal';
@@ -8808,8 +10766,14 @@
       saleDate: orderRecord.createdAt,
     });
     const cashContributions = normalizeCashContributions([]);
+    const isIfoodSale = isIfoodSaleContext({
+      items: itensSnapshot,
+      payments: pagamentosVenda,
+      address: state.deliverySelectedAddress,
+    });
     const saleRecord = registerCompletedSaleRecord({
       type: 'delivery',
+      typeLabel: isIfoodSale ? 'Ifood' : '',
       saleCode,
       snapshot: saleSnapshot,
       payments: pagamentosVenda,
@@ -8980,10 +10944,16 @@
     order.updatedAt = nowIso;
     order.finalizedAt = nowIso;
     renderDeliveryOrders();
+    const isIfoodSale = isIfoodSaleContext({
+      items: itensSnapshot.length ? itensSnapshot : order.items,
+      payments: pagamentosVenda,
+      address: order.address,
+    });
     const saleRecordId = order.saleRecordId;
     if (saleRecordId) {
       const saleRecord = updateCompletedSaleRecord(saleRecordId, {
         saleCode: order.saleCode,
+        typeLabel: isIfoodSale ? 'Ifood' : undefined,
         snapshot: saleSnapshot,
         payments: pagamentosVenda,
         items: itensSnapshot,
@@ -9012,6 +10982,7 @@
     } else {
       const saleRecord = registerCompletedSaleRecord({
         type: 'delivery',
+        typeLabel: isIfoodSale ? 'Ifood' : '',
         saleCode,
         snapshot: saleSnapshot,
         payments: pagamentosVenda,
@@ -9046,6 +11017,7 @@
       : 'Delivery finalizado e registrado no caixa.';
     notify(successMessage, 'success');
     setSaleCustomer(null, null);
+    state.saleSource = '';
     clearSaleSearchAreas();
     closeFinalizeModal();
     if (!existingSaleCode && saleCode) {
@@ -13298,6 +15270,7 @@
 
   const createCompletedSaleRecord = ({
     type = 'venda',
+    typeLabel: typeLabelOverride = '',
     saleCode = '',
     snapshot = null,
     payments = [],
@@ -13312,7 +15285,8 @@
     seller = null,
   } = {}) => {
     const normalizedType = type === 'delivery' ? 'delivery' : 'venda';
-    const typeLabel = normalizedType === 'delivery' ? 'Delivery' : 'Venda';
+    const customTypeLabel = String(typeLabelOverride || '').trim();
+    const typeLabel = customTypeLabel || (normalizedType === 'delivery' ? 'Delivery' : 'Venda');
     const normalizedAppointmentId = normalizeId(appointmentId);
     const saleItems = Array.isArray(items) ? items : [];
     const paymentTags = Array.from(
@@ -14038,13 +16012,16 @@
           appointment.empresa ||
           appointment.loja
       ),
-      customerId: normalizeId(
-        appointment.clienteId ||
+      customerId: (() => {
+        const raw =
+          appointment.clienteId ||
           appointment.customerId ||
+          appointment.tutorId ||
           appointment.cliente?._id ||
           appointment.cliente?.id ||
-          appointment.cliente?._id
-      ),
+          appointment.cliente;
+        return isValidObjectId(raw) ? normalizeId(raw) : '';
+      })(),
       customerName:
         appointment.clienteNome ||
         appointment.customerName ||
@@ -14085,7 +16062,10 @@
         appointment.clienteCelular ||
         appointment.clienteTelefone ||
         '',
-      petId: normalizeId(appointment.petId || appointment.pet?._id),
+      petId: (() => {
+        const raw = appointment.petId || appointment.pet?._id || appointment.pet?.id || appointment.pet;
+        return isValidObjectId(raw) ? normalizeId(raw) : '';
+      })(),
       petName:
         appointment.petNome || appointment.petName || appointment.pet?.nome || appointment.pet || '',
       services,
@@ -14725,11 +16705,77 @@
     }
     return customer;
   };
+  const cloneAppointmentSalesList = (sales) =>
+    Array.isArray(sales) ? sales.map((sale) => ({ ...sale })) : [];
+  const normalizeAppointmentSaleRecord = (record) => {
+    if (!record || typeof record !== 'object') return null;
+    const id = normalizeId(record.id || record._id);
+    if (!id) return null;
+    const quantidade = safeNumber(record.quantidade ?? record.qtd ?? 0);
+    const valorUnitario = safeNumber(record.valorUnitario ?? record.valor ?? record.preco ?? 0);
+    const subtotal = safeNumber(record.subtotal ?? record.total ?? valorUnitario * quantidade);
+    return {
+      id,
+      produtoId: normalizeId(record.produtoId || record.produto),
+      nome: record.produtoNome || record.nome || record.descricao || '',
+      quantidade,
+      valorUnitario,
+      subtotal,
+    };
+  };
+  const loadAppointmentSalesForAppointment = async (appointment) => {
+    const appointmentId = normalizeId(appointment?.id || appointment?.appointmentId);
+    if (!appointmentId) return [];
+    if (appointmentSalesCache.has(appointmentId)) {
+      return cloneAppointmentSalesList(appointmentSalesCache.get(appointmentId));
+    }
+    if (appointmentSalesRequestCache.has(appointmentId)) {
+      const pending = await appointmentSalesRequestCache.get(appointmentId);
+      return cloneAppointmentSalesList(pending);
+    }
+    const rawClienteId =
+      appointment?.customerId ||
+      appointment?.clienteId ||
+      appointment?.tutorId ||
+      appointment?.cliente;
+    const rawPetId = appointment?.petId || appointment?.pet;
+    const clienteId = isValidObjectId(rawClienteId) ? normalizeId(rawClienteId) : '';
+    const petId = isValidObjectId(rawPetId) ? normalizeId(rawPetId) : '';
+    const token = getToken();
+    const request = (async () => {
+      try {
+        const params = new URLSearchParams({ appointmentId });
+        if (clienteId) params.set('clienteId', clienteId);
+        if (petId) params.set('petId', petId);
+        const payload = await fetchWithOptionalAuth(
+          `${API_BASE}/func/vet/vendas?${params.toString()}`,
+          {
+            token,
+            errorMessage: 'Não foi possível carregar as vendas do atendimento.',
+          }
+        );
+        const list = Array.isArray(payload) ? payload : [];
+        const normalized = list.map(normalizeAppointmentSaleRecord).filter(Boolean);
+        appointmentSalesCache.set(appointmentId, normalized);
+        return normalized;
+      } catch (error) {
+        console.error('Erro ao carregar vendas do atendimento:', error);
+        return [];
+      } finally {
+        appointmentSalesRequestCache.delete(appointmentId);
+      }
+    })();
+    appointmentSalesRequestCache.set(appointmentId, request);
+    const resolved = await request;
+    return cloneAppointmentSalesList(resolved);
+  };
   const applyAppointmentToSale = async (appointment) => {
     if (!appointment) return false;
     const services = Array.isArray(appointment.services) ? appointment.services : [];
-    if (!services.length && safeNumber(appointment.total) <= 0) {
-      notify('Este atendimento não possui serviços cadastrados para importar.', 'info');
+    const appointmentSales = await loadAppointmentSalesForAppointment(appointment);
+    const hasSales = appointmentSales.length > 0;
+    if (!services.length && safeNumber(appointment.total) <= 0 && !hasSales) {
+      notify('Este atendimento não possui serviços ou produtos cadastrados para importar.', 'info');
       return false;
     }
     const hasItems = state.itens.length > 0;
@@ -14737,39 +16783,60 @@
       hasItems && state.activeAppointmentId && state.activeAppointmentId !== appointment.id;
     if (hasItems && isDifferentAppointment) {
       const confirmed = window.confirm(
-        'Os itens atuais da venda serão substituídos pelos serviços do atendimento selecionado. Deseja continuar?'
+        'Os itens atuais da venda serão substituídos pelos serviços e produtos do atendimento selecionado. Deseja continuar?'
       );
       if (!confirmed) return false;
     }
-    const itemsToApply = services.length
-      ? services.map((service, index) => {
-          const quantity = safeNumber(service.quantidade) > 0 ? safeNumber(service.quantidade) : 1;
-          const value = safeNumber(service.valor);
-          return {
-            id: service.id || `${appointment.id}:${index}`,
-            codigo: service.id || '',
-            codigoInterno: service.id || '',
-            codigoBarras: '',
-            nome: service.nome || `Serviço ${index + 1}`,
-            quantidade: quantity,
-            valor: value,
-            subtotal: value * quantity,
-            generalPromo: false,
-          };
-        })
-      : [
-          {
-            id: `${appointment.id}:svc`,
-            codigo: appointment.id,
-            codigoInterno: appointment.id,
-            codigoBarras: '',
-            nome: 'Serviços do atendimento',
-            quantidade: 1,
-            valor: safeNumber(appointment.total),
-            subtotal: safeNumber(appointment.total),
-            generalPromo: false,
-          },
-        ];
+    const serviceItems = services.map((service, index) => {
+      const quantity = safeNumber(service.quantidade) > 0 ? safeNumber(service.quantidade) : 1;
+      const value = safeNumber(service.valor);
+      return {
+        id: service.id || `${appointment.id}:${index}`,
+        codigo: service.id || '',
+        codigoInterno: service.id || '',
+        codigoBarras: '',
+        nome: service.nome || `Serviço ${index + 1}`,
+        quantidade: quantity,
+        valor: value,
+        subtotal: value * quantity,
+        generalPromo: false,
+      };
+    });
+    const saleItems = appointmentSales.map((sale, index) => {
+      const quantity = safeNumber(sale.quantidade) > 0 ? safeNumber(sale.quantidade) : 1;
+      const value = safeNumber(sale.valorUnitario);
+      const subtotal = safeNumber(sale.subtotal || value * quantity);
+      return {
+        id: sale.id || `${appointment.id}:venda:${index}`,
+        codigo: sale.produtoId || '',
+        codigoInterno: sale.produtoId || '',
+        codigoBarras: '',
+        nome: sale.nome || `Produto ${index + 1}`,
+        quantidade: quantity,
+        valor: value,
+        subtotal,
+        generalPromo: false,
+      };
+    });
+    const itemsToApply = [];
+    if (serviceItems.length) {
+      itemsToApply.push(...serviceItems);
+    } else if (safeNumber(appointment.total) > 0) {
+      itemsToApply.push({
+        id: `${appointment.id}:svc`,
+        codigo: appointment.id,
+        codigoInterno: appointment.id,
+        codigoBarras: '',
+        nome: 'Serviços do atendimento',
+        quantidade: 1,
+        valor: safeNumber(appointment.total),
+        subtotal: safeNumber(appointment.total),
+        generalPromo: false,
+      });
+    }
+    if (saleItems.length) {
+      itemsToApply.push(...saleItems);
+    }
     applySaleStateSnapshot({
       itens: itemsToApply,
       vendaPagamentos: [],
@@ -14828,7 +16895,7 @@
     clearSaleSearchAreas();
     state.activeAppointmentId = appointment.id;
     setActiveTab('pdv-tab');
-    notify('Serviços do atendimento importados para a venda.', 'success');
+    notify('Serviços e produtos do atendimento importados para a venda.', 'success');
     renderAppointments();
     return true;
   };
@@ -15125,6 +17192,7 @@
     if (!sale) return null;
     const {
       saleCode,
+      typeLabel,
       snapshot,
       payments,
       items,
@@ -15157,6 +17225,12 @@
     if (saleCode !== undefined) {
       sale.saleCode = saleCode || '';
       sale.saleCodeLabel = sale.saleCode || 'Sem código';
+    }
+    if (typeLabel !== undefined) {
+      const normalizedLabel = String(typeLabel || '').trim();
+      if (normalizedLabel) {
+        sale.typeLabel = normalizedLabel;
+      }
     }
     if (snapshot !== undefined) {
       sale.receiptSnapshot = snapshot || null;
@@ -15374,6 +17448,9 @@
       elements.customerModal,
       elements.finalizeModal,
       elements.paymentValueModal,
+      elements.exchangeModal,
+      elements.exchangeHistoryModal,
+      elements.exchangeSaleModal,
       elements.deliveryAddressModal,
       elements.crediarioModal,
       elements.fiscalStatusModal,
@@ -15430,6 +17507,128 @@
       elements.saleCancelReason.value = '';
     }
     clearSaleCancelError();
+    releaseBodyScrollIfNoModal();
+  };
+
+  const setExchangeCounts = (returned = 0, taken = 0) => {
+    if (elements.exchangeReturnCount) {
+      elements.exchangeReturnCount.textContent = String(returned);
+    }
+    if (elements.exchangeTakeCount) {
+      elements.exchangeTakeCount.textContent = String(taken);
+    }
+  };
+
+  const setExchangeDiff = (value = 0) => {
+    if (!elements.exchangeDiff) return;
+    const numeric = safeNumber(value);
+    elements.exchangeDiff.textContent = formatCurrency(Math.abs(numeric));
+    elements.exchangeDiff.classList.remove('text-emerald-600', 'text-rose-600', 'text-gray-700');
+    if (numeric > 0) {
+      elements.exchangeDiff.classList.add('text-emerald-600');
+    } else if (numeric < 0) {
+      elements.exchangeDiff.classList.add('text-rose-600');
+    } else {
+      elements.exchangeDiff.classList.add('text-gray-700');
+    }
+  };
+
+  const resetExchangeModal = () => {
+    state.exchangeModal.exchangeId = '';
+    if (elements.exchangeCode) elements.exchangeCode.value = '';
+    if (elements.exchangeDate && !elements.exchangeDate.value) {
+      elements.exchangeDate.value = getTodayIsoDate();
+    }
+    if (elements.exchangeSeller) elements.exchangeSeller.value = '';
+    if (elements.exchangeSellerName) elements.exchangeSellerName.value = '';
+    if (elements.exchangeClient) elements.exchangeClient.value = '';
+    if (elements.exchangeClientName) elements.exchangeClientName.value = '';
+    if (elements.exchangeType) elements.exchangeType.value = 'troca';
+    if (elements.exchangeNotes) elements.exchangeNotes.value = '';
+    if (elements.exchangeReturnCode) elements.exchangeReturnCode.value = '';
+    if (elements.exchangeTakeCode) elements.exchangeTakeCode.value = '';
+    resetExchangeProductFields({
+      desc: elements.exchangeReturnDesc,
+      qty: elements.exchangeReturnQty,
+      unit: elements.exchangeReturnUnit,
+      total: elements.exchangeReturnTotal,
+    });
+    resetExchangeProductFields({
+      desc: elements.exchangeTakeDesc,
+      qty: elements.exchangeTakeQty,
+      unit: elements.exchangeTakeUnit,
+      total: elements.exchangeTakeTotal,
+      discount: elements.exchangeTakeDiscount,
+    });
+    if (elements.exchangeReturnBody) elements.exchangeReturnBody.innerHTML = '';
+    if (elements.exchangeTakeBody) elements.exchangeTakeBody.innerHTML = '';
+    if (elements.exchangeReturnEmpty) {
+      elements.exchangeReturnEmpty.classList.remove('hidden', 'invisible');
+    }
+    if (elements.exchangeTakeEmpty) {
+      elements.exchangeTakeEmpty.classList.remove('hidden', 'invisible');
+    }
+    setExchangeCounts(0, 0);
+    setExchangeDiff(0);
+  };
+
+  const clearExchangeFormFields = () => {
+    state.exchangeModal.exchangeId = '';
+    if (elements.exchangeCode) elements.exchangeCode.value = '';
+    if (elements.exchangeDate) elements.exchangeDate.value = getTodayIsoDate();
+    if (elements.exchangeType) elements.exchangeType.value = 'troca';
+    if (elements.exchangeSeller) elements.exchangeSeller.value = '';
+    if (elements.exchangeSellerName) elements.exchangeSellerName.value = '';
+    if (elements.exchangeClient) elements.exchangeClient.value = '';
+    if (elements.exchangeClientName) elements.exchangeClientName.value = '';
+    if (elements.exchangeNotes) elements.exchangeNotes.value = '';
+    if (elements.exchangeReturnCode) elements.exchangeReturnCode.value = '';
+    if (elements.exchangeTakeCode) elements.exchangeTakeCode.value = '';
+    resetExchangeProductFields({
+      desc: elements.exchangeReturnDesc,
+      qty: elements.exchangeReturnQty,
+      unit: elements.exchangeReturnUnit,
+      total: elements.exchangeReturnTotal,
+    });
+    resetExchangeProductFields({
+      desc: elements.exchangeTakeDesc,
+      qty: elements.exchangeTakeQty,
+      unit: elements.exchangeTakeUnit,
+      total: elements.exchangeTakeTotal,
+      discount: elements.exchangeTakeDiscount,
+    });
+    clearExchangeTables();
+  };
+
+  const openExchangeModal = async () => {
+    if (!elements.exchangeModal) {
+      notify('Nao foi possivel abrir o modal de troca.', 'error');
+      return;
+    }
+    state.exchangeModal.open = true;
+    if (state.exchangeHistory.open) {
+      closeExchangeHistoryModal();
+    }
+    if (state.exchangeSale.open) {
+      closeExchangeSaleModal();
+    }
+    resetExchangeModal();
+    try {
+      await ensureTransferFormData();
+    } catch (error) {
+      console.error('Erro ao carregar depositos para troca:', error);
+    }
+    updateExchangeDepositOptions();
+    elements.exchangeModal.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+    elements.exchangeCode?.focus();
+  };
+
+  const closeExchangeModal = () => {
+    state.exchangeModal.open = false;
+    if (elements.exchangeModal) {
+      elements.exchangeModal.classList.add('hidden');
+    }
     releaseBodyScrollIfNoModal();
   };
 
@@ -15902,6 +18101,8 @@
     closeTransferModal({ force: true });
     customerAddressesCache.clear();
     appointmentCache.clear();
+    appointmentSalesCache.clear();
+    appointmentSalesRequestCache.clear();
     appointmentsRequestId = 0;
     updatePrintControls();
     if (customerSearchTimeout) {
@@ -16363,6 +18564,8 @@
     state.appointmentScrollPending = false;
     state.activeAppointmentId = '';
     appointmentCache.clear();
+    appointmentSalesCache.clear();
+    appointmentSalesRequestCache.clear();
     appointmentsRequestId = 0;
     renderPayments();
     renderHistory();
@@ -16472,8 +18675,21 @@
         errorMessage: 'Não foi possível buscar produtos.',
       });
       const products = Array.isArray(payload?.products) ? payload.products : Array.isArray(payload) ? payload : [];
-      state.searchResults = products;
-      renderSearchResults(products, normalized);
+      const lookupValue = normalizeBarcodeValue(normalized);
+      const ranked = products
+        .map((product, index) => {
+          const code = normalizeBarcodeValue(getProductCode(product));
+          const barcode = normalizeBarcodeValue(getProductBarcode(product));
+          const isExact = lookupValue && (code === lookupValue || barcode === lookupValue);
+          return { product, index, isExact };
+        })
+        .sort((a, b) => {
+          if (a.isExact === b.isExact) return a.index - b.index;
+          return a.isExact ? -1 : 1;
+        })
+        .map((entry) => entry.product);
+      state.searchResults = ranked;
+      renderSearchResults(ranked, normalized);
     } catch (error) {
       if (error.name === 'AbortError') return;
       console.error('Erro ao pesquisar produtos no PDV:', error);
@@ -17222,7 +19438,7 @@
       const action = button.getAttribute('data-sale-action');
       if (!action) return;
       if (action === 'customer') {
-        button.addEventListener('click', openCustomerModal);
+        button.addEventListener('click', () => openCustomerModal('sale'));
         return;
       }
       if (action === 'delivery') {
@@ -17241,10 +19457,8 @@
         button.addEventListener('click', openTransferModal);
         return;
       }
-      if (action === 'bonificar') {
-        button.addEventListener('click', () => {
-          notify('Em desenvolvimento', 'info');
-        });
+      if (action === 'troca') {
+        button.addEventListener('click', openExchangeModal);
         return;
       }
       button.addEventListener('click', () => {
@@ -17268,6 +19482,107 @@
     elements.customerModalClose?.addEventListener('click', closeCustomerModal);
     elements.customerModalBackdrop?.addEventListener('click', closeCustomerModal);
     elements.customerCancel?.addEventListener('click', closeCustomerModal);
+    elements.exchangeClose?.addEventListener('click', closeExchangeModal);
+    elements.exchangeExit?.addEventListener('click', closeExchangeModal);
+    elements.exchangeBackdrop?.addEventListener('click', closeExchangeModal);
+    elements.exchangeSave?.addEventListener('click', handleExchangeSave);
+    elements.exchangeDelete?.addEventListener('click', handleExchangeDelete);
+    elements.exchangeFinish?.addEventListener('click', handleExchangeFinish);
+    elements.exchangePrint?.addEventListener('click', () => notify('Em desenvolvimento', 'info'));
+    elements.exchangeType?.addEventListener('change', handleExchangeTypeChange);
+    elements.exchangeCode?.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      handleExchangeCodeLookup(elements.exchangeCode?.value || '', { notifyOnMissing: true });
+    });
+    elements.exchangeCode?.addEventListener('blur', () =>
+      handleExchangeCodeLookup(elements.exchangeCode?.value || '', { notifyOnMissing: true })
+    );
+    elements.exchangeSeller?.addEventListener('input', handleExchangeSellerInputChange);
+    elements.exchangeSeller?.addEventListener('blur', handleExchangeSellerInputBlur);
+    elements.exchangeClient?.addEventListener('input', handleExchangeCustomerInputChange);
+    elements.exchangeClient?.addEventListener('blur', handleExchangeCustomerInputBlur);
+    elements.exchangeHistoryClose?.addEventListener('click', closeExchangeHistoryModal);
+    elements.exchangeHistoryCloseFooter?.addEventListener('click', closeExchangeHistoryModal);
+    elements.exchangeHistoryBackdrop?.addEventListener('click', closeExchangeHistoryModal);
+    elements.exchangeHistoryModal?.addEventListener('keydown', handleExchangeHistoryModalKeydown);
+    elements.exchangeHistoryBody?.addEventListener('click', handleExchangeHistoryBodyClick);
+    elements.exchangeHistoryBody?.addEventListener('change', handleExchangeHistorySelectionChange);
+    elements.exchangeHistoryImport?.addEventListener('click', importExchangeHistorySales);
+    elements.exchangeSaleClose?.addEventListener('click', closeExchangeSaleModal);
+    elements.exchangeSaleCloseFooter?.addEventListener('click', closeExchangeSaleModal);
+    elements.exchangeSaleBackdrop?.addEventListener('click', closeExchangeSaleModal);
+    elements.exchangeSaleModal?.addEventListener('keydown', handleExchangeSaleModalKeydown);
+    elements.exchangeSaleCode?.addEventListener('input', handleExchangeSaleCodeInputChange);
+    elements.exchangeSaleCode?.addEventListener('blur', handleExchangeSaleCodeInputBlur);
+    elements.exchangeSaleItemsBody?.addEventListener('change', handleExchangeSaleSelectionChange);
+    elements.exchangeSaleImport?.addEventListener('click', importExchangeSaleItems);
+    elements.exchangeHistoryClient?.addEventListener(
+      'input',
+      handleExchangeHistoryCustomerInputChange
+    );
+    elements.exchangeHistoryClient?.addEventListener(
+      'blur',
+      handleExchangeHistoryCustomerInputBlur
+    );
+    elements.exchangeHistoryStart?.addEventListener('change', handleExchangeHistoryDateChange);
+    elements.exchangeHistoryEnd?.addEventListener('change', handleExchangeHistoryDateChange);
+    elements.exchangeReturnCode?.addEventListener('blur', handleExchangeReturnCodeLookup);
+    elements.exchangeReturnCode?.addEventListener('keydown', (event) =>
+      handleExchangeProductCodeKeydown(event, handleExchangeReturnCodeLookup, () =>
+        appendExchangeRow('return')
+      )
+    );
+    elements.exchangeReturnQty?.addEventListener('input', () =>
+      updateExchangeTotalsFromInputs({
+        qty: elements.exchangeReturnQty,
+        unit: elements.exchangeReturnUnit,
+        total: elements.exchangeReturnTotal,
+      })
+    );
+    elements.exchangeReturnUnit?.addEventListener('input', () =>
+      updateExchangeTotalsFromInputs({
+        qty: elements.exchangeReturnQty,
+        unit: elements.exchangeReturnUnit,
+        total: elements.exchangeReturnTotal,
+      })
+    );
+    elements.exchangeReturnTotal?.addEventListener('keydown', (event) =>
+      handleExchangeTotalKeydown(event, 'return')
+    );
+    elements.exchangeTakeCode?.addEventListener('blur', handleExchangeTakeCodeLookup);
+    elements.exchangeTakeCode?.addEventListener('keydown', (event) =>
+      handleExchangeProductCodeKeydown(event, handleExchangeTakeCodeLookup, () =>
+        appendExchangeRow('take')
+      )
+    );
+    elements.exchangeTakeQty?.addEventListener('input', () =>
+      updateExchangeTotalsFromInputs({
+        qty: elements.exchangeTakeQty,
+        unit: elements.exchangeTakeUnit,
+        total: elements.exchangeTakeTotal,
+      })
+    );
+    elements.exchangeTakeUnit?.addEventListener('input', () =>
+      updateExchangeTotalsFromInputs({
+        qty: elements.exchangeTakeQty,
+        unit: elements.exchangeTakeUnit,
+        total: elements.exchangeTakeTotal,
+      })
+    );
+    elements.exchangeTakeTotal?.addEventListener('keydown', (event) =>
+      handleExchangeTotalKeydown(event, 'take')
+    );
+    elements.exchangeReturnBody?.addEventListener('dblclick', (event) => {
+      const row = event.target.closest('tr');
+      if (!row || !elements.exchangeReturnBody.contains(row)) return;
+      confirmExchangeRowRemoval(row, 'return');
+    });
+    elements.exchangeTakeBody?.addEventListener('dblclick', (event) => {
+      const row = event.target.closest('tr');
+      if (!row || !elements.exchangeTakeBody.contains(row)) return;
+      confirmExchangeRowRemoval(row, 'take');
+    });
     elements.customerConfirm?.addEventListener('click', handleCustomerConfirm);
     elements.customerClear?.addEventListener('click', handleCustomerClearSelection);
     elements.customerSearchInput?.addEventListener('input', handleCustomerSearchInput);
@@ -17548,6 +19863,43 @@
   const normalizeIfoodPaymentMatch = (value) =>
     normalizeKeyword(value).replace(/[^a-z0-9]/g, '');
 
+  const isIfoodSaleContext = ({ items = [], payments = [], address = null } = {}) => {
+    if (state.saleSource === 'ifood') return true;
+    const matchValue = (value) =>
+      value && normalizeIfoodPaymentMatch(value).includes('ifood');
+    const itemList = Array.isArray(items) ? items : [];
+    const paymentList = Array.isArray(payments) ? payments : [];
+    const hasItemMatch = itemList.some((item) => {
+      if (!item || typeof item !== 'object') return false;
+      const candidates = [
+        item.codigo,
+        item.codigoInterno,
+        item.codigoBarras,
+        item.nome,
+        item.descricao,
+        item.product?.name,
+        item.productSnapshot?.name,
+      ];
+      return candidates.some(matchValue);
+    });
+    if (hasItemMatch) return true;
+    const hasPaymentMatch = paymentList.some((payment) => {
+      if (!payment || typeof payment !== 'object') return false;
+      const candidates = [
+        payment.label,
+        payment.nome,
+        payment.tipo,
+        payment.method,
+        payment.paymentLabel,
+        payment.paymentMethodLabel,
+      ];
+      return candidates.some(matchValue);
+    });
+    if (hasPaymentMatch) return true;
+    const addressLabel = address?.apelido || address?.name || address?.label || '';
+    return matchValue(addressLabel);
+  };
+
   const isIfoodPaymentMethod = (method) => {
     if (!method) return false;
     const candidates = [method.label, method.code, ...(method.aliases || [])].filter(Boolean);
@@ -17801,6 +20153,7 @@
     state.vendaPagamentos = [];
     state.vendaDesconto = 0;
     state.vendaAcrescimo = 0;
+    state.saleSource = 'ifood';
     state.deliverySelectedAddressId = '';
     state.deliverySelectedAddress = null;
     if (isIfoodPrepaidPayment(order)) {

@@ -24,6 +24,9 @@ export function updatePageVisibility() {
   if (!els.pageContent) return;
   const hasTutor = !!(state.selectedCliente && state.selectedCliente._id);
   const hasPet = !!state.selectedPetId;
+  if (els.topTabs) {
+    els.topTabs.classList.toggle('hidden', !hasTutor);
+  }
   if (hasTutor && hasPet) {
     els.pageContent.classList.remove('hidden');
   } else {

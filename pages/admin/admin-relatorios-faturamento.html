@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin: Faturamento - E o Bicho</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="../../src/output.css">
+</head>
+<body class="bg-gray-100">
+  <div id="admin-header-placeholder"></div>
+
+  <main class="container mx-auto px-4 pt-1 pb-10 min-h-screen">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <aside class="md:col-span-4">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
+
+      <div class="md:col-span-4 space-y-6">
+        <header class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div class="space-y-2">
+            <nav aria-label="Breadcrumb" class="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+              <span class="inline-flex items-center gap-2 text-primary"><i class="fas fa-warehouse"></i>Retaguarda</span>
+              <i class="fas fa-angle-right text-gray-400"></i>
+              <span class="text-gray-600">Relatorios</span>
+              <i class="fas fa-angle-right text-gray-400"></i>
+              <span class="text-gray-600">Faturamento</span>
+            </nav>
+            <div>
+              <h1 class="text-2xl font-bold text-gray-800">Faturamento</h1>
+              <p class="text-sm text-gray-600">
+                Visao detalhada do desempenho financeiro do mes com indicadores, clientes e vendas liquidas.
+              </p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 text-xs text-gray-600">
+              <span id="billing-period-label" class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 font-semibold text-primary">
+                <i class="fas fa-calendar"></i>Periodo de Visualizacao
+              </span>
+              <span id="billing-compare" class="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1">
+                <i class="fas fa-chart-line"></i>Periodo de Comparacao
+              </span>
+              <span id="billing-updated" class="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">
+                <i class="fas fa-circle text-[8px]"></i>Atualizado
+              </span>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-end gap-3">
+            <div class="space-y-1">
+              <label for="billing-month-view" class="text-xs font-semibold uppercase text-gray-500">Periodo de Visualizacao</label>
+              <input type="month" id="billing-month-view" class="w-full min-w-[190px] rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+            </div>
+            <div class="space-y-1">
+              <label for="billing-month-compare" class="text-xs font-semibold uppercase text-gray-500">Periodo de Comparacao</label>
+              <input type="month" id="billing-month-compare" class="w-full min-w-[190px] rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+            </div>
+            <div class="space-y-1">
+              <label for="billing-company-code" class="text-xs font-semibold uppercase text-gray-500">Empresa</label>
+              <input
+                type="text"
+                id="billing-company-code"
+                class="w-full max-w-[110px] rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"
+                placeholder="Codigo"
+                inputmode="numeric"
+              >
+            </div>
+            <button id="billing-export" type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">
+              <i class="fas fa-file-export text-primary"></i>
+              Exportar
+            </button>
+          </div>
+        </header>
+
+        <section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+            <div class="flex items-center justify-between text-sm text-gray-500">
+              <span>Faturamento bruto</span>
+              <span id="metric-gross-trend" class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-700">
+                <i class="fas fa-minus"></i>0%
+              </span>
+            </div>
+            <p id="metric-gross" class="mt-2 text-2xl font-bold text-gray-800">R$ 0,00</p>
+            <p class="text-xs text-gray-500">Antes de descontos e taxas</p>
+          </article>
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+            <div class="flex items-center justify-between text-sm text-gray-500">
+              <span>Faturamento liquido</span>
+              <span id="metric-net-trend" class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-700">
+                <i class="fas fa-minus"></i>0%
+              </span>
+            </div>
+            <p id="metric-net" class="mt-2 text-2xl font-bold text-gray-800">R$ 0,00</p>
+            <p class="text-xs text-gray-500">Liquido apos taxas e descontos</p>
+          </article>
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+            <div class="flex items-center justify-between text-sm text-gray-500">
+              <span>Ticket medio</span>
+              <span id="metric-ticket-trend" class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-700">
+                <i class="fas fa-minus"></i>0%
+              </span>
+            </div>
+            <p id="metric-ticket" class="mt-2 text-2xl font-bold text-gray-800">R$ 0,00</p>
+            <p class="text-xs text-gray-500">Por pedido confirmado</p>
+          </article>
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+            <div class="flex items-center justify-between text-sm text-gray-500">
+              <span>Pedidos confirmados</span>
+              <span id="metric-orders-trend" class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-700">
+                <i class="fas fa-minus"></i>0%
+              </span>
+            </div>
+            <p id="metric-orders" class="mt-2 text-2xl font-bold text-gray-800">0</p>
+            <p class="text-xs text-gray-500">Total de vendas finalizadas</p>
+          </article>
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+            <div class="flex items-center justify-between text-sm text-gray-500">
+              <span>Descontos aplicados</span>
+              <span id="metric-discounts-trend" class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-700">
+                <i class="fas fa-minus"></i>0%
+              </span>
+            </div>
+            <p id="metric-discounts" class="mt-2 text-2xl font-bold text-gray-800">R$ 0,00</p>
+            <p class="text-xs text-gray-500">Cupons, combos e ajustes</p>
+          </article>
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+            <div class="flex items-center justify-between text-sm text-gray-500">
+              <span>Taxas de pagamento</span>
+              <span id="metric-fees-trend" class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-700">
+                <i class="fas fa-minus"></i>0%
+              </span>
+            </div>
+            <p id="metric-fees" class="mt-2 text-2xl font-bold text-gray-800">R$ 0,00</p>
+            <p class="text-xs text-gray-500">Taxa removida do meio de pagamento</p>
+          </article>
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+            <div class="flex items-center justify-between text-sm text-gray-500">
+              <span>Estornos / chargeback</span>
+              <span id="metric-refunds-trend" class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-700">
+                <i class="fas fa-minus"></i>0%
+              </span>
+            </div>
+            <p id="metric-refunds" class="mt-2 text-2xl font-bold text-gray-800">R$ 0,00</p>
+            <p class="text-xs text-gray-500">Ajustes financeiros do mes</p>
+          </article>
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+            <div class="flex items-center justify-between text-sm text-gray-500">
+              <span>Lucro estimado</span>
+              <span id="metric-profit-trend" class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-700">
+                <i class="fas fa-minus"></i>0%
+              </span>
+            </div>
+            <p id="metric-profit" class="mt-2 text-2xl font-bold text-gray-800">R$ 0,00</p>
+            <p class="text-xs text-gray-500">Margem estimada apos custos</p>
+          </article>
+        </section>
+
+        <section class="grid grid-cols-1 xl:grid-cols-4 gap-6">
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 xl:col-span-2 space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h2 class="text-lg font-semibold text-gray-800">Metas e projecao</h2>
+                <p class="text-sm text-gray-600">Acompanhe o progresso em relacao a meta mensal.</p>
+              </div>
+              <span id="billing-goal-badge" class="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                <i class="fas fa-bullseye"></i>Meta
+              </span>
+            </div>
+            <div class="space-y-2">
+              <div class="flex items-center justify-between text-sm text-gray-600">
+                <span>Meta do mes</span>
+                <span id="billing-goal-target">R$ 0,00</span>
+              </div>
+              <div class="h-3 rounded-full bg-gray-100 overflow-hidden">
+                <div id="billing-goal-progress" class="h-full rounded-full bg-primary" style="width: 0%"></div>
+              </div>
+              <div class="flex items-center justify-between text-xs text-gray-500">
+                <span id="billing-goal-achieved">R$ 0,00 realizado</span>
+                <span id="billing-goal-percent">0% atingido</span>
+              </div>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div class="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                <p class="text-xs text-gray-500">Projecao do mes</p>
+                <p id="billing-projection" class="text-lg font-semibold text-gray-800">R$ 0,00</p>
+              </div>
+              <div class="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                <p class="text-xs text-gray-500">Clientes ativos</p>
+                <p id="billing-active-customers" class="text-lg font-semibold text-gray-800">0</p>
+              </div>
+              <div class="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                <p class="text-xs text-gray-500">Itens vendidos</p>
+                <p id="billing-items-sold" class="text-lg font-semibold text-gray-800">0</p>
+              </div>
+            </div>
+          </article>
+
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Mix por canal</h2>
+              <p class="text-sm text-gray-600">Participacao de cada canal no faturamento.</p>
+            </div>
+            <div id="billing-channel-list" class="space-y-3"></div>
+          </article>
+
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Saude do faturamento</h2>
+              <p class="text-sm text-gray-600">Indicadores operacionais e de retencao.</p>
+            </div>
+            <div id="billing-health-list" class="space-y-3"></div>
+          </article>
+        </section>
+
+        <section class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Clientes com mais vendas</h2>
+              <p class="text-sm text-gray-600">Ranking por faturamento total no mes.</p>
+            </div>
+            <div class="overflow-hidden rounded-xl border border-gray-100">
+              <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-100 text-left text-[11px] text-gray-700">
+                  <thead class="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500">
+                    <tr>
+                      <th class="px-3 py-2 font-semibold text-gray-600">Cliente</th>
+                      <th class="px-3 py-2 font-semibold text-gray-600 text-right">Pedidos</th>
+                      <th class="px-3 py-2 font-semibold text-gray-600 text-right">Total</th>
+                      <th class="px-3 py-2 font-semibold text-gray-600 text-right">Ticket</th>
+                      <th class="px-3 py-2 font-semibold text-gray-600">Ultima compra</th>
+                      <th class="px-3 py-2 font-semibold text-gray-600">Canal</th>
+                    </tr>
+                  </thead>
+                  <tbody id="billing-customers-body" class="divide-y divide-gray-100 bg-white"></tbody>
+                </table>
+              </div>
+            </div>
+          </article>
+
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Produtos mais vendidos</h2>
+              <p class="text-sm text-gray-600">Produtos com maior volume e receita.</p>
+            </div>
+            <div class="overflow-hidden rounded-xl border border-gray-100">
+              <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-100 text-left text-[11px] text-gray-700">
+                  <thead class="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500">
+                    <tr>
+                      <th class="px-3 py-2 font-semibold text-gray-600">Produto</th>
+                      <th class="px-3 py-2 font-semibold text-gray-600">Categoria</th>
+                      <th class="px-3 py-2 font-semibold text-gray-600 text-right">Qtde</th>
+                      <th class="px-3 py-2 font-semibold text-gray-600 text-right">Bruto</th>
+                      <th class="px-3 py-2 font-semibold text-gray-600 text-right">Desconto</th>
+                      <th class="px-3 py-2 font-semibold text-gray-600 text-right">Liquido</th>
+                    </tr>
+                  </thead>
+                  <tbody id="billing-products-body" class="divide-y divide-gray-100 bg-white"></tbody>
+                </table>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <section class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4 xl:col-span-2">
+            <div class="flex items-center justify-between">
+              <div>
+                <h2 class="text-lg font-semibold text-gray-800">Meios de pagamento e taxas</h2>
+                <p class="text-sm text-gray-600">Resumo de taxas por meio de pagamento.</p>
+              </div>
+              <span class="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-600">
+                <i class="fas fa-coins"></i>Taxa removida do meio
+              </span>
+            </div>
+            <div class="overflow-hidden rounded-xl border border-gray-100">
+              <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-100 text-left text-[11px] text-gray-700">
+                  <thead class="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500">
+                    <tr>
+                      <th class="px-3 py-2 font-semibold text-gray-600">Meio</th>
+                      <th class="px-3 py-2 font-semibold text-gray-600 text-right">Pedidos</th>
+                      <th class="px-3 py-2 font-semibold text-gray-600 text-right">Bruto</th>
+                      <th class="px-3 py-2 font-semibold text-gray-600 text-right">Taxa media</th>
+                      <th class="px-3 py-2 font-semibold text-gray-600 text-right">Taxa total</th>
+                      <th class="px-3 py-2 font-semibold text-gray-600 text-right">Liquido</th>
+                    </tr>
+                  </thead>
+                  <tbody id="billing-payments-body" class="divide-y divide-gray-100 bg-white"></tbody>
+                </table>
+              </div>
+            </div>
+          </article>
+
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Resumo fiscal e taxas</h2>
+              <p class="text-sm text-gray-600">Impostos, comissoes e provisoes do mes.</p>
+            </div>
+            <div id="billing-taxes-list" class="space-y-3 text-sm text-gray-700"></div>
+            <div class="rounded-lg border border-gray-100 bg-gray-50 p-3 space-y-1 text-xs text-gray-500">
+              <p class="font-semibold text-gray-600">Notas</p>
+              <ul id="billing-notes-list" class="space-y-1"></ul>
+            </div>
+          </article>
+        </section>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+          <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Detalhamento de vendas</h2>
+              <p class="text-sm text-gray-600">Tabela com valor da venda, descontos, taxa e valor liquido.</p>
+            </div>
+            <span id="billing-sales-count" class="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-600">
+              <i class="fas fa-list"></i>0 vendas no mes
+            </span>
+          </div>
+          <div class="overflow-hidden rounded-xl border border-gray-100">
+            <div class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-100 text-left text-[11px] text-gray-700">
+                <thead class="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500">
+                  <tr>
+                    <th class="px-3 py-2 font-semibold text-gray-600">Data</th>
+                    <th class="px-3 py-2 font-semibold text-gray-600">Pedido</th>
+                    <th class="px-3 py-2 font-semibold text-gray-600">Cliente</th>
+                    <th class="px-3 py-2 font-semibold text-gray-600">Canal</th>
+                    <th class="px-3 py-2 font-semibold text-gray-600">Meio</th>
+                    <th class="px-3 py-2 font-semibold text-gray-600 text-right">Valor venda</th>
+                    <th class="px-3 py-2 font-semibold text-gray-600 text-right">Desconto</th>
+                    <th class="px-3 py-2 font-semibold text-gray-600 text-right">Taxa</th>
+                    <th class="px-3 py-2 font-semibold text-gray-600 text-right">Valor liquido</th>
+                    <th class="px-3 py-2 font-semibold text-gray-600 text-right">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="billing-sales-body" class="divide-y divide-gray-100 bg-white"></tbody>
+                <tfoot class="bg-gray-50 text-[11px] font-semibold text-gray-700">
+                  <tr>
+                    <td class="px-3 py-2" colspan="5">Totais do mes</td>
+                    <td id="billing-sales-total" class="px-3 py-2 text-right">R$ 0,00</td>
+                    <td id="billing-sales-discount" class="px-3 py-2 text-right">R$ 0,00</td>
+                    <td id="billing-sales-fee" class="px-3 py-2 text-right">R$ 0,00</td>
+                    <td id="billing-sales-net" class="px-3 py-2 text-right">R$ 0,00</td>
+                    <td class="px-3 py-2 text-right">-</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-3">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Alertas do mes</h2>
+              <p class="text-sm text-gray-600">Itens que exigem atencao da equipe.</p>
+            </div>
+            <div id="billing-alerts-list" class="space-y-3"></div>
+          </article>
+
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-3">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Observacoes e proximos passos</h2>
+              <p class="text-sm text-gray-600">Recomendacoes para o proximo ciclo.</p>
+            </div>
+            <ul id="billing-next-steps" class="space-y-2 text-sm text-gray-700"></ul>
+          </article>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <div id="admin-footer-placeholder"></div>
+  <div id="modal-placeholder"></div>
+  <div id="confirm-modal-placeholder"></div>
+
+  <script>var basePath = '../../';</script>
+  <script src="../../scripts/core/config.js"></script>
+  <script src="../../scripts/core/ui.js"></script>
+  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/admin/admin.js"></script>
+  <script src="../../scripts/admin/admin-relatorios-faturamento.js"></script>
+</body>
+</html>

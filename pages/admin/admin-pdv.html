@@ -19,6 +19,80 @@
         body.pdv-fullscreen-active #admin-header-placeholder {
             display: none;
         }
+
+        .pdv-exchange-shell {
+            max-width: 1460px;
+        }
+
+        #pdv-exchange-modal .pdv-exchange-surface {
+            background: linear-gradient(180deg, #f5f7fa 0%, #eef2f6 100%);
+            border: 1px solid #cfd6de;
+        }
+
+        #pdv-exchange-modal .pdv-exchange-panel,
+        #pdv-exchange-modal .pdv-exchange-summary {
+            background: #f9fbfd;
+            border-color: #d5dbe3;
+            box-shadow: inset 0 1px 0 #ffffff;
+        }
+
+        #pdv-exchange-modal .pdv-exchange-card {
+            background: #f6f8fb;
+            border-color: #cfd6de;
+        }
+
+        #pdv-exchange-modal .pdv-exchange-card-title,
+        #pdv-exchange-modal .pdv-exchange-card-footer {
+            background: #5d6672;
+        }
+
+        #pdv-exchange-modal .pdv-exchange-header {
+            background: #e2e8f0;
+            color: #1f2937;
+            border-bottom: 1px solid #cfd6de;
+        }
+
+        #pdv-exchange-modal .pdv-exchange-header button {
+            color: #1f2937;
+            border-color: #c1c9d2;
+        }
+
+        #pdv-exchange-modal .pdv-exchange-header button:hover {
+            background: #d4dbe4;
+        }
+
+        #pdv-exchange-modal .pdv-exchange-actions {
+            background: #eef2f6;
+            border-top-color: #cfd6de;
+        }
+
+        #pdv-exchange-modal .pdv-exchange-actions button {
+            color: #1f2937;
+        }
+
+        #pdv-exchange-modal .pdv-exchange-panel input,
+        #pdv-exchange-modal .pdv-exchange-panel select,
+        #pdv-exchange-modal .pdv-exchange-summary input {
+            background: #ffffff;
+            border-color: #d5dbe3;
+        }
+
+        #pdv-exchange-modal .pdv-exchange-table {
+            height: 240px;
+            overflow-y: auto;
+            background: #f8fafc;
+        }
+
+        #pdv-exchange-modal .pdv-exchange-table thead {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        #confirm-modal,
+        #info-modal {
+            z-index: 2000;
+        }
     </style>
 </head>
 <body class="bg-gray-100">
@@ -232,9 +306,9 @@
                                                             <i class="fas fa-paw text-[10px]"></i>
                                                             <span class="text-xs font-semibold text-gray-700">Importar atendimento</span>
                                                         </button>
-                                                        <button type="button" class="inline-flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="bonificar">
-                                                            <i class="fas fa-gift text-[10px]"></i>
-                                                            <span class="text-xs font-semibold text-gray-700">Bonificar</span>
+                                                        <button type="button" class="inline-flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="troca">
+                                                            <i class="fas fa-right-left text-[10px]"></i>
+                                                            <span class="text-xs font-semibold text-gray-700">Troca</span>
                                                         </button>
                                                         <button type="button" class="inline-flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="solicitacao-transferencia">
                                                             <i class="fas fa-exchange-alt text-[10px]"></i>
@@ -580,7 +654,7 @@
     <div id="modal-placeholder"></div>
     <div id="confirm-modal-placeholder"></div>
 
-    <div id="pdv-seller-modal" class="fixed inset-0 z-[80] hidden" aria-hidden="true">
+    <div id="pdv-seller-modal" class="fixed inset-0 z-[90] hidden" aria-hidden="true">
         <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" data-seller-dismiss="backdrop"></div>
         <div class="relative mx-auto mt-14 w-full max-w-xl px-4">
             <div class="overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5">
@@ -646,7 +720,15 @@
                     <div class="space-y-2">
                         <div id="pdv-customer-results-loading" class="hidden rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-500">Buscando clientes...</div>
                         <div id="pdv-customer-results-empty" class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-500">Digite para buscar clientes.</div>
-                        <div id="pdv-customer-results" class="space-y-2"></div>
+                        <div id="pdv-customer-results-table" class="hidden overflow-hidden rounded-lg border border-gray-200">
+                            <div class="grid grid-cols-1 gap-2 bg-gray-100 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-500 md:grid-cols-6">
+                                <span class="md:col-span-1">Cod</span>
+                                <span class="md:col-span-2">Nome</span>
+                                <span class="md:col-span-1">CPF</span>
+                                <span class="md:col-span-2">Celular</span>
+                            </div>
+                            <div id="pdv-customer-results" class="divide-y divide-gray-100"></div>
+                        </div>
                     </div>
                 </div>
                 <div data-pdv-customer-panel="pet" class="hidden space-y-4">
@@ -1139,6 +1221,336 @@
                             <span>Enviar solicitação</span>
                         </button>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="pdv-exchange-modal" class="fixed inset-0 z-[65] hidden">
+        <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-exchange-dismiss="backdrop"></div>
+        <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
+            <div class="relative flex w-full pdv-exchange-shell pdv-exchange-surface transform-gpu flex-col overflow-hidden rounded-2xl text-[12px] leading-[1.35] shadow-2xl transition-all duration-200 ease-out max-h-[90vh] min-h-0">
+                <div class="flex items-center justify-between bg-gray-600 px-4 py-2 text-white pdv-exchange-header">
+                    <span class="text-[11px] font-semibold uppercase tracking-wide">Troca de Mercadoria</span>
+                    <button type="button" data-exchange-dismiss="close" class="inline-flex items-center justify-center rounded-full border border-white/30 p-1.5 text-white transition hover:bg-white/10" aria-label="Fechar modal de troca">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+
+                <div class="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+                    <section class="rounded-xl border border-gray-200 bg-white px-4 py-4 pdv-exchange-panel">
+                        <div class="grid grid-cols-1 gap-3 md:grid-cols-6">
+                            <div class="md:col-span-1">
+                                <label for="pdv-exchange-code" class="block text-[11px] font-semibold text-gray-600">Codigo</label>
+                                <input type="text" id="pdv-exchange-code" class="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-[12px] focus:border-primary focus:ring-2 focus:ring-primary/20">
+                            </div>
+                            <div class="md:col-span-1">
+                                <label for="pdv-exchange-date" class="block text-[11px] font-semibold text-gray-600">Data da Troca</label>
+                                <div class="relative mt-1">
+                                    <input type="date" id="pdv-exchange-date" class="w-full rounded-md border border-gray-200 px-3 py-2 text-[12px] focus:border-primary focus:ring-2 focus:ring-primary/20">
+                                    <span class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[12px] text-gray-400"><i class="fas fa-calendar-days"></i></span>
+                                </div>
+                            </div>
+                            <div class="md:col-span-2">
+                                <label for="pdv-exchange-seller" class="block text-[11px] font-semibold text-gray-600">*Vendedor (F2)</label>
+                                <input type="text" id="pdv-exchange-seller" class="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-[12px] focus:border-primary focus:ring-2 focus:ring-primary/20">
+                            </div>
+                            <div class="md:col-span-2">
+                                <label for="pdv-exchange-seller-name" class="block text-[11px] font-semibold text-gray-600">&nbsp;</label>
+                                <input type="text" id="pdv-exchange-seller-name" class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-[12px] text-gray-600" placeholder="" readonly>
+                            </div>
+                        </div>
+
+                        <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-6">
+                            <div class="md:col-span-2">
+                                <label for="pdv-exchange-type" class="block text-[11px] font-semibold text-gray-600">Tipo</label>
+                                <select id="pdv-exchange-type" class="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-[12px] focus:border-primary focus:ring-2 focus:ring-primary/20">
+                                    <option value="troca">Troca de Mercadoria</option>
+                                    <option value="historico">Por Historico</option>
+                                    <option value="venda">Por Codigo de Venda</option>
+                                </select>
+                            </div>
+                            <div class="md:col-span-2">
+                                <label for="pdv-exchange-client" class="block text-[11px] font-semibold text-gray-600">Cliente (F2)</label>
+                                <input type="text" id="pdv-exchange-client" class="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-[12px] focus:border-primary focus:ring-2 focus:ring-primary/20">
+                            </div>
+                            <div class="md:col-span-2">
+                                <label for="pdv-exchange-client-name" class="block text-[11px] font-semibold text-gray-600">&nbsp;</label>
+                                <input type="text" id="pdv-exchange-client-name" class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-[12px] text-gray-600" readonly>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                        <div class="rounded-xl border border-gray-300 bg-white overflow-hidden pdv-exchange-card">
+                            <div class="bg-gray-600 px-4 py-2 text-[12px] font-semibold text-white pdv-exchange-card-title">Produtos a serem devolvidos</div>
+                            <div class="px-4 py-3">
+                                <div class="grid grid-cols-1 gap-2 text-[11px] text-gray-600 md:grid-cols-12">
+                                    <div class="md:col-span-2">
+                                        <label class="block text-[10px] font-semibold uppercase tracking-wide text-gray-400">Codigo</label>
+                                        <input type="text" id="pdv-exchange-return-code" class="mt-1 w-full rounded-md border border-gray-200 px-2 py-1 text-[12px]" placeholder="Codigo">
+                                    </div>
+                                    <div class="md:col-span-4">
+                                        <label class="block text-[10px] font-semibold uppercase tracking-wide text-gray-400">Descricao</label>
+                                        <input type="text" id="pdv-exchange-return-desc" class="mt-1 w-full rounded-md border border-gray-200 px-2 py-1 text-[12px]" placeholder="Descricao">
+                                    </div>
+                                    <div class="md:col-span-2">
+                                        <label class="block text-[10px] font-semibold uppercase tracking-wide text-gray-400">Deposito</label>
+                                        <select id="pdv-exchange-return-deposit" class="mt-1 w-full rounded-md border border-gray-200 px-2 py-1 text-[12px]">
+                                            <option value="">Loja</option>
+                                        </select>
+                                    </div>
+                                    <div class="md:col-span-1">
+                                        <label class="block text-[10px] font-semibold uppercase tracking-wide text-gray-400">QTD</label>
+                                        <input type="text" id="pdv-exchange-return-qty" inputmode="decimal" value="1,000" class="mt-1 w-full rounded-md border border-gray-200 px-2 py-1 text-[12px]">
+                                    </div>
+                                    <div class="md:col-span-1">
+                                        <label class="block text-[10px] font-semibold uppercase tracking-wide text-gray-400">Unitario</label>
+                                        <input type="text" id="pdv-exchange-return-unit" inputmode="decimal" value="0,00" class="mt-1 w-full rounded-md border border-gray-200 px-2 py-1 text-[12px]">
+                                    </div>
+                                    <div class="md:col-span-2">
+                                        <label class="block text-[10px] font-semibold uppercase tracking-wide text-gray-400">Total</label>
+                                        <input type="text" id="pdv-exchange-return-total" inputmode="decimal" value="0,00" class="mt-1 w-full rounded-md border border-gray-200 px-2 py-1 text-[12px]">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="border-t border-gray-200 pdv-exchange-table">
+                                <table class="min-w-full divide-y divide-gray-200 text-left text-[11px] text-gray-600">
+                                    <thead class="bg-gray-200 text-[10px] uppercase tracking-wide text-gray-500">
+                                        <tr>
+                                            <th class="px-3 py-2 font-semibold">Codigo</th>
+                                            <th class="px-3 py-2 font-semibold">Descricao</th>
+                                            <th class="px-3 py-2 font-semibold text-right">Qtde</th>
+                                            <th class="px-3 py-2 font-semibold text-right">Unit</th>
+                                            <th class="px-3 py-2 font-semibold text-right">Total</th>
+                                            <th class="px-3 py-2 font-semibold text-right">Deposito</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="pdv-exchange-return-body" class="divide-y divide-gray-100"></tbody>
+                                    <tbody>
+                                        <tr id="pdv-exchange-return-empty">
+                                            <td colspan="6" class="px-3 py-10 text-center text-[11px] text-gray-500">Nao ha conteudo na tabela</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="bg-gray-600 px-4 py-2 text-[11px] font-semibold text-white pdv-exchange-card-footer">
+                                Quantidade de produtos que serao devolvidos: <span id="pdv-exchange-return-count">0</span>
+                            </div>
+                        </div>
+
+                        <div class="rounded-xl border border-gray-300 bg-white overflow-hidden pdv-exchange-card">
+                            <div class="bg-gray-600 px-4 py-2 text-[12px] font-semibold text-white pdv-exchange-card-title">Produtos a serem levados</div>
+                            <div class="px-4 py-3">
+                                <div class="grid grid-cols-1 gap-2 text-[11px] text-gray-600 md:grid-cols-12">
+                                    <div class="md:col-span-2">
+                                        <label class="block text-[10px] font-semibold uppercase tracking-wide text-gray-400">Codigo</label>
+                                        <input type="text" id="pdv-exchange-take-code" class="mt-1 w-full rounded-md border border-gray-200 px-2 py-1 text-[12px]" placeholder="Codigo">
+                                    </div>
+                                    <div class="md:col-span-4">
+                                        <label class="block text-[10px] font-semibold uppercase tracking-wide text-gray-400">Descricao</label>
+                                        <input type="text" id="pdv-exchange-take-desc" class="mt-1 w-full rounded-md border border-gray-200 px-2 py-1 text-[12px]" placeholder="Descricao">
+                                    </div>
+                                    <div class="md:col-span-2">
+                                        <label class="block text-[10px] font-semibold uppercase tracking-wide text-gray-400">Deposito</label>
+                                        <select id="pdv-exchange-take-deposit" class="mt-1 w-full rounded-md border border-gray-200 px-2 py-1 text-[12px]">
+                                            <option value="">Loja</option>
+                                        </select>
+                                    </div>
+                                    <div class="md:col-span-1">
+                                        <label class="block text-[10px] font-semibold uppercase tracking-wide text-gray-400">QTD</label>
+                                        <input type="text" id="pdv-exchange-take-qty" inputmode="decimal" value="1,000" class="mt-1 w-full rounded-md border border-gray-200 px-2 py-1 text-[12px]">
+                                    </div>
+                                    <div class="md:col-span-1">
+                                        <label class="block text-[10px] font-semibold uppercase tracking-wide text-gray-400">Unitario</label>
+                                        <input type="text" id="pdv-exchange-take-unit" inputmode="decimal" value="0,00" class="mt-1 w-full rounded-md border border-gray-200 px-2 py-1 text-[12px]">
+                                    </div>
+                                    <div class="md:col-span-1">
+                                        <label class="block text-[10px] font-semibold uppercase tracking-wide text-gray-400">Desc</label>
+                                        <input type="text" id="pdv-exchange-take-discount" inputmode="decimal" value="0,00" class="mt-1 w-full rounded-md border border-gray-200 px-2 py-1 text-[12px]">
+                                    </div>
+                                    <div class="md:col-span-1">
+                                        <label class="block text-[10px] font-semibold uppercase tracking-wide text-gray-400">Total</label>
+                                        <input type="text" id="pdv-exchange-take-total" inputmode="decimal" value="0,00" class="mt-1 w-full rounded-md border border-gray-200 px-2 py-1 text-[12px]">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="border-t border-gray-200 pdv-exchange-table">
+                                <table class="min-w-full divide-y divide-gray-200 text-left text-[11px] text-gray-600">
+                                    <thead class="bg-gray-200 text-[10px] uppercase tracking-wide text-gray-500">
+                                        <tr>
+                                            <th class="px-3 py-2 font-semibold">Codigo</th>
+                                            <th class="px-3 py-2 font-semibold">Descricao</th>
+                                            <th class="px-3 py-2 font-semibold text-right">Qtde</th>
+                                            <th class="px-3 py-2 font-semibold text-right">Unit</th>
+                                            <th class="px-3 py-2 font-semibold text-right">Total</th>
+                                            <th class="px-3 py-2 font-semibold text-right">Desc.</th>
+                                            <th class="px-3 py-2 font-semibold text-right">Deposito</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="pdv-exchange-take-body" class="divide-y divide-gray-100"></tbody>
+                                    <tbody>
+                                        <tr id="pdv-exchange-take-empty">
+                                            <td colspan="7" class="px-3 py-10 text-center text-[11px] text-gray-500">Nao ha conteudo na tabela</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="bg-gray-600 px-4 py-2 text-[11px] font-semibold text-white pdv-exchange-card-footer">
+                                Quantidade de produtos que serao levados: <span id="pdv-exchange-take-count">0</span>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="rounded-xl border border-gray-200 bg-white px-4 py-3 pdv-exchange-summary">
+                        <div class="flex flex-col gap-3 md:flex-row md:items-center">
+                            <div class="text-[12px] font-semibold text-gray-700">
+                                Valor da diferenca: <span id="pdv-exchange-diff" class="font-bold">R$ 0,00</span>
+                            </div>
+                            <div class="flex-1">
+                                <label for="pdv-exchange-notes" class="block text-[10px] font-semibold uppercase tracking-wide text-gray-400">Observacoes</label>
+                                <input type="text" id="pdv-exchange-notes" class="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-[12px] focus:border-primary focus:ring-2 focus:ring-primary/20">
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <div class="grid grid-cols-1 gap-3 border-t border-gray-200 bg-white px-4 py-3 md:grid-cols-5 pdv-exchange-actions">
+                    <button type="button" id="pdv-exchange-save" class="inline-flex items-center justify-center rounded-lg bg-emerald-200 px-4 py-3 text-[13px] font-semibold text-white shadow-sm transition hover:bg-emerald-300">
+                        Gravar (CTRL+G)
+                    </button>
+                    <button type="button" id="pdv-exchange-delete" class="inline-flex items-center justify-center rounded-lg bg-rose-200 px-4 py-3 text-[13px] font-semibold text-white shadow-sm transition hover:bg-rose-300">
+                        Excluir (CTRL+E)
+                    </button>
+                    <button type="button" id="pdv-exchange-finish" class="inline-flex items-center justify-center rounded-lg bg-emerald-200 px-4 py-3 text-[13px] font-semibold text-white shadow-sm transition hover:bg-emerald-300">
+                        Finalizar (F5)
+                    </button>
+                    <button type="button" id="pdv-exchange-print" class="inline-flex items-center justify-center rounded-lg bg-indigo-200 px-4 py-3 text-[13px] font-semibold text-white shadow-sm transition hover:bg-indigo-300">
+                        Imprimir (F6)
+                    </button>
+                    <button type="button" id="pdv-exchange-exit" class="inline-flex items-center justify-center rounded-lg bg-red-700 px-4 py-3 text-[13px] font-semibold text-white shadow-sm transition hover:bg-red-800">
+                        Sair (Esc)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="pdv-exchange-history-modal" class="fixed inset-0 z-[70] hidden" aria-hidden="true">
+        <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" data-exchange-history-dismiss="backdrop"></div>
+        <div class="relative mx-auto mt-12 w-full max-w-5xl px-4">
+            <div class="overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5">
+                <div class="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+                    <div>
+                        <h2 class="text-lg font-semibold text-gray-800">Historico de vendas</h2>
+                        <p class="text-sm text-gray-500">Selecione o cliente e o periodo para localizar as vendas.</p>
+                    </div>
+                    <button type="button" id="pdv-exchange-history-close" class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600" aria-label="Fechar historico de vendas">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="space-y-4 px-5 py-5">
+                    <div class="grid grid-cols-1 gap-3 md:grid-cols-6">
+                        <div class="md:col-span-2">
+                            <label for="pdv-exchange-history-client" class="block text-xs font-semibold uppercase tracking-wide text-gray-500">Cliente</label>
+                            <input id="pdv-exchange-history-client" type="text" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Codigo do cliente">
+                        </div>
+                        <div class="md:col-span-4">
+                            <label for="pdv-exchange-history-client-name" class="block text-xs font-semibold uppercase tracking-wide text-gray-500">&nbsp;</label>
+                            <input id="pdv-exchange-history-client-name" type="text" class="mt-1 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600" readonly>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 gap-3 md:grid-cols-4">
+                        <div class="md:col-span-2">
+                            <label for="pdv-exchange-history-start" class="block text-xs font-semibold uppercase tracking-wide text-gray-500">Periodo inicio</label>
+                            <input id="pdv-exchange-history-start" type="date" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                        </div>
+                        <div class="md:col-span-2">
+                            <label for="pdv-exchange-history-end" class="block text-xs font-semibold uppercase tracking-wide text-gray-500">Periodo fim</label>
+                            <input id="pdv-exchange-history-end" type="date" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                        </div>
+                    </div>
+                    <div class="overflow-hidden rounded-lg border border-gray-200">
+                        <div class="max-h-72 overflow-y-auto">
+                            <table class="min-w-full divide-y divide-gray-200 text-left text-[11px] text-gray-600">
+                                <thead class="sticky top-0 bg-gray-100 text-[10px] uppercase tracking-wide text-gray-500">
+                                    <tr>
+                                        <th class="w-10 px-3 py-2 text-center font-semibold"><span class="sr-only">Selecionar</span></th>
+                                        <th class="px-3 py-2 font-semibold">Codigo</th>
+                                        <th class="px-3 py-2 font-semibold">Data</th>
+                                        <th class="px-3 py-2 font-semibold text-center">Itens</th>
+                                        <th class="px-3 py-2 font-semibold text-right">Total</th>
+                                        <th class="px-3 py-2 font-semibold">Vendedor</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="pdv-exchange-history-body" class="divide-y divide-gray-100"></tbody>
+                                <tbody>
+                                    <tr id="pdv-exchange-history-empty">
+                                        <td colspan="6" class="px-3 py-6 text-center text-[11px] text-gray-500">Selecione um cliente para visualizar as vendas.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center justify-end gap-2 border-t border-gray-200 bg-gray-50 px-5 py-4">
+                    <button type="button" id="pdv-exchange-history-import" class="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60" disabled>Importar</button>
+                    <button type="button" id="pdv-exchange-history-close-footer" class="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100">Fechar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="pdv-exchange-sale-modal" class="fixed inset-0 z-[70] hidden" aria-hidden="true">
+        <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" data-exchange-sale-dismiss="backdrop"></div>
+        <div class="relative mx-auto mt-12 w-full max-w-5xl px-4">
+            <div class="overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5">
+                <div class="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+                    <div>
+                        <h2 class="text-lg font-semibold text-gray-800">Buscar venda</h2>
+                        <p class="text-sm text-gray-500">Informe o codigo da venda para selecionar os produtos.</p>
+                    </div>
+                    <button type="button" id="pdv-exchange-sale-close" class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600" aria-label="Fechar busca de venda">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="space-y-4 px-5 py-5">
+                    <div class="grid grid-cols-1 gap-3 md:grid-cols-6">
+                        <div class="md:col-span-2">
+                            <label for="pdv-exchange-sale-code" class="block text-xs font-semibold uppercase tracking-wide text-gray-500">Codigo da venda</label>
+                            <input id="pdv-exchange-sale-code" type="text" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex: PDV001-000004">
+                        </div>
+                        <div class="md:col-span-4">
+                            <label for="pdv-exchange-sale-info" class="block text-xs font-semibold uppercase tracking-wide text-gray-500">Resumo</label>
+                            <input id="pdv-exchange-sale-info" type="text" class="mt-1 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600" readonly>
+                        </div>
+                    </div>
+                    <div class="overflow-hidden rounded-lg border border-gray-200">
+                        <div class="max-h-72 overflow-y-auto">
+                            <table class="min-w-full divide-y divide-gray-200 text-left text-[11px] text-gray-600">
+                                <thead class="sticky top-0 bg-gray-100 text-[10px] uppercase tracking-wide text-gray-500">
+                                    <tr>
+                                        <th class="w-10 px-3 py-2 text-center font-semibold"><span class="sr-only">Selecionar</span></th>
+                                        <th class="px-3 py-2 font-semibold">Codigo</th>
+                                        <th class="px-3 py-2 font-semibold">Descricao</th>
+                                        <th class="px-3 py-2 font-semibold text-right">Qtde</th>
+                                        <th class="px-3 py-2 font-semibold text-right">Unitario</th>
+                                        <th class="px-3 py-2 font-semibold text-right">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="pdv-exchange-sale-items-body" class="divide-y divide-gray-100"></tbody>
+                                <tbody>
+                                    <tr id="pdv-exchange-sale-items-empty">
+                                        <td colspan="6" class="px-3 py-6 text-center text-[11px] text-gray-500">Informe o codigo da venda para carregar os itens.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center justify-end gap-2 border-t border-gray-200 bg-gray-50 px-5 py-4">
+                    <button type="button" id="pdv-exchange-sale-import" class="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60" disabled>Importar</button>
+                    <button type="button" id="pdv-exchange-sale-close-footer" class="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100">Fechar</button>
                 </div>
             </div>
         </div>

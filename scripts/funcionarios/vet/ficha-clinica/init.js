@@ -12,6 +12,7 @@ import { openDocumentoModal, loadDocumentosFromServer } from './documentos.js';
 import { openReceitaModal, loadReceitasFromServer } from './receitas.js';
 import { openExameModal, loadExamesForSelection, handleExameRealTimeEvent } from './exames.js';
 import { openPesoModal, loadPesosFromServer } from './pesos.js';
+import { loadVendasFromServer, handleVendasRealTimeEvent } from './vendas.js';
 import {
   openObservacaoModal,
   loadObservacoesForSelection,
@@ -34,6 +35,7 @@ import {
   handleAtendimentoRealTimeEvent,
 } from './atendimento.js';
 import { loadHistoricoForSelection } from './historico.js';
+import { initVendasTooltip } from './vendas.js';
 import {
   initFichaRealTime,
   registerFichaUpdateHandler,
@@ -53,6 +55,7 @@ async function performRemoteSync() {
       loadPesosFromServer({ force: true }),
       loadDocumentosFromServer({ force: true }),
       loadReceitasFromServer({ force: true }),
+      loadVendasFromServer({ force: true }),
       loadHistoricoForSelection(),
     ]);
     loadVacinasForSelection();
@@ -88,6 +91,8 @@ function handleFichaRealTimeMessage(message) {
       handled = handleVacinaRealTimeEvent(event) || handled;
     } else if (scope === 'exame') {
       handled = handleExameRealTimeEvent(event) || handled;
+    } else if (scope === 'venda') {
+      handled = handleVendasRealTimeEvent(event) || handled;
     } else if (scope === 'observacao') {
       handled = handleObservacaoRealTimeEvent(event) || handled;
     } else if (scope === 'anexo') {
@@ -229,6 +234,7 @@ export function initFichaClinica() {
   }
 
   initInternacaoShortcut();
+  initVendasTooltip();
 
   if (els.consultaTab) {
     els.consultaTab.addEventListener('click', (event) => {

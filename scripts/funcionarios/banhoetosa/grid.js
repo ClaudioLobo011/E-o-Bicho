@@ -11,6 +11,9 @@ const VET_FICHA_CLIENTE_KEY = 'vetFichaSelectedCliente';
 const VET_FICHA_PET_KEY = 'vetFichaSelectedPetId';
 const VET_FICHA_AGENDA_CONTEXT_KEY = 'vetFichaAgendaContext';
 const OBJECT_ID_REGEX = /^[0-9a-fA-F]{24}$/;
+const DEFAULT_BUSINESS_START = 8;
+const DEFAULT_BUSINESS_END = 19;
+const WEEKDAY_KEYS = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
 
 function pickFirst(...values) {
   for (const value of values) {
@@ -111,6 +114,63 @@ function coerceToDate(value) {
     }
   }
   return null;
+}
+
+function parseTimeToMinutes(value) {
+  if (!value) return null;
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
+  const match = trimmed.match(/^(\d{1,2})(?::(\d{2}))?$/);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2] || '0');
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+function getSelectedStoreHorario() {
+  const store = (state.stores || []).find(s => String(s?._id) === String(state.selectedStoreId));
+  return store?.horario || null;
+}
+
+function getBusinessRangeForDate(dateStr) {
+  const fallback = { startHour: DEFAULT_BUSINESS_START, endHour: DEFAULT_BUSINESS_END, closed: false };
+  const horario = getSelectedStoreHorario();
+  if (!horario) return fallback;
+  const date = new Date(`${dateStr}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return fallback;
+  const dayKey = WEEKDAY_KEYS[date.getDay()];
+  const day = horario?.[dayKey];
+  if (!day) return fallback;
+  if (day.fechada) return { startHour: 0, endHour: 0, closed: true };
+
+  const startMin = parseTimeToMinutes(day.abre);
+  const endMin = parseTimeToMinutes(day.fecha);
+  if (startMin === null || endMin === null || endMin <= startMin) {
+    return fallback;
+  }
+
+  const startHour = Math.max(0, Math.min(23, Math.floor(startMin / 60)));
+  const endHour = Math.max(startHour + 1, Math.min(24, Math.ceil(endMin / 60)));
+  return { startHour, endHour, closed: false };
+}
+
+function buildHoursList(startHour, endHour) {
+  const hours = [];
+  const start = Math.max(0, Math.min(23, Number(startHour)));
+  const end = Math.max(start + 1, Math.min(24, Number(endHour)));
+  for (let h = start; h < end; h++) {
+    hours.push(`${pad(h)}:00`);
+  }
+  return hours;
+}
+
+function renderClosedMessage(message) {
+  const empty = document.createElement('div');
+  empty.className = 'px-4 py-6 text-sm text-slate-600 bg-slate-50 border-b';
+  empty.textContent = message;
+  els.agendaList.appendChild(empty);
 }
 
 function getAppointmentDateKey(appointment) {
@@ -760,9 +820,8 @@ export function renderGrid() {
 
   const date = normalizeDate(els.dateInput?.value || todayStr());
   updateHeaderLabel();
-  const BUSINESS_START = 8;
-  const BUSINESS_END   = 19;
-  const hours = []; for (let h = 0; h < 24; h++) hours.push(`${pad(h)}:00`);
+  const businessRange = getBusinessRangeForDate(date);
+  const hours = businessRange.closed ? [] : buildHoursList(businessRange.startHour, businessRange.endHour);
   clearChildren(els.agendaList);
 
   const profsAll  = state.profissionais || [];
@@ -824,6 +883,11 @@ export function renderGrid() {
   header.appendChild(counter);
   els.agendaList.appendChild(header);
 
+  if (!hours.length) {
+    renderClosedMessage('Empresa fechada para esta data.');
+    return;
+  }
+
   const body = document.createElement('div');
   body.style.display = 'grid';
   body.style.gridTemplateColumns = `120px repeat(${Math.max(colCount - 1, 0)}, minmax(var(--agenda-col-w, 360px), 1fr))`;
@@ -836,7 +900,7 @@ export function renderGrid() {
 
   hours.forEach(hh => {
     const hourNumber = parseInt(hh.split(':')[0], 10);
-    const inBusiness = hourNumber >= BUSINESS_START && hourNumber < BUSINESS_END;
+    const inBusiness = hourNumber >= businessRange.startHour && hourNumber < businessRange.endHour;
     const isNowRow   = isToday && hh === nowHH;
     const timeCell = document.createElement('div');
     timeCell.className = 'agenda-time-cell';
@@ -962,8 +1026,15 @@ export function renderWeekGrid() {
   updateHeaderLabel();
   clearChildren(els.agendaList);
 
-  const BUSINESS_START = 8, BUSINESS_END = 19;
-  const hours = []; for (let h = 0; h < 24; h++) hours.push(`${pad(h)}:00`);
+  const ranges = days.map(d => getBusinessRangeForDate(d));
+  const openRanges = ranges.filter(r => !r.closed);
+  if (!openRanges.length) {
+    renderClosedMessage('Empresa fechada durante a semana selecionada.');
+    return;
+  }
+  const startHour = Math.min(...openRanges.map(r => r.startHour));
+  const endHour = Math.max(...openRanges.map(r => r.endHour));
+  const hours = buildHoursList(startHour, endHour);
   const header = document.createElement('div');
   header.style.display = 'grid';
   header.style.gridTemplateColumns = `120px repeat(7, minmax(180px,1fr))`;
@@ -984,13 +1055,14 @@ export function renderWeekGrid() {
 
   hours.forEach(hh => {
     const hNum = parseInt(hh.slice(0,2),10);
-    const inBusiness = (hNum>=BUSINESS_START && hNum< BUSINESS_END);
     const timeCell = document.createElement('div');
     timeCell.className = 'agenda-time-cell agenda-time-cell--compact';
-    if (inBusiness) timeCell.classList.add('is-business'); else timeCell.classList.add('is-off');
+    timeCell.classList.add('is-business');
     timeCell.textContent = hh;
     body.appendChild(timeCell);
-    days.forEach(d=>{
+    days.forEach((d, index) => {
+      const range = ranges[index];
+      const inBusiness = !range.closed && hNum >= range.startHour && hNum < range.endHour;
       const cell = document.createElement('div');
       cell.className = 'agenda-slot agenda-week-slot';
       if (!inBusiness) cell.classList.add('is-off');

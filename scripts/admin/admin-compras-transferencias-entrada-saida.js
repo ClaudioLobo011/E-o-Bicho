@@ -30,6 +30,7 @@
     operation: 'saida',
     items: [],
     companies: [],
+    allowedCompanies: [],
     deposits: [],
     responsibles: [],
     selectedResponsibleId: '',
@@ -665,6 +666,11 @@
     elements.companySelect.value = exists ? previousValue : '';
   }
 
+  function isCompanyAllowed(companyId) {
+    if (!companyId) return false;
+    return state.allowedCompanies.some((company) => String(company?._id) === String(companyId));
+  }
+
   function populateDepositSelect(companyId) {
     if (!elements.depositSelect) return;
     const previousValue = elements.depositSelect.value;
@@ -827,9 +833,14 @@
         throw new Error('Sessão expirada. Faça login novamente.');
       }
 
-      const response = await fetch(`${API_CONFIG.BASE_URL}/inventory-adjustments/form-data`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const [response, allowedResponse] = await Promise.all([
+        fetch(`${API_CONFIG.BASE_URL}/inventory-adjustments/form-data`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`${API_CONFIG.BASE_URL}/stores/allowed`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ]);
 
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
@@ -837,7 +848,17 @@
       }
 
       const data = await response.json();
-      state.companies = Array.isArray(data?.stores) ? data.stores : [];
+      const allowedPayload = await allowedResponse.json().catch(() => ({}));
+      if (!allowedResponse.ok) {
+        throw new Error(allowedPayload?.message || 'Nao foi possivel carregar as empresas permitidas.');
+      }
+      const allowedCompanies = Array.isArray(allowedPayload?.stores)
+        ? allowedPayload.stores
+        : Array.isArray(allowedPayload)
+        ? allowedPayload
+        : [];
+      state.allowedCompanies = Array.isArray(allowedCompanies) ? allowedCompanies : [];
+      state.companies = state.allowedCompanies;
       state.deposits = Array.isArray(data?.deposits) ? data.deposits : [];
       state.responsibles = Array.isArray(data?.responsaveis) ? data.responsaveis : [];
 
@@ -1417,6 +1438,11 @@
       elements.companySelect?.focus();
       return;
     }
+    if (!isCompanyAllowed(companyId)) {
+      showFeedback('Empresa nao autorizada para movimentacao de estoque.', 'error');
+      elements.companySelect?.focus();
+      return;
+    }
 
     const depositId = elements.depositSelect?.value;
     if (!depositId) {
@@ -1569,6 +1595,12 @@
       return false;
     }
 
+    if (!isCompanyAllowed(elements.companySelect.value)) {
+      showFeedback('Empresa nao autorizada para movimentacao de estoque.', 'error');
+      elements.companySelect?.focus();
+      return false;
+    }
+
     if (!elements.dateInput?.value) {
       showFeedback('Informe a data da movimentação de estoque.', 'error');
       elements.dateInput?.focus();
@@ -1677,7 +1709,14 @@
 
   if (elements.companySelect) {
     elements.companySelect.addEventListener('change', (event) => {
-      populateDepositSelect(event.target.value);
+      const selectedCompany = event.target.value;
+      if (selectedCompany && !isCompanyAllowed(selectedCompany)) {
+        event.target.value = '';
+        populateDepositSelect('');
+        showFeedback('Empresa nao autorizada para movimentacao de estoque.', 'error');
+        return;
+      }
+      populateDepositSelect(selectedCompany);
     });
   }
 

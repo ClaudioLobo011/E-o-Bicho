@@ -35,6 +35,10 @@ const VetConsultationSchema = new Schema({
     type: String,
     default: '',
   },
+  retornoEm: {
+    type: Date,
+    default: null,
+  },
   createdBy: {
     type: Schema.Types.ObjectId,
     ref: 'User',

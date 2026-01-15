@@ -906,9 +906,11 @@ router.get('/', async (req, res) => {
             query.searchableString = { $regex: normalizedSearch, $options: 'i' };
         }
 
+        const limitValue = Number.isFinite(parseInt(limit, 10)) ? parseInt(limit, 10) : 20;
+
         const products = await Product.find(query)
-            .limit(parseInt(limit))
-            .skip(parseInt(limit) * (page - 1))
+            .limit(limitValue)
+            .skip(limitValue * (page - 1))
             .populate('categorias')
             .sort({ nome: 1 })
             .lean();
@@ -935,6 +937,36 @@ router.get('/', async (req, res) => {
                 p.stock = Number.isFinite(parsedStock) ? parsedStock : 0;
             }
         });
+
+        const exactSearch = search ? search.toString().trim() : '';
+        if (exactSearch) {
+            const exactFilters = { ...query };
+            delete exactFilters.searchableString;
+            exactFilters.$or = [
+                { cod: exactSearch },
+                { codbarras: exactSearch },
+                { referencia: exactSearch },
+                { codigosComplementares: exactSearch },
+                { 'fornecedores.codigoProduto': exactSearch },
+            ];
+
+            const exactMatch = await Product.findOne(exactFilters).populate('categorias').lean();
+            if (exactMatch) {
+                applyProductImageUrls(exactMatch);
+                const existingIndex = products.findIndex(
+                    (product) => String(product._id) === String(exactMatch._id)
+                );
+                if (existingIndex >= 0) {
+                    const [existing] = products.splice(existingIndex, 1);
+                    products.unshift(existing);
+                } else {
+                    products.unshift(exactMatch);
+                    if (products.length > limitValue) {
+                        products.pop();
+                    }
+                }
+            }
+        }
 
         res.json({
             products,

@@ -48,6 +48,7 @@ import {
   loadReceitasFromServer,
 } from './receitas.js';
 import { openVacinaModal } from './vacinas.js';
+import { closeVendasTooltip, getVendasItemsForContext, loadVendasFromServer } from './vendas.js';
 import { emitFichaClinicaUpdate, updateFichaRealTimeSelection } from './real-time.js';
 
 function normalizeConsultaRecord(raw) {
@@ -69,6 +70,7 @@ function normalizeConsultaRecord(raw) {
 
   const createdAt = toIsoOrNull(raw.createdAt || raw.criadoEm || raw.dataCriacao);
   const updatedAt = toIsoOrNull(raw.updatedAt || raw.atualizadoEm || raw.dataAtualizacao) || createdAt;
+  const retornoEm = toIsoOrNull(raw.retornoEm || raw.retorno || raw.dataRetorno);
 
   return {
     id,
@@ -81,6 +83,7 @@ function normalizeConsultaRecord(raw) {
     anamnese: typeof raw.anamnese === 'string' ? raw.anamnese : '',
     exameFisico: typeof raw.exameFisico === 'string' ? raw.exameFisico : '',
     diagnostico: typeof raw.diagnostico === 'string' ? raw.diagnostico : '',
+    retornoEm,
     createdAt,
     updatedAt,
   };
@@ -536,6 +539,10 @@ function createManualConsultaCard(consulta) {
   content.appendChild(createConsultaFieldSection('Anamnese', consulta?.anamnese || ''));
   content.appendChild(createConsultaFieldSection('Exame Físico', consulta?.exameFisico || ''));
   content.appendChild(createConsultaFieldSection('Diagnóstico', consulta?.diagnostico || ''));
+  const retornoText = consulta?.retornoEm ? formatDateDisplay(consulta.retornoEm) : '';
+  if (retornoText) {
+    content.appendChild(createConsultaFieldSection('Retorno', retornoText));
+  }
   card.appendChild(content);
 
   const openForEdit = (event) => {
@@ -2473,6 +2480,29 @@ function createModalTextareaField(label, fieldName) {
   return { wrapper, textarea };
 }
 
+function createModalDateField(label, fieldName) {
+  const wrapper = document.createElement('label');
+  wrapper.className = 'grid gap-1';
+
+  const span = document.createElement('span');
+  span.className = 'text-sm font-medium text-gray-700';
+  span.textContent = label;
+  wrapper.appendChild(span);
+
+  const input = document.createElement('input');
+  input.type = 'date';
+  input.name = fieldName;
+  input.className = 'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300';
+  wrapper.appendChild(input);
+
+  return { wrapper, input };
+}
+
+function formatDateInputValue(value) {
+  const iso = toIsoOrNull(value);
+  return iso ? iso.slice(0, 10) : '';
+}
+
 export function ensureConsultaModal() {
   if (consultaModal.overlay) return consultaModal;
 
@@ -2518,6 +2548,18 @@ export function ensureConsultaModal() {
   const contextInfo = document.createElement('div');
   contextInfo.className = 'hidden rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-700';
   fieldsWrapper.appendChild(contextInfo);
+
+  const retornoRow = document.createElement('div');
+  retornoRow.className = 'flex flex-col items-start gap-2 sm:flex-row sm:items-end';
+  fieldsWrapper.appendChild(retornoRow);
+
+  const retornoSpacer = document.createElement('div');
+  retornoSpacer.className = 'hidden flex-1 sm:block';
+  retornoRow.appendChild(retornoSpacer);
+
+  const retornoField = createModalDateField('Retorno', 'retornoEm');
+  retornoField.wrapper.classList.add('sm:w-52');
+  retornoRow.appendChild(retornoField.wrapper);
 
   const anamneseField = createModalTextareaField('Anamnese', 'anamnese');
   fieldsWrapper.appendChild(anamneseField.wrapper);
@@ -2572,6 +2614,7 @@ export function ensureConsultaModal() {
     anamnese: anamneseField.textarea,
     exameFisico: exameField.textarea,
     diagnostico: diagnosticoField.textarea,
+    retornoEm: retornoField.input,
   };
   consultaModal.contextInfo = contextInfo;
 
@@ -2646,6 +2689,9 @@ export function openConsultaModal(consultaId = null) {
   if (modal.fields.diagnostico) {
     modal.fields.diagnostico.value = existing?.diagnostico || '';
   }
+  if (modal.fields.retornoEm) {
+    modal.fields.retornoEm.value = formatDateInputValue(existing?.retornoEm || existing?.retorno);
+  }
 
   if (modal.contextInfo) {
     const tutorNome = pickFirst(
@@ -2703,6 +2749,7 @@ async function handleConsultaSubmit() {
     anamnese: (modal.fields.anamnese?.value || '').trim(),
     exameFisico: (modal.fields.exameFisico?.value || '').trim(),
     diagnostico: (modal.fields.diagnostico?.value || '').trim(),
+    retornoEm: (modal.fields.retornoEm?.value || '').trim(),
   };
 
   const editingConsulta = modal.mode === 'edit' && modal.editingId
@@ -2732,6 +2779,7 @@ async function handleConsultaSubmit() {
     anamnese: values.anamnese,
     exameFisico: values.exameFisico,
     diagnostico: values.diagnostico,
+    retornoEm: values.retornoEm ? `${values.retornoEm}T00:00:00` : null,
   };
   if (appointmentId) payload.appointmentId = appointmentId;
 
@@ -2988,6 +3036,7 @@ async function startWaitingAppointment(appointment, triggerButton) {
       loadPesosFromServer({ force: true }),
       loadDocumentosFromServer({ force: true }),
       loadReceitasFromServer({ force: true }),
+      loadVendasFromServer({ force: true }),
     ]);
 
     await loadWaitingAppointments({ force: true });
@@ -3049,6 +3098,8 @@ export function updateConsultaAgendaCard() {
   const receitas = Array.isArray(state.receitas) ? state.receitas : [];
   const hasReceitas = receitas.length > 0;
   const isLoadingReceitas = !!state.receitasLoading;
+  const vendasItems = getVendasItemsForContext();
+  const hasVendas = vendasItems.length > 0;
   const waitingAppointments = Array.isArray(state.waitingAppointments) ? state.waitingAppointments : [];
   const hasWaitingAppointments = waitingAppointments.length > 0;
   const isLoadingWaitingAppointments = !!state.waitingAppointmentsLoading;
@@ -3114,6 +3165,33 @@ export function updateConsultaAgendaCard() {
       esperaBtn.removeAttribute('disabled');
       esperaBtn.textContent = idleLabel;
       delete esperaBtn.dataset.processing;
+    }
+  }
+
+  if (els.iniciarAtendimentoBtn) {
+    const iniciarBtn = els.iniciarAtendimentoBtn;
+    const shouldDisable = contextMatches && agendaAtivo;
+    iniciarBtn.disabled = shouldDisable;
+    iniciarBtn.classList.toggle('opacity-50', shouldDisable);
+    iniciarBtn.classList.toggle('cursor-not-allowed', shouldDisable);
+    iniciarBtn.title = shouldDisable ? 'Atendimento já em andamento.' : 'Iniciar atendimento';
+  }
+
+  if (els.openVendasBtn) {
+    const vendasBtn = els.openVendasBtn;
+    const shouldDisable = !(contextMatches && agendaAtivo);
+    vendasBtn.classList.toggle('opacity-50', shouldDisable);
+    vendasBtn.classList.toggle('cursor-not-allowed', shouldDisable);
+    vendasBtn.classList.toggle('pointer-events-none', shouldDisable);
+    if (shouldDisable) {
+      vendasBtn.setAttribute('aria-disabled', 'true');
+      vendasBtn.setAttribute('tabindex', '-1');
+      vendasBtn.title = 'Inicie o atendimento para liberar vendas.';
+      closeVendasTooltip();
+    } else {
+      vendasBtn.removeAttribute('aria-disabled');
+      vendasBtn.removeAttribute('tabindex');
+      vendasBtn.title = 'Abrir vendas';
     }
   }
 
@@ -3238,7 +3316,84 @@ export function updateConsultaAgendaCard() {
         card.appendChild(obsWrap);
       }
 
-      agendaElement = card;
+      const vendasCard = document.createElement('div');
+      vendasCard.className = 'bg-white border border-gray-200 rounded-xl shadow-sm p-3 space-y-2';
+
+      const vendasHeader = document.createElement('div');
+      vendasHeader.className = 'flex items-center justify-between';
+      vendasCard.appendChild(vendasHeader);
+
+      const vendasTitle = document.createElement('h3');
+      vendasTitle.className = 'text-sm font-semibold text-gray-800';
+      vendasTitle.textContent = 'Vendas';
+      vendasHeader.appendChild(vendasTitle);
+
+      const vendasList = document.createElement('div');
+      vendasList.className = 'rounded-lg border border-gray-200 overflow-hidden';
+      vendasCard.appendChild(vendasList);
+
+      const formatQtd = (value) => {
+        const num = Number(value);
+        if (!Number.isFinite(num)) return '0,000';
+        return num.toFixed(3).replace('.', ',');
+      };
+
+      if (!vendasItems.length) {
+        const empty = document.createElement('div');
+        empty.className = 'px-3 py-4 text-xs text-slate-500 text-center';
+        empty.textContent = 'Nenhum produto adicionado.';
+        vendasList.appendChild(empty);
+      } else {
+        let vendasTotal = 0;
+        vendasItems.forEach((item, idx) => {
+          const row = document.createElement('div');
+          row.className = 'flex flex-col gap-1 px-3 py-1 text-xs text-gray-700';
+          if (idx % 2 === 1) {
+            row.classList.add('bg-gray-50');
+          }
+
+          const nome = document.createElement('span');
+          nome.className = 'truncate leading-tight';
+          nome.textContent = item?.nome || 'Produto';
+          row.appendChild(nome);
+
+          const valuesRow = document.createElement('div');
+          valuesRow.className = 'flex items-center gap-3 text-[11px] text-gray-700';
+
+          const preco = document.createElement('span');
+          preco.className = 'font-semibold text-gray-900 tabular-nums';
+          preco.textContent = formatMoney(item?.valorUnitario || 0);
+          valuesRow.appendChild(preco);
+
+          const qtd = document.createElement('span');
+          qtd.className = 'text-gray-600';
+          qtd.textContent = `${formatQtd(item?.quantidade || 0)} un`;
+          valuesRow.appendChild(qtd);
+
+          const subtotalValue = Number(item?.subtotal || 0);
+          const totalEl = document.createElement('span');
+          totalEl.className = 'font-semibold text-gray-900 tabular-nums';
+          totalEl.textContent = formatMoney(subtotalValue || 0);
+          valuesRow.appendChild(totalEl);
+
+          row.appendChild(valuesRow);
+
+          vendasTotal += Number(subtotalValue || 0) || 0;
+          vendasList.appendChild(row);
+        });
+
+        const footer = document.createElement('div');
+        footer.className = 'flex items-center justify-between border-t border-gray-200 px-3 py-2 text-xs font-semibold text-gray-900';
+        footer.innerHTML = `<span>Total</span><span>${formatMoney(vendasTotal)}</span>`;
+        vendasCard.appendChild(footer);
+      }
+
+      const agendaGrid = document.createElement('div');
+      agendaGrid.className = 'grid gap-6 lg:grid-cols-2';
+      agendaGrid.appendChild(card);
+      agendaGrid.appendChild(vendasCard);
+
+      agendaElement = agendaGrid;
       hasAgendaContent = true;
     }
   }
@@ -3252,6 +3407,7 @@ export function updateConsultaAgendaCard() {
     hasExames ||
     hasObservacoes ||
     hasDocumentos ||
+    hasVendas ||
     hasWaitingAppointments;
   const shouldShowPlaceholder = !hasAnyContent && !isLoadingWaitingAppointments;
   const placeholderText = agendaFinalizado
@@ -3457,3 +3613,7 @@ export function updateConsultaAgendaCard() {
     scroll.appendChild(restGrid);
   }
 }
+
+document.addEventListener('vet-vendas-updated', () => {
+  updateConsultaAgendaCard();
+});

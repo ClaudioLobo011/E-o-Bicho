@@ -329,15 +329,14 @@ function hasMeaningfulSignedFile(rawSignedFile) {
   }
 
   const stringKeys = [
-    'url',
-    'driveViewLink',
-    'driveContentLink',
-    'driveFileId',
-    'nome',
-    'originalName',
-    'mimeType',
-    'extension',
-  ];
+      'url',
+      'r2Url',
+      'r2Key',
+      'nome',
+      'originalName',
+      'mimeType',
+      'extension',
+    ];
 
   if (stringKeys.some((key) => {
     const value = rawSignedFile[key];
@@ -1132,11 +1131,7 @@ function normalizeReceitaRegistroRecord(raw) {
     : null;
   let signedFile = null;
   if (rawSignedFile && hasMeaningfulSignedFile(rawSignedFile)) {
-    const fileUrl = pickFirst(
-      rawSignedFile.url,
-      rawSignedFile.driveViewLink,
-      rawSignedFile.driveContentLink,
-    );
+    const fileUrl = pickFirst(rawSignedFile.r2Url, rawSignedFile.url);
     const uploadedAtDate = parseDateValue(
       rawSignedFile.uploadedAt
       || rawSignedFile.createdAt
@@ -1153,9 +1148,6 @@ function normalizeReceitaRegistroRecord(raw) {
       size: Number(rawSignedFile.size || 0),
       extension: typeof rawSignedFile.extension === 'string' ? rawSignedFile.extension : '',
       url: typeof fileUrl === 'string' ? fileUrl : '',
-      driveFileId: rawSignedFile.driveFileId || '',
-      driveViewLink: rawSignedFile.driveViewLink || '',
-      driveContentLink: rawSignedFile.driveContentLink || '',
       uploadedAt: uploadedAtDate ? uploadedAtDate.toISOString() : null,
     };
   }

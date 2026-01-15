@@ -144,6 +144,7 @@ export const els = {
   toggleTutor: document.getElementById('vet-card-show-tutor'),
   togglePet: document.getElementById('vet-card-show-pet'),
   pageContent: document.getElementById('vet-ficha-content'),
+  topTabs: document.getElementById('vet-top-tabs'),
   consultaArea: document.getElementById('vet-consulta-area'),
   historicoArea: document.getElementById('vet-historico-area'),
   historicoTab: document.getElementById('vet-tab-historico'),
@@ -157,8 +158,10 @@ export const els = {
   addExameBtn: document.getElementById('vet-add-exame-btn'),
   addPesoBtn: document.getElementById('vet-add-peso-btn'),
   addObservacaoBtn: document.getElementById('vet-add-observacao-btn'),
+  openVendasBtn: document.getElementById('vet-open-vendas-btn'),
   openInternacaoBtn: document.getElementById('vet-open-internacao-btn'),
   colocarEmEsperaBtn: document.getElementById('vet-colocar-em-espera'),
+  iniciarAtendimentoBtn: document.getElementById('vet-iniciar-atendimento'),
   finalizarAtendimentoBtn: document.getElementById('vet-finalizar-atendimento'),
   limparConsultaBtn: document.getElementById('vet-clear-consulta'),
 };
@@ -189,6 +192,9 @@ export const state = {
   receitas: [],
   receitasLoading: false,
   receitasLoadKey: null,
+  vendas: [],
+  vendasLoading: false,
+  vendasLoadKey: null,
   waitingAppointments: [],
   waitingAppointmentsLoading: false,
   waitingAppointmentsLoadKey: null,
@@ -1043,6 +1049,7 @@ export function isVetCategory(value) {
   if (!normalized) return false;
   if (normalized.includes('veterinario')) return true;
   if (normalized.includes('exame')) return true;
+  if (normalized.includes('vacina')) return true;
   return false;
 }
 

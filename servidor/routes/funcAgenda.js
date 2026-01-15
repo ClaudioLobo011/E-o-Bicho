@@ -1422,8 +1422,12 @@ router.get('/clientes/buscar', authMiddleware, requireStaff, async (req, res) =>
     if (!q) return res.json([]);
     const regex = new RegExp(escapeRegex(q), 'i');
     const onlyDigits = q.replace(/\D/g, '');
+    const numericCode = parseCodigoCliente(onlyDigits);
 
     const or = [{ nomeCompleto: regex }, { nomeContato: regex }, { razaoSocial: regex }, { email: regex }];
+    if (numericCode) {
+      or.push({ codigoCliente: numericCode });
+    }
     if (onlyDigits.length >= 4) {
       or.push({ cpf: new RegExp(onlyDigits) });
       or.push({ cnpj: new RegExp(onlyDigits) });

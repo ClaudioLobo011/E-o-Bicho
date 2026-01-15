@@ -8,13 +8,13 @@
     producao: 'Produção',
   };
 
-  const state = {
-    pdvs: [],
-    stores: [],
-    editingId: null,
-    nextCode: '',
-    saving: false,
-  };
+    const state = {
+      pdvs: [],
+      stores: [],
+      editingId: null,
+      nextCode: '',
+      saving: false,
+    };
 
   const selectors = {
     form: '#pdv-form',
@@ -174,16 +174,19 @@
     }
   };
 
-  const storeSupportsEnvironment = (store, env) => {
-    if (!store) return false;
+    const storeSupportsEnvironment = (store, env) => {
+      if (!store) return false;
     if (env === 'producao') {
       return Boolean(store.cscIdProducao && store.cscTokenProducaoArmazenado);
     }
     if (env === 'homologacao') {
       return Boolean(store.cscIdHomologacao && store.cscTokenHomologacaoArmazenado);
     }
-    return false;
-  };
+      return false;
+    };
+
+    const isStoreAllowed = (storeId) =>
+      state.stores.some((store) => normalizeId(store?._id) === normalizeId(storeId));
 
   const getSelectedStore = () => {
     const companyId = normalizeId(elements.company?.value);
@@ -689,17 +692,22 @@
       return null;
     }
 
-    const empresaId = normalizeId(elements.company?.value);
-    if (!empresaId) {
-      notify('Selecione a empresa responsável pelo PDV.', 'warning');
-      elements.company?.focus();
-      return null;
-    }
+      const empresaId = normalizeId(elements.company?.value);
+      if (!empresaId) {
+        notify('Selecione a empresa responsável pelo PDV.', 'warning');
+        elements.company?.focus();
+        return null;
+      }
+      if (!isStoreAllowed(empresaId)) {
+        notify('Você não tem permissão para configurar esta empresa.', 'warning');
+        elements.company?.focus();
+        return null;
+      }
 
-    const store = state.stores.find((item) => normalizeId(item._id) === empresaId);
-    if (!store) {
-      notify('Não foi possível localizar a empresa selecionada.', 'error');
-      return null;
+      const store = state.stores.find((item) => normalizeId(item._id) === empresaId);
+      if (!store) {
+        notify('Não foi possível localizar a empresa selecionada.', 'error');
+        return null;
     }
 
     const ambientesHabilitados = getEnabledEnvironments();
@@ -811,13 +819,13 @@
     };
   };
 
-  const populateCompanySelect = () => {
-    if (!elements.company) return;
-    const previous = normalizeId(elements.company.value);
+    const populateCompanySelect = () => {
+      if (!elements.company) return;
+      const previous = normalizeId(elements.company.value);
 
-    if (!state.stores.length) {
-      elements.company.innerHTML = '<option value="">Nenhuma empresa cadastrada</option>';
-    } else {
+      if (!state.stores.length) {
+        elements.company.innerHTML = '<option value="">Nenhuma empresa cadastrada</option>';
+      } else {
       const options = ['<option value="">Selecione uma empresa</option>'];
       state.stores.forEach((store) => {
         const storeId = normalizeId(store._id);
@@ -827,43 +835,63 @@
           }</option>`
         );
       });
-      elements.company.innerHTML = options.join('');
-    }
+        elements.company.innerHTML = options.join('');
+      }
 
-    if (previous && state.stores.some((store) => normalizeId(store._id) === previous)) {
-      elements.company.value = previous;
-    }
+      if (previous && state.stores.some((store) => normalizeId(store._id) === previous)) {
+        elements.company.value = previous;
+      } else if (previous) {
+        elements.company.value = '';
+      }
 
-    updateCompanySummary();
-  };
+      updateCompanySummary();
+    };
 
-  const fetchStores = async () => {
-    const response = await fetch(`${API_BASE}/stores`);
-    if (!response.ok) {
-      throw new Error('Não foi possível carregar as empresas cadastradas.');
-    }
-    const payload = await response.json();
-    state.stores = Array.isArray(payload) ? payload.map(normalizeStoreRecord) : [];
-    populateCompanySelect();
-    if (!state.editingId) {
-      syncEnvironmentAvailability({ preserveSelection: false, preferredDefault: 'homologacao' });
-    }
-  };
+    const fetchStores = async () => {
+      const token = getToken();
+      const response = await fetch(`${API_BASE}/stores/allowed`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!response.ok) {
+        throw new Error('Não foi possível carregar as empresas cadastradas.');
+      }
+      const payload = await response.json();
+      const list = Array.isArray(payload?.stores)
+        ? payload.stores
+        : Array.isArray(payload)
+        ? payload
+        : [];
+      state.stores = Array.isArray(list) ? list.map(normalizeStoreRecord) : [];
+      populateCompanySelect();
+      if (!state.editingId) {
+        syncEnvironmentAvailability({ preserveSelection: false, preferredDefault: 'homologacao' });
+      }
+    };
 
-  const fetchPdvs = async () => {
-    const response = await fetch(`${API_BASE}/pdvs`);
+    const fetchPdvs = async () => {
+      const response = await fetch(`${API_BASE}/pdvs`);
     if (!response.ok) {
       throw new Error('Não foi possível carregar os PDVs cadastrados.');
     }
     const payload = await response.json();
-    const pdvs = Array.isArray(payload?.pdvs)
-      ? payload.pdvs
-      : Array.isArray(payload)
-      ? payload
-      : [];
-    state.pdvs = pdvs.map(normalizePdvRecord);
-    renderPdvs();
-    updateCodeField();
+      const pdvs = Array.isArray(payload?.pdvs)
+        ? payload.pdvs
+        : Array.isArray(payload)
+        ? payload
+        : [];
+      const allowedIds = new Set(state.stores.map((store) => normalizeId(store?._id)).filter(Boolean));
+      state.pdvs = pdvs
+        .map(normalizePdvRecord)
+        .filter((pdv) => {
+          const empresaId = normalizeId(
+            typeof pdv?.empresa === 'object' && pdv.empresa
+              ? pdv.empresa._id || pdv.empresa.id || pdv.empresa.value
+              : pdv?.empresa
+          );
+          return empresaId && allowedIds.has(empresaId);
+        });
+      renderPdvs();
+      updateCodeField();
   };
 
   const fetchNextCode = async () => {

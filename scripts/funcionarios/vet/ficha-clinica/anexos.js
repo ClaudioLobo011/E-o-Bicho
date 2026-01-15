@@ -50,6 +50,12 @@ function sanitizeAttachmentName(value) {
     .trim();
 }
 
+function sanitizeUploadFilename(value, fallback = 'arquivo') {
+  const sanitized = sanitizeAttachmentName(value);
+  const asciiSafe = sanitized.replace(/[^\x20-\x7E]+/g, '').trim();
+  return asciiSafe || fallback;
+}
+
 function normalizeAttachmentExtension(extension) {
   if (!extension) return '';
   const str = String(extension).trim().toLowerCase();
@@ -1278,13 +1284,15 @@ export function ensureAnexoModal() {
 
   const dropzone = document.createElement('label');
   dropzone.className = 'flex h-32 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-indigo-300 bg-indigo-50 text-sm text-indigo-600';
+  dropzone.setAttribute('tabindex', '0');
+  dropzone.setAttribute('role', 'button');
   dropzone.innerHTML = '<span id="vet-anexo-dropzone-text">Arraste o arquivo aqui ou clique para selecionar</span><span id="vet-anexo-dropzone-hint" class="text-xs text-indigo-500">Formatos aceitos: PNG, JPG, JPEG ou PDF.</span>';
   fileWrapper.appendChild(dropzone);
 
   const fileInput = document.createElement('input');
   fileInput.type = 'file';
   fileInput.accept = ANEXO_ALLOWED_EXTENSIONS.join(',');
-  fileInput.className = 'hidden';
+  fileInput.className = 'sr-only';
   dropzone.appendChild(fileInput);
 
   const addBtn = document.createElement('button');
@@ -1355,11 +1363,24 @@ export function ensureAnexoModal() {
     }
   });
 
+  const openFilePicker = () => {
+    if (fileInput.disabled) return;
+    if (typeof fileInput.showPicker === 'function') {
+      fileInput.showPicker();
+      return;
+    }
+    fileInput.click();
+  };
+
   dropzone.addEventListener('click', (event) => {
     event.preventDefault();
-    if (anexoModal.fileInput) {
-      anexoModal.fileInput.click();
-    }
+    openFilePicker();
+  });
+
+  dropzone.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    openFilePicker();
   });
 
   fileInput.addEventListener('change', (event) => {
@@ -1648,8 +1669,9 @@ async function handleAnexoSubmit() {
 
     const uploadName = entry.uploadName || file.name;
     const displayName = (entry.name || entry.displayName || uploadName || file.name || '').trim() || uploadName;
-
-    formData.append('arquivos', file, uploadName);
+    const fallbackUpload = entry.extension ? `arquivo${entry.extension}` : 'arquivo';
+    const safeUploadName = sanitizeUploadFilename(uploadName, fallbackUpload);
+    formData.append('arquivos', file, safeUploadName || uploadName);
     formData.append('nomes[]', displayName);
 
     const createdAt = new Date().toISOString();
@@ -1662,7 +1684,7 @@ async function handleAnexoSubmit() {
       mimeType: entry.mimeType || file.type || '',
       size: Number(entry.size || file.size || 0),
       extension: entry.extension,
-      fileName: uploadName,
+      fileName: safeUploadName || uploadName,
       createdAt,
     });
     if (fallbackEntry) {

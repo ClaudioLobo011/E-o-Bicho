@@ -848,19 +848,28 @@
       });
     }
     elements.companySelect.innerHTML = options.join('');
-    if (state.selectedCompanyId) {
+    if (state.selectedCompanyId && state.companies.some((company) => company._id === state.selectedCompanyId)) {
       elements.companySelect.value = state.selectedCompanyId;
+    } else if (state.selectedCompanyId) {
+      state.selectedCompanyId = '';
+      elements.companySelect.value = '';
     }
   };
+  const isCompanyAllowed = (companyId) =>
+    state.companies.some((company) => company && company._id === companyId);
 
   const fetchCompanies = async () => {
     try {
-      const response = await fetch(`${API_BASE}/stores`);
+      const token = getToken();
+      const response = await fetch(`${API_BASE}/stores/allowed`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       if (!response.ok) {
         throw new Error('Não foi possível carregar as empresas cadastradas.');
       }
       const payload = await response.json();
-      state.companies = Array.isArray(payload) ? payload : [];
+      const list = Array.isArray(payload?.stores) ? payload.stores : (Array.isArray(payload) ? payload : []);
+      state.companies = Array.isArray(list) ? list : [];
       populateCompanySelect();
       updateCompanySummary();
       updateOverview();
@@ -904,6 +913,16 @@
 
   const handleCompanyChange = async (event) => {
     state.selectedCompanyId = event.target.value || '';
+    if (state.selectedCompanyId && !isCompanyAllowed(state.selectedCompanyId)) {
+      state.selectedCompanyId = '';
+      if (elements.companySelect) {
+        elements.companySelect.value = '';
+      }
+      notify('Você não tem permissão para configurar meios de pagamento para esta empresa.', 'error');
+      updateCompanySummary();
+      updateOverview();
+      return;
+    }
     if (state.editingId && state.editingCompanyId && state.editingCompanyId !== state.selectedCompanyId) {
       resetForm({ preserveCompany: true });
     }
@@ -1392,6 +1411,11 @@
     const company = getSelectedCompany();
     if (!company) {
       notify('Selecione uma empresa antes de salvar o meio de pagamento.', 'error');
+      elements.companySelect?.focus();
+      return;
+    }
+    if (!isCompanyAllowed(company._id)) {
+      notify('Você não tem permissão para configurar meios de pagamento para esta empresa.', 'error');
       elements.companySelect?.focus();
       return;
     }

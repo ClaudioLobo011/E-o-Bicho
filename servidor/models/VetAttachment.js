@@ -32,17 +32,12 @@ const VetAttachmentFileSchema = new Schema({
     trim: true,
     default: '',
   },
-  driveFileId: {
+  r2Key: {
     type: String,
     trim: true,
     default: '',
   },
-  driveViewLink: {
-    type: String,
-    trim: true,
-    default: '',
-  },
-  driveContentLink: {
+  r2Url: {
     type: String,
     trim: true,
     default: '',

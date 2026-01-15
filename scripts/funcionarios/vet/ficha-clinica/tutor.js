@@ -26,6 +26,7 @@ import { loadObservacoesForSelection } from './observacoes.js';
 import { loadPesosFromServer } from './pesos.js';
 import { loadDocumentosFromServer } from './documentos.js';
 import { loadReceitasFromServer } from './receitas.js';
+import { loadVendasFromServer } from './vendas.js';
 import { updateCardDisplay, updatePageVisibility, setCardMode } from './ui.js';
 import { loadHistoricoForSelection, setActiveMainTab } from './historico.js';
 import { updateFichaRealTimeSelection } from './real-time.js';
@@ -232,6 +233,9 @@ export async function onSelectCliente(cli, opts = {}) {
   state.receitas = [];
   state.receitasLoadKey = null;
   state.receitasLoading = false;
+  state.vendas = [];
+  state.vendasLoadKey = null;
+  state.vendasLoading = false;
   state.waitingAppointments = [];
   state.waitingAppointmentsLoadKey = null;
   state.waitingAppointmentsLoading = false;
@@ -358,6 +362,9 @@ export async function onSelectPet(petId, opts = {}) {
   state.receitas = [];
   state.receitasLoadKey = null;
   state.receitasLoading = false;
+  state.vendas = [];
+  state.vendasLoadKey = null;
+  state.vendasLoading = false;
   state.waitingAppointments = [];
   state.waitingAppointmentsLoadKey = null;
   state.waitingAppointmentsLoading = false;
@@ -379,6 +386,7 @@ export async function onSelectPet(petId, opts = {}) {
     loadPesosFromServer({ force: true }),
     loadDocumentosFromServer({ force: true }),
     loadReceitasFromServer({ force: true }),
+    loadVendasFromServer({ force: true }),
   ]);
 }
 

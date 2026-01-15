@@ -108,10 +108,15 @@
         option.textContent = store.nome || store.nomeFantasia || store.razaoSocial || 'Empresa sem nome';
         companySelect.appendChild(option);
       });
-      if (selectedValue) {
+      if (selectedValue && stores.some((store) => store._id === selectedValue)) {
         companySelect.value = selectedValue;
+      } else if (selectedValue) {
+        companySelect.value = '';
       }
     };
+
+    const isCompanyAllowed = (companyId) =>
+      stores.some((store) => store._id === companyId);
 
     const computeNextCode = (companyId) => {
       if (!companyId) {
@@ -150,10 +155,14 @@
 
     const fetchStores = async () => {
       try {
-        const response = await fetch(`${API_CONFIG.BASE_URL}/stores`);
+        const token = getToken();
+        const response = await fetch(`${API_CONFIG.BASE_URL}/stores/allowed`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
         if (!response.ok) throw new Error('Não foi possível carregar as empresas.');
         const payload = await response.json();
-        stores = Array.isArray(payload) ? payload : [];
+        const list = Array.isArray(payload?.stores) ? payload.stores : (Array.isArray(payload) ? payload : []);
+        stores = Array.isArray(list) ? list : [];
         populateCompanies();
       } catch (error) {
         console.error('Erro ao carregar empresas:', error);
@@ -197,6 +206,14 @@
     resetValueInput();
 
     companySelect?.addEventListener('change', () => {
+      if (companySelect?.value && !isCompanyAllowed(companySelect.value)) {
+        companySelect.value = '';
+        showModal({
+          title: 'Empresa não autorizada',
+          message: 'Você não tem permissão para configurar ICMS para esta empresa.',
+          confirmText: 'Entendi',
+        });
+      }
       updateCodeField();
     });
 
@@ -212,6 +229,14 @@
         showModal({
           title: 'Selecione uma empresa',
           message: 'Escolha uma empresa antes de adicionar um novo valor de ICMS.',
+          confirmText: 'Entendi',
+        });
+        return;
+      }
+      if (!isCompanyAllowed(empresa)) {
+        showModal({
+          title: 'Empresa não autorizada',
+          message: 'Você não tem permissão para configurar ICMS para esta empresa.',
           confirmText: 'Entendi',
         });
         return;

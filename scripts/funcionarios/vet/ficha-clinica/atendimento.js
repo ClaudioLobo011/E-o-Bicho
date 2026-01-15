@@ -4,8 +4,14 @@ import {
   els,
   api,
   notify,
+  debounce,
   persistAgendaContext,
   normalizeId,
+  normalizeForCompare,
+  formatMoney,
+  pickFirst,
+  getCurrentUserId,
+  getAgendaStoreId,
   VACINA_STORAGE_PREFIX,
   ANEXO_STORAGE_PREFIX,
   EXAME_STORAGE_PREFIX,
@@ -30,7 +36,7 @@ import {
   setActiveMainTab,
   persistHistoricoEntry,
 } from './historico.js';
-import { emitFichaClinicaUpdate } from './real-time.js';
+import { emitFichaClinicaUpdate, updateFichaRealTimeSelection } from './real-time.js';
 import { deleteVacina } from './vacinas.js';
 import { deleteAnexo, isExameAttachmentRecord } from './anexos.js';
 import { deleteExame } from './exames.js';
@@ -38,6 +44,7 @@ import { deletePeso } from './pesos.js';
 import { deleteObservacao } from './observacoes.js';
 import { deleteDocumentoRegistro } from './documentos.js';
 import { deleteReceitaRegistro } from './receitas.js';
+import { loadVendasFromServer } from './vendas.js';
 
 function deepClone(value) {
   try {
@@ -186,6 +193,9 @@ function resetConsultaState() {
   state.documentosLoadKey = null;
   state.receitas = [];
   state.receitasLoadKey = null;
+  state.vendas = [];
+  state.vendasLoadKey = null;
+  state.vendasLoading = false;
 }
 
 function setLimparConsultaProcessing(isProcessing) {
@@ -223,6 +233,550 @@ function setColocarEmEsperaProcessing(isProcessing) {
   }
 }
 
+const iniciarAtendimentoModal = {
+  overlay: null,
+  dialog: null,
+  form: null,
+  storeSelect: null,
+  serviceInput: null,
+  suggestionsEl: null,
+  serviceInfo: null,
+  submitBtn: null,
+  cancelBtn: null,
+  stores: [],
+  selectedService: null,
+  isSubmitting: false,
+  searchAbortController: null,
+  keydownHandler: null,
+};
+
+function isStartAtendimentoServiceCandidate(service) {
+  if (!service) return false;
+  const categories = [];
+  if (Array.isArray(service.categorias)) categories.push(...service.categorias);
+  if (Array.isArray(service.category)) categories.push(...service.category);
+  if (service.categoria) categories.push(service.categoria);
+  if (service?.grupo?.nome) categories.push(service.grupo.nome);
+  const hasCategory = categories.some((cat) => {
+    const normalized = normalizeForCompare(cat);
+    return normalized.includes('vacina') || normalized.includes('veterinario') || normalized.includes('exame');
+  });
+  if (hasCategory) return true;
+  const nomeNorm = normalizeForCompare(service.nome || service.descricao || '');
+  return nomeNorm.includes('vacina') || nomeNorm.includes('veterin') || nomeNorm.includes('exame');
+}
+
+function setIniciarAtendimentoSubmitting(isSubmitting) {
+  iniciarAtendimentoModal.isSubmitting = !!isSubmitting;
+  if (iniciarAtendimentoModal.submitBtn) {
+    iniciarAtendimentoModal.submitBtn.disabled = !!isSubmitting;
+    iniciarAtendimentoModal.submitBtn.classList.toggle('opacity-60', !!isSubmitting);
+    iniciarAtendimentoModal.submitBtn.classList.toggle('cursor-not-allowed', !!isSubmitting);
+    iniciarAtendimentoModal.submitBtn.textContent = isSubmitting ? 'Iniciando...' : 'Iniciar atendimento';
+  }
+  if (iniciarAtendimentoModal.cancelBtn) {
+    iniciarAtendimentoModal.cancelBtn.disabled = !!isSubmitting;
+    iniciarAtendimentoModal.cancelBtn.classList.toggle('opacity-60', !!isSubmitting);
+    iniciarAtendimentoModal.cancelBtn.classList.toggle('cursor-not-allowed', !!isSubmitting);
+  }
+  if (iniciarAtendimentoModal.storeSelect) {
+    iniciarAtendimentoModal.storeSelect.disabled = !!isSubmitting;
+  }
+  if (iniciarAtendimentoModal.serviceInput) {
+    iniciarAtendimentoModal.serviceInput.disabled = !!isSubmitting;
+  }
+}
+
+function updateIniciarAtendimentoServiceInfo() {
+  const info = iniciarAtendimentoModal.serviceInfo;
+  if (!info) return;
+  const service = iniciarAtendimentoModal.selectedService;
+  if (!service) {
+    info.textContent = 'Nenhum serviço selecionado.';
+    return;
+  }
+  const name = service.nome || 'Serviço';
+  const valor = Number(service.valor || 0);
+  const priceText = valor ? formatMoney(valor) : 'Preço padrão';
+  info.textContent = `${name} · ${priceText}`;
+}
+
+function hideIniciarAtendimentoSuggestions() {
+  if (!iniciarAtendimentoModal.suggestionsEl) return;
+  iniciarAtendimentoModal.suggestionsEl.innerHTML = '';
+  iniciarAtendimentoModal.suggestionsEl.classList.add('hidden');
+}
+
+function selectIniciarAtendimentoService(service) {
+  iniciarAtendimentoModal.selectedService = service;
+  if (iniciarAtendimentoModal.serviceInput) {
+    iniciarAtendimentoModal.serviceInput.value = service?.nome || '';
+  }
+  hideIniciarAtendimentoSuggestions();
+  updateIniciarAtendimentoServiceInfo();
+}
+
+async function searchIniciarAtendimentoServices(term) {
+  const query = String(term || '').trim();
+  if (!query || query.length < 2) {
+    hideIniciarAtendimentoSuggestions();
+    return;
+  }
+
+  if (iniciarAtendimentoModal.searchAbortController) {
+    try { iniciarAtendimentoModal.searchAbortController.abort(); } catch {}
+  }
+  const controller = new AbortController();
+  iniciarAtendimentoModal.searchAbortController = controller;
+
+  try {
+    const params = new URLSearchParams({ q: query, limit: '10' });
+    const resp = await api(`/func/servicos/buscar?${params.toString()}`, { signal: controller.signal });
+    if (!resp.ok) {
+      hideIniciarAtendimentoSuggestions();
+      return;
+    }
+    const payload = await resp.json().catch(() => []);
+    if (controller.signal.aborted) return;
+
+    const list = Array.isArray(payload) ? payload : [];
+    const filtered = list.filter(isStartAtendimentoServiceCandidate);
+    const normalized = filtered
+      .map((svc) => ({
+        _id: normalizeId(svc._id),
+        nome: pickFirst(svc.nome, svc.descricao) || '',
+        valor: Number(svc.valor || 0),
+        categorias: Array.isArray(svc.categorias) ? svc.categorias : [],
+        tiposPermitidos: Array.isArray(svc?.grupo?.tiposPermitidos) ? svc.grupo.tiposPermitidos : [],
+      }))
+      .filter((svc) => svc._id && svc.nome);
+
+    if (!normalized.length) {
+      hideIniciarAtendimentoSuggestions();
+      return;
+    }
+
+    const listEl = iniciarAtendimentoModal.suggestionsEl;
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    normalized.forEach((svc) => {
+      const li = document.createElement('li');
+      li.className = 'px-3 py-2 hover:bg-gray-50 cursor-pointer';
+      li.dataset.serviceId = svc._id;
+      const nameEl = document.createElement('div');
+      nameEl.className = 'font-medium text-gray-900';
+      nameEl.textContent = svc.nome;
+      const priceEl = document.createElement('div');
+      priceEl.className = 'text-xs text-gray-500';
+      priceEl.textContent = formatMoney(Number(svc.valor || 0));
+      li.appendChild(nameEl);
+      li.appendChild(priceEl);
+      li.addEventListener('click', () => selectIniciarAtendimentoService(svc));
+      listEl.appendChild(li);
+    });
+    listEl.classList.remove('hidden');
+  } catch (error) {
+    if (error?.name === 'AbortError') return;
+    console.error('searchIniciarAtendimentoServices', error);
+    hideIniciarAtendimentoSuggestions();
+  }
+}
+
+function renderIniciarAtendimentoStoreOptions() {
+  const select = iniciarAtendimentoModal.storeSelect;
+  if (!select) return;
+
+  const stores = Array.isArray(iniciarAtendimentoModal.stores) ? iniciarAtendimentoModal.stores : [];
+  const options = [];
+  if (stores.length) {
+    options.push('<option value="">Selecione a empresa</option>');
+    stores.forEach((store) => {
+      const label = store.nomeFantasia || store.nome || store.razaoSocial || 'Empresa';
+      options.push(`<option value="${store._id}">${label}</option>`);
+    });
+  } else {
+    options.push('<option value="">Nenhuma empresa vinculada</option>');
+  }
+  select.innerHTML = options.join('');
+
+  const currentStoreId = normalizeId(getAgendaStoreId({ persist: false }));
+  const allowedCurrent = stores.some((store) => store._id === currentStoreId);
+  if (allowedCurrent) {
+    select.value = currentStoreId;
+  } else if (stores.length === 1) {
+    select.value = stores[0]._id;
+  }
+}
+
+async function loadIniciarAtendimentoStores() {
+  const select = iniciarAtendimentoModal.storeSelect;
+  if (!select) return;
+
+  select.innerHTML = '<option value="">Carregando...</option>';
+  select.disabled = true;
+
+  try {
+    const resp = await api('/stores/allowed');
+    if (!resp.ok) throw new Error('Falha ao carregar empresas.');
+    const payload = await resp.json().catch(() => ({}));
+    const stores = Array.isArray(payload?.stores) ? payload.stores : Array.isArray(payload) ? payload : [];
+    iniciarAtendimentoModal.stores = stores
+      .map((store) => ({
+        _id: normalizeId(store._id || store.id),
+        nome: store.nome || '',
+        nomeFantasia: store.nomeFantasia || '',
+        razaoSocial: store.razaoSocial || '',
+      }))
+      .filter((store) => store._id);
+  } catch (error) {
+    console.error('loadIniciarAtendimentoStores', error);
+    iniciarAtendimentoModal.stores = [];
+    notify('Não foi possível carregar as empresas vinculadas ao seu usuário.', 'error');
+  } finally {
+    select.disabled = false;
+    renderIniciarAtendimentoStoreOptions();
+  }
+}
+
+function ensureIniciarAtendimentoModal() {
+  if (iniciarAtendimentoModal.overlay) return iniciarAtendimentoModal;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'vet-iniciar-atendimento-modal';
+  overlay.className = 'hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4';
+  overlay.setAttribute('aria-hidden', 'true');
+
+  const dialog = document.createElement('div');
+  dialog.className = 'w-full max-w-2xl rounded-xl bg-white shadow-xl focus:outline-none';
+  dialog.tabIndex = -1;
+  dialog.setAttribute('role', 'dialog');
+  dialog.setAttribute('aria-modal', 'true');
+  overlay.appendChild(dialog);
+
+  const form = document.createElement('form');
+  form.className = 'flex flex-col gap-5 p-6';
+  dialog.appendChild(form);
+
+  const header = document.createElement('div');
+  header.className = 'flex items-start justify-between gap-3';
+  form.appendChild(header);
+
+  const title = document.createElement('h2');
+  title.className = 'text-lg font-semibold text-gray-800';
+  title.textContent = 'Iniciar atendimento';
+  header.appendChild(title);
+
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'text-gray-400 transition hover:text-gray-600';
+  closeBtn.innerHTML = '<i class="fas fa-xmark"></i>';
+  closeBtn.addEventListener('click', (event) => {
+    event.preventDefault();
+    closeIniciarAtendimentoModal();
+  });
+  header.appendChild(closeBtn);
+
+  const fields = document.createElement('div');
+  fields.className = 'grid gap-4';
+  form.appendChild(fields);
+
+  const storeField = document.createElement('label');
+  storeField.className = 'grid gap-1';
+  fields.appendChild(storeField);
+
+  const storeLabel = document.createElement('span');
+  storeLabel.className = 'text-sm font-medium text-gray-700';
+  storeLabel.textContent = 'Empresa';
+  storeField.appendChild(storeLabel);
+
+  const storeSelect = document.createElement('select');
+  storeSelect.className = 'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300';
+  storeField.appendChild(storeSelect);
+
+  const storeHelp = document.createElement('p');
+  storeHelp.className = 'text-xs text-gray-500';
+  storeHelp.textContent = 'Selecione a empresa onde o atendimento será iniciado.';
+  storeField.appendChild(storeHelp);
+
+  const serviceField = document.createElement('label');
+  serviceField.className = 'grid gap-1';
+  fields.appendChild(serviceField);
+
+  const serviceLabel = document.createElement('span');
+  serviceLabel.className = 'text-sm font-medium text-gray-700';
+  serviceLabel.textContent = 'Serviço';
+  serviceField.appendChild(serviceLabel);
+
+  const serviceWrap = document.createElement('div');
+  serviceWrap.className = 'relative';
+  serviceField.appendChild(serviceWrap);
+
+  const serviceInput = document.createElement('input');
+  serviceInput.type = 'text';
+  serviceInput.placeholder = 'Busque por vacina, exame ou consulta veterinária';
+  serviceInput.autocomplete = 'off';
+  serviceInput.className = 'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300';
+  serviceWrap.appendChild(serviceInput);
+
+  const suggestions = document.createElement('ul');
+  suggestions.className = 'hidden absolute left-0 right-0 top-full mt-2 max-h-56 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg z-10';
+  serviceWrap.appendChild(suggestions);
+
+  const serviceInfo = document.createElement('p');
+  serviceInfo.className = 'text-xs text-gray-500';
+  serviceField.appendChild(serviceInfo);
+
+  const footer = document.createElement('div');
+  footer.className = 'flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:items-center sm:justify-end sm:gap-3';
+  form.appendChild(footer);
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className = 'w-full rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 sm:w-auto';
+  cancelBtn.textContent = 'Cancelar';
+  cancelBtn.addEventListener('click', (event) => {
+    event.preventDefault();
+    closeIniciarAtendimentoModal();
+  });
+  footer.appendChild(cancelBtn);
+
+  const submitBtn = document.createElement('button');
+  submitBtn.type = 'submit';
+  submitBtn.className = 'w-full rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-400 sm:w-auto';
+  submitBtn.textContent = 'Iniciar atendimento';
+  footer.appendChild(submitBtn);
+
+  const debouncedSearch = debounce((value) => searchIniciarAtendimentoServices(value), 300);
+  serviceInput.addEventListener('input', (event) => {
+    iniciarAtendimentoModal.selectedService = null;
+    updateIniciarAtendimentoServiceInfo();
+    debouncedSearch(event.target.value);
+  });
+  serviceInput.addEventListener('focus', (event) => {
+    const value = String(event.target.value || '').trim();
+    if (value.length >= 2) {
+      searchIniciarAtendimentoServices(value);
+    }
+  });
+  serviceInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !iniciarAtendimentoModal.selectedService) {
+      event.preventDefault();
+    }
+  });
+  serviceInput.addEventListener('blur', () => {
+    setTimeout(() => hideIniciarAtendimentoSuggestions(), 150);
+  });
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    await handleIniciarAtendimentoSubmit();
+  });
+
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) {
+      event.preventDefault();
+      closeIniciarAtendimentoModal();
+    }
+  });
+
+  document.body.appendChild(overlay);
+
+  iniciarAtendimentoModal.overlay = overlay;
+  iniciarAtendimentoModal.dialog = dialog;
+  iniciarAtendimentoModal.form = form;
+  iniciarAtendimentoModal.storeSelect = storeSelect;
+  iniciarAtendimentoModal.serviceInput = serviceInput;
+  iniciarAtendimentoModal.suggestionsEl = suggestions;
+  iniciarAtendimentoModal.serviceInfo = serviceInfo;
+  iniciarAtendimentoModal.submitBtn = submitBtn;
+  iniciarAtendimentoModal.cancelBtn = cancelBtn;
+
+  updateIniciarAtendimentoServiceInfo();
+
+  return iniciarAtendimentoModal;
+}
+
+function closeIniciarAtendimentoModal() {
+  if (!iniciarAtendimentoModal.overlay) return;
+  iniciarAtendimentoModal.overlay.classList.add('hidden');
+  iniciarAtendimentoModal.overlay.setAttribute('aria-hidden', 'true');
+  if (iniciarAtendimentoModal.form) iniciarAtendimentoModal.form.reset();
+  iniciarAtendimentoModal.selectedService = null;
+  hideIniciarAtendimentoSuggestions();
+  updateIniciarAtendimentoServiceInfo();
+  setIniciarAtendimentoSubmitting(false);
+  if (iniciarAtendimentoModal.keydownHandler) {
+    document.removeEventListener('keydown', iniciarAtendimentoModal.keydownHandler);
+    iniciarAtendimentoModal.keydownHandler = null;
+  }
+}
+
+function openIniciarAtendimentoModal() {
+  const clienteId = normalizeId(state.selectedCliente?._id);
+  const petId = normalizeId(state.selectedPetId);
+  if (!(clienteId && petId)) {
+    notify('Selecione um tutor e um pet para iniciar o atendimento.', 'warning');
+    return;
+  }
+
+  const currentStatus = normalizeForCompare(state.agendaContext?.status);
+  const contextTutor = normalizeId(state.agendaContext?.tutorId);
+  const contextPet = normalizeId(state.agendaContext?.petId);
+  if (currentStatus === 'em_atendimento' && contextTutor === clienteId && contextPet === petId) {
+    notify('O atendimento já está em andamento para este tutor e pet.', 'info');
+    return;
+  }
+
+  const modal = ensureIniciarAtendimentoModal();
+  modal.selectedService = null;
+  if (modal.serviceInput) modal.serviceInput.value = '';
+  updateIniciarAtendimentoServiceInfo();
+  setIniciarAtendimentoSubmitting(false);
+  loadIniciarAtendimentoStores();
+
+  modal.overlay.classList.remove('hidden');
+  modal.overlay.removeAttribute('aria-hidden');
+  if (modal.dialog) {
+    modal.dialog.focus();
+  }
+
+  if (modal.keydownHandler) {
+    document.removeEventListener('keydown', modal.keydownHandler);
+  }
+  modal.keydownHandler = (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeIniciarAtendimentoModal();
+    }
+  };
+  document.addEventListener('keydown', modal.keydownHandler);
+}
+
+function applyIniciarAtendimentoContext({ appointmentId, storeId, scheduledAt, status, servico, profissionalNome, profissionalId }) {
+  const clienteId = normalizeId(state.selectedCliente?._id);
+  const petId = normalizeId(state.selectedPetId);
+  if (!(clienteId && petId && appointmentId)) return;
+
+  const servicos = servico ? [{
+    _id: servico._id,
+    nome: servico.nome,
+    valor: Number(servico.valor || 0),
+    categorias: Array.isArray(servico.categorias) ? servico.categorias : [],
+    tiposPermitidos: Array.isArray(servico.tiposPermitidos) ? servico.tiposPermitidos : [],
+  }] : [];
+  const total = servicos.reduce((sum, item) => sum + Number(item.valor || 0), 0);
+
+  state.agendaContext = {
+    ...(state.agendaContext || {}),
+    appointmentId,
+    tutorId: clienteId,
+    petId,
+    status: status || 'em_atendimento',
+    scheduledAt: scheduledAt || new Date().toISOString(),
+    valor: total,
+    servicos,
+    totalServicos: servicos.length,
+    profissionalId: profissionalId || null,
+    profissionalNome: profissionalNome || '',
+  };
+
+  if (storeId) {
+    state.agendaContext.storeId = storeId;
+    if (!Array.isArray(state.agendaContext.storeIdCandidates)) {
+      state.agendaContext.storeIdCandidates = [];
+    }
+    if (!state.agendaContext.storeIdCandidates.includes(storeId)) {
+      state.agendaContext.storeIdCandidates.push(storeId);
+    }
+  }
+
+  persistAgendaContext(state.agendaContext);
+}
+
+async function handleIniciarAtendimentoSubmit() {
+  const modal = ensureIniciarAtendimentoModal();
+  if (modal.isSubmitting) return;
+
+  const clienteId = normalizeId(state.selectedCliente?._id);
+  const petId = normalizeId(state.selectedPetId);
+  if (!(clienteId && petId)) {
+    notify('Selecione um tutor e um pet para iniciar o atendimento.', 'warning');
+    return;
+  }
+
+  const storeId = normalizeId(modal.storeSelect?.value || '');
+  if (!storeId) {
+    notify('Selecione a empresa para iniciar o atendimento.', 'warning');
+    return;
+  }
+
+  const service = modal.selectedService;
+  if (!service || !service._id) {
+    notify('Selecione o serviço que será iniciado.', 'warning');
+    return;
+  }
+
+  const profissionalId = getCurrentUserId();
+  if (!profissionalId) {
+    notify('Não foi possível identificar o profissional logado.', 'error');
+    return;
+  }
+
+  const scheduledAt = new Date().toISOString();
+  const payload = {
+    storeId,
+    clienteId,
+    petId,
+    profissionalId,
+    scheduledAt,
+    status: 'em_atendimento',
+    servicos: [{
+      servicoId: service._id,
+      valor: Number(service.valor || 0),
+      profissionalId,
+      status: 'em_atendimento',
+    }],
+  };
+
+  setIniciarAtendimentoSubmitting(true);
+
+  try {
+    const response = await api('/func/agendamentos', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json().catch(() => (response.ok ? {} : {}));
+    if (!response.ok) {
+      const message = typeof data?.message === 'string' ? data.message : 'Erro ao iniciar atendimento.';
+      throw new Error(message);
+    }
+
+    const appointmentId = normalizeId(data?._id || data?.id || data?.appointmentId);
+    applyIniciarAtendimentoContext({
+      appointmentId,
+      storeId,
+      scheduledAt: data?.h || scheduledAt,
+      status: data?.status || 'em_atendimento',
+      servico: service,
+      profissionalNome: data?.profissional || '',
+      profissionalId,
+    });
+
+    clearLocalStoredDataForSelection(clienteId, petId);
+    resetConsultaState();
+    updateConsultaAgendaCard();
+    updateFichaRealTimeSelection().catch(() => {});
+    await loadWaitingAppointments({ force: true });
+
+    closeIniciarAtendimentoModal();
+    notify('Atendimento iniciado com sucesso.', 'success');
+  } catch (error) {
+    console.error('handleIniciarAtendimentoSubmit', error);
+    notify(error.message || 'Erro ao iniciar atendimento.', 'error');
+  } finally {
+    setIniciarAtendimentoSubmitting(false);
+  }
+}
 let isProcessingLimpeza = false;
 let isProcessingFinalizacao = false;
 let isProcessingColocarEmEspera = false;
@@ -535,6 +1089,18 @@ export async function finalizarAtendimento() {
         state.agendaContext.profissionalNome = data.profissional;
       }
     }
+    if (entry && entry.agenda && typeof entry.agenda === 'object') {
+      entry.agenda.status = data?.status || 'finalizado';
+      if (Array.isArray(data?.servicos)) {
+        entry.agenda.servicos = data.servicos;
+      }
+      if (typeof data?.valor === 'number') {
+        entry.agenda.valor = Number(data.valor);
+      }
+      if (data?.profissional) {
+        entry.agenda.profissionalNome = data.profissional;
+      }
+    }
     persistAgendaContext(state.agendaContext);
 
     let savedEntry = null;
@@ -658,6 +1224,7 @@ async function reopenHistoricoEntry(entry, closeModal) {
     updateMainTabLayout();
     updateConsultaAgendaCard();
     renderHistoricoArea();
+    await loadVendasFromServer({ force: true });
 
     if (typeof closeModal === 'function') {
       closeModal();
@@ -978,6 +1545,12 @@ export function initAtendimentoActions() {
       if (result && typeof result.then === 'function') {
         result.catch(() => {});
       }
+    });
+  }
+  if (els.iniciarAtendimentoBtn) {
+    els.iniciarAtendimentoBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      openIniciarAtendimentoModal();
     });
   }
   if (els.finalizarAtendimentoBtn) {

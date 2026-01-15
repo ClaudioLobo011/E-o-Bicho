@@ -2521,7 +2521,7 @@
             ? API_CONFIG.BASE_URL.replace(/\/+$/, '')
             : '/api';
         const pendingDocumentsEndpoint = `${apiBaseUrl}/purchase/nfe/drafts/dfe`;
-        const companiesEndpoint = `${apiBaseUrl}/stores`;
+        const companiesEndpoint = `${apiBaseUrl}/stores/allowed`;
         const suppliersEndpoint = `${apiBaseUrl}/suppliers`;
         const bankAccountsEndpoint = `${apiBaseUrl}/bank-accounts`;
         const depositsEndpoint = `${apiBaseUrl}/deposits`;
@@ -2576,6 +2576,11 @@
           index: new Map(),
           lastLoadedAt: 0,
           error: null,
+        };
+
+        const isCompanyAllowed = (companyId) => {
+          if (!companyId) return false;
+          return companyRegistry.index.has(String(companyId));
         };
 
         const bankAccountsRegistry = {
@@ -14037,6 +14042,15 @@
         if (companySelect) {
           companySelect.addEventListener('change', () => {
             const selectedCompany = companySelect.value || '';
+            if (selectedCompany && !isCompanyAllowed(selectedCompany)) {
+              companySelect.value = '';
+              pendingCompanyId = '';
+              pendingCompanyDocumentDigits = '';
+              refreshDepositOptions({ preserveSelection: false }).catch(() => {});
+              refreshBankAccountOptions({ preserveSelection: false }).catch(() => {});
+              notify('Empresa nao autorizada para esta operacao.', 'warning');
+              return;
+            }
             pendingCompanyId = '';
             if (lastNfeData) {
               lastNfeData.selectedCompanyId = selectedCompany;

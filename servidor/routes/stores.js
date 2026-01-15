@@ -373,6 +373,7 @@ const sanitizeHorario = (horario) => {
 };
 
 const sanitizeStorePayload = (body = {}) => {
+    const codigo = trimString(body.codigo).replace(/\D/g, '');
     const nomeFantasia = trimString(body.nomeFantasia) || trimString(body.nome);
     const nome = trimString(body.nome) || nomeFantasia || trimString(body.razaoSocial);
     const razaoSocial = trimString(body.razaoSocial);
@@ -449,6 +450,7 @@ const sanitizeStorePayload = (body = {}) => {
     const horario = sanitizeHorario(body.horario);
 
     const payload = {
+        codigo: codigo || undefined,
         nome,
         nomeFantasia,
         razaoSocial,
@@ -524,6 +526,37 @@ const sanitizeStorePayload = (body = {}) => {
     return payload;
 };
 
+const normalizeStoreCodeNumber = (value) => {
+    const digits = trimString(value).replace(/\D/g, '');
+    if (!digits) return null;
+    const parsed = Number(digits);
+    if (!Number.isFinite(parsed)) return null;
+    return Math.trunc(parsed);
+};
+
+const fetchUsedStoreCodes = async (excludeId = null) => {
+    const query = { codigo: { $nin: [null, ''] } };
+    if (excludeId) query._id = { $ne: excludeId };
+    const stores = await Store.find(query).select('codigo').lean();
+    const used = new Set();
+    stores.forEach((store) => {
+        const normalized = normalizeStoreCodeNumber(store.codigo);
+        if (normalized !== null) {
+            used.add(String(normalized));
+        }
+    });
+    return used;
+};
+
+const resolveNextStoreCode = async (excludeId = null) => {
+    const used = await fetchUsedStoreCodes(excludeId);
+    let next = 1;
+    while (used.has(String(next))) {
+        next += 1;
+    }
+    return String(next);
+};
+
 router.post('/certificate/preview', requireAuth, authorizeRoles('admin', 'admin_master'), uploadCertificate.single('certificado'), async (req, res) => {
     try {
         const senha = trimString(req.body?.senha);
@@ -561,6 +594,54 @@ router.get('/allowed', requireAuth, authorizeRoles('admin', 'admin_master', 'fun
     }
 });
 
+// POST /api/stores/backfill-codes - gerar codigos para lojas existentes (restrito)
+router.post('/backfill-codes', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
+    try {
+        const stores = await Store.find({}).sort({ createdAt: 1, nome: 1 }).select('codigo').lean();
+        const used = new Set();
+        stores.forEach((store) => {
+            const normalized = normalizeStoreCodeNumber(store.codigo);
+            if (normalized !== null) {
+                used.add(String(normalized));
+            }
+        });
+
+        const takeNextCode = () => {
+            let next = 1;
+            while (used.has(String(next))) {
+                next += 1;
+            }
+            used.add(String(next));
+            return String(next);
+        };
+
+        const updates = [];
+        let updated = 0;
+
+        stores.forEach((store) => {
+            const current = trimString(store.codigo);
+            if (current) return;
+            const code = takeNextCode();
+            updates.push({
+                updateOne: {
+                    filter: { _id: store._id },
+                    update: { $set: { codigo: code } }
+                }
+            });
+            updated += 1;
+        });
+
+        if (updates.length) {
+            await Store.bulkWrite(updates);
+        }
+
+        res.json({ updated });
+    } catch (error) {
+        console.error('Erro ao atualizar codigos das lojas:', error);
+        res.status(500).json({ message: 'Erro ao atualizar codigos das lojas.' });
+    }
+});
+
 router.get('/', async (req, res) => {
     try {
         const stores = await Store.find({}).sort({ nome: 1 });
@@ -590,6 +671,14 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
         if (!payload.nome) {
             return res.status(400).json({ message: 'O nome da loja Ã© obrigatÃ³rio.' });
         }
+        if (payload.codigo) {
+            const exists = await Store.exists({ codigo: payload.codigo });
+            if (exists) {
+                return res.status(400).json({ message: 'Codigo ja utilizado em outra loja.' });
+            }
+        } else {
+            payload.codigo = await resolveNextStoreCode();
+        }
         const newStore = new Store(payload);
         const savedStore = await newStore.save();
         res.status(201).json(savedStore);
@@ -606,8 +695,22 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
         if (!payload.nome) {
             return res.status(400).json({ message: 'O nome da loja Ã© obrigatÃ³rio.' });
         }
+        const existingStore = await Store.findById(req.params.id);
+        if (!existingStore) return res.status(404).json({ message: 'Loja nÇœo encontrada.' });
+
+        if (payload.codigo) {
+            if (payload.codigo !== existingStore.codigo) {
+                const exists = await Store.exists({ codigo: payload.codigo, _id: { $ne: existingStore._id } });
+                if (exists) {
+                    return res.status(400).json({ message: 'Codigo ja utilizado em outra loja.' });
+                }
+            }
+        } else {
+            payload.codigo = existingStore.codigo || (await resolveNextStoreCode(existingStore._id));
+        }
+
         const updatedStore = await Store.findByIdAndUpdate(
-            req.params.id,
+            existingStore._id,
             payload,
             { new: true, runValidators: true }
         );

@@ -20,6 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const imageInput = document.getElementById('store-image-input');
     const cepInput = document.getElementById('store-cep');
     const enderecoHiddenInput = document.getElementById('store-endereco');
+    const codigoInput = document.getElementById('store-codigo');
     const razaoSocialInput = document.getElementById('store-razao-social');
     const nomeFantasiaInput = document.getElementById('store-nome');
     const cnpjInput = document.getElementById('store-cnpj');
@@ -619,6 +620,7 @@ document.addEventListener('DOMContentLoaded', () => {
         modalTitle.textContent = 'Adicionar Nova Loja';
         hiddenStoreId.value = '';
         form.reset();
+        if (codigoInput) codigoInput.value = '';
         selectedServices = [];
         renderServiceTags();
         activateTab('endereco');
@@ -692,6 +694,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             modalTitle.textContent = 'Editar Loja';
             hiddenStoreId.value = store._id;
+            if (codigoInput) codigoInput.value = store.codigo || '';
             razaoSocialInput.value = store.razaoSocial || '';
             nomeFantasiaInput.value = store.nomeFantasia || store.nome || '';
             cnpjInput.value = store.cnpj || '';
@@ -1616,12 +1619,27 @@ document.addEventListener('DOMContentLoaded', () => {
         applyStoreColumnWidths();
     }
 
+    async function backfillStoreCodes() {
+        try {
+            const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser') || 'null');
+            const token = loggedInUser?.token;
+            if (!token) return;
+            await fetch(`${API_CONFIG.BASE_URL}/stores/backfill-codes`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+        } catch (error) {
+            console.warn('NÇœo foi possÇðvel atualizar os cÇüdigos das lojas.', error);
+        }
+    }
+
     async function fetchAndDisplayStores() {
         ensureStoresTableLayout();
         setStoresCounter('A carregar lojas...');
         setStoresTableMessage('A carregar lojas...');
 
         try {
+            await backfillStoreCodes();
             const response = await fetch(`${API_CONFIG.BASE_URL}/stores`);
             const stores = Array.isArray(response) ? response : await response.json();
             const list = Array.isArray(stores) ? stores : [];
@@ -1640,6 +1658,12 @@ document.addEventListener('DOMContentLoaded', () => {
     closeModalBtn?.addEventListener('click', closeModal);
     openServicesModalBtn.addEventListener('click', openServicesModal);
     saveServicesModalBtn.addEventListener('click', saveServicesSelection);
+    codigoInput?.addEventListener('input', () => {
+        const digits = codigoInput.value.replace(/\D/g, '');
+        if (codigoInput.value !== digits) {
+            codigoInput.value = digits;
+        }
+    });
 
     horarioContainer.addEventListener('change', (event) => {
         if (event.target.classList.contains('fechada-checkbox')) {
@@ -1780,11 +1804,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const cscIdHomologacaoValue = (cscIdHomologacaoInput?.value || '').trim();
         const cscTokenProducaoValue = (cscTokenProducaoInput?.value || '').trim();
         const cscTokenHomologacaoValue = (cscTokenHomologacaoInput?.value || '').trim();
+        const codigoValue = (codigoInput?.value || '').trim();
+        const codigo = codigoValue ? codigoValue.replace(/\D/g, '') : '';
 
         const storeData = {
             nome: nomeFantasiaInput.value,
             nomeFantasia: nomeFantasiaInput.value,
             razaoSocial: razaoSocialInput.value,
+            codigo,
             cnpj: cnpjInput.value,
             cnaePrincipal: formattedCnaePrincipal,
             cnaePrincipalDescricao: cnaeDescricaoInput?.value || '',

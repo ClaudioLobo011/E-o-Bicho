@@ -1122,13 +1122,57 @@
     font-weight: 500;
     letter-spacing: 0.01em;
   }
+  .agenda-summary { flex-wrap: wrap; }
   .agenda-summary span { display: inline-flex; align-items: center; gap: .25rem; }
   .agenda-summary .font-semibold { color: #0f172a; }
 
+  .agenda-page {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .agenda-page .agenda-main {
+    flex: 1;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .agenda-page .agenda-grid {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .agenda-page .agenda-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .agenda-page .agenda-shell {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .agenda-page .agenda-scroll {
+    flex: 1;
+    min-height: 0;
+  }
+
   #agenda-wrapper {
     position: relative;
-    overflow-x: auto;
-    overflow-y: visible;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
     padding: clamp(1.5rem, 1vw + 1.1rem, 2.5rem);
     background:
       radial-gradient(at 18% 22%, rgba(59,130,246,0.14), transparent 55%),

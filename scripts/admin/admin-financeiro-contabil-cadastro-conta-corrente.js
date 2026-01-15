@@ -28,6 +28,7 @@
 
   const state = {
     companies: [],
+    companiesLoaded: false,
     saving: false,
     accounts: [],
     loadingAccounts: false,
@@ -220,6 +221,19 @@
     return nome || documento || 'Empresa sem identificação';
   };
 
+  const isCompanyAllowed = (companyId) =>
+    state.companies.some((company) => company && company._id === companyId);
+
+  const getAccountCompanyId = (account) => normalizeId(
+    account?.company?._id ||
+    account?.company?.id ||
+    account?.company ||
+    account?.companyId ||
+    account?.empresa ||
+    account?.store ||
+    ''
+  );
+
   const formatDocument = (documentNumber) => {
     if (!documentNumber) return '—';
     const digits = String(documentNumber).replace(/\D+/g, '');
@@ -361,12 +375,15 @@
       ? normalizeId(account.company._id || account.company.id || account.company.value)
       : normalizeId(account.company);
     if (elements.company) {
-      if (companyId) {
+      if (companyId && isCompanyAllowed(companyId)) {
         const companyLabel = account.company && typeof account.company === 'object'
           ? buildCompanyLabel(account.company)
           : buildCompanyLabel({ nome: account.company });
         ensureSelectOption(elements.company, companyId, companyLabel);
         elements.company.value = companyId;
+      } else if (companyId) {
+        elements.company.value = '';
+        notify('Você não tem permissão para editar esta empresa.', 'error');
       } else {
         elements.company.value = '';
       }
@@ -493,7 +510,18 @@
       }
 
       const data = await response.json();
-      state.accounts = Array.isArray(data?.accounts) ? data.accounts : [];
+      const accounts = Array.isArray(data?.accounts) ? data.accounts : [];
+      if (state.companiesLoaded) {
+        const allowedIds = new Set(
+          state.companies.map((company) => normalizeId(company?._id)).filter(Boolean)
+        );
+        state.accounts = accounts.filter((account) => {
+          const companyId = getAccountCompanyId(account);
+          return companyId && allowedIds.has(companyId);
+        });
+      } else {
+        state.accounts = accounts;
+      }
 
       if (state.editingAccountId) {
         const refreshed = state.accounts.find((item) => normalizeId(item._id) === state.editingAccountId);
@@ -635,13 +663,15 @@
       const token = getToken();
       if (token) headers.Authorization = `Bearer ${token}`;
 
-      const response = await fetch(`${API_BASE}/stores`, { headers });
+      const response = await fetch(`${API_BASE}/stores/allowed`, { headers });
       if (!response.ok) {
         throw new Error(`Falha ao carregar empresas (${response.status})`);
       }
 
       const data = await response.json();
-      state.companies = Array.isArray(data) ? data : [];
+      const list = Array.isArray(data?.stores) ? data.stores : (Array.isArray(data) ? data : []);
+      state.companies = Array.isArray(list) ? list : [];
+      state.companiesLoaded = true;
 
       if (!state.companies.length) {
         select.innerHTML = '<option value="">Nenhuma empresa cadastrada</option>';
@@ -657,10 +687,19 @@
         option.textContent = buildCompanyLabel(company);
         select.appendChild(option);
       });
+
+      if (select.value && !isCompanyAllowed(select.value)) {
+        select.value = '';
+        notify('Você não tem permissão para editar esta empresa.', 'error');
+      }
+      if (!state.loadingAccounts) {
+        loadAccounts();
+      }
     } catch (error) {
       console.error('Erro ao carregar empresas:', error);
       select.innerHTML = '<option value="">Não foi possível carregar as empresas</option>';
       notify('Não foi possível carregar as empresas. Tente novamente mais tarde.', 'error');
+      state.companiesLoaded = true;
     }
   };
 
@@ -777,6 +816,9 @@
     if (!payload.company) {
       throw new Error('Selecione a empresa proprietária da conta.');
     }
+    if (!isCompanyAllowed(payload.company)) {
+      throw new Error('Você não tem permissão para configurar esta empresa.');
+    }
     if (!payload.bankCode) {
       throw new Error('Selecione o banco da conta corrente.');
     }
@@ -868,6 +910,14 @@
 
     elements.form.addEventListener('submit', handleSubmit);
     elements.form.addEventListener('reset', handleReset);
+    if (elements.company) {
+      elements.company.addEventListener('change', () => {
+        if (elements.company.value && !isCompanyAllowed(elements.company.value)) {
+          elements.company.value = '';
+          notify('Você não tem permissão para configurar esta empresa.', 'error');
+        }
+      });
+    }
     if (elements.tableBody) {
       elements.tableBody.addEventListener('click', handleTableClick);
     }

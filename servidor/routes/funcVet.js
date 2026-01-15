@@ -15,15 +15,17 @@ const VetDocument = require('../models/VetDocument');
 const VetDocumentRecord = require('../models/VetDocumentRecord');
 const VetRecipe = require('../models/VetRecipe');
 const VetRecipeRecord = require('../models/VetRecipeRecord');
+const VetSaleRecord = require('../models/VetSaleRecord');
 const PetWeight = require('../models/PetWeight');
 const VetClinicHistory = require('../models/VetClinicHistory');
 const InternacaoRegistro = require('../models/InternacaoRegistro');
 const {
-  isDriveConfigured,
-  getDriveFolderId,
-  uploadBufferToDrive,
-  deleteFile,
-} = require('../utils/googleDrive');
+  isR2Configured,
+  uploadBufferToR2,
+  deleteObjectFromR2,
+  buildPublicUrl,
+  parseKeyFromPublicUrl,
+} = require('../utils/cloudflareR2');
 
 const router = express.Router();
 const requireStaff = authorizeRoles('funcionario', 'admin', 'admin_master');
@@ -59,18 +61,40 @@ const RECEITA_REGISTROS_ID_PATHS = RECEITA_REGISTROS_BASE_PATHS.map((base) => `$
 const RECEITA_REGISTROS_SIGNATURE_PATHS = RECEITA_REGISTROS_ID_PATHS.map((base) => `${base}/assinatura`);
 
 function handleAnexoUpload(req, res, next) {
+  let aborted = false;
+  req.on('aborted', () => {
+    aborted = true;
+  });
+  req.on('close', () => {
+    if (aborted) {
+      console.error('handleAnexoUpload aborted', {
+        url: req.originalUrl,
+        contentType: req.headers['content-type'],
+        contentLength: req.headers['content-length'],
+      });
+    }
+  });
   uploadAnexoMiddleware.array('arquivos', MAX_ANEXO_FILE_COUNT)(req, res, (err) => {
     if (err instanceof multer.MulterError) {
+      console.error('handleAnexoUpload multer error:', err);
       if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(400).json({ message: 'Cada arquivo deve ter no mÃ¡ximo 20MB.' });
+        return res.status(400).json({ message: 'Cada arquivo deve ter no mǭximo 20MB.' });
       }
       if (err.code === 'LIMIT_FILE_COUNT') {
-        return res.status(400).json({ message: `Envie no mÃ¡ximo ${MAX_ANEXO_FILE_COUNT} arquivos por vez.` });
+        return res.status(400).json({ message: `Envie no mǭximo ${MAX_ANEXO_FILE_COUNT} arquivos por vez.` });
       }
       return res.status(400).json({ message: 'Falha ao processar os arquivos enviados.' });
     }
     if (err) {
-      return res.status(400).json({ message: 'Falha ao processar os arquivos enviados.' });
+      console.error('handleAnexoUpload error:', err);
+      const rawMessage = typeof err?.message === 'string' ? err.message : '';
+      if (rawMessage.toLowerCase().includes('unexpected end of form')) {
+        return res.status(400).json({
+          message: 'Upload interrompido antes de concluir. Tente novamente.',
+        });
+      }
+      const details = rawMessage ? ` (${rawMessage})` : '';
+      return res.status(400).json({ message: `Falha ao processar os arquivos enviados.${details}` });
     }
     return next();
   });
@@ -141,6 +165,37 @@ function toIsoDate(value) {
   return date.toISOString();
 }
 
+function toNumber(value) {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === 'string') {
+    const normalized = value.replace(',', '.').trim();
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatVendaRecord(doc) {
+  if (!doc || typeof doc !== 'object') return null;
+  const id = normalizeObjectId(doc._id || doc.id);
+  if (!id) return null;
+  return {
+    id,
+    _id: id,
+    clienteId: normalizeObjectId(doc.cliente?._id || doc.cliente),
+    petId: normalizeObjectId(doc.pet?._id || doc.pet),
+    appointmentId: normalizeObjectId(doc.appointment?._id || doc.appointment),
+    produtoId: normalizeObjectId(doc.produto?._id || doc.produto),
+    produtoNome: doc.produtoNome || '',
+    valorUnitario: Number(doc.valorUnitario || 0),
+    quantidade: Number(doc.quantidade || 0),
+    subtotal: Number(doc.subtotal || 0),
+    createdAt: toIsoDate(doc.createdAt),
+    updatedAt: toIsoDate(doc.updatedAt),
+  };
+}
+
 async function registerInternacaoPesoUpdate({ internacaoId, pesoValue, author }) {
   const targetId = normalizeObjectId(internacaoId);
   if (!targetId) return null;
@@ -175,9 +230,8 @@ function hasSignedFileData(file) {
 
   const stringFields = [
     'url',
-    'driveFileId',
-    'driveViewLink',
-    'driveContentLink',
+    'r2Key',
+    'r2Url',
     'originalName',
     'mimeType',
     'extension',
@@ -233,6 +287,21 @@ function ensureFileNameWithExtension(name, extension) {
     return name || '';
   }
   return `${name || ''}${ext}`;
+}
+
+function buildVetR2Key(folderParts, fileName) {
+  const safeParts = Array.isArray(folderParts)
+    ? folderParts.map((part) => sanitizeFolderSegment(part)).filter(Boolean)
+    : [];
+  const cleanedName = sanitizeFileName(fileName) || `arquivo-${Date.now()}`;
+  return path.posix.join('vet', ...safeParts, cleanedName);
+}
+
+function resolveR2Url(file) {
+  if (!file || typeof file !== 'object') return '';
+  if (file.r2Url) return file.r2Url;
+  if (file.r2Key) return buildPublicUrl(file.r2Key);
+  return '';
 }
 
 function inferExtensionFromFile(file) {
@@ -400,11 +469,27 @@ function parseRenameMap(value) {
   return result;
 }
 
+function normalizeForCompare(value) {
+  if (value === null || value === undefined) return '';
+  const raw = String(value).trim().toLowerCase();
+  if (!raw) return '';
+  return raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '');
+}
+
+function isVetCategory(value) {
+  const normalized = normalizeForCompare(value);
+  if (!normalized) return false;
+  return normalized.includes('veterinario') || normalized.includes('exame') || normalized.includes('vacina');
+}
+
 function isVetService(serviceDoc = {}) {
   const raw = Array.isArray(serviceDoc.categorias)
     ? serviceDoc.categorias
     : (serviceDoc.categorias ? [serviceDoc.categorias] : []);
-  return raw.some((cat) => String(cat || '').trim().toLowerCase() === 'veterinario');
+  if (raw.some(isVetCategory)) return true;
+  const nameNorm = normalizeForCompare(serviceDoc.nome || '');
+  if (nameNorm.includes('veterin')) return true;
+  return false;
 }
 
 async function ensurePetBelongsToCliente(petId, clienteId) {
@@ -515,6 +600,7 @@ function formatConsultation(doc) {
   if (!doc) return null;
   const createdAt = doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt || null;
   const updatedAt = doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt || createdAt;
+  const retornoEm = toIsoDate(doc.retornoEm);
   return {
     _id: toStringSafe(doc._id),
     clienteId: toStringSafe(doc.cliente),
@@ -525,6 +611,7 @@ function formatConsultation(doc) {
     anamnese: doc.anamnese || '',
     exameFisico: doc.exameFisico || '',
     diagnostico: doc.diagnostico || '',
+    retornoEm,
     createdAt,
     updatedAt,
   };
@@ -539,7 +626,8 @@ function formatDocumentRecord(doc) {
   if (doc.signedFile && typeof doc.signedFile === 'object' && hasSignedFileData(doc.signedFile)) {
     const file = doc.signedFile;
     const fileCreatedAt = toIsoDate(file.uploadedAt) || updatedAt || createdAt;
-    const url = file.url || file.driveViewLink || file.driveContentLink || '';
+    const r2Url = resolveR2Url(file);
+    const url = r2Url || file.url || '';
     signedFile = {
       nome: file.nome || file.originalName || 'Documento assinado',
       originalName: file.originalName || '',
@@ -547,9 +635,8 @@ function formatDocumentRecord(doc) {
       size: Number(file.size || 0),
       extension: file.extension || '',
       url,
-      driveFileId: file.driveFileId || '',
-      driveViewLink: file.driveViewLink || '',
-      driveContentLink: file.driveContentLink || '',
+      r2Key: file.r2Key || '',
+      r2Url: r2Url || '',
       uploadedAt: fileCreatedAt,
     };
   }
@@ -580,7 +667,8 @@ function formatRecipeRecord(doc) {
   if (doc.signedFile && typeof doc.signedFile === 'object' && hasSignedFileData(doc.signedFile)) {
     const file = doc.signedFile;
     const fileCreatedAt = toIsoDate(file.uploadedAt) || updatedAt || createdAt;
-    const url = file.url || file.driveViewLink || file.driveContentLink || '';
+    const r2Url = resolveR2Url(file);
+    const url = r2Url || file.url || '';
     signedFile = {
       nome: file.nome || file.originalName || 'Receita assinada',
       originalName: file.originalName || '',
@@ -588,9 +676,8 @@ function formatRecipeRecord(doc) {
       size: Number(file.size || 0),
       extension: file.extension || '',
       url,
-      driveFileId: file.driveFileId || '',
-      driveViewLink: file.driveViewLink || '',
-      driveContentLink: file.driveContentLink || '',
+      r2Key: file.r2Key || '',
+      r2Url: r2Url || '',
       uploadedAt: fileCreatedAt,
     };
   }
@@ -617,25 +704,27 @@ function formatAttachment(doc) {
   const createdAt = toIsoDate(doc.createdAt);
   const updatedAt = toIsoDate(doc.updatedAt) || createdAt;
   const arquivosRaw = Array.isArray(doc.arquivos) ? doc.arquivos : [];
-  const arquivos = arquivosRaw
-    .map((file) => {
-      if (!file) return null;
-      const fileId = toStringSafe(file._id || file.id);
-      const extension = typeof file.extension === 'string' ? file.extension : '';
-      return {
-        id: fileId || undefined,
-        _id: fileId || undefined,
-        nome: file.nome || file.originalName || 'Arquivo',
-        originalName: file.originalName || '',
-        mimeType: file.mimeType || '',
-        size: Number(file.size || 0),
-        extension: extension || '',
-        url: file.url || file.driveViewLink || file.driveContentLink || '',
-        driveFileId: file.driveFileId || '',
-        createdAt: toIsoDate(file.createdAt) || createdAt,
-      };
-    })
-    .filter(Boolean);
+    const arquivos = arquivosRaw
+      .map((file) => {
+        if (!file) return null;
+        const fileId = toStringSafe(file._id || file.id);
+        const extension = typeof file.extension === 'string' ? file.extension : '';
+        const r2Url = resolveR2Url(file);
+        return {
+          id: fileId || undefined,
+          _id: fileId || undefined,
+          nome: file.nome || file.originalName || 'Arquivo',
+          originalName: file.originalName || '',
+          mimeType: file.mimeType || '',
+          size: Number(file.size || 0),
+          extension: extension || '',
+          url: r2Url || file.url || '',
+          r2Key: file.r2Key || '',
+          r2Url: r2Url || '',
+          createdAt: toIsoDate(file.createdAt) || createdAt,
+        };
+      })
+      .filter(Boolean);
 
   arquivos.sort((a, b) => {
     const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -1548,17 +1637,17 @@ router.post('/vet/documentos-registros', authMiddleware, requireStaff, async (re
   }
 });
 
-router.post(
-  '/vet/documentos-registros/:id/assinatura',
-  authMiddleware,
-  requireStaff,
-  handleDocumentoAssinadoUpload,
-  async (req, res) => {
-    const uploadedDriveIds = [];
-    try {
-      if (!isDriveConfigured()) {
-        return res.status(500).json({ message: 'Integração com o Google Drive não está configurada.' });
-      }
+  router.post(
+    '/vet/documentos-registros/:id/assinatura',
+    authMiddleware,
+    requireStaff,
+    handleDocumentoAssinadoUpload,
+    async (req, res) => {
+      const uploadedR2Keys = [];
+      try {
+        if (!isR2Configured()) {
+          return res.status(500).json({ message: 'Cloudflare R2 nao configurado.' });
+        }
 
       const recordId = normalizeObjectId(req.params.id);
       if (!recordId) {
@@ -1688,47 +1777,45 @@ router.post(
       const fallbackName = sanitizeFileName(file.originalname) || 'Documento assinado';
       const displayName = sanitizedProvided || fallbackName || 'Documento assinado';
 
-      let driveBaseName = sanitizeFileName(displayName) || `documento-assinado-${Date.now()}`;
-      let driveFileName = ensureFileNameWithExtension(driveBaseName, extension || inferExtensionFromFile(file));
-      driveFileName = sanitizeFileName(driveFileName);
-      if (!driveFileName) {
-        driveFileName = `documento-assinado-${Date.now()}${extension || ''}`;
-      } else if (extension && !driveFileName.toLowerCase().endsWith(extension)) {
-        driveFileName = `${driveFileName}${extension}`;
-      }
+        let fileBaseName = sanitizeFileName(displayName) || `documento-assinado-${Date.now()}`;
+        let uploadFileName = ensureFileNameWithExtension(fileBaseName, extension || inferExtensionFromFile(file));
+        uploadFileName = sanitizeFileName(uploadFileName);
+        if (!uploadFileName) {
+          uploadFileName = `documento-assinado-${Date.now()}${extension || ''}`;
+        } else if (extension && !uploadFileName.toLowerCase().endsWith(extension)) {
+          uploadFileName = `${uploadFileName}${extension}`;
+        }
 
-      const folderId = getDriveFolderId();
-      const uploadResult = await uploadBufferToDrive(file.buffer, {
-        mimeType: file.mimetype || 'application/octet-stream',
-        name: driveFileName,
-        folderId,
-        folderPath,
-      });
-
-      if (uploadResult?.id) {
-        uploadedDriveIds.push(uploadResult.id);
-      }
+        const r2Key = buildVetR2Key(folderPath, uploadFileName);
+        const uploadResult = await uploadBufferToR2(file.buffer, {
+          key: r2Key,
+          contentType: file.mimetype || 'application/octet-stream',
+        });
+        const resolvedKey = uploadResult?.key || r2Key;
+        const r2Url = uploadResult?.url || buildPublicUrl(resolvedKey);
+        uploadedR2Keys.push(resolvedKey);
 
       const previousSignedFile = existing.signedFile && typeof existing.signedFile === 'object'
         ? (typeof existing.signedFile.toObject === 'function'
           ? existing.signedFile.toObject()
           : { ...existing.signedFile })
         : null;
-      const previousDriveId = previousSignedFile?.driveFileId || '';
+        const previousR2Key =
+          previousSignedFile?.r2Key
+          || parseKeyFromPublicUrl(previousSignedFile?.r2Url || previousSignedFile?.url || '');
 
       const uploadedAt = new Date();
-      existing.signedFile = {
-        nome: displayName,
-        originalName: file.originalname || '',
-        mimeType: uploadResult?.mimeType || file.mimetype || '',
-        size: Number(uploadResult?.size) || Number(file.size || 0),
-        extension: extension || '',
-        url: uploadResult?.webViewLink || uploadResult?.webContentLink || '',
-        driveFileId: uploadResult?.id || '',
-        driveViewLink: uploadResult?.webViewLink || '',
-        driveContentLink: uploadResult?.webContentLink || '',
-        uploadedAt,
-      };
+        existing.signedFile = {
+          nome: displayName,
+          originalName: file.originalname || '',
+          mimeType: file.mimetype || '',
+          size: Number(file.size || 0),
+          extension: extension || '',
+          url: r2Url || '',
+          r2Key: resolvedKey,
+          r2Url: r2Url || '',
+          uploadedAt,
+        };
       existing.markModified('signedFile');
 
       const userId = normalizeObjectId(req.user?.id || req.user?._id);
@@ -1737,38 +1824,26 @@ router.post(
       }
       existing.updatedAt = uploadedAt;
 
-      await existing.save();
-      uploadedDriveIds.length = 0;
+        await existing.save();
+        uploadedR2Keys.length = 0;
 
-      if (previousDriveId && previousDriveId !== existing.signedFile?.driveFileId) {
-        deleteFile(previousDriveId).catch(() => {});
-      }
+        if (previousR2Key && previousR2Key !== existing.signedFile?.r2Key) {
+          deleteObjectFromR2(previousR2Key).catch(() => {});
+        }
 
       const formatted = formatDocumentRecord(existing.toObject());
       return res.json(formatted);
-    } catch (error) {
-      if (uploadedDriveIds.length) {
-        await Promise.allSettled(uploadedDriveIds.map((id) => deleteFile(id)));
-      }
-      console.error('POST /func/vet/documentos-registros/:id/assinatura', error);
-      let message = 'Erro ao salvar documento assinado.';
-      if (error?.body) {
-        try {
-          const parsed = JSON.parse(error.body.toString('utf8'));
-          if (parsed?.error?.message) {
-            message = `Google Drive: ${parsed.error.message}`;
-          } else if (parsed?.error_description) {
-            message = `Google Drive: ${parsed.error_description}`;
-          }
-        } catch (_) {
-          // ignore parsing issues
+      } catch (error) {
+        if (uploadedR2Keys.length) {
+          await Promise.allSettled(uploadedR2Keys.map((key) => deleteObjectFromR2(key)));
         }
+        console.error('POST /func/vet/documentos-registros/:id/assinatura', error);
+        let message = 'Erro ao salvar documento assinado.';
+        if (message === 'Erro ao salvar documento assinado.' && error?.message) {
+          message = error.message;
+        }
+        return res.status(500).json({ message });
       }
-      if (message === 'Erro ao salvar documento assinado.' && error?.message) {
-        message = error.message;
-      }
-      return res.status(500).json({ message });
-    }
   },
 );
 
@@ -1877,6 +1952,14 @@ router.put('/vet/documentos-registros/:id', authMiddleware, requireStaff, async 
 
     await existing.save();
 
+    if (previousR2Key) {
+      try {
+        await deleteObjectFromR2(previousR2Key);
+      } catch (deleteError) {
+        console.error('DELETE /func/vet/documentos-registros/:id/assinatura deleteObjectFromR2', deleteError);
+      }
+    }
+
     const formatted = formatDocumentRecord(existing.toObject());
     return res.json(formatted);
   } catch (error) {
@@ -1902,7 +1985,9 @@ router.delete('/vet/documentos-registros/:id/assinatura', authMiddleware, requir
         ? existing.signedFile.toObject()
         : { ...existing.signedFile })
       : null;
-    const previousDriveId = previousSignedFile?.driveFileId || '';
+    const previousR2Key =
+      previousSignedFile?.r2Key
+      || parseKeyFromPublicUrl(previousSignedFile?.r2Url || previousSignedFile?.url || '');
 
     existing.signedFile = undefined;
     existing.markModified('signedFile');
@@ -1914,10 +1999,6 @@ router.delete('/vet/documentos-registros/:id/assinatura', authMiddleware, requir
     existing.updatedAt = new Date();
 
     await existing.save();
-
-    if (previousDriveId) {
-      deleteFile(previousDriveId).catch(() => {});
-    }
 
     const formatted = formatDocumentRecord(existing.toObject());
     return res.json(formatted);
@@ -1938,12 +2019,14 @@ router.delete('/vet/documentos-registros/:id', authMiddleware, requireStaff, asy
       return res.status(404).json({ message: 'Documento do atendimento nÃ£o encontrado.' });
     }
 
-    await VetDocumentRecord.deleteOne({ _id: id });
-    const driveId = existing?.signedFile?.driveFileId;
-    if (driveId) {
-      deleteFile(driveId).catch(() => {});
-    }
-    return res.status(204).send();
+      await VetDocumentRecord.deleteOne({ _id: id });
+      const r2Key =
+        existing?.signedFile?.r2Key
+        || parseKeyFromPublicUrl(existing?.signedFile?.r2Url || existing?.signedFile?.url || '');
+      if (r2Key) {
+        deleteObjectFromR2(r2Key).catch(() => {});
+      }
+      return res.status(204).send();
   } catch (error) {
     console.error('DELETE /func/vet/documentos-registros/:id', error);
     return res.status(500).json({ message: 'Erro ao remover documento do atendimento.' });
@@ -1956,10 +2039,10 @@ router.post(
   requireStaff,
   handleReceitaAssinadaUpload,
   async (req, res) => {
-    const uploadedDriveIds = [];
+    const uploadedR2Keys = [];
     try {
-      if (!isDriveConfigured()) {
-        return res.status(500).json({ message: 'IntegraÃ§Ã£o com o Google Drive nÃ£o estÃ¡ configurada.' });
+      if (!isR2Configured()) {
+        return res.status(500).json({ message: 'Cloudflare R2 nao configurado.' });
       }
 
       const recordId = normalizeObjectId(req.params.id);
@@ -2090,45 +2173,43 @@ router.post(
       const fallbackName = sanitizeFileName(file.originalname) || 'Receita assinada';
       const displayName = sanitizedProvided || fallbackName || 'Receita assinada';
 
-      let driveBaseName = sanitizeFileName(displayName) || `receita-assinada-${Date.now()}`;
-      let driveFileName = ensureFileNameWithExtension(driveBaseName, extension || inferExtensionFromFile(file));
-      driveFileName = sanitizeFileName(driveFileName);
-      if (!driveFileName) {
-        driveFileName = `receita-assinada-${Date.now()}${extension || ''}`;
-      } else if (extension && !driveFileName.toLowerCase().endsWith(extension)) {
-        driveFileName = `${driveFileName}${extension}`;
+      let fileBaseName = sanitizeFileName(displayName) || `receita-assinada-${Date.now()}`;
+      let uploadFileName = ensureFileNameWithExtension(fileBaseName, extension || inferExtensionFromFile(file));
+      uploadFileName = sanitizeFileName(uploadFileName);
+      if (!uploadFileName) {
+        uploadFileName = `receita-assinada-${Date.now()}${extension || ''}`;
+      } else if (extension && !uploadFileName.toLowerCase().endsWith(extension)) {
+        uploadFileName = `${uploadFileName}${extension}`;
       }
 
-      const folderId = getDriveFolderId();
-      const uploadResult = await uploadBufferToDrive(file.buffer, {
-        mimeType: file.mimetype || 'application/octet-stream',
-        name: driveFileName,
-        folderId,
-        folderPath,
+      const r2Key = buildVetR2Key(folderPath, uploadFileName);
+      const uploadResult = await uploadBufferToR2(file.buffer, {
+        key: r2Key,
+        contentType: file.mimetype || 'application/octet-stream',
       });
-
-      if (uploadResult?.id) {
-        uploadedDriveIds.push(uploadResult.id);
-      }
+      const resolvedKey = uploadResult?.key || r2Key;
+      const r2Url = uploadResult?.url || buildPublicUrl(resolvedKey);
+      uploadedR2Keys.push(resolvedKey);
 
       const previousSignedFile = existing.signedFile && typeof existing.signedFile === 'object'
         ? (typeof existing.signedFile.toObject === 'function'
           ? existing.signedFile.toObject()
           : { ...existing.signedFile })
         : null;
-      const previousDriveId = previousSignedFile?.driveFileId || '';
+      const previousR2Key =
+        previousSignedFile?.r2Key
+        || parseKeyFromPublicUrl(previousSignedFile?.r2Url || previousSignedFile?.url || '');
 
       const uploadedAt = new Date();
       existing.signedFile = {
         nome: displayName,
         originalName: file.originalname || '',
-        mimeType: uploadResult?.mimeType || file.mimetype || '',
-        size: Number(uploadResult?.size) || Number(file.size || 0),
+        mimeType: file.mimetype || '',
+        size: Number(file.size || 0),
         extension: extension || '',
-        url: uploadResult?.webViewLink || uploadResult?.webContentLink || '',
-        driveFileId: uploadResult?.id || '',
-        driveViewLink: uploadResult?.webViewLink || '',
-        driveContentLink: uploadResult?.webContentLink || '',
+        url: r2Url || '',
+        r2Key: resolvedKey,
+        r2Url: r2Url || '',
         uploadedAt,
       };
       existing.markModified('signedFile');
@@ -2140,37 +2221,25 @@ router.post(
       existing.updatedAt = uploadedAt;
 
       await existing.save();
-      uploadedDriveIds.length = 0;
+      uploadedR2Keys.length = 0;
 
-      if (previousDriveId && previousDriveId !== existing.signedFile?.driveFileId) {
-        deleteFile(previousDriveId).catch(() => {});
+      if (previousR2Key && previousR2Key !== existing.signedFile?.r2Key) {
+        deleteObjectFromR2(previousR2Key).catch(() => {});
       }
 
       const formatted = formatRecipeRecord(existing.toObject());
       return res.json(formatted);
-    } catch (error) {
-      if (uploadedDriveIds.length) {
-        await Promise.allSettled(uploadedDriveIds.map((id) => deleteFile(id)));
-      }
-      console.error('POST /func/vet/receitas-registros/:id/assinatura', error);
-      let message = 'Erro ao salvar receita assinada.';
-      if (error?.body) {
-        try {
-          const parsed = JSON.parse(error.body.toString('utf8'));
-          if (parsed?.error?.message) {
-            message = `Google Drive: ${parsed.error.message}`;
-          } else if (parsed?.error_description) {
-            message = `Google Drive: ${parsed.error_description}`;
-          }
-        } catch (_) {
-          // ignore parsing issues
+      } catch (error) {
+        if (uploadedR2Keys.length) {
+          await Promise.allSettled(uploadedR2Keys.map((key) => deleteObjectFromR2(key)));
         }
+        console.error('POST /func/vet/receitas-registros/:id/assinatura', error);
+        let message = 'Erro ao salvar receita assinada.';
+        if (message === 'Erro ao salvar receita assinada.' && error?.message) {
+          message = error.message;
+        }
+        return res.status(500).json({ message });
       }
-      if (message === 'Erro ao salvar receita assinada.' && error?.message) {
-        message = error.message;
-      }
-      return res.status(500).json({ message });
-    }
   },
 );
 
@@ -2191,7 +2260,6 @@ router.delete(RECEITA_REGISTROS_SIGNATURE_PATHS, authMiddleware, requireStaff, a
         ? existing.signedFile.toObject()
         : { ...existing.signedFile })
       : null;
-    const previousDriveId = previousSignedFile?.driveFileId || '';
 
     existing.signedFile = undefined;
     existing.markModified('signedFile');
@@ -2204,8 +2272,8 @@ router.delete(RECEITA_REGISTROS_SIGNATURE_PATHS, authMiddleware, requireStaff, a
 
     await existing.save();
 
-    if (previousDriveId) {
-      deleteFile(previousDriveId).catch(() => {});
+    if (previousR2Key) {
+      deleteObjectFromR2(previousR2Key).catch(() => {});
     }
 
     const formatted = formatRecipeRecord(existing.toObject());
@@ -2466,9 +2534,11 @@ router.delete(RECEITA_REGISTROS_ID_PATHS, authMiddleware, requireStaff, async (r
     }
 
     await VetRecipeRecord.deleteOne({ _id: id });
-    const driveId = existing?.signedFile?.driveFileId;
-    if (driveId) {
-      deleteFile(driveId).catch(() => {});
+    const r2Key =
+      existing?.signedFile?.r2Key
+      || parseKeyFromPublicUrl(existing?.signedFile?.r2Url || existing?.signedFile?.url || '');
+    if (r2Key) {
+      deleteObjectFromR2(r2Key).catch(() => {});
     }
     return res.status(204).send();
   } catch (error) {
@@ -2587,6 +2657,90 @@ router.delete('/vet/historicos/:id', authMiddleware, requireAdmin, async (req, r
   } catch (error) {
     console.error('DELETE /func/vet/historicos/:id', error);
     return res.status(500).json({ message: 'Erro ao remover histórico do atendimento.' });
+  }
+});
+
+router.get('/vet/vendas', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const clienteId = normalizeObjectId(req.query.clienteId);
+    const petId = normalizeObjectId(req.query.petId);
+    const appointmentId = normalizeObjectId(req.query.appointmentId);
+
+    if (!appointmentId && !(clienteId && petId)) {
+      return res.status(400).json({ message: 'Informe appointmentId ou clienteId e petId.' });
+    }
+
+    if (clienteId && petId) {
+      const petCheck = await ensurePetBelongsToCliente(petId, clienteId);
+      if (!petCheck.ok) {
+        return res.status(petCheck.status).json({ message: petCheck.message });
+      }
+    }
+
+    const query = {};
+    if (clienteId) query.cliente = clienteId;
+    if (petId) query.pet = petId;
+    if (appointmentId) query.appointment = appointmentId;
+
+    const docs = await VetSaleRecord.find(query)
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const formatted = docs.map(formatVendaRecord).filter(Boolean);
+    return res.json(formatted);
+  } catch (error) {
+    console.error('GET /func/vet/vendas', error);
+    return res.status(500).json({ message: 'Erro ao carregar vendas.' });
+  }
+});
+
+router.post('/vet/vendas', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const clienteId = normalizeObjectId(req.body.clienteId || req.body.cliente);
+    const petId = normalizeObjectId(req.body.petId || req.body.pet);
+    const appointmentId = normalizeObjectId(req.body.appointmentId || req.body.appointment);
+    const produtoId = normalizeObjectId(req.body.produtoId || req.body.produto);
+    const produtoNome = typeof req.body.produtoNome === 'string' ? req.body.produtoNome.trim() : '';
+
+    if (!(clienteId && petId && appointmentId)) {
+      return res.status(400).json({ message: 'clienteId, petId e appointmentId são obrigatórios.' });
+    }
+
+    if (!produtoNome && !produtoId) {
+      return res.status(400).json({ message: 'Informe o produto para adicionar.' });
+    }
+
+    const quantidade = toNumber(req.body.quantidade);
+    if (!(quantidade > 0)) {
+      return res.status(400).json({ message: 'Quantidade inválida.' });
+    }
+
+    const valorUnitario = toNumber(req.body.valorUnitario);
+    const subtotal = toNumber(req.body.subtotal) || valorUnitario * quantidade;
+
+    const petCheck = await ensurePetBelongsToCliente(petId, clienteId);
+    if (!petCheck.ok) {
+      return res.status(petCheck.status).json({ message: petCheck.message });
+    }
+
+    const payload = {
+      cliente: clienteId,
+      pet: petId,
+      appointment: appointmentId,
+      produto: produtoId || undefined,
+      produtoNome: produtoNome || '',
+      valorUnitario,
+      quantidade,
+      subtotal,
+      createdBy: normalizeObjectId(req.user?.id || req.user?._id) || null,
+    };
+
+    const created = await VetSaleRecord.create(payload);
+    const record = await VetSaleRecord.findById(created._id).lean();
+    return res.status(201).json(formatVendaRecord(record));
+  } catch (error) {
+    console.error('POST /func/vet/vendas', error);
+    return res.status(500).json({ message: 'Erro ao registrar venda.' });
   }
 });
 
@@ -2734,10 +2888,10 @@ router.get('/vet/consultas/:id', authMiddleware, requireStaff, async (req, res) 
 });
 
 router.post('/vet/anexos', authMiddleware, requireStaff, handleAnexoUpload, async (req, res) => {
-  const uploadedDriveIds = [];
+  const uploadedR2Keys = [];
   try {
-    if (!isDriveConfigured()) {
-      return res.status(500).json({ message: 'Integração com o Google Drive não está configurada.' });
+    if (!isR2Configured()) {
+      return res.status(500).json({ message: 'Cloudflare R2 nao configurado.' });
     }
 
     const cliente = normalizeObjectId(req.body.clienteId);
@@ -2855,7 +3009,6 @@ router.post('/vet/anexos', authMiddleware, requireStaff, handleAnexoUpload, asyn
       ? rawNames
       : (typeof rawNames === 'string' ? [rawNames] : []);
 
-    const folderId = getDriveFolderId();
     const uploadedFiles = [];
 
     for (let index = 0; index < files.length; index += 1) {
@@ -2866,36 +3019,33 @@ router.post('/vet/anexos', authMiddleware, requireStaff, handleAnexoUpload, asyn
       const displayName = sanitizedProvided || fallbackName || `Arquivo ${index + 1}`;
       const extension = inferExtensionFromFile(file).toLowerCase();
 
-      let driveBaseName = sanitizeFileName(displayName) || `arquivo-${Date.now()}-${index + 1}`;
-      let driveFileName = ensureFileNameWithExtension(driveBaseName, extension || inferExtensionFromFile(file));
-      driveFileName = sanitizeFileName(driveFileName);
-      if (!driveFileName) {
-        driveFileName = `arquivo-${Date.now()}-${index + 1}${extension || ''}`;
-      } else if (extension && !driveFileName.toLowerCase().endsWith(extension)) {
-        driveFileName = `${driveFileName}${extension}`;
+      let fileBaseName = sanitizeFileName(displayName) || `arquivo-${Date.now()}-${index + 1}`;
+      let uploadFileName = ensureFileNameWithExtension(fileBaseName, extension || inferExtensionFromFile(file));
+      uploadFileName = sanitizeFileName(uploadFileName);
+      if (!uploadFileName) {
+        uploadFileName = `arquivo-${Date.now()}-${index + 1}${extension || ''}`;
+      } else if (extension && !uploadFileName.toLowerCase().endsWith(extension)) {
+        uploadFileName = `${uploadFileName}${extension}`;
       }
 
-      const uploadResult = await uploadBufferToDrive(file.buffer, {
-        mimeType: file.mimetype || 'application/octet-stream',
-        name: driveFileName,
-        folderId,
-        folderPath,
+      const r2Key = buildVetR2Key(folderPath, uploadFileName);
+      const uploadResult = await uploadBufferToR2(file.buffer, {
+        key: r2Key,
+        contentType: file.mimetype || 'application/octet-stream',
       });
-
-      if (uploadResult?.id) {
-        uploadedDriveIds.push(uploadResult.id);
-      }
+      const resolvedKey = uploadResult?.key || r2Key;
+      const r2Url = uploadResult?.url || buildPublicUrl(resolvedKey);
+      uploadedR2Keys.push(resolvedKey);
 
       uploadedFiles.push({
         nome: displayName,
         originalName: file.originalname || '',
-        mimeType: uploadResult?.mimeType || file.mimetype || '',
-        size: Number(uploadResult?.size) || Number(file.size || 0),
+        mimeType: file.mimetype || '',
+        size: Number(file.size || 0),
         extension: extension || '',
-        url: uploadResult?.webViewLink || uploadResult?.webContentLink || '',
-        driveFileId: uploadResult?.id || '',
-        driveViewLink: uploadResult?.webViewLink || '',
-        driveContentLink: uploadResult?.webContentLink || '',
+        url: r2Url || '',
+        r2Key: resolvedKey,
+        r2Url: r2Url || '',
         createdAt: new Date(),
       });
     }
@@ -2914,23 +3064,11 @@ router.post('/vet/anexos', authMiddleware, requireStaff, handleAnexoUpload, asyn
     const full = await VetAttachment.findById(doc._id).lean();
     return res.status(201).json(formatAttachment(full));
   } catch (error) {
-    if (uploadedDriveIds.length) {
-      await Promise.allSettled(uploadedDriveIds.map((id) => deleteFile(id)));
+    if (uploadedR2Keys.length) {
+      await Promise.allSettled(uploadedR2Keys.map((key) => deleteObjectFromR2(key)));
     }
     console.error('POST /func/vet/anexos', error);
     let message = 'Erro ao salvar anexos.';
-    if (error?.body) {
-      try {
-        const parsed = JSON.parse(error.body.toString('utf8'));
-        if (parsed?.error?.message) {
-          message = `Google Drive: ${parsed.error.message}`;
-        } else if (parsed?.error_description) {
-          message = `Google Drive: ${parsed.error_description}`;
-        }
-      } catch (_) {
-        // ignore parsing issues
-      }
-    }
     if (message === 'Erro ao salvar anexos.' && error?.message) {
       message = error.message;
     }
@@ -2939,11 +3077,11 @@ router.post('/vet/anexos', authMiddleware, requireStaff, handleAnexoUpload, asyn
 });
 
 router.put('/vet/anexos/:id', authMiddleware, requireStaff, handleAnexoUpload, async (req, res) => {
-  const uploadedDriveIds = [];
-  const removedDriveIds = [];
+  const uploadedR2Keys = [];
+  const removedR2Keys = [];
   try {
-    if (!isDriveConfigured()) {
-      return res.status(500).json({ message: 'Integração com o Google Drive não está configurada.' });
+    if (!isR2Configured()) {
+      return res.status(500).json({ message: 'Cloudflare R2 nao configurado.' });
     }
 
     const anexoId = normalizeObjectId(req.params.id);
@@ -3004,14 +3142,17 @@ router.put('/vet/anexos/:id', authMiddleware, requireStaff, handleAnexoUpload, a
     const removeSet = new Set(removals.map((id) => normalizeObjectId(id) || String(id || '').trim()).filter(Boolean));
 
     const keptFiles = [];
-    currentFiles.forEach((file) => {
-      const fileId = toStringSafe(file._id || file.id);
-      if (fileId && removeSet.has(fileId)) {
-        if (file.driveFileId) {
-          removedDriveIds.push(file.driveFileId);
+      currentFiles.forEach((file) => {
+        const fileId = toStringSafe(file._id || file.id);
+        if (fileId && removeSet.has(fileId)) {
+          const r2Key =
+            file.r2Key
+            || parseKeyFromPublicUrl(file.r2Url || file.url || '');
+          if (r2Key) {
+            removedR2Keys.push(r2Key);
+          }
+          return;
         }
-        return;
-      }
       const renameLabel = fileId ? renameMap[fileId] : null;
       if (renameLabel) {
         const cleaned = sanitizeFileName(renameLabel) || renameLabel;
@@ -3091,7 +3232,6 @@ router.put('/vet/anexos/:id', authMiddleware, requireStaff, handleAnexoUpload, a
       ? rawNames
       : (typeof rawNames === 'string' ? [rawNames] : []);
 
-    const folderId = getDriveFolderId();
     const uploadedFiles = [];
 
     for (let index = 0; index < files.length; index += 1) {
@@ -3102,36 +3242,33 @@ router.put('/vet/anexos/:id', authMiddleware, requireStaff, handleAnexoUpload, a
       const displayName = sanitizedProvided || fallbackName || `Arquivo ${index + 1}`;
       const extension = inferExtensionFromFile(file).toLowerCase();
 
-      let driveBaseName = sanitizeFileName(displayName) || `arquivo-${Date.now()}-${index + 1}`;
-      let driveFileName = ensureFileNameWithExtension(driveBaseName, extension || inferExtensionFromFile(file));
-      driveFileName = sanitizeFileName(driveFileName);
-      if (!driveFileName) {
-        driveFileName = `arquivo-${Date.now()}-${index + 1}${extension || ''}`;
-      } else if (extension && !driveFileName.toLowerCase().endsWith(extension)) {
-        driveFileName = `${driveFileName}${extension}`;
+      let fileBaseName = sanitizeFileName(displayName) || `arquivo-${Date.now()}-${index + 1}`;
+      let uploadFileName = ensureFileNameWithExtension(fileBaseName, extension || inferExtensionFromFile(file));
+      uploadFileName = sanitizeFileName(uploadFileName);
+      if (!uploadFileName) {
+        uploadFileName = `arquivo-${Date.now()}-${index + 1}${extension || ''}`;
+      } else if (extension && !uploadFileName.toLowerCase().endsWith(extension)) {
+        uploadFileName = `${uploadFileName}${extension}`;
       }
 
-      const uploadResult = await uploadBufferToDrive(file.buffer, {
-        mimeType: file.mimetype || 'application/octet-stream',
-        name: driveFileName,
-        folderId,
-        folderPath,
+      const r2Key = buildVetR2Key(folderPath, uploadFileName);
+      const uploadResult = await uploadBufferToR2(file.buffer, {
+        key: r2Key,
+        contentType: file.mimetype || 'application/octet-stream',
       });
-
-      if (uploadResult?.id) {
-        uploadedDriveIds.push(uploadResult.id);
-      }
+      const resolvedKey = uploadResult?.key || r2Key;
+      const r2Url = uploadResult?.url || buildPublicUrl(resolvedKey);
+      uploadedR2Keys.push(resolvedKey);
 
       uploadedFiles.push({
         nome: displayName,
         originalName: file.originalname || '',
-        mimeType: uploadResult?.mimeType || file.mimetype || '',
-        size: Number(uploadResult?.size) || Number(file.size || 0),
+        mimeType: file.mimetype || '',
+        size: Number(file.size || 0),
         extension: extension || '',
-        url: uploadResult?.webViewLink || uploadResult?.webContentLink || '',
-        driveFileId: uploadResult?.id || '',
-        driveViewLink: uploadResult?.webViewLink || '',
-        driveContentLink: uploadResult?.webContentLink || '',
+        url: r2Url || '',
+        r2Key: resolvedKey,
+        r2Url: r2Url || '',
         createdAt: new Date(),
       });
     }
@@ -3155,15 +3292,15 @@ router.put('/vet/anexos/:id', authMiddleware, requireStaff, handleAnexoUpload, a
     existing.updatedAt = new Date();
     await existing.save();
 
-    if (removedDriveIds.length && isDriveConfigured()) {
-      await Promise.allSettled(removedDriveIds.map((driveId) => deleteFile(driveId)));
+    if (removedR2Keys.length) {
+      await Promise.allSettled(removedR2Keys.map((key) => deleteObjectFromR2(key)));
     }
 
     const formatted = formatAttachment(existing.toObject());
     return res.json(formatted);
   } catch (error) {
-    if (uploadedDriveIds.length) {
-      await Promise.allSettled(uploadedDriveIds.map((id) => deleteFile(id)));
+    if (uploadedR2Keys.length) {
+      await Promise.allSettled(uploadedR2Keys.map((key) => deleteObjectFromR2(key)));
     }
     console.error('PUT /func/vet/anexos/:id', error);
     return res.status(500).json({ message: 'Erro ao atualizar anexos.' });
@@ -3196,18 +3333,19 @@ router.delete('/vet/anexos/:id', authMiddleware, requireStaff, async (req, res) 
     if (appointmentId && existingAppointmentId && existingAppointmentId !== appointmentId) {
       return res.status(400).json({ message: 'Anexo pertence a outro agendamento.' });
     }
-
-    const driveIds = Array.isArray(existing.arquivos)
-      ? existing.arquivos.map((file) => toStringSafe(file?.driveFileId)).filter(Boolean)
+    const r2Keys = Array.isArray(existing.arquivos)
+      ? existing.arquivos
+        .map((file) => file?.r2Key || parseKeyFromPublicUrl(file?.r2Url || file?.url || ''))
+        .filter(Boolean)
       : [];
 
     await VetAttachment.deleteOne({ _id: id });
 
-    if (driveIds.length && isDriveConfigured()) {
-      await Promise.allSettled(driveIds.map((driveId) => deleteFile(driveId)));
-    }
+      if (r2Keys.length) {
+        await Promise.allSettled(r2Keys.map((key) => deleteObjectFromR2(key)));
+      }
 
-    return res.status(204).send();
+      return res.status(204).send();
   } catch (error) {
     console.error('DELETE /func/vet/anexos/:id', error);
     return res.status(500).json({ message: 'Erro ao remover anexo.' });
@@ -3224,6 +3362,7 @@ router.post('/vet/consultas', authMiddleware, requireStaff, async (req, res) => 
       anamnese,
       exameFisico,
       diagnostico,
+      retornoEm,
     } = req.body || {};
 
     const cliente = normalizeObjectId(clienteId);
@@ -3251,6 +3390,7 @@ router.post('/vet/consultas', authMiddleware, requireStaff, async (req, res) => 
     }
 
     const nowUserId = normalizeObjectId(req.user?.id);
+    const retornoParsed = toIsoDate(retornoEm);
 
     const doc = await VetConsultation.create({
       cliente,
@@ -3260,6 +3400,7 @@ router.post('/vet/consultas', authMiddleware, requireStaff, async (req, res) => 
       anamnese: typeof anamnese === 'string' ? anamnese : '',
       exameFisico: typeof exameFisico === 'string' ? exameFisico : '',
       diagnostico: typeof diagnostico === 'string' ? diagnostico : '',
+      retornoEm: retornoParsed ? new Date(retornoParsed) : undefined,
       createdBy: nowUserId || undefined,
       updatedBy: nowUserId || undefined,
     });
@@ -3298,6 +3439,7 @@ router.put('/vet/consultas/:id', authMiddleware, requireStaff, async (req, res) 
       appointmentId,
       clienteId,
       petId,
+      retornoEm,
     } = req.body || {};
 
     const bodyClienteId = normalizeObjectId(clienteId);
@@ -3313,6 +3455,10 @@ router.put('/vet/consultas/:id', authMiddleware, requireStaff, async (req, res) 
     if (typeof anamnese !== 'undefined') updates.anamnese = String(anamnese || '');
     if (typeof exameFisico !== 'undefined') updates.exameFisico = String(exameFisico || '');
     if (typeof diagnostico !== 'undefined') updates.diagnostico = String(diagnostico || '');
+    if (Object.prototype.hasOwnProperty.call(req.body, 'retornoEm')) {
+      const parsedRetorno = toIsoDate(retornoEm);
+      updates.retornoEm = parsedRetorno ? new Date(parsedRetorno) : null;
+    }
 
     const nextServicoId = normalizeObjectId(servicoId) || toStringSafe(existing.servico);
     if (!nextServicoId) {

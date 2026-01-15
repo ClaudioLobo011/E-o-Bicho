@@ -12,6 +12,7 @@
       search: '',
     },
     companies: [],
+    allowedCompanies: [],
     deposits: [],
     responsibles: [],
     adjustments: [],
@@ -108,6 +109,11 @@
       return null;
     }
     return response;
+  }
+
+  function isCompanyAllowed(companyId) {
+    if (!companyId) return false;
+    return state.allowedCompanies.some((company) => company.id === companyId);
   }
 
   function escapeHtml(value) {
@@ -488,45 +494,62 @@
 
   async function loadFormData() {
     try {
-      const response = await fetchWithAuth(`${API_CONFIG.BASE_URL}/inventory-adjustments/form-data`);
-      if (!response) return;
+      const [response, allowedResponse] = await Promise.all([
+        fetchWithAuth(`${API_CONFIG.BASE_URL}/inventory-adjustments/form-data`),
+        fetchWithAuth(`${API_CONFIG.BASE_URL}/stores/allowed`),
+      ]);
+      if (!response || !allowedResponse) return;
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
-        throw new Error(payload?.message || 'Não foi possível carregar os dados iniciais.');
+        throw new Error(payload?.message || 'Nao foi possivel carregar os dados iniciais.');
+      }
+      if (!allowedResponse.ok) {
+        const payload = await allowedResponse.json().catch(() => null);
+        throw new Error(payload?.message || 'Nao foi possivel carregar as empresas permitidas.');
       }
       const data = await response.json();
-      const companies = Array.isArray(data?.stores)
-        ? data.stores.map((store) => ({
+      const allowedPayload = await allowedResponse.json().catch(() => null);
+      const allowedCompanies = Array.isArray(allowedPayload?.stores)
+        ? allowedPayload.stores.map((store) => ({
+            id: store?._id ? String(store._id) : '',
+            name: sanitizeInput(store?.nomeFantasia) || sanitizeInput(store?.nome) || 'Empresa sem nome',
+          }))
+        : Array.isArray(allowedPayload)
+        ? allowedPayload.map((store) => ({
             id: store?._id ? String(store._id) : '',
             name: sanitizeInput(store?.nomeFantasia) || sanitizeInput(store?.nome) || 'Empresa sem nome',
           }))
         : [];
+      const allowedCompanyIds = new Set(allowedCompanies.map((company) => company.id).filter(Boolean));
       const deposits = Array.isArray(data?.deposits)
         ? data.deposits.map((deposit) => ({
             id: deposit?._id ? String(deposit._id) : '',
-            name: sanitizeInput(deposit?.nome) || 'Depósito sem nome',
+            name: sanitizeInput(deposit?.nome) || 'Deposito sem nome',
             companyId: deposit?.empresa ? String(deposit.empresa) : '',
           }))
         : [];
       const responsibles = Array.isArray(data?.responsaveis)
         ? data.responsaveis.map((person) => ({
             id: person?._id ? String(person._id) : '',
-            name: sanitizeInput(person?.nomeCompleto) || sanitizeInput(person?.apelido) || sanitizeInput(person?.email) || 'Responsável',
+            name: sanitizeInput(person?.nomeCompleto) || sanitizeInput(person?.apelido) || sanitizeInput(person?.email) || 'Responsavel',
             email: sanitizeInput(person?.email || ''),
           }))
         : [];
 
-      state.companies = companies;
-      state.deposits = deposits;
+      state.allowedCompanies = allowedCompanies;
+      state.companies = allowedCompanies;
+      state.deposits = allowedCompanyIds.size
+        ? deposits.filter((deposit) => allowedCompanyIds.has(deposit.companyId))
+        : [];
       state.responsibles = responsibles;
 
-      populateCompanies(companies);
+      populateCompanies(state.companies);
       populateResponsibles(responsibles);
       updateDepositOptions();
       setFormFromFilters();
     } catch (error) {
-      console.error('Erro ao carregar dados iniciais da relação de estoque:', error);
-      alert(error.message || 'Não foi possível carregar os dados iniciais da relação.');
+      console.error('Erro ao carregar dados iniciais da relacao de estoque:', error);
+      alert(error.message || 'Nao foi possivel carregar os dados iniciais da relacao.');
     }
   }
 
@@ -673,6 +696,13 @@
 
     if (elements.companySelect) {
       elements.companySelect.addEventListener('change', () => {
+        const selectedCompany = sanitizeInput(elements.companySelect?.value || '');
+        if (selectedCompany && !isCompanyAllowed(selectedCompany)) {
+          elements.companySelect.value = '';
+          updateDepositOptions();
+          alert('Empresa nao autorizada para esta consulta.');
+          return;
+        }
         updateDepositOptions();
       });
     }

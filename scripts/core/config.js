@@ -33,12 +33,16 @@ const API_CONFIG = (() => {
       return DEFAULT_RENDER_SERVER_URL;
     }
 
+    const manualOverride = normalizeUrl(getLocalOverride()) || normalizeUrl(getGlobalOverride());
+    if (manualOverride) {
+      return manualOverride;
+    }
+
     const hostname = window.location.hostname;
     const isLocalhost = ['localhost', '127.0.0.1', '::1'].includes(hostname);
 
     if (isLocalhost) {
-      const manual = normalizeUrl(getLocalOverride()) || normalizeUrl(getGlobalOverride());
-      return manual || LOCAL_SERVER_URL;
+      return LOCAL_SERVER_URL;
     }
 
     // Em produção sempre usamos o servidor da Render para evitar requisições

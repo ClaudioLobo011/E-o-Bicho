@@ -5,8 +5,14 @@ const { decryptText } = require('../utils/certificates');
 
 const router = express.Router();
 
-// Garante acesso ao corpo bruto para qualquer content-type (evita depender apenas do express.json global)
-router.use(express.raw({ type: '*/*', limit: '2mb' }));
+// Garante acesso ao corpo bruto apenas para os endpoints de webhook.
+const rawBodyParser = express.raw({ type: '*/*', limit: '2mb' });
+const RAW_BODY_PATHS = new Set(['/', '/marketplaces', '/webhook']);
+router.use((req, res, next) => {
+  if (req.method !== 'POST') return next();
+  if (!RAW_BODY_PATHS.has(req.path)) return next();
+  return rawBodyParser(req, res, next);
+});
 
 // Cache simples na memória para idempotência (X-Event-Id)
 const seenEvents = new Map();
