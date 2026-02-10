@@ -26,6 +26,10 @@ async function authMiddleware(req, res, next) {
         next();
     } catch (error) {
         console.error('authMiddleware:', error);
+        if (error && error.name === 'TokenExpiredError') {
+            res.set('X-Auth-Reason', 'token-expired');
+            return res.status(401).json({ message: 'Token expirado', code: 'TOKEN_EXPIRED', logout: true });
+        }
         return res.status(403).json({ message: 'Token invalido ou expirado' });
     }
 }

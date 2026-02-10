@@ -27,10 +27,12 @@
   function statusBadge(status = '') {
     const normalized = String(status || '').toLowerCase();
     const map = {
+      ativa: 'bg-emerald-50 text-emerald-600',
       pago: 'bg-emerald-50 text-emerald-600',
       pendente: 'bg-amber-50 text-amber-600',
       aguardando: 'bg-gray-100 text-gray-700',
       cancelado: 'bg-red-50 text-red-600',
+      estornada: 'bg-rose-50 text-rose-600',
     };
     const classes = map[normalized] || 'bg-gray-100 text-gray-700';
     const label = normalized ? normalized.charAt(0).toUpperCase() + normalized.slice(1) : 'Status';
@@ -140,7 +142,7 @@
     const list = document.getElementById(`${view}-resumo-list`);
     list.innerHTML = '';
     const entries = [
-      { label: view === 'produtos' ? 'Pedidos com comissão' : 'Vendas com comissão', value: resumo.vendasComComissao || 0, highlight: 'text-gray-900' },
+      { label: view === 'produtos' ? 'Itens com comissão' : 'Vendas com comissão', value: resumo.vendasComComissao || 0, highlight: 'text-gray-900' },
       { label: 'Taxa de aprovação', value: `${resumo.taxaAprovacao || 0}%`, highlight: 'text-emerald-600' },
       { label: view === 'produtos' ? 'Tempo médio de repasse' : 'Tempo médio de liberação', value: resumo.tempoMedioLiberacao ? `${resumo.tempoMedioLiberacao} dias` : 'N/D', highlight: 'text-gray-900' },
       { label: view === 'produtos' ? 'Bônus por combo' : 'Bonificações', value: formatMoney(resumo.bonificacoes || 0), highlight: 'text-blue-600' },
@@ -180,15 +182,19 @@
         item.comissaoTotal ?? item.valor ?? comissaoVenda + comissaoServico,
         0,
       );
+      const commissionStatusRaw = String(item.status_comissao || item.statusComissao || '').toLowerCase();
+      const statusLabel = commissionStatusRaw.includes('estorn') ? 'estornada' : item.status;
+      const referencia = item.referencia ? `<p class="text-xs text-gray-500">Ref: ${item.referencia}</p>` : '';
       const cells = [
         `<td class="px-4 py-3">${item.data || '--'}</td>`,
         `<td class="px-4 py-3">
           <p class="font-semibold text-gray-900">${item.codigo || '--'}</p>
           <p class="text-xs text-gray-500">${item.descricao || ''}</p>
+          ${referencia}
         </td>`,
         `<td class="px-4 py-3">${item.cliente || '--'}</td>`,
         `<td class="px-4 py-3">${item.origem || '--'}</td>`,
-        `<td class="px-4 py-3">${statusBadge(item.status)}</td>`,
+        `<td class="px-4 py-3">${statusBadge(statusLabel)}</td>`,
       ];
       if (!isServicos) {
         cells.push(

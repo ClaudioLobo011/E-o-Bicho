@@ -12,6 +12,14 @@
             flex-direction: column;
             gap: 8px;
         }
+        .checkout-step {
+            flex: 0 0 33.333333%;
+            max-width: 33.333333%;
+        }
+        .checkout-col-primary,
+        .checkout-col-summary {
+            width: 100%;
+        }
         @media (min-width: 640px) {
             .payment-doc-row {
                 flex-direction: row;
@@ -23,6 +31,14 @@
             .payment-doc-number {
                 flex: 1 1 auto;
                 min-width: 0;
+            }
+        }
+        @media (min-width: 1024px) {
+            .checkout-col-primary {
+                width: 66.666667%;
+            }
+            .checkout-col-summary {
+                width: 33.333333%;
             }
         }
     </style>
@@ -47,15 +63,17 @@
         <div class="flex items-center text-sm text-gray-600 mb-6">
             <span id="checkout-step-1" class="font-bold text-primary">1. Sacola</span>
             <i class="fas fa-chevron-right text-xs mx-2 text-gray-400"></i>
-            <span id="checkout-step-2" class="text-gray-400">2. Pagamento</span>
+            <span id="checkout-step-2" class="text-gray-400">2. Forma de pagamento</span>
+            <i class="fas fa-chevron-right text-xs mx-2 text-gray-400"></i>
+            <span id="checkout-step-3" class="text-gray-400">3. Pagamento</span>
         </div>
 
         <div id="checkout-step-viewport" style="overflow-x: hidden;">
-            <div id="checkout-step-track" class="flex transition-transform duration-500 ease-in-out" style="width: 200%;">
-                <section class="w-1/2 shrink-0">
+            <div id="checkout-step-track" class="flex transition-transform duration-500 ease-in-out" style="width: 300%;">
+                <section class="checkout-step shrink-0">
                     <div class="flex flex-col lg:flex-row gap-8 items-start">
             
-            <div class="lg:w-2/3 w-full">
+            <div class="checkout-col-primary w-full">
                 <div class="bg-white p-2 rounded-lg shadow">
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm">
@@ -103,7 +121,7 @@
                 </div>
             </div>
 
-            <div class="lg:w-1/3 w-full bg-white p-6 rounded-lg shadow sticky top-24">
+            <div class="checkout-col-summary w-full bg-white p-6 rounded-lg shadow sticky top-24">
                 
             <div class="mb-4 pb-4 border-b">
             <label class="block text-sm font-medium mb-2 text-gray-800">Calcular frete e prazo</label>
@@ -228,10 +246,96 @@
             </div>
         </div>
                 </section>
-                <section class="w-1/2 shrink-0">
+                <section class="checkout-step shrink-0">
                     <div class="flex flex-col gap-8">
                         <div class="flex flex-col gap-6 lg:flex-row lg:items-start">
-                            <div class="w-full lg:w-2/3">
+                            <div class="w-full checkout-col-primary">
+                                <div class="bg-white p-6 rounded-lg shadow">
+                                    <div class="flex items-start gap-3">
+                                        <span class="w-10 h-10 rounded-full bg-primary/10 text-primary grid place-items-center">
+                                            <i class="fas fa-list-check"></i>
+                                        </span>
+                                        <div>
+                                            <h2 class="text-2xl font-bold text-gray-800">Forma de pagamento</h2>
+                                            <p class="text-gray-600 mt-1">Escolha como deseja pagar.</p>
+                                        </div>
+                                    </div>
+                                    <div class="mt-6 space-y-3">
+                                        <button type="button" data-payment-method="card" class="payment-method-option w-full rounded-lg border-2 border-gray-200 bg-white p-4 text-left transition hover:border-primary/70">
+                                            <div class="flex items-start gap-3">
+                                                <span class="mt-1 text-primary">
+                                                    <i class="fas fa-credit-card"></i>
+                                                </span>
+                                                <div>
+                                                    <p class="text-sm font-semibold text-gray-800">Cartao de Credito ou Debito</p>
+                                                    <p class="text-xs text-gray-500">Aprovacao em ate 2 hrs</p>
+                                                </div>
+                                            </div>
+                                        </button>
+                                        <button type="button" data-payment-method="pix" class="payment-method-option w-full rounded-lg border-2 border-gray-200 bg-white p-4 text-left transition hover:border-primary/70">
+                                            <div class="flex items-start gap-3">
+                                                <span class="mt-1 text-primary">
+                                                    <i class="fas fa-qrcode"></i>
+                                                </span>
+                                                <div>
+                                                    <p class="text-sm font-semibold text-gray-800">Pix</p>
+                                                    <p class="text-xs text-gray-500">Aprovacao Imediata</p>
+                                                </div>
+                                            </div>
+                                        </button>
+                                        <button type="button" data-payment-method="boleto" class="payment-method-option w-full rounded-lg border-2 border-gray-200 bg-white p-4 text-left transition hover:border-primary/70">
+                                            <div class="flex items-start gap-3">
+                                                <span class="mt-1 text-primary">
+                                                    <i class="fas fa-barcode"></i>
+                                                </span>
+                                                <div>
+                                                    <p class="text-sm font-semibold text-gray-800">Boleto</p>
+                                                    <p class="text-xs text-gray-500">Aprovacao em ate 2 dias uteis</p>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    </div>
+                                    <div class="mt-6 flex flex-col gap-3 sm:flex-row">
+                                        <button id="payment-method-back" type="button" class="w-full rounded-lg border border-gray-200 bg-white py-3 text-sm font-bold text-gray-700 hover:border-primary/60">
+                                            Voltar para a sacola
+                                        </button>
+                                        <button id="payment-method-continue" type="button" class="w-full rounded-lg bg-primary py-3 text-sm font-bold text-white transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60">
+                                            Continuar para pagamento
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="w-full checkout-col-summary">
+                                <div class="bg-white p-6 rounded-lg shadow">
+                                    <h3 class="text-lg font-bold text-gray-800">Resumo</h3>
+                                    <p class="mt-2 text-sm text-gray-600">A forma de pagamento pode alterar o prazo de aprovacao.</p>
+                                    <div class="mt-4 space-y-2 text-sm">
+                                        <div class="flex justify-between text-gray-600">
+                                            <span>Subtotal (<span id="summary-item-count-method">0</span> itens)</span>
+                                            <span id="summary-subtotal-method">R$ 0,00</span>
+                                        </div>
+                                        <div class="flex justify-between text-gray-600">
+                                            <span>Descontos</span>
+                                            <span id="summary-discounts-method">- R$ 0,00</span>
+                                        </div>
+                                        <div class="flex justify-between text-gray-600">
+                                            <span>Entrega</span>
+                                            <span id="summary-delivery-method">A calcular</span>
+                                        </div>
+                                        <div class="flex justify-between font-semibold text-gray-800 pt-2 border-t">
+                                            <span>Total</span>
+                                            <span id="summary-total-method">R$ 0,00</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+                <section class="checkout-step shrink-0">
+                    <div class="flex flex-col gap-8">
+                        <div class="flex flex-col gap-6 lg:flex-row lg:items-start">
+                            <div class="w-full checkout-col-primary">
                                 <div class="bg-white p-6 rounded-lg shadow">
                                     <div class="flex items-start gap-3">
                                         <span class="w-10 h-10 rounded-full bg-primary/10 text-primary grid place-items-center">
@@ -239,31 +343,36 @@
                                         </span>
                                         <div>
                                             <h2 class="text-2xl font-bold text-gray-800">Pagamento</h2>
-                                            <p class="text-gray-600 mt-1">Checkout transparente do Mercado Pago.</p>
+                                            <p class="text-gray-600 mt-1">
+                                                Checkout transparente do Mercado Pago.
+                                                <span id="payment-method-selected" class="ml-1 font-semibold text-gray-700"></span>
+                                            </p>
                                         </div>
                                     </div>
-                                    <div class="mt-6 space-y-4">
-                                        <div>
-                                            <label for="payment-card-number" class="block text-sm font-medium text-gray-700">Numero do Cartao</label>
-                                            <input id="payment-card-number" type="text" inputmode="numeric" placeholder="0000 0000 0000 0000"
-                                                class="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
-                                        </div>
-                                        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                    <div id="payment-card-section" class="mt-6 space-y-4">
+                                        <div id="payment-card-fields" class="space-y-4">
                                             <div>
-                                                <label for="payment-expiry" class="block text-sm font-medium text-gray-700">Data de Vencimento</label>
-                                                <input id="payment-expiry" type="text" inputmode="numeric" placeholder="MM/AA"
+                                                <label for="payment-card-number" class="block text-sm font-medium text-gray-700">Numero do Cartao</label>
+                                                <input id="payment-card-number" type="text" inputmode="numeric" placeholder="0000 0000 0000 0000"
                                                     class="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
                                             </div>
+                                            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                                <div>
+                                                    <label for="payment-expiry" class="block text-sm font-medium text-gray-700">Data de Vencimento</label>
+                                                    <input id="payment-expiry" type="text" inputmode="numeric" placeholder="MM/AA"
+                                                        class="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                                                </div>
+                                                <div>
+                                                    <label for="payment-cvv" class="block text-sm font-medium text-gray-700">Codigo de seguranca</label>
+                                                    <input id="payment-cvv" type="text" inputmode="numeric" placeholder="123"
+                                                        class="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                                                </div>
+                                            </div>
                                             <div>
-                                                <label for="payment-cvv" class="block text-sm font-medium text-gray-700">Codigo de seguranca</label>
-                                                <input id="payment-cvv" type="text" inputmode="numeric" placeholder="123"
+                                                <label for="payment-holder-name" class="block text-sm font-medium text-gray-700">Nome do titular como aparece no cartao</label>
+                                                <input id="payment-holder-name" type="text" placeholder="Nome completo"
                                                     class="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
                                             </div>
-                                        </div>
-                                        <div>
-                                            <label for="payment-holder-name" class="block text-sm font-medium text-gray-700">Nome do titular como aparece no cartao</label>
-                                            <input id="payment-holder-name" type="text" placeholder="Nome completo"
-                                                class="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
                                         </div>
                                         <div>
                                             <label class="block text-sm font-medium text-gray-700">Documento do titular</label>
@@ -285,10 +394,47 @@
                                         <button id="payment-submit" class="w-full rounded-lg bg-primary py-3 text-sm font-bold text-white hover:bg-secondary transition-colors">
                                             Concluir Pagamento
                                         </button>
+                                        <div id="payment-pix-result" class="hidden rounded-lg border border-gray-200 bg-gray-50 p-4">
+                                            <p class="text-sm font-semibold text-gray-700">Pagamento Pix</p>
+                                            <p id="payment-pix-status" class="mt-1 text-xs text-gray-600"></p>
+                                            <div id="payment-pix-content" class="mt-4 flex flex-col items-center gap-3">
+                                                <div class="rounded-lg border border-gray-200 bg-white p-3">
+                                                    <img id="payment-pix-qr" alt="QR Code Pix" style="width: 180px; height: 180px;">
+                                                </div>
+                                                <div class="w-full">
+                                                    <label for="payment-pix-code" class="block text-xs font-semibold text-gray-700">Pix Copia e Cola</label>
+                                                    <div class="mt-2 flex">
+                                                        <input id="payment-pix-code" type="text" readonly
+                                                            class="w-full rounded-l border border-gray-300 px-3 py-2 text-sm focus:outline-none">
+                                                        <button id="payment-pix-copy" type="button"
+                                                            class="rounded-r bg-gray-200 px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-300">
+                                                            Copiar
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <a id="payment-pix-ticket" href="#" target="_blank" rel="noopener"
+                                                    class="text-sm font-semibold text-primary hover:underline">
+                                                    Abrir link de pagamento
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div id="payment-alternative-section" class="mt-6 hidden">
+                                        <div class="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                                            <p class="text-sm font-semibold text-amber-800">
+                                                Forma selecionada: <span id="payment-alternative-name"></span>
+                                            </p>
+                                            <p class="mt-2 text-sm text-amber-700">
+                                                Esta forma ainda nao esta disponivel nesta tela. Selecione Cartao de Credito ou Pix para concluir.
+                                            </p>
+                                            <button id="payment-method-change" type="button" class="mt-4 w-full rounded-lg border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100 transition-colors">
+                                                Alterar forma de pagamento
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                            <div class="w-full lg:w-1/3">
+                            <div class="w-full checkout-col-summary">
                                 <div class="bg-white p-6 rounded-lg shadow">
                                     <h3 class="text-lg font-bold text-gray-800">Resumo</h3>
                                     <div class="mt-4 space-y-4 text-sm">

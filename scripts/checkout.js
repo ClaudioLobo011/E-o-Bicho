@@ -35,7 +35,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const stepTrack = document.getElementById('checkout-step-track');
     const stepLabel1 = document.getElementById('checkout-step-1');
     const stepLabel2 = document.getElementById('checkout-step-2');
+    const stepLabel3 = document.getElementById('checkout-step-3');
     const goPaymentBtn = document.getElementById('checkout-go-payment');
+    const paymentMethodOptions = document.querySelectorAll('[data-payment-method]');
+    const paymentMethodContinueBtn = document.getElementById('payment-method-continue');
+    const paymentMethodBackBtn = document.getElementById('payment-method-back');
+    const paymentMethodChangeBtn = document.getElementById('payment-method-change');
+    const paymentMethodSelected = document.getElementById('payment-method-selected');
+    const paymentCardSection = document.getElementById('payment-card-section');
+    const paymentCardFields = document.getElementById('payment-card-fields');
+    const paymentAlternativeSection = document.getElementById('payment-alternative-section');
+    const paymentAlternativeName = document.getElementById('payment-alternative-name');
+    const paymentPixResult = document.getElementById('payment-pix-result');
+    const paymentPixStatus = document.getElementById('payment-pix-status');
+    const paymentPixContent = document.getElementById('payment-pix-content');
+    const paymentPixQr = document.getElementById('payment-pix-qr');
+    const paymentPixCode = document.getElementById('payment-pix-code');
+    const paymentPixCopyBtn = document.getElementById('payment-pix-copy');
+    const paymentPixTicket = document.getElementById('payment-pix-ticket');
     const paymentCardInput = document.getElementById('payment-card-number');
     const paymentExpiryInput = document.getElementById('payment-expiry');
     const paymentCvvInput = document.getElementById('payment-cvv');
@@ -56,16 +73,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const summaryDiscounts2 = document.getElementById('summary-discounts-2');
     const summaryDelivery2 = document.getElementById('summary-delivery-2');
     const summaryTotal2 = document.getElementById('summary-total-2');
+    const summaryItemCountMethod = document.getElementById('summary-item-count-method');
+    const summarySubtotalMethod = document.getElementById('summary-subtotal-method');
+    const summaryDiscountsMethod = document.getElementById('summary-discounts-method');
+    const summaryDeliveryMethod = document.getElementById('summary-delivery-method');
+    const summaryTotalMethod = document.getElementById('summary-total-method');
     let lastSelectedAddress = null;
     let selectedStore = null;
     let selectedStoreId = '';
     let mpInstance = null;
     let mpPublicKey = '';
+    let selectedPaymentMethod = '';
+    let pixResultData = null;
+    let pixPollTimer = null;
+    let orderCreationInFlight = false;
+    let orderCreated = false;
     let selectedDelivery = {
         cost: 0,
         type: 'Padrão' 
     };
     const freeShippingGoal = 100;
+    const PAYMENT_METHOD_LABELS = {
+        card: 'Cartao de Credito ou Debito',
+        pix: 'Pix',
+        boleto: 'Boleto'
+    };
 
     function formatSummaryValue(value, fallback = 'Nao informado') {
         return value ? String(value) : fallback;
@@ -291,19 +323,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function setCheckoutStep(step) {
+        const normalizedStep = Number(step) || 1;
         if (stepTrack) {
-            stepTrack.style.transform = step === 2 ? 'translateX(-50%)' : 'translateX(0)';
+            const offset = (normalizedStep - 1) * (100 / 3);
+            stepTrack.style.transform = `translateX(-${offset}%)`;
         }
-        if (stepLabel1 && stepLabel2) {
-            const isStep2 = step === 2;
-            stepLabel1.classList.toggle('text-primary', !isStep2);
-            stepLabel1.classList.toggle('font-bold', !isStep2);
-            stepLabel1.classList.toggle('text-gray-400', isStep2);
-
-            stepLabel2.classList.toggle('text-primary', isStep2);
-            stepLabel2.classList.toggle('font-bold', isStep2);
-            stepLabel2.classList.toggle('text-gray-400', !isStep2);
-        }
+        const steps = [
+            { label: stepLabel1, active: normalizedStep === 1 },
+            { label: stepLabel2, active: normalizedStep === 2 },
+            { label: stepLabel3, active: normalizedStep === 3 }
+        ];
+        steps.forEach(({ label, active }) => {
+            if (!label) return;
+            label.classList.toggle('text-primary', active);
+            label.classList.toggle('font-bold', active);
+            label.classList.toggle('text-gray-400', !active);
+        });
     }
 
     function updateSummary(cart) {
@@ -335,6 +370,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (summaryDiscounts2) summaryDiscounts2.textContent = `- R$ ${totalDiscounts.toFixed(2).replace('.', ',')}`;
         if (summaryDelivery2) summaryDelivery2.textContent = finalDeliveryCost > 0 ? `R$ ${finalDeliveryCost.toFixed(2).replace('.', ',')}` : 'Gratis';
         if (summaryTotal2) summaryTotal2.textContent = `R$ ${finalTotal.toFixed(2).replace('.', ',')}`;
+        if (summaryItemCountMethod) summaryItemCountMethod.textContent = itemCount;
+        if (summarySubtotalMethod) summarySubtotalMethod.textContent = `R$ ${subtotal.toFixed(2).replace('.', ',')}`;
+        if (summaryDiscountsMethod) summaryDiscountsMethod.textContent = `- R$ ${totalDiscounts.toFixed(2).replace('.', ',')}`;
+        if (summaryDeliveryMethod) summaryDeliveryMethod.textContent = finalDeliveryCost > 0 ? `R$ ${finalDeliveryCost.toFixed(2).replace('.', ',')}` : 'Gratis';
+        if (summaryTotalMethod) summaryTotalMethod.textContent = `R$ ${finalTotal.toFixed(2).replace('.', ',')}`;
         if (paymentSummaryDeliveryType) paymentSummaryDeliveryType.textContent = selectedDelivery?.type || 'Nao definido';
         if (paymentSummaryDeliveryCost) {
             paymentSummaryDeliveryCost.textContent = finalDeliveryCost > 0 ? `R$ ${finalDeliveryCost.toFixed(2).replace('.', ',')}` : 'Gratis';
@@ -342,6 +382,139 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Chama a nova função para atualizar a aparência dos botões
         updateDeliveryOptionsUI(hasFreeShipping);
+    }
+
+    function getPaymentMethodLabel(method) {
+        return PAYMENT_METHOD_LABELS[method] || '';
+    }
+
+    function resolvePayerEmail() {
+        const direct = (paymentEmailInput?.value || '').trim();
+        if (direct) return direct;
+        const summary = (paymentSummaryEmail?.textContent || '').trim();
+        if (summary && !/^nao informado$/i.test(summary)) return summary;
+        try {
+            const cached = JSON.parse(localStorage.getItem('loggedInUser') || 'null') || {};
+            return (cached?.email || '').trim();
+        } catch (error) {
+            return '';
+        }
+    }
+
+    function updatePaymentSubmitLabel() {
+        if (!paymentSubmitBtn) return;
+        if (selectedPaymentMethod === 'pix') {
+            paymentSubmitBtn.textContent = 'Gerar Pix';
+            return;
+        }
+        paymentSubmitBtn.textContent = paymentSubmitOriginalLabel || 'Concluir Pagamento';
+    }
+
+    function stopPixPolling() {
+        if (pixPollTimer) {
+            clearTimeout(pixPollTimer);
+            pixPollTimer = null;
+        }
+    }
+
+    function resetPixResult() {
+        stopPixPolling();
+        pixResultData = null;
+        if (paymentPixResult) paymentPixResult.classList.add('hidden');
+        if (paymentPixStatus) {
+            paymentPixStatus.textContent = '';
+            paymentPixStatus.style.color = '';
+        }
+        if (paymentPixContent) paymentPixContent.classList.remove('hidden');
+        if (paymentPixQr) paymentPixQr.removeAttribute('src');
+        if (paymentPixCode) paymentPixCode.value = '';
+        if (paymentPixTicket) {
+            paymentPixTicket.setAttribute('href', '#');
+            paymentPixTicket.classList.add('hidden');
+        }
+    }
+
+    function applyPixResult(data) {
+        pixResultData = data || null;
+        const qrCodeBase64 = data?.qrCodeBase64 || '';
+        const qrCode = data?.qrCode || '';
+        const ticketUrl = data?.ticketUrl || '';
+        const statusMessage = formatPaymentStatus(data?.status, data?.statusDetail);
+
+        if (paymentPixStatus) {
+            paymentPixStatus.textContent = statusMessage || 'Pix gerado. Use o QR Code para pagar.';
+        }
+        if (paymentPixContent) {
+            paymentPixContent.classList.remove('hidden');
+        }
+        if (paymentPixQr) {
+            if (qrCodeBase64) {
+                paymentPixQr.setAttribute('src', `data:image/jpeg;base64,${qrCodeBase64}`);
+            } else {
+                paymentPixQr.removeAttribute('src');
+            }
+        }
+        if (paymentPixCode) paymentPixCode.value = qrCode || '';
+        if (paymentPixTicket) {
+            if (ticketUrl) {
+                paymentPixTicket.setAttribute('href', ticketUrl);
+                paymentPixTicket.classList.remove('hidden');
+            } else {
+                paymentPixTicket.setAttribute('href', '#');
+                paymentPixTicket.classList.add('hidden');
+            }
+        }
+        if (paymentPixResult) paymentPixResult.classList.remove('hidden');
+    }
+
+    function updatePaymentMethodSelectionUI() {
+        const hasSelection = !!selectedPaymentMethod;
+        if (paymentMethodOptions && paymentMethodOptions.length) {
+            paymentMethodOptions.forEach((btn) => {
+                const method = btn.getAttribute('data-payment-method');
+                const isActive = method === selectedPaymentMethod;
+                btn.classList.toggle('border-primary', isActive);
+                btn.classList.toggle('bg-primary/10', isActive);
+                btn.classList.toggle('border-gray-200', !isActive);
+                btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+            });
+        }
+        if (paymentMethodContinueBtn) {
+            paymentMethodContinueBtn.disabled = !hasSelection;
+            paymentMethodContinueBtn.classList.toggle('opacity-60', !hasSelection);
+        }
+    }
+
+    function updatePaymentMethodView() {
+        const label = getPaymentMethodLabel(selectedPaymentMethod);
+        const isCard = selectedPaymentMethod === 'card';
+        const isPix = selectedPaymentMethod === 'pix';
+        const showPrimary = isCard || isPix;
+        if (paymentMethodSelected) {
+            paymentMethodSelected.textContent = label ? `Forma: ${label}` : '';
+        }
+        if (paymentAlternativeName) {
+            paymentAlternativeName.textContent = label || 'Forma de pagamento';
+        }
+        if (paymentCardSection) {
+            paymentCardSection.classList.toggle('hidden', !showPrimary);
+        }
+        if (paymentCardFields) {
+            paymentCardFields.classList.toggle('hidden', !isCard);
+        }
+        if (paymentAlternativeSection) {
+            paymentAlternativeSection.classList.toggle('hidden', showPrimary || !selectedPaymentMethod);
+        }
+        if (!isPix) {
+            resetPixResult();
+        }
+        updatePaymentSubmitLabel();
+    }
+
+    function setSelectedPaymentMethod(method) {
+        selectedPaymentMethod = method || '';
+        updatePaymentMethodSelectionUI();
+        updatePaymentMethodView();
     }
 
     async function loadFeaturedProducts() {
@@ -920,6 +1093,7 @@ document.addEventListener('DOMContentLoaded', () => {
             pending: 'Pagamento pendente.',
             in_process: 'Pagamento em analise.',
             authorized: 'Pagamento autorizado.',
+            action_required: 'Pagamento aguardando acao do comprador.',
             rejected: 'Pagamento recusado.',
             cancelled: 'Pagamento cancelado.',
             refunded: 'Pagamento estornado.',
@@ -929,8 +1103,154 @@ document.addEventListener('DOMContentLoaded', () => {
         return detail ? `${base} (${detail})` : base;
     }
 
+    function formatPixOrderStatus(paymentStatus, orderStatus, detail) {
+        if (paymentStatus) {
+            return formatPaymentStatus(paymentStatus, detail);
+        }
+        const orderMap = {
+            action_required: 'Aguardando pagamento Pix.',
+            processed: 'Pagamento aprovado.',
+            cancelled: 'Pagamento cancelado.'
+        };
+        const base = orderMap[orderStatus] || 'Status do Pix indefinido.';
+        return detail ? `${base} (${detail})` : base;
+    }
+
     function isFinalPaymentStatus(status) {
         return ['approved', 'rejected', 'cancelled', 'refunded', 'charged_back'].includes(status);
+    }
+
+    async function createWebOrder(paymentInfo = {}) {
+        if (orderCreated || orderCreationInFlight) return null;
+        orderCreationInFlight = true;
+        try {
+            const storeId = resolveSelectedStoreId();
+            if (!storeId) throw new Error('Loja nao definida.');
+            const cart = await CartManager.getCart();
+            const totals = computeTotals(cart);
+            const addressId = lastSelectedAddress?._id || lastSelectedAddress?.id || '';
+            const address = lastSelectedAddress || null;
+
+            const payload = {
+                storeId,
+                status: 'PAGO',
+                payment: {
+                    method: paymentInfo.method || selectedPaymentMethod,
+                    status: paymentInfo.status || 'approved',
+                    statusDetail: paymentInfo.statusDetail || '',
+                    id: paymentInfo.paymentId || '',
+                    orderId: paymentInfo.orderId || '',
+                    amount: Number(totals.finalTotal || 0),
+                    gateway: 'mercadopago',
+                },
+                delivery: {
+                    type: selectedDelivery?.type || '',
+                    cost: Number(totals.deliveryCost || 0),
+                },
+                addressId,
+                address,
+                externalReference: paymentInfo.paymentId || paymentInfo.orderId || '',
+            };
+
+            const headers = getAuthHeaders();
+            if (!headers.Authorization) {
+                throw new Error('Usuario nao autenticado.');
+            }
+
+            const response = await fetchJson(`${API_CONFIG.BASE_URL}/orders/web`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...headers,
+                },
+                body: JSON.stringify(payload),
+            });
+            orderCreated = true;
+            return response;
+        } catch (error) {
+            console.warn('[checkout] Falha ao criar pedido.', error);
+            if (typeof showToast === 'function') {
+                showToast(error?.message || 'Falha ao registrar o pedido.', 'warning', 5000);
+            }
+            return null;
+        } finally {
+            orderCreationInFlight = false;
+        }
+    }
+
+    async function handlePixApproved(paymentInfo = {}) {
+        stopPixPolling();
+        if (paymentPixContent) {
+            paymentPixContent.classList.add('hidden');
+        }
+        if (paymentPixStatus) {
+            paymentPixStatus.textContent = 'Pagamento aprovado. Redirecionando para Meus Pedidos...';
+            paymentPixStatus.style.color = '#15803d';
+        }
+        if (typeof showToast === 'function') {
+            showToast('Pagamento aprovado. Redirecionando...', 'success', 4000);
+        }
+        await createWebOrder({
+            method: 'pix',
+            status: paymentInfo.paymentStatus || 'approved',
+            statusDetail: paymentInfo.detail || '',
+            paymentId: pixResultData?.paymentId || '',
+            orderId: pixResultData?.orderId || '',
+        });
+        const target = (typeof basePath !== 'undefined') ? `${basePath}pages/meus-pedidos.html` : '../pages/meus-pedidos.html';
+        setTimeout(() => {
+            window.location.href = target;
+        }, 2000);
+    }
+
+    async function redirectToOrdersAfterApproval(paymentInfo = {}) {
+        if (typeof showToast === 'function') {
+            showToast('Pagamento aprovado. Redirecionando...', 'success', 4000);
+        }
+        await createWebOrder({
+            method: paymentInfo.method || selectedPaymentMethod,
+            status: paymentInfo.status || 'approved',
+            statusDetail: paymentInfo.statusDetail || '',
+            paymentId: paymentInfo.paymentId || '',
+        });
+        const target = (typeof basePath !== 'undefined') ? `${basePath}pages/meus-pedidos.html` : '../pages/meus-pedidos.html';
+        setTimeout(() => {
+            window.location.href = target;
+        }, 2000);
+    }
+
+    async function pollPixStatus(orderId, storeId, attempt = 0) {
+        if (!orderId || !storeId) return;
+        const maxAttempts = 90;
+        const intervalMs = 6000;
+        if (attempt >= maxAttempts) return;
+
+        try {
+            const data = await fetchJson(
+                `${API_CONFIG.BASE_URL}/mercadopago/orders/${encodeURIComponent(orderId)}?storeId=${encodeURIComponent(storeId)}`,
+                { headers: getAuthHeaders() }
+            );
+            const paymentStatus = data?.paymentStatus || '';
+            const orderStatus = data?.orderStatus || '';
+            const detail = data?.paymentStatusDetail || data?.orderStatusDetail || '';
+            if (paymentPixStatus) {
+                paymentPixStatus.textContent = formatPixOrderStatus(paymentStatus, orderStatus, detail);
+            }
+            if (paymentStatus === 'approved' || orderStatus === 'processed') {
+                await handlePixApproved({ paymentStatus, detail });
+                return;
+            }
+            if (isFinalPaymentStatus(paymentStatus) || orderStatus === 'cancelled') {
+                stopPixPolling();
+                return;
+            }
+        } catch (error) {
+            console.warn('[checkout][pix] Falha ao consultar status.', error);
+        }
+
+        pixPollTimer = setTimeout(() => {
+            pollPixStatus(orderId, storeId, attempt + 1);
+        }, intervalMs);
     }
 
     async function fetchJson(url, options) {
@@ -987,6 +1307,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         showToast(formatPaymentStatus(data.status, data.statusDetail), 'info', 4000);
                     }
                 }
+                if (data?.status === 'approved') {
+                    await redirectToOrdersAfterApproval({
+                        paymentId,
+                        status: data.status,
+                        statusDetail: data.statusDetail,
+                    });
+                    break;
+                }
                 if (isFinalPaymentStatus(data?.status)) {
                     break;
                 }
@@ -996,13 +1324,70 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    if (paymentMethodOptions && paymentMethodOptions.length) {
+        paymentMethodOptions.forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const method = btn.getAttribute('data-payment-method') || '';
+                setSelectedPaymentMethod(method);
+            });
+        });
+    }
+
+    if (paymentMethodContinueBtn) {
+        paymentMethodContinueBtn.addEventListener('click', () => {
+            if (!selectedPaymentMethod) {
+                if (typeof showToast === 'function') {
+                    showToast('Selecione a forma de pagamento.', 'warning', 4000);
+                } else if (typeof showModal === 'function') {
+                    showModal({ title: 'Pagamento', message: 'Selecione a forma de pagamento.', confirmText: 'OK' });
+                }
+                return;
+            }
+            setCheckoutStep(3);
+            updatePaymentMethodView();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+    }
+
+    if (paymentMethodBackBtn) {
+        paymentMethodBackBtn.addEventListener('click', () => {
+            setCheckoutStep(1);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+    }
+
+    if (paymentMethodChangeBtn) {
+        paymentMethodChangeBtn.addEventListener('click', () => {
+            setCheckoutStep(2);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+    }
+
+    if (paymentPixCopyBtn) {
+        paymentPixCopyBtn.addEventListener('click', async () => {
+            const code = (paymentPixCode?.value || '').trim();
+            if (!code) return;
+            try {
+                if (navigator?.clipboard?.writeText) {
+                    await navigator.clipboard.writeText(code);
+                } else {
+                    paymentPixCode?.select?.();
+                    document.execCommand('copy');
+                }
+                if (typeof showToast === 'function') {
+                    showToast('Pix copia e cola copiado.', 'success', 3000);
+                }
+            } catch (error) {
+                console.warn('[checkout] Falha ao copiar Pix.', error);
+            }
+        });
+    }
+
     if (paymentSubmitBtn) {
         paymentSubmitBtn.addEventListener('click', async () => {
             if (paymentSubmitBtn.disabled) return;
             paymentSubmitBtn.disabled = true;
-            if (paymentSubmitOriginalLabel) {
-                paymentSubmitBtn.textContent = 'Processando...';
-            }
+            paymentSubmitBtn.textContent = selectedPaymentMethod === 'pix' ? 'Gerando Pix...' : 'Processando...';
             try {
                 const storeId = resolveSelectedStoreId();
                 const cart = await CartManager.getCart();
@@ -1014,6 +1399,52 @@ document.addEventListener('DOMContentLoaded', () => {
                 const finalTotal = Number(totals.finalTotal || 0);
                 if (!Number.isFinite(finalTotal) || finalTotal <= 0) {
                     throw new Error('Total do pedido invalido.');
+                }
+                if (!selectedPaymentMethod) {
+                    throw new Error('Selecione a forma de pagamento.');
+                }
+                if (selectedPaymentMethod === 'pix') {
+                    const email = resolvePayerEmail();
+                    if (!email) throw new Error('Informe o email para o pagamento.');
+
+                    resetPixResult();
+                    const payload = {
+                        storeId,
+                        amount: Number(finalTotal.toFixed(2)),
+                        processingMode: 'automatic',
+                        payer: {
+                            email
+                        }
+                    };
+
+                    console.log('[checkout][pix] criando order', {
+                        storeId,
+                        amount: payload.amount,
+                        email
+                    });
+
+                    const pixData = await fetchJson(`${API_CONFIG.BASE_URL}/mercadopago/orders`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...getAuthHeaders()
+                        },
+                        body: JSON.stringify(payload)
+                    });
+
+                    applyPixResult(pixData);
+                    if (pixData?.orderId) {
+                        pollPixStatus(pixData.orderId, storeId);
+                    }
+                    if (typeof showModal === 'function') {
+                        showModal({ title: 'Pagamento', message: 'Pix gerado. Use o QR Code para pagar.', confirmText: 'OK' });
+                    } else if (typeof showToast === 'function') {
+                        showToast('Pix gerado. Use o QR Code para pagar.', 'info', 4000);
+                    }
+                    return;
+                }
+                if (selectedPaymentMethod !== 'card') {
+                    throw new Error('Forma de pagamento selecionada ainda nao esta disponivel.');
                 }
 
                 const cardNumber = digitsOnly(paymentCardInput?.value);
@@ -1099,11 +1530,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     showToast(statusMessage, 'info', 4000);
                 }
 
-                if (paymentId && !isFinalPaymentStatus(paymentData?.status)) {
+                if (paymentData?.status === 'approved') {
+                    await redirectToOrdersAfterApproval({
+                        paymentId,
+                        status: paymentData.status,
+                        statusDetail: paymentData.statusDetail,
+                    });
+                } else if (paymentId && !isFinalPaymentStatus(paymentData?.status)) {
                     pollPaymentStatus(paymentId, storeId);
                 }
             } catch (error) {
                 console.error('[checkout] Falha ao processar pagamento.', error);
+                if (selectedPaymentMethod === 'pix') {
+                    console.log('[checkout][pix] detalhes do erro', error?.data || null);
+                }
                 const msg = error?.message || 'Nao foi possivel concluir o pagamento.';
                 if (typeof showModal === 'function') {
                     showModal({ title: 'Pagamento', message: msg, confirmText: 'OK' });
@@ -1114,9 +1554,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } finally {
                 paymentSubmitBtn.disabled = false;
-                if (paymentSubmitOriginalLabel) {
-                    paymentSubmitBtn.textContent = paymentSubmitOriginalLabel;
-                }
+                updatePaymentSubmitLabel();
             }
         });
     }
@@ -1129,6 +1567,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     setCheckoutStep(1);
+    updatePaymentMethodSelectionUI();
 
     loadAndRenderPage();
     loadFeaturedProducts();

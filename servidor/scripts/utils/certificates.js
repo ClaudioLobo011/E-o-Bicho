@@ -16,6 +16,18 @@ const extractCertificatePair = (pfxBuffer, password) => {
   const pfxDer = forge.asn1.fromDer(pfxBuffer.toString('binary'));
   const pfx = forge.pkcs12.pkcs12FromAsn1(pfxDer, passwordValue);
 
+  const normalizeAttributes = (attributes) => {
+    if (!attributes) return [];
+    if (Array.isArray(attributes)) return attributes;
+    if (typeof attributes === 'object') {
+      return Object.keys(attributes).map((key) => ({
+        type: key,
+        value: attributes[key],
+      }));
+    }
+    return [];
+  };
+
   const findKeyBag = () => {
     const candidates = [forge.pki.oids.pkcs8ShroudedKeyBag, forge.pki.oids.keyBag];
     for (const bagType of candidates) {
@@ -38,7 +50,7 @@ const extractCertificatePair = (pfxBuffer, password) => {
   }
 
   const keyId = (() => {
-    const attribute = (keyBag.attributes || []).find(
+    const attribute = normalizeAttributes(keyBag.attributes).find(
       (attr) => attr && attr.type === forge.pki.oids.localKeyId
     );
     if (!attribute || !attribute.value || !attribute.value.length) {
@@ -69,7 +81,9 @@ const extractCertificatePair = (pfxBuffer, password) => {
     }
     certificateChain.push(pem);
     if (!leafCert && keyId && bag.attributes) {
-      const certAttr = bag.attributes.find((attr) => attr && attr.type === forge.pki.oids.localKeyId);
+      const certAttr = normalizeAttributes(bag.attributes).find(
+        (attr) => attr && attr.type === forge.pki.oids.localKeyId
+      );
       if (certAttr && certAttr.value && certAttr.value[0]) {
         const raw = certAttr.value[0];
         const certId =

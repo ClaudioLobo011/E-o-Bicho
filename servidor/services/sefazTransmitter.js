@@ -36,6 +36,19 @@ const AUTORIZACAO_ENDPOINTS = {
   },
 };
 
+const NFE_AUTORIZACAO_ENDPOINTS = {
+  homologacao: {
+    RS: 'https://nfe-homologacao.sefazrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx',
+    SVRS: 'https://nfe-homologacao.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx',
+    default: 'https://nfe-homologacao.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx',
+  },
+  producao: {
+    RS: 'https://nfe.sefazrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx',
+    SVRS: 'https://nfe.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx',
+    default: 'https://nfe.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx',
+  },
+};
+
 const SOAP_ACTION =
   'http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4/nfeAutorizacaoLote';
 
@@ -47,6 +60,19 @@ const STATUS_ENDPOINTS = {
   producao: {
     MS: 'https://nfce.sefaz.ms.gov.br/ws/NFeStatusServico4/NFeStatusServico4.asmx',
     default: 'https://nfce.svrs.rs.gov.br/ws/NfeStatusServico/NFeStatusServico4.asmx',
+  },
+};
+
+const NFE_STATUS_ENDPOINTS = {
+  homologacao: {
+    RS: 'https://nfe-homologacao.sefazrs.rs.gov.br/ws/NfeStatusServico/NFeStatusServico4.asmx',
+    SVRS: 'https://nfe-homologacao.svrs.rs.gov.br/ws/NfeStatusServico/NFeStatusServico4.asmx',
+    default: 'https://nfe-homologacao.svrs.rs.gov.br/ws/NfeStatusServico/NFeStatusServico4.asmx',
+  },
+  producao: {
+    RS: 'https://nfe.sefazrs.rs.gov.br/ws/NfeStatusServico/NFeStatusServico4.asmx',
+    SVRS: 'https://nfe.svrs.rs.gov.br/ws/NfeStatusServico/NFeStatusServico4.asmx',
+    default: 'https://nfe.svrs.rs.gov.br/ws/NfeStatusServico/NFeStatusServico4.asmx',
   },
 };
 
@@ -383,6 +409,42 @@ const resolveEndpoint = (uf, environment) => {
 const resolveStatusEndpoint = (uf, environment) => {
   const envKey = environment === 'producao' ? 'producao' : 'homologacao';
   const map = STATUS_ENDPOINTS[envKey] || {};
+  const normalizedUf = (uf || '').toString().trim().toUpperCase();
+  const endpoint = map[normalizedUf] || map.default;
+  if (!endpoint) {
+    throw new SefazTransmissionError('Endpoint de status da SEFAZ não configurado para o estado informado.');
+  }
+  return endpoint;
+};
+
+const resolveNfeEndpoint = (uf, environment) => {
+  const envKey = environment === 'producao' ? 'producao' : 'homologacao';
+  const override =
+    envKey === 'producao'
+      ? process.env.NFE_AUTORIZACAO_URL_PRODUCAO || process.env.NFE_AUTORIZACAO_URL
+      : process.env.NFE_AUTORIZACAO_URL_HOMOLOGACAO || process.env.NFE_AUTORIZACAO_URL_HOMOLOG;
+  if (override) {
+    return String(override).trim();
+  }
+  const map = NFE_AUTORIZACAO_ENDPOINTS[envKey] || {};
+  const normalizedUf = (uf || '').toString().trim().toUpperCase();
+  const endpoint = map[normalizedUf] || map.default;
+  if (!endpoint) {
+    throw new SefazTransmissionError('Endpoint da SEFAZ não configurado para o estado informado.');
+  }
+  return endpoint;
+};
+
+const resolveNfeStatusEndpoint = (uf, environment) => {
+  const envKey = environment === 'producao' ? 'producao' : 'homologacao';
+  const override =
+    envKey === 'producao'
+      ? process.env.NFE_STATUS_URL_PRODUCAO || process.env.NFE_STATUS_URL
+      : process.env.NFE_STATUS_URL_HOMOLOGACAO || process.env.NFE_STATUS_URL_HOMOLOG;
+  if (override) {
+    return String(override).trim();
+  }
+  const map = NFE_STATUS_ENDPOINTS[envKey] || {};
   const normalizedUf = (uf || '').toString().trim().toUpperCase();
   const endpoint = map[normalizedUf] || map.default;
   if (!endpoint) {
@@ -956,6 +1018,98 @@ const transmitNfceToSefaz = async ({
   };
 };
 
+const transmitNfeToSefaz = async ({
+  xml,
+  uf,
+  environment,
+  certificate,
+  certificateChain,
+  privateKey,
+  lotId,
+}) => {
+  const endpoint = resolveNfeEndpoint(uf, environment);
+  const enviNfe = buildEnviNfePayload({ xml, loteId: lotId, synchronous: true });
+  if (!/versao="4\.00"/.test(enviNfe)) {
+    throw new SefazTransmissionError('enviNFe deve ser gerado na versão 4.00.');
+  }
+
+  const loteMatch = /<idLote>([^<]+)<\/idLote>/.exec(enviNfe);
+  if (!loteMatch || !/^\d+$/.test(loteMatch[1])) {
+    throw new SefazTransmissionError('IdLote inválido: informe apenas dígitos.');
+  }
+
+  const envelope = buildSoapEnvelope({ enviNfeXml: enviNfe, uf });
+
+  const responseXml = await performSoapRequest({
+    endpoint,
+    envelope,
+    certificate,
+    certificateChain,
+    privateKey,
+  });
+
+  const retEnviSection = extractSection(responseXml, 'retEnviNFe');
+  if (!retEnviSection) {
+    throw new SefazTransmissionError('Resposta da SEFAZ não contém o retorno do envio da NF-e.', {
+      response: responseXml,
+    });
+  }
+
+  const loteStatus = extractTagContent(retEnviSection, 'cStat');
+  const loteMessage = extractTagContent(retEnviSection, 'xMotivo');
+  const receipt = extractTagContent(retEnviSection, 'nRec');
+
+  if (loteStatus !== '104') {
+    throw new SefazTransmissionError(
+      `SEFAZ não processou o lote (${loteStatus || 'sem código'} - ${loteMessage || 'sem mensagem'}).`,
+      {
+        response: responseXml,
+        loteStatus,
+        loteMessage,
+      }
+    );
+  }
+
+  const protSection = extractSection(retEnviSection, 'protNFe');
+  if (!protSection) {
+    throw new SefazTransmissionError('SEFAZ não retornou protocolo para a NF-e enviada.', {
+      response: responseXml,
+      loteStatus,
+      loteMessage,
+    });
+  }
+
+  const protocolStatus = extractTagContent(protSection, 'cStat');
+  const protocolMessage = extractTagContent(protSection, 'xMotivo');
+  const protocolNumber = extractTagContent(protSection, 'nProt');
+  const processedAt = extractTagContent(protSection, 'dhRecbto');
+
+  if (!['100', '150'].includes(protocolStatus)) {
+    throw new SefazTransmissionError(
+      `SEFAZ rejeitou a NF-e (${protocolStatus || 'sem código'} - ${protocolMessage || 'sem mensagem'}).`,
+      {
+        response: responseXml,
+        loteStatus,
+        loteMessage,
+        protocolStatus,
+        protocolMessage,
+      }
+    );
+  }
+
+  return {
+    endpoint,
+    responseXml,
+    receipt,
+    status: protocolStatus,
+    message: protocolMessage,
+    protocol: protocolNumber,
+    processedAt,
+    loteStatus,
+    loteMessage,
+  };
+};
+
 const consultNfceStatusServico = async ({
   uf,
   environment,
@@ -984,6 +1138,7 @@ const consultNfceStatusServico = async ({
 
 module.exports = {
   transmitNfceToSefaz,
+  transmitNfeToSefaz,
   consultNfceStatusServico,
   performSoapRequest,
   resolveUfCode,
@@ -1005,5 +1160,7 @@ module.exports = {
     buildEnviNfePayload,
     ensureClockSynchronization,
     getSynchronizedDate,
+    resolveNfeEndpoint,
+    resolveNfeStatusEndpoint,
   },
 };

@@ -471,6 +471,15 @@
                                             </span>
                                         </label>
                                     </div>
+                                    <div class="md:col-span-2 rounded-xl border border-dashed border-sky-200 bg-sky-50/50 p-4">
+                                        <label class="inline-flex items-start gap-3 text-xs font-semibold text-gray-700">
+                                            <input type="checkbox" id="sem-gtin" class="mt-1 h-4 w-4 rounded border-gray-300 text-sky-600 focus:ring-sky-400">
+                                            <span>
+                                                Produto SEM GTIN
+                                                <span class="mt-1 block text-[11px] font-normal text-gray-500">Marque se o produto não possui GTIN/código de barras válido.</span>
+                                            </span>
+                                        </label>
+                                    </div>
                                     <div class="md:col-span-2 rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4">
                                         <label class="inline-flex items-start gap-3 text-xs font-semibold text-gray-700">
                                             <input type="checkbox" id="inativo" name="inativo" class="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/20">
@@ -638,20 +647,32 @@
                             </div>
 
                             <div id="tab-fiscal" class="hidden space-y-5 px-4 pb-5 pt-4" role="tabpanel" aria-labelledby="tab-fiscal-trigger" aria-hidden="true">
-                                <div class="rounded-2xl border border-dashed border-gray-300 bg-white p-4 space-y-5">
-                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                <div class="rounded-2xl border border-dashed border-gray-300 bg-white p-4 space-y-4">
+                                    <div>
+                                        <h3 class="text-[13px] font-semibold text-gray-800">Regras fiscais por empresa</h3>
+                                        <p class="text-[11px] text-gray-500">Selecione a regra fiscal cadastrada para cada empresa.</p>
+                                    </div>
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <div>
-                                            <h3 class="text-[13px] font-semibold text-gray-800">Empresa fiscal selecionada</h3>
-                                            <p class="text-[11px] text-gray-500">Os campos são agrupados por empresa fiscal cadastrada.</p>
-                                        </div>
-                                        <div class="flex items-center gap-2 text-[11px] font-semibold text-gray-500">
-                                            <label for="fiscal-company-select" class="hidden">Empresa fiscal</label>
-                                            <select id="fiscal-company-select" class="rounded-full border border-gray-200 px-3 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20"></select>
+                                            <label for="ncm" class="block text-xs font-semibold text-gray-700">NCM</label>
+                                            <input type="text" id="ncm" name="ncm" class="mt-1.5 w-full rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-700">
                                         </div>
                                     </div>
-                                    <div id="fiscal-company-summary" class="text-xs text-gray-600"></div>
+                                    <div class="overflow-hidden rounded-xl border border-gray-200">
+                                        <div class="overflow-x-auto">
+                                            <table class="min-w-full text-xs" id="fiscal-rules-table">
+                                                <thead id="fiscal-rules-head" class="text-gray-500 uppercase tracking-wide"></thead>
+                                                <tbody id="fiscal-rules-body" class="divide-y divide-gray-100 text-gray-700">
+                                                    <tr id="fiscal-rules-empty">
+                                                        <td colspan="2" class="px-3 py-4 text-center text-gray-500">Nenhuma empresa encontrada.</td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
                                 </div>
 
+                                <div id="fiscal-legacy-fields" class="hidden space-y-4">
                                 <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
                                     <div class="rounded-xl border border-gray-200 bg-white p-3.5 shadow-sm space-y-3">
                                         <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Origem e códigos</h4>
@@ -947,6 +968,7 @@
                                         </label>
                                     </div>
                                 </div>
+                            </div>
                             </div>
                         </div>
                     </section>

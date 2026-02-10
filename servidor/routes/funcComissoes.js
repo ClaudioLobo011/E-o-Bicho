@@ -10,6 +10,7 @@ const Service = require('../models/Service');
 const Appointment = require('../models/Appointment');
 const UserGroup = require('../models/UserGroup');
 const CommissionClosing = require('../models/CommissionClosing');
+const Exchange = require('../models/Exchange');
 
 const router = express.Router();
 const requireStaff = authorizeRoles('funcionario', 'admin', 'admin_master');
@@ -68,12 +69,97 @@ const normalizeStatus = (status) => {
   return value || 'aguardando';
 };
 
+const normalizeCommissionOrigin = (origin) => {
+  const value = String(origin || '').trim().toUpperCase();
+  if (!value) return 'VENDA';
+  if (value === 'TROCA' || value === 'TROCA_DIFERENCA') return 'TROCA_DIFERENCA';
+  if (value === 'ESTORNO' || value === 'ESTORNADO' || value === 'ESTORNADA') return 'ESTORNO';
+  return value;
+};
+
+const formatCommissionOrigin = (origin) => {
+  const normalized = normalizeCommissionOrigin(origin);
+  if (normalized === 'TROCA_DIFERENCA') return 'Troca (diferença)';
+  if (normalized === 'ESTORNO') return 'Estorno';
+  return 'Venda';
+};
+
+const normalizeCommissionStatus = (status) => {
+  const value = String(status || '').trim().toUpperCase();
+  if (!value) return '';
+  if (value === 'ESTORNADA' || value === 'ESTORNADO' || value === 'ESTORNO') return 'estornada';
+  if (value === 'ATIVA') return 'ativa';
+  return value.toLowerCase();
+};
+
 const normalizeName = (value = '') => {
   return String(value || '')
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .trim();
+};
+
+const resolveItemSeller = (item = {}, sale = {}) => {
+  const itemSeller = item?.seller || item?.vendedor || {};
+  const saleSeller = sale?.seller || {};
+  const idCandidates = [
+    item?.sellerId,
+    item?.seller_id,
+    item?.vendedor_id,
+    itemSeller?._id,
+    itemSeller?.id,
+    sale?.sellerId,
+    saleSeller?._id,
+    saleSeller?.id,
+  ]
+    .map((value) => (value ? String(value) : ''))
+    .filter(Boolean);
+  const id = idCandidates[0] || '';
+
+  const codeCandidates = [
+    item?.sellerCode,
+    item?.seller_code,
+    item?.vendedorCodigo,
+    itemSeller?.codigo,
+    itemSeller?.codigoCliente,
+    sale?.sellerCode,
+    saleSeller?.codigo,
+    saleSeller?.codigoCliente,
+  ]
+    .map((value) => (value ? String(value) : ''))
+    .filter(Boolean);
+  const code = codeCandidates[0] || '';
+
+  const nameCandidates = [
+    item?.sellerName,
+    item?.seller_name,
+    item?.vendedorNome,
+    itemSeller?.nome,
+    sale?.sellerName,
+    saleSeller?.nome,
+  ]
+    .map((value) => (value ? String(value) : ''))
+    .filter(Boolean);
+  const name = nameCandidates[0] || '';
+
+  return { id, code, name };
+};
+
+const itemMatchesSeller = (
+  itemSeller,
+  saleMatches,
+  { sellerIds, sellerCodes, operatorName }
+) => {
+  const info = itemSeller || { id: '', code: '' };
+  if (info.id && sellerIds.has(String(info.id))) return true;
+  if (info.code && sellerCodes.has(normalizeDigits(info.code))) return true;
+  if (!info.id && !info.code) return saleMatches;
+  if (info.name) {
+    const normalized = normalizeName(info.name);
+    if (normalized && operatorName && normalized === operatorName) return true;
+  }
+  return false;
 };
 
 const SERVICE_STATUS_VALUES = new Set(['agendado', 'em_espera', 'em_atendimento', 'finalizado']);
@@ -144,7 +230,12 @@ const toEndOfDay = (value) => {
 
 const collectSaleItems = (sale = {}) => {
   const candidates = [
-    sale.items,
+    sale.fiscalItemsSnapshot,
+    sale.fiscalItemsSnapshot?.items,
+    sale.fiscalItemsSnapshot?.itens,
+    sale.itemsSnapshot,
+    sale.itemsSnapshot?.items,
+    sale.itemsSnapshot?.itens,
     sale.receiptSnapshot?.items,
     sale.receiptSnapshot?.itens,
     sale.receiptSnapshot?.products,
@@ -153,12 +244,7 @@ const collectSaleItems = (sale = {}) => {
     sale.receiptSnapshot?.cart?.itens,
     sale.receiptSnapshot?.cart?.products,
     sale.receiptSnapshot?.cart?.produtos,
-    sale.itemsSnapshot,
-    sale.itemsSnapshot?.items,
-    sale.itemsSnapshot?.itens,
-    sale.fiscalItemsSnapshot,
-    sale.fiscalItemsSnapshot?.items,
-    sale.fiscalItemsSnapshot?.itens,
+    sale.items,
   ];
 
   for (const entry of candidates) {
@@ -250,6 +336,50 @@ const deriveSaleTotal = (sale = {}) => {
   const items = collectSaleItems(sale);
   if (!items.length) return 0;
   return items.reduce((acc, item) => acc + deriveItemTotal(item), 0);
+};
+
+const deriveSaleDiscount = (sale = {}) => {
+  const totals = sale?.receiptSnapshot?.totais || sale?.totais || {};
+  const candidates = [
+    sale.discountValue,
+    sale.desconto,
+    sale.descontoValor,
+    totals?.descontoValor,
+    totals?.desconto,
+    totals?.discount,
+  ];
+  for (const candidate of candidates) {
+    const parsed = parseNumber(candidate);
+    if (parsed !== null) return parsed;
+  }
+  return 0;
+};
+
+const deriveSaleAddition = (sale = {}) => {
+  const totals = sale?.receiptSnapshot?.totais || sale?.totais || {};
+  const candidates = [
+    sale.additionValue,
+    sale.acrescimo,
+    sale.acrescimoValor,
+    totals?.acrescimoValor,
+    totals?.acrescimo,
+    totals?.addition,
+  ];
+  for (const candidate of candidates) {
+    const parsed = parseNumber(candidate);
+    if (parsed !== null) return parsed;
+  }
+  return 0;
+};
+
+const deriveNetFactorForSale = (items = [], sale = {}) => {
+  if (!items.length) return 1;
+  const grossTotal = items.reduce((sum, item) => sum + deriveItemTotal(item), 0);
+  if (grossTotal <= 0) return 1;
+  const discount = Math.max(0, deriveSaleDiscount(sale) || 0);
+  const addition = Math.max(0, deriveSaleAddition(sale) || 0);
+  const netTotal = Math.max(0, grossTotal + addition - discount);
+  return grossTotal > 0 ? netTotal / grossTotal : 1;
 };
 
 const extractItemObjectId = (item = {}) => {
@@ -557,9 +687,7 @@ const buildResumo = (records = [], opts = {}) => {
   const { mode = 'default', closingsKpi = null } = opts;
   const resumo = emptyResumo();
 
-  const entries = mode === 'produtos'
-    ? records.filter((item) => normalizeStatus(item.status) !== 'cancelado')
-    : records;
+  const entries = records;
 
   let total = 0;
   let aReceber = 0;
@@ -571,6 +699,11 @@ const buildResumo = (records = [], opts = {}) => {
 
   entries.forEach((item) => {
     const valor = parseNumber(item.comissaoTotal) || 0;
+    const commissionStatus = normalizeCommissionStatus(item.status_comissao || item.statusComissao);
+    if (commissionStatus === 'estornada') {
+      cancelamentos += 1;
+      return;
+    }
     const status = normalizeStatus(item.status);
 
     if (status === 'cancelado') {
@@ -707,6 +840,8 @@ const summarizeClosingsForKpi = (closings = []) => {
 const buildProximos = (records = [], extra = []) => {
   const pendentes = records
     .filter((item) => {
+      const commissionStatus = normalizeCommissionStatus(item.status_comissao || item.statusComissao);
+      if (commissionStatus === 'estornada') return false;
       const status = normalizeStatus(item.status);
       return status !== 'pago' && status !== 'cancelado';
     })
@@ -814,17 +949,55 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
       user.nomeCompleto || user.nomeContato || user.razaoSocial || user.email || ''
     );
 
-    const sales = aggregated
-      .map((entry) => ({
-        ...(entry.completedSales || {}),
-        _pdvStateId: entry._id,
-      }))
-      .filter((sale) => belongsToSeller(sale, { sellerIds, sellerCodes, operatorName: normalizedUserName }));
+    const sales = aggregated.map((entry) => ({
+      ...(entry.completedSales || {}),
+      _pdvStateId: entry._id,
+    }));
 
     console.log(
       '[funcComissoes]',
-      { userId: String(user._id), dias, salesTotal: aggregated.length, salesMatched: sales.length },
+      { userId: String(user._id), dias, salesTotal: aggregated.length },
     );
+
+    const saleIdCandidates = sales
+      .map((sale) => sale.id || sale._id)
+      .filter(Boolean)
+      .map((value) => String(value));
+    const saleCodeCandidates = sales
+      .map((sale) => sale.saleCode || sale.saleCodeLabel || '')
+      .filter(Boolean)
+      .map((value) => String(value));
+
+    const exchangeMatch = [];
+    if (saleIdCandidates.length) {
+      exchangeMatch.push({ 'sourceSales.saleId': { $in: saleIdCandidates } });
+    }
+    if (saleCodeCandidates.length) {
+      exchangeMatch.push({ 'sourceSales.saleCode': { $in: saleCodeCandidates } });
+    }
+
+    const exchangeQuery = { inventoryProcessed: true };
+    if (req.query?.store && mongoose.Types.ObjectId.isValid(String(req.query.store))) {
+      exchangeQuery.company = new mongoose.Types.ObjectId(String(req.query.store));
+    }
+    if (exchangeMatch.length) {
+      exchangeQuery.$or = exchangeMatch;
+    }
+
+    const exchanges = exchangeMatch.length ? await Exchange.find(exchangeQuery).lean() : [];
+    const totalReturnSaleIds = new Set();
+    const totalReturnSaleCodes = new Set();
+    exchanges.forEach((exchange) => {
+      const returnedTotal = parseNumber(exchange?.totals?.returned) || 0;
+      const takenTotal = parseNumber(exchange?.totals?.taken) || 0;
+      const isTotalReturn = returnedTotal > 0 && takenTotal <= 0.009;
+      if (!isTotalReturn) return;
+      const sourceSales = Array.isArray(exchange.sourceSales) ? exchange.sourceSales : [];
+      sourceSales.forEach((entry) => {
+        if (entry?.saleId) totalReturnSaleIds.add(String(entry.saleId));
+        if (entry?.saleCode) totalReturnSaleCodes.add(String(entry.saleCode));
+      });
+    });
 
     const itemIdSet = new Set();
     sales.forEach((sale) => {
@@ -843,52 +1016,62 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
     const ServiceIdSet = new Set(Services.map((svc) => String(svc._id)));
     const productIdSet = new Set(products.map((prod) => String(prod._id)));
 
-    const historicoBase = sales.map((sale) => {
-      const items = collectSaleItems(sale);
-      let valorProdutos = 0;
-      let valorServicos = 0;
-      let comissaoProdutos = 0;
-      let comissaoServicos = 0;
-      let hasItemProdPercent = false;
-      let hasItemSvcPercent = false;
-      const itemNames = [];
+    const historicoBase = [];
+    const prodPercentDefault = comissaoPercent || 0;
+    const svcPercentDefault = comissaoServicoPercent || 0;
+    const resolvePercent = (item = {}) => {
+      const candidate =
+        item.comissaoPercent ??
+        item.comissao ??
+        item.comissaoVenda ??
+        item.comissaoVendaPercent ??
+        item.commission ??
+        item.commissionPercent ??
+        item.percentualComissao ??
+        item.percentualComissaoVenda;
+      if (candidate === undefined || candidate === null || candidate === '') return null;
+      const parsed = parseNumber(candidate);
+      return Number.isFinite(parsed) ? parsed : null;
+    };
 
-      const prodPercentDefault = comissaoPercent || 0;
-      const svcPercentDefault = comissaoServicoPercent || 0;
-      const resolvePercent = (item = {}) => {
-        const candidate =
-          item.comissaoPercent ??
-          item.comissao ??
-          item.comissaoVenda ??
-          item.comissaoVendaPercent ??
-          item.commission ??
-          item.commissionPercent ??
-          item.percentualComissao ??
-          item.percentualComissaoVenda;
-        if (candidate === undefined || candidate === null || candidate === '') return null;
-        const parsed = parseNumber(candidate);
-        return Number.isFinite(parsed) ? parsed : null;
-      };
+    sales.forEach((sale) => {
+      const items = collectSaleItems(sale);
+      if (!items.length) return;
+      const saleMatches = belongsToSeller(sale, { sellerIds, sellerCodes, operatorName: normalizedUserName });
+      const netFactor = deriveNetFactorForSale(items, sale);
+      const createdAt = sale.createdAt ? new Date(sale.createdAt) : null;
+      const status = normalizeStatus(sale.status);
+      const paymentLabel = normalizePaymentLabel(sale);
+      const saleId = sale.id || sale._id || '';
+      const saleCode = sale.saleCode || sale.saleCodeLabel || '';
+      const isTotalReturn =
+        (saleId && totalReturnSaleIds.has(String(saleId))) ||
+        (saleCode && totalReturnSaleCodes.has(String(saleCode)));
 
       items.forEach((item) => {
+        const itemSeller = resolveItemSeller(item, sale);
+        if (!itemMatchesSeller(itemSeller, saleMatches, { sellerIds, sellerCodes, operatorName: normalizedUserName })) {
+          return;
+        }
         const total = deriveItemTotal(item);
+        if (!total && total !== 0) return;
+        const netTotal = total * netFactor;
         const oid = extractItemObjectId(item);
         const isServicoId = oid && ServiceIdSet.has(oid);
         const isProdutoId = oid && productIdSet.has(oid);
         const isProdutoSnapshot = item.productSnapshot || item.product || item.produto;
         const isServico = isServicoId || (!isProdutoId && !isProdutoSnapshot);
-        if (isServico) {
-          valorServicos += total;
-          const percent = resolvePercent(item);
-          const applied = percent !== null ? percent : svcPercentDefault;
-          if (percent !== null) hasItemSvcPercent = true;
-          comissaoServicos += total * (applied / 100);
-        } else {
-          valorProdutos += total;
-          const percent = resolvePercent(item);
-          const applied = percent !== null ? percent : prodPercentDefault;
-          if (percent !== null) hasItemProdPercent = true;
-          comissaoProdutos += total * (applied / 100);
+        const percent = resolvePercent(item);
+        const applied = percent !== null ? percent : (isServico ? svcPercentDefault : prodPercentDefault);
+        const comissaoValue = netTotal * (applied / 100);
+        const comissaoVenda = isServico ? 0 : comissaoValue;
+        const comissaoServico = isServico ? comissaoValue : 0;
+        const originRaw = item?.origem_comissao || item?.origemComissao || 'VENDA';
+        let origem_comissao = normalizeCommissionOrigin(originRaw);
+        let status_comissao = (item?.status_comissao || item?.statusComissao || 'ATIVA').toString().toUpperCase();
+        if (status === 'cancelado' || isTotalReturn) {
+          origem_comissao = 'ESTORNO';
+          status_comissao = 'ESTORNADA';
         }
 
         const name =
@@ -900,43 +1083,30 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
           item.product?.nome ||
           item.produto?.nome ||
           '';
-        if (name) itemNames.push(name);
+        const referencia =
+          item?.sourceSaleCode ||
+          item?.referenceSaleCode ||
+          item?.exchangeSaleCode ||
+          '';
+
+        historicoBase.push({
+          _createdAt: createdAt,
+          codigo: sale.saleCode || sale.saleCodeLabel || sale.id || '',
+          data: formatDate(createdAt),
+          descricao: name || sale.typeLabel || 'Venda',
+          referencia,
+          cliente: sale.customerName || 'Cliente nao informado',
+          origem: formatCommissionOrigin(origem_comissao),
+          origem_comissao,
+          status,
+          status_comissao,
+          comissaoVenda,
+          comissaoServico,
+          comissaoTotal: comissaoVenda + comissaoServico,
+          valorVenda: netTotal,
+          pagamento: paymentLabel,
+        });
       });
-
-      const vendaBase = valorProdutos;
-      const servicoBase = valorServicos;
-      const comissaoVenda = hasItemProdPercent ? comissaoProdutos : vendaBase * (comissaoPercent / 100);
-      const comissaoServico = hasItemSvcPercent ? comissaoServicos : servicoBase * (comissaoServicoPercent / 100);
-      const comissaoTotal = comissaoVenda + comissaoServico;
-
-      const createdAt = sale.createdAt ? new Date(sale.createdAt) : null;
-      const status = normalizeStatus(sale.status);
-      const paymentLabel = normalizePaymentLabel(sale);
-      const origemLabel = valorProdutos > 0 && valorServicos > 0
-        ? 'Produtos + Servicos'
-        : valorServicos > 0
-        ? 'Servicos'
-        : 'Produtos';
-
-      const descricao = itemNames.length ? itemNames.slice(0, 3).join(', ') : sale.typeLabel || 'Venda';
-      const valorVenda = deriveSaleTotal(sale) || vendaBase + servicoBase;
-
-      return {
-        _createdAt: createdAt,
-        codigo: sale.saleCode || sale.saleCodeLabel || sale.id || '',
-        data: formatDate(createdAt),
-        descricao,
-        cliente: sale.customerName || 'Cliente nao informado',
-        origem: origemLabel,
-        status,
-        comissaoVenda,
-        comissaoServico,
-        comissaoTotal,
-        valorVenda,
-        pagamento: paymentLabel,
-        valorProdutos,
-        valorServicos,
-      };
     });
 
     const closingFilter = {
@@ -1010,8 +1180,8 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
       response.debug = {
         aggregated: aggregated.length,
         matched: sales.length,
-        servicoCount: historicoBase.filter((it) => (it.valorServicos || 0) > 0).length,
-        produtoCount: historicoBase.filter((it) => (it.valorProdutos || 0) > 0).length,
+        servicoCount: historicoBase.filter((it) => (it.comissaoServico || 0) > 0).length,
+        produtoCount: historicoBase.filter((it) => (it.comissaoVenda || 0) > 0).length,
         produtosViewCount: produtosView.historico.length,
         servicosViewCount: servicosView.historico.length,
         servicosFetchCount: appointments.length,

@@ -166,6 +166,10 @@ const productSchema = new mongoose.Schema({
         type: Boolean,
         default: false,
     },
+    semGtin: {
+        type: Boolean,
+        default: false,
+    },
     ifoodIntegratedAt: { type: Date, default: null },
     ifoodLastSyncAt: { type: Date, default: null },
     ifoodActive: { type: Boolean, default: null },

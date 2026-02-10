@@ -36,6 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const vigenciaInput = document.getElementById('data-vigencia');
     const unitSelect = document.getElementById('unidade');
     const inactiveCheckbox = document.getElementById('inativo');
+    const semGtinCheckbox = document.getElementById('sem-gtin');
     const hideOnSiteCheckbox = document.getElementById('hide-on-site');
     const sendToIfoodCheckbox = document.getElementById('send-to-ifood');
     const fractionedCheckbox = document.getElementById('fractioned-toggle');
@@ -54,6 +55,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const fractionChildCreateButtonDefaultHtml = fractionChildCreateButton?.innerHTML || '';
     const fiscalCompanySelect = document.getElementById('fiscal-company-select');
     const fiscalCompanySummary = document.getElementById('fiscal-company-summary');
+    const fiscalRuleSelect = document.getElementById('fiscal-rule-select');
+    const fiscalRuleHint = document.getElementById('fiscal-rule-hint');
+    const fiscalRulesHead = document.getElementById('fiscal-rules-head');
+    const fiscalRulesBody = document.getElementById('fiscal-rules-body');
+    const fiscalRulesEmpty = document.getElementById('fiscal-rules-empty');
     const deleteProductButton = document.getElementById('delete-product-button');
     const priceHistoryButton = document.getElementById('open-price-history-btn');
     const priceHistoryModal = document.getElementById('price-history-modal');
@@ -96,6 +102,31 @@ document.addEventListener('DOMContentLoaded', () => {
         parcial: 'bg-sky-100 text-sky-800 border border-sky-200',
         aprovado: 'bg-emerald-100 text-emerald-800 border border-emerald-200',
     };
+    const FISCAL_RULE_COLUMNS = [
+        { key: 'company', label: 'Empresa' },
+        { key: 'rule', label: 'Regra fiscal' },
+    ];
+    const fiscalRulesTableState = {
+        filters: FISCAL_RULE_COLUMNS.reduce((acc, col) => {
+            acc[col.key] = '';
+            return acc;
+        }, {}),
+        selections: FISCAL_RULE_COLUMNS.reduce((acc, col) => {
+            acc[col.key] = new Set();
+            return acc;
+        }, {}),
+        sort: { key: '', direction: 'asc' },
+    };
+    const fiscalRulesTableControls = {
+        filterInputs: new Map(),
+        sortButtons: new Map(),
+        sortHeaders: new Map(),
+        filterTriggers: new Map(),
+        activeDropdown: null,
+        activeKey: null,
+    };
+    let fiscalRulesTableReady = false;
+    let fiscalRulesRowSequence = 0;
 
     const PRODUCT_EDIT_STATE_STORAGE_KEY = 'adminProductEditState';
     const loadPersistedProductEditState = () => {
@@ -166,6 +197,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let storeNameMap = new Map();
     let fiscalByCompany = new Map([[FISCAL_GENERAL_KEY, {}]]);
     let activeFiscalCompanyKey = FISCAL_GENERAL_KEY;
+    const fiscalRulesByStore = new Map();
+    const fiscalRuleSelectionByStore = new Map();
+    const fiscalRulesLoading = new Set();
 
     const fiscalInputs = {
         origem: document.getElementById('fiscal-origem'),
@@ -431,6 +465,442 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const getStoreDisplayName = (store = {}) => store.nome || store.nomeFantasia || store.razaoSocial || 'Empresa sem nome';
 
+    const setFiscalRuleHint = (message = '') => {
+        if (!fiscalRuleHint) return;
+        fiscalRuleHint.textContent = message;
+    };
+
+    const normalizeFiscalRuleValue = (value = '') => String(value || '').trim();
+
+    const buildFiscalRuleFilterRegex = (rawValue) => {
+        const normalizedFilter = normalizeSearchText(rawValue || '');
+        if (!normalizedFilter) {
+            return null;
+        }
+        const pattern = normalizedFilter
+            .split('*')
+            .map((segment) => escapeProductSearchRegex(segment))
+            .join('.*');
+        if (!pattern) {
+            return null;
+        }
+        try {
+            return new RegExp(pattern, 'i');
+        } catch (error) {
+            console.warn('Filtro invalido ignorado na tabela fiscal.', error);
+            return null;
+        }
+    };
+
+    const getFiscalRuleRowValue = (row, key) => {
+        if (!row) return '';
+        if (key === 'company') {
+            return row.dataset.fiscalRuleCompany || '';
+        }
+        if (key === 'rule') {
+            return row.dataset.fiscalRuleRule || '';
+        }
+        return '';
+    };
+
+    const getFiscalRuleCandidates = (row, key) => {
+        const value = getFiscalRuleRowValue(row, key);
+        return value ? [value] : [''];
+    };
+
+    const matchesFiscalRuleFilter = (row, key, filterValue) => {
+        const regex = buildFiscalRuleFilterRegex(filterValue);
+        if (!regex) return true;
+        const candidates = getFiscalRuleCandidates(row, key);
+        return candidates.some((candidate) => regex.test(normalizeSearchText(candidate)));
+    };
+
+    const applyFiscalRuleFilters = (rows) => {
+        const list = Array.isArray(rows) ? rows : [];
+        const filters = fiscalRulesTableState.filters || {};
+        return list.filter((row) => {
+            const matchesText = Object.entries(filters).every(([key, value]) => {
+                if (!value) return true;
+                return matchesFiscalRuleFilter(row, key, value);
+            });
+            if (!matchesText) return false;
+            return Object.entries(fiscalRulesTableState.selections || {}).every(([key, selection]) => {
+                if (!selection || !selection.size) return true;
+                const rowValue = normalizeFiscalRuleValue(getFiscalRuleRowValue(row, key));
+                return selection.has(rowValue);
+            });
+        });
+    };
+
+    const getFiscalRuleSortValue = (row, key) => normalizeSearchText(getFiscalRuleRowValue(row, key));
+
+    const applyFiscalRuleSort = (rows) => {
+        const list = Array.isArray(rows) ? rows : [];
+        const { key, direction } = fiscalRulesTableState.sort || {};
+        const sortKey = key || '';
+        if (!sortKey) return list.slice();
+        const multiplier = direction === 'desc' ? -1 : 1;
+        return list.slice().sort((a, b) => {
+            const valueA = getFiscalRuleSortValue(a, sortKey);
+            const valueB = getFiscalRuleSortValue(b, sortKey);
+            const comparison = valueA.localeCompare(valueB, 'pt-BR', { sensitivity: 'base', numeric: true });
+            if (comparison === 0) {
+                return Number(a.dataset.order || 0) - Number(b.dataset.order || 0);
+            }
+            return comparison * multiplier;
+        });
+    };
+
+    const applyFiscalRuleFiltersAndSort = () => {
+        if (!fiscalRulesBody) return;
+        const rows = Array.from(fiscalRulesBody.querySelectorAll('tr[data-fiscal-rule-row]'));
+        if (!rows.length) return;
+        rows.forEach((row) => {
+            if (!row.dataset.order) {
+                row.dataset.order = String(fiscalRulesRowSequence++);
+            }
+        });
+        const filtered = applyFiscalRuleFilters(rows);
+        const sorted = applyFiscalRuleSort(rows);
+        const filteredSet = new Set(filtered);
+        sorted.forEach((row) => {
+            row.classList.toggle('hidden', !filteredSet.has(row));
+            fiscalRulesBody.appendChild(row);
+        });
+    };
+
+    const setFiscalRuleFilter = (key, value) => {
+        if (!key) return;
+        const nextValue = typeof value === 'string' ? value : '';
+        if (fiscalRulesTableState.filters[key] === nextValue) return;
+        fiscalRulesTableState.filters[key] = nextValue;
+        applyFiscalRuleFiltersAndSort();
+    };
+
+    const setFiscalRuleSort = (key, direction) => {
+        if (!key) return;
+        const nextDirection = direction === 'desc' ? 'desc' : 'asc';
+        if (fiscalRulesTableState.sort.key === key && fiscalRulesTableState.sort.direction === nextDirection) {
+            fiscalRulesTableState.sort = { key: '', direction: 'asc' };
+        } else {
+            fiscalRulesTableState.sort = { key, direction: nextDirection };
+        }
+        updateFiscalRuleSortButtons();
+        applyFiscalRuleFiltersAndSort();
+    };
+
+    const updateFiscalRuleSortButtons = () => {
+        const activeKey = fiscalRulesTableState.sort.key;
+        const activeDirection = fiscalRulesTableState.sort.direction;
+        fiscalRulesTableControls.sortHeaders.forEach((header, key) => {
+            if (!header) return;
+            if (activeKey && key === activeKey) {
+                header.setAttribute('aria-sort', activeDirection === 'desc' ? 'descending' : 'ascending');
+            } else {
+                header.removeAttribute('aria-sort');
+            }
+        });
+        fiscalRulesTableControls.sortButtons.forEach((meta, button) => {
+            if (!button) return;
+            const isActive = meta.key === activeKey && meta.direction === activeDirection;
+            button.classList.toggle('text-primary', isActive);
+            button.classList.toggle('border-primary/60', isActive);
+            button.classList.toggle('bg-primary/10', isActive);
+            button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        });
+    };
+
+    const updateFiscalRuleFilterTriggerState = (key) => {
+        const trigger = fiscalRulesTableControls.filterTriggers.get(key);
+        if (!trigger) return;
+        const hasSelection = fiscalRulesTableState.selections[key]?.size;
+        trigger.classList.toggle('text-primary', !!hasSelection);
+    };
+
+    const closeFiscalRuleFilterDropdown = () => {
+        if (fiscalRulesTableControls.activeDropdown) {
+            fiscalRulesTableControls.activeDropdown.remove();
+            fiscalRulesTableControls.activeDropdown = null;
+            fiscalRulesTableControls.activeKey = null;
+        }
+    };
+
+    const getFiscalRuleUniqueValues = (key) => {
+        const values = new Set();
+        const rows = Array.from(fiscalRulesBody?.querySelectorAll('tr[data-fiscal-rule-row]') || []);
+        rows.forEach((row) => {
+            const value = normalizeFiscalRuleValue(getFiscalRuleRowValue(row, key));
+            if (value) values.add(value);
+        });
+        return Array.from(values).sort((a, b) =>
+            normalizeSearchText(a).localeCompare(normalizeSearchText(b), 'pt-BR', { sensitivity: 'base', numeric: true }),
+        );
+    };
+
+    const applyFiscalRuleSelectionFilter = (key, values, totalOptions = 0) => {
+        const selection = fiscalRulesTableState.selections[key];
+        if (!selection) return;
+        selection.clear();
+        if (values.length && totalOptions && values.length >= totalOptions) {
+            updateFiscalRuleFilterTriggerState(key);
+            applyFiscalRuleFiltersAndSort();
+            return;
+        }
+        values.forEach((value) => selection.add(value));
+        updateFiscalRuleFilterTriggerState(key);
+        applyFiscalRuleFiltersAndSort();
+    };
+
+    const buildFiscalRuleFilterDropdown = (key, anchor) => {
+        const existingSelection = fiscalRulesTableState.selections[key] || new Set();
+        const values = getFiscalRuleUniqueValues(key);
+        const hasStoredSelection = existingSelection.size > 0;
+
+        const dropdown = document.createElement('div');
+        dropdown.className =
+            'absolute z-50 mt-1 w-60 rounded-lg border border-gray-200 bg-white shadow-xl p-2 text-xs text-gray-600';
+        dropdown.innerHTML = `
+          <div class="flex items-center justify-between px-2 py-1 text-[11px] font-semibold text-gray-500 uppercase">
+            <span>Opcoes</span>
+            <button type="button" class="text-gray-400 hover:text-primary" data-action="close" aria-label="Fechar">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+          <div class="max-h-40 overflow-y-auto px-2 py-1 space-y-1" data-options></div>
+          <div class="flex items-center justify-between gap-2 px-2 pt-2">
+            <button type="button" class="text-[11px] text-gray-500 hover:text-primary" data-action="select-all">Selecionar tudo</button>
+            <button type="button" class="text-[11px] text-gray-500 hover:text-primary" data-action="clear">Limpar</button>
+            <button type="button" class="ml-auto rounded-md bg-primary px-2 py-1 text-[11px] font-semibold text-white hover:bg-primary/90" data-action="apply">Aplicar</button>
+          </div>
+        `;
+        const optionsContainer = dropdown.querySelector('[data-options]');
+        values.forEach((value) => {
+            const item = document.createElement('label');
+            item.className = 'flex items-center gap-2 py-1';
+            const checked = hasStoredSelection ? existingSelection.has(value) : true;
+            item.innerHTML = `
+              <input type="checkbox" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/30" value="${value}" ${checked ? 'checked' : ''}>
+              <span class="flex-1 truncate">${value}</span>
+            `;
+            optionsContainer?.appendChild(item);
+        });
+
+        const collectSelectedValues = () => Array.from(dropdown.querySelectorAll('input[type="checkbox"]'))
+            .filter((input) => input.checked)
+            .map((input) => input.value);
+
+        dropdown.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-action]');
+            if (!button) return;
+            const action = button.dataset.action;
+            if (action === 'close') {
+                closeFiscalRuleFilterDropdown();
+            } else if (action === 'select-all') {
+                dropdown.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+                    input.checked = true;
+                });
+            } else if (action === 'clear') {
+                dropdown.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+                    input.checked = false;
+                });
+            } else if (action === 'apply') {
+                applyFiscalRuleSelectionFilter(key, collectSelectedValues(), values.length);
+                closeFiscalRuleFilterDropdown();
+            }
+        });
+
+        anchor.parentElement?.appendChild(dropdown);
+        fiscalRulesTableControls.activeDropdown = dropdown;
+        fiscalRulesTableControls.activeKey = key;
+    };
+
+    const handleFiscalRuleFilterTriggerClick = (event, key) => {
+        event.stopPropagation();
+        if (fiscalRulesTableControls.activeDropdown && fiscalRulesTableControls.activeKey === key) {
+            closeFiscalRuleFilterDropdown();
+            return;
+        }
+        closeFiscalRuleFilterDropdown();
+        buildFiscalRuleFilterDropdown(key, event.currentTarget);
+    };
+
+    const renderFiscalRulesTableHeader = () => {
+        if (!fiscalRulesHead) return;
+        const headerCells = FISCAL_RULE_COLUMNS.map((column, index) => `
+          <th class="relative px-3 py-2 text-left" data-fiscal-rule-sort-header="${column.key}" data-fiscal-rule-col-index="${index}">
+            <div class="flex flex-col gap-1">
+              <div class="flex items-center justify-between gap-1">
+                <span class="whitespace-nowrap">${column.label}</span>
+                <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                  <button type="button" class="flex h-3 w-3 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-fiscal-rule-sort="${column.key}" data-sort-direction="asc" aria-label="Ordenar crescente por ${column.label}">
+                    <i class="fas fa-sort-up text-[9px]"></i>
+                  </button>
+                  <button type="button" class="flex h-3 w-3 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-fiscal-rule-sort="${column.key}" data-sort-direction="desc" aria-label="Ordenar decrescente por ${column.label}">
+                    <i class="fas fa-sort-down text-[9px]"></i>
+                  </button>
+                </div>
+              </div>
+              <div class="relative">
+                <button type="button" class="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-fiscal-rule-filter-trigger="${column.key}" aria-label="Abrir filtro de ${column.label}">
+                  <i class="fas fa-magnifying-glass"></i>
+                </button>
+                <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white pl-6 pr-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-fiscal-rule-filter="${column.key}">
+              </div>
+            </div>
+            <span class="absolute right-0 top-0 h-full w-2 cursor-col-resize select-none" data-fiscal-rule-resize="${column.key}" aria-hidden="true"></span>
+          </th>
+        `).join('');
+        fiscalRulesHead.innerHTML = `<tr>${headerCells}</tr>`;
+        if (fiscalRulesEmpty) {
+            fiscalRulesEmpty.setAttribute('colspan', String(FISCAL_RULE_COLUMNS.length));
+        }
+    };
+
+    const applyFiscalRuleColumnWidth = (index, width) => {
+        const headCell = document.querySelector(`[data-fiscal-rule-col-index="${index}"]`);
+        if (headCell) headCell.style.width = `${width}px`;
+        const rows = Array.from(fiscalRulesBody?.querySelectorAll('tr[data-fiscal-rule-row]') || []);
+        rows.forEach((row) => {
+            const cell = row.children[index];
+            if (cell) cell.style.width = `${width}px`;
+        });
+    };
+
+    const syncFiscalRuleColumnWidths = () => {
+        const headCells = Array.from(document.querySelectorAll('[data-fiscal-rule-col-index]'));
+        headCells.forEach((cell) => {
+            const index = Number(cell.dataset.fiscalRuleColIndex);
+            if (Number.isNaN(index)) return;
+            const width = cell.getBoundingClientRect().width;
+            if (width > 0) applyFiscalRuleColumnWidth(index, width);
+        });
+    };
+
+    const setupFiscalRulesTableControls = () => {
+        document.querySelectorAll('[data-fiscal-rule-filter]').forEach((input) => {
+            const key = input.dataset.fiscalRuleFilter;
+            if (!key) return;
+            fiscalRulesTableControls.filterInputs.set(key, input);
+            input.addEventListener('input', (event) => {
+                setFiscalRuleFilter(key, event.target.value || '');
+            });
+        });
+        document.querySelectorAll('[data-fiscal-rule-sort]').forEach((button) => {
+            const key = button.dataset.fiscalRuleSort;
+            if (!key) return;
+            const direction = button.dataset.sortDirection === 'desc' ? 'desc' : 'asc';
+            fiscalRulesTableControls.sortButtons.set(button, { key, direction });
+            const header = button.closest('[data-fiscal-rule-sort-header]');
+            if (header && !fiscalRulesTableControls.sortHeaders.has(key)) {
+                fiscalRulesTableControls.sortHeaders.set(key, header);
+            }
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                setFiscalRuleSort(key, direction);
+            });
+        });
+        document.querySelectorAll('[data-fiscal-rule-filter-trigger]').forEach((button) => {
+            const key = button.dataset.fiscalRuleFilterTrigger;
+            if (!key) return;
+            fiscalRulesTableControls.filterTriggers.set(key, button);
+            updateFiscalRuleFilterTriggerState(key);
+            button.addEventListener('click', (event) => handleFiscalRuleFilterTriggerClick(event, key));
+        });
+        document.querySelectorAll('[data-fiscal-rule-resize]').forEach((handle) => {
+            handle.addEventListener('mousedown', (event) => {
+                event.preventDefault();
+                const headCell = event.target.closest('[data-fiscal-rule-col-index]');
+                if (!headCell) return;
+                const colIndex = Number(headCell.dataset.fiscalRuleColIndex);
+                if (Number.isNaN(colIndex)) return;
+                const startX = event.clientX;
+                const startWidth = headCell.getBoundingClientRect().width;
+                const minWidth = 120;
+                const onMouseMove = (moveEvent) => {
+                    const nextWidth = Math.max(minWidth, startWidth + (moveEvent.clientX - startX));
+                    applyFiscalRuleColumnWidth(colIndex, nextWidth);
+                };
+                const onMouseUp = () => {
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+                };
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+            });
+        });
+        updateFiscalRuleSortButtons();
+    };
+
+    const normalizeRuleCode = (value) => {
+        const parsed = Number.parseInt(value, 10);
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+    };
+
+    const buildComparableFiscalSnapshot = (fiscal = {}) => ({
+        origem: fiscal?.origem || '0',
+        csosn: fiscal?.csosn || '',
+        cst: fiscal?.cst || '',
+        cest: fiscal?.cest || '',
+        status: {
+            nfe: fiscal?.status?.nfe || 'pendente',
+            nfce: fiscal?.status?.nfce || 'pendente',
+        },
+        cfop: {
+            nfe: {
+                dentroEstado: fiscal?.cfop?.nfe?.dentroEstado || '',
+                foraEstado: fiscal?.cfop?.nfe?.foraEstado || '',
+                transferencia: fiscal?.cfop?.nfe?.transferencia || '',
+                devolucao: fiscal?.cfop?.nfe?.devolucao || '',
+                industrializacao: fiscal?.cfop?.nfe?.industrializacao || '',
+            },
+            nfce: {
+                dentroEstado: fiscal?.cfop?.nfce?.dentroEstado || '',
+                foraEstado: fiscal?.cfop?.nfce?.foraEstado || '',
+                transferencia: fiscal?.cfop?.nfce?.transferencia || '',
+                devolucao: fiscal?.cfop?.nfce?.devolucao || '',
+                industrializacao: fiscal?.cfop?.nfce?.industrializacao || '',
+            },
+        },
+        pis: {
+            codigo: fiscal?.pis?.codigo || '',
+            cst: fiscal?.pis?.cst || '',
+            aliquota: parseNullableNumber(fiscal?.pis?.aliquota ?? null),
+            tipoCalculo: fiscal?.pis?.tipoCalculo || 'percentual',
+        },
+        cofins: {
+            codigo: fiscal?.cofins?.codigo || '',
+            cst: fiscal?.cofins?.cst || '',
+            aliquota: parseNullableNumber(fiscal?.cofins?.aliquota ?? null),
+            tipoCalculo: fiscal?.cofins?.tipoCalculo || 'percentual',
+        },
+        ipi: {
+            cst: fiscal?.ipi?.cst || '',
+            codigoEnquadramento: fiscal?.ipi?.codigoEnquadramento || '',
+            aliquota: parseNullableNumber(fiscal?.ipi?.aliquota ?? null),
+            tipoCalculo: fiscal?.ipi?.tipoCalculo || 'percentual',
+        },
+        fcp: {
+            indicador: fiscal?.fcp?.indicador || '0',
+            aliquota: parseNullableNumber(fiscal?.fcp?.aliquota ?? null),
+            aplica: Boolean(fiscal?.fcp?.aplica),
+        },
+    });
+
+    const buildFiscalSignature = (fiscal = {}) => JSON.stringify(buildComparableFiscalSnapshot(fiscal));
+
+    const findMatchingRuleForFiscal = (rules = [], fiscal = {}) => {
+        if (!Array.isArray(rules) || !rules.length) return null;
+        const fiscalSignature = buildFiscalSignature(fiscal);
+        return rules.find((rule) => buildFiscalSignature(rule?.fiscal || {}) === fiscalSignature) || null;
+    };
+
+    const getRuleLabel = (rule) => {
+        if (!rule) return '';
+        const code = normalizeRuleCode(rule.code);
+        const name = rule.name || '';
+        return code ? `${code} - ${name}` : name;
+    };
+
     const isKnownCompanyKey = (key) => {
         if (!key) return false;
         if (key === FISCAL_GENERAL_KEY) return true;
@@ -456,6 +926,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const statusNfe = currentData?.status?.nfe || 'pendente';
         const statusNfce = currentData?.status?.nfce || 'pendente';
         const companyName = getCompanyNameByKey(activeFiscalCompanyKey);
+        let ruleLabel = 'Nenhuma regra selecionada';
+        if (activeFiscalCompanyKey === FISCAL_GENERAL_KEY) {
+            ruleLabel = 'Regras fiscais disponiveis apenas por empresa.';
+        } else {
+            const selectedRuleCode = fiscalRuleSelectionByStore.get(activeFiscalCompanyKey);
+            const rules = fiscalRulesByStore.get(activeFiscalCompanyKey) || [];
+            if (selectedRuleCode) {
+                const matchedRule = rules.find((rule) => normalizeRuleCode(rule?.code) === selectedRuleCode);
+                ruleLabel = matchedRule ? getRuleLabel(matchedRule) : `Regra ${selectedRuleCode}`;
+            } else if (rules.length) {
+                ruleLabel = 'Selecione uma regra para aplicar.';
+            }
+        }
         const note = activeFiscalCompanyKey === FISCAL_GENERAL_KEY
             ? 'Aplica-se como padrão para empresas sem configuração específica.'
             : 'Configuração exclusiva para a empresa selecionada.';
@@ -467,9 +950,275 @@ document.addEventListener('DOMContentLoaded', () => {
                     ${buildStatusBadge('NF-e', statusNfe)}
                     ${buildStatusBadge('NFC-e', statusNfce)}
                 </div>
-                <p class="text-xs text-gray-500 md:text-right">${note}</p>
+                <p class="text-xs text-gray-500 md:text-right">${ruleLabel}</p>
+                <p class="text-[10px] text-gray-400 md:text-right">${note}</p>
             </div>
         `;
+    };
+
+    const setFiscalRuleSelectOptions = (rules = []) => {
+        if (!fiscalRuleSelect) return;
+        const options = ['<option value="">Selecionar regra</option>'];
+        rules.forEach((rule) => {
+            const code = normalizeRuleCode(rule?.code);
+            if (!code) return;
+            options.push(`<option value="${code}">${getRuleLabel(rule)}</option>`);
+        });
+        fiscalRuleSelect.innerHTML = options.join('');
+    };
+
+    const resolveSelectedRuleCode = (storeId, rules = []) => {
+        if (!storeId) return null;
+        if (fiscalRuleSelectionByStore.has(storeId)) {
+            return fiscalRuleSelectionByStore.get(storeId);
+        }
+        const fiscalSnapshot = fiscalByCompany.get(storeId) || getDefaultFiscalSnapshot();
+        const matchedRule = findMatchingRuleForFiscal(rules, fiscalSnapshot);
+        if (matchedRule) {
+            const matchedCode = normalizeRuleCode(matchedRule.code);
+            if (matchedCode) {
+                fiscalRuleSelectionByStore.set(storeId, matchedCode);
+                return matchedCode;
+            }
+        }
+        return null;
+    };
+
+    const setFiscalRuleSelectState = ({ disabled, hint }) => {
+        if (fiscalRuleSelect) {
+            fiscalRuleSelect.disabled = Boolean(disabled);
+        }
+        if (hint !== undefined) {
+            setFiscalRuleHint(hint);
+        }
+    };
+
+    const loadFiscalRulesForCompany = async (storeId) => {
+        if (!fiscalRuleSelect) return;
+        if (!storeId || storeId === FISCAL_GENERAL_KEY) {
+            setFiscalRuleSelectOptions([]);
+            setFiscalRuleSelectState({
+                disabled: true,
+                hint: 'Selecione uma empresa para carregar as regras fiscais.',
+            });
+            updateFiscalCompanySummary();
+            return;
+        }
+
+        if (fiscalRulesByStore.has(storeId)) {
+            const cachedRules = fiscalRulesByStore.get(storeId) || [];
+            setFiscalRuleSelectOptions(cachedRules);
+            const selectedCode = resolveSelectedRuleCode(storeId, cachedRules);
+            fiscalRuleSelect.value = selectedCode ? String(selectedCode) : '';
+            setFiscalRuleSelectState({
+                disabled: !cachedRules.length,
+                hint: cachedRules.length
+                    ? 'Selecione a regra fiscal que sera aplicada.'
+                    : 'Nenhuma regra cadastrada para esta empresa.',
+            });
+            updateFiscalCompanySummary();
+            return;
+        }
+
+        if (fiscalRulesLoading.has(storeId)) return;
+        fiscalRulesLoading.add(storeId);
+        setFiscalRuleSelectOptions([]);
+        setFiscalRuleSelectState({ disabled: true, hint: 'Carregando regras fiscais...' });
+
+        try {
+            const token = getToken();
+            const response = await fetch(`${API_CONFIG.BASE_URL}/fiscal/default-rules?storeId=${encodeURIComponent(storeId)}`, {
+                headers: token ? { Authorization: `Bearer ${token}` } : {},
+            });
+            if (!response.ok) {
+                throw new Error('Nao foi possivel carregar as regras fiscais.');
+            }
+            const payload = await response.json();
+            const rules = Array.isArray(payload?.rules) ? payload.rules : [];
+            fiscalRulesByStore.set(storeId, rules);
+            setFiscalRuleSelectOptions(rules);
+            const selectedCode = resolveSelectedRuleCode(storeId, rules);
+            fiscalRuleSelect.value = selectedCode ? String(selectedCode) : '';
+            setFiscalRuleSelectState({
+                disabled: !rules.length,
+                hint: rules.length
+                    ? 'Selecione a regra fiscal que sera aplicada.'
+                    : 'Nenhuma regra cadastrada para esta empresa.',
+            });
+            updateFiscalCompanySummary();
+        } catch (error) {
+            console.error('Erro ao carregar regras fiscais:', error);
+            setFiscalRuleSelectOptions([]);
+            setFiscalRuleSelectState({
+                disabled: true,
+                hint: 'Erro ao carregar regras fiscais para esta empresa.',
+            });
+            showModal({
+                title: 'Erro ao carregar regras fiscais',
+                message: error.message || 'Nao foi possivel carregar as regras fiscais.',
+                confirmText: 'Entendi',
+            });
+        } finally {
+            fiscalRulesLoading.delete(storeId);
+        }
+    };
+
+    const fetchFiscalRulesForStore = async (storeId) => {
+        if (!storeId || storeId === FISCAL_GENERAL_KEY) return [];
+        if (fiscalRulesByStore.has(storeId)) {
+            return fiscalRulesByStore.get(storeId) || [];
+        }
+        if (fiscalRulesLoading.has(storeId)) return [];
+        fiscalRulesLoading.add(storeId);
+        try {
+            const token = getToken();
+            const response = await fetch(`${API_CONFIG.BASE_URL}/fiscal/default-rules?storeId=${encodeURIComponent(storeId)}`, {
+                headers: token ? { Authorization: `Bearer ${token}` } : {},
+            });
+            if (!response.ok) {
+                throw new Error('Nao foi possivel carregar as regras fiscais.');
+            }
+            const payload = await response.json();
+            const rules = Array.isArray(payload?.rules) ? payload.rules : [];
+            fiscalRulesByStore.set(storeId, rules);
+            return rules;
+        } catch (error) {
+            console.error('Erro ao carregar regras fiscais:', error);
+            showModal({
+                title: 'Erro ao carregar regras fiscais',
+                message: error.message || 'Nao foi possivel carregar as regras fiscais.',
+                confirmText: 'Entendi',
+            });
+            return [];
+        } finally {
+            fiscalRulesLoading.delete(storeId);
+        }
+    };
+
+    const buildFiscalRuleSelectOptions = (rules = []) => {
+        const options = ['<option value="">Selecionar regra</option>'];
+        rules.forEach((rule) => {
+            const code = normalizeRuleCode(rule?.code);
+            if (!code) return;
+            options.push(`<option value="${code}">${getRuleLabel(rule)}</option>`);
+        });
+        return options.join('');
+    };
+
+    const updateFiscalRuleRowDataset = (row, storeName, selectEl) => {
+        if (!row) return;
+        const selectedValue = selectEl?.value || '';
+        const ruleLabel = selectedValue ? (selectEl?.selectedOptions?.[0]?.textContent || '') : '';
+        row.dataset.fiscalRuleCompany = normalizeFiscalRuleValue(storeName);
+        row.dataset.fiscalRuleRule = normalizeFiscalRuleValue(ruleLabel);
+    };
+
+    const applySelectedRuleToCompany = (storeId, selectedCode) => {
+        if (!storeId || storeId === FISCAL_GENERAL_KEY) return;
+        const rules = fiscalRulesByStore.get(storeId) || [];
+        if (!selectedCode) {
+            fiscalRuleSelectionByStore.delete(storeId);
+            return;
+        }
+        const selectedRule = rules.find((rule) => normalizeRuleCode(rule?.code) === selectedCode);
+        if (!selectedRule) return;
+        fiscalRuleSelectionByStore.set(storeId, selectedCode);
+        fiscalByCompany.set(storeId, cloneFiscalObject(selectedRule.fiscal || {}));
+    };
+
+    const updateFiscalRuleSelectForStore = async (storeId, selectEl, storeName, row) => {
+        if (!selectEl) return;
+        selectEl.disabled = true;
+        const rules = await fetchFiscalRulesForStore(storeId);
+        selectEl.innerHTML = buildFiscalRuleSelectOptions(rules);
+        const selectedCode = resolveSelectedRuleCode(storeId, rules);
+        selectEl.value = selectedCode ? String(selectedCode) : '';
+        selectEl.disabled = !rules.length;
+        updateFiscalRuleRowDataset(row, storeName, selectEl);
+    };
+
+    const handleFiscalRuleSelectChange = (storeId, selectEl, storeName, row) => {
+        const selectedCode = normalizeRuleCode(selectEl?.value || '');
+        applySelectedRuleToCompany(storeId, selectedCode);
+        updateFiscalRuleRowDataset(row, storeName, selectEl);
+        applyFiscalRuleFiltersAndSort();
+        markProductAsModified();
+    };
+
+    const renderFiscalRulesTableRows = () => {
+        if (!fiscalRulesBody) return;
+        fiscalRulesBody.innerHTML = '';
+        fiscalRulesRowSequence = 0;
+        if (!Array.isArray(storesList) || !storesList.length) {
+            if (fiscalRulesEmpty) fiscalRulesBody.appendChild(fiscalRulesEmpty);
+            return;
+        }
+
+        storesList.forEach((store) => {
+            const storeId = store?._id || store?.id;
+            if (!storeId) return;
+            const storeName = getStoreDisplayName(store);
+            const row = document.createElement('tr');
+            row.dataset.fiscalRuleRow = 'true';
+            row.dataset.fiscalRuleStoreId = String(storeId);
+            row.dataset.order = String(fiscalRulesRowSequence++);
+
+            const companyCell = document.createElement('td');
+            companyCell.className = 'px-3 py-2 text-gray-700';
+            companyCell.dataset.fiscalRuleCell = 'company';
+            companyCell.textContent = storeName;
+
+            const ruleCell = document.createElement('td');
+            ruleCell.className = 'px-3 py-2';
+            ruleCell.dataset.fiscalRuleCell = 'rule';
+            const selectEl = document.createElement('select');
+            selectEl.className = 'w-full rounded border border-gray-200 px-2 py-1 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20';
+            selectEl.dataset.fiscalRuleSelect = String(storeId);
+            selectEl.innerHTML = '<option value="">Carregando...</option>';
+            selectEl.disabled = true;
+            selectEl.addEventListener('change', () => handleFiscalRuleSelectChange(storeId, selectEl, storeName, row));
+            ruleCell.appendChild(selectEl);
+
+            row.appendChild(companyCell);
+            row.appendChild(ruleCell);
+            fiscalRulesBody.appendChild(row);
+
+            updateFiscalRuleSelectForStore(storeId, selectEl, storeName, row);
+        });
+
+        syncFiscalRuleColumnWidths();
+        applyFiscalRuleFiltersAndSort();
+    };
+
+    const ensureFiscalRulesTable = () => {
+        if (!fiscalRulesHead || !fiscalRulesBody) return;
+        if (!fiscalRulesTableReady) {
+            renderFiscalRulesTableHeader();
+            setupFiscalRulesTableControls();
+            fiscalRulesTableReady = true;
+        }
+        renderFiscalRulesTableRows();
+    };
+
+    const applySelectedRuleToActiveCompany = () => {
+        if (!fiscalRuleSelect) return;
+        if (!activeFiscalCompanyKey || activeFiscalCompanyKey === FISCAL_GENERAL_KEY) return;
+        const selectedCode = normalizeRuleCode(fiscalRuleSelect.value);
+        const rules = fiscalRulesByStore.get(activeFiscalCompanyKey) || [];
+        if (!selectedCode) {
+            fiscalRuleSelectionByStore.delete(activeFiscalCompanyKey);
+            updateFiscalCompanySummary();
+            return;
+        }
+        const selectedRule = rules.find((rule) => normalizeRuleCode(rule?.code) === selectedCode);
+        if (!selectedRule) {
+            updateFiscalCompanySummary();
+            return;
+        }
+        fiscalRuleSelectionByStore.set(activeFiscalCompanyKey, selectedCode);
+        fiscalByCompany.set(activeFiscalCompanyKey, cloneFiscalObject(selectedRule.fiscal || {}));
+        populateFiscalFields(selectedRule.fiscal || {});
+        updateFiscalCompanySummary();
     };
 
     const populateFiscalCompanySelect = (preferredKey = FISCAL_GENERAL_KEY) => {
@@ -829,6 +1578,7 @@ document.addEventListener('DOMContentLoaded', () => {
             naoMostrarNoSite: Boolean(hideOnSiteCheckbox?.checked),
             enviarParaIfood: Boolean(sendToIfoodCheckbox?.checked),
             inativo: Boolean(inactiveCheckbox?.checked),
+            semGtin: Boolean(semGtinCheckbox?.checked),
             dataCadastro: dataCadastroValue ? dataCadastroValue : null,
             dataVigencia: dataVigenciaValue ? dataVigenciaValue : null,
             peso: Number.isFinite(parsedPeso) ? parsedPeso : null,
@@ -3475,6 +4225,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 ? Boolean(snapshot.enviarParaIfood)
                 : false,
             inativo: Boolean(snapshot.inativo),
+            semGtin: Boolean(snapshot.semGtin),
             dataCadastro: snapshot.dataCadastro || snapshot.createdAt || null,
             dataVigencia: snapshot.dataVigencia || snapshot.vigencia || snapshot.updatedAt || null,
             peso: snapshot.peso ?? null,
@@ -4183,9 +4934,11 @@ document.addEventListener('DOMContentLoaded', () => {
         fiscalByCompany = new Map();
         fiscalByCompany.set(FISCAL_GENERAL_KEY, getDefaultFiscalSnapshot());
         activeFiscalCompanyKey = FISCAL_GENERAL_KEY;
+        fiscalRuleSelectionByStore.clear();
         populateFiscalCompanySelect(FISCAL_GENERAL_KEY);
         populateFiscalFields(fiscalByCompany.get(FISCAL_GENERAL_KEY));
         updateFiscalCompanySummary();
+        loadFiscalRulesForCompany(activeFiscalCompanyKey);
 
         depositStockMap.clear();
         renderDepositStockRows();
@@ -4355,6 +5108,7 @@ document.addEventListener('DOMContentLoaded', () => {
         form.querySelector('#codbarras').value = product.codbarras || '';
         form.querySelector('#descricao').value = product.descricao || '';
         setInputValue(inactiveCheckbox, product.inativo);
+        setInputValue(semGtinCheckbox, product.semGtin);
         setInputValue(
             hideOnSiteCheckbox,
             product.naoMostrarNoSite !== undefined ? product.naoMostrarNoSite : true,
@@ -4410,6 +5164,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const preferredCompanyKey = fiscalCompanySelect?.value || activeFiscalCompanyKey || FISCAL_GENERAL_KEY;
         fiscalByCompany = new Map();
         fiscalByCompany.set(FISCAL_GENERAL_KEY, cloneFiscalObject(product.fiscal || {}));
+        fiscalRuleSelectionByStore.clear();
         if (product.fiscalPorEmpresa && typeof product.fiscalPorEmpresa === 'object') {
             Object.entries(product.fiscalPorEmpresa).forEach(([storeId, fiscalData]) => {
                 fiscalByCompany.set(storeId, cloneFiscalObject(fiscalData || {}));
@@ -4423,6 +5178,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const activeFiscalData = fiscalByCompany.get(activeFiscalCompanyKey) || getDefaultFiscalSnapshot();
         populateFiscalFields(activeFiscalData);
         updateFiscalCompanySummary();
+        loadFiscalRulesForCompany(activeFiscalCompanyKey);
         supplierEntries = Array.isArray(product.fornecedores)
             ? product.fornecedores.map((item) => ({
                 fornecedor: item.fornecedor || '',
@@ -4547,11 +5303,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const initializePage = async () => {
         try {
+            const token = getAuthToken();
             const fetchers = [
                 fetch(`${API_CONFIG.BASE_URL}/categories/hierarchical`),
                 fetch(`${API_CONFIG.BASE_URL}/categories`),
                 fetch(`${API_CONFIG.BASE_URL}/deposits`),
-                fetch(`${API_CONFIG.BASE_URL}/stores`),
+                fetch(`${API_CONFIG.BASE_URL}/stores/allowed`, {
+                    headers: token ? { Authorization: `Bearer ${token}` } : {},
+                }),
             ];
 
             let productPromise = null;
@@ -4600,7 +5359,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     ? depositsPayload
                     : [];
             const storesPayload = await storesRes.json();
-            storesList = Array.isArray(storesPayload) ? storesPayload : [];
+            storesList = Array.isArray(storesPayload?.stores)
+                ? storesPayload.stores
+                : Array.isArray(storesPayload)
+                    ? storesPayload
+                    : [];
             storeNameMap = new Map(storesList.map((store) => [store._id, getStoreDisplayName(store)]));
 
             if (isEditMode && productId && productResponse) {
@@ -4611,6 +5374,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 applyNfeDraftIfAvailable();
             }
 
+            ensureFiscalRulesTable();
             populateCategoryTree(allHierarchicalCategories, productCategories);
 
         } catch (error) {
@@ -4631,6 +5395,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const nextFiscalData = fiscalByCompany.get(activeFiscalCompanyKey) || getDefaultFiscalSnapshot();
         populateFiscalFields(nextFiscalData);
         updateFiscalCompanySummary();
+        loadFiscalRulesForCompany(activeFiscalCompanyKey);
     });
 
     [fiscalInputs.statusNfe, fiscalInputs.statusNfce].forEach((statusInput) => {
@@ -4638,6 +5403,10 @@ document.addEventListener('DOMContentLoaded', () => {
             persistActiveFiscalData();
             updateFiscalCompanySummary();
         });
+    });
+
+    fiscalRuleSelect?.addEventListener('change', () => {
+        applySelectedRuleToActiveCompany();
     });
 
     addCategoryBtn.addEventListener('click', () => {
@@ -4758,6 +5527,15 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         hideSupplierSuggestions();
+    });
+
+    document.addEventListener('click', (event) => {
+        if (!fiscalRulesTableControls.activeDropdown) return;
+        const target = event.target;
+        if (target instanceof Node && fiscalRulesTableControls.activeDropdown.contains(target)) {
+            return;
+        }
+        closeFiscalRuleFilterDropdown();
     });
 
     priceHistorySearchInput?.addEventListener('input', () => {

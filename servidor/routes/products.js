@@ -670,6 +670,7 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
                 ? false
                 : Boolean(payload.enviarParaIfood),
             inativo: Boolean(payload.inativo),
+            semGtin: Boolean(payload.semGtin),
             codigosComplementares: Array.isArray(payload.codigosComplementares)
                 ? payload.codigosComplementares.map((code) => normalizeString(code)).filter(Boolean)
                 : [],
@@ -1520,6 +1521,9 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
         }
         if (payload.enviarParaIfood !== undefined) {
             updatePayload.enviarParaIfood = Boolean(payload.enviarParaIfood);
+        }
+        if (payload.semGtin !== undefined) {
+            updatePayload.semGtin = Boolean(payload.semGtin);
         }
 
         updatePayload.fornecedores = fornecedores;

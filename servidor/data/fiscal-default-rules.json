@@ -1,0 +1,128 @@
+{
+  "stores": {
+    "68ae259898f580f973cc506d": [
+      {
+        "code": 1,
+        "name": "5102 - Medicamentos/Acessórios",
+        "fiscal": {
+          "origem": "0",
+          "cest": "",
+          "csosn": "102",
+          "cst": "00",
+          "cfop": {
+            "nfe": {
+              "dentroEstado": "5102",
+              "foraEstado": "6102",
+              "transferencia": "5152",
+              "devolucao": "5202",
+              "industrializacao": "5101"
+            },
+            "nfce": {
+              "dentroEstado": "5102",
+              "foraEstado": "6108",
+              "transferencia": "5656",
+              "devolucao": "5202",
+              "industrializacao": "5101"
+            }
+          },
+          "pis": {
+            "codigo": "01",
+            "cst": "01",
+            "aliquota": 1.65,
+            "tipoCalculo": "percentual",
+            "valorBase": null
+          },
+          "cofins": {
+            "codigo": "01",
+            "cst": "01",
+            "aliquota": 7.6,
+            "tipoCalculo": "percentual",
+            "valorBase": null
+          },
+          "ipi": {
+            "cst": "53",
+            "codigoEnquadramento": "999",
+            "aliquota": 0,
+            "tipoCalculo": "percentual",
+            "valorBase": null
+          },
+          "fcp": {
+            "indicador": "0",
+            "aliquota": 0,
+            "aplica": false
+          },
+          "status": {
+            "nfe": "aprovado",
+            "nfce": "aprovado"
+          },
+          "atualizadoEm": null,
+          "atualizadoPor": ""
+        },
+        "createdAt": "2026-01-21T22:58:39.324Z",
+        "updatedAt": "2026-01-22T00:06:15.127Z",
+        "updatedBy": "68ae036a7d50176ccedb8255"
+      },
+      {
+        "code": 2,
+        "name": "5102 - Ração",
+        "fiscal": {
+          "origem": "0",
+          "cest": "17.001.00",
+          "csosn": "102",
+          "cst": "00",
+          "cfop": {
+            "nfe": {
+              "dentroEstado": "5102",
+              "foraEstado": "6102",
+              "transferencia": "5152",
+              "devolucao": "5202",
+              "industrializacao": "5101"
+            },
+            "nfce": {
+              "dentroEstado": "5102",
+              "foraEstado": "6108",
+              "transferencia": "5656",
+              "devolucao": "5202",
+              "industrializacao": "5101"
+            }
+          },
+          "pis": {
+            "codigo": "01",
+            "cst": "01",
+            "aliquota": 1.65,
+            "tipoCalculo": "percentual",
+            "valorBase": null
+          },
+          "cofins": {
+            "codigo": "01",
+            "cst": "01",
+            "aliquota": 7.6,
+            "tipoCalculo": "percentual",
+            "valorBase": null
+          },
+          "ipi": {
+            "cst": "53",
+            "codigoEnquadramento": "999",
+            "aliquota": 0,
+            "tipoCalculo": "percentual",
+            "valorBase": null
+          },
+          "fcp": {
+            "indicador": "0",
+            "aliquota": 0,
+            "aplica": false
+          },
+          "status": {
+            "nfe": "aprovado",
+            "nfce": "aprovado"
+          },
+          "atualizadoEm": null,
+          "atualizadoPor": ""
+        },
+        "createdAt": "2026-01-21T23:03:43.954Z",
+        "updatedAt": "2026-01-21T23:03:43.954Z",
+        "updatedBy": "68ae036a7d50176ccedb8255"
+      }
+    ]
+  }
+}

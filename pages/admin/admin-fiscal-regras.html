@@ -1,137 +1,244 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin: Regras Fiscais Automáticas</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-    <link rel="stylesheet" href="../../src/output.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin: Cadastro de Regra de Imposto</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="../../src/output.css">
 </head>
 <body class="bg-gray-100">
-    <div id="admin-header-placeholder"></div>
+  <div id="admin-header-placeholder"></div>
 
-    <main class="container mx-auto px-4 pt-1 pb-8 min-h-screen">
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
-            <aside class="md:col-span-4">
-                <div id="admin-sidebar-placeholder"></div>
-            </aside>
+  <main class="w-full max-w-none px-4 sm:px-6 lg:px-8 pt-1 pb-8 min-h-screen">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <aside class="md:col-span-4">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
 
-            <div class="md:col-span-4 space-y-8">
-                <section class="bg-white rounded-xl shadow p-6">
-                    <header class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                        <div>
-                            <h1 class="text-2xl font-bold text-gray-800">Regras fiscais automáticas</h1>
-                            <p class="text-gray-600">Sugira e aplique CFOP, CSOSN/CST e tributos automaticamente com base nas informações do produto.</p>
-                        </div>
-                        <div class="flex items-center gap-3">
-                            <button id="fiscal-regras-refresh" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50">
-                                <i class="fas fa-sync-alt"></i>
-                                Atualizar lista
-                            </button>
-                        </div>
-                    </header>
-
-                    <div class="mt-6 grid grid-cols-1 lg:grid-cols-12 gap-4">
-                        <div class="lg:col-span-4">
-                            <label for="fiscal-regras-store" class="block text-sm font-medium text-gray-700">Empresa</label>
-                            <select id="fiscal-regras-store" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">
-                                <option value="">Selecione uma empresa</option>
-                            </select>
-                        </div>
-                        <div class="lg:col-span-3">
-                            <span class="block text-sm font-medium text-gray-700">Modalidade</span>
-                            <div class="mt-1 inline-flex rounded-md border border-gray-200 bg-gray-50 p-1 text-sm font-semibold text-gray-600" role="group">
-                                <button type="button" data-modalidade="nfe" class="fiscal-regras-modalidade-btn inline-flex items-center gap-2 rounded-md px-3 py-2 transition focus:outline-none focus:ring-2 focus:ring-primary">
-                                    <i class="fas fa-file-invoice"></i>
-                                    NF-e
-                                </button>
-                                <button type="button" data-modalidade="nfce" class="fiscal-regras-modalidade-btn inline-flex items-center gap-2 rounded-md px-3 py-2 transition focus:outline-none focus:ring-2 focus:ring-primary">
-                                    <i class="fas fa-receipt"></i>
-                                    NFC-e
-                                </button>
-                            </div>
-                        </div>
-                        <div class="lg:col-span-3">
-                            <label for="fiscal-regras-status" class="block text-sm font-medium text-gray-700">Status</label>
-                            <select id="fiscal-regras-status" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">
-                                <option value="">Todos</option>
-                                <option value="pendente">Pendentes</option>
-                                <option value="parcial">Parciais</option>
-                                <option value="aprovado">Aprovados</option>
-                            </select>
-                        </div>
-                        <div class="lg:col-span-2">
-                            <label for="fiscal-regras-search" class="block text-sm font-medium text-gray-700">Buscar</label>
-                            <input type="text" id="fiscal-regras-search" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="Nome, SKU ou código">
-                        </div>
-                    </div>
-                </section>
-
-                <section id="fiscal-regras-icms" class="hidden bg-white rounded-xl shadow p-6">
-                    <header class="flex items-center justify-between">
-                        <div>
-                            <h2 class="text-lg font-semibold text-gray-800">Referências de ICMS (Simples Nacional)</h2>
-                            <p class="text-sm text-gray-500">Percentuais cadastrados para a empresa selecionada.</p>
-                        </div>
-                        <a href="admin-fiscal-icms-simples.html" class="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline">
-                            <i class="fas fa-external-link-alt"></i>
-                            Gerenciar ICMS
-                        </a>
-                    </header>
-                    <div class="mt-4 overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200 text-sm">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th class="px-4 py-2 text-left font-medium text-gray-700">Código</th>
-                                    <th class="px-4 py-2 text-right font-medium text-gray-700">Percentual</th>
-                                </tr>
-                            </thead>
-                            <tbody id="fiscal-regras-icms-body" class="divide-y divide-gray-100 bg-white"></tbody>
-                        </table>
-                    </div>
-                </section>
-
-                <section class="bg-white rounded-xl shadow p-6">
-                    <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                        <h2 class="text-lg font-semibold text-gray-800">Produtos</h2>
-                        <span id="fiscal-regras-counter" class="text-sm text-gray-500">Selecione uma empresa para carregar os produtos.</span>
-                    </div>
-                    <div class="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                        <div class="flex flex-wrap items-center gap-3 text-sm text-gray-600">
-                            <label for="fiscal-regras-page-size" class="flex items-center gap-2">
-                                Itens por página
-                                <select id="fiscal-regras-page-size" class="rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-primary focus:ring-primary">
-                                    <option value="20" selected>20</option>
-                                    <option value="50">50</option>
-                                    <option value="100">100</option>
-                                    <option value="200">200</option>
-                                </select>
-                            </label>
-                        </div>
-                        <button id="fiscal-regras-apply-all" class="inline-flex items-center justify-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60">
-                            <i class="fas fa-magic"></i>
-                            Aplicar regras sugeridas para todos
-                        </button>
-                    </div>
-                    <div id="fiscal-regras-alert" class="mt-4 hidden rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700"></div>
-                    <div id="fiscal-regras-list" class="mt-6 space-y-4"></div>
-                    <div id="fiscal-regras-empty" class="mt-6 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500 hidden">
-                        Nenhum produto encontrado para os filtros selecionados.
-                    </div>
-                    <div id="fiscal-regras-pagination" class="mt-6 hidden"></div>
-                </section>
+      <div class="md:col-span-4 space-y-6">
+        <section class="bg-white rounded-xl shadow p-6">
+          <header class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h1 class="text-2xl font-bold text-gray-800">Cadastro de Regra de Imposto</h1>
+              <p class="text-gray-600">Cadastre regras padrao com CFOP, CSOSN/CST e tributos para usar como base fiscal.</p>
             </div>
+            <div class="flex flex-wrap items-center gap-3">
+              <button id="fiscal-rule-new" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50">
+                <i class="fas fa-plus"></i>
+                Nova regra
+              </button>
+              <button id="fiscal-rule-refresh" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50">
+                <i class="fas fa-sync-alt"></i>
+                Atualizar lista
+              </button>
+            </div>
+          </header>
+
+          <div class="mt-6 grid grid-cols-1 gap-4 md:grid-cols-12">
+            <div class="md:col-span-4">
+              <label for="fiscal-rule-store" class="block text-sm font-medium text-gray-700">Empresa</label>
+              <select id="fiscal-rule-store" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">
+                <option value="">Selecione uma empresa</option>
+              </select>
+            </div>
+            <div class="md:col-span-8 flex items-end">
+              <div id="fiscal-rule-store-hint" class="hidden w-full rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                Selecione uma empresa para cadastrar regras padrao.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div class="grid grid-cols-1 gap-6">
+          <section class="bg-white rounded-xl shadow p-6">
+            <form id="fiscal-rule-form" class="space-y-6">
+              <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label for="fiscal-rule-code" class="block text-sm font-medium text-gray-700">Codigo</label>
+                  <input id="fiscal-rule-code" type="text" class="mt-1 block w-full rounded-md border border-gray-300 bg-gray-100 px-3 py-2 text-gray-700 focus:border-primary focus:ring-primary" readonly>
+                </div>
+                <div>
+                  <label for="fiscal-rule-name" class="block text-sm font-medium text-gray-700">Nome da regra</label>
+                  <input id="fiscal-rule-name" type="text" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="Regra padrao">
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+                <div class="rounded-lg border border-gray-200 p-4">
+                <h3 class="text-sm font-semibold text-gray-700">Base fiscal</h3>
+                <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label class="block text-xs font-semibold uppercase text-gray-500">Origem
+                    <select data-field="origem" id="fiscal-rule-origem" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary"></select>
+                  </label>
+                  <label class="block text-xs font-semibold uppercase text-gray-500">CEST
+                    <input type="text" data-field="cest" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="0000000">
+                  </label>
+                  <label class="block text-xs font-semibold uppercase text-gray-500">CSOSN
+                    <input type="text" data-field="csosn" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="102">
+                  </label>
+                  <label class="block text-xs font-semibold uppercase text-gray-500">CST
+                    <input type="text" data-field="cst" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="00">
+                  </label>
+                  <label class="block text-xs font-semibold uppercase text-gray-500">Status NF-e
+                    <select data-field="status.nfe" id="fiscal-rule-status-nfe" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary"></select>
+                  </label>
+                  <label class="block text-xs font-semibold uppercase text-gray-500">Status NFC-e
+                    <select data-field="status.nfce" id="fiscal-rule-status-nfce" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary"></select>
+                  </label>
+                </div>
+              </div>
+
+                <div class="rounded-lg border border-gray-200 p-4">
+                <h3 class="text-sm font-semibold text-gray-700">CFOP NF-e</h3>
+                <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label class="block text-xs font-semibold uppercase text-gray-500">Dentro do estado
+                    <input type="text" data-field="cfop.nfe.dentro" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="5102">
+                  </label>
+                  <label class="block text-xs font-semibold uppercase text-gray-500">Fora do estado
+                    <input type="text" data-field="cfop.nfe.fora" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="6102">
+                  </label>
+                  <label class="block text-xs font-semibold uppercase text-gray-500">Transferencia
+                    <input type="text" data-field="cfop.nfe.transferencia" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="5152">
+                  </label>
+                  <label class="block text-xs font-semibold uppercase text-gray-500">Devolucao
+                    <input type="text" data-field="cfop.nfe.devolucao" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="5202">
+                  </label>
+                  <label class="block text-xs font-semibold uppercase text-gray-500">Industrializacao
+                    <input type="text" data-field="cfop.nfe.industrializacao" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="5101">
+                  </label>
+                </div>
+              </div>
+
+                <div class="rounded-lg border border-gray-200 p-4">
+                <h3 class="text-sm font-semibold text-gray-700">CFOP NFC-e</h3>
+                <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label class="block text-xs font-semibold uppercase text-gray-500">Dentro do estado
+                    <input type="text" data-field="cfop.nfce.dentro" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="5102">
+                  </label>
+                  <label class="block text-xs font-semibold uppercase text-gray-500">Fora do estado
+                    <input type="text" data-field="cfop.nfce.fora" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="6108">
+                  </label>
+                  <label class="block text-xs font-semibold uppercase text-gray-500">Transferencia
+                    <input type="text" data-field="cfop.nfce.transferencia" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="5656">
+                  </label>
+                  <label class="block text-xs font-semibold uppercase text-gray-500">Devolucao
+                    <input type="text" data-field="cfop.nfce.devolucao" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="5202">
+                  </label>
+                  <label class="block text-xs font-semibold uppercase text-gray-500">Industrializacao
+                    <input type="text" data-field="cfop.nfce.industrializacao" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="5101">
+                  </label>
+                </div>
+              </div>
+
+                <div class="rounded-lg border border-gray-200 p-4">
+                  <h3 class="text-sm font-semibold text-gray-700">PIS</h3>
+                  <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <label class="block text-xs font-semibold uppercase text-gray-500">Codigo
+                      <input type="text" data-field="pis.codigo" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">
+                    </label>
+                    <label class="block text-xs font-semibold uppercase text-gray-500">CST
+                      <input type="text" data-field="pis.cst" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">
+                    </label>
+                    <label class="block text-xs font-semibold uppercase text-gray-500">Aliquota (%)
+                      <input type="number" step="0.01" data-field="pis.aliquota" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">
+                    </label>
+                    <label class="block text-xs font-semibold uppercase text-gray-500">Tipo de calculo
+                      <select data-field="pis.tipo" id="fiscal-rule-pis-tipo" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary"></select>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="rounded-lg border border-gray-200 p-4">
+                  <h3 class="text-sm font-semibold text-gray-700">COFINS</h3>
+                  <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <label class="block text-xs font-semibold uppercase text-gray-500">Codigo
+                      <input type="text" data-field="cofins.codigo" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">
+                    </label>
+                    <label class="block text-xs font-semibold uppercase text-gray-500">CST
+                      <input type="text" data-field="cofins.cst" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">
+                    </label>
+                    <label class="block text-xs font-semibold uppercase text-gray-500">Aliquota (%)
+                      <input type="number" step="0.01" data-field="cofins.aliquota" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">
+                    </label>
+                    <label class="block text-xs font-semibold uppercase text-gray-500">Tipo de calculo
+                      <select data-field="cofins.tipo" id="fiscal-rule-cofins-tipo" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary"></select>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="rounded-lg border border-gray-200 p-4">
+                  <h3 class="text-sm font-semibold text-gray-700">IPI</h3>
+                  <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <label class="block text-xs font-semibold uppercase text-gray-500">CST
+                      <input type="text" data-field="ipi.cst" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">
+                    </label>
+                    <label class="block text-xs font-semibold uppercase text-gray-500">Enquadramento
+                      <input type="text" data-field="ipi.enquadramento" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">
+                    </label>
+                    <label class="block text-xs font-semibold uppercase text-gray-500">Aliquota (%)
+                      <input type="number" step="0.01" data-field="ipi.aliquota" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">
+                    </label>
+                    <label class="block text-xs font-semibold uppercase text-gray-500">Tipo de calculo
+                      <select data-field="ipi.tipo" id="fiscal-rule-ipi-tipo" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary"></select>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="rounded-lg border border-gray-200 p-4">
+                  <h3 class="text-sm font-semibold text-gray-700">FCP</h3>
+                  <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <label class="block text-xs font-semibold uppercase text-gray-500">Indicador
+                      <select data-field="fcp.indicador" id="fiscal-rule-fcp-indicador" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary"></select>
+                    </label>
+                    <label class="block text-xs font-semibold uppercase text-gray-500">Aliquota (%)
+                      <input type="number" step="0.01" data-field="fcp.aliquota" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">
+                    </label>
+                    <label class="flex items-center gap-2 text-xs font-semibold uppercase text-gray-500 sm:col-span-2">
+                      <input type="checkbox" data-field="fcp.aplica" class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary">
+                      Aplicar FCP
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <button type="button" id="fiscal-rule-cancel" class="hidden inline-flex items-center justify-center gap-2 rounded-md border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-50">
+                  <i class="fas fa-times"></i>
+                  Cancelar edicao
+                </button>
+                <button type="submit" id="fiscal-rule-save" class="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
+                  <i class="fas fa-save"></i>
+                  Salvar regra
+                </button>
+              </div>
+            </form>
+          </section>
+
         </div>
-    </main>
 
-    <div id="admin-footer-placeholder"></div>
+        <section class="bg-white rounded-xl shadow p-6">
+          <header class="flex items-center justify-between">
+            <h2 class="text-lg font-semibold text-gray-800">Regras cadastradas</h2>
+            <span id="fiscal-rule-count" class="text-sm text-gray-500">Nenhuma regra cadastrada</span>
+          </header>
+          <div id="fiscal-rule-list" class="mt-4 space-y-3"></div>
+          <div id="fiscal-rule-empty" class="mt-4 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500 hidden">
+            Nenhuma regra cadastrada para esta empresa.
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
 
-    <script>var basePath = '../../';</script>
-    <script src="../../scripts/core/config.js"></script>
-    <script src="../../scripts/core/ui.js"></script>
-    <script src="../../scripts/core/main.js"></script>
-    <script src="../../scripts/admin/admin.js"></script>
-    <script src="../../scripts/admin/admin-fiscal-regras.js"></script>
+  <div id="admin-footer-placeholder"></div>
+
+  <script>var basePath = '../../';</script>
+  <script src="../../scripts/core/config.js"></script>
+  <script src="../../scripts/core/ui.js"></script>
+  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/admin/admin.js"></script>
+  <script src="../../scripts/admin/admin-fiscal-regras.js"></script>
   <script src="/scripts/common/modal-bridge.js"></script>
 </body>
 </html>

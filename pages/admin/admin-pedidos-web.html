@@ -1,0 +1,203 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin: Pedidos Web - E o Bicho</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="../../src/output.css">
+</head>
+<body class="bg-gray-100">
+  <div id="admin-header-placeholder"></div>
+
+  <main class="container mx-auto px-4 pt-1 pb-10 min-h-screen">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <aside class="md:col-span-4">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
+
+      <div class="md:col-span-4 space-y-6">
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+          <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div class="space-y-2">
+              <nav aria-label="Breadcrumb" class="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                <span class="inline-flex items-center gap-2 text-primary"><i class="fas fa-cash-register"></i> Vendas</span>
+                <i class="fas fa-angle-right text-gray-400"></i>
+                <span class="text-gray-600">Pedidos Web</span>
+              </nav>
+              <div>
+                <h1 class="text-2xl font-bold text-gray-800">Pedidos Web</h1>
+                <p class="text-gray-600 mt-1">Acompanhe apenas os pedidos com origem ECOMMERCE e controle todo o fluxo.</p>
+              </div>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <button type="button" id="web-orders-refresh" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">
+                <i class="fas fa-rotate text-primary"></i>
+                Atualizar
+              </button>
+              <button type="button" id="web-orders-export" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-secondary transition">
+                <i class="fas fa-file-export"></i>
+                Exportar
+              </button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <article class="rounded-xl border border-gray-100 bg-gray-50 p-4">
+              <p class="text-xs uppercase tracking-wide text-gray-500">Recebidos</p>
+              <p class="mt-2 text-2xl font-bold text-gray-800" id="web-orders-count-received">0</p>
+              <p class="text-xs text-gray-500 mt-1">Origem: ECOMMERCE</p>
+            </article>
+            <article class="rounded-xl border border-gray-100 bg-gray-50 p-4">
+              <p class="text-xs uppercase tracking-wide text-gray-500">Aguardando pagamento</p>
+              <p class="mt-2 text-2xl font-bold text-gray-800" id="web-orders-count-pending">0</p>
+              <p class="text-xs text-gray-500 mt-1">Transacoes pendentes</p>
+            </article>
+            <article class="rounded-xl border border-gray-100 bg-gray-50 p-4">
+              <p class="text-xs uppercase tracking-wide text-gray-500">Pagos</p>
+              <p class="mt-2 text-2xl font-bold text-gray-800" id="web-orders-count-paid">0</p>
+              <p class="text-xs text-gray-500 mt-1">Pagamentos aprovados</p>
+            </article>
+            <article class="rounded-xl border border-gray-100 bg-gray-50 p-4">
+              <p class="text-xs uppercase tracking-wide text-gray-500">Total hoje</p>
+              <p class="mt-2 text-2xl font-bold text-gray-800" id="web-orders-count-total">R$ 0,00</p>
+              <p class="text-xs text-gray-500 mt-1">Somente ecommerce</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <details class="group">
+            <summary class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between cursor-pointer list-none">
+              <div>
+                <h2 class="text-lg font-semibold text-gray-800">Filtros obrigatorios</h2>
+                <p class="text-sm text-gray-600">Utilize os filtros para localizar pedidos ecommerce.</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <span id="web-orders-feedback" class="text-xs text-gray-500"></span>
+                <i class="fas fa-chevron-down text-gray-400"></i>
+              </div>
+            </summary>
+
+            <div class="mt-4">
+              <form id="web-orders-filters" class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            <div class="lg:col-span-3 space-y-2">
+              <label for="web-orders-start" class="block text-sm font-medium text-gray-700">Periodo inicial</label>
+              <input type="date" id="web-orders-start" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+            </div>
+            <div class="lg:col-span-3 space-y-2">
+              <label for="web-orders-end" class="block text-sm font-medium text-gray-700">Periodo final</label>
+              <input type="date" id="web-orders-end" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+            </div>
+            <div class="lg:col-span-3 space-y-2">
+              <label for="web-orders-status" class="block text-sm font-medium text-gray-700">Status do pedido</label>
+              <select id="web-orders-status" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="">Todos</option>
+                <option value="RECEBIDO">Recebido</option>
+                <option value="AGUARDANDO_PAGAMENTO">Aguardando pagamento</option>
+                <option value="PAGO">Pago</option>
+                <option value="EM_SEPARACAO">Em separacao</option>
+                <option value="PRONTO_PARA_ENVIO">Pronto para envio</option>
+                <option value="ENVIADO">Enviado</option>
+                <option value="CONCLUIDO">Concluido</option>
+                <option value="CANCELADO">Cancelado</option>
+                <option value="DEVOLVIDO">Devolvido</option>
+              </select>
+            </div>
+            <div class="lg:col-span-3 space-y-2">
+              <label for="web-orders-payment-status" class="block text-sm font-medium text-gray-700">Status do pagamento</label>
+              <select id="web-orders-payment-status" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="">Todos</option>
+                <option value="pending">Pendente</option>
+                <option value="in_process">Em analise</option>
+                <option value="approved">Aprovado</option>
+                <option value="rejected">Recusado</option>
+                <option value="cancelled">Cancelado</option>
+                <option value="refunded">Estornado</option>
+              </select>
+            </div>
+            <div class="lg:col-span-3 space-y-2">
+              <label for="web-orders-payment-method" class="block text-sm font-medium text-gray-700">Forma de pagamento</label>
+              <select id="web-orders-payment-method" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="">Todas</option>
+                <option value="card">Cartao</option>
+                <option value="pix">Pix</option>
+                <option value="boleto">Boleto</option>
+              </select>
+            </div>
+            <div class="lg:col-span-3 space-y-2">
+              <label for="web-orders-delivery-type" class="block text-sm font-medium text-gray-700">Tipo de entrega</label>
+              <select id="web-orders-delivery-type" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="">Todos</option>
+                <option value="entrega">Entrega</option>
+                <option value="retirada">Retirada</option>
+              </select>
+            </div>
+            <div class="lg:col-span-3 space-y-2">
+              <label for="web-orders-customer" class="block text-sm font-medium text-gray-700">Cliente</label>
+              <input id="web-orders-customer" type="text" placeholder="Nome, CPF ou telefone" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+            </div>
+            <div class="lg:col-span-3 space-y-2">
+              <label for="web-orders-number" class="block text-sm font-medium text-gray-700">Numero do pedido</label>
+              <input id="web-orders-number" type="text" placeholder="Ex: 10239" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+            </div>
+            <div class="lg:col-span-3 space-y-2">
+              <label for="web-orders-invoice" class="block text-sm font-medium text-gray-700">Numero da nota fiscal</label>
+              <input id="web-orders-invoice" type="text" placeholder="NF-e / NFC-e" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+            </div>
+            <div class="lg:col-span-3 space-y-2">
+              <label for="web-orders-store" class="block text-sm font-medium text-gray-700">Loja / filial</label>
+              <select id="web-orders-store" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="">Carregando...</option>
+              </select>
+            </div>
+            <div class="lg:col-span-3 space-y-2">
+              <label for="web-orders-origin" class="block text-sm font-medium text-gray-700">Origem</label>
+              <input id="web-orders-origin" type="text" value="ECOMMERCE" disabled class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
+            </div>
+            <div class="lg:col-span-12 flex flex-wrap items-end gap-3">
+              <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-white hover:bg-secondary transition">
+                <i class="fas fa-filter"></i>
+                Aplicar filtros
+              </button>
+              <button type="button" id="web-orders-reset" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">
+                <i class="fas fa-rotate-left"></i>
+                Limpar filtros
+              </button>
+            </div>
+              </form>
+            </div>
+          </details>
+        </section>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+          <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Listagem de pedidos ecommerce</h2>
+              <p class="text-sm text-gray-600">Pedidos do site nao aparecem no PDV.</p>
+            </div>
+            <span id="web-orders-results-count" class="text-xs text-gray-500">0 pedidos</span>
+          </div>
+
+          <div id="web-orders-cards" class="space-y-4">
+            <div class="rounded-xl border border-gray-100 bg-gray-50 px-4 py-6 text-center text-sm text-gray-500">
+              Nenhum pedido ecommerce carregado.
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <div id="modal-placeholder"></div>
+  <div id="confirm-modal-placeholder"></div>
+  <div id="admin-footer-placeholder"></div>
+
+  <script>var basePath = '../../';</script>
+  <script src="../../scripts/core/config.js"></script>
+  <script src="../../scripts/core/ui.js"></script>
+  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/admin/admin.js"></script>
+  <script src="../../scripts/admin/admin-pedidos-web.js"></script>
+</body>
+</html>

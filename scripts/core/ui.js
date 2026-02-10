@@ -254,6 +254,67 @@
   };
 
   /* ------------------------------------------------------------------------
+   * Global fetch guard: if API responds with token expired, force logout
+   * ---------------------------------------------------------------------- */
+  (function installFetchAuthGuard() {
+    const originalFetch = window.fetch;
+    if (typeof originalFetch !== 'function') return;
+    if (window.__eobichoFetchAuthGuard) return;
+    window.__eobichoFetchAuthGuard = true;
+
+    let logoutTriggered = false;
+    const triggerLogout = () => {
+      if (logoutTriggered) return;
+      logoutTriggered = true;
+      if (typeof window.logout === 'function') {
+        window.logout();
+      } else {
+        clearSession();
+        doRedirect(`${BASE}pages/login.html`);
+      }
+    };
+
+    const isApiUrl = (url) => {
+      if (!url) return false;
+      try {
+        const target = new URL(url, window.location.origin);
+        const base = (window.API_CONFIG && window.API_CONFIG.BASE_URL) ? window.API_CONFIG.BASE_URL : '/api';
+        const api = new URL(base, window.location.origin);
+        return target.origin === api.origin && target.pathname.startsWith(api.pathname);
+      } catch (_) {
+        return false;
+      }
+    };
+
+    const shouldLogoutFrom = (resp, payload) => {
+      const reason = resp && resp.headers ? resp.headers.get('x-auth-reason') : '';
+      if (reason === 'token-expired') return true;
+      if (payload && (payload.logout === true || payload.code === 'TOKEN_EXPIRED')) return true;
+      const msg = (payload && payload.message) ? String(payload.message) : '';
+      return /token\s+expirad/i.test(msg);
+    };
+
+    window.fetch = async (input, init) => {
+      const resp = await originalFetch(input, init);
+      try {
+        if (resp && resp.status === 401) {
+          const url = typeof input === 'string' ? input : (input && input.url) ? input.url : '';
+          if (isApiUrl(url)) {
+            let payload = null;
+            try { payload = await resp.clone().json(); } catch (_) { payload = null; }
+            if (shouldLogoutFrom(resp, payload)) {
+              triggerLogout();
+            }
+          }
+        }
+      } catch (err) {
+        console.error('fetch auth guard:', err);
+      }
+      return resp;
+    };
+  })();
+
+  /* ------------------------------------------------------------------------
    * Fechar modais com ESC (se estiverem visÃ­veis)
    * ---------------------------------------------------------------------- */
   document.addEventListener('keydown', (e) => {

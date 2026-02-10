@@ -11,6 +11,11 @@ const ExchangeItemSchema = new mongoose.Schema(
     discountValue: { type: Number, default: 0 },
     depositId: { type: mongoose.Schema.Types.ObjectId, ref: 'Deposit', default: null },
     depositLabel: { type: String, trim: true, default: '' },
+    sellerId: { type: String, trim: true, default: '' },
+    sellerCode: { type: String, trim: true, default: '' },
+    sellerName: { type: String, trim: true, default: '' },
+    sourceSaleId: { type: String, trim: true, default: '' },
+    sourceSaleCode: { type: String, trim: true, default: '' },
   },
   { _id: false }
 );
@@ -42,6 +47,16 @@ const ExchangeSchema = new mongoose.Schema(
       taken: { type: Number, default: 0 },
     },
     differenceValue: { type: Number, default: 0 },
+    sourceSales: {
+      type: [
+        {
+          saleId: { type: String, trim: true, default: '' },
+          saleCode: { type: String, trim: true, default: '' },
+          saleCodeLabel: { type: String, trim: true, default: '' },
+        },
+      ],
+      default: [],
+    },
     inventoryProcessed: { type: Boolean, default: false },
     inventoryProcessedAt: { type: Date, default: null },
     finalizedAt: { type: Date, default: null },

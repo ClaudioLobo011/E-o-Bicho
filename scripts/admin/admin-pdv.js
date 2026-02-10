@@ -280,6 +280,7 @@
       open: false,
       saleId: '',
       exchangeId: '',
+      sourceSales: [],
     },
     exchangeHistory: {
       open: false,
@@ -1712,11 +1713,11 @@
 
   };
 
-  const getSaleReceiptSnapshot = (
-    items = state.itens,
-    payments = state.vendaPagamentos,
-    options = {}
-  ) => {
+    const getSaleReceiptSnapshot = (
+      items = state.itens,
+      payments = state.vendaPagamentos,
+      options = {}
+    ) => {
     const saleItems = Array.isArray(items) ? items : [];
     if (!state.selectedStore || !state.selectedPdv || !saleItems.length) {
       return null;
@@ -1774,22 +1775,22 @@
     const acrescimoValor = Math.max(0, safeNumber(additionSource));
     const bruto = saleItems.reduce((sum, item) => sum + safeNumber(item.subtotal), 0);
     const liquidoValor = Math.max(0, bruto + acrescimoValor - descontoValor);
-    const pagamentoItems = (Array.isArray(payments) ? payments : []).map((payment) => {
-      const parcelasLabel = payment.parcelas && payment.parcelas > 1 ? ` (${payment.parcelas}x)` : '';
-      return {
-        label: `${payment.label || 'Pagamento'}${parcelasLabel}`,
-        formatted: formatCurrency(payment.valor || 0),
-        valor: safeNumber(payment.valor),
+      const pagamentoItems = (Array.isArray(payments) ? payments : []).map((payment) => {
+        const parcelasLabel = payment.parcelas && payment.parcelas > 1 ? ` (${payment.parcelas}x)` : '';
+        return {
+          label: `${payment.label || 'Pagamento'}${parcelasLabel}`,
+          formatted: formatCurrency(payment.valor || 0),
+          valor: safeNumber(payment.valor),
       };
     });
     const pagoValor = pagamentoItems.reduce((sum, item) => sum + safeNumber(item.valor), 0);
     const trocoValor = Math.max(0, pagoValor - liquidoValor);
 
-    const promotionTotals = {
-      general: 0,
-      conditional: 0,
-      club: 0,
-    };
+      const promotionTotals = {
+        general: 0,
+        conditional: 0,
+        club: 0,
+      };
 
     saleItems.forEach((item) => {
       if (item?.usePromotion === false) {
@@ -1884,33 +1885,33 @@
         }
       : null;
 
-    return {
-      meta: {
-        store: storeLabel,
-        pdv: pdvLabel,
-        data: nowLabel,
+      return {
+        meta: {
+          store: storeLabel,
+          pdv: pdvLabel,
+          data: nowLabel,
         operador: operatorName,
         saleCode,
       },
       cliente,
       delivery: deliveryAddress,
       itens,
-      totais: {
-        bruto: formatCurrency(bruto),
-        desconto: formatCurrency(descontoValor),
-        descontoValor,
-        acrescimo: formatCurrency(acrescimoValor),
-        acrescimoValor,
-        liquido: formatCurrency(liquidoValor),
-        pago: formatCurrency(pagoValor),
-        troco: formatCurrency(trocoValor),
-        trocoValor,
-      },
-      descontosPromocao: {
-        total: promotionTotal,
-        entries: promotionEntries,
-      },
-      pagamentos: {
+        totais: {
+          bruto: formatCurrency(bruto),
+          desconto: formatCurrency(descontoValor),
+          descontoValor,
+          acrescimo: formatCurrency(acrescimoValor),
+          acrescimoValor,
+          liquido: formatCurrency(liquidoValor),
+          pago: formatCurrency(pagoValor),
+          troco: formatCurrency(trocoValor),
+          trocoValor,
+        },
+        descontosPromocao: {
+          total: promotionTotal,
+          entries: promotionEntries,
+        },
+        pagamentos: {
         items: pagamentoItems,
         total: pagoValor,
         formattedTotal: formatCurrency(pagoValor),
@@ -3952,6 +3953,62 @@
     return parts.slice(0, 2).join(' ');
   };
 
+  const getSellerId = (seller) => normalizeId(seller?._id || seller?.id || '');
+
+  const buildSellerSnapshot = (seller) => {
+    if (!seller || typeof seller !== 'object') {
+      return { id: '', code: '', name: '' };
+    }
+    return {
+      id: getSellerId(seller),
+      code: getSellerCode(seller),
+      name: getSellerDisplayName(seller),
+    };
+  };
+
+  const resolveItemSellerSnapshot = (item, fallbackSeller = null) => {
+    const itemSeller = item?.seller || item?.vendedor || null;
+    const id = normalizeId(
+      item?.sellerId ||
+        item?.seller_id ||
+        item?.vendedor_id ||
+        itemSeller?._id ||
+        itemSeller?.id ||
+        ''
+    );
+    const code = sanitizeSellerCode(
+      item?.sellerCode ||
+        item?.seller_code ||
+        item?.vendedorCodigo ||
+        itemSeller?.codigo ||
+        itemSeller?.codigoCliente ||
+        ''
+    );
+    const name = String(
+      item?.sellerName || item?.seller_name || item?.vendedorNome || itemSeller?.nome || ''
+    ).trim();
+    if (id || code || name) {
+      return {
+        id,
+        code,
+        name: name || (itemSeller ? getSellerDisplayName(itemSeller) : ''),
+      };
+    }
+    return buildSellerSnapshot(fallbackSeller);
+  };
+
+  const isSameSellerForItem = (item, sellerInfo) => {
+    const info = sellerInfo || { id: '', code: '' };
+    const itemId = normalizeId(item?.sellerId || item?.seller_id || item?.vendedor_id || '');
+    const itemCode = sanitizeSellerCode(item?.sellerCode || item?.seller_code || item?.vendedorCodigo || '');
+    if (!info.id && !info.code) {
+      return !itemId && !itemCode;
+    }
+    if (info.id && itemId) return info.id === itemId;
+    if (info.code && itemCode) return info.code === itemCode;
+    return false;
+  };
+
   const getActiveSellerCompanyId = () => {
     const pdv = findPdvById(state.selectedPdv);
     const candidates = [state.activePdvStoreId, getPdvCompanyId(pdv), state.selectedStore];
@@ -4292,10 +4349,11 @@
     try {
       const token = getToken();
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const response = await fetch(
-        `${API_BASE}/func/clientes/buscar?q=${encodeURIComponent(query)}&limit=8`,
-        { headers, signal: controller.signal }
-      );
+      const url =
+        `${API_BASE}/func/clientes/buscar?q=` +
+        encodeURIComponent(query) +
+        '&limit=8';
+      const response = await fetch(url, { headers, signal: controller.signal });
       if (!response.ok) {
         throw new Error('Nao foi possivel buscar clientes.');
       }
@@ -4413,10 +4471,11 @@
     try {
       const token = getToken();
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const response = await fetch(
-        `${API_BASE}/func/clientes/buscar?q=${encodeURIComponent(query)}&limit=8`,
-        { headers, signal: controller.signal }
-      );
+      const url =
+        `${API_BASE}/func/clientes/buscar?q=` +
+        encodeURIComponent(query) +
+        '&limit=8';
+      const response = await fetch(url, { headers, signal: controller.signal });
       if (!response.ok) {
         throw new Error('Nao foi possivel buscar clientes.');
       }
@@ -4665,6 +4724,11 @@
     row.dataset.total = formatDecimalValue(totalValue, 2);
     if (depositId) row.dataset.depositId = depositId;
     if (productId) row.dataset.productId = productId;
+    if (values.sellerId) row.dataset.sellerId = String(values.sellerId);
+    if (values.sellerCode) row.dataset.sellerCode = String(values.sellerCode);
+    if (values.sellerName) row.dataset.sellerName = String(values.sellerName);
+    if (values.sourceSaleId) row.dataset.sourceSaleId = String(values.sourceSaleId);
+    if (values.sourceSaleCode) row.dataset.sourceSaleCode = String(values.sourceSaleCode);
     body.appendChild(row);
   };
 
@@ -4672,6 +4736,33 @@
     const candidate = item?.id || item?.codigoInterno || item?.codigo || item?.barcode || '';
     const base = candidate ? String(candidate) : 'item';
     return `${base}-${index}`;
+  };
+
+  const buildExchangeSourceSale = (sale) => {
+    if (!sale || typeof sale !== 'object') return null;
+    const saleId = sale.id || sale._id || '';
+    const saleCode = sale.saleCodeLabel || sale.saleCode || '';
+    if (!saleId && !saleCode) return null;
+    return {
+      saleId: saleId ? String(saleId) : '',
+      saleCode: saleCode ? String(saleCode) : '',
+      saleCodeLabel: sale.saleCodeLabel ? String(sale.saleCodeLabel) : '',
+    };
+  };
+
+  const setExchangeSourceSales = (sales = []) => {
+    const entries = Array.isArray(sales) ? sales.map(buildExchangeSourceSale).filter(Boolean) : [];
+    state.exchangeModal.sourceSales = entries;
+  };
+
+  const getExchangeReferenceSaleCode = () => {
+    const entries = Array.isArray(state.exchangeModal.sourceSales)
+      ? state.exchangeModal.sourceSales
+      : [];
+    if (!entries.length) return '';
+    const codes = entries.map((entry) => entry.saleCode || entry.saleCodeLabel).filter(Boolean);
+    if (!codes.length) return '';
+    return codes.slice(0, 3).join(', ');
   };
 
   const normalizeSaleCode = (value) => String(value || '').trim().toLowerCase();
@@ -5032,6 +5123,7 @@
       notify('Selecione ao menos uma venda para importar.', 'warning');
       return;
     }
+    setExchangeSourceSales(selectedSales);
     if (state.exchangeHistory.customer) {
       applyExchangeCustomerSelection(state.exchangeHistory.customer);
     }
@@ -5042,18 +5134,27 @@
       ]?.text || elements.exchangeReturnDeposit?.value || '-';
     selectedSales.forEach((sale) => {
       const items = Array.isArray(sale.items) ? sale.items : [];
+      const sourceSaleId = sale.id || sale._id || '';
+      const sourceSaleCode = sale.saleCodeLabel || sale.saleCode || '';
       items.forEach((item) => {
         const quantityLabel = getHistoryItemQuantityLabel(item);
         const unitLabel = getHistoryItemUnitLabel(item);
         const totalLabel = getHistoryItemTotalLabel(item);
+        const sellerInfo = resolveItemSellerSnapshot(item, sale.seller);
         appendExchangeRowFromValues('return', {
           code: getExchangeHistoryItemCode(item),
           desc: getExchangeHistoryItemDescription(item),
           quantity: parseDecimalInput(quantityLabel),
           unitValue: parseDecimalInput(unitLabel),
           totalValue: parseDecimalInput(totalLabel),
+          productId: item.productId || item.id || '',
           depositId,
           depositLabel,
+          sellerId: sellerInfo.id,
+          sellerCode: sellerInfo.code,
+          sellerName: sellerInfo.name,
+          sourceSaleId,
+          sourceSaleCode,
         });
       });
     });
@@ -5197,6 +5298,7 @@
       notify('Selecione os produtos que deseja importar.', 'warning');
       return;
     }
+    setExchangeSourceSales([sale]);
     await resolveExchangeCustomerFromSale(sale);
     const items = Array.isArray(sale.items) ? sale.items : [];
     const depositId = elements.exchangeReturnDeposit?.value || '';
@@ -5204,17 +5306,26 @@
       elements.exchangeReturnDeposit?.options?.[
         elements.exchangeReturnDeposit?.selectedIndex ?? 0
       ]?.text || elements.exchangeReturnDeposit?.value || '-';
+    const sourceSaleId = sale.id || sale._id || '';
+    const sourceSaleCode = sale.saleCodeLabel || sale.saleCode || '';
     items.forEach((item, index) => {
       const key = getExchangeSaleItemKey(item, index);
       if (!selectedSet.has(key)) return;
+      const sellerInfo = resolveItemSellerSnapshot(item, sale.seller);
       appendExchangeRowFromValues('return', {
         code: getExchangeHistoryItemCode(item),
         desc: getExchangeHistoryItemDescription(item),
         quantity: parseDecimalInput(getHistoryItemQuantityLabel(item)),
         unitValue: parseDecimalInput(getHistoryItemUnitLabel(item)),
         totalValue: parseDecimalInput(getHistoryItemTotalLabel(item)),
+        productId: item.productId || item.id || '',
         depositId,
         depositLabel,
+        sellerId: sellerInfo.id,
+        sellerCode: sellerInfo.code,
+        sellerName: sellerInfo.name,
+        sourceSaleId,
+        sourceSaleCode,
       });
     });
     updateExchangeTableCounts();
@@ -5523,6 +5634,11 @@
         const depositLabel = parseExchangeCellValue(cells[isReturn ? 5 : 6]);
         const depositId = row.dataset.depositId || '';
         const productId = row.dataset.productId || '';
+        const sellerId = row.dataset.sellerId || '';
+        const sellerCode = row.dataset.sellerCode || '';
+        const sellerName = row.dataset.sellerName || '';
+        const sourceSaleId = row.dataset.sourceSaleId || '';
+        const sourceSaleCode = row.dataset.sourceSaleCode || '';
         if (!code && !description) return null;
         return {
           code,
@@ -5534,6 +5650,11 @@
           discountValue,
           depositId,
           depositLabel,
+          sellerId,
+          sellerCode,
+          sellerName,
+          sourceSaleId,
+          sourceSaleCode,
         };
       })
       .filter(Boolean);
@@ -5564,6 +5685,11 @@
         totalValue: item.totalValue,
         depositId: item.depositId,
         depositLabel: item.depositLabel,
+        sellerId: item.sellerId,
+        sellerCode: item.sellerCode,
+        sellerName: item.sellerName,
+        sourceSaleId: item.sourceSaleId,
+        sourceSaleCode: item.sourceSaleCode,
       });
     });
     takenItems.forEach((item) => {
@@ -5577,6 +5703,11 @@
         discountValue: item.discountValue,
         depositId: item.depositId,
         depositLabel: item.depositLabel,
+        sellerId: item.sellerId,
+        sellerCode: item.sellerCode,
+        sellerName: item.sellerName,
+        sourceSaleId: item.sourceSaleId,
+        sourceSaleCode: item.sourceSaleCode,
       });
     });
     updateExchangeTableCounts();
@@ -5612,6 +5743,13 @@
     if (elements.exchangeNotes) {
       elements.exchangeNotes.value = exchange.notes || '';
     }
+    state.exchangeModal.sourceSales = Array.isArray(exchange.sourceSales)
+      ? exchange.sourceSales.map((entry) => ({
+          saleId: entry.saleId || entry.sale || '',
+          saleCode: entry.saleCode || entry.code || '',
+          saleCodeLabel: entry.saleCodeLabel || '',
+        }))
+      : [];
     applyExchangeItemsToTables(exchange.returnedItems || [], exchange.takenItems || []);
   };
 
@@ -5675,7 +5813,6 @@
       notify('Nenhuma troca carregada para excluir.', 'warning');
       return;
     }
-    const confirmAction = () => true;
     if (typeof window?.showModal === 'function') {
       return window.showModal({
         title: 'Excluir troca',
@@ -5728,6 +5865,9 @@
       const returnedTotal = sumExchangeTotals(elements.exchangeReturnBody);
       const takenTotal = sumExchangeTotals(elements.exchangeTakeBody);
       const differenceValue = returnedTotal - takenTotal;
+      const sourceSales = Array.isArray(state.exchangeModal.sourceSales)
+        ? state.exchangeModal.sourceSales
+        : [];
       const payload = {
         pdvId: state.selectedPdv || '',
         companyId: getExchangeCompanyId(),
@@ -5745,6 +5885,7 @@
         returnedItems,
         takenItems,
         differenceValue,
+        sourceSales,
       };
       const token = getToken();
       const isEditing = Boolean(state.exchangeModal.exchangeId);
@@ -5858,7 +5999,25 @@
       notify('Nenhum produto encontrado para gerar a venda da diferenca.', 'warning');
       return false;
     }
-    state.itens = items;
+    const exchangeCode = elements.exchangeCode?.value || '';
+    const sourceSaleCode = getExchangeReferenceSaleCode();
+    const sellerCode = elements.exchangeSeller?.value || '';
+    const seller = sellerCode ? findSellerByCode(sellerCode) : null;
+    const sellerInfo = seller ? buildSellerSnapshot(seller) : { id: '', code: '', name: '' };
+    if (!sellerInfo.code && sellerCode) sellerInfo.code = sanitizeSellerCode(sellerCode);
+    if (!sellerInfo.name && elements.exchangeSellerName?.value) {
+      sellerInfo.name = elements.exchangeSellerName.value;
+    }
+    state.itens = items.map((item) => ({
+      ...item,
+      sellerId: sellerInfo.id,
+      sellerCode: sellerInfo.code,
+      sellerName: sellerInfo.name,
+      origem_comissao: 'TROCA_DIFERENCA',
+      status_comissao: 'ATIVA',
+      sourceSaleCode,
+      exchangeCode,
+    }));
     state.vendaPagamentos = [];
     state.vendaDesconto = Math.max(0, safeNumber(returnedTotal));
     state.vendaAcrescimo = 0;
@@ -10493,18 +10652,20 @@
     }
     const budgetIdToFinalize = state.activeBudgetId || '';
     const budgetToFinalize = budgetIdToFinalize ? findBudgetById(budgetIdToFinalize) : null;
-    const saleCode = state.currentSaleCode || '';
-    const itensSnapshot = state.itens.map((item) => ({ ...item }));
-    const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
-    const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda, { saleCode });
-    const saleDate = new Date();
-    const saleReceivables = buildSaleReceivables({
-      payments: pagamentosVenda,
-      customer: state.vendaCliente,
-      saleCode,
-      items: itensSnapshot,
-      saleDate,
-    });
+      const saleCode = state.currentSaleCode || '';
+      const itensSnapshot = state.itens.map((item) => ({ ...item }));
+      const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
+      const saleDate = new Date();
+      const saleReceivables = buildSaleReceivables({
+        payments: pagamentosVenda,
+        customer: state.vendaCliente,
+        saleCode,
+        items: itensSnapshot,
+        saleDate,
+      });
+      const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda, {
+        saleCode,
+      });
     const cashContributions = normalizeCashContributions(
       registerSaleOnCaixa(pagamentosVenda, total, saleCode)
     );
@@ -10739,32 +10900,33 @@
       notify('O valor pago é insuficiente para registrar o delivery.', 'warning');
       return;
     }
-    const saleCode = state.currentSaleCode || '';
-    const itensSnapshot = state.itens.map((item) => ({ ...item }));
-    const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
-    const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda, {
-      deliveryAddress: state.deliverySelectedAddress,
-      saleCode,
-    });
+      const saleCode = state.currentSaleCode || '';
+      const itensSnapshot = state.itens.map((item) => ({ ...item }));
+      const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
+      const saleDate = new Date();
+      const saleReceivables = buildSaleReceivables({
+        payments: pagamentosVenda,
+        customer: state.vendaCliente,
+        saleCode,
+        items: itensSnapshot,
+        saleDate,
+      });
+      const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda, {
+        deliveryAddress: state.deliverySelectedAddress,
+        saleCode,
+      });
     const statusOverride = resolveDeliveryStatusOverride(state.deliveryStatusOverride);
-    const orderRecord = createDeliveryOrderRecord(
-      saleSnapshot,
-      state.deliverySelectedAddress,
-      pagamentosVenda,
-      total,
-      itensSnapshot,
-      state.vendaDesconto,
-      state.vendaAcrescimo,
-      saleCode,
-      { status: statusOverride }
-    );
-    const saleReceivables = buildSaleReceivables({
-      payments: pagamentosVenda,
-      customer: state.vendaCliente,
-      saleCode,
-      items: itensSnapshot,
-      saleDate: orderRecord.createdAt,
-    });
+      const orderRecord = createDeliveryOrderRecord(
+        saleSnapshot,
+        state.deliverySelectedAddress,
+        pagamentosVenda,
+        total,
+        itensSnapshot,
+        state.vendaDesconto,
+        state.vendaAcrescimo,
+        saleCode,
+        { status: statusOverride }
+      );
     const cashContributions = normalizeCashContributions([]);
     const isIfoodSale = isIfoodSaleContext({
       items: itensSnapshot,
@@ -10845,17 +11007,6 @@
       order.saleCode ||
       order.receiptSnapshot?.meta?.saleCode ||
       '';
-    const saleCode = existingSaleCode || state.currentSaleCode || '';
-    const itensSnapshot = state.itens.map((item) => ({ ...item }));
-    const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
-    const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda, {
-      deliveryAddress: order.address,
-      saleCode,
-    });
-    if (!saleSnapshot) {
-      notify('Não foi possível gerar o comprovante do delivery.', 'error');
-      return;
-    }
     const orderCustomer = resolveDeliveryOrderCustomer(order);
     if (orderCustomer) {
       order.customerDetails = { ...orderCustomer };
@@ -10915,18 +11066,30 @@
         }
       }
     }
-    const saleCustomerId = resolveCustomerId(saleCustomer);
-    if (!saleCustomerId) {
-      notify('Selecione novamente o cliente do delivery antes de finalizar.', 'warning');
-      return;
-    }
+    const saleCode = existingSaleCode || state.currentSaleCode || '';
+    const itensSnapshot = state.itens.map((item) => ({ ...item }));
+    const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
+    const saleDate = order.createdAt ? new Date(order.createdAt) : new Date();
     const saleReceivables = buildSaleReceivables({
       payments: pagamentosVenda,
       customer: saleCustomer,
       saleCode,
       items: itensSnapshot,
-      saleDate: order.createdAt || new Date(),
+      saleDate,
     });
+    const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda, {
+      deliveryAddress: order.address,
+      saleCode,
+    });
+    if (!saleSnapshot) {
+      notify('Não foi possível gerar o comprovante do delivery.', 'error');
+      return;
+    }
+    const saleCustomerId = resolveCustomerId(saleCustomer);
+    if (!saleCustomerId) {
+      notify('Selecione novamente o cliente do delivery antes de finalizar.', 'warning');
+      return;
+    }
     const cashContributions = normalizeCashContributions(
       registerSaleOnCaixa(pagamentosVenda, total, saleCode)
     );
@@ -13705,21 +13868,21 @@
       ? `<ul class="nfce-compact__totals-list">${totalsRows}</ul>`
       : '<p class="nfce-compact__empty">Totais indisponíveis.</p>';
 
-    const pagamentosRows = Array.isArray(snapshot.pagamentos?.items) && snapshot.pagamentos.items.length
-      ? snapshot.pagamentos.items
-          .map(
-            (payment) => `
-              <li class="nfce-compact__total">
-                <span>${escapeHtml(payment.label)}</span>
-                <span>${escapeHtml(payment.formatted)}</span>
-              </li>`
-          )
-          .join('')
-      : '';
+      const pagamentosRows = Array.isArray(snapshot.pagamentos?.items) && snapshot.pagamentos.items.length
+        ? snapshot.pagamentos.items
+            .map(
+              (payment) => `
+                <li class="nfce-compact__total">
+                  <span>${escapeHtml(payment.label)}</span>
+                  <span>${escapeHtml(payment.formatted)}</span>
+                </li>`
+            )
+            .join('')
+        : '';
 
-    const pagamentosMarkup = pagamentosRows
-      ? `<ul class="nfce-compact__totals-list">${pagamentosRows}</ul>`
-      : '<p class="nfce-compact__empty">Nenhum pagamento registrado.</p>';
+      const pagamentosMarkup = pagamentosRows
+        ? `<ul class="nfce-compact__totals-list">${pagamentosRows}</ul>`
+        : '<p class="nfce-compact__empty">Nenhum pagamento registrado.</p>';
 
     const clienteLines = [];
     if (snapshot.cliente?.nome) clienteLines.push(snapshot.cliente.nome);
@@ -13786,14 +13949,14 @@
             <tbody>${itemsRows}</tbody>
           </table>
         </section>
-        <section class="nfce-compact__section nfce-compact__section--totals">
-          <h2 class="nfce-compact__section-title">Totais</h2>
-          ${totalsMarkup}
-        </section>
-        <section class="nfce-compact__section nfce-compact__section--payments">
-          <h2 class="nfce-compact__section-title">Pagamentos</h2>
-          ${pagamentosMarkup}
-        </section>
+          <section class="nfce-compact__section nfce-compact__section--totals">
+            <h2 class="nfce-compact__section-title">Totais</h2>
+            ${totalsMarkup}
+          </section>
+          <section class="nfce-compact__section nfce-compact__section--payments">
+            <h2 class="nfce-compact__section-title">Pagamentos</h2>
+            ${pagamentosMarkup}
+          </section>
         ${clienteSection}
         ${deliverySection}
         ${thankYouSection}
@@ -13822,11 +13985,11 @@
       .map((line) => `<span class="receipt__meta-item">${escapeHtml(line)}</span>`)
       .join('');
 
-    const itemsRows = snapshot.itens
-      .map(
-        (item) => `
-          <tr>
-            <td>${escapeHtml(item.index)}</td>
+      const itemsRows = snapshot.itens
+        .map(
+          (item) => `
+            <tr>
+              <td>${escapeHtml(item.index)}</td>
             <td>
               <strong>${escapeHtml(item.nome)}</strong>
               ${item.codigo ? `<span class="receipt-table__muted">${escapeHtml(item.codigo)}</span>` : ''}
@@ -13880,17 +14043,17 @@
         </li>`)
       .join('');
 
-    const pagamentosRows = snapshot.pagamentos.items.length
-      ? snapshot.pagamentos.items
-          .map(
-            (payment) => `
-              <li class="receipt-row">
-                <span class="receipt-row__label">${escapeHtml(payment.label)}</span>
-                <span class="receipt-row__value">${escapeHtml(payment.formatted)}</span>
-              </li>`
-          )
-          .join('')
-      : '<li class="receipt-list__empty">Nenhum pagamento registrado.</li>';
+      const pagamentosRows = snapshot.pagamentos.items.length
+        ? snapshot.pagamentos.items
+            .map(
+              (payment) => `
+                <li class="receipt-row">
+                  <span class="receipt-row__label">${escapeHtml(payment.label)}</span>
+                  <span class="receipt-row__value">${escapeHtml(payment.formatted)}</span>
+                </li>`
+            )
+            .join('')
+        : '<li class="receipt-list__empty">Nenhum pagamento registrado.</li>';
 
     const clienteSection = snapshot.cliente
       ? `
@@ -14270,11 +14433,11 @@
           .filter((entry) => entry.value)
       : [];
 
-    const payload = {
-      version: 1,
-      type: 'venda',
-      title: title || 'Comprovante de venda',
-      variant,
+      const payload = {
+        version: 1,
+        type: 'venda',
+        title: title || 'Comprovante de venda',
+        variant,
       paperWidth: normalizedPaperWidth,
       columns: danfeColumns,
       font: danfeFont,
@@ -14309,18 +14472,17 @@
         changeValue: safeNumber(snapshot.totais?.trocoValor),
         promotions: promoEntries,
       },
-      payments: Array.isArray(snapshot.pagamentos?.items)
-        ? snapshot.pagamentos.items.map((payment) => ({
-            label: payment.label || 'Pagamento',
-            value: payment.formatted || '',
-            amount: safeNumber(payment.valor),
-          }))
-        : [],
-      footer: {
-        lines: ['Obrigado pela preferencia! Volte sempre.'],
-      },
-    };
-
+        payments: Array.isArray(snapshot.pagamentos?.items)
+          ? snapshot.pagamentos.items.map((payment) => ({
+              label: payment.label || 'Pagamento',
+              value: payment.formatted || '',
+              amount: safeNumber(payment.valor),
+            }))
+          : [],
+        footer: {
+          lines: ['Obrigado pela preferencia! Volte sempre.'],
+        },
+      };
     if (snapshot.cliente) {
       const customerAddress =
         snapshot.cliente.endereco ||
@@ -15330,7 +15492,8 @@
       safeNumber(snapshot?.totais?.acrescimoValor ?? snapshot?.totais?.acrescimo ?? addition ?? 0)
     );
     const itemDisplays = saleItems.map((item, index) => {
-      const barcode = item?.codigoBarras || item?.codigo || item?.barcode || '—';
+      const sellerInfo = resolveItemSellerSnapshot(item, sellerSnapshot);
+      const barcode = item?.codigoBarras || item?.codigo || item?.barcode || '-';
       const productName = item?.nome || item?.descricao || item?.produto || `Item ${index + 1}`;
       const quantityValue = safeNumber(item?.quantidade ?? item?.qtd ?? 0);
       const quantityLabel = quantityValue.toLocaleString('pt-BR', {
@@ -15339,26 +15502,62 @@
       });
       const unitValue = safeNumber(item?.valor ?? item?.valorUnitario ?? item?.preco ?? 0);
       const subtotalValue = safeNumber(item?.subtotal ?? item?.total ?? unitValue * quantityValue);
+      const origin = item?.origem_comissao || item?.origemComissao || 'VENDA';
+      const statusComissao = item?.status_comissao || item?.statusComissao || 'ATIVA';
+      const internalCode = item?.codigoInterno || item?.codInterno || '';
+      const rawProductId =
+        item?.productSnapshot?._id || item?.productId || item?.id || item?.produtoId || '';
+      const productId = isValidObjectId(rawProductId)
+        ? rawProductId
+        : item?.productSnapshot?._id || item?.productId || item?.produtoId || '';
+      const sourceSaleCode = item?.sourceSaleCode || item?.referenceSaleCode || '';
+      const exchangeCode = item?.exchangeCode || '';
       return {
         id: item?.id || `${Date.now()}-${index}`,
-        barcode: barcode || '—',
+        barcode: barcode || '-',
         product: productName,
         quantityLabel,
         unitLabel: formatCurrency(unitValue),
         totalLabel: formatCurrency(subtotalValue),
+        quantity: quantityValue,
+        unitValue,
+        totalValue: subtotalValue,
+        codigoInterno: internalCode,
+        productId,
+        sellerId: sellerInfo.id,
+        sellerCode: sellerInfo.code,
+        sellerName: sellerInfo.name,
+        origem_comissao: origin,
+        status_comissao: statusComissao,
+        sourceSaleCode,
+        exchangeCode,
       };
     });
-    const fiscalItemsSnapshot = saleItems.map((item) => ({
-      productId: item?.id || item?.productSnapshot?._id || null,
-      quantity: safeNumber(item?.quantidade ?? item?.qtd ?? 0),
-      unitPrice: safeNumber(item?.valor ?? item?.valorUnitario ?? item?.preco ?? 0),
-      totalPrice: safeNumber(item?.subtotal ?? item?.total ?? 0),
-      name: item?.nome || item?.descricao || item?.produto || '',
-      barcode: item?.codigoBarras || item?.codigo || '',
-      internalCode: item?.codigoInterno || '',
-      unit: item?.unidade || item?.productSnapshot?.unidade || 'UN',
-      productSnapshot: item?.productSnapshot ? { ...item.productSnapshot } : null,
-    }));
+    const fiscalItemsSnapshot = saleItems.map((item) => {
+      const rawProductId =
+        item?.productSnapshot?._id || item?.productId || item?.id || item?.produtoId || '';
+      const productId = isValidObjectId(rawProductId)
+        ? rawProductId
+        : item?.productSnapshot?._id || item?.productId || item?.produtoId || null;
+      return {
+        productId,
+        quantity: safeNumber(item?.quantidade ?? item?.qtd ?? 0),
+        unitPrice: safeNumber(item?.valor ?? item?.valorUnitario ?? item?.preco ?? 0),
+        totalPrice: safeNumber(item?.subtotal ?? item?.total ?? 0),
+        name: item?.nome || item?.descricao || item?.produto || '',
+        barcode: item?.codigoBarras || item?.codigo || '',
+        internalCode: item?.codigoInterno || '',
+        unit: item?.unidade || item?.productSnapshot?.unidade || 'UN',
+        productSnapshot: item?.productSnapshot ? { ...item.productSnapshot } : null,
+        sellerId: resolveItemSellerSnapshot(item, sellerSnapshot).id,
+        sellerCode: resolveItemSellerSnapshot(item, sellerSnapshot).code,
+        sellerName: resolveItemSellerSnapshot(item, sellerSnapshot).name,
+        origem_comissao: item?.origem_comissao || item?.origemComissao || 'VENDA',
+        status_comissao: item?.status_comissao || item?.statusComissao || 'ATIVA',
+        sourceSaleCode: item?.sourceSaleCode || item?.referenceSaleCode || '',
+        exchangeCode: item?.exchangeCode || '',
+      };
+    });
     const normalizedCashContributions = normalizeCashContributions(cashContributions);
 
     return {
@@ -17312,8 +17511,10 @@
       );
     }
     if (Array.isArray(items)) {
+      const sellerFallback = sale.seller && typeof sale.seller === 'object' ? sale.seller : null;
       sale.items = items.map((item, index) => {
-        const barcode = item?.codigoBarras || item?.codigo || item?.barcode || '—';
+        const sellerInfo = resolveItemSellerSnapshot(item, sellerFallback);
+        const barcode = item?.codigoBarras || item?.codigo || item?.barcode || '-';
         const productName = item?.nome || item?.descricao || item?.produto || `Item ${index + 1}`;
         const quantityValue = safeNumber(item?.quantidade ?? item?.qtd ?? 0);
         const quantityLabel = quantityValue.toLocaleString('pt-BR', {
@@ -17322,13 +17523,35 @@
         });
         const unitValue = safeNumber(item?.valor ?? item?.valorUnitario ?? item?.preco ?? 0);
         const subtotalValue = safeNumber(item?.subtotal ?? item?.total ?? unitValue * quantityValue);
+        const origin = item?.origem_comissao || item?.origemComissao || 'VENDA';
+        const statusComissao = item?.status_comissao || item?.statusComissao || 'ATIVA';
+        const internalCode = item?.codigoInterno || item?.codInterno || '';
+        const rawProductId =
+          item?.productSnapshot?._id || item?.productId || item?.id || item?.produtoId || '';
+        const productId = isValidObjectId(rawProductId)
+          ? rawProductId
+          : item?.productSnapshot?._id || item?.productId || item?.produtoId || '';
+        const sourceSaleCode = item?.sourceSaleCode || item?.referenceSaleCode || '';
+        const exchangeCode = item?.exchangeCode || '';
         return {
           id: item?.id || `${Date.now()}-${index}`,
-          barcode: barcode || '—',
+          barcode: barcode || '-',
           product: productName,
           quantityLabel,
           unitLabel: formatCurrency(unitValue),
           totalLabel: formatCurrency(subtotalValue),
+          quantity: quantityValue,
+          unitValue,
+          totalValue: subtotalValue,
+          codigoInterno: internalCode,
+          productId,
+          sellerId: sellerInfo.id,
+          sellerCode: sellerInfo.code,
+          sellerName: sellerInfo.name,
+          origem_comissao: origin,
+          status_comissao: statusComissao,
+          sourceSaleCode,
+          exchangeCode,
         };
       });
     }
@@ -17574,6 +17797,7 @@
 
   const clearExchangeFormFields = () => {
     state.exchangeModal.exchangeId = '';
+    state.exchangeModal.sourceSales = [];
     if (elements.exchangeCode) elements.exchangeCode.value = '';
     if (elements.exchangeDate) elements.exchangeDate.value = getTodayIsoDate();
     if (elements.exchangeType) elements.exchangeType.value = 'troca';
@@ -18796,14 +19020,19 @@
     const nome = product?.nome || 'Produto sem nome';
     const generalPromo = hasGeneralPromotion(product);
     const snapshot = buildProductSnapshot(product);
+    const sellerInfo = buildSellerSnapshot(state.selectedSeller);
     const existingIndex = state.itens.findIndex(
       (item) =>
         item.id === product._id ||
         item.codigo === codigo ||
         (!!codigoInterno && item.codigoInterno === codigoInterno)
     );
-    if (existingIndex >= 0) {
-      const current = state.itens[existingIndex];
+    const existingWithSellerIndex =
+      existingIndex >= 0 && isSameSellerForItem(state.itens[existingIndex], sellerInfo)
+        ? existingIndex
+        : -1;
+    if (existingWithSellerIndex >= 0) {
+      const current = state.itens[existingWithSellerIndex];
       const shouldUsePromotion =
         current.usePromotion !== undefined ? current.usePromotion : usePromotion;
       current.quantidade += quantidadeFinal;
@@ -18820,8 +19049,10 @@
       current.productSnapshot = snapshot;
     } else {
       const pricingToApply = getItemPricing(product, usePromotion, quantidadeFinal);
+      const baseId = product._id || product.id || codigo || String(Date.now());
+      const sellerKey = sellerInfo.id || sellerInfo.code;
       state.itens.push({
-        id: product._id || product.id || codigo || String(Date.now()),
+        id: sellerKey ? `${baseId}:${sellerKey}` : baseId,
         codigo,
         codigoInterno,
         codigoBarras,
@@ -18835,6 +19066,11 @@
         promoType: pricingToApply.promoType || null,
         generalPromo,
         productSnapshot: snapshot,
+        sellerId: sellerInfo.id,
+        sellerCode: sellerInfo.code,
+        sellerName: sellerInfo.name,
+        origem_comissao: 'VENDA',
+        status_comissao: 'ATIVA',
       });
     }
     renderItemsList();

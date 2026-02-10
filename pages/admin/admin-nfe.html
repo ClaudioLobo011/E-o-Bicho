@@ -1,0 +1,1406 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin: NF-e - E o Bicho</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="../../src/output.css">
+  <style>
+    html {
+      font-size: 14px;
+    }
+
+    body {
+      padding-bottom: 110px;
+    }
+
+    #admin-header-placeholder > header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 40;
+    }
+
+    main {
+      padding-top: 7rem;
+    }
+
+    #nfe-action-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 40;
+    }
+
+    #nfe-items-table th,
+    #nfe-items-table td {
+      vertical-align: top;
+      padding: 6px 8px;
+      font-size: 11px;
+      line-height: 1.25;
+    }
+
+    #nfe-items-table input {
+      font-size: 11px;
+      padding: 4px 6px;
+    }
+
+    #nfe-items-scroll {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+    }
+
+    @media (min-width: 768px) {
+      :root {
+        --nfe-card-height: clamp(420px, 56vh, 620px);
+      }
+
+      #nfe-items-card,
+      #nfe-totals-card {
+        height: var(--nfe-card-height);
+      }
+    }
+  </style>
+</head>
+<body class="bg-gray-100">
+  <div id="admin-header-placeholder"></div>
+
+  <main class="w-full max-w-none px-4 sm:px-6 lg:px-8 pb-10 min-h-screen">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <aside class="md:col-span-4">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
+
+      <div class="md:col-span-4 space-y-6">
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+          <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div class="space-y-2">
+              <nav aria-label="Breadcrumb" class="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                <span class="inline-flex items-center gap-2 text-primary"><i class="fas fa-cash-register"></i> Vendas</span>
+                <i class="fas fa-angle-right text-gray-400"></i>
+                <span class="text-gray-600">NF-e</span>
+              </nav>
+              <div>
+                <div class="flex flex-wrap items-center gap-3">
+                  <h1 class="text-2xl font-bold text-gray-800">Emissão de NF-e (Modelo 55)</h1>
+                  <span id="nfe-status-badge" class="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-700" data-status="draft">
+                    <i class="fas fa-circle text-[7px]"></i>
+                    Rascunho
+                  </span>
+                </div>
+                <p class="text-gray-600 mt-1">Documento fiscal para circulação de mercadorias.</p>
+              </div>
+            </div>
+            <div class="flex flex-wrap items-center gap-2"></div>
+          </div>
+        </section>
+
+        
+                
+
+        
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4" data-component="NFeDados">
+                            <div>
+                              <h2 class="text-lg font-semibold text-gray-800">Dados da Nota</h2>
+                              <p class="text-sm text-gray-600">Preencha os dados fiscais principais da NF-e.</p>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+                              <div class="md:col-span-2 space-y-2">
+                                <label for="nfe-codigo" class="block text-sm font-medium text-gray-700">Codigo</label>
+                                <input type="text" id="nfe-codigo" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                              </div>
+                              <div class="md:col-span-4 space-y-2">
+                                <label for="nfe-natureza-operacao" class="block text-sm font-medium text-gray-700">
+                                  Natureza da Operação
+                                  <span class="text-gray-400" title="Selecione o CFOP ativo para este tipo de operação."><i class="fas fa-info-circle"></i></span>
+                                </label>
+                                <select id="nfe-natureza-operacao" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-required>
+                                  <option value="">Selecione</option>
+                                </select>
+                              </div>
+                              <div class="md:col-span-4 space-y-2">
+                                <label for="nfe-natureza" class="block text-sm font-medium text-gray-700">
+                                  Finalidade da Emissão
+                                  <span class="text-gray-400" title="Exemplo: Venda de mercadoria adquirida/recebida de terceiros."><i class="fas fa-info-circle"></i></span>
+                                </label>
+                                <select id="nfe-natureza" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-required>
+                                  <option value="normal" selected>NF-e Normal</option>
+                                  <option value="complementar">NF-e Complementar</option>
+                                  <option value="ajuste">NF-e de Ajuste</option>
+                                  <option value="devolucao">Devolução de Mercadoria</option>
+                                  <option value="transferencia">Nf-e de Transferencia</option>
+                                  <option value="simples-faturamento">Simples Faturamento</option>
+                                  <option value="remessa-entrega-futura">Remessa - Entrega Futura</option>
+                                </select>
+                              </div>
+                              <div class="md:col-span-2 space-y-2">
+                                <label for="nfe-operacao" class="block text-sm font-medium text-gray-700">
+                                  Tipo de Operação
+                                  <span class="text-gray-400" title="Entrada para recebimento, Saída para venda."><i class="fas fa-info-circle"></i></span>
+                                </label>
+                                <select id="nfe-operacao" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-required>
+                                  <option value="saida" selected>Saída</option>
+                                  <option value="entrada">Entrada</option>
+                                </select>
+                              </div>
+                              <div class="md:col-span-3 space-y-2">
+                                <label for="nfe-finalidade" class="block text-sm font-medium text-gray-700">
+                                  Finalidade da NF-e
+                                  <span class="text-gray-400" title="Define o objetivo fiscal desta nota."><i class="fas fa-info-circle"></i></span>
+                                </label>
+                                <select id="nfe-finalidade" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-required>
+                                  <option value="normal" selected>Normal</option>
+                                  <option value="transferencia">Transferência</option>
+                                  <option value="complementar">Complementar</option>
+                                  <option value="ajuste">Ajuste</option>
+                                  <option value="devolucao">Devolução</option>
+                                </select>
+                              </div>
+                              <div class="md:col-span-3 space-y-2">
+                                <label for="nfe-issue-date" class="block text-sm font-medium text-gray-700">Data de Emissão</label>
+                                <input type="date" id="nfe-issue-date" class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600" readonly>
+                              </div>
+                              <div class="md:col-span-2 space-y-2">
+                                <label for="nfe-exit-date" class="block text-sm font-medium text-gray-700">Data de Saída/Entrada</label>
+                                <input type="date" id="nfe-exit-date" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-required>
+                              </div>
+                              <div class="md:col-span-1 space-y-2">
+                                <label for="nfe-serie" class="block text-sm font-medium text-gray-700">Série</label>
+                                <select id="nfe-serie" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-required>
+                                  <option value="">Selecione</option>
+                                </select>
+                              </div>
+                              <div class="md:col-span-2 space-y-2">
+                                <label for="nfe-number" class="block text-sm font-medium text-gray-700">Número da NF-e</label>
+                                <input type="text" id="nfe-number" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm">
+                              </div>
+                              <div class="md:col-span-1 space-y-2">
+                                <label for="nfe-model" class="block text-sm font-medium text-gray-700">Modelo</label>
+                                <input type="text" id="nfe-model" class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600" value="55" readonly>
+                              </div>
+                            </div>
+                          </section>
+          <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4" data-component="NFeEmitente">
+                            <div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                              <div>
+                                <h2 class="text-lg font-semibold text-gray-800">Dados do Emitente</h2>
+                                <p class="text-sm text-gray-600">Dados da empresa configurada no sistema.</p>
+                              </div>
+                              <button type="button" id="nfe-emitente-select" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">
+                                <i class="fas fa-building text-primary"></i>
+                                Selecione a Empresa Emitente
+                              </button>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+                              <div class="md:col-span-6 space-y-2">
+                                <label class="block text-sm font-medium text-gray-700">Razão Social</label>
+                                <input type="text" id="nfe-emitente-razao" class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600" readonly>
+                              </div>
+                              <div class="md:col-span-6 space-y-2">
+                                <label class="block text-sm font-medium text-gray-700">Nome Fantasia</label>
+                                <input type="text" id="nfe-emitente-fantasia" class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600" readonly>
+                              </div>
+                              <div class="md:col-span-3 space-y-2">
+                                <label class="block text-sm font-medium text-gray-700">CNPJ</label>
+                                <input type="text" id="nfe-emitente-cnpj" class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600" readonly>
+                              </div>
+                              <div class="md:col-span-3 space-y-2">
+                                <label class="block text-sm font-medium text-gray-700">Inscrição Estadual</label>
+                                <input type="text" id="nfe-emitente-ie" class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600" readonly>
+                              </div>
+                              <div class="md:col-span-3 space-y-2">
+                                <label class="block text-sm font-medium text-gray-700">Regime Tributário</label>
+                                <input type="text" id="nfe-emitente-regime" class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600" readonly>
+                              </div>
+                              <div class="md:col-span-3 space-y-2">
+                                <label class="block text-sm font-medium text-gray-700">Endereço completo</label>
+                                <input type="text" id="nfe-emitente-endereco" class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600" readonly>
+                              </div>
+                            </div>
+                          </section>
+        </div>
+
+<section class="bg-white rounded-xl shadow-sm border border-gray-100 p-3" data-component="NFeTabs">
+          <div class="flex flex-wrap gap-2" role="tablist" aria-label="Secoes da NF-e">
+            <button type="button" class="nfe-tab inline-flex items-center rounded-full border border-gray-200 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-600 transition hover:border-primary hover:text-primary" data-nfe-tab="dados" aria-selected="true">Dados da NF</button>
+            <button type="button" class="nfe-tab inline-flex items-center rounded-full border border-gray-200 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-600 transition hover:border-primary hover:text-primary" data-nfe-tab="destinatario">Destinatario</button>
+            <button type="button" class="nfe-tab inline-flex items-center rounded-full border border-gray-200 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-600 transition hover:border-primary hover:text-primary" data-nfe-tab="produtos">Produtos</button>
+            <button type="button" class="nfe-tab inline-flex items-center rounded-full border border-gray-200 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-600 transition hover:border-primary hover:text-primary" data-nfe-tab="transporte">Transporte</button>
+            <button type="button" class="nfe-tab inline-flex items-center rounded-full border border-gray-200 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-600 transition hover:border-primary hover:text-primary" data-nfe-tab="totais">Totais</button>
+            <button type="button" class="nfe-tab inline-flex items-center rounded-full border border-gray-200 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-600 transition hover:border-primary hover:text-primary" data-nfe-tab="pagamento">Meios de Pagamento</button>
+            <button type="button" class="nfe-tab inline-flex items-center rounded-full border border-gray-200 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-600 transition hover:border-primary hover:text-primary" data-nfe-tab="adicionais">Inf. Adicionais</button>
+          </div>
+        </section>
+
+        <div id="nfe-tab-panels" class="space-y-6">
+          
+          <div data-nfe-panel="dados" class="space-y-6">
+            <div class="flex flex-wrap gap-2" role="tablist" aria-label="Abas de Dados da NF">
+              <button type="button" class="rounded-full border border-gray-200 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-primary" data-nfe-dados-tab="dados" aria-selected="true">Dados</button>
+              <button type="button" class="rounded-full border border-gray-200 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-600" data-nfe-dados-tab="referenciada">NF Refer&ecirc;nciada</button>
+            </div>
+            <div data-nfe-dados-panel="dados" class="space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              <section class="lg:col-span-7 bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4" data-component="NFeAtendimento">
+                <div>
+                  <h2 class="text-lg font-semibold text-gray-800">Dados da NF</h2>
+                  <p class="text-sm text-gray-600">Configure o tipo de atendimento desta NF-e.</p>
+                </div>
+                <div class="space-y-2">
+                  <label for="nfe-service-type" class="block text-sm font-medium text-gray-700">Tipo de atendimento</label>
+                  <select id="nfe-service-type" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                    <option value="nao-aplica" selected>Não se aplica</option>
+                    <option value="presencial">Operação Presencial</option>
+                    <option value="internet">Operação não Presencial, pela Internet</option>
+                    <option value="teleatendimento">Operação não Presencial, por Teleatendimento</option>
+                    <option value="nfce-domicilio">NFC-e em operação com entrega em domicilio</option>
+                  </select>
+                </div>
+              </section>
+
+              <section class="lg:col-span-5 bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4" data-component="NFeEstoque">
+                <div>
+                  <h2 class="text-lg font-semibold text-gray-800">Estoque</h2>
+                  <p class="text-sm text-gray-600">Defina a movimentação e o depósito vinculado.</p>
+                </div>
+                <div class="space-y-3">
+                  <div class="space-y-2">
+                    <label for="nfe-stock-movement" class="block text-sm font-medium text-gray-700">Movimentação</label>
+                    <select id="nfe-stock-movement" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                      <option value="nao-alterar">Não alterar</option>
+                      <option value="remover" selected>Remover</option>
+                      <option value="adicionar">Adicionar</option>
+                    </select>
+                  </div>
+                  <div class="space-y-2">
+                    <label for="nfe-stock-deposit" class="block text-sm font-medium text-gray-700">Depósito</label>
+                    <select id="nfe-stock-deposit" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                      <option value="">Selecione o depósito</option>
+                    </select>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+            </div>
+            <div data-nfe-dados-panel="referenciada" class="space-y-6 hidden">
+              <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+                <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                  <div class="space-y-1">
+                    <h2 class="text-lg font-semibold text-gray-800">NF Refer&ecirc;nciada</h2>
+                    <p class="text-sm text-gray-600">Informe a chave de acesso para vincular a nota fiscal.</p>
+                  </div>
+                  <div class="flex flex-wrap items-end gap-3">
+                    <div class="space-y-1 w-full md:w-[420px]">
+                      <label for="nfe-ref-chave" class="block text-sm font-medium text-gray-700">Chave de Acesso</label>
+                      <input type="text" id="nfe-ref-chave" maxlength="44" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Digite a chave de acesso (44 dígitos)">
+                    </div>
+                    <button type="button" id="nfe-ref-add" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">Adicionar</button>
+                  </div>
+                </div>
+              </section>
+              <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-0">
+                <div class="overflow-x-auto">
+                  <table class="min-w-full text-xs" id="nfe-ref-table">
+                    <thead id="nfe-ref-head" class="text-gray-500 uppercase tracking-wide"></thead>
+                    <tbody id="nfe-ref-body" class="divide-y divide-gray-100 text-gray-700">
+                      <tr id="nfe-ref-empty">
+                        <td colspan="3" class="px-3 py-4 text-center text-gray-500">Nenhuma NF referenciada.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+          </div>
+          <div data-nfe-panel="destinatario" class="space-y-6 hidden">
+<section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4" data-component="NFeDestinatario">
+          <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Destinatario</h2>
+              <p class="text-sm text-gray-600">Dados do cliente ou fornecedor da NF-e.</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <select id="nfe-party-type" class="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="cliente" selected>Cliente</option>
+                <option value="fornecedor">Fornecedor</option>
+              </select>
+              <div class="relative min-w-[220px] flex-1">
+                <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400"><i class="fas fa-magnifying-glass"></i></span>
+                <input type="text" id="nfe-client-search" placeholder="Buscar por codigo ou nome" class="w-full rounded-lg border border-gray-200 py-2 pl-9 pr-3 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+              </div>
+              <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition" data-nfe-action="quick-client">
+                <i class="fas fa-user-plus text-primary"></i>
+                Cadastro rapido
+              </button>
+            </div>
+          </div>
+          <div class="space-y-6">
+            <div>
+              <h3 class="text-sm font-semibold text-gray-700">Dados do Destinatario</h3>
+              <div class="mt-3 grid grid-cols-1 md:grid-cols-12 gap-4">
+                <div class="md:col-span-6 space-y-2">
+                  <label for="nfe-client-name" class="block text-sm font-medium text-gray-700">Nome / Razao Social</label>
+                  <input type="text" id="nfe-client-name" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-required>
+                </div>
+                <div class="md:col-span-3 space-y-2">
+                  <label for="nfe-client-doc" class="block text-sm font-medium text-gray-700">Documento</label>
+                  <input type="text" id="nfe-client-doc" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-required>
+                  <p id="nfe-client-doc-alert" class="text-xs text-red-600 hidden">Documento invalido.</p>
+                </div>
+                <div class="md:col-span-3 space-y-2">
+                  <label for="nfe-client-ie" class="block text-sm font-medium text-gray-700">Inscricao Estadual (Se houver)</label>
+                  <input type="text" id="nfe-client-ie" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                </div>
+                <div class="md:col-span-3 space-y-2">
+                  <label for="nfe-client-phone" class="block text-sm font-medium text-gray-700">Telefone</label>
+                  <input type="text" id="nfe-client-phone" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-required>
+                </div>
+                <div class="md:col-span-3 space-y-2">
+                  <label for="nfe-client-consumer-final" class="block text-sm font-medium text-gray-700">Consumidor Final</label>
+                  <select id="nfe-client-consumer-final" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                    <option value="">Selecione</option>
+                    <option value="sim">Sim</option>
+                    <option value="nao">Nao</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div>
+              <h3 class="text-sm font-semibold text-gray-700">Endereco</h3>
+              <div class="mt-3 grid grid-cols-1 md:grid-cols-12 gap-4">
+                <div class="md:col-span-5 space-y-2">
+                  <label for="nfe-client-address" class="block text-sm font-medium text-gray-700">Endereco</label>
+                  <input type="text" id="nfe-client-address" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-required>
+                </div>
+                <div class="md:col-span-2 space-y-2">
+                  <label for="nfe-client-number" class="block text-sm font-medium text-gray-700">Numero</label>
+                  <input type="text" id="nfe-client-number" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                </div>
+                <div class="md:col-span-5 space-y-2">
+                  <label for="nfe-client-complement" class="block text-sm font-medium text-gray-700">Complemento</label>
+                  <input type="text" id="nfe-client-complement" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                </div>
+                <div class="md:col-span-3 space-y-2">
+                  <label for="nfe-client-neighborhood" class="block text-sm font-medium text-gray-700">Bairro</label>
+                  <input type="text" id="nfe-client-neighborhood" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                </div>
+                <div class="md:col-span-3 space-y-2">
+                  <label for="nfe-client-zip" class="block text-sm font-medium text-gray-700">CEP</label>
+                  <input type="text" id="nfe-client-zip" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                </div>
+                <div class="md:col-span-3 space-y-2">
+                  <label for="nfe-client-city" class="block text-sm font-medium text-gray-700">Municipio</label>
+                  <input type="text" id="nfe-client-city" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                </div>
+                <div class="md:col-span-1 space-y-2">
+                  <label for="nfe-client-state" class="block text-sm font-medium text-gray-700">UF</label>
+                  <input type="text" id="nfe-client-state" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                </div>
+                <div class="md:col-span-2 space-y-2">
+                  <label for="nfe-client-country" class="block text-sm font-medium text-gray-700">Pais</label>
+                  <input type="text" id="nfe-client-country" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="Brasil">
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+          </div>
+          <div data-nfe-panel="produtos" class="space-y-6 hidden">
+        <section class="space-y-4" data-component="NFeItens">
+
+            <div id="nfe-items-card" class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4 h-full flex flex-col">
+              <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h2 class="text-lg font-semibold text-gray-800">Produtos / Itens da NF-e</h2>
+                  <p class="text-sm text-gray-600">Adicione itens e mantenha os impostos atualizados em tempo real.</p>
+                </div>
+                <div class="w-full md:w-auto flex items-center gap-2">
+                  <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition" data-nfe-action="add-item">
+                    <i class="fas fa-plus text-primary"></i>
+                    Adicionar
+                  </button>
+                </div>
+              </div>
+              <div id="nfe-items-scroll" class="overflow-x-auto flex-1 min-h-0">
+                <table class="min-w-full text-xs" id="nfe-items-table">
+                  <thead id="nfe-items-head" class="text-gray-500 uppercase tracking-wide"></thead>
+                  <tbody id="nfe-items-body" class="divide-y divide-gray-100 text-gray-700">
+                    <tr id="nfe-items-empty">
+                      <td colspan="14" class="px-3 py-4 text-center text-gray-500">Nenhum item adicionado.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div id="nfe-items-alert" class="hidden rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700"></div>
+            </div>
+        </section>
+          </div>
+          <div data-nfe-panel="transporte" class="space-y-6 hidden">
+        
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6" data-component="NFeTransporte">
+          <div>
+            <h2 class="text-lg font-semibold text-gray-800">Transporte</h2>
+            <p class="text-sm text-gray-600">Informe dados de transporte vinculados &agrave; nota fiscal.</p>
+          </div>
+          <div class="space-y-2">
+            <label for="nfe-frete-modalidade" class="block text-sm font-medium text-gray-700">Modalidade Frete</label>
+            <select id="nfe-frete-modalidade" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+              <option value="0">0 - Contrata&ccedil;&atilde;o do Frete por conta do Remetente (CIF)</option>
+              <option value="1">1 - Contrata&ccedil;&atilde;o do Frete por conta do Destinat&aacute;rio (FOB)</option>
+              <option value="2">2 - Contrata&ccedil;&atilde;o do Frete por conta de Terceiros</option>
+              <option value="3">3 - Transporte Pr&oacute;prio por conta do Remetente</option>
+              <option value="4">4 - Transporte Pr&oacute;prio por conta do Destinat&aacute;rio</option>
+              <option value="9" selected>9 - Sem Ocorr&ecirc;ncia de Transporte</option>
+            </select>
+          </div>
+
+          <div class="space-y-4">
+            <h3 class="text-base font-semibold text-gray-800">Informa&ccedil;&otilde;es Transportadora</h3>
+            <div class="space-y-2">
+              <label for="nfe-transportadora-search" class="block text-xs font-semibold uppercase tracking-wide text-gray-500">Transportadora (F2)</label>
+              <div class="relative max-w-xs">
+                <span class="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400"><i class="fas fa-magnifying-glass"></i></span>
+                <input type="text" id="nfe-transportadora-search" class="w-full border-b border-gray-300 bg-transparent pb-2 text-sm focus:border-primary focus:outline-none" placeholder="Procura">
+              </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div class="space-y-2">
+                <label for="nfe-transportadora-nome" class="block text-sm font-medium text-gray-700">Nome</label>
+                <input type="text" id="nfe-transportadora-nome" class="w-full border-b border-gray-300 bg-transparent pb-2 text-sm focus:border-primary focus:outline-none">
+              </div>
+              <div class="space-y-2">
+                <label for="nfe-transportadora-cnpj" class="block text-sm font-medium text-gray-700">CNPJ</label>
+                <input type="text" id="nfe-transportadora-cnpj" class="w-full border-b border-gray-300 bg-transparent pb-2 text-sm focus:border-primary focus:outline-none">
+              </div>
+              <div class="space-y-2">
+                <label for="nfe-transportadora-municipio" class="block text-sm font-medium text-gray-700">Munic&iacute;pio</label>
+                <input type="text" id="nfe-transportadora-municipio" class="w-full border-b border-gray-300 bg-transparent pb-2 text-sm focus:border-primary focus:outline-none">
+              </div>
+              <div class="space-y-2">
+                <label for="nfe-transportadora-ie" class="block text-sm font-medium text-gray-700">Inscri&ccedil;&atilde;o Estadual</label>
+                <input type="text" id="nfe-transportadora-ie" class="w-full border-b border-gray-300 bg-transparent pb-2 text-sm focus:border-primary focus:outline-none">
+              </div>
+              <div class="space-y-2">
+                <label for="nfe-transportadora-endereco" class="block text-sm font-medium text-gray-700">Endere&ccedil;o</label>
+                <input type="text" id="nfe-transportadora-endereco" class="w-full border-b border-gray-300 bg-transparent pb-2 text-sm focus:border-primary focus:outline-none">
+              </div>
+              <div class="space-y-2">
+                <label for="nfe-transportadora-numero" class="block text-sm font-medium text-gray-700">N&uacute;mero</label>
+                <input type="text" id="nfe-transportadora-numero" class="w-full border-b border-gray-300 bg-transparent pb-2 text-sm focus:border-primary focus:outline-none">
+              </div>
+              <div class="space-y-2">
+                <label for="nfe-transportadora-uf" class="block text-sm font-medium text-gray-700">UF</label>
+                <select id="nfe-transportadora-uf" class="w-full border-b border-gray-300 bg-transparent pb-2 text-sm focus:border-primary focus:outline-none">
+                  <option value="">--SELECIONE--</option>
+                </select>
+              </div>
+              <div class="space-y-2">
+                <label for="nfe-transportadora-placa" class="block text-sm font-medium text-gray-700">Placa do Ve&iacute;culo</label>
+                <input type="text" id="nfe-transportadora-placa" class="w-full border-b border-gray-300 bg-transparent pb-2 text-sm focus:border-primary focus:outline-none">
+              </div>
+              <div class="space-y-2">
+                <label for="nfe-transportadora-uf-placa" class="block text-sm font-medium text-gray-700">UF Placa</label>
+                <select id="nfe-transportadora-uf-placa" class="w-full border-b border-gray-300 bg-transparent pb-2 text-sm focus:border-primary focus:outline-none">
+                  <option value="">--SELECIONE--</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="space-y-4">
+            <h3 class="text-base font-semibold text-gray-800">Volumes Transportadora</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div class="space-y-2">
+                <label for="nfe-volume-identificacao" class="block text-sm font-medium text-gray-700">N&deg; identifica&ccedil;&atilde;o dos volumes</label>
+                <input type="text" id="nfe-volume-identificacao" class="w-full border-b border-gray-300 bg-transparent pb-2 text-sm focus:border-primary focus:outline-none">
+              </div>
+              <div class="space-y-2">
+                <label for="nfe-volume-especie" class="block text-sm font-medium text-gray-700">Esp&eacute;cie</label>
+                <input type="text" id="nfe-volume-especie" class="w-full border-b border-gray-300 bg-transparent pb-2 text-sm focus:border-primary focus:outline-none">
+              </div>
+              <div class="space-y-2">
+                <label for="nfe-volume-marca" class="block text-sm font-medium text-gray-700">Marca</label>
+                <input type="text" id="nfe-volume-marca" class="w-full border-b border-gray-300 bg-transparent pb-2 text-sm focus:border-primary focus:outline-none">
+              </div>
+              <div class="space-y-2">
+                <label for="nfe-volume-quantidade" class="block text-sm font-medium text-gray-700">Quantidade total de volumes</label>
+                <input type="text" id="nfe-volume-quantidade" class="w-full border-b border-gray-300 bg-transparent pb-2 text-sm focus:border-primary focus:outline-none" value="0">
+              </div>
+              <div class="space-y-2">
+                <label for="nfe-volume-peso-bruto" class="block text-sm font-medium text-gray-700">Peso Bruto (KG)</label>
+                <input type="text" id="nfe-volume-peso-bruto" class="w-full border-b border-gray-300 bg-transparent pb-2 text-sm focus:border-primary focus:outline-none" value="0,000">
+              </div>
+              <div class="space-y-2">
+                <label for="nfe-volume-peso-liquido" class="block text-sm font-medium text-gray-700">Peso Liq. (KG)</label>
+                <input type="text" id="nfe-volume-peso-liquido" class="w-full border-b border-gray-300 bg-transparent pb-2 text-sm focus:border-primary focus:outline-none" value="0,000">
+              </div>
+              <div class="space-y-2">
+                <label for="nfe-volume-cubagem" class="block text-sm font-medium text-gray-700">Cubagem (m&sup3;)</label>
+                <input type="text" id="nfe-volume-cubagem" class="w-full border-b border-gray-300 bg-transparent pb-2 text-sm focus:border-primary focus:outline-none" value="0,000">
+              </div>
+            </div>
+            <p class="text-sm text-gray-500">Ap&oacute;s preencher os campos, clique em adicionar para que as informa&ccedil;&otilde;es sejam vinculadas &agrave; nota fiscal.</p>
+            <div class="flex gap-2">
+              <button type="button" id="nfe-volume-add" class="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">Adicionar</button>
+              <button type="button" id="nfe-volume-new" class="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">Novo</button>
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            <p class="text-xs uppercase tracking-wide text-gray-500">Arraste uma coluna para agrupar</p>
+            <div class="overflow-x-auto">
+              <table class="min-w-full text-xs" id="nfe-volumes-table">
+                <thead id="nfe-volumes-head" class="text-gray-500 uppercase tracking-wide"></thead>
+                <tbody id="nfe-volumes-body" class="divide-y divide-gray-100 text-gray-700">
+                  <tr id="nfe-volumes-empty">
+                    <td colspan="7" class="px-3 py-4 text-center text-gray-500">Nenhum volume adicionado.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+          </div>
+          <div data-nfe-panel="totais" class="space-y-6 hidden">
+        <section class="space-y-4" data-component="NFeTotais">
+
+            <div id="nfe-totals-card" class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4 h-full">
+              <div>
+                <h2 class="text-lg font-semibold text-gray-800">Totais da Nota</h2>
+                <p class="text-sm text-gray-600">Resumo automático de valores e impostos.</p>
+              </div>
+              <div class="space-y-3 text-sm">
+                <div class="flex items-center justify-between">
+                  <span class="text-gray-500">Total dos Produtos</span>
+                  <span id="nfe-total-products" class="font-semibold text-gray-800">R$ 0,00</span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-gray-500">Total de Descontos</span>
+                  <span id="nfe-total-discounts" class="font-semibold text-gray-800">R$ 0,00</span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-gray-500">Base de Cálculo ICMS</span>
+                  <span id="nfe-base-icms" class="font-semibold text-gray-800">R$ 0,00</span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-gray-500">Valor ICMS</span>
+                  <span id="nfe-total-icms" class="font-semibold text-gray-800">R$ 0,00</span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-gray-500">Valor IPI</span>
+                  <span id="nfe-total-ipi" class="font-semibold text-gray-800">R$ 0,00</span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-gray-500">Valor PIS</span>
+                  <span id="nfe-total-pis" class="font-semibold text-gray-800">R$ 0,00</span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-gray-500">Valor COFINS</span>
+                  <span id="nfe-total-cofins" class="font-semibold text-gray-800">R$ 0,00</span>
+                </div>
+              </div>
+              <div class="grid grid-cols-1 gap-3 text-sm">
+                <div class="space-y-1">
+                  <label for="nfe-frete" class="text-gray-500">Frete</label>
+                  <input type="text" id="nfe-frete" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="0,00">
+                </div>
+                <div class="space-y-1">
+                  <label for="nfe-outros" class="text-gray-500">Outras Despesas</label>
+                  <input type="text" id="nfe-outros" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="0,00">
+                </div>
+              </div>
+              <div class="rounded-xl bg-primary/10 px-4 py-3">
+                <p class="text-xs uppercase tracking-wide text-primary">Valor Total da NF-e</p>
+                <p id="nfe-total-note" class="text-2xl font-bold text-primary">R$ 0,00</p>
+              </div>
+            </div>
+        </section>
+          </div>
+          <div data-nfe-panel="pagamento" class="space-y-6 hidden">
+<section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4" data-component="NFePagamento">
+          <div>
+            <h2 class="text-lg font-semibold text-gray-800">Pagamento</h2>
+            <p class="text-sm text-gray-600">Defina condições e forma de pagamento.</p>
+          </div>
+          <div class="flex flex-wrap items-center justify-between gap-4">
+            <div class="flex flex-wrap gap-2" role="tablist" aria-label="Tipos de pagamento">
+              <button type="button" class="nfe-payment-tab inline-flex items-center rounded-full border border-gray-200 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-gray-600 transition hover:border-primary hover:text-primary" data-payment-tab="credario">Credario</button>
+              <button type="button" class="nfe-payment-tab inline-flex items-center rounded-full border border-gray-200 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-gray-600 transition hover:border-primary hover:text-primary" data-payment-tab="cheque">Cheque</button>
+              <button type="button" class="nfe-payment-tab inline-flex items-center rounded-full border border-gray-200 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-gray-600 transition hover:border-primary hover:text-primary" data-payment-tab="cartao">Cartao</button>
+              <button type="button" class="nfe-payment-tab inline-flex items-center rounded-full border border-gray-200 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-gray-600 transition hover:border-primary hover:text-primary" data-payment-tab="dinheiro" aria-selected="true">Dinheiro</button>
+              <button type="button" class="nfe-payment-tab inline-flex items-center rounded-full border border-gray-200 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-gray-600 transition hover:border-primary hover:text-primary" data-payment-tab="pix">Pix</button>
+              <button type="button" class="nfe-payment-tab inline-flex items-center rounded-full border border-gray-200 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-gray-600 transition hover:border-primary hover:text-primary" data-payment-tab="outras">Outras</button>
+            </div>
+            <div class="flex flex-wrap items-center gap-3 text-xs">
+              <label class="inline-flex items-center gap-2 text-gray-600">
+                <input type="checkbox" id="nfe-payment-delivery" class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/30">
+                Receber na Entrega
+              </label>
+              <div class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-600">
+                <span class="font-semibold text-gray-700">Total</span>
+                <span id="nfe-payment-kpi-total" class="ml-2 text-gray-900">R$ 0,00</span>
+              </div>
+              <div class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-600">
+                <span class="font-semibold text-gray-700">Restante</span>
+                <span id="nfe-payment-kpi-remaining" class="ml-2 text-gray-900">R$ 0,00</span>
+              </div>
+              <div class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-600">
+                <span class="font-semibold text-gray-700">Troco</span>
+                <span id="nfe-payment-kpi-change" class="ml-2 text-gray-900">R$ 0,00</span>
+              </div>
+            </div>
+          </div>
+          <div class="rounded-lg border border-gray-100 bg-gray-50 px-4 py-4 text-xs text-gray-600 hidden" data-payment-panel="credario">
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-12">
+              <div class="md:col-span-3 space-y-2">
+                <label for="nfe-crediario-type" class="block text-sm font-medium text-gray-700">Tipo de Pagamento</label>
+                <select id="nfe-crediario-type" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  <option value="">Selecione</option>
+                  <option value="avista">A vista</option>
+                  <option value="prazo">A prazo</option>
+                </select>
+              </div>
+              <div class="md:col-span-3 space-y-2">
+                <label for="nfe-crediario-due" class="block text-sm font-medium text-gray-700">Vencimento Inicial</label>
+                <input type="date" id="nfe-crediario-due" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+              </div>
+              <div class="md:col-span-2 space-y-2">
+                <label for="nfe-crediario-installments" class="block text-sm font-medium text-gray-700">Parcela</label>
+                <input type="number" min="1" step="1" id="nfe-crediario-installments" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="1">
+              </div>
+              <div class="md:col-span-2 space-y-2">
+                <label for="nfe-crediario-value" class="block text-sm font-medium text-gray-700">Valor</label>
+                <input type="text" id="nfe-crediario-value" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="0,00">
+              </div>
+              <div class="md:col-span-4 space-y-2">
+                <label for="nfe-crediario-bank-account" class="block text-sm font-medium text-gray-700">Conta Corrente</label>
+                <select id="nfe-crediario-bank-account" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  <option value="">Selecione</option>
+                </select>
+              </div>
+              <div class="md:col-span-4 space-y-2">
+                <label for="nfe-crediario-accounting-account" class="block text-sm font-medium text-gray-700">Conta Contabil</label>
+                <div class="flex flex-wrap items-center gap-2">
+                  <select id="nfe-crediario-accounting-account" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                    <option value="">Selecione</option>
+                  </select>
+                  <button type="button" id="nfe-crediario-add" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-50">
+                    <i class="fas fa-plus"></i>
+                    Adicionar
+                  </button>
+                  <button type="button" id="nfe-crediario-new" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-50">
+                    <i class="fas fa-file"></i>
+                    Novo
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="overflow-x-auto inline-block max-w-full">
+              <table class="w-auto table-auto divide-y divide-gray-200 text-xs">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Parcela</th>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Vencimento</th>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Valor</th>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Acoes</th>
+                </tr>
+              </thead>
+              <tbody id="nfe-crediario-table" class="divide-y divide-gray-100 bg-white">
+                <tr id="nfe-crediario-empty">
+                  <td colspan="4" class="px-4 py-4 text-center text-xs text-gray-500">Nenhuma parcela gerada.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          </div>
+          <div class="rounded-lg border border-gray-100 bg-gray-50 px-4 py-4 text-xs text-gray-600 hidden" data-payment-panel="cheque">
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-12">
+              <div class="md:col-span-3 space-y-2">
+                <label for="nfe-cheque-date" class="block text-sm font-medium text-gray-700">Data para apresentacao do cheque*</label>
+                <input type="date" id="nfe-cheque-date" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+              </div>
+              <div class="md:col-span-2 space-y-2">
+                <label for="nfe-cheque-value" class="block text-sm font-medium text-gray-700">Valor</label>
+                <input type="text" id="nfe-cheque-value" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="0,00">
+              </div>
+              <div class="md:col-span-2 space-y-2">
+                <label for="nfe-cheque-bank" class="block text-sm font-medium text-gray-700">Banco</label>
+                <input type="text" id="nfe-cheque-bank" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+              </div>
+              <div class="md:col-span-2 space-y-2">
+                <label for="nfe-cheque-account" class="block text-sm font-medium text-gray-700">Conta</label>
+                <input type="text" id="nfe-cheque-account" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+              </div>
+              <div class="md:col-span-2 space-y-2">
+                <label for="nfe-cheque-agency" class="block text-sm font-medium text-gray-700">Agencia</label>
+                <input type="text" id="nfe-cheque-agency" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+              </div>
+              <div class="md:col-span-2 space-y-2">
+                <label for="nfe-cheque-number" class="block text-sm font-medium text-gray-700">Cheque</label>
+                <input type="text" id="nfe-cheque-number" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+              </div>
+
+              <div class="md:col-span-4 space-y-2">
+                <label for="nfe-cheque-client" class="block text-sm font-medium text-gray-700">Cliente</label>
+                <input type="text" id="nfe-cheque-client" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Codigo do cliente ou nome">
+              </div>
+              <div class="md:col-span-4 space-y-2">
+                <label for="nfe-cheque-holder" class="block text-sm font-medium text-gray-700">Nome Titular</label>
+                <input type="text" id="nfe-cheque-holder" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+              </div>
+              <div class="md:col-span-2 space-y-2">
+                <label for="nfe-cheque-holder-type" class="block text-sm font-medium text-gray-700">Tipo</label>
+                <select id="nfe-cheque-holder-type" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  <option value="">Selecione</option>
+                  <option value="fisico">Fisico</option>
+                  <option value="juridico">Juridico</option>
+                </select>
+              </div>
+              <div class="md:col-span-2 space-y-2">
+                <label for="nfe-cheque-cpf" class="block text-sm font-medium text-gray-700">CPF</label>
+                <input type="text" id="nfe-cheque-cpf" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+              </div>
+              <div class="md:col-span-3 space-y-2">
+                <label for="nfe-cheque-phone" class="block text-sm font-medium text-gray-700">Fone Titular</label>
+                <input type="text" id="nfe-cheque-phone" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+              </div>
+              <div class="md:col-span-9 space-y-2">
+                <label for="nfe-cheque-address" class="block text-sm font-medium text-gray-700">Endereco Titular</label>
+                <input type="text" id="nfe-cheque-address" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+              </div>
+              <div class="md:col-span-12 flex flex-wrap gap-2">
+                <button type="button" id="nfe-cheque-add" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-50">
+                  <i class="fas fa-plus"></i>
+                  Adicionar
+                </button>
+                <button type="button" id="nfe-cheque-new" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-50">
+                  <i class="fas fa-file"></i>
+                  Novo
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="rounded-lg border border-gray-100 bg-gray-50 px-4 py-3 text-xs text-gray-600 hidden" data-payment-panel="cartao">
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-12">
+              <div class="md:col-span-4 space-y-2">
+                <label for="nfe-card-method" class="block text-sm font-medium text-gray-700">Cartao</label>
+                <select id="nfe-card-method" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  <option value="">Selecione</option>
+                </select>
+              </div>
+              <div class="md:col-span-2 space-y-2">
+                <label for="nfe-card-value" class="block text-sm font-medium text-gray-700">Valor</label>
+                <input type="text" id="nfe-card-value" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="0,00">
+              </div>
+              <div class="md:col-span-12 flex flex-wrap gap-2">
+                <button type="button" id="nfe-card-add" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-50">
+                  <i class="fas fa-plus"></i>
+                  Adicionar
+                </button>
+                <button type="button" id="nfe-card-new" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-50">
+                  <i class="fas fa-file"></i>
+                  Novo
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="rounded-lg border border-gray-100 bg-gray-50 px-4 py-4 text-xs text-gray-600" data-payment-panel="dinheiro">
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-12">
+              <div class="md:col-span-2 space-y-2">
+                <label for="nfe-cash-value" class="block text-sm font-medium text-gray-700">Valor</label>
+                <input type="text" id="nfe-cash-value" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="0,00">
+              </div>
+              <div class="md:col-span-12 flex flex-wrap gap-2">
+                <button type="button" id="nfe-cash-add" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-50">
+                  <i class="fas fa-plus"></i>
+                  Adicionar
+                </button>
+                <button type="button" id="nfe-cash-new" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-50">
+                  <i class="fas fa-file"></i>
+                  Novo
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="rounded-lg border border-gray-100 bg-gray-50 px-4 py-4 text-xs text-gray-600 hidden" data-payment-panel="pix">
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-12">
+              <div class="md:col-span-2 space-y-2">
+                <label for="nfe-pix-value" class="block text-sm font-medium text-gray-700">Valor</label>
+                <input type="text" id="nfe-pix-value" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="0,00">
+              </div>
+              <div class="md:col-span-12 flex flex-wrap gap-2">
+                <button type="button" id="nfe-pix-add" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-50">
+                  <i class="fas fa-plus"></i>
+                  Adicionar
+                </button>
+                <button type="button" id="nfe-pix-new" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-50">
+                  <i class="fas fa-file"></i>
+                  Novo
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="rounded-lg border border-gray-100 bg-gray-50 px-4 py-3 text-xs text-gray-600 hidden" data-payment-panel="outras">
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-12">
+              <div class="md:col-span-4 space-y-2">
+                <label for="nfe-other-method" class="block text-sm font-medium text-gray-700">Meio de Pagamento</label>
+                <select id="nfe-other-method" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  <option value="">Selecione</option>
+                  <option value="vale-alimentacao">Vale Alimentacao</option>
+                  <option value="vale-refeicao">Vale Refeicao</option>
+                  <option value="vale-presente">Vale Presente</option>
+                  <option value="vale-combustivel">Vale Combustivel</option>
+                  <option value="boleto-bancario">Boleto Bancario</option>
+                  <option value="deposito-bancario">Deposito Bancario</option>
+                  <option value="transferencia-bancaria">Transferencia Bancaria</option>
+                  <option value="programa-fidelidade">Programa Fidelidade</option>
+                  <option value="outros">Outros</option>
+                </select>
+              </div>
+              <div class="md:col-span-2 space-y-2">
+                <label for="nfe-other-value" class="block text-sm font-medium text-gray-700">Valor</label>
+                <input type="text" id="nfe-other-value" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="0,00">
+              </div>
+              <div class="md:col-span-12 flex flex-wrap gap-2">
+                <button type="button" id="nfe-other-add" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-50">
+                  <i class="fas fa-plus"></i>
+                  Adicionar
+                </button>
+                <button type="button" id="nfe-other-new" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-50">
+                  <i class="fas fa-file"></i>
+                  Novo
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="overflow-x-auto hidden" data-payment-cheque-table>
+            <table class="w-auto table-auto divide-y divide-gray-200 text-xs">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Data</th>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Valor</th>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Banco</th>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Conta</th>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Agencia</th>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Cheque</th>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Cliente</th>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Titular</th>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Tipo</th>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">CPF</th>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Fone</th>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Endereco</th>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Acoes</th>
+                </tr>
+              </thead>
+              <tbody id="nfe-cheque-table" class="divide-y divide-gray-100 bg-white">
+                <tr id="nfe-cheque-empty">
+                  <td colspan="13" class="px-4 py-4 text-center text-xs text-gray-500">Nenhum cheque adicionado.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="overflow-x-auto hidden" data-payment-card-table>
+            <table class="w-auto table-auto divide-y divide-gray-200 text-xs">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Cartao</th>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Valor</th>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Acoes</th>
+                </tr>
+              </thead>
+              <tbody id="nfe-card-table" class="divide-y divide-gray-100 bg-white">
+                <tr id="nfe-card-empty">
+                  <td colspan="3" class="px-4 py-4 text-center text-xs text-gray-500">Nenhum cartao adicionado.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="overflow-x-auto hidden" data-payment-cash-table>
+            <table class="w-auto table-auto divide-y divide-gray-200 text-xs">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Valor</th>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Acoes</th>
+                </tr>
+              </thead>
+              <tbody id="nfe-cash-table" class="divide-y divide-gray-100 bg-white">
+                <tr id="nfe-cash-empty">
+                  <td colspan="2" class="px-4 py-4 text-center text-xs text-gray-500">Nenhum valor adicionado.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="overflow-x-auto hidden" data-payment-pix-table>
+            <table class="w-auto table-auto divide-y divide-gray-200 text-xs">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Valor</th>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Acoes</th>
+                </tr>
+              </thead>
+              <tbody id="nfe-pix-table" class="divide-y divide-gray-100 bg-white">
+                <tr id="nfe-pix-empty">
+                  <td colspan="2" class="px-4 py-4 text-center text-xs text-gray-500">Nenhum valor adicionado.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="overflow-x-auto hidden" data-payment-other-table>
+            <table class="w-auto table-auto divide-y divide-gray-200 text-xs">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Meio de Pagamento</th>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Valor</th>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Acoes</th>
+                </tr>
+              </thead>
+              <tbody id="nfe-other-table" class="divide-y divide-gray-100 bg-white">
+                <tr id="nfe-other-empty">
+                  <td colspan="3" class="px-4 py-4 text-center text-xs text-gray-500">Nenhum valor adicionado.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+          </div>
+          
+          <div data-nfe-panel="adicionais" class="space-y-6 hidden">
+            <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6" data-component="NFeObservacoes">
+              <div class="space-y-2">
+                <label for="nfe-info-contribuinte" class="block text-sm font-medium text-gray-700">Inf. Adicionais de Interesse do Contribuinte</label>
+                <textarea id="nfe-info-contribuinte" rows="4" class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"></textarea>
+              </div>
+              <div class="space-y-2">
+                <label for="nfe-info-contribuinte-auto" class="block text-sm font-medium text-gray-700">Inf. Adicionais de Interesse do Contribuinte (Gerados Automaticamente)</label>
+                <textarea id="nfe-info-contribuinte-auto" rows="4" class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"></textarea>
+              </div>
+              <div class="space-y-2">
+                <label for="nfe-info-fisco" class="block text-sm font-medium text-gray-700">Inf. Adicionais de Interesse do Fisco</label>
+                <textarea id="nfe-info-fisco" rows="4" class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"></textarea>
+              </div>
+              <div class="space-y-2">
+                <label for="nfe-info-microchip" class="block text-sm font-medium text-gray-700">Inf. Adicionais Microchip/Anilhas</label>
+                <textarea id="nfe-info-microchip" rows="4" class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"></textarea>
+              </div>
+            </section>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <div id="nfe-action-bar" class="bg-white/95 border-t border-gray-200 backdrop-blur">
+    <div class="w-full max-w-none px-4 sm:px-6 lg:px-8 py-4">
+      <div class="flex flex-wrap items-center gap-3">
+        <button type="button" id="nfe-action-save" class="inline-flex items-center gap-2 rounded-lg bg-gray-800 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-700">
+          <i class="fas fa-floppy-disk"></i>
+          Gravar
+        </button>
+        <button type="button" id="nfe-action-new" data-nfe-action="novo" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-5 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50">
+          <i class="fas fa-file"></i>
+          Novo
+        </button>
+        <button type="button" id="nfe-action-manage" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-5 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50">
+          <i class="fas fa-gear"></i>
+          Gerenciar NF
+        </button>
+        <button type="button" id="nfe-action-import" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-5 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50">
+          <i class="fas fa-file-import"></i>
+          Importar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="nfe-product-modal" class="fixed inset-0 z-50 hidden overflow-y-auto bg-black/40 p-3" aria-hidden="true">
+    <div class="mx-auto w-full max-w-5xl rounded-xl bg-white shadow-xl">
+      <div class="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+        <h3 class="text-base font-semibold text-gray-800">Informar Produtos</h3>
+        <button type="button" class="text-gray-400 hover:text-gray-600" data-nfe-modal-close>
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="max-h-[78vh] overflow-y-auto space-y-4 px-4 py-4 text-[11px]">
+        <div class="space-y-1">
+          <label for="nfe-modal-product" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Procura</label>
+          <div class="relative">
+            <span class="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400"><i class="fas fa-magnifying-glass"></i></span>
+            <input type="text" id="nfe-modal-product" class="w-full border-b border-gray-300 bg-transparent pb-1 pr-8 text-[11px] focus:border-primary focus:outline-none" placeholder="Digite o produto">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="space-y-1">
+            <label for="nfe-modal-qty" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Quantidade</label>
+            <input type="text" id="nfe-modal-qty" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,000">
+          </div>
+          <div class="space-y-1">
+            <label for="nfe-modal-unit" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Valor Unitario (R$)</label>
+            <input type="text" id="nfe-modal-unit" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,000">
+          </div>
+          <div class="space-y-1">
+            <label for="nfe-modal-subtotal" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">SubTotal (R$)</label>
+            <input type="text" id="nfe-modal-subtotal" class="w-full border-b border-gray-200 bg-transparent pb-1 text-[11px] text-gray-400" value="0,00" readonly>
+          </div>
+
+          <div class="space-y-1">
+            <label for="nfe-modal-discount-percent" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Desconto (%)</label>
+            <input type="text" id="nfe-modal-discount-percent" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+          </div>
+          <div class="space-y-1">
+            <label for="nfe-modal-discount-value" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Desconto (R$)</label>
+            <input type="text" id="nfe-modal-discount-value" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+          </div>
+          <div class="space-y-1">
+            <label for="nfe-modal-other-expenses" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Outras Despesas Acessorias (R$)</label>
+            <input type="text" id="nfe-modal-other-expenses" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+          </div>
+
+          <div class="space-y-1">
+            <label for="nfe-modal-total" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Valor Total (R$)</label>
+            <input type="text" id="nfe-modal-total" class="w-full border-b border-gray-200 bg-transparent pb-1 text-[11px] text-gray-400" value="0,00" readonly>
+          </div>
+          <div class="space-y-1">
+            <label for="nfe-modal-unidade-comercial" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Unidade Comercial</label>
+            <select id="nfe-modal-unidade-comercial" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none">
+              <option value="">--SELECIONE--</option>
+            </select>
+          </div>
+          <div class="space-y-1">
+            <label for="nfe-modal-peso" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Peso (Kg)</label>
+            <input type="text" id="nfe-modal-peso" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,000">
+          </div>
+
+          <div class="space-y-1">
+            <label for="nfe-modal-qty-trib" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Quantidade Tributavel</label>
+            <input type="text" id="nfe-modal-qty-trib" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,000">
+          </div>
+          <div class="space-y-1">
+            <label for="nfe-modal-unidade-tributavel" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Unidade Tributavel</label>
+            <select id="nfe-modal-unidade-tributavel" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none">
+              <option value="">--SELECIONE--</option>
+            </select>
+          </div>
+          <div class="space-y-1">
+            <label for="nfe-modal-unit-trib" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Valor Unitario de Tributacao</label>
+            <input type="text" id="nfe-modal-unit-trib" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,000">
+          </div>
+
+          <div class="space-y-1">
+            <label for="nfe-modal-ncm" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">NCM</label>
+            <input type="text" id="nfe-modal-ncm" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none">
+          </div>
+          <div class="space-y-1">
+            <label for="nfe-modal-cfop" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">CFOP</label>
+            <select id="nfe-modal-cfop" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none">
+              <option value="">--SELECIONE--</option>
+            </select>
+          </div>
+          <div class="space-y-1">
+            <label for="nfe-modal-cest" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Cest</label>
+            <div class="relative">
+              <input type="text" id="nfe-modal-cest" class="w-full border-b border-gray-300 bg-transparent pb-1 pr-5 text-[11px] focus:border-primary focus:outline-none" placeholder="--SELECIONE--" autocomplete="off">
+              <button type="button" class="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary" data-cest-toggle aria-label="Abrir lista de CEST">
+                <i class="fas fa-chevron-down text-[10px]"></i>
+              </button>
+              <div class="absolute z-50 mt-2 hidden max-h-56 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg text-xs text-gray-600" data-cest-dropdown></div>
+            </div>
+          </div>
+
+          <div class="space-y-1">
+            <label for="nfe-modal-beneficio" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Codigo do Beneficio Fiscal</label>
+            <input type="text" id="nfe-modal-beneficio" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none">
+          </div>
+          <div class="space-y-1">
+            <label for="nfe-modal-numero-pedido" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Numero Pedido</label>
+            <input type="text" id="nfe-modal-numero-pedido" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none">
+          </div>
+          <div class="space-y-1">
+            <label for="nfe-modal-numero-item-pedido" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Numero Item Pedido</label>
+            <input type="text" id="nfe-modal-numero-item-pedido" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none">
+          </div>
+        </div>
+
+        <div class="border-t border-gray-100 pt-3">
+          <div class="flex flex-wrap gap-2 text-[10px] font-semibold uppercase tracking-wide text-gray-500" role="tablist" aria-label="Abas do item">
+            <button type="button" class="rounded-full border border-gray-200 px-3 py-1.5 text-primary" data-nfe-modal-tab="icms" aria-selected="true">ICMS</button>
+            <button type="button" class="rounded-full border border-gray-200 px-3 py-1.5" data-nfe-modal-tab="ipi">IPI</button>
+            <button type="button" class="rounded-full border border-gray-200 px-3 py-1.5" data-nfe-modal-tab="pis-cofins">PIS / COFINS</button>
+            <button type="button" class="rounded-full border border-gray-200 px-3 py-1.5" data-nfe-modal-tab="info">Informacoes do Produto</button>
+          </div>
+          <div class="mt-4">
+            <div data-nfe-modal-panel="icms" class="space-y-4">
+              <div class="space-y-1">
+                <label for="nfe-modal-icms-cst" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">CST <span class="text-red-500">*</span></label>
+                <select id="nfe-modal-icms-cst" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none">
+                  <option value="">--SELECIONE--</option>
+                  <option value="00">CST 00 - Tributada integralmente</option>
+                  <option value="10">CST 10 - Tributada e com cobranca do ICMS por substituicao tributaria</option>
+                  <option value="20">CST 20 - Com reducao da base de calculo</option>
+                  <option value="30">CST 30 - Isenta ou nao tributada e com cobranca do ICMS por substituicao tributaria</option>
+                  <option value="40">CST 40 - Isenta</option>
+                  <option value="41">CST 41 - Nao tributada</option>
+                  <option value="50">CST 50 - Suspensao</option>
+                  <option value="51">CST 51 - Diferimento</option>
+                  <option value="60">CST 60 - ICMS cobrado anteriormente por substituicao tributaria</option>
+                  <option value="70">CST 70 - Com reducao da base de calculo e cobranca do ICMS por substituicao tributaria</option>
+                  <option value="90">CST 90 - Outras</option>
+                  <option value="101">CSOSN 101 - Tributada com permissao de credito</option>
+                  <option value="102">CSOSN 102 - Tributada sem permissao de credito</option>
+                  <option value="103">CSOSN 103 - Isencao do ICMS para faixa de receita bruta</option>
+                  <option value="201">CSOSN 201 - Tributada com permissao de credito e com cobranca do ICMS ST</option>
+                  <option value="202">CSOSN 202 - Tributada sem permissao de credito e com cobranca do ICMS ST</option>
+                  <option value="203">CSOSN 203 - Isencao para faixa de receita bruta e com cobranca do ICMS ST</option>
+                  <option value="300">CSOSN 300 - Imune</option>
+                  <option value="400">CSOSN 400 - Nao tributada</option>
+                  <option value="500">CSOSN 500 - ICMS cobrado anteriormente por ST ou por antecipacao</option>
+                  <option value="900">CSOSN 900 - Outros</option>
+                </select>
+              </div>
+              <div class="space-y-1">
+                <label for="nfe-modal-icms-modalidade" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Modalid. de determin. da BC ICMS</label>
+                <select id="nfe-modal-icms-modalidade" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none">
+                  <option value="nao-aplica">N&atilde;o se aplica</option>
+                  <option value="mva" selected>Margem Valor Agregado</option>
+                  <option value="pauta">Pauta (valor)</option>
+                  <option value="preco-tabelado">Preço Tabelado Máx. (valor)</option>
+                  <option value="valor-operacao">Valor da Operação</option>
+                </select>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="space-y-1">
+                  <label for="nfe-modal-icms-base-percent" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Base ICMS (%)</label>
+                  <input type="text" id="nfe-modal-icms-base-percent" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="100">
+                </div>
+                <div class="space-y-1">
+                  <label for="nfe-modal-icms-base-value" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Base ICMS (R$)</label>
+                  <input type="text" id="nfe-modal-icms-base-value" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+                </div>
+                <div class="space-y-1">
+                  <label for="nfe-modal-icms-aliq" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Aliq. ICMS (%)</label>
+                  <input type="text" id="nfe-modal-icms-aliq" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+                </div>
+                <div class="space-y-1">
+                  <label for="nfe-modal-icms-valor" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Valor ICMS (R$)</label>
+                  <input type="text" id="nfe-modal-icms-valor" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+                </div>
+                <div class="space-y-1">
+                  <label for="nfe-modal-icms-aliq-fcp" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Aliq. FCP (%)</label>
+                  <input type="text" id="nfe-modal-icms-aliq-fcp" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+                </div>
+                <div class="space-y-1">
+                  <label for="nfe-modal-icms-valor-fcp" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Valor FCP (R$)</label>
+                  <input type="text" id="nfe-modal-icms-valor-fcp" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+                </div>
+              </div>
+            </div>
+            <div data-nfe-modal-panel="ipi" class="hidden space-y-4">
+              <div class="space-y-1">
+                <label for="nfe-modal-ipi-st" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">ST IPI</label>
+                <select id="nfe-modal-ipi-st" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none">
+                  <option value="">--SELECIONE--</option>
+                  <option value="00">CST 00 - Entrada com recuperacao de credito</option>
+                  <option value="01">CST 01 - Entrada tributada com aliquota zero</option>
+                  <option value="02">CST 02 - Entrada isenta</option>
+                  <option value="03">CST 03 - Entrada nao tributada</option>
+                  <option value="04">CST 04 - Entrada imune</option>
+                  <option value="05">CST 05 - Entrada com suspensao</option>
+                  <option value="49">CST 49 - Outras entradas</option>
+                  <option value="50">CST 50 - Saida tributada</option>
+                  <option value="51">CST 51 - Saida tributada com aliquota zero</option>
+                  <option value="52">CST 52 - Saida isenta</option>
+                  <option value="53">CST 53 - Saida nao tributada</option>
+                  <option value="54">CST 54 - Saida imune</option>
+                  <option value="55">CST 55 - Saida com suspensao</option>
+                  <option value="99">CST 99 - Outras saidas</option>
+                </select>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="space-y-1">
+                  <label for="nfe-modal-ipi-base" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Base IPI (R$)</label>
+                  <input type="text" id="nfe-modal-ipi-base" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+                </div>
+                <div class="space-y-1">
+                  <label for="nfe-modal-ipi-aliq" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Alíq. IPI (%)</label>
+                  <input type="text" id="nfe-modal-ipi-aliq" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+                </div>
+                <div class="space-y-1">
+                  <label for="nfe-modal-ipi-valor" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Valor IPI (R$)</label>
+                  <input type="text" id="nfe-modal-ipi-valor" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+                </div>
+              </div>
+              <div class="space-y-1">
+                <label for="nfe-modal-ipi-enquadramento" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Cód. de enquad.</label>
+                <input type="text" id="nfe-modal-ipi-enquadramento" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none">
+              </div>
+            </div>
+            <div data-nfe-modal-panel="pis-cofins" class="hidden space-y-4">
+              <div class="space-y-1">
+                <label for="nfe-modal-pis-st" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">ST PIS</label>
+                <select id="nfe-modal-pis-st" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none">
+                  <option value="">--SELECIONE--</option>
+                  <option value="01">CST 01 - Opera&ccedil;&atilde;o Tribut&aacute;vel (Base de C&aacute;lculo = Valor da Opera&ccedil;&atilde;o Al&iacute;quota Normal)</option>
+                  <option value="02">CST 02 - Opera&ccedil;&atilde;o Tribut&aacute;vel (Base de C&aacute;lculo = Valor da Opera&ccedil;&atilde;o Al&iacute;quota Diferenciada)</option>
+                  <option value="03">CST 03 - Opera&ccedil;&atilde;o Tribut&aacute;vel (Base de C&aacute;lculo = Quantidade Vendida x Al&iacute;quota por Unidade)</option>
+                  <option value="04">CST 04 - Opera&ccedil;&atilde;o Tribut&aacute;vel (Tributa&ccedil;&atilde;o Monof&aacute;sica - Al&iacute;quota Zero)</option>
+                  <option value="05">CST 05 - Opera&ccedil;&atilde;o Tribut&aacute;vel (Substitui&ccedil;&atilde;o Tribut&aacute;ria)</option>
+                  <option value="06">CST 06 - Opera&ccedil;&atilde;o Tribut&aacute;vel (Al&iacute;quota Zero)</option>
+                  <option value="07">CST 07 - Opera&ccedil;&atilde;o Isenta da Contribui&ccedil;&atilde;o</option>
+                  <option value="08">CST 08 - Opera&ccedil;&atilde;o Sem Incid&ecirc;ncia da Contribui&ccedil;&atilde;o</option>
+                  <option value="09">CST 09 - Opera&ccedil;&atilde;o com Suspens&atilde;o da Contribui&ccedil;&atilde;o</option>
+                  <option value="49">CST 49 - Outras Opera&ccedil;&otilde;es de Sa&iacute;da</option>
+                  <option value="50">CST 50 - Opera&ccedil;&atilde;o com Direito a Cr&eacute;dito - Vinculada Exclusivamente a Receita Tributada no Mercado Interno</option>
+                  <option value="51">CST 51 - Opera&ccedil;&atilde;o com Direito a Cr&eacute;dito - Vinculada Exclusivamente a Receita N&atilde;o Tributada no Mercado Interno</option>
+                  <option value="52">CST 52 - Opera&ccedil;&atilde;o com Direito a Cr&eacute;dito - Vinculada Exclusivamente a Receita de Exporta&ccedil;&atilde;o</option>
+                  <option value="53">CST 53 - Opera&ccedil;&atilde;o com Direito a Cr&eacute;dito - Vinculada a Receitas Tributadas e N&atilde;o-Tributadas no Mercado Interno</option>
+                  <option value="54">CST 54 - Opera&ccedil;&atilde;o com Direito a Cr&eacute;dito - Vinculada a Receitas Tributadas no Mercado Interno e de Exporta&ccedil;&atilde;o</option>
+                  <option value="55">CST 55 - Opera&ccedil;&atilde;o com Direito a Cr&eacute;dito - Vinculada a Receitas N&atilde;o-Tributadas no Mercado Interno e de Exporta&ccedil;&atilde;o</option>
+                  <option value="56">CST 56 - Opera&ccedil;&atilde;o com Direito a Cr&eacute;dito - Vinculada a Receitas Tributadas e N&atilde;o-Tributadas no Mercado Interno e de Exporta&ccedil;&atilde;o</option>
+                  <option value="60">CST 60 - Cr&eacute;dito Presumido - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o Vinculada Exclusivamente a Receita Tributada no Mercado Interno</option>
+                  <option value="61">CST 61 - Cr&eacute;dito Presumido - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o Vinculada Exclusivamente a Receita N&atilde;o Tributada no Mercado Interno</option>
+                  <option value="62">CST 62 - Cr&eacute;dito Presumido - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o Vinculada Exclusivamente a Receita de Exporta&ccedil;&atilde;o</option>
+                  <option value="63">CST 63 - Cr&eacute;dito Presumido - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o Vinculada a Receitas Tributadas e N&atilde;o-Tributadas no Mercado Interno</option>
+                  <option value="64">CST 64 - Cr&eacute;dito Presumido - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o Vinculada a Receitas Tributadas no Mercado Interno e de Exporta&ccedil;&atilde;o</option>
+                  <option value="65">CST 65 - Cr&eacute;dito Presumido - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o Vinculada a Receitas N&atilde;o-Tributadas no Mercado Interno e de Exporta&ccedil;&atilde;o</option>
+                  <option value="66">CST 66 - Cr&eacute;dito Presumido - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o Vinculada a Receitas Tributadas e N&atilde;o-Tributadas no Mercado Interno e de Exporta&ccedil;&atilde;o</option>
+                  <option value="67">CST 67 - Cr&eacute;dito Presumido - Outras Opera&ccedil;&otilde;es</option>
+                  <option value="70">CST 70 - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o sem Direito a Cr&eacute;dito</option>
+                  <option value="71">CST 71 - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o com Isen&ccedil;&atilde;o</option>
+                  <option value="72">CST 72 - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o com Suspens&atilde;o</option>
+                  <option value="73">CST 73 - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o a Al&iacute;quota Zero</option>
+                  <option value="74">CST 74 - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o sem Incid&ecirc;ncia da Contribui&ccedil;&atilde;o</option>
+                  <option value="75">CST 75 - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o por Substitui&ccedil;&atilde;o Tribut&aacute;ria</option>
+                  <option value="98">CST 98 - Outras Opera&ccedil;&otilde;es de Entrada</option>
+                  <option value="99">CST 99 - Outras Opera&ccedil;&otilde;es</option>
+                </select>
+              </div>
+              <div class="flex flex-wrap gap-4 text-[10px] text-gray-500">
+                <label class="inline-flex items-center gap-2">
+                  <input type="checkbox" id="nfe-modal-pis-st-total" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/30">
+                  Valor do PIS ST compõe valor total da NF-e
+                </label>
+                <label class="inline-flex items-center gap-2">
+                  <input type="checkbox" id="nfe-modal-pis-excluir-icms" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/30">
+                  Excluir o valor do ICMS da Base de Cálculo do PIS
+                </label>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="space-y-1">
+                  <label for="nfe-modal-pis-base" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Base PIS (R$)</label>
+                  <input type="text" id="nfe-modal-pis-base" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+                </div>
+                <div class="space-y-1">
+                  <label for="nfe-modal-pis-aliq" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Alíquota PIS (%)</label>
+                  <input type="text" id="nfe-modal-pis-aliq" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+                </div>
+                <div class="space-y-1">
+                  <label for="nfe-modal-pis-valor" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Valor PIS (R$)</label>
+                  <input type="text" id="nfe-modal-pis-valor" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+                </div>
+              </div>
+
+              <div class="space-y-1 pt-2">
+                <label for="nfe-modal-cofins-st" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">ST COFINS</label>
+                <select id="nfe-modal-cofins-st" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none">
+                  <option value="">--SELECIONE--</option>
+                  <option value="01">CST 01 - Opera&ccedil;&atilde;o Tribut&aacute;vel (Base de C&aacute;lculo = Valor da Opera&ccedil;&atilde;o Al&iacute;quota Normal)</option>
+                  <option value="02">CST 02 - Opera&ccedil;&atilde;o Tribut&aacute;vel (Base de C&aacute;lculo = Valor da Opera&ccedil;&atilde;o Al&iacute;quota Diferenciada)</option>
+                  <option value="03">CST 03 - Opera&ccedil;&atilde;o Tribut&aacute;vel (Base de C&aacute;lculo = Quantidade Vendida x Al&iacute;quota por Unidade)</option>
+                  <option value="04">CST 04 - Opera&ccedil;&atilde;o Tribut&aacute;vel (Tributa&ccedil;&atilde;o Monof&aacute;sica - Al&iacute;quota Zero)</option>
+                  <option value="05">CST 05 - Opera&ccedil;&atilde;o Tribut&aacute;vel (Substitui&ccedil;&atilde;o Tribut&aacute;ria)</option>
+                  <option value="06">CST 06 - Opera&ccedil;&atilde;o Tribut&aacute;vel (Al&iacute;quota Zero)</option>
+                  <option value="07">CST 07 - Opera&ccedil;&atilde;o Isenta da Contribui&ccedil;&atilde;o</option>
+                  <option value="08">CST 08 - Opera&ccedil;&atilde;o Sem Incid&ecirc;ncia da Contribui&ccedil;&atilde;o</option>
+                  <option value="09">CST 09 - Opera&ccedil;&atilde;o com Suspens&atilde;o da Contribui&ccedil;&atilde;o</option>
+                  <option value="49">CST 49 - Outras Opera&ccedil;&otilde;es de Sa&iacute;da</option>
+                  <option value="50">CST 50 - Opera&ccedil;&atilde;o com Direito a Cr&eacute;dito - Vinculada Exclusivamente a Receita Tributada no Mercado Interno</option>
+                  <option value="51">CST 51 - Opera&ccedil;&atilde;o com Direito a Cr&eacute;dito - Vinculada Exclusivamente a Receita N&atilde;o Tributada no Mercado Interno</option>
+                  <option value="52">CST 52 - Opera&ccedil;&atilde;o com Direito a Cr&eacute;dito - Vinculada Exclusivamente a Receita de Exporta&ccedil;&atilde;o</option>
+                  <option value="53">CST 53 - Opera&ccedil;&atilde;o com Direito a Cr&eacute;dito - Vinculada a Receitas Tributadas e N&atilde;o-Tributadas no Mercado Interno</option>
+                  <option value="54">CST 54 - Opera&ccedil;&atilde;o com Direito a Cr&eacute;dito - Vinculada a Receitas Tributadas no Mercado Interno e de Exporta&ccedil;&atilde;o</option>
+                  <option value="55">CST 55 - Opera&ccedil;&atilde;o com Direito a Cr&eacute;dito - Vinculada a Receitas N&atilde;o-Tributadas no Mercado Interno e de Exporta&ccedil;&atilde;o</option>
+                  <option value="56">CST 56 - Opera&ccedil;&atilde;o com Direito a Cr&eacute;dito - Vinculada a Receitas Tributadas e N&atilde;o-Tributadas no Mercado Interno e de Exporta&ccedil;&atilde;o</option>
+                  <option value="60">CST 60 - Cr&eacute;dito Presumido - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o Vinculada Exclusivamente a Receita Tributada no Mercado Interno</option>
+                  <option value="61">CST 61 - Cr&eacute;dito Presumido - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o Vinculada Exclusivamente a Receita N&atilde;o Tributada no Mercado Interno</option>
+                  <option value="62">CST 62 - Cr&eacute;dito Presumido - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o Vinculada Exclusivamente a Receita de Exporta&ccedil;&atilde;o</option>
+                  <option value="63">CST 63 - Cr&eacute;dito Presumido - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o Vinculada a Receitas Tributadas e N&atilde;o-Tributadas no Mercado Interno</option>
+                  <option value="64">CST 64 - Cr&eacute;dito Presumido - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o Vinculada a Receitas Tributadas no Mercado Interno e de Exporta&ccedil;&atilde;o</option>
+                  <option value="65">CST 65 - Cr&eacute;dito Presumido - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o Vinculada a Receitas N&atilde;o-Tributadas no Mercado Interno e de Exporta&ccedil;&atilde;o</option>
+                  <option value="66">CST 66 - Cr&eacute;dito Presumido - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o Vinculada a Receitas Tributadas e N&atilde;o-Tributadas no Mercado Interno e de Exporta&ccedil;&atilde;o</option>
+                  <option value="67">CST 67 - Cr&eacute;dito Presumido - Outras Opera&ccedil;&otilde;es</option>
+                  <option value="70">CST 70 - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o sem Direito a Cr&eacute;dito</option>
+                  <option value="71">CST 71 - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o com Isen&ccedil;&atilde;o</option>
+                  <option value="72">CST 72 - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o com Suspens&atilde;o</option>
+                  <option value="73">CST 73 - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o a Al&iacute;quota Zero</option>
+                  <option value="74">CST 74 - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o sem Incid&ecirc;ncia da Contribui&ccedil;&atilde;o</option>
+                  <option value="75">CST 75 - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o por Substitui&ccedil;&atilde;o Tribut&aacute;ria</option>
+                  <option value="98">CST 98 - Outras Opera&ccedil;&otilde;es de Entrada</option>
+                  <option value="99">CST 99 - Outras Opera&ccedil;&otilde;es</option>
+                </select>
+              </div>
+              <div class="flex flex-wrap gap-4 text-[10px] text-gray-500">
+                <label class="inline-flex items-center gap-2">
+                  <input type="checkbox" id="nfe-modal-cofins-st-total" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/30">
+                  Valor do COFINS ST compõe valor total da NF-e
+                </label>
+                <label class="inline-flex items-center gap-2">
+                  <input type="checkbox" id="nfe-modal-cofins-excluir-icms" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/30">
+                  Excluir o valor do ICMS da Base de Cálculo do Cofins
+                </label>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="space-y-1">
+                  <label for="nfe-modal-cofins-base" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Base COFINS (R$)</label>
+                  <input type="text" id="nfe-modal-cofins-base" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+                </div>
+                <div class="space-y-1">
+                  <label for="nfe-modal-cofins-aliq" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Alíquota COFINS (%)</label>
+                  <input type="text" id="nfe-modal-cofins-aliq" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+                </div>
+                <div class="space-y-1">
+                  <label for="nfe-modal-cofins-valor" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Valor COFINS (R$)</label>
+                  <input type="text" id="nfe-modal-cofins-valor" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+                </div>
+              </div>
+            </div>
+            <div data-nfe-modal-panel="info" class="hidden">
+              <div class="space-y-1">
+                <label for="nfe-modal-info-produto" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Inf. Adicionais Produto</label>
+                <textarea id="nfe-modal-info-produto" rows="3" class="w-full rounded-md border border-gray-200 bg-gray-50 p-2 text-[11px] text-gray-700 focus:border-primary focus:outline-none"></textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="flex items-center justify-end gap-2 border-t border-gray-100 px-4 py-3 text-[11px]">
+        <button type="button" id="nfe-modal-cancel" class="rounded-lg border border-gray-200 px-3 py-1.5 font-semibold text-gray-700 hover:bg-gray-50 transition">Cancelar</button>
+        <button type="button" id="nfe-modal-save" class="rounded-lg bg-primary px-3 py-1.5 font-semibold text-white hover:bg-primary/90 transition">Adicionar item</button>
+      </div>
+    </div>
+  </div>
+
+  <ul id="nfe-history" class="hidden">
+    <li>Nenhuma ação registrada.</li>
+  </ul>
+
+  <div id="modal-placeholder"></div>
+  <div id="confirm-modal-placeholder"></div>
+  <div id="admin-footer-placeholder"></div>
+
+  <script>var basePath = '../../';</script>
+  <script src="https://unpkg.com/imask"></script>
+  <script src="../../scripts/core/config.js"></script>
+  <script src="../../scripts/core/ui.js"></script>
+  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/admin/admin.js"></script>
+  <script src="../../scripts/admin/admin-nfe.js"></script>
+</body>
+</html>

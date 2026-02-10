@@ -33,7 +33,9 @@ app.use(express.json({
   }
 }));
 app.use(express.urlencoded({ extended: true, limit: BODY_PARSER_LIMIT }));
-app.use(cors());
+app.use(cors({
+  exposedHeaders: ['Content-Disposition'],
+}));
 app.use(express.static('public'));
 app.use('/api/funcionarios', require('./routes/adminFuncionarios'));
 
@@ -64,6 +66,7 @@ const routes = [
   { path: '/api/suppliers', file: './routes/suppliers' },
   { path: '/api/internacao', file: './routes/internacaoBoxes' },
   { path: '/api/internacao/parametros', file: './routes/internacaoParametros' },
+  { path: '/api/nfe/drafts', file: './routes/nfeDrafts' },
   { path: '/api/purchase/nfe/drafts', file: './routes/purchaseNfeDrafts' },
   { path: '/api/accounts-payable', file: './routes/accountsPayable' },
   { path: '/api/accounts-receivable', file: './routes/accountsReceivable' },
@@ -81,11 +84,15 @@ const routes = [
   { path: '/api/admin/products/bulk', file: './routes/adminProductsBulk' },
   { path: '/api/fiscal/icms-simples', file: './routes/fiscalIcmsSimples' },
   { path: '/api/fiscal/rules', file: './routes/fiscalRules' },
+  { path: '/api/fiscal/default-rules', file: './routes/fiscalDefaultRules' },
+  { path: '/api/fiscal/series', file: './routes/fiscalSeries' },
+  { path: '/api/fiscal/cfop', file: './routes/fiscalCfop' },
   { path: '/api/profile', file: './routes/profile' },
   { path: '/api/email', file: './routes/email' },
   { path: '/api/search', file: './routes/search' },
   { path: '/api/integrations/external', file: './routes/integrationsExternal' },
   { path: '/api/mercadopago', file: './routes/mercadoPago' },
+  { path: '/api/orders', file: './routes/webOrders' },
   { path: '/api/integrations/whatsapp', file: './routes/integrationsWhatsapp' },
   { path: '/webhooks/whatsapp', file: './routes/whatsappWebhooks' },
   { path: '/webhook/whatsapp', file: './routes/whatsappWebhooks' },

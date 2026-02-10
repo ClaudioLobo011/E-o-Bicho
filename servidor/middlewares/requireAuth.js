@@ -25,6 +25,10 @@ module.exports = async function requireAuth(req, res, next) {
     next();
   } catch (err) {
     console.error(err);
+    if (err && err.name === 'TokenExpiredError') {
+      res.set('X-Auth-Reason', 'token-expired');
+      return res.status(401).json({ message: 'Token expirado', code: 'TOKEN_EXPIRED', logout: true });
+    }
     return res.status(401).json({ message: 'Não autorizado' });
   }
 };

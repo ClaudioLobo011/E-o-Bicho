@@ -105,6 +105,13 @@ const buildExchangeItem = (item) => {
   const discountValue = parseDecimal(item.discountValue);
   const depositId = toObjectId(item.depositId || item.deposit || item.deposito);
   const depositLabel = sanitizeString(item.depositLabel);
+  const sellerId = sanitizeString(item.sellerId || item.vendedorId || item.vendedor_id);
+  const sellerCode = sanitizeString(item.sellerCode || item.vendedorCodigo || item.vendedor_code);
+  const sellerName = sanitizeString(item.sellerName || item.vendedorNome || item.vendedor_name);
+  const sourceSaleId = sanitizeString(item.sourceSaleId || item.saleId || item.vendaId);
+  const sourceSaleCode = sanitizeString(
+    item.sourceSaleCode || item.saleCode || item.vendaCodigo || item.vendaCode
+  );
   if (!code && !description) return null;
   return {
     code,
@@ -116,7 +123,26 @@ const buildExchangeItem = (item) => {
     discountValue,
     depositId,
     depositLabel,
+    sellerId,
+    sellerCode,
+    sellerName,
+    sourceSaleId,
+    sourceSaleCode,
   };
+};
+
+const buildSourceSales = (sourceSales) => {
+  if (!Array.isArray(sourceSales)) return [];
+  return sourceSales
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') return null;
+      const saleId = sanitizeString(entry.saleId || entry.sale || entry.id);
+      const saleCode = sanitizeString(entry.saleCode || entry.code);
+      const saleCodeLabel = sanitizeString(entry.saleCodeLabel || entry.codeLabel);
+      if (!saleId && !saleCode) return null;
+      return { saleId, saleCode, saleCodeLabel };
+    })
+    .filter(Boolean);
 };
 
 const getNextExchangeNumber = async () => {
@@ -192,6 +218,7 @@ router.post('/', requireAuth, authorizeRoles(...allowedRoles), async (req, res) 
         taken: takenTotal,
       },
       differenceValue,
+      sourceSales: buildSourceSales(body.sourceSales),
       createdBy: {
         id: sanitizeString(req.user?.id),
         email: sanitizeString(req.user?.email),
@@ -247,6 +274,11 @@ router.get('/by-code/:code', requireAuth, authorizeRoles(...allowedRoles), async
           discountValue: item.discountValue,
           depositId: item.depositId ? String(item.depositId) : '',
           depositLabel: item.depositLabel,
+          sellerId: item.sellerId || '',
+          sellerCode: item.sellerCode || '',
+          sellerName: item.sellerName || '',
+          sourceSaleId: item.sourceSaleId || '',
+          sourceSaleCode: item.sourceSaleCode || '',
         })),
         takenItems: (exchange.takenItems || []).map((item) => ({
           code: item.code,
@@ -258,9 +290,15 @@ router.get('/by-code/:code', requireAuth, authorizeRoles(...allowedRoles), async
           discountValue: item.discountValue,
           depositId: item.depositId ? String(item.depositId) : '',
           depositLabel: item.depositLabel,
+          sellerId: item.sellerId || '',
+          sellerCode: item.sellerCode || '',
+          sellerName: item.sellerName || '',
+          sourceSaleId: item.sourceSaleId || '',
+          sourceSaleCode: item.sourceSaleCode || '',
         })),
         totals: exchange.totals || { returned: 0, taken: 0 },
         differenceValue: exchange.differenceValue || 0,
+        sourceSales: Array.isArray(exchange.sourceSales) ? exchange.sourceSales : [],
       },
     });
   } catch (error) {
@@ -322,6 +360,9 @@ router.put('/:id', requireAuth, authorizeRoles(...allowedRoles), async (req, res
     existing.takenItems = takenItems;
     existing.totals = { returned: returnedTotal, taken: takenTotal };
     existing.differenceValue = differenceValue;
+    if (Array.isArray(body.sourceSales)) {
+      existing.sourceSales = buildSourceSales(body.sourceSales);
+    }
 
     const saved = await existing.save();
     return res.json({
