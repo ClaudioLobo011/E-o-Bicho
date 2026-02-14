@@ -461,6 +461,9 @@
   let currentStatus = 'draft';
   let currentDraftId = '';
   let currentDraftCode = '';
+  let currentDraftMetadata = {};
+  let currentDraftXmlAmbient = '';
+  let nfeEventEntries = [];
   const INVALID_CODE_FLAG = 'nfe:invalid-code';
   let defaultFormState = null;
 
@@ -521,6 +524,7 @@
   const historyList = document.getElementById('nfe-history');
   const headerActionSelector = '[data-nfe-action]';
   const manageModalId = 'nfe-manage-modal';
+  const eventsModalId = 'nfe-events-modal';
   const manageModalTitle = 'Gerenciar NF';
 
   const MONEY_FORMAT = new Intl.NumberFormat('pt-BR', {
@@ -752,7 +756,9 @@
     }
 
     const wrapper = document.createElement('div');
-    wrapper.className = 'text-left space-y-3';
+    wrapper.className = 'text-left flex flex-col gap-3';
+    wrapper.style.maxHeight = '70vh';
+    wrapper.style.overflow = 'hidden';
     wrapper.innerHTML = `
       <div class="space-y-1">
         <label class="block text-xs font-semibold text-gray-500">Buscar empresa emitente</label>
@@ -2182,6 +2188,12 @@
       ITEM_COLUMNS.forEach((column) => {
         item[column.key] = getItemFieldValue(row, column.key);
       });
+      const productId = normalizeString(row.dataset.productId || '');
+      if (productId) item.productId = productId;
+      const productCode = normalizeString(row.dataset.productCode || '');
+      if (productCode) item.productCode = productCode;
+      const productBarcode = normalizeString(row.dataset.productBarcode || '');
+      if (productBarcode) item.productBarcode = productBarcode;
       return item;
     });
   }
@@ -2479,6 +2491,9 @@
     }
     const data = await response.json().catch(() => ({}));
     const draft = data?.draft || data || {};
+    currentDraftMetadata = draft?.metadata && typeof draft.metadata === 'object' ? draft.metadata : {};
+    currentDraftXmlAmbient = normalizeString(draft?.xml?.ambient || payload?.xml?.ambient || '');
+    nfeEventEntries = normalizeNfeEventList(currentDraftMetadata?.events);
     const draftId = draft._id || draft.id || '';
     if (draftId) {
       currentDraftId = String(draftId);
@@ -2542,6 +2557,10 @@
       addHistory(`Status atualizado para ${config.label}.`);
     }
 
+    if (currentStatus === 'authorized') {
+      ensureLocalAuthorizationEvent();
+    }
+
     updateActionAvailability();
   }
 
@@ -2568,6 +2587,7 @@
       if (!button.dataset.originalHtml) {
         button.dataset.originalHtml = button.innerHTML;
       }
+      button.dataset.wasDisabled = button.disabled ? 'true' : 'false';
       button.dataset.loading = 'true';
       button.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${label || 'Processando...'}`;
       button.disabled = true;
@@ -2575,6 +2595,7 @@
       button.dataset.loading = 'false';
       const original = button.dataset.originalHtml || button.innerHTML;
       button.innerHTML = original;
+      button.disabled = button.dataset.wasDisabled === 'true';
     }
   }
 
@@ -2637,6 +2658,214 @@
         return `<li>${time} - ${message}</li>`;
       })
       .join('');
+  }
+
+  function normalizeNfeEventName(value) {
+    const normalized = normalizeKeyword(value);
+    if (normalized === 'cancelamento') return 'Cancelamento';
+    if (normalized === 'carta de correcao' || normalized === 'carta_correcao') return 'Carta de Correcao';
+    if (
+      normalized === 'autorizado o uso da nf-e' ||
+      normalized === 'autorizado o uso da nfe' ||
+      normalized === 'autorizacao'
+    ) {
+      return 'Autorizado o Uso da NF-e';
+    }
+    return '';
+  }
+
+  function isCurrentDraftHomologation() {
+    const ambient = normalizeKeyword(currentDraftXmlAmbient);
+    return ambient === '2' || ambient === 'homologacao';
+  }
+
+  function formatNfeEventDate(value) {
+    const parsed = value ? new Date(value) : null;
+    if (!parsed || Number.isNaN(parsed.getTime())) return '-';
+    return parsed.toLocaleString('pt-BR');
+  }
+
+  function normalizeNfeEventList(list) {
+    if (!Array.isArray(list)) return [];
+    return list
+      .map((entry) => {
+        const eventName = normalizeNfeEventName(entry?.event || entry?.type);
+        if (!eventName) return null;
+        return {
+          event: eventName,
+          protocol: normalizeString(entry?.protocol || ''),
+          justification: normalizeString(entry?.justification || ''),
+          createdAt: normalizeString(entry?.createdAt || entry?.at || ''),
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function ensureLocalAuthorizationEvent() {
+    if (currentStatus !== 'authorized') return;
+    const hasAuthorizationEvent = nfeEventEntries.some(
+      (entry) => normalizeNfeEventName(entry?.event || '') === 'Autorizado o Uso da NF-e'
+    );
+    if (hasAuthorizationEvent) return;
+    nfeEventEntries.unshift({
+      event: 'Autorizado o Uso da NF-e',
+      protocol: normalizeString(currentDraftMetadata?.sefazProtocol || ''),
+      justification: '',
+      createdAt: normalizeString(currentDraftMetadata?.sefazProcessedAt || new Date().toISOString()),
+    });
+  }
+
+  function renderNfeEventsTable() {
+    const tbody = document.getElementById('nfe-events-table-body');
+    if (!tbody) return;
+    ensureLocalAuthorizationEvent();
+    if (!nfeEventEntries.length) {
+      tbody.innerHTML = '<tr><td colspan="4" class="px-3 py-4 text-center text-xs text-gray-500">Nenhum evento registrado.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = nfeEventEntries
+      .map((entry, index) => {
+        const event = entry?.event || '-';
+        const protocol = entry?.protocol || '-';
+        const date = formatNfeEventDate(entry?.createdAt);
+        return `
+          <tr class="border-t border-gray-100">
+            <td class="px-3 py-2 text-xs text-gray-700">${index + 1}</td>
+            <td class="px-3 py-2 text-xs text-gray-700">${event}</td>
+            <td class="px-3 py-2 text-xs text-gray-700">${protocol}</td>
+            <td class="px-3 py-2 text-xs text-gray-700">${date}</td>
+          </tr>
+        `;
+      })
+      .join('');
+  }
+
+  function buildEventsModal() {
+    if (document.getElementById(eventsModalId)) return;
+    const modal = document.createElement('div');
+    modal.id = eventsModalId;
+    modal.className = 'fixed inset-0 z-[70] hidden overflow-y-auto bg-black/40 p-4';
+    modal.innerHTML = `
+      <div class="mx-auto w-full max-w-4xl rounded-xl bg-white shadow-xl">
+        <div class="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+          <h3 class="text-base font-semibold text-gray-800">Eventos da NF-e</h3>
+          <button type="button" class="text-gray-400 hover:text-gray-600" data-events-close>
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="space-y-4 px-4 py-4 text-sm text-gray-700">
+          <div class="grid gap-4 md:grid-cols-2">
+            <label class="flex flex-col gap-1">
+              <span class="text-xs font-semibold uppercase tracking-wide text-gray-500">Tipo de Evento</span>
+              <select id="nfe-events-type" class="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700">
+                <option value="Cancelamento">Cancelamento</option>
+                <option value="Carta de Correcao">Carta de Correcao</option>
+              </select>
+            </label>
+            <label class="flex flex-col gap-1 md:col-span-2">
+              <span class="text-xs font-semibold uppercase tracking-wide text-gray-500">Justificativa</span>
+              <textarea id="nfe-events-justification" rows="4" class="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700" placeholder="Descreva a justificativa do evento..."></textarea>
+            </label>
+          </div>
+          <div class="overflow-hidden rounded-lg border border-gray-200">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">id</th>
+                  <th class="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Evento</th>
+                  <th class="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Protocolo</th>
+                  <th class="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Data</th>
+                </tr>
+              </thead>
+              <tbody id="nfe-events-table-body" class="bg-white"></tbody>
+            </table>
+          </div>
+          <div class="flex justify-end">
+            <button
+              type="button"
+              id="nfe-events-send"
+              class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+            >
+              <i class="fas fa-paper-plane"></i>
+              Enviar
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  }
+
+  function openEventsModal() {
+    buildEventsModal();
+    renderNfeEventsTable();
+    const modal = document.getElementById(eventsModalId);
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('overflow-hidden');
+  }
+
+  function closeEventsModal() {
+    const modal = document.getElementById(eventsModalId);
+    if (!modal) return;
+    modal.classList.add('hidden');
+    modal.setAttribute('aria-hidden', 'true');
+    const manageModal = document.getElementById(manageModalId);
+    if (!manageModal || manageModal.classList.contains('hidden')) {
+      document.body.classList.remove('overflow-hidden');
+    }
+  }
+
+  async function submitNfeEvent() {
+    if (!currentDraftId) {
+      throw new Error('Salve a NF-e antes de registrar eventos.');
+    }
+    const hasAuthorizationProtocol = Boolean(
+      normalizeString(currentDraftMetadata?.sefazProtocol || '').replace(/\D/g, '').length >= 10
+    );
+    if (currentStatus !== 'authorized' && !hasAuthorizationProtocol) {
+      throw new Error('Apenas NF-e autorizada permite registrar eventos.');
+    }
+    const eventSelect = document.getElementById('nfe-events-type');
+    const justificationInput = document.getElementById('nfe-events-justification');
+    const selectedEvent = normalizeNfeEventName(eventSelect?.value || '');
+    const justification = normalizeString(justificationInput?.value || '');
+    if (!selectedEvent || selectedEvent === 'Autorizado o Uso da NF-e') {
+      throw new Error('Tipo de evento invalido.');
+    }
+    if (!justification) {
+      throw new Error('Informe a justificativa do evento.');
+    }
+
+    const response = await fetch(`${API_BASE}/nfe/drafts/${currentDraftId}/events`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({
+        event: selectedEvent,
+        justification,
+      }),
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload?.message || 'Nao foi possivel registrar o evento.');
+    }
+    const payload = await response.json().catch(() => ({}));
+    nfeEventEntries = normalizeNfeEventList(payload?.events);
+    if (String(payload?.status || '').toLowerCase() === 'canceled') {
+      setStatus('canceled', { log: false });
+    }
+    ensureLocalAuthorizationEvent();
+    renderNfeEventsTable();
+    if (justificationInput) justificationInput.value = '';
+    addHistory(`Evento registrado: ${selectedEvent}.`);
+    updateManageModalContent();
+    if (typeof showToast === 'function') {
+      showToast('Evento registrado com sucesso.', 'success');
+    }
   }
 
   function buildManageModal() {
@@ -2714,7 +2943,10 @@
     if (!modal) return;
     modal.classList.add('hidden');
     modal.setAttribute('aria-hidden', 'true');
-    document.body.classList.remove('overflow-hidden');
+    const eventsModal = document.getElementById(eventsModalId);
+    if (!eventsModal || eventsModal.classList.contains('hidden')) {
+      document.body.classList.remove('overflow-hidden');
+    }
   }
 
   async function fetchNfeXmlOrGenerate(draftId) {
@@ -3314,7 +3546,7 @@
         </td>
         <td>
           <div class="label">Protocolo de Autorizacao de Uso</div>
-          <div class="value">${protocolo} - ${dhEmi}</div>
+          <div class="value">${protocolo}</div>
         </td>
       </tr>
     </table>
@@ -3646,11 +3878,57 @@
       }
       const payload = await response.json().catch(() => ({}));
       addHistory('NF-e transmitida para a SEFAZ.');
+      if (['100', '150'].includes(String(payload?.status || ''))) {
+        currentDraftMetadata = {
+          ...(currentDraftMetadata || {}),
+          sefazProtocol: normalizeString(payload?.protocol || ''),
+          sefazProcessedAt: normalizeString(payload?.processedAt || new Date().toISOString()),
+        };
+        setStatus('authorized', { log: false });
+        ensureLocalAuthorizationEvent();
+      } else {
+        setStatus('rejected', { log: false });
+      }
       updateManageModalContent();
       await bumpNextNumberAfterTransmit();
       if (typeof showToast === 'function') {
         const statusLabel = payload?.status ? ` (status ${payload.status})` : '';
         showToast(`NF-e transmitida${statusLabel}.`, 'success');
+      }
+      return;
+    }
+    if (label === 'Consultar') {
+      const response = await fetch(`${API_BASE}/nfe/drafts/${currentDraftId}/sefaz/status`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload?.message || 'Nao foi possivel consultar o status da NF-e na SEFAZ.');
+      }
+      const payload = await response.json().catch(() => ({}));
+      const statusCode = String(payload?.status || '');
+      if (['100', '150'].includes(statusCode)) {
+        currentDraftMetadata = {
+          ...(currentDraftMetadata || {}),
+          sefazProtocol: normalizeString(payload?.protocol || currentDraftMetadata?.sefazProtocol || ''),
+          sefazProcessedAt: normalizeString(payload?.processedAt || currentDraftMetadata?.sefazProcessedAt || ''),
+        };
+        setStatus('authorized', { log: false });
+        ensureLocalAuthorizationEvent();
+      } else if (['101', '151', '155'].includes(statusCode) || String(payload?.draftStatus || '') === 'canceled') {
+        setStatus('canceled', { log: false });
+      } else if (statusCode) {
+        setStatus('rejected', { log: false });
+      }
+      const statusMessage = payload?.message || 'Consulta realizada.';
+      addHistory(`Consulta SEFAZ: ${statusCode || 'sem status'} - ${statusMessage}`);
+      updateManageModalContent();
+      if (typeof showToast === 'function') {
+        showToast(`SEFAZ: ${statusCode || 'sem status'} - ${statusMessage}`, 'info');
       }
       return;
     }
@@ -3687,6 +3965,19 @@
       const xmlDoc = parseXml(xmlText);
       const html = buildDanfeHtml(xmlDoc, { mode: 'simple' });
       openPrintWindow(html, 'DANFE Simplificado');
+      return;
+    }
+    if (label === 'Eventos') {
+      const hasAuthorizationProtocol = Boolean(
+        normalizeString(currentDraftMetadata?.sefazProtocol || '').replace(/\D/g, '').length >= 10
+      );
+      if (currentStatus !== 'authorized' && !hasAuthorizationProtocol) {
+        if (typeof showToast === 'function') {
+          showToast('Apenas NF-e autorizada permite registrar eventos.', 'warning');
+        }
+        return;
+      }
+      openEventsModal();
       return;
     }
     if (typeof showToast === 'function') {
@@ -3750,6 +4041,9 @@
     }
     updatePartySearchPlaceholder();
     setStatus('draft', { log: false });
+    currentDraftMetadata = {};
+    currentDraftXmlAmbient = '';
+    nfeEventEntries = [];
     resetHistoryList();
     updateTotals();
     updatePaymentKpis();
@@ -4185,7 +4479,7 @@
         <label class="block text-xs font-semibold text-gray-500">Buscar cliente</label>
         <input id="nfe-cheque-modal-search" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" />
       </div>
-      <div id="nfe-cheque-modal-results" class="max-h-60 space-y-2 overflow-y-auto"></div>
+      <div id="nfe-cheque-modal-results" class="space-y-2 overflow-y-auto pr-1"></div>
       <p id="nfe-cheque-modal-empty" class="text-xs text-gray-500"></p>
     `;
 
@@ -4199,6 +4493,10 @@
       loading: false,
       error: '',
     };
+    if (chequeModalState.list) {
+      chequeModalState.list.style.maxHeight = '45vh';
+      chequeModalState.list.style.overflowY = 'auto';
+    }
 
     showModal({
       message: wrapper,
@@ -4811,13 +5109,15 @@
     }
 
     const wrapper = document.createElement('div');
-    wrapper.className = 'text-left space-y-3';
+    wrapper.className = 'text-left flex flex-col gap-3';
+    wrapper.style.maxHeight = '70vh';
+    wrapper.style.overflow = 'hidden';
     wrapper.innerHTML = `
       <div class="space-y-1">
         <label class="block text-xs font-semibold text-gray-500">Buscar ${type}</label>
         <input id="nfe-party-modal-search" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" />
       </div>
-      <div id="nfe-party-modal-results" class="max-h-60 space-y-2 overflow-y-auto"></div>
+      <div id="nfe-party-modal-results" class="space-y-2 overflow-y-auto pr-1"></div>
       <p id="nfe-party-modal-empty" class="text-xs text-gray-500"></p>
     `;
 
@@ -4832,6 +5132,10 @@
       loading: false,
       error: '',
     };
+    if (partyModalState.list) {
+      partyModalState.list.style.maxHeight = '45vh';
+      partyModalState.list.style.overflowY = 'auto';
+    }
 
     showModal({
       message: wrapper,
@@ -5202,6 +5506,9 @@
     const draftCode = draft?.code ?? payload?.header?.code ?? draft?.header?.code ?? '';
     if (codeInput) codeInput.value = draftCode ? String(draftCode) : '';
     currentDraftCode = draftCode ? String(draftCode) : '';
+    currentDraftMetadata = draft?.metadata && typeof draft.metadata === 'object' ? draft.metadata : {};
+    currentDraftXmlAmbient = normalizeString(draft?.xml?.ambient || payload?.xml?.ambient || '');
+    nfeEventEntries = normalizeNfeEventList(currentDraftMetadata?.events);
 
     if (numberInput) numberInput.value = payload?.header?.number || draft?.header?.number || '';
     if (serieFields.select) serieFields.select.value = payload?.header?.serie || draft?.header?.serie || '';
@@ -6428,6 +6735,7 @@
     const ipiEnq = normalizeString(fiscal?.ipi?.codigoEnquadramento || '');
     const unidadeBase = product?.unidade || product?.unidadeVenda || '';
     return {
+      productId: product?._id || product?.id || '',
       code: product?.cod || product?.codbarras || '',
       codigoBarras: product?.codbarras || '',
       name: product?.nome || '',
@@ -6891,6 +7199,12 @@
     const row = document.createElement('tr');
     row.dataset.itemRow = 'true';
     row.dataset.order = String(itemRowSequence++);
+    const productId = normalizeString(prefill?.productId || prefill?._id || prefill?.id || '');
+    if (productId) row.dataset.productId = productId;
+    const productCode = normalizeString(prefill?.productCode || prefill?.code || '');
+    if (productCode) row.dataset.productCode = productCode;
+    const productBarcode = normalizeString(prefill?.productBarcode || prefill?.codigoBarras || prefill?.codbarras || '');
+    if (productBarcode) row.dataset.productBarcode = productBarcode;
 
     const hasValue = (value) => value !== null && value !== undefined && String(value).trim() !== '';
     const getDefaultItemValue = (key) => {
@@ -7186,6 +7500,7 @@
         const codeValue = modalProductSnapshot?.cod || modalProductSnapshot?.codbarras || '';
         const barcodeValue = modalProductSnapshot?.codbarras || '';
         const prefill = {
+          productId: modalProductSnapshot?._id || modalProductSnapshot?.id || '',
           code: codeValue,
           codigoBarras: barcodeValue,
           name: productModalFields.product?.value || '',
@@ -7305,6 +7620,35 @@
             updateManageModalContent();
           }
         });
+      });
+      document.addEventListener('click', (event) => {
+        const modal = document.getElementById(eventsModalId);
+        if (!modal || modal.classList.contains('hidden')) return;
+        if (event.target === modal) closeEventsModal();
+      });
+      document.addEventListener('click', (event) => {
+        const closeButton = event.target.closest('[data-events-close]');
+        if (closeButton) {
+          closeEventsModal();
+          return;
+        }
+        const sendButton = event.target.closest('#nfe-events-send');
+        if (!sendButton) return;
+        if (sendButton.dataset.loading === 'true') return;
+        withLoading(
+          sendButton,
+          async () => {
+            try {
+              await submitNfeEvent();
+            } catch (error) {
+              if (typeof showToast === 'function') {
+                showToast(error?.message || 'Nao foi possivel registrar o evento.', 'error');
+              }
+              throw error;
+            }
+          },
+          'Enviando...'
+        ).catch(() => null);
       });
 
     extraInputs.frete?.addEventListener('input', updateTotals);

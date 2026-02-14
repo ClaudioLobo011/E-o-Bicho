@@ -166,6 +166,7 @@
       btnSalvar: document.getElementById('btn-salvar-cliente'),
       inputId: document.getElementById('cliente-id'),
       inputCodigo: document.getElementById('cliente-codigo'),
+      inputCodigoAntigo: document.getElementById('cliente-codigo-antigo'),
       selectTipo: document.getElementById('cliente-tipo'),
       inputPais: document.getElementById('cliente-pais'),
       selectEmpresa: document.getElementById('cliente-empresa'),
@@ -221,6 +222,7 @@
         rga: document.getElementById('pet-rga'),
         microchip: document.getElementById('pet-microchip'),
         obito: document.getElementById('pet-obito'),
+        castrado: document.getElementById('pet-castrado'),
       },
       btnPetSalvar: document.getElementById('btn-pet-salvar'),
       btnPetCancelar: document.getElementById('btn-pet-cancelar'),
@@ -240,6 +242,14 @@
         saldoUsado: document.getElementById('pendencias-saldo-usado'),
       },
     };
+    const hasClientesListSection = !!(
+      elements.tabelaBody
+      && elements.info
+      && elements.btnPrev
+      && elements.btnNext
+      && elements.busca
+      && elements.btnBusca
+    );
 
     const petAutocomplete = {
       instance: null,
@@ -257,7 +267,7 @@
       if (key.startsWith('med')) return 'medio';
       if (key.startsWith('gra')) return 'grande';
       if (key.startsWith('gig')) return 'gigante';
-      return 'medio';
+      return '';
     };
 
     function fixEncoding(value) {
@@ -298,8 +308,13 @@
           grande: Array.from(new Set(portes.grande || [])),
           gigante: Array.from(new Set(portes.gigante || [])),
         };
-        const dogAll = Array.from(new Set(dogPayload.all || [
-          ...dogMap.mini, ...dogMap.pequeno, ...dogMap.medio, ...dogMap.grande, ...dogMap.gigante,
+        const dogAll = Array.from(new Set([
+          ...(Array.isArray(dogPayload.all) ? dogPayload.all : []),
+          ...dogMap.mini,
+          ...dogMap.pequeno,
+          ...dogMap.medio,
+          ...dogMap.grande,
+          ...dogMap.gigante,
         ]));
         const dogLookup = {};
         const dogMapPayload = dogPayload.map || {};
@@ -592,12 +607,55 @@
       }
     }
 
+    function inferPetTypeFromBreed(breedValue) {
+      const speciesMap = petAutocomplete.speciesMap;
+      const breedKey = normalizeText(breedValue);
+      if (!speciesMap || !breedKey) return '';
+
+      const dogBreeds = speciesMap?.cachorro?.all || [];
+      if (dogBreeds.some((item) => normalizeText(item) === breedKey)) {
+        return 'cachorro';
+      }
+
+      const simpleTypes = ['gato', 'passaro', 'peixe', 'roedor', 'lagarto', 'tartaruga'];
+      for (const type of simpleTypes) {
+        const list = speciesMap?.[type] || [];
+        if (list.some((item) => normalizeText(item) === breedKey)) {
+          return type;
+        }
+      }
+
+      return '';
+    }
+
+    async function applyTypeFromBreed() {
+      const tipoSelect = elements.pets.tipo;
+      const racaInput = elements.pets.raca;
+      if (!tipoSelect || !racaInput) return;
+
+      const rawBreed = racaInput.value;
+      if (!normalizeText(rawBreed)) return;
+
+      await loadSpeciesMap().catch(() => {});
+      const inferredType = inferPetTypeFromBreed(rawBreed);
+      if (!inferredType) return;
+
+      const currentType = normalizeText(tipoSelect.value);
+      if (currentType !== inferredType) {
+        setSelectValue(tipoSelect, inferredType);
+        await updateBreedOptions();
+      }
+
+      syncPorteDisabled();
+      setPorteFromBreedIfDog();
+    }
+
     function syncPorteDisabled() {
       const porteSelect = elements.pets.porte;
       const tipoSelect = elements.pets.tipo;
       if (!porteSelect || !tipoSelect) return;
       const isDog = normalizeText(tipoSelect.value) === 'cachorro';
-      porteSelect.disabled = true;
+      porteSelect.disabled = !isDog;
       if (isDog) {
         setPorteFromBreedIfDog();
       } else {
@@ -624,7 +682,16 @@
       } else if (['peixe', 'roedor', 'lagarto', 'tartaruga'].includes(selectedType)) {
         breeds = (petAutocomplete.speciesMap?.[selectedType] || []).slice();
       } else {
-        breeds = [];
+        const allBreeds = [
+          ...(petAutocomplete.speciesMap?.cachorro?.all || []),
+          ...(petAutocomplete.speciesMap?.gato || petAutocomplete.speciesMap?.gatos || []),
+          ...(petAutocomplete.speciesMap?.passaro || petAutocomplete.speciesMap?.passaros || []),
+          ...(petAutocomplete.speciesMap?.peixe || []),
+          ...(petAutocomplete.speciesMap?.roedor || []),
+          ...(petAutocomplete.speciesMap?.lagarto || []),
+          ...(petAutocomplete.speciesMap?.tartaruga || []),
+        ];
+        breeds = Array.from(new Set(allBreeds));
       }
       breeds = breeds.map((item) => fixEncoding(item)).sort((a, b) => a.localeCompare(b));
 
@@ -716,6 +783,7 @@
       state.currentClienteId = null;
       elements.inputId.value = '';
       elements.inputCodigo.value = '';
+      elements.inputCodigoAntigo.value = '';
       elements.inputPais.value = 'Brasil';
       elements.selectEmpresa.value = '';
       elements.inputNome.value = '';
@@ -901,13 +969,16 @@
         const rga = fixEncoding(pet.rga || '');
         const microchip = fixEncoding(pet.microchip || '');
         const codigo = (pet.codigo || pet.codigoPet || '').toString();
-        const statusBadge = pet.obito
+        const statusObitoBadge = pet.obito
           ? '<span class="inline-flex items-center rounded bg-rose-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-rose-600">Óbito</span>'
+          : '';
+        const statusCastradoBadge = pet.castrado
+          ? '<span class="inline-flex items-center rounded bg-sky-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-sky-700">Castrado</span>'
           : '';
         const codigoBadge = codigo
           ? `<span class="inline-flex items-center rounded bg-amber-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-700">Código ${codigo}</span>`
           : '';
-        const headerBadges = [codigoBadge, statusBadge].filter(Boolean).join(' ');
+        const headerBadges = [codigoBadge, statusObitoBadge, statusCastradoBadge].filter(Boolean).join(' ');
         const detalhes = [
           tipo ? `Tipo: ${tipo}` : '',
           raca ? `Raça: ${raca}` : '',
@@ -934,6 +1005,7 @@
     }
 
     function renderClientes(items = [], pagination) {
+      if (!hasClientesListSection) return;
       if (!Array.isArray(items) || !items.length) {
         elements.tabelaBody.innerHTML = '<tr><td colspan="7" class="px-4 py-6 text-center text-gray-500 text-sm">Nenhum cliente encontrado.</td></tr>';
       } else {
@@ -970,6 +1042,7 @@
     }
 
     async function loadClientes(page = 1) {
+      if (!hasClientesListSection) return;
       try {
         const params = new URLSearchParams({ page: String(page), limit: String(state.pagination.limit), search: state.busca || '' });
         const data = await apiFetch(`/func/clientes?${params.toString()}`);
@@ -1038,6 +1111,7 @@
           elements.inputIE.removeAttribute('disabled');
         }
         elements.selectEstadoIE.value = data.estadoIE || '';
+        elements.inputCodigoAntigo.value = data.codigoAntigo || '';
         elements.contato.email.value = data.email || '';
         elements.contato.celular.value = formatPhone(data.celular || '');
         elements.contato.telefone.value = formatPhone(data.telefone || '');
@@ -1054,6 +1128,39 @@
       }
     }
 
+    async function buscarClientePorCodigoDigitado() {
+      const rawCodigo = String(elements.inputCodigo.value || '').trim();
+      if (!rawCodigo) return;
+
+      const digits = onlyDigits(rawCodigo);
+      if (!digits) {
+        notify('Informe um codigo numerico valido.', 'warning');
+        return;
+      }
+
+      try {
+        const normalizedCode = String(Number.parseInt(digits, 10));
+        const results = await apiFetch(`/func/clientes/buscar?q=${encodeURIComponent(normalizedCode)}&limit=20`);
+        const items = Array.isArray(results) ? results : [];
+        const match = items.find((item) => String(item?.codigo || '') === normalizedCode);
+
+        if (!match?._id) {
+          notify('O codigo informado nao tem cadastro.', 'warning');
+          return;
+        }
+
+        if (state.currentClienteId && String(state.currentClienteId) === String(match._id)) {
+          elements.inputCodigo.value = normalizedCode;
+          return;
+        }
+
+        await loadCliente(match._id);
+      } catch (err) {
+        console.error('Erro ao buscar cliente por codigo', err);
+        notify(err.message || 'Erro ao buscar cliente pelo codigo.', 'error');
+      }
+    }
+
     async function salvarCliente(event) {
       event.preventDefault();
       const tipoConta = elements.selectTipo.value === 'pessoa_juridica' ? 'pessoa_juridica' : 'pessoa_fisica';
@@ -1061,6 +1168,7 @@
         tipoConta,
         pais: elements.inputPais.value.trim() || 'Brasil',
         empresaId: elements.selectEmpresa.value || '',
+        codigoAntigo: elements.inputCodigoAntigo.value.trim(),
         email: elements.contato.email.value.trim(),
         celular: onlyDigits(elements.contato.celular.value),
         telefone: onlyDigits(elements.contato.telefone.value),
@@ -1178,6 +1286,7 @@
         rga: elements.pets.rga.value.trim(),
         microchip: elements.pets.microchip.value.trim(),
         obito: Boolean(elements.pets.obito?.checked),
+        castrado: Boolean(elements.pets.castrado?.checked),
       };
       const isEdicao = !!state.petEditandoId;
       const path = isEdicao
@@ -1266,6 +1375,16 @@
       switchTipo(elements.selectTipo.value);
     });
 
+    elements.inputCodigo.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      buscarClientePorCodigoDigitado();
+    });
+
+    elements.inputCodigo.addEventListener('blur', () => {
+      buscarClientePorCodigoDigitado();
+    });
+
     elements.checkboxIsentoIE.addEventListener('change', () => {
       if (elements.checkboxIsentoIE.checked) {
         elements.inputIE.value = 'ISENTO';
@@ -1308,9 +1427,13 @@
 
     if (elements.pets.raca) {
       ['change', 'blur'].forEach((evt) => {
-        elements.pets.raca.addEventListener(evt, () => setTimeout(setPorteFromBreedIfDog, 0));
+        elements.pets.raca.addEventListener(evt, () => setTimeout(() => {
+          applyTypeFromBreed();
+        }, 0));
       });
-      elements.pets.raca.addEventListener('awesomplete-selectcomplete', () => setTimeout(setPorteFromBreedIfDog, 0));
+      elements.pets.raca.addEventListener('awesomplete-selectcomplete', () => setTimeout(() => {
+        applyTypeFromBreed();
+      }, 0));
       elements.pets.raca.addEventListener('focus', () => {
         updateBreedOptions();
         if (petAutocomplete.instance && typeof petAutocomplete.instance.open === 'function') {
@@ -1380,6 +1503,9 @@
         if (elements.pets.obito) {
           elements.pets.obito.checked = Boolean(pet.obito);
         }
+        if (elements.pets.castrado) {
+          elements.pets.castrado.checked = Boolean(pet.castrado);
+        }
         elements.btnPetCancelar.classList.remove('hidden');
         elements.btnPetSalvar.textContent = 'Atualizar pet';
         syncPorteDisabled();
@@ -1390,45 +1516,47 @@
       }
     });
 
-    elements.tabelaBody.addEventListener('click', (event) => {
-      const deleteButton = event.target.closest('.btn-excluir-cliente');
-      if (deleteButton) {
-        const id = deleteButton.dataset.id;
+    if (hasClientesListSection) {
+      elements.tabelaBody.addEventListener('click', (event) => {
+        const deleteButton = event.target.closest('.btn-excluir-cliente');
+        if (deleteButton) {
+          const id = deleteButton.dataset.id;
+          if (!id) return;
+          removerCliente(id);
+          return;
+        }
+        const button = event.target.closest('.btn-editar-cliente');
+        if (!button) return;
+        const id = button.dataset.id;
         if (!id) return;
-        removerCliente(id);
-        return;
-      }
-      const button = event.target.closest('.btn-editar-cliente');
-      if (!button) return;
-      const id = button.dataset.id;
-      if (!id) return;
-      loadCliente(id);
-    });
+        loadCliente(id);
+      });
 
-    elements.btnPrev.addEventListener('click', () => {
-      if (state.pagination.page > 1) {
-        loadClientes(state.pagination.page - 1);
-      }
-    });
+      elements.btnPrev.addEventListener('click', () => {
+        if (state.pagination.page > 1) {
+          loadClientes(state.pagination.page - 1);
+        }
+      });
 
-    elements.btnNext.addEventListener('click', () => {
-      if (state.pagination.page < state.pagination.totalPages) {
-        loadClientes(state.pagination.page + 1);
-      }
-    });
+      elements.btnNext.addEventListener('click', () => {
+        if (state.pagination.page < state.pagination.totalPages) {
+          loadClientes(state.pagination.page + 1);
+        }
+      });
 
-    elements.btnBusca.addEventListener('click', () => {
-      state.busca = elements.busca.value.trim();
-      loadClientes(1);
-    });
-
-    elements.busca.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') {
-        event.preventDefault();
+      elements.btnBusca.addEventListener('click', () => {
         state.busca = elements.busca.value.trim();
         loadClientes(1);
-      }
-    });
+      });
+
+      elements.busca.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          state.busca = elements.busca.value.trim();
+          loadClientes(1);
+        }
+      });
+    }
 
     elements.endereco.cep.addEventListener('blur', () => {
       consultarCep(elements.endereco.cep.value);
@@ -1444,6 +1572,8 @@
     loadEmpresas().then(() => {
       applyPrefillContext(prefillContext);
     });
-    loadClientes();
+    if (hasClientesListSection) {
+      loadClientes();
+    }
   });
 })();

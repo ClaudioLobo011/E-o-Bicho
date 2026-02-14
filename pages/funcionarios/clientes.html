@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
@@ -35,23 +35,23 @@
           <form id="cliente-form" class="space-y-6 px-6 py-6">
             <input type="hidden" id="cliente-id" />
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-2">
+              <div class="md:col-span-2">
                 <label for="cliente-codigo" class="block text-sm font-medium text-gray-700">Código</label>
-                <input id="cliente-codigo" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 focus:border-primary focus:ring-primary" placeholder="Gerado automaticamente" readonly />
+                <input id="cliente-codigo" type="text" inputmode="numeric" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" placeholder="Digite um código para buscar" />
               </div>
-              <div>
+              <div class="md:col-span-2">
                 <label for="cliente-tipo" class="block text-sm font-medium text-gray-700">Tipo</label>
                 <select id="cliente-tipo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
                   <option value="pessoa_fisica">Pessoa Física</option>
                   <option value="pessoa_juridica">Pessoa Jurídica</option>
                 </select>
               </div>
-              <div>
+              <div class="md:col-span-1">
                 <label for="cliente-pais" class="block text-sm font-medium text-gray-700">País</label>
                 <input id="cliente-pais" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" value="Brasil" />
               </div>
-              <div>
+              <div class="md:col-span-1">
                 <label for="cliente-empresa" class="block text-sm font-medium text-gray-700">Empresa</label>
                 <select id="cliente-empresa" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
                   <option value="">Selecione uma empresa</option>
@@ -59,28 +59,28 @@
               </div>
             </div>
 
-            <div id="pf-fields" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
+            <div id="pf-fields" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-2">
+              <div class="md:col-span-2">
                 <label for="cliente-nome" class="block text-sm font-medium text-gray-700">Nome completo <span class="text-red-500" aria-hidden="true">*</span></label>
                 <input id="cliente-nome" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" required aria-required="true" />
               </div>
-              <div>
+              <div class="md:col-span-1">
                 <label for="cliente-apelido" class="block text-sm font-medium text-gray-700">Apelido</label>
                 <input id="cliente-apelido" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" />
               </div>
-              <div>
+              <div class="md:col-span-1">
                 <label for="cliente-cpf" class="block text-sm font-medium text-gray-700">CPF <span class="text-red-500" aria-hidden="true">*</span></label>
                 <input id="cliente-cpf" type="text" inputmode="numeric" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" placeholder="000.000.000-00" required aria-required="true" />
               </div>
-              <div>
+              <div class="md:col-span-1">
                 <label for="cliente-rg" class="block text-sm font-medium text-gray-700">RG</label>
                 <input id="cliente-rg" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" />
               </div>
-              <div>
+              <div class="md:col-span-1">
                 <label for="cliente-nascimento" class="block text-sm font-medium text-gray-700">Nascimento</label>
                 <input id="cliente-nascimento" type="date" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" />
               </div>
-              <div>
+              <div class="md:col-span-1">
                 <label for="cliente-sexo" class="block text-sm font-medium text-gray-700">Sexo <span class="text-red-500" aria-hidden="true">*</span></label>
                 <select id="cliente-sexo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" required aria-required="true">
                   <option value="">Selecione</option>
@@ -152,6 +152,7 @@
               <div class="flex flex-wrap items-center gap-2 border-b pb-3">
                 <button type="button" class="tab-button px-4 py-2 rounded-md text-sm font-medium bg-primary/10 text-primary" data-tab="endereco">Endereço</button>
                 <button type="button" class="tab-button px-4 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100" data-tab="contato">Contato</button>
+                <button type="button" class="tab-button px-4 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100" data-tab="info">Info</button>
                 <button type="button" class="tab-button px-4 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100" data-tab="pendencias">Pendências</button>
                 <button type="button" class="tab-button px-4 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100" data-tab="animais">Animais</button>
               </div>
@@ -238,6 +239,15 @@
                   </div>
                 </div>
 
+                <div class="tab-panel hidden" data-tab-panel="info">
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label for="cliente-codigo-antigo" class="block text-sm font-medium text-gray-700">Código Antigo</label>
+                      <input id="cliente-codigo-antigo" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" />
+                    </div>
+                  </div>
+                </div>
+
                 <div class="tab-panel hidden" data-tab-panel="pendencias">
                   <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
@@ -245,7 +255,7 @@
                         <span class="text-sm font-medium text-gray-600">Valor pendente</span>
                         <span id="pendencias-valor-pendente-status" class="text-xs font-semibold uppercase tracking-wide text-gray-500"></span>
                       </div>
-                      <p id="pendencias-valor-pendente" class="mt-2 text-2xl font-semibold text-gray-700">R$ 0,00</p>
+                      <p id="pendencias-valor-pendente" class="mt-2 text-2xl font-semibold text-gray-700">R$ 0,00</p>
                       <p class="mt-2 text-xs text-gray-500">Saldo em aberto considerando todos os lançamentos financeiros.</p>
                     </div>
 
@@ -260,13 +270,13 @@
 
                     <div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
                       <span class="text-sm font-medium text-gray-600">Saldo disponível</span>
-                      <p id="pendencias-saldo-disponivel" class="mt-2 text-2xl font-semibold text-gray-700">R$ 0,00</p>
+                      <p id="pendencias-saldo-disponivel" class="mt-2 text-2xl font-semibold text-gray-700">R$ 0,00</p>
                       <p class="mt-2 text-xs text-gray-500">Calculado automaticamente a partir do limite e do saldo utilizado.</p>
                     </div>
 
                     <div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
                       <span class="text-sm font-medium text-gray-600">Saldo usado</span>
-                      <p id="pendencias-saldo-usado" class="mt-2 text-2xl font-semibold text-gray-700">R$ 0,00</p>
+                      <p id="pendencias-saldo-usado" class="mt-2 text-2xl font-semibold text-gray-700">R$ 0,00</p>
                       <p class="mt-2 text-xs text-gray-500">Total já comprometido dentro do limite de crédito do cliente.</p>
                     </div>
                   </div>
@@ -341,9 +351,11 @@
                       <input id="pet-microchip" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" />
                     </div>
                     <div class="md:col-span-2">
-                      <div class="flex items-center gap-2 mt-2">
+                      <div class="flex flex-wrap items-center gap-4 mt-2">
                         <input id="pet-obito" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary" />
                         <label for="pet-obito" class="text-sm font-medium text-gray-700">Óbito</label>
+                        <input id="pet-castrado" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary" />
+                        <label for="pet-castrado" class="text-sm font-medium text-gray-700">Castrado</label>
                       </div>
                       <p class="mt-1 text-xs text-gray-500">Ao marcar esta opção o pet não aparecerá mais nas demais telas.</p>
                     </div>
@@ -365,48 +377,6 @@
           </form>
         </div>
 
-        <div class="rounded-2xl bg-white shadow ring-1 ring-black/5">
-          <header class="flex flex-col gap-4 border-b border-gray-100 px-6 py-5 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p class="text-xs font-semibold uppercase tracking-wide text-primary">Clientes</p>
-              <h2 class="text-xl font-semibold text-gray-800">Clientes cadastrados</h2>
-              <p class="text-sm text-gray-500">Todos os usuários cadastrados são exibidos nesta lista.</p>
-            </div>
-            <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-2">
-              <input id="cliente-busca" type="text" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-primary focus:ring-primary md:w-64" placeholder="Buscar por nome, documento ou email" />
-              <button id="btn-busca-cliente" type="button" class="flex items-center justify-center rounded-xl bg-gray-800 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-gray-900 hover:shadow"><i class="fas fa-search"></i></button>
-            </div>
-          </header>
-
-          <div class="overflow-x-auto px-6 py-4">
-            <table class="min-w-full divide-y divide-gray-200 text-sm">
-              <thead class="bg-gray-50">
-                <tr>
-                  <th class="px-4 py-3 text-left font-semibold text-gray-600 uppercase tracking-wide">Código</th>
-                  <th class="px-4 py-3 text-left font-semibold text-gray-600 uppercase tracking-wide">Nome</th>
-                  <th class="px-4 py-3 text-left font-semibold text-gray-600 uppercase tracking-wide">Tipo</th>
-                  <th class="px-4 py-3 text-left font-semibold text-gray-600 uppercase tracking-wide">Documento</th>
-                  <th class="px-4 py-3 text-left font-semibold text-gray-600 uppercase tracking-wide">Empresa</th>
-                  <th class="px-4 py-3 text-left font-semibold text-gray-600 uppercase tracking-wide">Contato</th>
-                  <th class="px-4 py-3"></th>
-                </tr>
-              </thead>
-              <tbody id="clientes-tbody" class="divide-y divide-gray-200">
-                <tr>
-                  <td colspan="7" class="px-4 py-6 text-center text-gray-500 text-sm">Carregando clientes...</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div class="mt-4 flex items-center justify-between text-sm text-gray-500">
-            <div id="clientes-info">&nbsp;</div>
-            <div class="flex items-center gap-2">
-              <button id="clientes-prev" type="button" class="px-3 py-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 transition">Anterior</button>
-              <button id="clientes-next" type="button" class="px-3 py-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 transition">Próximo</button>
-            </div>
-          </div>
-        </div>
       </section>
     </div>
   </main>
@@ -425,3 +395,5 @@
   <script src="../../scripts/funcionarios/clientes.js"></script>
 </body>
 </html>
+
+

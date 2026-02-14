@@ -76,8 +76,38 @@ const NFE_STATUS_ENDPOINTS = {
   },
 };
 
+const NFE_CONSULTA_PROTOCOLO_ENDPOINTS = {
+  homologacao: {
+    RS: 'https://nfe-homologacao.sefazrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx',
+    SVRS: 'https://nfe-homologacao.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx',
+    default: 'https://nfe-homologacao.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx',
+  },
+  producao: {
+    RS: 'https://nfe.sefazrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx',
+    SVRS: 'https://nfe.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx',
+    default: 'https://nfe.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx',
+  },
+};
+
 const STATUS_SOAP_ACTION =
   'http://www.portalfiscal.inf.br/nfe/wsdl/NFeStatusServico4/nfeStatusServicoNF';
+const CONSULTA_PROTOCOLO_SOAP_ACTION =
+  'http://www.portalfiscal.inf.br/nfe/wsdl/NFeConsultaProtocolo4/nfeConsultaNF';
+const EVENTO_SOAP_ACTION =
+  'http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4/nfeRecepcaoEventoNF';
+
+const NFE_EVENTO_ENDPOINTS = {
+  homologacao: {
+    RS: 'https://nfe-homologacao.sefazrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx',
+    SVRS: 'https://nfe-homologacao.svrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx',
+    default: 'https://nfe-homologacao.svrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx',
+  },
+  producao: {
+    RS: 'https://nfe.sefazrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx',
+    SVRS: 'https://nfe.svrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx',
+    default: 'https://nfe.svrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx',
+  },
+};
 
 const CERTIFICATE_PATTERN = /-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g;
 
@@ -383,6 +413,49 @@ const buildStatusSoapEnvelope = ({ payloadXml, uf }) => {
   ].join('\n');
 };
 
+const buildConsultaProtocoloSoapEnvelope = ({ payloadXml, uf }) => {
+  const sanitized = removeXmlDeclaration(payloadXml);
+  const ufCode = resolveUfCode(uf);
+
+  return [
+    '<?xml version="1.0" encoding="utf-8"?>',
+    '<soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"',
+    '                 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
+    '                 xmlns:xsd="http://www.w3.org/2001/XMLSchema">',
+    '  <soap12:Header>',
+    '    <nfeCabecMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeConsultaProtocolo4">',
+    `      <cUF>${ufCode}</cUF>`,
+    '      <versaoDados>4.00</versaoDados>',
+    '    </nfeCabecMsg>',
+    '  </soap12:Header>',
+    '  <soap12:Body>',
+    `    <nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeConsultaProtocolo4">${sanitized}</nfeDadosMsg>`,
+    '  </soap12:Body>',
+    '</soap12:Envelope>',
+  ].join('\n');
+};
+
+const buildEventSoapEnvelope = ({ payloadXml, uf }) => {
+  const sanitized = removeXmlDeclaration(payloadXml);
+  const ufCode = resolveUfCode(uf);
+  return [
+    '<?xml version="1.0" encoding="utf-8"?>',
+    '<soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"',
+    '                 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
+    '                 xmlns:xsd="http://www.w3.org/2001/XMLSchema">',
+    '  <soap12:Header>',
+    '    <nfeCabecMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4">',
+    `      <cUF>${ufCode}</cUF>`,
+    '      <versaoDados>1.00</versaoDados>',
+    '    </nfeCabecMsg>',
+    '  </soap12:Header>',
+    '  <soap12:Body>',
+    `    <nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4">${sanitized}</nfeDadosMsg>`,
+    '  </soap12:Body>',
+    '</soap12:Envelope>',
+  ].join('\n');
+};
+
 const buildStatusPayload = ({ uf, environment }) => {
   const ufCode = resolveUfCode(uf);
   const tpAmb = environment === 'producao' ? '1' : '2';
@@ -392,6 +465,18 @@ const buildStatusPayload = ({ uf, environment }) => {
     `  <cUF>${ufCode}</cUF>`,
     '  <xServ>STATUS</xServ>',
     '</consStatServ>',
+  ].join('\n');
+};
+
+const buildConsultaProtocoloPayload = ({ accessKey, environment }) => {
+  const tpAmb = environment === 'producao' ? '1' : '2';
+  const chave = String(accessKey || '').replace(/\D+/g, '');
+  return [
+    '<consSitNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">',
+    `  <tpAmb>${tpAmb}</tpAmb>`,
+    '  <xServ>CONSULTAR</xServ>',
+    `  <chNFe>${chave}</chNFe>`,
+    '</consSitNFe>',
   ].join('\n');
 };
 
@@ -449,6 +534,42 @@ const resolveNfeStatusEndpoint = (uf, environment) => {
   const endpoint = map[normalizedUf] || map.default;
   if (!endpoint) {
     throw new SefazTransmissionError('Endpoint de status da SEFAZ não configurado para o estado informado.');
+  }
+  return endpoint;
+};
+
+const resolveNfeConsultaProtocoloEndpoint = (uf, environment) => {
+  const envKey = environment === 'producao' ? 'producao' : 'homologacao';
+  const override =
+    envKey === 'producao'
+      ? process.env.NFE_CONSULTA_PROTOCOLO_URL_PRODUCAO || process.env.NFE_CONSULTA_PROTOCOLO_URL
+      : process.env.NFE_CONSULTA_PROTOCOLO_URL_HOMOLOGACAO || process.env.NFE_CONSULTA_PROTOCOLO_URL_HOMOLOG;
+  if (override) {
+    return String(override).trim();
+  }
+  const map = NFE_CONSULTA_PROTOCOLO_ENDPOINTS[envKey] || {};
+  const normalizedUf = (uf || '').toString().trim().toUpperCase();
+  const endpoint = map[normalizedUf] || map.default;
+  if (!endpoint) {
+    throw new SefazTransmissionError('Endpoint de consulta de protocolo da SEFAZ não configurado para o estado informado.');
+  }
+  return endpoint;
+};
+
+const resolveNfeEventoEndpoint = (uf, environment) => {
+  const envKey = environment === 'producao' ? 'producao' : 'homologacao';
+  const override =
+    envKey === 'producao'
+      ? process.env.NFE_RECEPCAO_EVENTO_URL_PRODUCAO || process.env.NFE_RECEPCAO_EVENTO_URL
+      : process.env.NFE_RECEPCAO_EVENTO_URL_HOMOLOGACAO || process.env.NFE_RECEPCAO_EVENTO_URL_HOMOLOG;
+  if (override) {
+    return String(override).trim();
+  }
+  const map = NFE_EVENTO_ENDPOINTS[envKey] || {};
+  const normalizedUf = (uf || '').toString().trim().toUpperCase();
+  const endpoint = map[normalizedUf] || map.default;
+  if (!endpoint) {
+    throw new SefazTransmissionError('Endpoint de evento da SEFAZ não configurado para o estado informado.');
   }
   return endpoint;
 };
@@ -1136,9 +1257,146 @@ const consultNfceStatusServico = async ({
   };
 };
 
+const consultNfeProtocolOnSefaz = async ({
+  accessKey,
+  uf,
+  environment,
+  certificate,
+  certificateChain,
+  privateKey,
+}) => {
+  const chave = String(accessKey || '').replace(/\D+/g, '');
+  if (chave.length !== 44) {
+    throw new SefazTransmissionError('Chave de acesso da NF-e inválida para consulta de status.');
+  }
+
+  const endpoint = resolveNfeConsultaProtocoloEndpoint(uf, environment);
+  const payload = buildConsultaProtocoloPayload({ accessKey: chave, environment });
+  const envelope = buildConsultaProtocoloSoapEnvelope({ payloadXml: payload, uf });
+
+  const responseXml = await performSoapRequest({
+    endpoint,
+    envelope,
+    certificate,
+    certificateChain,
+    privateKey,
+    soapAction: CONSULTA_PROTOCOLO_SOAP_ACTION,
+  });
+
+  const retSection = extractSection(responseXml, 'retConsSitNFe');
+  if (!retSection) {
+    throw new SefazTransmissionError('Resposta da SEFAZ não contém retorno da consulta de protocolo.', {
+      response: responseXml,
+    });
+  }
+
+  const consultaStatus = extractTagContent(retSection, 'cStat');
+  const consultaMessage = extractTagContent(retSection, 'xMotivo');
+  const protSection = extractSection(retSection, 'protNFe');
+  const protocolStatus = extractTagContent(protSection, 'cStat');
+  const protocolMessage = extractTagContent(protSection, 'xMotivo');
+  const protocolNumber = extractTagContent(protSection || retSection, 'nProt');
+  const processedAt = extractTagContent(protSection || retSection, 'dhRecbto');
+
+  return {
+    endpoint,
+    responseXml,
+    consultaStatus: consultaStatus || '',
+    consultaMessage: consultaMessage || '',
+    status: consultaStatus || protocolStatus || '',
+    message: consultaMessage || protocolMessage || '',
+    authorizationStatus: protocolStatus || '',
+    authorizationMessage: protocolMessage || '',
+    protocol: protocolNumber || '',
+    processedAt: processedAt || '',
+  };
+};
+
+const transmitNfeEventToSefaz = async ({
+  eventXml,
+  uf,
+  environment,
+  certificate,
+  certificateChain,
+  privateKey,
+  acceptedStatuses = ['135', '136'],
+}) => {
+  const endpoint = resolveNfeEventoEndpoint(uf, environment);
+  const payload = removeXmlDeclaration(eventXml);
+  if (!/versao="1\.00"/.test(payload)) {
+    throw new SefazTransmissionError('envEvento deve ser gerado na versão 1.00.');
+  }
+
+  const envelope = buildEventSoapEnvelope({ payloadXml: payload, uf });
+
+  const responseXml = await performSoapRequest({
+    endpoint,
+    envelope,
+    certificate,
+    certificateChain,
+    privateKey,
+    soapAction: EVENTO_SOAP_ACTION,
+  });
+
+  const retEnvSection = extractSection(responseXml, 'retEnvEvento');
+  if (!retEnvSection) {
+    throw new SefazTransmissionError('Resposta da SEFAZ não contém retorno de evento da NF-e.', {
+      response: responseXml,
+    });
+  }
+
+  const loteStatus = extractTagContent(retEnvSection, 'cStat');
+  const loteMessage = extractTagContent(retEnvSection, 'xMotivo');
+  if (loteStatus !== '128') {
+    throw new SefazTransmissionError(
+      `SEFAZ não processou o evento (${loteStatus || 'sem código'} - ${loteMessage || 'sem mensagem'}).`,
+      {
+        response: responseXml,
+        loteStatus,
+        loteMessage,
+      }
+    );
+  }
+
+  const retEventoSection = extractSection(retEnvSection, 'retEvento');
+  const protocolStatus = extractTagContent(retEventoSection || retEnvSection, 'cStat');
+  const protocolMessage = extractTagContent(retEventoSection || retEnvSection, 'xMotivo');
+  const protocolNumber = extractTagContent(retEventoSection || retEnvSection, 'nProt');
+  const registeredAt = extractTagContent(retEventoSection || retEnvSection, 'dhRegEvento');
+
+  const accepted = Array.isArray(acceptedStatuses)
+    ? acceptedStatuses.map((value) => String(value || '').trim()).filter(Boolean)
+    : ['135', '136'];
+  if (!accepted.includes(protocolStatus || '')) {
+    throw new SefazTransmissionError(
+      `SEFAZ rejeitou o evento (${protocolStatus || 'sem código'} - ${protocolMessage || 'sem mensagem'}).`,
+      {
+        response: responseXml,
+        loteStatus,
+        loteMessage,
+        protocolStatus,
+        protocolMessage,
+      }
+    );
+  }
+
+  return {
+    endpoint,
+    responseXml,
+    loteStatus,
+    loteMessage,
+    status: protocolStatus,
+    message: protocolMessage,
+    protocol: protocolNumber,
+    registeredAt,
+  };
+};
+
 module.exports = {
   transmitNfceToSefaz,
   transmitNfeToSefaz,
+  transmitNfeEventToSefaz,
+  consultNfeProtocolOnSefaz,
   consultNfceStatusServico,
   performSoapRequest,
   resolveUfCode,
@@ -1157,10 +1415,15 @@ module.exports = {
     buildSoapEnvelope,
     buildStatusSoapEnvelope,
     buildStatusPayload,
+    buildConsultaProtocoloSoapEnvelope,
+    buildConsultaProtocoloPayload,
     buildEnviNfePayload,
+    buildEventSoapEnvelope,
     ensureClockSynchronization,
     getSynchronizedDate,
     resolveNfeEndpoint,
     resolveNfeStatusEndpoint,
+    resolveNfeConsultaProtocoloEndpoint,
+    resolveNfeEventoEndpoint,
   },
 };

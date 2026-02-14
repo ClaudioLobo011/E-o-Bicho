@@ -285,6 +285,8 @@ function mapPetDoc(doc) {
     rga: plain?.rga,
     peso: plain?.peso,
     obito: plain?.obito,
+    castrado: plain?.castrado,
+    codAntigoPet: plain?.codAntigoPet || '',
     codigoPet: parsed || null,
     codigo: parsed ? String(parsed) : null,
     owner: plain?.owner,
@@ -307,6 +309,7 @@ async function buildClientePayload(body = {}, opts = {}) {
 
   const pais = sanitizeString(body.pais || currentUser?.pais || 'Brasil') || 'Brasil';
   const apelido = sanitizeString(body.apelido || (tipoConta === 'pessoa_fisica' ? currentUser?.apelido : currentUser?.nomeFantasia) || '');
+  const codigoAntigo = sanitizeString(body.codigoAntigo || currentUser?.codigoAntigo || '');
 
   const empresaPrincipal = await ensureEmpresaExists(body.empresaId || body.empresa || body.empresaPrincipal || currentUser?.empresaPrincipal);
 
@@ -319,6 +322,7 @@ async function buildClientePayload(body = {}, opts = {}) {
     celularSecundario: celular2 || '',
     pais,
     apelido,
+    codigoAntigo,
   };
 
   if (Object.prototype.hasOwnProperty.call(body, 'limiteCredito')) {
@@ -375,6 +379,187 @@ async function buildClientePayload(body = {}, opts = {}) {
   }
 
   return payload;
+}
+
+function normalizeImportText(value = '') {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function parseImportBirthDate(value) {
+  const raw = sanitizeString(value);
+  if (!raw) return '';
+
+  const brMatch = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (brMatch) {
+    const day = brMatch[1].padStart(2, '0');
+    const month = brMatch[2].padStart(2, '0');
+    const year = brMatch[3];
+    return `${year}-${month}-${day}`;
+  }
+
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().slice(0, 10);
+}
+
+function normalizePhoneWithDdd(dddValue, phoneValue) {
+  let digits = onlyDigits(phoneValue);
+  if (!digits) return '';
+
+  if (digits.startsWith('55') && digits.length > 11) {
+    digits = digits.slice(2);
+  }
+
+  if (digits.length > 11) {
+    digits = digits.slice(-11);
+  }
+
+  if (digits.length === 8 || digits.length === 9) {
+    const ddd = onlyDigits(dddValue).slice(-2) || '21';
+    digits = `${ddd}${digits}`;
+  }
+
+  if (digits.length < 10) return '';
+  if (digits.length > 11) return digits.slice(-11);
+  return digits;
+}
+
+function classifyPhoneNumber(phoneDigits) {
+  if (!phoneDigits) return '';
+  if (phoneDigits.length === 11) return 'celular';
+  if (phoneDigits.length === 10) return 'telefone';
+  return '';
+}
+
+function collectImportPhones(row = {}) {
+  const rawCandidates = [
+    { source: 'celular', value: normalizePhoneWithDdd('', row.celular) },
+    { source: 'fone1', value: normalizePhoneWithDdd(row.ddd1, row.fone) },
+    { source: 'fone2', value: normalizePhoneWithDdd(row.ddd2, row.fone2) },
+  ];
+
+  const dedupSet = new Set();
+  const candidates = rawCandidates
+    .filter((entry) => entry.value)
+    .filter((entry) => {
+      if (dedupSet.has(entry.value)) return false;
+      dedupSet.add(entry.value);
+      return true;
+    })
+    .map((entry) => ({ ...entry, type: classifyPhoneNumber(entry.value) }))
+    .filter((entry) => entry.type);
+
+  const mobiles = candidates.filter((entry) => entry.type === 'celular');
+  const landlines = candidates.filter((entry) => entry.type === 'telefone');
+
+  const sortByPriority = (list, priorityMap) => {
+    return list.slice().sort((a, b) => {
+      const pa = priorityMap[a.source] ?? 99;
+      const pb = priorityMap[b.source] ?? 99;
+      return pa - pb;
+    });
+  };
+
+  const mobilePriority = { celular: 1, fone1: 2, fone2: 3 };
+  const landlinePriority = { fone1: 1, fone2: 2, celular: 3 };
+
+  const sortedMobiles = sortByPriority(mobiles, mobilePriority);
+  const sortedLandlines = sortByPriority(landlines, landlinePriority);
+
+  const celular = sortedMobiles[0]?.value || '';
+  const telefone = sortedLandlines[0]?.value || '';
+  const celular2 = sortedMobiles[1]?.value || '';
+  const telefone2 = sortedLandlines[1]?.value || '';
+
+  return { celular, celular2, telefone, telefone2 };
+}
+
+function detectTipoContaForImport(tipoValue, documentoDigits) {
+  const normalizedTipo = normalizeImportText(tipoValue);
+  if (normalizedTipo.includes('jurid') || normalizedTipo === 'pj') return 'pessoa_juridica';
+  if (normalizedTipo.includes('fis') || normalizedTipo === 'pf') return 'pessoa_fisica';
+  return documentoDigits.length > 11 ? 'pessoa_juridica' : 'pessoa_fisica';
+}
+
+function parseImportSexo(value) {
+  const normalized = normalizeImportText(value);
+  if (!normalized) return '';
+  if (normalized === 'm' || normalized.startsWith('masc')) return 'masculino';
+  if (normalized === 'f' || normalized.startsWith('fem')) return 'feminino';
+  return '';
+}
+
+function buildStoreNameIndex(stores = []) {
+  const index = new Map();
+  stores.forEach((store) => {
+    const keys = [store?.nome, store?.nomeFantasia, store?.razaoSocial];
+    keys.forEach((key) => {
+      const normalized = normalizeImportText(key);
+      if (normalized && !index.has(normalized)) {
+        index.set(normalized, String(store._id));
+      }
+    });
+  });
+  return index;
+}
+
+function buildFallbackEmail(seed) {
+  return `importacao.clientes+${seed}@eobicho.local`;
+}
+
+function buildFallbackCellular(seed) {
+  const suffix = String(100000000 + (seed % 900000000)).slice(-9);
+  return `99${suffix}`;
+}
+
+function normalizePetImportType(value) {
+  const normalized = normalizeImportText(value);
+  if (!normalized) return 'outro';
+  if (normalized === 'cao' || normalized === 'cachorro' || normalized.includes('canin')) return 'cachorro';
+  if (normalized === 'gato' || normalized.includes('felin')) return 'gato';
+  if (normalized === 'passaro' || normalized === 'ave') return 'passaro';
+  if (normalized === 'peixe') return 'peixe';
+  if (normalized === 'roedor') return 'roedor';
+  if (normalized === 'lagarto') return 'lagarto';
+  if (normalized === 'tartaruga') return 'tartaruga';
+  return normalized;
+}
+
+function normalizePetImportSex(value) {
+  const normalized = normalizeImportText(value);
+  if (!normalized) return '';
+  if (normalized === 'm' || normalized.startsWith('mach')) return 'macho';
+  if (normalized === 'f' || normalized.startsWith('fem')) return 'femea';
+  return normalized;
+}
+
+function parseImportWeight(value) {
+  const raw = sanitizeString(value);
+  if (!raw) return '';
+  const parsed = parseNumber(raw, NaN);
+  if (!Number.isFinite(parsed)) return raw;
+  return parsed.toFixed(3);
+}
+
+function buildCodigoAntigoIndex(users = []) {
+  const index = new Map();
+  users.forEach((user) => {
+    const codigoAntigo = sanitizeString(user?.codigoAntigo);
+    if (!codigoAntigo) return;
+    const keyText = normalizeImportText(codigoAntigo);
+    if (keyText && !index.has(keyText)) {
+      index.set(keyText, String(user._id));
+    }
+    const keyDigits = onlyDigits(codigoAntigo);
+    if (keyDigits && !index.has(keyDigits)) {
+      index.set(keyDigits, String(user._id));
+    }
+  });
+  return index;
 }
 
 async function ensureClienteEhEditavel(user) {
@@ -1051,13 +1236,377 @@ router.post('/clientes', authMiddleware, requireStaff, async (req, res) => {
   }
 });
 
+router.post('/clientes/importar-lote', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+    if (!rows.length) {
+      return res.status(400).json({ message: 'Envie ao menos uma linha para importar.' });
+    }
+
+    await atribuirCodigosParaClientesSemCodigo();
+
+    const stores = await Store.find({})
+      .select('_id nome nomeFantasia razaoSocial')
+      .lean();
+    const storeIndex = buildStoreNameIndex(stores);
+    const timestampSeed = Date.now();
+
+    const summary = {
+      received: rows.length,
+      created: 0,
+      updated: 0,
+      failed: 0,
+      skipped: 0,
+    };
+    const errors = [];
+    const createdIds = [];
+    const updatedIds = [];
+
+    for (let i = 0; i < rows.length; i += 1) {
+      const row = rows[i] || {};
+      const line = Number(row._line) || (i + 2);
+
+      const codigoAntigo = sanitizeString(row.codigoAntigo);
+      const nome = sanitizeString(row.nome);
+      const documentoDigits = onlyDigits(row.cpfCnpj);
+
+      if (!codigoAntigo || !nome || !documentoDigits) {
+        summary.skipped += 1;
+        errors.push({
+          line,
+          message: 'Campos obrigatorios ausentes (Codigo Antigo, Nome, CPF/CNPJ).',
+        });
+        continue;
+      }
+
+      try {
+        const tipoConta = detectTipoContaForImport(row.tipo, documentoDigits);
+        const storeNameKey = normalizeImportText(row.empresa);
+        const empresaId = storeNameKey && storeIndex.has(storeNameKey)
+          ? storeIndex.get(storeNameKey)
+          : '';
+
+        const phones = collectImportPhones(row);
+
+        let email = sanitizeEmail(row.email);
+        if (!email) {
+          email = buildFallbackEmail(`${timestampSeed}-${i}`);
+        }
+
+        let celular = phones.celular;
+        if (!celular) {
+          celular = buildFallbackCellular(timestampSeed + i);
+        }
+
+        const payloadInput = {
+          tipoConta,
+          codigoAntigo,
+          empresaId,
+          nome,
+          apelido: nome,
+          sexo: parseImportSexo(row.sexo),
+          email,
+          celular,
+          celular2: phones.celular2,
+          telefone: phones.telefone,
+          telefone2: phones.telefone2,
+          pais: 'Brasil',
+        };
+
+        if (tipoConta === 'pessoa_juridica') {
+          payloadInput.razaoSocial = nome;
+          payloadInput.nomeFantasia = nome;
+          payloadInput.nomeContato = nome;
+          payloadInput.cnpj = documentoDigits.slice(-14);
+          payloadInput.inscricaoEstadual = sanitizeString(row.rgIe);
+          payloadInput.estadoIE = sanitizeString(row.uf || '').toUpperCase();
+        } else {
+          payloadInput.cpf = documentoDigits.slice(-11);
+          payloadInput.rg = sanitizeString(row.rgIe);
+          payloadInput.nascimento = parseImportBirthDate(row.dataNascimento);
+        }
+
+        const existing = await User.findOne({ codigoAntigo, role: 'cliente' })
+          .select('role tipoConta nomeCompleto razaoSocial nomeFantasia nomeContato email celular telefone apelido pais cpf cnpj inscricaoEstadual genero dataNascimento rgNumero estadoIE isentoIE empresaPrincipal empresas telefoneSecundario celularSecundario codigoAntigo')
+          .lean();
+
+        let persistedUserId = '';
+        if (existing) {
+          const payload = await buildClientePayload(payloadInput, {
+            isUpdate: true,
+            currentUser: existing,
+          });
+
+          const unsetPayload = {};
+          Object.keys(payload).forEach((key) => {
+            if (typeof payload[key] === 'undefined') delete payload[key];
+          });
+
+          if (payload.tipoConta === 'pessoa_juridica') {
+            payload.nomeCompleto = '';
+            payload.cpf = '';
+            payload.genero = '';
+            if (!Object.prototype.hasOwnProperty.call(payload, 'dataNascimento')) {
+              payload.dataNascimento = null;
+            }
+            payload.rgNumero = '';
+          } else {
+            payload.razaoSocial = '';
+            payload.nomeFantasia = '';
+            payload.nomeContato = '';
+            unsetPayload.cnpj = '';
+            unsetPayload.inscricaoEstadual = '';
+            unsetPayload.estadoIE = '';
+            unsetPayload.isentoIE = '';
+          }
+
+          const updateQuery = { $set: payload };
+          if (Object.keys(unsetPayload).length > 0) {
+            updateQuery.$unset = unsetPayload;
+          }
+
+          const updated = await User.findByIdAndUpdate(existing._id, updateQuery, {
+            new: true,
+            runValidators: true,
+          });
+          if (!updated) {
+            throw new Error('Cliente existente nao encontrado para atualizacao.');
+          }
+
+          persistedUserId = String(updated._id);
+          updatedIds.push(persistedUserId);
+          summary.updated += 1;
+        } else {
+          let payload = await buildClientePayload(payloadInput, { isUpdate: false });
+          payload.role = 'cliente';
+
+          const plainPassword = randomBytes(8).toString('base64url').slice(0, 12);
+          const salt = await bcrypt.genSalt(10);
+          payload.senha = await bcrypt.hash(plainPassword, salt);
+
+          let created = null;
+          for (let attempt = 0; attempt < 5; attempt += 1) {
+            try {
+              payload.codigoCliente = await gerarCodigoClienteSequencial();
+              created = await User.create(payload);
+              break;
+            } catch (creationErr) {
+              const duplicateKeys = Object.keys(creationErr?.keyPattern || creationErr?.keyValue || {});
+              if (creationErr?.code === 11000 && duplicateKeys.includes('codigoCliente')) {
+                continue;
+              }
+              if (creationErr?.code === 11000 && duplicateKeys.includes('email')) {
+                payload.email = buildFallbackEmail(`${timestampSeed}-${i}-${attempt + 1}`);
+                continue;
+              }
+              if (creationErr?.code === 11000 && duplicateKeys.includes('celular')) {
+                payload.celular = buildFallbackCellular(timestampSeed + i + attempt + 1);
+                continue;
+              }
+              throw creationErr;
+            }
+          }
+
+          if (!created) {
+            throw new Error('Nao foi possivel criar cliente apos multiplas tentativas.');
+          }
+
+          persistedUserId = String(created._id);
+          createdIds.push(persistedUserId);
+          summary.created += 1;
+        }
+
+        const cepDigits = onlyDigits(row.cep);
+        if (cepDigits.length === 8 && persistedUserId) {
+          const addressPayload = {
+            user: persistedUserId,
+            apelido: 'Principal',
+            cep: formatCep(cepDigits),
+            logradouro: sanitizeString(row.endereco),
+            numero: sanitizeString(row.numero),
+            complemento: sanitizeString(row.complemento),
+            bairro: sanitizeString(row.bairro),
+            cidade: sanitizeString(row.cidade),
+            uf: sanitizeString(row.uf || '').toUpperCase(),
+            pais: 'Brasil',
+            isDefault: true,
+          };
+
+          const existingAddress = await UserAddress.findOne({ user: persistedUserId, isDefault: true })
+            .sort({ updatedAt: -1 })
+            .lean();
+
+          if (existingAddress?._id) {
+            await UserAddress.findByIdAndUpdate(existingAddress._id, { $set: addressPayload }, { runValidators: true });
+          } else {
+            await UserAddress.create(addressPayload);
+          }
+        }
+      } catch (rowErr) {
+        summary.failed += 1;
+        errors.push({
+          line,
+          message: rowErr?.message || 'Erro ao importar linha.',
+        });
+      }
+    }
+
+    return res.json({
+      message: 'Importacao de clientes concluida.',
+      summary,
+      errors,
+      createdIds,
+      updatedIds,
+    });
+  } catch (err) {
+    console.error('POST /func/clientes/importar-lote', err);
+    return res.status(500).json({ message: err?.message || 'Erro ao importar clientes.' });
+  }
+});
+
+router.post('/pets/importar-lote', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+    if (!rows.length) {
+      return res.status(400).json({ message: 'Envie ao menos uma linha para importar.' });
+    }
+
+    await atribuirCodigosParaPetsSemCodigo();
+
+    const clientes = await User.find({
+      role: 'cliente',
+      codigoAntigo: { $exists: true, $ne: null, $ne: '' },
+    })
+      .select('_id codigoAntigo')
+      .lean();
+    const ownerIndex = buildCodigoAntigoIndex(clientes);
+
+    const summary = {
+      received: rows.length,
+      created: 0,
+      updated: 0,
+      failed: 0,
+      skipped: 0,
+    };
+    const errors = [];
+    const createdIds = [];
+    const updatedIds = [];
+
+    for (let i = 0; i < rows.length; i += 1) {
+      const row = rows[i] || {};
+      const line = Number(row._line) || (i + 2);
+
+      const codAntigoPet = sanitizeString(row.codigo);
+      const nome = sanitizeString(row.nome);
+      const codProprietarioRaw = sanitizeString(row.codProprietario);
+
+      if (!codAntigoPet || !nome || !codProprietarioRaw) {
+        summary.skipped += 1;
+        errors.push({
+          line,
+          message: 'Campos obrigatorios ausentes (Codigo, Nome, Cod. Proprietario).',
+        });
+        continue;
+      }
+
+      const ownerKeyText = normalizeImportText(codProprietarioRaw);
+      const ownerKeyDigits = onlyDigits(codProprietarioRaw);
+      const ownerId = ownerIndex.get(ownerKeyText) || ownerIndex.get(ownerKeyDigits) || '';
+      if (!ownerId) {
+        summary.failed += 1;
+        errors.push({
+          line,
+          message: `Cliente com Codigo Antigo "${codProprietarioRaw}" nao encontrado.`,
+        });
+        continue;
+      }
+
+      try {
+        const payload = {
+          owner: ownerId,
+          codAntigoPet,
+          nome,
+          tipo: normalizePetImportType(row.especie),
+          raca: sanitizeString(row.raca) || 'SRD',
+          pelagemCor: sanitizeString(row.pelagem),
+          sexo: normalizePetImportSex(row.sexo) || 'macho',
+          dataNascimento: parseDate(parseImportBirthDate(row.dataNascimento)) || new Date(),
+          rga: sanitizeString(row.rga),
+          microchip: sanitizeString(row.chip),
+          peso: parseImportWeight(row.peso),
+        };
+
+        const existing = await Pet.findOne({ owner: ownerId, codAntigoPet })
+          .select('_id codigoPet')
+          .lean();
+
+        if (existing?._id) {
+          const update = { ...payload };
+          delete update.owner;
+          if (!parseCodigoPet(existing.codigoPet)) {
+            update.codigoPet = await gerarCodigoPetSequencial();
+          }
+          const updated = await Pet.findByIdAndUpdate(existing._id, { $set: update }, {
+            new: true,
+            runValidators: true,
+          });
+          if (!updated) {
+            throw new Error('Pet existente nao encontrado para atualizacao.');
+          }
+          updatedIds.push(String(updated._id));
+          summary.updated += 1;
+        } else {
+          let created = null;
+          let tentativas = 0;
+          do {
+            tentativas += 1;
+            try {
+              payload.codigoPet = await gerarCodigoPetSequencial();
+              created = await Pet.create(payload);
+            } catch (creationErr) {
+              if (creationErr?.code === 11000 && creationErr?.keyPattern?.codigoPet && tentativas < 5) {
+                created = null;
+                continue;
+              }
+              throw creationErr;
+            }
+          } while (!created && tentativas < 5);
+
+          if (!created) {
+            throw new Error('Nao foi possivel gerar o codigo do pet.');
+          }
+          createdIds.push(String(created._id));
+          summary.created += 1;
+        }
+      } catch (rowErr) {
+        summary.failed += 1;
+        errors.push({
+          line,
+          message: rowErr?.message || 'Erro ao importar linha.',
+        });
+      }
+    }
+
+    return res.json({
+      message: 'Importacao de animais concluida.',
+      summary,
+      errors,
+      createdIds,
+      updatedIds,
+    });
+  } catch (err) {
+    console.error('POST /func/pets/importar-lote', err);
+    return res.status(500).json({ message: err?.message || 'Erro ao importar animais.' });
+  }
+});
+
 router.put('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
   try {
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: 'ID inválido.' });
     }
-    const current = await User.findById(id).select('role tipoConta nomeCompleto razaoSocial nomeFantasia nomeContato email celular telefone apelido pais cpf cnpj inscricaoEstadual genero dataNascimento rgNumero estadoIE isentoIE empresaPrincipal empresas telefoneSecundario celularSecundario').lean();
+    const current = await User.findById(id).select('role tipoConta nomeCompleto razaoSocial nomeFantasia nomeContato email celular telefone apelido pais cpf cnpj inscricaoEstadual genero dataNascimento rgNumero estadoIE isentoIE empresaPrincipal empresas telefoneSecundario celularSecundario codigoAntigo').lean();
     await ensureClienteEhEditavel(current);
 
     const payload = await buildClientePayload(req.body, { isUpdate: true, currentUser: current });
@@ -1308,6 +1857,7 @@ router.post('/clientes/:id/pets', authMiddleware, requireStaff, async (req, res)
 
     const doc = {
       owner: id,
+      codAntigoPet: sanitizeString(req.body.codAntigoPet || req.body.codigoAntigoPet || req.body.codigo),
       nome,
       tipo,
       porte: sanitizeString(req.body.porte),
@@ -1319,6 +1869,7 @@ router.post('/clientes/:id/pets', authMiddleware, requireStaff, async (req, res)
       rga: sanitizeString(req.body.rga),
       peso: sanitizeString(req.body.peso),
       obito: parseBooleanFlag(req.body.obito),
+      castrado: parseBooleanFlag(req.body.castrado),
     };
 
     let tentativas = 0;
@@ -1363,6 +1914,7 @@ router.put('/clientes/:id/pets/:petId', authMiddleware, requireStaff, async (req
     }
 
     const update = {
+      codAntigoPet: sanitizeString(req.body.codAntigoPet || req.body.codigoAntigoPet || req.body.codigo || pet.codAntigoPet || ''),
       nome: sanitizeString(req.body.nome || req.body.nomePet) || pet.nome,
       tipo: sanitizeString(req.body.tipo || req.body.tipoPet) || pet.tipo,
       porte: sanitizeString(req.body.porte),
@@ -1381,6 +1933,9 @@ router.put('/clientes/:id/pets/:petId', authMiddleware, requireStaff, async (req
 
     if (Object.prototype.hasOwnProperty.call(req.body, 'obito')) {
       update.obito = parseBooleanFlag(req.body.obito);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'castrado')) {
+      update.castrado = parseBooleanFlag(req.body.castrado);
     }
 
     const updated = await Pet.findByIdAndUpdate(petId, update, { new: true });
@@ -1457,6 +2012,67 @@ router.get('/clientes/buscar', authMiddleware, requireStaff, async (req, res) =>
   } catch (e) {
     console.error('GET /func/clientes/buscar', e);
     res.status(500).json({ message: 'Erro ao buscar clientes' });
+  }
+});
+
+router.post('/clientes/lookup-codigo-antigo', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const codes = Array.isArray(req.body?.codes) ? req.body.codes : [];
+    const cleanedCodes = Array.from(new Set(codes
+      .map((value) => sanitizeString(value))
+      .filter(Boolean)));
+
+    if (!cleanedCodes.length) {
+      return res.json({ items: [] });
+    }
+
+    const codeKeys = cleanedCodes.map((code) => ({
+      raw: code,
+      normalized: normalizeImportText(code),
+      digits: onlyDigits(code),
+    }));
+
+    const users = await User.find({
+      role: 'cliente',
+      codigoAntigo: { $exists: true, $ne: null, $ne: '' },
+    })
+      .select('_id codigoAntigo nomeCompleto nomeContato razaoSocial email')
+      .lean();
+
+    const ownersByKey = new Map();
+    users.forEach((user) => {
+      const codigoAntigo = sanitizeString(user?.codigoAntigo);
+      if (!codigoAntigo) return;
+      const info = {
+        ownerId: String(user._id),
+        codigoAntigo,
+        nome: userDisplayName(user) || '',
+      };
+      const normalized = normalizeImportText(codigoAntigo);
+      const digits = onlyDigits(codigoAntigo);
+      if (normalized && !ownersByKey.has(normalized)) {
+        ownersByKey.set(normalized, info);
+      }
+      if (digits && !ownersByKey.has(digits)) {
+        ownersByKey.set(digits, info);
+      }
+    });
+
+    const items = codeKeys.map((entry) => {
+      const owner = ownersByKey.get(entry.normalized) || ownersByKey.get(entry.digits) || null;
+      return {
+        query: entry.raw,
+        encontrado: !!owner,
+        ownerId: owner?.ownerId || '',
+        codigoAntigo: owner?.codigoAntigo || '',
+        nome: owner?.nome || '',
+      };
+    });
+
+    return res.json({ items });
+  } catch (err) {
+    console.error('POST /func/clientes/lookup-codigo-antigo', err);
+    return res.status(500).json({ message: err?.message || 'Erro ao consultar codigos antigos.' });
   }
 });
 
@@ -1540,7 +2156,7 @@ router.get('/clientes/:id/pets', authMiddleware, requireStaff, async (req, res) 
       filter.obito = { $ne: true };
     }
     const pets = await Pet.find(filter)
-      .select('_id nome tipo raca porte sexo dataNascimento peso microchip pelagemCor rga obito codigoPet owner')
+      .select('_id nome tipo raca porte sexo dataNascimento peso microchip pelagemCor rga obito castrado codAntigoPet codigoPet owner')
       .sort({ nome: 1 })
       .lean();
     res.json(pets.map(mapPetDoc));
@@ -2094,7 +2710,7 @@ router.get('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
       return res.status(400).json({ message: 'ID inválido.' });
     }
     const u = await User.findById(id)
-      .select('_id role tipoConta nomeCompleto nomeContato razaoSocial nomeFantasia email celular telefone celularSecundario telefoneSecundario cpf cnpj inscricaoEstadual genero dataNascimento rgNumero estadoIE isentoIE apelido pais empresaPrincipal empresas limiteCredito codigoCliente')
+      .select('_id role tipoConta nomeCompleto nomeContato razaoSocial nomeFantasia email celular telefone celularSecundario telefoneSecundario cpf cnpj inscricaoEstadual genero dataNascimento rgNumero estadoIE isentoIE apelido pais empresaPrincipal empresas limiteCredito codigoCliente codigoAntigo')
       .lean();
     if (!u) {
       return res.status(404).json({ message: 'Cliente não encontrado.' });
@@ -2135,6 +2751,7 @@ router.get('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
       nome,
       tipoConta: u.tipoConta,
       codigo: codigo ? String(codigo) : String(u._id),
+      codigoAntigo: u.codigoAntigo || '',
       apelido: u.apelido || '',
       pais: u.pais || 'Brasil',
       empresaPrincipal: empresa,

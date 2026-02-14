@@ -17,13 +17,14 @@
         "Papillon",
         "Pequinês",
         "Pinscher",
-        "Pomeranian (Spitz Alemão Anão)",
+        "Spitz Alemão Anão",
         "Poodle Toy",
         "Prazsky Krysarik",
         "Russian Toy",
         "Toy Fox Terrier",
         "Toy Manchester Terrier",
-        "Xoloitzcuintli Toy"
+        "Xoloitzcuintli Toy",
+        "Yorkshire Terrier"
       ],
       "pequeno": [
         "Basenji",
@@ -45,11 +46,9 @@
         "Lhasa Apso",
         "Manchester Terrier",
         "Miniature Bull Terrier",
-        "Miniature Schnauzer",
         "Norfolk Terrier",
         "Norwich Terrier",
         "Parson Russell Terrier",
-        "Poodle Miniatura",
         "Pug",
         "Schipperke",
         "Schnauzer Miniatura",
@@ -60,12 +59,13 @@
         "Shih Tzu",
         "Silky Terrier",
         "Skye Terrier",
-        "Spitz Alemão Pequeno",
+        "Spitz Alemão",
         "Spitz Japonês",
         "Terrier Brasileiro (Fox Paulistinha)",
         "Welsh Corgi Cardigan",
         "Welsh Corgi Pembroke",
-        "West Highland White Terrier"
+        "West Highland White Terrier",
+        "Yorkshire"
       ],
       "medio": [
         "SRD (Sem Raça Definida)",
@@ -77,6 +77,7 @@
         "Bearded Collie",
         "Border Collie",
         "Brittany (Epagneul Breton)",
+        "Buldogue francês",
         "Bull Terrier (Standard)",
         "Bulldog Inglês",
         "Cão de Água Português",
@@ -90,13 +91,17 @@
         "Norwegian Buhund",
         "Poodle Médio",
         "Podengo Português Médio",
-        "Schnauzer Standard",
+        "Schnauzer Médio",
         "Shar",
         "Springer Spaniel Inglês",
         "Springer Spaniel Galês",
         "Staffordshire Bull Terrier",
         "Vizsla (Pointer Húngaro)",
-        "Whippet"
+        "Whippet",
+        "Cão D'água Português",
+        "Dálmata",
+        "Shar-pei",
+        "Dachshund Médio"
       ],
       "grande": [
         "Akita Americano",
@@ -120,7 +125,9 @@
         "Samoyed",
         "Weimaraner",
         "Rhodesian Ridgeback",
-        "Schnauzer Gigante"
+        "Poodle Grande",
+        "Schnauzer Gigante",
+        "Shar-pei Grande"
       ],
       "gigante": [
         "Akbash",
@@ -156,7 +163,7 @@
       "Papillon",
       "Pequinês",
       "Pinscher",
-      "Pomeranian (Spitz Alemão Anão)",
+      "Spitz Alemão Anão",
       "Poodle Toy",
       "Prazsky Krysarik",
       "Russian Toy",
@@ -182,11 +189,10 @@
       "Lhasa Apso",
       "Manchester Terrier",
       "Miniature Bull Terrier",
-      "Miniature Schnauzer",
       "Norfolk Terrier",
       "Norwich Terrier",
       "Parson Russell Terrier",
-      "Poodle Miniatura",
+      "Poodle Grande",
       "Pug",
       "Schipperke",
       "Schnauzer Miniatura",
@@ -197,7 +203,7 @@
       "Shih Tzu",
       "Silky Terrier",
       "Skye Terrier",
-      "Spitz Alemão Pequeno",
+      "Spitz Alemão",
       "Spitz Japonês",
       "Terrier Brasileiro (Fox Paulistinha)",
       "Welsh Corgi Cardigan",
@@ -225,7 +231,7 @@
       "Norwegian Buhund",
       "Poodle Médio",
       "Podengo Português Médio",
-      "Schnauzer Standard",
+      "Schnauzer Médio",
       "Shar",
       "Springer Spaniel Inglês",
       "Springer Spaniel Galês",
@@ -268,7 +274,14 @@
       "Irish Wolfhound",
       "Scottish Deerhound",
       "Great Dane (Dogue Alemão)",
-      "Fila Brasileiro"
+      "Fila Brasileiro",
+      "Cão D'água Português",
+      "Dálmata",
+      "Shar-pei",
+      "Shar-pei Grande",
+      "Dachshund Médio",
+      "Yorkshire Terrier",
+      "Yorkshire"
     ],
     "map": {
       "affenpinscher": "mini",
@@ -286,7 +299,6 @@
       "papillon": "mini",
       "pequines": "mini",
       "pinscher": "mini",
-      "pomeranian (spitz alemao anao)": "mini",
       "poodle toy": "mini",
       "prazsky krysarik": "mini",
       "russian toy": "mini",
@@ -312,11 +324,10 @@
       "lhasa apso": "pequeno",
       "manchester terrier": "pequeno",
       "miniature bull terrier": "pequeno",
-      "miniature schnauzer": "pequeno",
       "norfolk terrier": "pequeno",
       "norwich terrier": "pequeno",
       "parson russell terrier": "pequeno",
-      "poodle miniatura": "pequeno",
+      "poodle grande": "grande",
       "pug": "pequeno",
       "schipperke": "pequeno",
       "schnauzer miniatura": "pequeno",
@@ -327,7 +338,6 @@
       "shih tzu": "pequeno",
       "silky terrier": "pequeno",
       "skye terrier": "pequeno",
-      "spitz alemao pequeno": "pequeno",
       "spitz japones": "pequeno",
       "terrier brasileiro (fox paulistinha)": "pequeno",
       "welsh corgi cardigan": "pequeno",
@@ -342,6 +352,9 @@
       "bearded collie": "medio",
       "border collie": "medio",
       "brittany (epagneul breton)": "medio",
+      "buldogue frances": "medio",
+      "buldoge frances": "medio",
+      "bulldog frances": "medio",
       "bull terrier (standard)": "medio",
       "bulldog ingles": "medio",
       "cao de agua portugues": "medio",
@@ -355,7 +368,7 @@
       "norwegian buhund": "medio",
       "poodle medio": "medio",
       "podengo portugues medio": "medio",
-      "schnauzer standard": "medio",
+      "schnauzer medio": "medio",
       "shar": "medio",
       "springer spaniel ingles": "medio",
       "springer spaniel gales": "medio",
@@ -398,7 +411,17 @@
       "irish wolfhound": "gigante",
       "scottish deerhound": "gigante",
       "great dane (dogue alemao)": "gigante",
-      "fila brasileiro": "gigante"
+      "fila brasileiro": "gigante",
+      "cao d agua portugues": "medio",
+      "spitz alemao": "pequeno",
+      "spitz alemao anao": "mini",
+      "shar-pei": "medio",
+      "shar pei": "medio",
+      "shar-pei grande": "grande",
+      "shar pei grande": "grande",
+      "dachshund medio": "medio",
+      "yorkshire terrier": "mini",
+      "yorkshire": "pequeno"
     }
   },
   "gato": [
@@ -422,7 +445,9 @@
     "Scottish Fold",
     "Siamês",
     "Siberiano",
-    "Sphynx"
+    "Sphynx",
+    "PCB (Pelo Curto Brasileiro)",
+    "PLB (Pelo Longo Brasileiro)"
   ],
   "passaro": [
     "Agapornis",
@@ -536,9 +561,6 @@
     "pinscher": [
       "cachorro"
     ],
-    "pomeranian (spitz alemao anao)": [
-      "cachorro"
-    ],
     "poodle toy": [
       "cachorro"
     ],
@@ -614,9 +636,6 @@
     "miniature bull terrier": [
       "cachorro"
     ],
-    "miniature schnauzer": [
-      "cachorro"
-    ],
     "norfolk terrier": [
       "cachorro"
     ],
@@ -626,7 +645,7 @@
     "parson russell terrier": [
       "cachorro"
     ],
-    "poodle miniatura": [
+    "poodle grande": [
       "cachorro"
     ],
     "pug": [
@@ -657,9 +676,6 @@
       "cachorro"
     ],
     "skye terrier": [
-      "cachorro"
-    ],
-    "spitz alemao pequeno": [
       "cachorro"
     ],
     "spitz japones": [
@@ -744,7 +760,7 @@
     "podengo portugues medio": [
       "cachorro"
     ],
-    "schnauzer standard": [
+    "schnauzer medio": [
       "cachorro"
     ],
     "shar": [
@@ -1097,6 +1113,42 @@
     ],
     "fennec (raposa do deserto)": [
       "exotico"
+    ],
+    "cao d agua portugues": [
+      "cachorro"
+    ],
+    "spitz alemao": [
+      "cachorro"
+    ],
+    "spitz alemao anao": [
+      "cachorro"
+    ],
+    "pcb (pelo curto brasileiro)": [
+      "gato"
+    ],
+    "plb (pelo longo brasileiro)": [
+      "gato"
+    ],
+    "shar-pei": [
+      "cachorro"
+    ],
+    "shar pei": [
+      "cachorro"
+    ],
+    "shar-pei grande": [
+      "cachorro"
+    ],
+    "shar pei grande": [
+      "cachorro"
+    ],
+    "dachshund medio": [
+      "cachorro"
+    ],
+    "yorkshire terrier": [
+      "cachorro"
+    ],
+    "yorkshire": [
+      "cachorro"
     ]
   }
 }

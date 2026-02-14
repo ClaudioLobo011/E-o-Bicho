@@ -1,17 +1,25 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const path = require('path');
+const municipalitiesDataset = require('../data/ibge-municipios.json');
 const { DOMParser } = require('@xmldom/xmldom');
 const xpath = require('xpath');
 const { SignedXml } = require('xml-crypto');
 const NfeEmissionDraft = require('../models/NfeEmissionDraft');
 const FiscalSerie = require('../models/FiscalSerie');
 const Store = require('../models/Store');
+const Product = require('../models/Product');
 const { sanitizeSegment } = require('../utils/fiscalDrivePath');
 const { decryptBuffer, decryptText } = require('../utils/certificates');
 const { extractCertificatePair } = require('../scripts/utils/certificates');
 const { sanitizeXmlContent } = require('../utils/xmlSanitizer');
-const { transmitNfeToSefaz } = require('../services/sefazTransmitter');
+const {
+  transmitNfeToSefaz,
+  transmitNfeEventToSefaz,
+  consultNfeProtocolOnSefaz,
+  extractSection,
+} = require('../services/sefazTransmitter');
+const { adjustProductStockForDeposit, toObjectIdOrNull } = require('../utils/inventoryStock');
 const {
   isR2Configured,
   uploadBufferToR2,
@@ -63,6 +71,69 @@ const normalizeKeyword = (value) =>
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
+
+const normalizeMunicipalityName = (value) =>
+  normalizeKeyword(value)
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const MUNICIPALITY_BY_CODE = new Map();
+const MUNICIPALITY_BY_UF_AND_NAME = new Map();
+for (const item of Array.isArray(municipalitiesDataset) ? municipalitiesDataset : []) {
+  const code = cleanString(item?.codigo || '').replace(/\D+/g, '');
+  const uf = cleanString(item?.uf || '').toUpperCase();
+  const name = cleanString(item?.municipio || '');
+  if (!/^\d{7}$/.test(code) || !uf || !name) continue;
+  if (!MUNICIPALITY_BY_CODE.has(code)) {
+    MUNICIPALITY_BY_CODE.set(code, { code, uf, name });
+  }
+  const key = `${uf}|${normalizeMunicipalityName(name)}`;
+  if (!MUNICIPALITY_BY_UF_AND_NAME.has(key)) {
+    MUNICIPALITY_BY_UF_AND_NAME.set(key, { code, uf, name });
+  }
+}
+
+const resolveDestinationMunicipality = ({ cityCode, cityName, uf }) => {
+  const normalizedUf = cleanString(uf).toUpperCase();
+  const ufCode = UF_CODE_MAP[normalizedUf] || '';
+  let code = cleanString(cityCode || '').replace(/\D+/g, '');
+  if (code.length > 7) {
+    code = code.slice(-7);
+  }
+  if (!/^\d{7}$/.test(code)) {
+    code = '';
+  }
+
+  let record = code ? MUNICIPALITY_BY_CODE.get(code) || null : null;
+  if (record && normalizedUf && record.uf !== normalizedUf) {
+    record = null;
+    code = '';
+  }
+  if (code && ufCode && code.slice(0, 2) !== ufCode) {
+    record = null;
+    code = '';
+  }
+
+  if (!record && normalizedUf && cityName) {
+    const key = `${normalizedUf}|${normalizeMunicipalityName(cityName)}`;
+    record = MUNICIPALITY_BY_UF_AND_NAME.get(key) || null;
+  }
+
+  if (record) {
+    return {
+      code: record.code,
+      city: record.name,
+      uf: record.uf,
+    };
+  }
+
+  return {
+    code: '',
+    city: cleanString(cityName),
+    uf: normalizedUf,
+  };
+};
 
 const formatNDup = (index) => String(index).padStart(3, '0');
 
@@ -253,6 +324,321 @@ const parseDateInput = (value) => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
+const normalizeStockMovement = (value) => {
+  const normalized = cleanString(value).toLowerCase();
+  if (normalized === 'adicionar' || normalized === 'entrada') return 'entrada';
+  if (normalized === 'remover' || normalized === 'saida' || normalized === 'saída') return 'saida';
+  return '';
+};
+
+const extractItemProductObjectId = (item = {}) => {
+  if (!item || typeof item !== 'object') return null;
+  const candidates = [
+    item._id,
+    item.id,
+    item.uuid,
+    item.productId,
+    item.product_id,
+    item.produtoId,
+    item.produto_id,
+    item.product?.id,
+    item.product?._id,
+    item.matchedProduct?._id,
+    item.matchedProduct?.id,
+  ];
+  for (const candidate of candidates) {
+    const objectId = toObjectIdOrNull(candidate);
+    if (objectId) return objectId;
+  }
+  return null;
+};
+
+const resolveStockQuantityFromItem = (item = {}) => {
+  if (!item || typeof item !== 'object') return null;
+  const candidates = [
+    item.entryStockQuantity,
+    item.quantity,
+    item.qtyTrib,
+    item.qTrib,
+    item.qty,
+  ];
+  for (const candidate of candidates) {
+    const value = toNumber(candidate);
+    if (Number.isFinite(value) && value > 0) return value;
+  }
+  return null;
+};
+
+const extractItemCodes = (item = {}) => {
+  if (!item || typeof item !== 'object') return [];
+  const values = [
+    item.productCode,
+    item.code,
+    item.codigo,
+    item.codigoProduto,
+    item.sku,
+    item.productBarcode,
+    item.codigoBarras,
+    item.codbarras,
+    item.barcode,
+  ]
+    .map((value) => cleanString(value))
+    .filter(Boolean);
+  return Array.from(new Set(values));
+};
+
+const resolveProductIdByCode = async ({ codes = [], session }) => {
+  if (!Array.isArray(codes) || !codes.length) return null;
+  const query = {
+    $or: [],
+  };
+  for (const code of codes) {
+    const normalized = cleanString(code);
+    if (!normalized) continue;
+    query.$or.push({ cod: normalized });
+    query.$or.push({ codbarras: normalized });
+  }
+  if (!query.$or.length) return null;
+  const product = await Product.findOne(query).select('_id').session(session).lean();
+  return product?._id ? toObjectIdOrNull(product._id) : null;
+};
+
+const collectStockMovementsFromItems = async ({ items = [], session }) => {
+  const quantities = new Map();
+
+  if (!Array.isArray(items)) {
+    return quantities;
+  }
+
+  for (const item of items) {
+    const quantity = resolveStockQuantityFromItem(item);
+    if (!Number.isFinite(quantity) || quantity <= 0) continue;
+
+    let productId = extractItemProductObjectId(item);
+    if (!productId) {
+      const codes = extractItemCodes(item);
+      productId = await resolveProductIdByCode({ codes, session });
+    }
+    if (!productId) continue;
+
+    const key = String(productId);
+    const current = quantities.get(key) || 0;
+    quantities.set(key, current + quantity);
+  }
+
+  return quantities;
+};
+
+const applyAuthorizedDraftStockMovement = async ({ draftId }) => {
+  let movementResult = {
+    applied: false,
+    alreadyApplied: false,
+    movement: '',
+    itemCount: 0,
+    skipped: false,
+    reason: '',
+  };
+
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const draft = await NfeEmissionDraft.findById(draftId).session(session);
+      if (!draft) {
+        throw new Error('NF-e não encontrada para movimentação de estoque autorizada.');
+      }
+
+      const metadata = draft.metadata && typeof draft.metadata === 'object' ? draft.metadata : {};
+      if (metadata.stockMovementAppliedAt) {
+        movementResult = {
+          applied: false,
+          alreadyApplied: true,
+          movement: normalizeStockMovement(metadata.stockMovementAppliedOperation),
+          itemCount: Number(metadata.stockMovementAppliedItems) || 0,
+          skipped: false,
+          reason: '',
+        };
+        return;
+      }
+
+      const requestedMovement = normalizeStockMovement(
+        draft?.payload?.metadata?.stockMovement || metadata.stockMovement || ''
+      );
+      if (!requestedMovement) {
+        movementResult = {
+          applied: false,
+          alreadyApplied: false,
+          movement: '',
+          itemCount: 0,
+          skipped: true,
+          reason: 'stock_movement_not_configured',
+        };
+        return;
+      }
+
+      const depositIdValue =
+        draft?.payload?.metadata?.stockDeposit ||
+        draft?.selection?.depositId ||
+        draft?.payload?.selection?.depositId ||
+        '';
+      const depositId = toObjectIdOrNull(depositIdValue);
+      if (!depositId) {
+        throw new Error('Selecione um depósito válido para movimentar o estoque desta NF-e.');
+      }
+
+      const itemQuantities = await collectStockMovementsFromItems({
+        items: Array.isArray(draft.items) ? draft.items : [],
+        session,
+      });
+      if (!itemQuantities.size) {
+        throw new Error(
+          'Não foi possível identificar produtos válidos para movimentar o estoque da NF-e autorizada.'
+        );
+      }
+
+      const factor = requestedMovement === 'saida' ? -1 : 1;
+      for (const [productId, quantity] of itemQuantities.entries()) {
+        const normalizedQuantity = Number(quantity);
+        if (!Number.isFinite(normalizedQuantity) || normalizedQuantity <= 0) continue;
+        await adjustProductStockForDeposit({
+          productId,
+          depositId,
+          quantity: normalizedQuantity * factor,
+          session,
+          cascadeFractional: true,
+        });
+      }
+
+      const nowIso = new Date().toISOString();
+      metadata.stockMovement = requestedMovement;
+      metadata.stockDeposit = cleanString(String(depositIdValue));
+      metadata.stockMovementAppliedAt = nowIso;
+      metadata.stockMovementAppliedOperation = requestedMovement;
+      metadata.stockMovementAppliedItems = itemQuantities.size;
+      metadata.stockMovementAppliedQuantityTotal = Number(
+        Array.from(itemQuantities.values()).reduce((sum, value) => sum + (Number(value) || 0), 0).toFixed(6)
+      );
+      draft.metadata = metadata;
+      appendDraftLog(draft, `Estoque movimentado (${requestedMovement}) após autorização da NF-e.`);
+      draft.markModified('metadata');
+      await draft.save({ session });
+
+      movementResult = {
+        applied: true,
+        alreadyApplied: false,
+        movement: requestedMovement,
+        itemCount: itemQuantities.size,
+        skipped: false,
+        reason: '',
+      };
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  return movementResult;
+};
+
+const applyCanceledDraftStockReversal = async ({ draftId }) => {
+  let movementResult = {
+    applied: false,
+    alreadyApplied: false,
+    movement: '',
+    itemCount: 0,
+    skipped: false,
+    reason: '',
+  };
+
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const draft = await NfeEmissionDraft.findById(draftId).session(session);
+      if (!draft) {
+        throw new Error('NF-e não encontrada para retorno de estoque do cancelamento.');
+      }
+
+      const metadata = draft.metadata && typeof draft.metadata === 'object' ? draft.metadata : {};
+      if (metadata.stockMovementRevertedAt) {
+        movementResult = {
+          applied: false,
+          alreadyApplied: true,
+          movement: normalizeStockMovement(metadata.stockMovementRevertedOperation),
+          itemCount: Number(metadata.stockMovementRevertedItems) || 0,
+          skipped: false,
+          reason: '',
+        };
+        return;
+      }
+
+      const appliedOperation = normalizeStockMovement(metadata.stockMovementAppliedOperation || metadata.stockMovement);
+      if (!appliedOperation || !metadata.stockMovementAppliedAt) {
+        movementResult = {
+          applied: false,
+          alreadyApplied: false,
+          movement: '',
+          itemCount: 0,
+          skipped: true,
+          reason: 'stock_movement_not_applied',
+        };
+        return;
+      }
+
+      const reverseOperation = appliedOperation === 'saida' ? 'entrada' : 'saida';
+      const depositIdValue =
+        metadata.stockDeposit || draft?.payload?.metadata?.stockDeposit || draft?.selection?.depositId || '';
+      const depositId = toObjectIdOrNull(depositIdValue);
+      if (!depositId) {
+        throw new Error('Depósito inválido para retorno de estoque da NF-e cancelada.');
+      }
+
+      const itemQuantities = await collectStockMovementsFromItems({
+        items: Array.isArray(draft.items) ? draft.items : [],
+        session,
+      });
+      if (!itemQuantities.size) {
+        throw new Error('Não foi possível identificar produtos válidos para retorno de estoque da NF-e cancelada.');
+      }
+
+      const factor = reverseOperation === 'saida' ? -1 : 1;
+      for (const [productId, quantity] of itemQuantities.entries()) {
+        const normalizedQuantity = Number(quantity);
+        if (!Number.isFinite(normalizedQuantity) || normalizedQuantity <= 0) continue;
+        await adjustProductStockForDeposit({
+          productId,
+          depositId,
+          quantity: normalizedQuantity * factor,
+          session,
+          cascadeFractional: true,
+        });
+      }
+
+      const nowIso = new Date().toISOString();
+      metadata.stockMovementRevertedAt = nowIso;
+      metadata.stockMovementRevertedOperation = reverseOperation;
+      metadata.stockMovementRevertedItems = itemQuantities.size;
+      metadata.stockMovementRevertedQuantityTotal = Number(
+        Array.from(itemQuantities.values()).reduce((sum, value) => sum + (Number(value) || 0), 0).toFixed(6)
+      );
+      draft.metadata = metadata;
+      appendDraftLog(draft, `Estoque retornado (${reverseOperation}) após cancelamento da NF-e.`);
+      draft.markModified('metadata');
+      await draft.save({ session });
+
+      movementResult = {
+        applied: true,
+        alreadyApplied: false,
+        movement: reverseOperation,
+        itemCount: itemQuantities.size,
+        skipped: false,
+        reason: '',
+      };
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  return movementResult;
+};
+
 const appendDraftLog = (draft, message) => {
   if (!draft) return null;
   const text = cleanString(message);
@@ -269,6 +655,56 @@ const appendDraftLog = (draft, message) => {
   draft.metadata.lastStatusAt = entry.at;
   draft.markModified('metadata');
   return entry;
+};
+
+const normalizeNfeEventName = (value) => {
+  const normalized = cleanString(value).toLowerCase();
+  const normalizedNoAccent = normalized.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (normalizedNoAccent === 'cancelamento') return 'Cancelamento';
+  if (normalizedNoAccent === 'carta_correcao' || normalizedNoAccent === 'carta de correcao') {
+    return 'Carta de Correcao';
+  }
+  if (
+    normalizedNoAccent === 'autorizado o uso da nf-e' ||
+    normalizedNoAccent === 'autorizado o uso da nfe' ||
+    normalizedNoAccent === 'autorizacao'
+  ) {
+    return 'Autorizado o Uso da NF-e';
+  }
+  return '';
+};
+
+const isDraftHomologation = (draft) => {
+  const ambient = cleanString(draft?.xml?.ambient).toLowerCase();
+  return ambient === '2' || ambient === 'homologacao' || ambient === 'homologação';
+};
+
+const ensureAuthorizationEvent = (draft) => {
+  if (!draft || cleanString(draft.status).toLowerCase() !== 'authorized') return;
+  draft.metadata = draft.metadata || {};
+  const events = Array.isArray(draft.metadata.events) ? draft.metadata.events : [];
+  const authorizationIndex = events.findIndex(
+    (entry) => normalizeNfeEventName(entry?.event || entry?.type) === 'Autorizado o Uso da NF-e'
+  );
+  const hasAuthorizationEvent = authorizationIndex >= 0;
+  if (hasAuthorizationEvent) {
+    const currentProtocol = cleanString(events[authorizationIndex]?.protocol || '');
+    const fallbackProtocol = cleanString(draft?.metadata?.sefazProtocol);
+    if (!currentProtocol && fallbackProtocol) {
+      events[authorizationIndex].protocol = fallbackProtocol;
+      draft.markModified('metadata');
+    }
+    draft.metadata.events = events;
+    return;
+  }
+  events.push({
+    event: 'Autorizado o Uso da NF-e',
+    protocol: cleanString(draft?.metadata?.sefazProtocol),
+    justification: '',
+    createdAt: cleanString(draft?.metadata?.sefazProcessedAt) || new Date().toISOString(),
+  });
+  draft.metadata.events = events;
+  draft.markModified('metadata');
 };
 
 const UF_CODE_MAP = {
@@ -497,16 +933,34 @@ const buildNfeXml = ({ draft, store, serie, environment }) => {
     tpAmb === '2' ? homologDestinationName : sanitize(supplier?.name || '') || 'CONSUMIDOR';
   lines.push(`      <xNome>${destinationName}</xNome>`);
 
+  const resolvedDestMunicipality = resolveDestinationMunicipality({
+    cityCode: supplier?.cityCode || '',
+    cityName: supplier?.city || '',
+    uf: destUf || supplier?.state || '',
+  });
+
   const destAddress = {
     xLgr: sanitize(supplier?.address || '') || 'NAO INFORMADO',
     nro: digitsOnly(supplier?.number || '') || 'S/N',
     xCpl: sanitize(supplier?.complement || ''),
     xBairro: sanitize(supplier?.neighborhood || '') || 'CENTRO',
-    cMun: digitsOnly(supplier?.cityCode || store?.codigoIbgeMunicipio || '') || '0000000',
-    xMun: sanitize(supplier?.city || store?.municipio || '') || 'NAO INFORMADO',
-    UF: destUf || sanitize(store?.uf || '').toUpperCase() || 'RJ',
-    CEP: digitsOnly(supplier?.zip || store?.cep || '') || '00000000',
+    cMun: resolvedDestMunicipality.code || '',
+    xMun: sanitize(resolvedDestMunicipality.city || supplier?.city || '') || 'NAO INFORMADO',
+    UF: resolvedDestMunicipality.uf || destUf || '',
+    CEP: digitsOnly(supplier?.zip || '') || '00000000',
   };
+
+  if (!/^\d{7}$/.test(destAddress.cMun)) {
+    throw new Error(
+      'Codigo do municipio do destinatario invalido. Informe o municipio/UF corretamente no cadastro do cliente.'
+    );
+  }
+  const destUfCode = UF_CODE_MAP[destAddress.UF] || '';
+  if (!destUfCode || destAddress.cMun.slice(0, 2) !== destUfCode) {
+    throw new Error(
+      'Codigo do municipio do destinatario difere da UF do destinatario. Revise cidade/UF no cadastro do cliente.'
+    );
+  }
 
   const hasDestAddress = Boolean(
     destAddress.xLgr &&
@@ -925,6 +1379,206 @@ const signNfeXml = ({ xml, certificatePem, privateKeyPem }) => {
   };
 };
 
+const CCE_COND_USO =
+  'A Carta de Correcao e disciplinada pelo paragrafo 1o-A do art. 7o do Convenio S/N, de 15 de dezembro de 1970 e pode ser utilizada para regularizacao de erro ocorrido na emissao de documento fiscal, desde que o erro nao esteja relacionado com: I - as variaveis que determinam o valor do imposto tais como: base de calculo, aliquota, diferenca de preco, quantidade, valor da operacao ou da prestacao; II - a correcao de dados cadastrais que implique mudanca do remetente ou do destinatario; III - a data de emissao ou de saida.';
+
+const signNfeEventXml = ({ xml, certificatePem, privateKeyPem }) => {
+  if (!xml) {
+    throw new Error('XML do evento vazio para assinatura.');
+  }
+  const cleanedXml = sanitizeXmlContent(xml).replace(
+    /<(?:ds:)?Signature[\s\S]*?<\/(?:ds:)?Signature>/g,
+    ''
+  );
+  const xmlForSignature = sanitizeXmlContent(cleanedXml);
+  const xmlDocument = new DOMParser().parseFromString(xmlForSignature, 'text/xml');
+  const [infEventoNode] = xpath.select(
+    "/*[local-name()='envEvento']/*[local-name()='evento']/*[local-name()='infEvento']",
+    xmlDocument
+  );
+  if (!infEventoNode) {
+    throw new Error('Estrutura de evento inválida: nó <infEvento> ausente.');
+  }
+  const infId = infEventoNode.getAttribute('Id');
+  if (!infId) {
+    throw new Error('Estrutura de evento inválida: atributo Id ausente em <infEvento>.');
+  }
+
+  const keyPemString = Buffer.isBuffer(privateKeyPem)
+    ? privateKeyPem.toString('utf8')
+    : String(privateKeyPem || '');
+
+  if (!/-----BEGIN (?:RSA )?PRIVATE KEY-----/.test(keyPemString)) {
+    throw new Error('Chave privada inválida/ausente.');
+  }
+
+  const certB64 = String(certificatePem || '')
+    .replace('-----BEGIN CERTIFICATE-----', '')
+    .replace('-----END CERTIFICATE-----', '')
+    .replace(/\s+/g, '');
+
+  const signer = new SignedXml({
+    privateKey: Buffer.from(keyPemString),
+    idAttribute: 'Id',
+    canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+    signatureAlgorithm: 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+    digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
+  });
+  signer.keyInfoProvider = {
+    getKeyInfo: () => `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>`,
+  };
+  const refXPath =
+    "/*[local-name()='envEvento']/*[local-name()='evento']/*[local-name()='infEvento']";
+  signer.addReference({
+    xpath: refXPath,
+    transforms: [
+      'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
+      'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+    ],
+    digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
+  });
+  signer.computeSignature(xmlForSignature, {
+    prefix: '',
+    location: {
+      reference: refXPath,
+      action: 'after',
+    },
+  });
+
+  let signedXmlContent = signer.getSignedXml();
+  const digestValue = signer.references?.[0]?.digestValue || '';
+  const signatureValue = signer.signatureValue || '';
+
+  const hasKeyInfo = /<KeyInfo\b/.test(signedXmlContent);
+  if (!hasKeyInfo) {
+    const signatureValueClose = '</SignatureValue>';
+    const signatureValueIndex = signedXmlContent.indexOf(signatureValueClose);
+    if (signatureValueIndex === -1) {
+      throw new Error('Assinatura do evento inválida: bloco <SignatureValue> ausente.');
+    }
+    const insertPosition = signatureValueIndex + signatureValueClose.length;
+    const keyInfoXml =
+      '<KeyInfo><X509Data><X509Certificate>' +
+      certB64 +
+      '</X509Certificate></X509Data></KeyInfo>';
+    signedXmlContent =
+      signedXmlContent.slice(0, insertPosition) +
+      keyInfoXml +
+      signedXmlContent.slice(insertPosition);
+  }
+
+  const signedXml = signedXmlContent.startsWith('<?xml')
+    ? signedXmlContent
+    : `<?xml version="1.0" encoding="UTF-8"?>\n${signedXmlContent}`;
+
+  return {
+    xml: sanitizeXmlContent(signedXml),
+    digestValue,
+    signatureValue,
+  };
+};
+
+const buildCartaCorrecaoEventoXml = ({
+  accessKey,
+  ufCode,
+  tpAmb,
+  cnpj,
+  sequence,
+  justification,
+  eventDate,
+  lotId,
+}) => {
+  const seq = Math.max(1, Number(sequence) || 1);
+  const nSeqEvento = String(seq);
+  const id = `ID110110${accessKey}${String(seq).padStart(2, '0')}`;
+  const xCorrecao = cleanString(justification).slice(0, 1000);
+  const lines = [];
+  lines.push('<?xml version="1.0" encoding="UTF-8"?>');
+  lines.push('<envEvento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00">');
+  lines.push(`  <idLote>${sanitize(lotId)}</idLote>`);
+  lines.push('  <evento versao="1.00">');
+  lines.push(`    <infEvento Id="${sanitize(id)}">`);
+  lines.push(`      <cOrgao>${sanitize(ufCode)}</cOrgao>`);
+  lines.push(`      <tpAmb>${sanitize(tpAmb)}</tpAmb>`);
+  lines.push(`      <CNPJ>${sanitize(cnpj)}</CNPJ>`);
+  lines.push(`      <chNFe>${sanitize(accessKey)}</chNFe>`);
+  lines.push(`      <dhEvento>${sanitize(eventDate)}</dhEvento>`);
+  lines.push('      <tpEvento>110110</tpEvento>');
+  lines.push(`      <nSeqEvento>${sanitize(nSeqEvento)}</nSeqEvento>`);
+  lines.push('      <verEvento>1.00</verEvento>');
+  lines.push('      <detEvento versao="1.00">');
+  lines.push('        <descEvento>Carta de Correcao</descEvento>');
+  lines.push(`        <xCorrecao>${sanitize(xCorrecao)}</xCorrecao>`);
+  lines.push(`        <xCondUso>${sanitize(CCE_COND_USO)}</xCondUso>`);
+  lines.push('      </detEvento>');
+  lines.push('    </infEvento>');
+  lines.push('  </evento>');
+  lines.push('</envEvento>');
+  return lines.join('\n');
+};
+
+const buildCancelamentoEventoXml = ({
+  accessKey,
+  ufCode,
+  tpAmb,
+  cnpj,
+  justification,
+  eventDate,
+  lotId,
+  authorizationProtocol,
+}) => {
+  const seq = 1;
+  const nSeqEvento = String(seq);
+  const id = `ID110111${accessKey}${String(seq).padStart(2, '0')}`;
+  const xJust = cleanString(justification).slice(0, 255);
+  const nProt = digitsOnly(authorizationProtocol || '');
+  const lines = [];
+  lines.push('<?xml version="1.0" encoding="UTF-8"?>');
+  lines.push('<envEvento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00">');
+  lines.push(`  <idLote>${sanitize(lotId)}</idLote>`);
+  lines.push('  <evento versao="1.00">');
+  lines.push(`    <infEvento Id="${sanitize(id)}">`);
+  lines.push(`      <cOrgao>${sanitize(ufCode)}</cOrgao>`);
+  lines.push(`      <tpAmb>${sanitize(tpAmb)}</tpAmb>`);
+  lines.push(`      <CNPJ>${sanitize(cnpj)}</CNPJ>`);
+  lines.push(`      <chNFe>${sanitize(accessKey)}</chNFe>`);
+  lines.push(`      <dhEvento>${sanitize(eventDate)}</dhEvento>`);
+  lines.push('      <tpEvento>110111</tpEvento>');
+  lines.push(`      <nSeqEvento>${sanitize(nSeqEvento)}</nSeqEvento>`);
+  lines.push('      <verEvento>1.00</verEvento>');
+  lines.push('      <detEvento versao="1.00">');
+  lines.push('        <descEvento>Cancelamento</descEvento>');
+  lines.push(`        <nProt>${sanitize(nProt)}</nProt>`);
+  lines.push(`        <xJust>${sanitize(xJust)}</xJust>`);
+  lines.push('      </detEvento>');
+  lines.push('    </infEvento>');
+  lines.push('  </evento>');
+  lines.push('</envEvento>');
+  return lines.join('\n');
+};
+
+const removeXmlDeclaration = (xml) =>
+  sanitizeXmlContent(String(xml || '')).replace(/^<\?xml[^>]*>\s*/i, '').trim();
+
+const buildNfeProcXml = ({ nfeXml, protocolXml }) => {
+  const normalizedNfe = removeXmlDeclaration(nfeXml);
+  const normalizedProt = removeXmlDeclaration(protocolXml);
+  if (!normalizedNfe || !normalizedProt) return '';
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">',
+    normalizedNfe,
+    normalizedProt,
+    '</nfeProc>',
+  ].join('\n');
+};
+
+const buildNfeProcFromSefazResponse = ({ nfeXml, responseXml }) => {
+  const protNFeXml = extractSection(responseXml || '', 'protNFe');
+  if (!protNFeXml) return '';
+  return buildNfeProcXml({ nfeXml, protocolXml: protNFeXml });
+};
+
 const resolveDateSegments = (referenceDate) => {
   const date =
     referenceDate instanceof Date && !Number.isNaN(referenceDate.getTime())
@@ -1246,6 +1900,387 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+router.post('/:id/events', async (req, res) => {
+  let draft = null;
+  try {
+    const { id } = req.params;
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Identificador invalido.' });
+    }
+
+    draft = await NfeEmissionDraft.findById(id);
+    if (!draft) {
+      return res.status(404).json({ message: 'NF-e nao encontrada.' });
+    }
+
+    const currentStatus = cleanString(draft.status).toLowerCase();
+    const hasAuthorizationProtocol = digitsOnly(draft?.metadata?.sefazProtocol || '').length >= 10;
+    if (currentStatus === 'canceled') {
+      return res.status(400).json({ message: 'NF-e ja esta cancelada.' });
+    }
+    if (currentStatus !== 'authorized' && !hasAuthorizationProtocol) {
+      return res
+        .status(400)
+        .json({ message: 'Apenas NF-e autorizada permite registrar eventos. Protocolo de autorizacao nao encontrado.' });
+    }
+
+    const eventName = normalizeNfeEventName(req.body?.event || req.body?.type);
+    if (!eventName || eventName === 'Autorizado o Uso da NF-e') {
+      return res.status(400).json({ message: 'Tipo de evento invalido.' });
+    }
+    if (eventName !== 'Carta de Correcao' && eventName !== 'Cancelamento') {
+      return res.status(400).json({ message: 'Tipo de evento nao suportado.' });
+    }
+
+    const justification = cleanString(req.body?.justification);
+    if (!justification) {
+      return res.status(400).json({ message: 'Justificativa e obrigatoria.' });
+    }
+    if (justification.length < 15) {
+      return res
+        .status(400)
+        .json({ message: 'A justificativa do evento deve ter ao menos 15 caracteres.' });
+    }
+    if (eventName === 'Cancelamento' && justification.length > 255) {
+      return res.status(400).json({ message: 'A justificativa do cancelamento deve ter no maximo 255 caracteres.' });
+    }
+
+    draft.metadata = draft.metadata || {};
+    ensureAuthorizationEvent(draft);
+    const events = Array.isArray(draft.metadata.events) ? draft.metadata.events : [];
+    const cceSequence =
+      events.filter((entry) => normalizeNfeEventName(entry?.event || entry?.type) === 'Carta de Correcao').length + 1;
+    if (eventName === 'Carta de Correcao' && cceSequence > 20) {
+      return res.status(400).json({ message: 'A NF-e atingiu o limite de 20 Cartas de Correcao.' });
+    }
+    const hasCancellationEvent = events.some(
+      (entry) => normalizeNfeEventName(entry?.event || entry?.type) === 'Cancelamento'
+    );
+    if (eventName === 'Cancelamento' && hasCancellationEvent) {
+      return res.status(400).json({ message: 'NF-e ja possui evento de cancelamento registrado.' });
+    }
+
+    const companyId = draft.companyId || draft.payload?.company?.id || '';
+    if (!companyId) {
+      return res.status(400).json({ message: 'Empresa da NF-e nao encontrada.' });
+    }
+
+    const store = await Store.findById(companyId)
+      .select('+certificadoArquivoCriptografado +certificadoSenhaCriptografada')
+      .lean();
+    if (!store) {
+      return res.status(404).json({ message: 'Empresa nao encontrada.' });
+    }
+
+    const serieId = draft?.payload?.header?.serie || '';
+    const serie = serieId ? await FiscalSerie.findById(serieId).lean() : null;
+    if (!serie) {
+      return res.status(404).json({ message: 'Serie fiscal nao encontrada.' });
+    }
+
+    const ambiente = cleanString(serie?.ambiente).toLowerCase() === 'producao' ? 'producao' : 'homologacao';
+    const tpAmb = ambiente === 'producao' ? '1' : '2';
+    const uf = cleanString(store?.uf || '').toUpperCase();
+    const ufCode = UF_CODE_MAP[uf] || '';
+    if (!ufCode) {
+      return res.status(400).json({ message: 'UF da empresa nao informada ou invalida.' });
+    }
+
+    const accessKey = digitsOnly(draft?.xml?.accessKey || '');
+    if (accessKey.length !== 44) {
+      return res.status(400).json({ message: 'Chave de acesso da NF-e invalida para envio de evento.' });
+    }
+
+    const cnpj = digitsOnly(store?.cnpj || store?.documento || '');
+    if (cnpj.length !== 14) {
+      return res.status(400).json({ message: 'CNPJ da empresa invalido para envio de evento.' });
+    }
+
+    const eventDate = formatDateTimeWithOffset(new Date());
+    const lotId = digitsOnly(`${Date.now()}${Math.floor(Math.random() * 9)}`)
+      .slice(-15)
+      .padStart(15, '0');
+
+    const authorizationProtocol = digitsOnly(draft?.metadata?.sefazProtocol || '');
+    if (eventName === 'Cancelamento' && authorizationProtocol.length < 10) {
+      return res.status(400).json({ message: 'Protocolo de autorizacao da NF-e nao encontrado para cancelamento.' });
+    }
+
+    const unsignedEventoXml =
+      eventName === 'Cancelamento'
+        ? buildCancelamentoEventoXml({
+            accessKey,
+            ufCode,
+            tpAmb,
+            cnpj,
+            justification,
+            eventDate,
+            lotId,
+            authorizationProtocol,
+          })
+        : buildCartaCorrecaoEventoXml({
+            accessKey,
+            ufCode,
+            tpAmb,
+            cnpj,
+            sequence: cceSequence,
+            justification,
+            eventDate,
+            lotId,
+          });
+
+    const { certificatePem, certificateChain, privateKeyPem } = getCertificatePair(store);
+    const signedEvento = signNfeEventXml({
+      xml: unsignedEventoXml,
+      certificatePem,
+      privateKeyPem,
+    });
+
+    const transmission = await transmitNfeEventToSefaz({
+      eventXml: signedEvento.xml,
+      uf,
+      environment: ambiente,
+      certificate: certificatePem,
+      certificateChain,
+      privateKey: privateKeyPem,
+      acceptedStatuses: eventName === 'Cancelamento' ? ['135', '136', '155'] : ['135', '136'],
+    });
+
+    const protocol = cleanString(transmission?.protocol || '');
+    const createdAt = cleanString(transmission?.registeredAt) || new Date().toISOString();
+    let stockMovement = {
+      applied: false,
+      alreadyApplied: false,
+      movement: '',
+      itemCount: 0,
+      skipped: true,
+      reason: 'not_cancellation',
+    };
+    if (eventName === 'Cancelamento') {
+      draft.status = 'canceled';
+    }
+    events.push({
+      event: eventName,
+      protocol,
+      justification,
+      createdAt,
+      sequence: eventName === 'Cancelamento' ? 1 : cceSequence,
+      status: cleanString(transmission?.status || ''),
+      message: cleanString(transmission?.message || ''),
+    });
+
+    if (events.length > 200) {
+      events.splice(0, events.length - 200);
+    }
+
+    draft.metadata.lastEvent = {
+      type: eventName,
+      sequence: cceSequence,
+      protocol: cleanString(transmission?.protocol || ''),
+      status: cleanString(transmission?.status || ''),
+      message: cleanString(transmission?.message || ''),
+      registeredAt: createdAt,
+      responseXml: cleanString(transmission?.responseXml || ''),
+      requestXml: signedEvento.xml,
+    };
+    draft.metadata.events = events;
+    if (eventName === 'Cancelamento') {
+      appendDraftLog(draft, `Cancelamento enviado${protocol ? ` - protocolo ${protocol}` : ''}.`);
+    } else {
+      appendDraftLog(
+        draft,
+        `Carta de Correcao enviada (seq ${cceSequence})${protocol ? ` - protocolo ${protocol}` : ''}.`
+      );
+    }
+    draft.markModified('metadata');
+    await draft.save();
+    if (eventName === 'Cancelamento') {
+      stockMovement = await applyCanceledDraftStockReversal({ draftId: draft._id });
+    }
+
+    return res.json({
+      events: draft.metadata.events,
+      status: draft.status,
+      transmission: {
+        status: transmission?.status || '',
+        message: transmission?.message || '',
+        protocol: transmission?.protocol || '',
+        registeredAt: transmission?.registeredAt || '',
+      },
+      stockMovement,
+    });
+  } catch (error) {
+    console.error('Erro ao registrar evento da NF-e:', error);
+    if (draft) {
+      appendDraftLog(draft, `Erro ao enviar evento: ${error.message || 'Falha ao registrar evento da NF-e.'}`);
+      await draft.save().catch(() => null);
+    }
+    return res.status(500).json({ message: error.message || 'Falha ao registrar evento da NF-e.' });
+  }
+});
+
+router.post('/:id/sefaz/status', async (req, res) => {
+  let draft = null;
+  try {
+    const { id } = req.params;
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Identificador invalido.' });
+    }
+
+    draft = await NfeEmissionDraft.findById(id);
+    if (!draft) {
+      return res.status(404).json({ message: 'NF-e nao encontrada.' });
+    }
+
+    const accessKey = digitsOnly(draft?.xml?.accessKey || '');
+    if (accessKey.length !== 44) {
+      return res.status(400).json({ message: 'Chave de acesso da NF-e nao encontrada para consulta.' });
+    }
+
+    const companyId = draft.companyId || draft.payload?.company?.id || '';
+    const store = companyId
+      ? await Store.findById(companyId)
+          .select('+certificadoArquivoCriptografado +certificadoSenhaCriptografada')
+          .lean()
+      : null;
+    if (!store) {
+      return res.status(404).json({ message: 'Empresa nao encontrada.' });
+    }
+
+    const serieId = draft?.payload?.header?.serie || '';
+    const serie = serieId ? await FiscalSerie.findById(serieId).lean() : null;
+    if (!serie) {
+      return res.status(404).json({ message: 'Serie fiscal nao encontrada.' });
+    }
+
+    const ambiente = cleanString(serie?.ambiente).toLowerCase() === 'producao' ? 'producao' : 'homologacao';
+    const uf = cleanString(store?.uf || '').toUpperCase();
+    if (!uf) {
+      return res.status(400).json({ message: 'UF da empresa nao informada.' });
+    }
+
+    const { certificatePem, certificateChain, privateKeyPem } = getCertificatePair(store);
+    const consultation = await consultNfeProtocolOnSefaz({
+      accessKey,
+      uf,
+      environment: ambiente,
+      certificate: certificatePem,
+      certificateChain,
+      privateKey: privateKeyPem,
+    });
+
+    draft.metadata = draft.metadata || {};
+    draft.metadata.sefazConsultStatus = consultation?.status || '';
+    draft.metadata.sefazConsultMessage = consultation?.message || '';
+    draft.metadata.sefazConsultedAt = new Date().toISOString();
+    draft.metadata.sefazConsultProtocol = consultation?.protocol || '';
+    draft.metadata.sefazConsultProcessedAt = consultation?.processedAt || '';
+    draft.metadata.sefazConsultResponseXml = consultation?.responseXml || '';
+    if (consultation?.protocol) {
+      draft.metadata.sefazProtocol = consultation.protocol;
+    }
+    if (consultation?.processedAt) {
+      draft.metadata.sefazProcessedAt = consultation.processedAt;
+    }
+    const processedXmlFromConsultation = buildNfeProcFromSefazResponse({
+      nfeXml: draft?.metadata?.xmlContent || '',
+      responseXml: consultation?.responseXml || '',
+    });
+    if (processedXmlFromConsultation) {
+      draft.metadata.xmlProcessedContent = processedXmlFromConsultation;
+      if (isR2Configured()) {
+        const header = draft?.payload?.header || {};
+        const emissionDate = header?.issueDate ? new Date(`${header.issueDate}T00:00:00`) : new Date();
+        const accessKeyForKey = draft?.xml?.accessKey || '';
+        const currentKey =
+          draft?.metadata?.xmlR2Key ||
+          buildNfeR2Key({
+            store,
+            environment: ambiente,
+            serie,
+            emissionDate,
+            accessKey: accessKeyForKey || `NFe-${draft._id}`,
+          });
+        const processedUpload = await uploadBufferToR2(Buffer.from(processedXmlFromConsultation, 'utf8'), {
+          key: currentKey,
+          contentType: 'application/xml',
+        });
+        draft.metadata.xmlR2Key = processedUpload?.key || currentKey;
+        draft.metadata.xmlUrl = processedUpload?.url || buildPublicUrl(currentKey);
+      }
+    }
+
+    const statusCode = String(consultation?.status || '');
+    if (['100', '150'].includes(statusCode)) {
+      draft.status = 'authorized';
+      if (consultation?.protocol) {
+        draft.metadata.sefazProtocol = consultation.protocol;
+      }
+      if (consultation?.processedAt) {
+        draft.metadata.sefazProcessedAt = consultation.processedAt;
+      }
+      ensureAuthorizationEvent(draft);
+    } else if (['101', '151', '155'].includes(statusCode)) {
+      draft.status = 'canceled';
+      const hasCancelEvent = Array.isArray(draft.metadata.events)
+        ? draft.metadata.events.some(
+            (entry) => normalizeNfeEventName(entry?.event || entry?.type) === 'Cancelamento'
+          )
+        : false;
+      if (!hasCancelEvent) {
+        const events = Array.isArray(draft.metadata.events) ? draft.metadata.events : [];
+        events.push({
+          event: 'Cancelamento',
+          protocol: cleanString(consultation?.protocol || ''),
+          justification: 'Cancelamento identificado via consulta SEFAZ.',
+          createdAt: cleanString(consultation?.processedAt || '') || new Date().toISOString(),
+          sequence: 1,
+          status: statusCode,
+          message: cleanString(consultation?.message || ''),
+        });
+        draft.metadata.events = events;
+      }
+    } else if (statusCode) {
+      draft.status = 'rejected';
+    }
+
+    appendDraftLog(
+      draft,
+      `Consulta SEFAZ: ${statusCode || 'sem status'}${consultation?.message ? ` - ${consultation.message}` : ''}`
+    );
+    draft.markModified('metadata');
+    await draft.save();
+
+    let stockMovement = {
+      applied: false,
+      alreadyApplied: false,
+      movement: '',
+      itemCount: 0,
+      skipped: true,
+      reason: 'not_canceled',
+    };
+    if (draft.status === 'canceled') {
+      stockMovement = await applyCanceledDraftStockReversal({ draftId: draft._id });
+    }
+
+    return res.json({
+      status: consultation?.status || '',
+      message: consultation?.message || '',
+      protocol: consultation?.protocol || '',
+      processedAt: consultation?.processedAt || '',
+      draftStatus: draft.status,
+      stockMovement,
+    });
+  } catch (error) {
+    console.error('Erro ao consultar status da NF-e na SEFAZ:', error);
+    if (draft) {
+      appendDraftLog(draft, `Erro na consulta SEFAZ: ${error.message || 'Falha na consulta.'}`);
+      await draft.save().catch(() => null);
+    }
+    return res.status(500).json({ message: error.message || 'Falha ao consultar status da NF-e na SEFAZ.' });
+  }
+});
+
 router.post('/:id/xml', async (req, res) => {
   try {
     const { id } = req.params;
@@ -1482,6 +2517,7 @@ router.post('/:id/xml/transmit', async (req, res) => {
       lotId,
     });
 
+    draft.metadata = draft.metadata || {};
     draft.metadata.sefazStatus = transmission.status || '';
     draft.metadata.sefazMessage = transmission.message || '';
     draft.metadata.sefazProtocol = transmission.protocol || '';
@@ -1489,12 +2525,49 @@ router.post('/:id/xml/transmit', async (req, res) => {
     draft.metadata.sefazProcessedAt = transmission.processedAt || '';
     draft.metadata.sefazResponseXml = transmission.responseXml || '';
     draft.metadata.sefazEndpoint = transmission.endpoint || '';
+    const processedXml = buildNfeProcFromSefazResponse({
+      nfeXml: xmlContent,
+      responseXml: transmission.responseXml || '',
+    });
+    if (processedXml) {
+      draft.metadata.xmlProcessedContent = processedXml;
+      if (isR2Configured()) {
+        const header = draft?.payload?.header || {};
+        const emissionDate = header?.issueDate ? new Date(`${header.issueDate}T00:00:00`) : new Date();
+        const accessKey = draft?.xml?.accessKey || '';
+        const currentKey =
+          draft?.metadata?.xmlR2Key ||
+          buildNfeR2Key({
+            store,
+            environment: ambiente,
+            serie,
+            emissionDate,
+            accessKey: accessKey || `NFe-${draft._id}`,
+          });
+        const processedUpload = await uploadBufferToR2(Buffer.from(processedXml, 'utf8'), {
+          key: currentKey,
+          contentType: 'application/xml',
+        });
+        draft.metadata.xmlR2Key = processedUpload?.key || currentKey;
+        draft.metadata.xmlUrl = processedUpload?.url || buildPublicUrl(currentKey);
+      }
+    }
     appendDraftLog(draft, 'XML Transmitido');
     if (['100', '150'].includes(transmission.status)) {
       draft.status = 'authorized';
+      ensureAuthorizationEvent(draft);
     }
     draft.markModified('metadata');
     await draft.save();
+
+    let stockMovement = {
+      applied: false,
+      alreadyApplied: false,
+      movement: '',
+      itemCount: 0,
+      skipped: true,
+      reason: 'not_authorized',
+    };
 
     if (['100', '150'].includes(transmission.status)) {
       const emittedNumber = cleanString(draft?.payload?.header?.number || draft?.header?.number || '');
@@ -1511,6 +2584,17 @@ router.post('/:id/xml/transmit', async (req, res) => {
           );
         }
       }
+
+      stockMovement = await applyAuthorizedDraftStockMovement({ draftId: draft._id });
+    } else {
+      stockMovement = {
+        applied: false,
+        alreadyApplied: false,
+        movement: '',
+        itemCount: 0,
+        skipped: true,
+        reason: 'sefaz_not_authorized',
+      };
     }
 
     return res.json({
@@ -1520,6 +2604,7 @@ router.post('/:id/xml/transmit', async (req, res) => {
       processedAt: transmission.processedAt,
       receipt: transmission.receipt,
       environment: ambiente,
+      stockMovement,
     });
   } catch (error) {
     console.error('Erro ao transmitir NF-e:', error);
@@ -1540,7 +2625,9 @@ router.get('/:id/xml', async (req, res) => {
 
     const draft = await NfeEmissionDraft.findById(id);
     let r2Key = draft?.metadata?.xmlR2Key || '';
-    if (!r2Key && draft?.metadata?.xmlContent) {
+    const xmlToServe =
+      cleanString(draft?.metadata?.xmlProcessedContent || '') || cleanString(draft?.metadata?.xmlContent || '');
+    if (!r2Key && xmlToServe) {
       if (!isR2Configured()) {
         return res.status(500).json({ message: 'Cloudflare R2 nao configurado.' });
       }
@@ -1562,7 +2649,7 @@ router.get('/:id/xml', async (req, res) => {
         emissionDate,
         accessKey: accessKey || `NFe-${draft._id}`,
       });
-      const upload = await uploadBufferToR2(Buffer.from(draft.metadata.xmlContent, 'utf8'), {
+      const upload = await uploadBufferToR2(Buffer.from(xmlToServe, 'utf8'), {
         key: keyToUpload,
         contentType: 'application/xml',
       });
@@ -1615,6 +2702,12 @@ router._test = {
   sumParcelas,
   validatePagCobrConsistency,
   buildPaymentEntries,
+  normalizeStockMovement,
+  resolveStockQuantityFromItem,
+  collectStockMovementsFromItems,
 };
 
 module.exports = router;
+
+
+

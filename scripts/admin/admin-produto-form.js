@@ -2,7 +2,8 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // --- REFERÊNCIAS AO DOM ---
     const form = document.getElementById('edit-product-form');
-    const submitButton = form?.querySelector('button[type="submit"]');
+    const submitButton = form?.querySelector('button[type="submit"]')
+        || document.querySelector('button[type="submit"][form="edit-product-form"]');
     const clearFormButton = document.getElementById('clear-form-button');
     const imageUploadInput = document.getElementById('imageUpload');
     const existingImagesGrid = document.getElementById('existing-images-grid');
@@ -1287,11 +1288,25 @@ document.addEventListener('DOMContentLoaded', () => {
             const isTarget = id === normalizedTabId;
             if (isTarget) {
                 el.classList.remove('hidden');
+                el.removeAttribute('hidden');
+                el.style.display = '';
             } else {
                 el.classList.add('hidden');
+                el.setAttribute('hidden', '');
+                el.style.display = 'none';
             }
             el.setAttribute('aria-hidden', isTarget ? 'false' : 'true');
         });
+
+        if (normalizedTabId === 'tab-stock') {
+            const stockPanel = productTabContents['tab-stock'];
+            const stockCard = stockPanel?.firstElementChild;
+            if (stockCard) {
+                stockCard.classList.remove('hidden');
+                stockCard.removeAttribute('hidden');
+                stockCard.style.display = '';
+            }
+        }
 
         productTabLinks.forEach((btn) => {
             const btnTabId = normalizeTabId(btn.dataset.tab);
@@ -3687,9 +3702,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const selectedUnit = getSelectedProductUnit();
 
         if (!Array.isArray(allDeposits) || allDeposits.length === 0) {
-            depositTableBody.innerHTML = '';
+            depositTableBody.innerHTML = `
+                <tr>
+                    <td colspan="5" class="px-4 py-6 text-center text-xs text-gray-500">
+                        Nenhum depósito vinculado até o momento.
+                    </td>
+                </tr>
+            `;
             depositEmptyState?.classList.remove('hidden');
-            depositTableWrapper?.classList.add('hidden');
+            depositTableWrapper?.classList.remove('hidden');
             updateDepositTotalDisplay();
             return;
         }
