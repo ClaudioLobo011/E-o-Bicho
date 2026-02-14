@@ -268,6 +268,7 @@
     appointments: [],
     appointmentsLoading: false,
     appointmentFilters: { preset: 'today', start: '', end: '' },
+    appointmentStatusFilter: 'todos',
     appointmentMetrics: { today: 0, week: 0, month: 0 },
     appointmentScrollPending: false,
     activeAppointmentId: '',
@@ -3096,6 +3097,7 @@
     elements.appointmentApply = document.getElementById('pdv-appointment-apply');
     elements.appointmentReload = document.getElementById('pdv-appointment-reload');
     elements.appointmentCount = document.getElementById('pdv-appointment-count');
+    elements.appointmentStatusFilters = document.getElementById('pdv-appointment-status-filters');
     elements.appointmentSelectedCount = document.getElementById('pdv-appointment-selected-count');
     elements.appointmentImportSelected = document.getElementById('pdv-appointment-import-selected');
     elements.appointmentList = document.getElementById('pdv-appointment-list');
@@ -16378,6 +16380,27 @@
     );
     state.selectedAppointmentImportIds = normalizedSelected;
   };
+  const normalizeAppointmentStatusFilter = (value) => {
+    const normalized = String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '_');
+    if (!normalized || normalized === 'todos' || normalized === 'all') return 'todos';
+    if (normalized === 'em_atendimento' || normalized === 'ematendimento') return 'em_atendimento';
+    if (normalized === 'em_espera' || normalized === 'emespera') return 'em_espera';
+    if (normalized === 'concluido' || normalized === 'finalizado') return 'concluido';
+    if (normalized === 'agendado') return 'agendado';
+    return normalized;
+  };
+  const getFilteredAppointmentsByStatus = (appointments) => {
+    const list = Array.isArray(appointments) ? appointments : [];
+    const statusFilter = normalizeAppointmentStatusFilter(state.appointmentStatusFilter);
+    if (statusFilter === 'todos') return list;
+    return list.filter((appointment) => {
+      const appointmentStatus = normalizeAppointmentStatusFilter(appointment?.status || '');
+      return appointmentStatus === statusFilter;
+    });
+  };
   const getAppointmentRangeFromFilters = (filters = state.appointmentFilters) => {
     const preset = (filters?.preset || 'today').toLowerCase();
     if (preset === 'custom') {
@@ -16508,8 +16531,25 @@
     if (elements.appointmentEnd) {
       elements.appointmentEnd.value = filters.end || '';
     }
+    if (elements.appointmentStatusFilters) {
+      const activeStatus = normalizeAppointmentStatusFilter(state.appointmentStatusFilter);
+      const buttons = elements.appointmentStatusFilters.querySelectorAll('[data-appointment-status]');
+      buttons.forEach((button) => {
+        const status = normalizeAppointmentStatusFilter(
+          button.getAttribute('data-appointment-status') || 'todos'
+        );
+        const isActive = status === activeStatus;
+        button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        button.classList.toggle('border-primary', isActive);
+        button.classList.toggle('text-primary', isActive);
+        button.classList.toggle('bg-primary/10', isActive);
+        button.classList.toggle('border-gray-200', !isActive);
+        button.classList.toggle('bg-white', !isActive);
+        button.classList.toggle('text-gray-600', !isActive);
+      });
+    }
     if (elements.appointmentCount) {
-      const count = state.appointments.length;
+      const count = getFilteredAppointmentsByStatus(state.appointments).length;
       const label = count === 1 ? '1 atendimento encontrado.' : `${count} atendimentos encontrados.`;
       elements.appointmentCount.textContent = label;
     }
@@ -16549,7 +16589,7 @@
       maybeResetScroll(false);
       return;
     }
-    const appointments = Array.isArray(state.appointments) ? state.appointments : [];
+    const appointments = getFilteredAppointmentsByStatus(state.appointments);
     if (!appointments.length) {
       elements.appointmentList.innerHTML = '';
       elements.appointmentEmpty.classList.remove('hidden');
@@ -17288,6 +17328,19 @@
     state.appointmentFilters = { preset, start: '', end: '' };
     renderAppointmentFilters();
     await loadAppointmentsForCurrentFilter();
+  };
+  const handleAppointmentStatusFilterClick = (event) => {
+    const button = event.target.closest('[data-appointment-status]');
+    if (!button) return;
+    event.preventDefault();
+    const nextStatus = normalizeAppointmentStatusFilter(
+      button.getAttribute('data-appointment-status') || 'todos'
+    );
+    if (nextStatus === normalizeAppointmentStatusFilter(state.appointmentStatusFilter)) {
+      return;
+    }
+    state.appointmentStatusFilter = nextStatus;
+    renderAppointments();
   };
   const handleAppointmentApply = async () => {
     const startInput = elements.appointmentStart?.value || '';
@@ -18475,6 +18528,7 @@
     state.appointments = [];
     state.appointmentsLoading = false;
     state.appointmentFilters = { preset: 'today', start: '', end: '' };
+    state.appointmentStatusFilter = 'todos';
     state.appointmentMetrics = { today: 0, week: 0, month: 0 };
     state.appointmentScrollPending = false;
     state.activeAppointmentId = '';
@@ -18951,6 +19005,7 @@
     state.appointments = [];
     state.appointmentsLoading = false;
     state.appointmentFilters = { preset: 'today', start: '', end: '' };
+    state.appointmentStatusFilter = 'todos';
     state.appointmentMetrics = { today: 0, week: 0, month: 0 };
     state.appointmentScrollPending = false;
     state.activeAppointmentId = '';
@@ -20026,6 +20081,7 @@
     elements.saleCancelModal?.addEventListener('keydown', handleSaleCancelModalKeydown);
     elements.saleCancelReason?.addEventListener('input', clearSaleCancelError);
     elements.appointmentPresets?.addEventListener('click', handleAppointmentPresetClick);
+    elements.appointmentStatusFilters?.addEventListener('click', handleAppointmentStatusFilterClick);
     elements.appointmentApply?.addEventListener('click', handleAppointmentApply);
     elements.appointmentList?.addEventListener('click', handleAppointmentListClick);
     elements.appointmentImportSelected?.addEventListener('click', handleAppointmentImportSelected);
