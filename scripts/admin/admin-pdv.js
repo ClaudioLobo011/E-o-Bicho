@@ -14894,11 +14894,10 @@
     }
   };
 
-  const resolvePrinterNameFromAgent = async (name) => {
+  const findBestPrinterMatch = (name, printers = []) => {
     const raw = String(name || '').trim();
     if (!raw) return '';
-    const printers = await fetchLocalAgentPrinters();
-    if (!printers.length) return raw;
+    if (!Array.isArray(printers) || !printers.length) return raw;
     const exact = printers.find((printer) => printer.toLowerCase() === raw.toLowerCase());
     if (exact) return exact;
     const contains = printers.find((printer) => printer.toLowerCase().includes(raw.toLowerCase()));
@@ -15132,9 +15131,9 @@
       }
     });
 
-  const ensureLocalAgentUpdated = async ({ forcePrompt = false } = {}) => {
+  const ensureLocalAgentUpdated = async ({ forcePrompt = false, skipRemoteCheck = false } = {}) => {
     // Evita chamadas remotas de update durante o fluxo normal de impressão.
-    if (!forcePrompt) {
+    if (skipRemoteCheck || !forcePrompt) {
       return true;
     }
     const info = await getLocalAgentUpdateInfo({ health: lastLocalAgentHealth });
@@ -15190,7 +15189,7 @@
       promptLocalAgentInstall({ fallbackHtml, logPrefix });
       return false;
     }
-    const canProceed = await ensureLocalAgentUpdated();
+    const canProceed = await ensureLocalAgentUpdated({ skipRemoteCheck: true });
     if (!canProceed) {
       return false;
     }
@@ -15216,7 +15215,9 @@
       notify('Impressao enviada para a impressora.', 'success');
       return true;
     } catch (error) {
-      console.error('Falha ao imprimir via agente local:', error);
+      if (!quietOnError) {
+        console.error('Falha ao imprimir via agente local:', error);
+      }
       if (!quietOnError) {
         notify('Falha ao imprimir via agente local. Abrindo impressao no navegador.', 'warning');
       }
@@ -15245,7 +15246,7 @@
       promptLocalAgentInstall({ fallbackHtml, logPrefix });
       return false;
     }
-    const canProceed = await ensureLocalAgentUpdated();
+    const canProceed = await ensureLocalAgentUpdated({ skipRemoteCheck: true });
     if (!canProceed) {
       return false;
     }
@@ -15271,7 +15272,9 @@
       notify('Impressao enviada para a impressora.', 'success');
       return true;
     } catch (error) {
-      console.error('Falha ao imprimir via agente local (json):', error);
+      if (!quietOnError) {
+        console.error('Falha ao imprimir via agente local (json):', error);
+      }
       if (!quietOnError) {
         notify('Falha ao imprimir via agente local. Abrindo impressao no navegador.', 'warning');
       }
@@ -15306,12 +15309,31 @@
       return false;
     }
     void (async () => {
-      for (let index = 0; index < candidates.length; index += 1) {
-        const printerName = candidates[index];
-        const isLast = index === candidates.length - 1;
-        const resolvedPrinterName = await resolvePrinterNameFromAgent(printerName);
+      const agentPrinters = await fetchLocalAgentPrinters();
+      const hasAgentCatalog = Array.isArray(agentPrinters) && agentPrinters.length > 0;
+      const resolvedCandidates = hasAgentCatalog
+        ? Array.from(
+            new Set(
+              candidates
+                .map((name) => findBestPrinterMatch(name, agentPrinters))
+                .filter((name) =>
+                  agentPrinters.some((printer) => printer.toLowerCase() === String(name || '').toLowerCase())
+                )
+            )
+          )
+        : candidates;
+      if (hasAgentCatalog && !resolvedCandidates.length) {
+        notify('Nenhuma impressora configurada foi encontrada no agente local.', 'warning');
+        if (htmlDocument) {
+          printHtmlDocument(htmlDocument, { logPrefix });
+        }
+        return;
+      }
+      for (let index = 0; index < resolvedCandidates.length; index += 1) {
+        const printerName = resolvedCandidates[index];
+        const isLast = index === resolvedCandidates.length - 1;
         const common = {
-          printerName: resolvedPrinterName,
+          printerName,
           copies: printerConfig.vias || 1,
           jobName: title,
           fallbackHtml: htmlDocument,
