@@ -32,6 +32,11 @@ function sanitizeEmail(value = '') {
   return sanitizeString(value).toLowerCase();
 }
 
+function isGeneratedCustomerEmail(value = '') {
+  const email = sanitizeEmail(value);
+  return /@(eobicho\.local)$/i.test(email) && /^(importacao\.clientes\+|cadastro\.clientes\+)/i.test(email);
+}
+
 function parseDate(value) {
   if (!value) return null;
   const date = new Date(value);
@@ -297,8 +302,12 @@ async function buildClientePayload(body = {}, opts = {}) {
   const { isUpdate = false, currentUser = null } = opts;
   const tipoConta = normalizeTipoConta(body.tipoConta || currentUser?.tipoConta);
 
-  const email = sanitizeEmail(body.email || currentUser?.email || '');
-  if (!email) throw new Error('Email é obrigatório.');
+  const emailFromBody = sanitizeEmail(body.email || '');
+  const emailFromCurrent = sanitizeEmail(currentUser?.email || '');
+  let email = emailFromBody || emailFromCurrent;
+  if (!email) {
+    email = buildCadastroFallbackEmail(`${Date.now()}-${randomBytes(3).toString('hex')}`);
+  }
 
   const celular = sanitizeTelefone(body.celular || currentUser?.celular || '');
   if (!celular) throw new Error('Celular é obrigatório.');
@@ -509,6 +518,10 @@ function buildStoreNameIndex(stores = []) {
 
 function buildFallbackEmail(seed) {
   return `importacao.clientes+${seed}@eobicho.local`;
+}
+
+function buildCadastroFallbackEmail(seed) {
+  return `cadastro.clientes+${seed}@eobicho.local`;
 }
 
 function buildFallbackCellular(seed) {
@@ -1151,7 +1164,7 @@ router.get('/clientes', authMiddleware, requireStaff, async (req, res) => {
         nome: userDisplayName(doc),
         tipoConta: doc.tipoConta,
         codigo: codigo ? String(codigo) : String(doc._id),
-        email: doc.email || '',
+        email: isGeneratedCustomerEmail(doc.email) ? '' : (doc.email || ''),
         celular: doc.celular || '',
         telefone: doc.telefone || '',
         documento,
@@ -2001,7 +2014,7 @@ router.get('/clientes/buscar', authMiddleware, requireStaff, async (req, res) =>
         return parsed ? String(parsed) : null;
       })(),
       nome: userDisplayName(u),
-      email: u.email,
+      email: isGeneratedCustomerEmail(u.email) ? '' : (u.email || ''),
       celular: u.celular || '',
       doc: u.cpf || u.cnpj || u.inscricaoEstadual || '',
       cpf: u.cpf || '',
@@ -2717,7 +2730,8 @@ router.get('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
     }
     await ensureClienteEhEditavel(u);
 
-    const nome = u.nomeCompleto || u.nomeContato || u.razaoSocial || u.email || '';
+    const visibleEmail = isGeneratedCustomerEmail(u.email) ? '' : (u.email || '');
+    const nome = u.nomeCompleto || u.nomeContato || u.razaoSocial || visibleEmail || '';
     const celular = u.celular || u.telefone || '';
     const telefone = u.telefone || '';
     const cpf = typeof u.cpf === 'string' ? u.cpf : '';
@@ -2756,7 +2770,7 @@ router.get('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
       pais: u.pais || 'Brasil',
       empresaPrincipal: empresa,
       empresas: Array.isArray(u.empresas) ? u.empresas.map((empId) => String(empId)) : [],
-      email: u.email || '',
+      email: visibleEmail,
       celular,
       telefone,
       celularSecundario: u.celularSecundario || '',
