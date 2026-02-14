@@ -1,6 +1,12 @@
 (function () {
   const API_BASE =
     (typeof API_CONFIG !== 'undefined' && API_CONFIG && API_CONFIG.BASE_URL) || '/api';
+  const LOCAL_AGENT_BASE_URL = (
+    typeof window !== 'undefined' && window.PDV_LOCAL_AGENT_URL
+      ? window.PDV_LOCAL_AGENT_URL
+      : 'http://127.0.0.1:17305'
+  ).replace(/\/+$/, '');
+  const LOCAL_AGENT_TIMEOUT_MS = 1800;
 
   const state = {
     stores: [],
@@ -42,6 +48,16 @@
       return;
     }
     window.alert(message);
+  };
+
+  const fetchWithTimeout = async (url, options = {}, timeoutMs = LOCAL_AGENT_TIMEOUT_MS) => {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { ...options, signal: controller.signal });
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
   };
 
   const queryElements = () => {
@@ -113,6 +129,135 @@
     return row;
   };
 
+  const getCurrentPrinterNames = (inputs) => {
+    const primary = String(inputs?.nome?.value || '').trim();
+    const aliases = getPrinterAliases(inputs);
+    return Array.from(new Set([primary, ...aliases].filter(Boolean)));
+  };
+
+  const addPrinterAliasValue = (inputs, value = '') => {
+    const normalized = String(value || '').trim();
+    if (!normalized) return false;
+    const currentNames = getCurrentPrinterNames(inputs);
+    if (currentNames.includes(normalized)) {
+      notify('Esta impressora já está adicionada.', 'info');
+      return false;
+    }
+    const container = inputs?.aliasesContainer;
+    if (!container) return false;
+    container.appendChild(createPrinterAliasRow(normalized));
+    return true;
+  };
+
+  const closeInfoModal = () => {
+    const modal = document.getElementById('info-modal');
+    if (modal) modal.classList.add('hidden');
+  };
+
+  const fetchAgentPrinters = async () => {
+    if (!LOCAL_AGENT_BASE_URL) return [];
+    const response = await fetchWithTimeout(
+      `${LOCAL_AGENT_BASE_URL}/printers`,
+      { method: 'GET', cache: 'no-store' },
+      LOCAL_AGENT_TIMEOUT_MS
+    );
+    if (!response.ok) {
+      throw new Error('Não foi possível listar as impressoras disponíveis no agente.');
+    }
+    const payload = await response.json().catch(() => null);
+    const printers = Array.isArray(payload?.printers) ? payload.printers : [];
+    return Array.from(
+      new Set(
+        printers
+          .map((entry) => String(entry || '').trim())
+          .filter(Boolean)
+      )
+    );
+  };
+
+  const openAgentPrintersModal = async (inputs) => {
+    if (typeof window?.showModal !== 'function') return false;
+
+    let printers = [];
+    try {
+      printers = await fetchAgentPrinters();
+    } catch (error) {
+      console.error('Erro ao listar impressoras do agente:', error);
+      notify(
+        'Agente local indisponível. Você ainda pode digitar o nome da impressora manualmente.',
+        'warning'
+      );
+      return false;
+    }
+
+    if (!printers.length) {
+      notify('Nenhuma impressora foi encontrada no agente local.', 'warning');
+      return false;
+    }
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'space-y-3';
+
+    const help = document.createElement('p');
+    help.className = 'text-sm text-gray-600';
+    help.textContent = 'Clique em uma impressora para adicionar o nome exato na configuração.';
+
+    const search = document.createElement('input');
+    search.type = 'search';
+    search.placeholder = 'Filtrar impressoras...';
+    search.className =
+      'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20';
+
+    const list = document.createElement('div');
+    list.className = 'max-h-64 space-y-1 overflow-y-auto rounded-lg border border-gray-200 p-2';
+
+    const renderList = (term = '') => {
+      const needle = String(term || '').trim().toLowerCase();
+      const filtered = needle
+        ? printers.filter((printer) => printer.toLowerCase().includes(needle))
+        : printers;
+      list.innerHTML = '';
+      if (!filtered.length) {
+        const empty = document.createElement('p');
+        empty.className = 'px-2 py-2 text-xs text-gray-500';
+        empty.textContent = 'Nenhuma impressora encontrada para o filtro.';
+        list.appendChild(empty);
+        return;
+      }
+      filtered.forEach((printerName) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className =
+          'w-full rounded-lg border border-gray-200 px-3 py-2 text-left text-sm text-gray-700 transition hover:border-primary hover:bg-primary/5';
+        button.textContent = printerName;
+        button.addEventListener('click', () => {
+          const added = addPrinterAliasValue(inputs, printerName);
+          if (added) {
+            notify('Impressora adicionada.', 'success');
+            closeInfoModal();
+          }
+        });
+        list.appendChild(button);
+      });
+    };
+
+    search.addEventListener('input', (event) => {
+      renderList(event.target?.value || '');
+    });
+
+    renderList();
+    wrapper.append(help, search, list);
+
+    await window.showModal({
+      title: 'Selecionar impressora',
+      message: wrapper,
+      confirmText: 'Fechar',
+      onConfirm: () => {},
+    });
+    window.setTimeout(() => search.focus(), 50);
+    return true;
+  };
+
   const setPrinterAliases = (inputs, aliases = []) => {
     const container = inputs?.aliasesContainer;
     if (!container) return;
@@ -143,7 +288,9 @@
       const container = inputs?.aliasesContainer;
       if (!button || !container || button.dataset.aliasReady === 'true') return;
       button.dataset.aliasReady = 'true';
-      button.addEventListener('click', () => {
+      button.addEventListener('click', async () => {
+        const openedModal = await openAgentPrintersModal(inputs);
+        if (openedModal) return;
         container.appendChild(createPrinterAliasRow(''));
         const last = container.querySelector('[data-printer-alias-input]:last-of-type');
         if (last) last.focus();

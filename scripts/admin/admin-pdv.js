@@ -14956,9 +14956,8 @@
     const latestInfo = await fetchLatestAgentVersion();
     const latestVersion = latestInfo?.version || '';
     const packageUrl =
-      resolveAgentDownloadUrl(latestInfo?.downloadUrl) ||
-      (await resolveAvailableUrl(LOCAL_AGENT_PACKAGE_URLS));
-    const installerUrl = await resolveAvailableUrl(LOCAL_AGENT_INSTALLER_URLS);
+      resolveAgentDownloadUrl(latestInfo?.downloadUrl) || localAgentUpdateState.downloadUrl || '';
+    const installerUrl = localAgentUpdateState.installerUrl || '';
     const hasUpdate =
       latestVersion && localVersion ? compareVersions(latestVersion, localVersion) > 0 : false;
     Object.assign(localAgentUpdateState, {
