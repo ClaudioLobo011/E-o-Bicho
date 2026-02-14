@@ -3848,24 +3848,23 @@
     const fragment = document.createDocumentFragment();
     state.customerSearchResults.forEach((cliente) => {
       const isSelected = Boolean(state.modalSelectedCliente && state.modalSelectedCliente._id === cliente._id);
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.setAttribute('data-customer-id', cliente._id);
-      button.className = [
-        'w-full text-left px-3 py-2 transition grid grid-cols-1 gap-2 text-[11px] md:grid-cols-6',
+      const row = document.createElement('tr');
+      row.setAttribute('data-customer-id', cliente._id);
+      row.className = [
+        'cursor-pointer transition',
         isSelected ? 'bg-primary/5 text-primary' : 'text-gray-700 hover:bg-primary/5',
       ].join(' ');
       const codigo = getCustomerCode(cliente);
       const nome = resolveCustomerName(cliente) || 'Cliente sem nome';
       const documento = cliente.cpf || cliente.doc || cliente.cnpj || '';
       const celular = cliente.celular || cliente.telefone || '';
-      button.innerHTML = `
-        <span class="md:col-span-1 font-semibold text-gray-800">${codigo || '-'}</span>
-        <span class="md:col-span-2 text-gray-800">${nome}</span>
-        <span class="md:col-span-1 text-gray-500">${documento || '-'}</span>
-        <span class="md:col-span-2 text-gray-500">${celular || '-'}</span>
+      row.innerHTML = `
+        <td class="px-3 py-2.5 font-semibold text-gray-800">${codigo || '-'}</td>
+        <td class="px-3 py-2.5 text-gray-800">${nome}</td>
+        <td class="px-3 py-2.5 text-gray-500">${documento || '-'}</td>
+        <td class="px-3 py-2.5 text-gray-500">${celular || '-'}</td>
       `;
-      fragment.appendChild(button);
+      fragment.appendChild(row);
     });
     elements.customerResultsList.appendChild(fragment);
   };

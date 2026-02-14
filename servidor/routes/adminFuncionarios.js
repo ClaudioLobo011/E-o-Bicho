@@ -20,6 +20,7 @@ const HORARIO_MODALIDADES = [...HORARIO_MODALIDADES_JORNADA, ...HORARIO_MODALIDA
 const RACA_COR_OPCOES = ['nao_informar', 'indigena', 'branco', 'preto', 'amarelo', 'pardo'];
 const DEFICIENCIA_OPCOES = ['nao_portador', 'fisica', 'auditiva', 'visual', 'intelectual', 'multipla'];
 const ESTADO_CIVIL_OPCOES = ['solteiro', 'casado', 'separado', 'viuvo'];
+const MAX_CODIGO_CLIENTE_SEQUENCIAL = 999999999;
 
 const normalizeStoreId = (value) => {
   if (!value) return '';
@@ -48,11 +49,66 @@ const resolveUserStoreAccess = async (userId) => {
 };
 
 function parseCodigoCliente(raw) {
-  if (raw === undefined || raw === null) return null;
-  const num = Number.parseInt(String(raw).replace(/\D/g, ''), 10);
-  if (!Number.isFinite(num)) return null;
-  if (num < 1) return null;
-  return num;
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    const code = Math.trunc(raw);
+    if (code >= 1 && code <= MAX_CODIGO_CLIENTE_SEQUENCIAL) return code;
+    return null;
+  }
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (!/^[\d.\-\/\s]+$/.test(trimmed)) return null;
+  const digits = trimmed.replace(/\D/g, '');
+  if (!digits) return null;
+  const code = Number.parseInt(digits, 10);
+  if (!Number.isFinite(code)) return null;
+  if (code < 1 || code > MAX_CODIGO_CLIENTE_SEQUENCIAL) return null;
+  return code;
+}
+
+async function obterMaiorCodigoCliente() {
+  const candidatos = await User.find({ codigoCliente: { $exists: true } })
+    .select('codigoCliente')
+    .sort({ codigoCliente: -1 })
+    .limit(20)
+    .lean();
+
+  return candidatos.reduce((maior, doc) => {
+    const parsed = parseCodigoCliente(doc?.codigoCliente);
+    if (parsed && parsed > maior) return parsed;
+    return maior;
+  }, 0);
+}
+
+async function gerarCodigoClienteSequencial() {
+  const maior = await obterMaiorCodigoCliente();
+  return maior + 1;
+}
+
+async function corrigirCodigoClienteSeInvalido(userId) {
+  if (!userId || !mongoose.Types.ObjectId.isValid(userId)) return;
+
+  let attempt = 0;
+  while (attempt < 3) {
+    attempt += 1;
+    const current = await User.findById(userId).select('codigoCliente').lean();
+    if (!current) return;
+    if (parseCodigoCliente(current.codigoCliente)) return;
+
+    const nextCode = await gerarCodigoClienteSequencial();
+    try {
+      await User.updateOne({ _id: userId }, { $set: { codigoCliente: nextCode } });
+      return;
+    } catch (error) {
+      const duplicateCodigo =
+        error?.code === 11000 &&
+        (error?.keyPattern?.codigoCliente ||
+          String(error?.message || '').toLowerCase().includes('codigocliente'));
+      if (!duplicateCodigo || attempt >= 3) {
+        throw error;
+      }
+    }
+  }
 }
 
 function escapeRegex(s) {
@@ -533,6 +589,7 @@ router.post('/transformar', authMiddleware, requireAdmin, async (req, res) => {
 // OBTÉM um funcionário
 router.get('/:id', authMiddleware, requireAdmin, async (req, res) => {
   try {
+      await corrigirCodigoClienteSeInvalido(req.params.id);
       const u = await User.findById(
         req.params.id,
         'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas userGroup genero dataNascimento racaCor deficiencia estadoCivil rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios codigoCliente'

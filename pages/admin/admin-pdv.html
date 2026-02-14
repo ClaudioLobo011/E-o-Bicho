@@ -721,13 +721,19 @@
                         <div id="pdv-customer-results-loading" class="hidden rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-500">Buscando clientes...</div>
                         <div id="pdv-customer-results-empty" class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-500">Digite para buscar clientes.</div>
                         <div id="pdv-customer-results-table" class="hidden overflow-hidden rounded-lg border border-gray-200">
-                            <div class="grid grid-cols-1 gap-2 bg-gray-100 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-500 md:grid-cols-6">
-                                <span class="md:col-span-1">Cod</span>
-                                <span class="md:col-span-2">Nome</span>
-                                <span class="md:col-span-1">CPF</span>
-                                <span class="md:col-span-2">Celular</span>
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-100 text-left text-[11px] leading-[1.35] text-gray-700">
+                                    <thead class="bg-gray-50 text-left text-[10px] uppercase tracking-wide text-gray-500">
+                                        <tr>
+                                            <th scope="col" class="px-3 py-2 font-semibold">Codigo</th>
+                                            <th scope="col" class="px-3 py-2 font-semibold">Nome</th>
+                                            <th scope="col" class="px-3 py-2 font-semibold">CPF</th>
+                                            <th scope="col" class="px-3 py-2 font-semibold">Celular</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="pdv-customer-results" class="divide-y divide-gray-100 bg-white"></tbody>
+                                </table>
                             </div>
-                            <div id="pdv-customer-results" class="divide-y divide-gray-100"></div>
                         </div>
                     </div>
                 </div>

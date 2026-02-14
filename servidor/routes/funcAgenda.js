@@ -15,6 +15,7 @@ const bcrypt = require('bcryptjs');
 const { randomBytes } = require('crypto');
 
 const requireStaff = authorizeRoles('funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master');
+const MAX_CODIGO_CLIENTE_SEQUENCIAL = 999999999;
 
 function escapeRegex(s) { return String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 function userDisplayName(u) { return u?.nomeCompleto || u?.nomeContato || u?.razaoSocial || u?.email; }
@@ -111,16 +112,21 @@ function parseBooleanFlag(value) {
 }
 
 function parseCodigoCliente(raw) {
-  if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) {
-    return Math.trunc(raw);
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    const code = Math.trunc(raw);
+    if (code >= 1 && code <= MAX_CODIGO_CLIENTE_SEQUENCIAL) return code;
+    return null;
   }
   if (typeof raw === 'string') {
-    const digits = raw.trim().replace(/\D/g, '');
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    if (!/^[\d.\-\/\s]+$/.test(trimmed)) return null;
+    const digits = trimmed.replace(/\D/g, '');
     if (!digits) return null;
     const parsed = Number.parseInt(digits, 10);
-    if (Number.isFinite(parsed) && parsed > 0) {
-      return parsed;
-    }
+    if (!Number.isFinite(parsed)) return null;
+    if (parsed < 1 || parsed > MAX_CODIGO_CLIENTE_SEQUENCIAL) return null;
+    return parsed;
   }
   return null;
 }

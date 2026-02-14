@@ -121,6 +121,46 @@ function buildIdentifierQuery(identifier) {
   return { $or: or };
 }
 
+const MAX_CODIGO_CLIENTE_SEQUENCIAL = 999999999;
+
+function parseCodigoClienteSequencial(raw) {
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    const code = Math.trunc(raw);
+    if (code >= 1 && code <= MAX_CODIGO_CLIENTE_SEQUENCIAL) return code;
+    return null;
+  }
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    if (!/^[\d.\-\/\s]+$/.test(trimmed)) return null;
+    const digits = trimmed.replace(/\D/g, '');
+    if (!digits) return null;
+    const code = Number.parseInt(digits, 10);
+    if (!Number.isFinite(code)) return null;
+    if (code < 1 || code > MAX_CODIGO_CLIENTE_SEQUENCIAL) return null;
+    return code;
+  }
+  return null;
+}
+
+async function obterMaiorCodigoClienteSequencial() {
+  const candidatos = await User.find({ codigoCliente: { $exists: true } })
+    .select('codigoCliente')
+    .sort({ codigoCliente: -1 })
+    .limit(20)
+    .lean();
+  return candidatos.reduce((maior, doc) => {
+    const parsed = parseCodigoClienteSequencial(doc?.codigoCliente);
+    if (parsed && parsed > maior) return parsed;
+    return maior;
+  }, 0);
+}
+
+async function gerarCodigoClienteSequencial() {
+  const maior = await obterMaiorCodigoClienteSequencial();
+  return maior + 1;
+}
+
 const registerValidationRules = [
   body('nomeCompleto').if(body('tipoConta').equals('pessoa_fisica')).notEmpty().withMessage('O nome completo é obrigatório.').isLength({ min: 3 }).withMessage('O nome deve ter pelo menos 3 caracteres.'),
   body('razaoSocial').if(body('tipoConta').equals('pessoa_juridica')).notEmpty().withMessage('A razão social é obrigatória.'),
@@ -177,7 +217,7 @@ router.post('/register', registerValidationRules, async (req, res) => {
     const hashedPassword = await bcrypt.hash(req.body.senha, salt);
     const isento = req.body.isentoIE === 'on';
 
-    const newUser = new User({
+    const basePayload = {
       tipoConta: req.body.tipoConta,
       email: req.body.email,
       senha: hashedPassword,
@@ -193,10 +233,35 @@ router.post('/register', registerValidationRules, async (req, res) => {
       inscricaoEstadual: req.body.inscricaoEstadual,
       estadoIE: req.body.estadoIE,
       isentoIE: isento,
-      role: 'cliente' // sempre cliente por padrão
-    });
+      role: 'cliente',
+    };
 
-    const savedUser = await newUser.save();
+    let savedUser = null;
+    let attempt = 0;
+    while (!savedUser && attempt < 3) {
+      attempt += 1;
+      const codigoCliente = await gerarCodigoClienteSequencial();
+      const newUser = new User({
+        ...basePayload,
+        codigoCliente,
+      });
+      try {
+        savedUser = await newUser.save();
+      } catch (creationError) {
+        const duplicateCodigo =
+          creationError?.code === 11000 &&
+          (creationError?.keyPattern?.codigoCliente ||
+            String(creationError?.message || '').toLowerCase().includes('codigocliente'));
+        if (duplicateCodigo && attempt < 3) {
+          continue;
+        }
+        throw creationError;
+      }
+    }
+
+    if (!savedUser) {
+      throw new Error('Nao foi possivel gerar codigo sequencial do cliente.');
+    }
 
     res.status(201).json({
       message: 'Utilizador registado com sucesso!',
@@ -642,3 +707,4 @@ router.post('/totp/disable', requireAuth, async (req, res) => {
 });
 
 module.exports = router;
+

@@ -37,6 +37,10 @@
       draggingId: null,
       filters: {},
       filterSearch: {},
+      selections: {},
+      activeFilterKey: '',
+      activeFilterDropdown: null,
+      activeFilterTrigger: null,
       range: { start: '', end: '' },
     },
   };
@@ -92,6 +96,7 @@
   forecastColumns.forEach((column) => {
     state.forecastTable.filters[column.key] = '';
     state.forecastTable.filterSearch[column.key] = '';
+    state.forecastTable.selections[column.key] = new Set();
   });
 
   const elements = {
@@ -1281,6 +1286,132 @@
     updateForecastSortIndicators();
   }
 
+  function closeForecastFilterDropdown() {
+    const dropdown = state.forecastTable.activeFilterDropdown;
+    if (dropdown && dropdown.parentNode) {
+      dropdown.parentNode.removeChild(dropdown);
+    }
+    state.forecastTable.activeFilterDropdown = null;
+    state.forecastTable.activeFilterKey = '';
+    state.forecastTable.activeFilterTrigger = null;
+  }
+
+  function getForecastColumnIndex(columnKey) {
+    return forecastColumns.findIndex((column) => column.key === columnKey);
+  }
+
+  function getForecastUniqueValues(columnKey) {
+    const columnIndex = getForecastColumnIndex(columnKey);
+    if (columnIndex < 0 || !elements.forecastBody) return [];
+
+    const values = new Set();
+    const rows = Array.from(elements.forecastBody.querySelectorAll('tr'));
+    rows.forEach((row) => {
+      const cells = Array.from(row.querySelectorAll('td'));
+      if (cells.length < forecastColumns.length + 1) return;
+      const value = String(cells[columnIndex]?.textContent || '').trim();
+      if (!value || value === '—') return;
+      values.add(value);
+    });
+
+    return Array.from(values).sort((a, b) =>
+      a.localeCompare(b, 'pt-BR', { numeric: true, sensitivity: 'base' })
+    );
+  }
+
+  function updateForecastFilterTriggerState(columnKey) {
+    if (!elements.forecastHead) return;
+    const trigger = elements.forecastHead.querySelector(`[data-forecast-filter-trigger="${columnKey}"]`);
+    if (!trigger) return;
+    const selected = state.forecastTable.selections[columnKey];
+    const hasSelection = selected instanceof Set && selected.size > 0;
+    trigger.classList.toggle('text-primary', hasSelection);
+  }
+
+  function buildForecastFilterDropdown(column, anchor) {
+    const columnKey = column?.key || '';
+    if (!columnKey || !anchor) return null;
+    const values = getForecastUniqueValues(columnKey);
+    const currentSelection = state.forecastTable.selections[columnKey] || new Set();
+    const hasSelection = currentSelection.size > 0;
+
+    const dropdown = document.createElement('div');
+    dropdown.className =
+      'absolute left-0 top-full z-50 mt-1 w-60 rounded-lg border border-gray-200 bg-white p-2 text-xs text-gray-600 shadow-xl';
+    dropdown.innerHTML = `
+      <div class="flex items-center justify-between px-2 py-1 text-[11px] font-semibold uppercase text-gray-500">
+        <span>Opcoes</span>
+        <button type="button" class="text-gray-400 hover:text-primary" data-action="close" aria-label="Fechar">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="max-h-40 space-y-1 overflow-y-auto px-2 py-1" data-options></div>
+      <div class="flex items-center justify-between gap-2 px-2 pt-2">
+        <button type="button" class="text-[11px] text-gray-500 hover:text-primary" data-action="select-all">Selecionar tudo</button>
+        <button type="button" class="text-[11px] text-gray-500 hover:text-primary" data-action="clear">Limpar</button>
+        <button type="button" class="ml-auto rounded-md bg-primary px-2 py-1 text-[11px] font-semibold text-white hover:bg-primary/90" data-action="apply">Aplicar</button>
+      </div>
+    `;
+
+    const optionsContainer = dropdown.querySelector('[data-options]');
+    if (values.length) {
+      values.forEach((value) => {
+        const checked = hasSelection ? currentSelection.has(value) : true;
+        const row = document.createElement('label');
+        row.className = 'flex items-center gap-2 text-[11px] text-gray-600';
+        row.innerHTML = `
+          <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20" value="${escapeHtml(value)}" ${checked ? 'checked' : ''}>
+          <span class="truncate">${escapeHtml(value)}</span>
+        `;
+        optionsContainer.appendChild(row);
+      });
+    } else {
+      const empty = document.createElement('p');
+      empty.className = 'py-1 text-[11px] text-gray-400';
+      empty.textContent = 'Nenhuma opcao encontrada.';
+      optionsContainer.appendChild(empty);
+    }
+
+    dropdown.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const action = event.target.closest('[data-action]')?.getAttribute('data-action');
+      if (!action) return;
+      if (action === 'close') {
+        closeForecastFilterDropdown();
+        return;
+      }
+      if (action === 'select-all') {
+        dropdown.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+          input.checked = true;
+        });
+        return;
+      }
+      if (action === 'clear') {
+        dropdown.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+          input.checked = false;
+        });
+        return;
+      }
+      if (action === 'apply') {
+        const checkedValues = Array.from(
+          dropdown.querySelectorAll('input[type="checkbox"]:checked')
+        ).map((input) => String(input.value || '').trim());
+        const next = state.forecastTable.selections[columnKey] || new Set();
+        next.clear();
+        if (!(checkedValues.length && checkedValues.length >= values.length)) {
+          checkedValues.forEach((value) => next.add(value));
+        }
+        state.forecastTable.selections[columnKey] = next;
+        updateForecastFilterTriggerState(columnKey);
+        closeForecastFilterDropdown();
+        renderForecast();
+      }
+    });
+
+    anchor.appendChild(dropdown);
+    return dropdown;
+  }
+
   function buildForecastTableHead() {
     if (!elements.forecastHead) return;
     elements.forecastHead.innerHTML = '';
@@ -1304,6 +1435,30 @@
       if (column.isNumeric) label.classList.add('text-right');
       labelRow.appendChild(label);
 
+      const tools = document.createElement('div');
+      tools.className = 'relative flex items-center gap-1';
+
+      const searchButton = document.createElement('button');
+      searchButton.type = 'button';
+      searchButton.dataset.forecastFilterTrigger = column.key;
+      searchButton.className =
+        'rounded p-0.5 text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30';
+      searchButton.setAttribute('aria-label', `Abrir filtro de ${column.label}`);
+      searchButton.innerHTML = '<i class="fas fa-search text-[9px]"></i>';
+      searchButton.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (state.forecastTable.activeFilterKey === column.key) {
+          closeForecastFilterDropdown();
+          return;
+        }
+        closeForecastFilterDropdown();
+        state.forecastTable.activeFilterKey = column.key;
+        state.forecastTable.activeFilterTrigger = searchButton;
+        state.forecastTable.activeFilterDropdown = buildForecastFilterDropdown(column, tools);
+      });
+      tools.appendChild(searchButton);
+
       const sortGroup = document.createElement('div');
       sortGroup.className = 'flex flex-col items-center justify-center gap-px text-gray-400';
 
@@ -1323,7 +1478,8 @@
         sortGroup.appendChild(button);
       });
 
-      labelRow.appendChild(sortGroup);
+      tools.appendChild(sortGroup);
+      labelRow.appendChild(tools);
 
       const filterRow = document.createElement('div');
       filterRow.className = 'flex items-center gap-1';
@@ -1340,18 +1496,7 @@
         renderForecast();
       });
 
-      const searchButton = document.createElement('button');
-      searchButton.type = 'button';
-      searchButton.className =
-        'flex h-8 w-8 items-center justify-center rounded border border-gray-200 bg-white text-gray-500 transition hover:border-primary/50 hover:text-primary';
-      searchButton.setAttribute('aria-label', `Filtrar valores da coluna ${column.label}`);
-      searchButton.innerHTML = '<i class="fas fa-magnifying-glass"></i>';
-      searchButton.addEventListener('click', (event) => {
-        event.preventDefault();
-        filter.focus();
-      });
-
-      filterRow.append(filter, searchButton);
+      filterRow.append(filter);
 
       wrapper.append(labelRow, filterRow);
       th.appendChild(wrapper);
@@ -1366,6 +1511,9 @@
 
     elements.forecastHead.appendChild(row);
     updateForecastSortIndicators();
+    forecastColumns.forEach((column) => {
+      updateForecastFilterTriggerState(column.key);
+    });
     ensureForecastTableLayout();
   }
 
@@ -1480,9 +1628,14 @@
       forecastColumns.every((column) => {
         const term = state.forecastTable.filters[column.key] || '';
         const regex = buildSearchRegex(term);
-        if (!regex) return true;
         const display = normalizeText(getForecastDisplayValue(row, column) || '');
-        return regex.test(display);
+        if (regex && !regex.test(display)) return false;
+        const selected = state.forecastTable.selections[column.key];
+        if (selected && selected.size > 0) {
+          const rawDisplay = String(getForecastDisplayValue(row, column) || '').trim();
+          if (!selected.has(rawDisplay)) return false;
+        }
+        return true;
       })
     );
 
@@ -3097,6 +3250,21 @@
     elements.forecastBody?.addEventListener('drop', handleForecastDrop);
     elements.forecastBody?.addEventListener('dragend', handleForecastDragEnd);
     elements.historyBody?.addEventListener('click', handleHistoryTableClick);
+    document.addEventListener('click', (event) => {
+      const dropdown = state.forecastTable.activeFilterDropdown;
+      if (!dropdown) return;
+      const trigger = state.forecastTable.activeFilterTrigger;
+      const inDropdown = dropdown.contains(event.target);
+      const inTrigger = !!(trigger && trigger.contains(event.target));
+      if (!inDropdown && !inTrigger) {
+        closeForecastFilterDropdown();
+      }
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        closeForecastFilterDropdown();
+      }
+    });
 
     loadOptions().then(() => {
       if (elements.company?.value) {

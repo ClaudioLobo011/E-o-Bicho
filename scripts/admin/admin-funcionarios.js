@@ -388,8 +388,15 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function normalizeCodigoCliente(value) {
-    const digits = onlyDigits(value).replace(/^0+/, '');
-    return digits ? String(Number.parseInt(digits, 10)) : '';
+    if (value === null || value === undefined) return '';
+    const raw = String(value).trim();
+    if (!raw) return '';
+    if (!/^[\d.\-\/\s]+$/.test(raw)) return '';
+    const digits = onlyDigits(raw).replace(/^0+/, '');
+    if (!digits) return '';
+    const parsed = Number.parseInt(digits, 10);
+    if (!Number.isFinite(parsed) || parsed < 1 || parsed > 999999999) return '';
+    return String(parsed);
   }
 
   function formatCEP(value = '') {
@@ -489,10 +496,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (normalized) {
       inputCodigo.value = normalized;
       inputCodigo.dataset.originalValue = normalized;
-      inputCodigo.dataset.hasValue = 'true';
-    } else if (value) {
-      inputCodigo.value = value;
-      inputCodigo.dataset.originalValue = value;
       inputCodigo.dataset.hasValue = 'true';
     } else {
       inputCodigo.value = 'Gerado automaticamente';
@@ -1599,7 +1602,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       modalTitle.textContent = 'Editar Funcionário';
       inputId.value = data._id;
-      setCodigoValue(codigoValor || data?._id || '');
+      setCodigoValue(codigoValor || '');
       setDataCadastroValue(dataCadastroValor);
       inputNome.value = getNome(data);
       inputEmail.value = data.email || '';

@@ -84,6 +84,20 @@
     return value || '';
   }
 
+  function buildPhoneMaskOptions() {
+    return {
+      mask: [
+        { mask: '(00) 0000-0000' },
+        { mask: '(00) 00000-0000' },
+      ],
+      dispatch(appended, dynamicMasked) {
+        const value = `${dynamicMasked.value}${appended}`;
+        const digits = value.replace(/\D/g, '');
+        return digits.length > 10 ? dynamicMasked.compiledMasks[1] : dynamicMasked.compiledMasks[0];
+      },
+    };
+  }
+
   function toISODateInput(value) {
     if (!value) return '';
     const date = new Date(value);
@@ -158,6 +172,31 @@
       empresas: [],
       cepAbort: null,
       pendencias: defaultPendencias(),
+      codigoSearch: {
+        open: false,
+        query: '',
+        results: [],
+        loading: false,
+        requestId: 0,
+        sortBy: '',
+        sortDirection: '',
+        filters: {
+          codigo: '',
+          nome: '',
+          cpf: '',
+          celular: '',
+          fone: '',
+          email: '',
+        },
+        selections: {
+          codigo: new Set(),
+          nome: new Set(),
+          cpf: new Set(),
+          celular: new Set(),
+          fone: new Set(),
+          email: new Set(),
+        },
+      },
     };
 
     const elements = {
@@ -241,7 +280,17 @@
         saldoDisponivel: document.getElementById('pendencias-saldo-disponivel'),
         saldoUsado: document.getElementById('pendencias-saldo-usado'),
       },
+      codigoSearchModal: document.getElementById('cliente-codigo-search-modal'),
+      codigoSearchBackdrop: document.querySelector('[data-codigo-search-dismiss="backdrop"]'),
+      codigoSearchClose: document.getElementById('cliente-codigo-search-close'),
+      codigoSearchCancel: document.getElementById('cliente-codigo-search-cancel'),
+      codigoSearchQuery: document.getElementById('cliente-codigo-search-query'),
+      codigoSearchSubmit: document.getElementById('cliente-codigo-search-submit'),
+      codigoSearchTbody: document.getElementById('cliente-codigo-search-tbody'),
+      codigoSearchEmpty: document.getElementById('cliente-codigo-search-empty'),
+      codigoSearchFilters: Array.from(document.querySelectorAll('[data-codigo-search-filter]')),
     };
+    const masks = {};
     const hasClientesListSection = !!(
       elements.tabelaBody
       && elements.info
@@ -255,6 +304,60 @@
       instance: null,
       speciesMap: null,
     };
+
+    function registerMask(key, element, options) {
+      if (typeof IMask === 'undefined' || !element) return null;
+      if (masks[key]) {
+        masks[key].destroy();
+      }
+      masks[key] = IMask(element, { ...options });
+      return masks[key];
+    }
+
+    function initInputMasks() {
+      if (typeof IMask === 'undefined') {
+        console.warn('Biblioteca IMask não carregada; os campos permanecerão sem máscara.');
+        return;
+      }
+
+      registerMask('clienteCodigoAntigo', elements.inputCodigoAntigo, {
+        mask: Number,
+        scale: 0,
+        signed: false,
+        thousandsSeparator: '',
+        padFractionalZeros: false,
+        normalizeZeros: true,
+        radix: ',',
+      });
+      registerMask('cpf', elements.inputCpf, { mask: '000.000.000-00' });
+      registerMask('cep', elements.endereco.cep, { mask: '00000-000' });
+      registerMask('telefone1', elements.contato.telefone, buildPhoneMaskOptions());
+      registerMask('celular1', elements.contato.celular, buildPhoneMaskOptions());
+      registerMask('telefone2', elements.contato.telefone2, buildPhoneMaskOptions());
+      registerMask('celular2', elements.contato.celular2, buildPhoneMaskOptions());
+      registerMask('enderecoCodIbge', elements.endereco.codIbge, { mask: '0000000' });
+      registerMask('enderecoCodUf', elements.endereco.codUf, { mask: '00' });
+      registerMask('limiteCredito', elements.pendencias.limiteCredito, {
+        mask: Number,
+        scale: 2,
+        signed: false,
+        thousandsSeparator: '.',
+        padFractionalZeros: true,
+        normalizeZeros: true,
+        radix: ',',
+        mapToRadix: ['.'],
+      });
+      registerMask('petPeso', elements.pets.peso, {
+        mask: Number,
+        scale: 3,
+        signed: false,
+        thousandsSeparator: '',
+        padFractionalZeros: false,
+        normalizeZeros: true,
+        radix: ',',
+        mapToRadix: ['.'],
+      });
+    }
 
     const normalizeText = (value) => String(value || '')
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -1128,9 +1231,355 @@
       }
     }
 
+    const hasLetters = (value = '') => /[A-Za-zÀ-ÿ]/.test(String(value || ''));
+
+    const normalizeCodigoSearchResults = (payload) => {
+      if (Array.isArray(payload)) return payload;
+      if (payload && Array.isArray(payload.items)) return payload.items;
+      return [];
+    };
+
+    const getCodigoSearchCellValue = (cliente = {}, key = '') => {
+      switch (key) {
+        case 'codigo':
+          return String(cliente?.codigo || cliente?._id || '');
+        case 'nome':
+          return String(cliente?.nome || cliente?.nomeCompleto || cliente?.razaoSocial || '');
+        case 'cpf':
+          return String(cliente?.cpf || cliente?.documento || '');
+        case 'celular':
+          return String(cliente?.celular || cliente?.celularSecundario || '');
+        case 'fone':
+          return String(cliente?.telefone || cliente?.telefoneSecundario || '');
+        case 'email':
+          return String(cliente?.email || '');
+        default:
+          return '';
+      }
+    };
+    const normalizeCodigoSearchText = (value = '') =>
+      String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toLowerCase();
+    const escapeCodigoSearchRegex = (value = '') =>
+      String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const buildCodigoSearchRegex = (rawValue = '') => {
+      const normalized = normalizeCodigoSearchText(rawValue);
+      if (!normalized) return null;
+      const pattern = normalized
+        .split('*')
+        .map((segment) => escapeCodigoSearchRegex(segment))
+        .join('.*');
+      if (!pattern) return null;
+      try {
+        return new RegExp(pattern, 'i');
+      } catch (error) {
+        console.warn('Filtro inválido ignorado na busca de clientes.', error);
+        return null;
+      }
+    };
+    const matchesCodigoSearchValue = (candidateValue, rawFilter) => {
+      const regex = buildCodigoSearchRegex(rawFilter);
+      if (!regex) return true;
+      return regex.test(normalizeCodigoSearchText(candidateValue || ''));
+    };
+    const matchesCodigoSearchQuery = (cliente, rawQuery) => {
+      const regex = buildCodigoSearchRegex(rawQuery);
+      if (!regex) return true;
+      const searchable = [
+        getCodigoSearchCellValue(cliente, 'codigo'),
+        getCodigoSearchCellValue(cliente, 'nome'),
+        getCodigoSearchCellValue(cliente, 'cpf'),
+        getCodigoSearchCellValue(cliente, 'celular'),
+        getCodigoSearchCellValue(cliente, 'fone'),
+        getCodigoSearchCellValue(cliente, 'email'),
+      ]
+        .map((value) => normalizeCodigoSearchText(value))
+        .join(' ');
+      return regex.test(searchable);
+    };
+    const getCodigoSearchUniqueValues = (key) => {
+      const values = new Set();
+      const list = Array.isArray(state.codigoSearch.results) ? state.codigoSearch.results : [];
+      list.forEach((cliente) => {
+        const value = String(getCodigoSearchCellValue(cliente, key) || '').trim();
+        if (value) values.add(value);
+      });
+      return Array.from(values).sort((a, b) =>
+        a.localeCompare(b, 'pt-BR', { sensitivity: 'base', numeric: true })
+      );
+    };
+
+    const closeCodigoSearchFilterDropdown = () => {
+      const dropdown = state.codigoSearch.activeDropdown;
+      if (dropdown && dropdown.parentNode) {
+        dropdown.parentNode.removeChild(dropdown);
+      }
+      state.codigoSearch.activeDropdown = null;
+      state.codigoSearch.activeFilterKey = '';
+    };
+
+    const buildCodigoSearchFilterDropdown = (key, anchor) => {
+      const selection = state.codigoSearch.selections[key] || new Set();
+      const options = getCodigoSearchUniqueValues(key);
+      const hasSelection = selection.size > 0;
+      const dropdown = document.createElement('div');
+      dropdown.className =
+        'absolute z-50 mt-1 w-60 rounded-lg border border-gray-200 bg-white shadow-xl p-2 text-xs text-gray-600';
+      dropdown.innerHTML = `
+        <div class="flex items-center justify-between px-2 py-1 text-[11px] font-semibold text-gray-500 uppercase">
+          <span>Opcoes</span>
+          <button type="button" class="text-gray-400 hover:text-primary" data-action="close" aria-label="Fechar">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="max-h-40 overflow-y-auto px-2 py-1 space-y-1" data-options></div>
+        <div class="flex items-center justify-between gap-2 px-2 pt-2">
+          <button type="button" class="text-[11px] text-gray-500 hover:text-primary" data-action="select-all">Selecionar tudo</button>
+          <button type="button" class="text-[11px] text-gray-500 hover:text-primary" data-action="clear">Limpar</button>
+          <button type="button" class="ml-auto rounded-md bg-primary px-2 py-1 text-[11px] font-semibold text-white hover:bg-primary/90" data-action="apply">Aplicar</button>
+        </div>
+      `;
+      const wrapper = dropdown.querySelector('[data-options]');
+      options.forEach((value) => {
+        const checked = hasSelection ? selection.has(value) : true;
+        const row = document.createElement('label');
+        row.className = 'flex items-center gap-2 text-[11px] text-gray-600';
+        row.innerHTML = `
+          <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20" value="${value.replace(/\"/g, '&quot;')}" ${
+            checked ? 'checked' : ''
+          }>
+          <span class="truncate">${value}</span>
+        `;
+        wrapper.appendChild(row);
+      });
+      dropdown.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const actionButton = event.target.closest('[data-action]');
+        if (!actionButton) return;
+        const action = actionButton.getAttribute('data-action') || '';
+        if (action === 'close') {
+          closeCodigoSearchFilterDropdown();
+          return;
+        }
+        if (action === 'select-all') {
+          dropdown.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+            input.checked = true;
+          });
+          return;
+        }
+        if (action === 'clear') {
+          dropdown.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+            input.checked = false;
+          });
+          return;
+        }
+        if (action === 'apply') {
+          const values = Array.from(dropdown.querySelectorAll('input[type="checkbox"]:checked')).map((input) =>
+            String(input.value || '').trim()
+          );
+          const nextSelection = state.codigoSearch.selections[key] || new Set();
+          nextSelection.clear();
+          if (!(values.length && values.length >= options.length)) {
+            values.forEach((value) => nextSelection.add(value));
+          }
+          state.codigoSearch.selections[key] = nextSelection;
+          closeCodigoSearchFilterDropdown();
+          renderCodigoSearchResults();
+        }
+      });
+      anchor.appendChild(dropdown);
+      return dropdown;
+    };
+
+    const openCodigoSearchFilterDropdown = (key, triggerButton) => {
+      const anchor = triggerButton?.closest('.relative');
+      if (!anchor) return;
+      if (state.codigoSearch.activeFilterKey === key) {
+        closeCodigoSearchFilterDropdown();
+        return;
+      }
+      closeCodigoSearchFilterDropdown();
+      state.codigoSearch.activeFilterKey = key;
+      state.codigoSearch.activeDropdown = buildCodigoSearchFilterDropdown(key, anchor);
+    };
+
+    const applyCodigoSearchFiltersAndSort = (items) => {
+      let list = Array.isArray(items) ? [...items] : [];
+      const mainQuery = String(state.codigoSearch.query || '').trim();
+      if (mainQuery) {
+        list = list.filter((cliente) => matchesCodigoSearchQuery(cliente, mainQuery));
+      }
+      const filters = state.codigoSearch.filters || {};
+      const filterKeys = Object.keys(filters);
+      if (filterKeys.length) {
+        list = list.filter((cliente) =>
+          filterKeys.every((key) => {
+            const filterValue = String(filters[key] || '').trim().toLowerCase();
+            if (!filterValue) return true;
+            const cellValue = getCodigoSearchCellValue(cliente, key);
+            return matchesCodigoSearchValue(cellValue, filterValue);
+          })
+        );
+      }
+      const selections = state.codigoSearch.selections || {};
+      const selectionKeys = Object.keys(selections);
+      if (selectionKeys.length) {
+        list = list.filter((cliente) =>
+          selectionKeys.every((key) => {
+            const selectedValues = selections[key];
+            if (!(selectedValues instanceof Set) || selectedValues.size === 0) return true;
+            const cellValue = String(getCodigoSearchCellValue(cliente, key) || '').trim();
+            return selectedValues.has(cellValue);
+          })
+        );
+      }
+      const sortBy = state.codigoSearch.sortBy || '';
+      const sortDirection = state.codigoSearch.sortDirection === 'desc' ? 'desc' : 'asc';
+      if (sortBy) {
+        list.sort((a, b) => {
+          const aValue = getCodigoSearchCellValue(a, sortBy);
+          const bValue = getCodigoSearchCellValue(b, sortBy);
+          const comparison = String(aValue || '').localeCompare(String(bValue || ''), 'pt-BR', {
+            numeric: true,
+            sensitivity: 'base',
+          });
+          return sortDirection === 'desc' ? -comparison : comparison;
+        });
+      }
+      return list;
+    };
+
+    const syncCodigoSearchFilterInputs = () => {
+      const filters = state.codigoSearch.filters || {};
+      elements.codigoSearchFilters.forEach((input) => {
+        const key = input.getAttribute('data-codigo-search-filter') || '';
+        if (!key) return;
+        const expected = String(filters[key] || '');
+        if (input.value !== expected) {
+          input.value = expected;
+        }
+      });
+    };
+
+    function renderCodigoSearchResults() {
+      if (!elements.codigoSearchTbody || !elements.codigoSearchEmpty) return;
+      const tbody = elements.codigoSearchTbody;
+      const rawResults = Array.isArray(state.codigoSearch.results) ? state.codigoSearch.results : [];
+      const results = applyCodigoSearchFiltersAndSort(rawResults);
+      tbody.innerHTML = '';
+      if (!results.length) {
+        elements.codigoSearchEmpty.classList.remove('hidden');
+        return;
+      }
+      elements.codigoSearchEmpty.classList.add('hidden');
+      const fragment = document.createDocumentFragment();
+      results.forEach((cliente) => {
+        const tr = document.createElement('tr');
+        tr.className = 'cursor-pointer hover:bg-gray-50';
+        tr.dataset.id = cliente?._id || '';
+        const nome = cliente?.nome || cliente?.nomeCompleto || cliente?.razaoSocial || '';
+        const cpf = formatDocumento(cliente?.cpf || cliente?.documento || '');
+        const celular = formatPhone(cliente?.celular || cliente?.celularSecundario || '');
+        const fone = formatPhone(cliente?.telefone || cliente?.telefoneSecundario || '');
+        const email = cliente?.email || '';
+        const codigo = cliente?.codigo || cliente?._id || '';
+        [codigo, nome, cpf, celular, fone, email].forEach((value) => {
+          const td = document.createElement('td');
+          td.className = 'px-4 py-3 text-sm text-gray-700';
+          td.textContent = String(value || '—');
+          tr.appendChild(td);
+        });
+        fragment.appendChild(tr);
+      });
+      tbody.appendChild(fragment);
+    }
+
+    async function loadCodigoSearchResults(query = '') {
+      const normalizedQuery = String(query || '').trim();
+      state.codigoSearch.query = normalizedQuery;
+      const apiQuery = normalizedQuery.replace(/\*/g, '').trim();
+      if (!normalizedQuery) {
+        state.codigoSearch.results = [];
+        renderCodigoSearchResults();
+        return;
+      }
+      const requestId = ++state.codigoSearch.requestId;
+      state.codigoSearch.loading = true;
+      try {
+        const response = await apiFetch(
+          `/func/clientes/buscar?q=${encodeURIComponent(apiQuery)}&limit=50`,
+        );
+        if (requestId !== state.codigoSearch.requestId) return;
+        state.codigoSearch.results = normalizeCodigoSearchResults(response);
+      } catch (err) {
+        if (requestId !== state.codigoSearch.requestId) return;
+        console.error('Erro ao buscar clientes no modal de codigo', err);
+        state.codigoSearch.results = [];
+        notify(err.message || 'Erro ao buscar clientes.', 'error');
+      } finally {
+        if (requestId === state.codigoSearch.requestId) {
+          state.codigoSearch.loading = false;
+          renderCodigoSearchResults();
+        }
+      }
+    }
+
+    function openCodigoSearchModal(initialQuery = '') {
+      if (!elements.codigoSearchModal) return;
+      state.codigoSearch.open = true;
+      elements.codigoSearchModal.classList.remove('hidden');
+      const query = String(initialQuery || '').trim();
+      if (elements.codigoSearchQuery) {
+        elements.codigoSearchQuery.value = query;
+        elements.codigoSearchQuery.focus();
+      }
+      syncCodigoSearchFilterInputs();
+      loadCodigoSearchResults(query);
+    }
+
+    function closeCodigoSearchModal() {
+      if (!elements.codigoSearchModal) return;
+      state.codigoSearch.open = false;
+      elements.codigoSearchModal.classList.add('hidden');
+      state.codigoSearch.results = [];
+      state.codigoSearch.query = '';
+      state.codigoSearch.sortBy = '';
+      state.codigoSearch.sortDirection = '';
+      state.codigoSearch.filters = {
+        codigo: '',
+        nome: '',
+        cpf: '',
+        celular: '',
+        fone: '',
+        email: '',
+      };
+      state.codigoSearch.selections = {
+        codigo: new Set(),
+        nome: new Set(),
+        cpf: new Set(),
+        celular: new Set(),
+        fone: new Set(),
+        email: new Set(),
+      };
+      closeCodigoSearchFilterDropdown();
+      if (elements.codigoSearchTbody) {
+        elements.codigoSearchTbody.innerHTML = '';
+      }
+      elements.codigoSearchEmpty?.classList.add('hidden');
+      syncCodigoSearchFilterInputs();
+    }
+
     async function buscarClientePorCodigoDigitado() {
       const rawCodigo = String(elements.inputCodigo.value || '').trim();
       if (!rawCodigo) return;
+
+      if (hasLetters(rawCodigo)) {
+        openCodigoSearchModal(rawCodigo);
+        return;
+      }
 
       const digits = onlyDigits(rawCodigo);
       if (!digits) {
@@ -1141,7 +1590,7 @@
       try {
         const normalizedCode = String(Number.parseInt(digits, 10));
         const results = await apiFetch(`/func/clientes/buscar?q=${encodeURIComponent(normalizedCode)}&limit=20`);
-        const items = Array.isArray(results) ? results : [];
+        const items = normalizeCodigoSearchResults(results);
         const match = items.find((item) => String(item?.codigo || '') === normalizedCode);
 
         if (!match?._id) {
@@ -1375,6 +1824,12 @@
       switchTipo(elements.selectTipo.value);
     });
 
+    elements.inputCodigo.addEventListener('input', () => {
+      const raw = String(elements.inputCodigo.value || '').trim();
+      if (!raw || !hasLetters(raw)) return;
+      openCodigoSearchModal(raw);
+    });
+
     elements.inputCodigo.addEventListener('keydown', (event) => {
       if (event.key !== 'Enter') return;
       event.preventDefault();
@@ -1382,7 +1837,78 @@
     });
 
     elements.inputCodigo.addEventListener('blur', () => {
+      if (state.codigoSearch.open) return;
       buscarClientePorCodigoDigitado();
+    });
+
+    elements.codigoSearchClose?.addEventListener('click', closeCodigoSearchModal);
+    elements.codigoSearchCancel?.addEventListener('click', closeCodigoSearchModal);
+    elements.codigoSearchBackdrop?.addEventListener('click', closeCodigoSearchModal);
+    elements.codigoSearchModal?.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeCodigoSearchFilterDropdown();
+        closeCodigoSearchModal();
+      }
+    });
+    elements.codigoSearchQuery?.addEventListener('input', () => {
+      loadCodigoSearchResults(elements.codigoSearchQuery.value || '');
+    });
+    elements.codigoSearchQuery?.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      loadCodigoSearchResults(elements.codigoSearchQuery.value || '');
+    });
+    elements.codigoSearchSubmit?.addEventListener('click', () => {
+      loadCodigoSearchResults(elements.codigoSearchQuery?.value || '');
+    });
+    elements.codigoSearchFilters.forEach((input) => {
+      input.addEventListener('input', () => {
+        const key = input.getAttribute('data-codigo-search-filter') || '';
+        if (!key) return;
+        state.codigoSearch.filters[key] = input.value || '';
+        renderCodigoSearchResults();
+      });
+    });
+    elements.codigoSearchModal?.addEventListener('click', (event) => {
+      const filterTrigger = event.target.closest('[data-codigo-search-filter-trigger]');
+      if (filterTrigger) {
+        event.preventDefault();
+        event.stopPropagation();
+        const key = filterTrigger.getAttribute('data-codigo-search-filter-trigger') || '';
+        if (!key) return;
+        openCodigoSearchFilterDropdown(key, filterTrigger);
+        return;
+      }
+      const sortButton = event.target.closest('[data-codigo-search-sort]');
+      if (!sortButton) return;
+      const sortBy = sortButton.getAttribute('data-codigo-search-sort') || '';
+      const sortDirection = sortButton.getAttribute('data-sort-direction') || 'asc';
+      if (!sortBy) return;
+      state.codigoSearch.sortBy = sortBy;
+      state.codigoSearch.sortDirection = sortDirection === 'desc' ? 'desc' : 'asc';
+      renderCodigoSearchResults();
+    });
+    document.addEventListener('click', (event) => {
+      if (!state.codigoSearch.open) return;
+      if (!state.codigoSearch.activeDropdown) return;
+      const clickedInsideDropdown = Boolean(event.target.closest('#cliente-codigo-search-modal .absolute.z-50'));
+      const clickedTrigger = Boolean(event.target.closest('[data-codigo-search-filter-trigger]'));
+      if (!clickedInsideDropdown && !clickedTrigger) {
+        closeCodigoSearchFilterDropdown();
+      }
+    });
+    elements.codigoSearchTbody?.addEventListener('click', (event) => {
+      const row = event.target.closest('tr[data-id]');
+      if (!row) return;
+      const id = row.dataset.id;
+      if (!id) return;
+      const selected = state.codigoSearch.results.find((item) => String(item?._id || '') === String(id));
+      if (selected) {
+        elements.inputCodigo.value = String(selected.codigo || '');
+      }
+      closeCodigoSearchModal();
+      loadCliente(id);
     });
 
     elements.checkboxIsentoIE.addEventListener('change', () => {
@@ -1399,6 +1925,7 @@
       btn.addEventListener('click', () => switchTab(btn.dataset.tab));
     });
 
+    initInputMasks();
     switchTab('endereco');
 
     elements.form.addEventListener('submit', salvarCliente);

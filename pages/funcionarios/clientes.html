@@ -8,6 +8,19 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/awesomplete/1.1.5/awesomplete.min.css" integrity="sha512-RT/9M3vzjYojy97YiNTZbyrQ4nJ+gNoinZKTGSVvLITijfQIAIDNicUe+U2KaeOWo9j7IbRzRisx/7eglOc+wA==" crossorigin="anonymous" referrerpolicy="no-referrer">
   <link rel="stylesheet" href="../../src/output.css">
+  <style>
+    body {
+      padding-bottom: 104px;
+    }
+
+    #clientes-action-bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 40;
+    }
+  </style>
 </head>
 <body class="bg-gray-100">
   <div id="admin-header-placeholder"></div>
@@ -25,10 +38,6 @@
               <p class="text-xs font-semibold uppercase tracking-wide text-primary">Clientes</p>
               <h1 class="text-2xl font-bold text-gray-800">Cadastro de Cliente</h1>
               <p class="text-sm text-gray-500">Gerencie os dados dos clientes da empresa.</p>
-            </div>
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-3">
-              <button id="btn-novo-cliente" type="button" class="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 hover:shadow-sm">Novo Cliente</button>
-              <button form="cliente-form" id="btn-salvar-cliente" type="submit" class="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90 hover:shadow">Salvar</button>
             </div>
           </header>
 
@@ -381,6 +390,154 @@
     </div>
   </main>
 
+  <div id="clientes-action-bar" class="border-t border-gray-200 bg-white/95 shadow-[0_-10px_30px_-22px_rgba(15,23,42,0.45)] supports-[backdrop-filter]:backdrop-blur">
+    <div class="container mx-auto flex items-center justify-end gap-3 px-4 py-3">
+      <button id="btn-novo-cliente" type="button" class="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 hover:shadow-sm">Novo Cliente</button>
+      <button form="cliente-form" id="btn-salvar-cliente" type="submit" class="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90 hover:shadow">Salvar</button>
+    </div>
+  </div>
+
+  <div id="cliente-codigo-search-modal" class="fixed inset-0 z-[70] hidden">
+    <div class="absolute inset-0 bg-slate-900/60" data-codigo-search-dismiss="backdrop"></div>
+    <div class="relative mx-auto mt-10 flex h-[75vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+      <div class="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+        <div>
+          <h2 class="text-lg font-semibold text-gray-800">Buscar cliente</h2>
+          <p class="text-sm text-gray-500">Digite para localizar e selecionar um cliente.</p>
+        </div>
+        <button type="button" id="cliente-codigo-search-close" class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600" aria-label="Fechar busca de clientes">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="border-b border-gray-100 px-6 py-4">
+        <div class="flex items-center gap-2">
+          <input id="cliente-codigo-search-query" type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Pesquisar por nome, cpf, celular, email..." />
+          <button type="button" id="cliente-codigo-search-submit" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-50 hover:text-primary">
+            <i class="fas fa-search"></i>
+            <span>Buscar</span>
+          </button>
+        </div>
+      </div>
+      <div class="flex-1 overflow-auto px-6 py-4">
+        <div class="overflow-hidden rounded-xl border border-gray-200">
+          <table class="min-w-full divide-y divide-gray-200 text-sm">
+            <thead class="bg-gray-50">
+              <tr>
+                <th scope="col" class="px-4 py-3 text-left align-top">
+                  <div class="flex flex-col gap-1">
+                    <div class="flex items-center justify-between gap-1">
+                      <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Codigo</span>
+                      <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                        <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-codigo-search-sort="codigo" data-sort-direction="asc"><i class="fas fa-sort-up text-[9px]"></i></button>
+                        <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-codigo-search-sort="codigo" data-sort-direction="desc"><i class="fas fa-sort-down text-[9px]"></i></button>
+                      </div>
+                    </div>
+                    <div class="relative">
+                      <button type="button" class="absolute left-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-codigo-search-filter-trigger="codigo" aria-label="Abrir filtro de código">
+                        <i class="fas fa-search text-[9px]"></i>
+                      </button>
+                      <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white pl-6 pr-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-codigo-search-filter="codigo" />
+                    </div>
+                  </div>
+                </th>
+                <th scope="col" class="px-4 py-3 text-left align-top">
+                  <div class="flex flex-col gap-1">
+                    <div class="flex items-center justify-between gap-1">
+                      <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Nome</span>
+                      <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                        <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-codigo-search-sort="nome" data-sort-direction="asc"><i class="fas fa-sort-up text-[9px]"></i></button>
+                        <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-codigo-search-sort="nome" data-sort-direction="desc"><i class="fas fa-sort-down text-[9px]"></i></button>
+                      </div>
+                    </div>
+                    <div class="relative">
+                      <button type="button" class="absolute left-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-codigo-search-filter-trigger="nome" aria-label="Abrir filtro de nome">
+                        <i class="fas fa-search text-[9px]"></i>
+                      </button>
+                      <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white pl-6 pr-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-codigo-search-filter="nome" />
+                    </div>
+                  </div>
+                </th>
+                <th scope="col" class="px-4 py-3 text-left align-top">
+                  <div class="flex flex-col gap-1">
+                    <div class="flex items-center justify-between gap-1">
+                      <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">CPF</span>
+                      <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                        <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-codigo-search-sort="cpf" data-sort-direction="asc"><i class="fas fa-sort-up text-[9px]"></i></button>
+                        <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-codigo-search-sort="cpf" data-sort-direction="desc"><i class="fas fa-sort-down text-[9px]"></i></button>
+                      </div>
+                    </div>
+                    <div class="relative">
+                      <button type="button" class="absolute left-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-codigo-search-filter-trigger="cpf" aria-label="Abrir filtro de CPF">
+                        <i class="fas fa-search text-[9px]"></i>
+                      </button>
+                      <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white pl-6 pr-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-codigo-search-filter="cpf" />
+                    </div>
+                  </div>
+                </th>
+                <th scope="col" class="px-4 py-3 text-left align-top">
+                  <div class="flex flex-col gap-1">
+                    <div class="flex items-center justify-between gap-1">
+                      <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Celular</span>
+                      <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                        <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-codigo-search-sort="celular" data-sort-direction="asc"><i class="fas fa-sort-up text-[9px]"></i></button>
+                        <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-codigo-search-sort="celular" data-sort-direction="desc"><i class="fas fa-sort-down text-[9px]"></i></button>
+                      </div>
+                    </div>
+                    <div class="relative">
+                      <button type="button" class="absolute left-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-codigo-search-filter-trigger="celular" aria-label="Abrir filtro de celular">
+                        <i class="fas fa-search text-[9px]"></i>
+                      </button>
+                      <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white pl-6 pr-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-codigo-search-filter="celular" />
+                    </div>
+                  </div>
+                </th>
+                <th scope="col" class="px-4 py-3 text-left align-top">
+                  <div class="flex flex-col gap-1">
+                    <div class="flex items-center justify-between gap-1">
+                      <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Fone</span>
+                      <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                        <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-codigo-search-sort="fone" data-sort-direction="asc"><i class="fas fa-sort-up text-[9px]"></i></button>
+                        <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-codigo-search-sort="fone" data-sort-direction="desc"><i class="fas fa-sort-down text-[9px]"></i></button>
+                      </div>
+                    </div>
+                    <div class="relative">
+                      <button type="button" class="absolute left-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-codigo-search-filter-trigger="fone" aria-label="Abrir filtro de fone">
+                        <i class="fas fa-search text-[9px]"></i>
+                      </button>
+                      <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white pl-6 pr-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-codigo-search-filter="fone" />
+                    </div>
+                  </div>
+                </th>
+                <th scope="col" class="px-4 py-3 text-left align-top">
+                  <div class="flex flex-col gap-1">
+                    <div class="flex items-center justify-between gap-1">
+                      <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Email</span>
+                      <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                        <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-codigo-search-sort="email" data-sort-direction="asc"><i class="fas fa-sort-up text-[9px]"></i></button>
+                        <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-codigo-search-sort="email" data-sort-direction="desc"><i class="fas fa-sort-down text-[9px]"></i></button>
+                      </div>
+                    </div>
+                    <div class="relative">
+                      <button type="button" class="absolute left-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-codigo-search-filter-trigger="email" aria-label="Abrir filtro de email">
+                        <i class="fas fa-search text-[9px]"></i>
+                      </button>
+                      <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white pl-6 pr-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-codigo-search-filter="email" />
+                    </div>
+                  </div>
+                </th>
+              </tr>
+            </thead>
+            <tbody id="cliente-codigo-search-tbody" class="divide-y divide-gray-100 bg-white"></tbody>
+          </table>
+        </div>
+        <p id="cliente-codigo-search-empty" class="mt-3 hidden text-sm text-gray-500">Nenhum cliente encontrado.</p>
+      </div>
+      <div class="flex items-center justify-end border-t border-gray-200 bg-gray-50 px-6 py-4">
+        <button type="button" id="cliente-codigo-search-cancel" class="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100">Fechar</button>
+      </div>
+    </div>
+  </div>
+
   <div id="modal-placeholder"></div>
   <div id="confirm-modal-placeholder"></div>
   <div id="admin-footer-placeholder"></div>
@@ -391,6 +548,7 @@
   <script src="../../scripts/core/main.js"></script>
   <script src="../../scripts/admin/admin.js"></script>
   <script src="/scripts/common/modal-bridge.js"></script>
+  <script src="https://unpkg.com/imask"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/awesomplete/1.1.5/awesomplete.min.js" integrity="sha512-HcBl0GSJvt4Qecm4srHapirUx0HJDi2zYXm6KUKNNUGdTIN9cBwakVZHWmRVj4MKgy1AChqhWGYcMDbRKgO0zg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="../../scripts/funcionarios/clientes.js"></script>
 </body>

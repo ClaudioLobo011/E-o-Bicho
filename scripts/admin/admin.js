@@ -42,6 +42,7 @@ async function checkAdminAccess() {
     document.body.style.visibility = 'visible';
     initAdminScreenSecurity();
     consumeAdminToast();
+    initAdminTableEnhancer();
   } catch (err) {
     console.error('Erro ao verificar permissões:', err);
     alert('Erro ao verificar permissões. Faça login novamente.');
@@ -70,6 +71,330 @@ let screenRulesPromise = null;
 let allowedStoresCache = [];
 let allowedStoresFetchedAt = 0;
 let allowedStoresPromise = null;
+const ADMIN_TABLE_ENHANCED_ATTR = 'data-admin-table-enhanced';
+
+function normalizeAdminTableText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function escapeAdminTableRegex(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function buildAdminTableFilterRegex(rawValue) {
+  const normalized = normalizeAdminTableText(rawValue);
+  if (!normalized) return null;
+  const pattern = normalized
+    .split('*')
+    .map((segment) => escapeAdminTableRegex(segment))
+    .join('.*');
+  if (!pattern) return null;
+  try {
+    return new RegExp(pattern, 'i');
+  } catch {
+    return null;
+  }
+}
+
+function shouldEnhanceAdminTable(table) {
+  if (!table || table.getAttribute(ADMIN_TABLE_ENHANCED_ATTR) === 'true') return false;
+  const thead = table.querySelector('thead');
+  const tbody = table.querySelector('tbody');
+  if (!thead || !tbody) return false;
+  if (
+    table.querySelector(
+      [
+        '[data-main-products-filter]',
+        '[data-nfe-item-filter]',
+        '[data-nfe-volume-filter]',
+        '[data-nfe-ref-filter]',
+        '[data-code-lookup-filter]',
+        '[data-price-filter]',
+        '[data-codigo-search-filter]',
+      ].join(','),
+    )
+  ) {
+    return false;
+  }
+  const headerRow = thead.querySelector('tr');
+  if (!headerRow) return false;
+  const headers = Array.from(headerRow.children).filter((cell) => /th/i.test(cell.tagName));
+  if (headers.length < 2) return false;
+  if (headerRow.querySelector('input,select,textarea,[data-sort-direction]')) return false;
+  return true;
+}
+
+function enhanceAdminTable(table) {
+  if (!shouldEnhanceAdminTable(table)) return;
+  const thead = table.querySelector('thead');
+  const tbody = table.querySelector('tbody');
+  const headerRow = thead.querySelector('tr');
+  const headers = Array.from(headerRow.children).filter((cell) => /th/i.test(cell.tagName));
+  if (!headers.length) return;
+
+  const state = {
+    sort: { key: '', direction: 'asc' },
+    filters: {},
+    selections: {},
+    activeDropdown: null,
+    activeKey: '',
+  };
+  headers.forEach((_, index) => {
+    state.filters[index] = '';
+    state.selections[index] = new Set();
+  });
+
+  const filterInputs = new Map();
+  const filterTriggers = new Map();
+  const sortButtons = new Map();
+
+  const getDataRows = () =>
+    Array.from(tbody.querySelectorAll('tr')).filter((row) => {
+      const cells = Array.from(row.children).filter((cell) => /td/i.test(cell.tagName));
+      return cells.length >= headers.length;
+    });
+
+  const getCellText = (row, index) => {
+    const cell = Array.from(row.children).filter((node) => /td/i.test(node.tagName))[index];
+    if (!cell) return '';
+    const input = cell.querySelector('input,select,textarea');
+    if (input && typeof input.value === 'string') return input.value;
+    return cell.textContent || '';
+  };
+
+  const getUniqueValues = (index) => {
+    const values = new Set();
+    getDataRows().forEach((row) => {
+      const value = String(getCellText(row, index) || '').trim();
+      if (value) values.add(value);
+    });
+    return Array.from(values).sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true, sensitivity: 'base' }));
+  };
+
+  const closeDropdown = () => {
+    if (state.activeDropdown && state.activeDropdown.parentNode) {
+      state.activeDropdown.parentNode.removeChild(state.activeDropdown);
+    }
+    state.activeDropdown = null;
+    state.activeKey = '';
+  };
+
+  const updateTriggerState = (index) => {
+    const trigger = filterTriggers.get(index);
+    if (!trigger) return;
+    const hasSelection = state.selections[index] && state.selections[index].size > 0;
+    trigger.classList.toggle('text-primary', hasSelection);
+  };
+
+  const applyFiltersAndSort = () => {
+    const rows = getDataRows();
+    const filteredRows = rows.filter((row) =>
+      headers.every((_, index) => {
+        const filterRegex = buildAdminTableFilterRegex(state.filters[index] || '');
+        const cellText = normalizeAdminTableText(getCellText(row, index));
+        if (filterRegex && !filterRegex.test(cellText)) return false;
+        const selected = state.selections[index];
+        if (selected && selected.size > 0) {
+          const rawCell = String(getCellText(row, index) || '').trim();
+          if (!selected.has(rawCell)) return false;
+        }
+        return true;
+      }),
+    );
+
+    let sortedRows = rows.slice();
+    if (state.sort.key !== '') {
+      const sortIndex = Number(state.sort.key);
+      sortedRows.sort((a, b) => {
+        const aValue = String(getCellText(a, sortIndex) || '');
+        const bValue = String(getCellText(b, sortIndex) || '');
+        const cmp = aValue.localeCompare(bValue, 'pt-BR', { numeric: true, sensitivity: 'base' });
+        return state.sort.direction === 'desc' ? -cmp : cmp;
+      });
+    }
+    sortedRows.forEach((row) => tbody.appendChild(row));
+    const visibleSet = new Set(filteredRows);
+    rows.forEach((row) => {
+      row.classList.toggle('hidden', !visibleSet.has(row));
+    });
+  };
+
+  const buildDropdown = (index, anchor) => {
+    const values = getUniqueValues(index);
+    const currentSelection = state.selections[index] || new Set();
+    const hasSelection = currentSelection.size > 0;
+    const dropdown = document.createElement('div');
+    dropdown.className =
+      'absolute left-0 top-full z-50 mt-1 w-60 rounded-lg border border-gray-200 bg-white shadow-xl p-2 text-xs text-gray-600';
+    dropdown.innerHTML = `
+      <div class="flex items-center justify-between px-2 py-1 text-[11px] font-semibold text-gray-500 uppercase">
+        <span>Opcoes</span>
+        <button type="button" class="text-gray-400 hover:text-primary" data-action="close" aria-label="Fechar">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="max-h-40 overflow-y-auto px-2 py-1 space-y-1" data-options></div>
+      <div class="flex items-center justify-between gap-2 px-2 pt-2">
+        <button type="button" class="text-[11px] text-gray-500 hover:text-primary" data-action="select-all">Selecionar tudo</button>
+        <button type="button" class="text-[11px] text-gray-500 hover:text-primary" data-action="clear">Limpar</button>
+        <button type="button" class="ml-auto rounded-md bg-primary px-2 py-1 text-[11px] font-semibold text-white hover:bg-primary/90" data-action="apply">Aplicar</button>
+      </div>
+    `;
+    const optionsContainer = dropdown.querySelector('[data-options]');
+    values.forEach((value) => {
+      const checked = hasSelection ? currentSelection.has(value) : true;
+      const row = document.createElement('label');
+      row.className = 'flex items-center gap-2 text-[11px] text-gray-600';
+      row.innerHTML = `
+        <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20" value="${value.replace(/\"/g, '&quot;')}" ${checked ? 'checked' : ''}>
+        <span class="truncate">${value}</span>
+      `;
+      optionsContainer.appendChild(row);
+    });
+    dropdown.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const action = event.target.closest('[data-action]')?.getAttribute('data-action');
+      if (!action) return;
+      if (action === 'close') {
+        closeDropdown();
+        return;
+      }
+      if (action === 'select-all') {
+        dropdown.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+          input.checked = true;
+        });
+        return;
+      }
+      if (action === 'clear') {
+        dropdown.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+          input.checked = false;
+        });
+        return;
+      }
+      if (action === 'apply') {
+        const checkedValues = Array.from(dropdown.querySelectorAll('input[type="checkbox"]:checked')).map((input) =>
+          String(input.value || '').trim(),
+        );
+        const next = state.selections[index] || new Set();
+        next.clear();
+        if (!(checkedValues.length && checkedValues.length >= values.length)) {
+          checkedValues.forEach((value) => next.add(value));
+        }
+        state.selections[index] = next;
+        updateTriggerState(index);
+        closeDropdown();
+        applyFiltersAndSort();
+      }
+    });
+    anchor.appendChild(dropdown);
+    return dropdown;
+  };
+
+  headers.forEach((th, index) => {
+    const label = String(th.textContent || '').replace(/\s+/g, ' ').trim() || `Coluna ${index + 1}`;
+    th.classList.add('px-4', 'py-3', 'text-left', 'align-top');
+    th.innerHTML = `
+      <div class="relative flex flex-col gap-1">
+        <div class="flex items-center justify-between gap-1">
+          <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">${label}</span>
+          <div class="flex items-center gap-1">
+            <button type="button" class="rounded p-0.5 text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-admin-table-filter-trigger="${index}" aria-label="Abrir filtro de ${label}">
+              <i class="fas fa-search text-[9px]"></i>
+            </button>
+            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+              <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-admin-table-sort="${index}" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna ${label}">
+                <i class="fas fa-sort-up text-[9px]"></i>
+              </button>
+              <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-admin-table-sort="${index}" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna ${label}">
+                <i class="fas fa-sort-down text-[9px]"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+        <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-admin-table-filter="${index}" />
+      </div>
+    `;
+    const filterInput = th.querySelector(`[data-admin-table-filter="${index}"]`);
+    const filterTrigger = th.querySelector(`[data-admin-table-filter-trigger="${index}"]`);
+    filterInputs.set(index, filterInput);
+    filterTriggers.set(index, filterTrigger);
+    if (filterInput) {
+      filterInput.addEventListener('input', (event) => {
+        state.filters[index] = event.target.value || '';
+        applyFiltersAndSort();
+      });
+    }
+    if (filterTrigger) {
+      filterTrigger.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const anchor = event.currentTarget.closest('.relative') || event.currentTarget.closest('div');
+        if (!anchor) return;
+        if (state.activeKey === String(index)) {
+          closeDropdown();
+          return;
+        }
+        closeDropdown();
+        state.activeKey = String(index);
+        state.activeDropdown = buildDropdown(index, anchor);
+      });
+    }
+
+    th.querySelectorAll(`[data-admin-table-sort="${index}"]`).forEach((button) => {
+      sortButtons.set(button, {
+        key: String(index),
+        direction: button.getAttribute('data-sort-direction') === 'desc' ? 'desc' : 'asc',
+      });
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        const meta = sortButtons.get(button);
+        if (!meta) return;
+        if (state.sort.key === meta.key && state.sort.direction === meta.direction) {
+          state.sort = { key: '', direction: 'asc' };
+        } else {
+          state.sort = { key: meta.key, direction: meta.direction };
+        }
+        sortButtons.forEach((btnMeta, btnEl) => {
+          const active = btnMeta.key === state.sort.key && btnMeta.direction === state.sort.direction;
+          btnEl.classList.toggle('text-primary', active);
+          btnEl.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
+        applyFiltersAndSort();
+      });
+    });
+  });
+
+  document.addEventListener('click', (event) => {
+    if (!state.activeDropdown) return;
+    const inDropdown = state.activeDropdown.contains(event.target);
+    const inTrigger = !!event.target.closest('[data-admin-table-filter-trigger]');
+    if (!inDropdown && !inTrigger) {
+      closeDropdown();
+    }
+  });
+
+  table.setAttribute(ADMIN_TABLE_ENHANCED_ATTR, 'true');
+  applyFiltersAndSort();
+}
+
+function initAdminTableEnhancer() {
+  const pathname = window.location.pathname || '';
+  if (!/\/pages\/admin\//i.test(pathname)) return;
+  const run = () => {
+    document.querySelectorAll('table').forEach((table) => {
+      enhanceAdminTable(table);
+    });
+  };
+  run();
+  const root = document.querySelector('main') || document.body;
+  if (!root) return;
+  const rootObserver = new MutationObserver(() => run());
+  rootObserver.observe(root, { childList: true, subtree: true });
+}
 
 function getLoggedUser() {
   try {
