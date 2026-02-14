@@ -271,6 +271,8 @@
     appointmentMetrics: { today: 0, week: 0, month: 0 },
     appointmentScrollPending: false,
     activeAppointmentId: '',
+    activeAppointmentIds: [],
+    selectedAppointmentImportIds: [],
     activeSaleCancellationId: '',
     fiscalEmissionStep: '',
     fiscalEmissionModalOpen: false,
@@ -2379,6 +2381,13 @@
       : sellerSnapshot
       ? getSellerCode(sellerSnapshot)
       : '';
+    const normalizedAppointmentIds = normalizeAppointmentIdList(
+      Array.isArray(record.appointmentIds) ? record.appointmentIds : []
+    );
+    const normalizedAppointmentId =
+      normalizeId(record.appointmentId || record.receiptSnapshot?.meta?.appointmentId || '') ||
+      normalizedAppointmentIds[0] ||
+      '';
 
     return {
       id: record.id ? String(record.id) : createUid(),
@@ -2436,6 +2445,8 @@
       cancellationAtLabel: record.cancellationAtLabel ? String(record.cancellationAtLabel) : '',
       inventoryProcessed,
       inventoryProcessedAt,
+      appointmentId: normalizedAppointmentId,
+      appointmentIds: normalizedAppointmentIds,
     };
   };
 
@@ -3085,6 +3096,8 @@
     elements.appointmentApply = document.getElementById('pdv-appointment-apply');
     elements.appointmentReload = document.getElementById('pdv-appointment-reload');
     elements.appointmentCount = document.getElementById('pdv-appointment-count');
+    elements.appointmentSelectedCount = document.getElementById('pdv-appointment-selected-count');
+    elements.appointmentImportSelected = document.getElementById('pdv-appointment-import-selected');
     elements.appointmentList = document.getElementById('pdv-appointment-list');
     elements.appointmentEmpty = document.getElementById('pdv-appointment-empty');
     elements.appointmentLoading = document.getElementById('pdv-appointment-loading');
@@ -7496,8 +7509,8 @@
       if (state.skipInventoryForNextSale) {
         state.skipInventoryForNextSale = false;
       }
-      if (state.activeAppointmentId) {
-        state.activeAppointmentId = '';
+      if (state.activeAppointmentId || normalizeAppointmentIdList(state.activeAppointmentIds).length) {
+        setActiveSaleAppointments([]);
         renderAppointments();
       }
       updateFinalizeButton();
@@ -10669,6 +10682,7 @@
     const cashContributions = normalizeCashContributions(
       registerSaleOnCaixa(pagamentosVenda, total, saleCode)
     );
+    const appointmentIdsForSale = normalizeAppointmentIdList(state.activeAppointmentIds);
     const saleRecord = registerCompletedSaleRecord({
       type: 'venda',
       saleCode,
@@ -10681,7 +10695,8 @@
       createdAt: saleReceivables.saleDate,
       receivables: saleReceivables.entries,
       cashContributions,
-      appointmentId: state.activeAppointmentId || '',
+      appointmentId: appointmentIdsForSale[0] || state.activeAppointmentId || '',
+      appointmentIds: appointmentIdsForSale,
       seller: state.selectedSeller,
     });
     if (saleRecord) {
@@ -10718,9 +10733,8 @@
       ? `Venda ${saleCode} finalizada com sucesso.`
       : 'Venda finalizada com sucesso.';
     notify(successMessage, 'success');
-    if (state.activeAppointmentId) {
-      await syncAppointmentAfterSale(state.activeAppointmentId, saleCode);
-    }
+    await syncAppointmentsAfterSale(appointmentIdsForSale, saleCode);
+    setActiveSaleAppointments([]);
     state.activeBudgetId = '';
     state.pendingBudgetValidityDays = null;
     state.itens = [];
@@ -15444,12 +15458,14 @@
     receivables = [],
     cashContributions = [],
     appointmentId = '',
+    appointmentIds = [],
     seller = null,
   } = {}) => {
     const normalizedType = type === 'delivery' ? 'delivery' : 'venda';
     const customTypeLabel = String(typeLabelOverride || '').trim();
     const typeLabel = customTypeLabel || (normalizedType === 'delivery' ? 'Delivery' : 'Venda');
     const normalizedAppointmentId = normalizeId(appointmentId);
+    const normalizedAppointmentIds = normalizeAppointmentIdList(appointmentIds);
     const saleItems = Array.isArray(items) ? items : [];
     const paymentTags = Array.from(
       new Set(
@@ -15608,6 +15624,7 @@
       inventoryProcessedAt: null,
       cashContributions: normalizedCashContributions,
       appointmentId: normalizedAppointmentId,
+      appointmentIds: normalizedAppointmentIds,
     };
   };
 
@@ -16310,6 +16327,57 @@
     }
     return null;
   };
+  const normalizeAppointmentIdList = (ids) =>
+    Array.from(
+      new Set(
+        (Array.isArray(ids) ? ids : [])
+          .map((id) => normalizeId(id))
+          .filter(Boolean)
+      )
+    );
+  const setActiveSaleAppointments = (appointmentIds) => {
+    const normalizedIds = normalizeAppointmentIdList(appointmentIds);
+    state.activeAppointmentIds = normalizedIds;
+    state.activeAppointmentId = normalizedIds[0] || '';
+  };
+  const normalizeAppointmentCustomerName = (value) =>
+    String(value || '')
+      .trim()
+      .replace(/\s+/g, ' ')
+      .toLowerCase();
+  const getAppointmentCustomerReference = (appointment) => {
+    if (!appointment || typeof appointment !== 'object') {
+      return { key: '', label: '' };
+    }
+    const customerId = normalizeId(
+      appointment.customerId ||
+        appointment.clienteId ||
+        (appointment.cliente && (appointment.cliente._id || appointment.cliente.id))
+    );
+    if (customerId) {
+      return { key: `id:${customerId}`, label: appointment.customerName || 'Cliente' };
+    }
+    const documentDigits = normalizeDocumentDigits(appointment.customerDocument || '');
+    if (documentDigits) {
+      return { key: `doc:${documentDigits}`, label: appointment.customerName || 'Cliente' };
+    }
+    const normalizedName = normalizeAppointmentCustomerName(appointment.customerName || '');
+    if (normalizedName) {
+      return { key: `name:${normalizedName}`, label: appointment.customerName || 'Cliente' };
+    }
+    return { key: `appointment:${appointment.id || ''}`, label: appointment.customerName || 'Cliente' };
+  };
+  const syncSelectedAppointmentImports = () => {
+    const availableIds = new Set(
+      (Array.isArray(state.appointments) ? state.appointments : [])
+        .filter((appointment) => !(appointment.paid || appointment.saleCode))
+        .map((appointment) => appointment.id)
+    );
+    const normalizedSelected = normalizeAppointmentIdList(state.selectedAppointmentImportIds).filter(
+      (id) => availableIds.has(id)
+    );
+    state.selectedAppointmentImportIds = normalizedSelected;
+  };
   const getAppointmentRangeFromFilters = (filters = state.appointmentFilters) => {
     const preset = (filters?.preset || 'today').toLowerCase();
     if (preset === 'custom') {
@@ -16445,6 +16513,20 @@
       const label = count === 1 ? '1 atendimento encontrado.' : `${count} atendimentos encontrados.`;
       elements.appointmentCount.textContent = label;
     }
+    if (elements.appointmentSelectedCount || elements.appointmentImportSelected) {
+      const selectedCount = normalizeAppointmentIdList(state.selectedAppointmentImportIds).length;
+      if (elements.appointmentSelectedCount) {
+        elements.appointmentSelectedCount.textContent =
+          selectedCount === 0
+            ? 'Nenhum atendimento selecionado.'
+            : selectedCount === 1
+            ? '1 atendimento selecionado.'
+            : `${selectedCount} atendimentos selecionados.`;
+      }
+      if (elements.appointmentImportSelected) {
+        elements.appointmentImportSelected.disabled = selectedCount === 0 || state.appointmentsLoading;
+      }
+    }
   };
   const renderAppointmentList = () => {
     if (!elements.appointmentList || !elements.appointmentEmpty || !elements.appointmentLoading) return;
@@ -16476,8 +16558,11 @@
     }
     elements.appointmentEmpty.classList.add('hidden');
     const fragment = document.createDocumentFragment();
+    const selectedIds = new Set(normalizeAppointmentIdList(state.selectedAppointmentImportIds));
+    const activeIds = new Set(normalizeAppointmentIdList(state.activeAppointmentIds));
     appointments.forEach((appointment) => {
-      const isActive = state.activeAppointmentId && state.activeAppointmentId === appointment.id;
+      const isActive = activeIds.has(appointment.id);
+      const isSelected = selectedIds.has(appointment.id);
       const alreadyPaid = Boolean(appointment.paid || appointment.saleCode);
       const scheduleLabel = getAppointmentScheduleLabel(appointment);
       const statusMeta = getAppointmentStatusMeta(appointment.status);
@@ -16508,24 +16593,26 @@
       const notes = appointment.notes
         ? `<p class="text-xs text-gray-500 italic">Obs.: ${escapeHtml(appointment.notes)}</p>`
         : '';
-      const buttonDisabled = alreadyPaid && !isActive;
+      const buttonDisabled = alreadyPaid;
       const buttonClasses = buttonDisabled
         ? 'inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-xs font-semibold text-gray-400 cursor-not-allowed'
+        : isSelected
+        ? 'inline-flex items-center justify-center gap-2 rounded-lg border border-primary bg-primary px-3 py-2 text-xs font-semibold text-white transition hover:bg-secondary'
         : 'inline-flex items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary transition hover:bg-primary/20';
       const buttonLabel = buttonDisabled
         ? appointment.saleCode
           ? `Venda ${escapeHtml(appointment.saleCode)}`
           : 'Atendimento pago'
-        : isActive
-        ? 'Atendimento selecionado'
-        : 'Importar serviços';
+        : isSelected
+        ? 'Selecionado'
+        : 'Selecionar';
       const buttonAttributes = buttonDisabled
         ? 'type="button" disabled'
-        : `type="button" data-appointment-import="${escapeHtml(appointment.id)}"`;
+        : `type="button" data-appointment-select="${escapeHtml(appointment.id)}"`;
       const card = document.createElement('article');
       card.dataset.appointmentId = appointment.id;
       card.className = `rounded-xl border ${
-        isActive ? 'border-primary shadow-lg shadow-primary/10' : 'border-gray-200'
+        isSelected || isActive ? 'border-primary shadow-lg shadow-primary/10' : 'border-gray-200'
       } bg-white p-4 transition`;
       card.innerHTML = `
         <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -16580,6 +16667,7 @@
   };
   const openAppointmentModal = async () => {
     if (!elements.appointmentModal) return;
+    state.selectedAppointmentImportIds = [];
     elements.appointmentModal.classList.remove('hidden');
     renderAppointments();
     try {
@@ -16593,6 +16681,7 @@
   };
   const closeAppointmentModal = () => {
     if (!elements.appointmentModal) return;
+    state.selectedAppointmentImportIds = [];
     elements.appointmentModal.classList.add('hidden');
   };
   const cloneCustomerDetailsForAppointment = (customer) => {
@@ -16968,24 +17057,9 @@
     const resolved = await request;
     return cloneAppointmentSalesList(resolved);
   };
-  const applyAppointmentToSale = async (appointment) => {
-    if (!appointment) return false;
+  const buildSaleItemsFromAppointment = (appointment, appointmentSales = []) => {
+    if (!appointment || typeof appointment !== 'object') return [];
     const services = Array.isArray(appointment.services) ? appointment.services : [];
-    const appointmentSales = await loadAppointmentSalesForAppointment(appointment);
-    const hasSales = appointmentSales.length > 0;
-    if (!services.length && safeNumber(appointment.total) <= 0 && !hasSales) {
-      notify('Este atendimento não possui serviços ou produtos cadastrados para importar.', 'info');
-      return false;
-    }
-    const hasItems = state.itens.length > 0;
-    const isDifferentAppointment =
-      hasItems && state.activeAppointmentId && state.activeAppointmentId !== appointment.id;
-    if (hasItems && isDifferentAppointment) {
-      const confirmed = window.confirm(
-        'Os itens atuais da venda serão substituídos pelos serviços e produtos do atendimento selecionado. Deseja continuar?'
-      );
-      if (!confirmed) return false;
-    }
     const serviceItems = services.map((service, index) => {
       const quantity = safeNumber(service.quantidade) > 0 ? safeNumber(service.quantidade) : 1;
       const value = safeNumber(service.valor);
@@ -17017,11 +17091,11 @@
         generalPromo: false,
       };
     });
-    const itemsToApply = [];
+    const items = [];
     if (serviceItems.length) {
-      itemsToApply.push(...serviceItems);
+      items.push(...serviceItems);
     } else if (safeNumber(appointment.total) > 0) {
-      itemsToApply.push({
+      items.push({
         id: `${appointment.id}:svc`,
         codigo: appointment.id,
         codigoInterno: appointment.id,
@@ -17034,36 +17108,28 @@
       });
     }
     if (saleItems.length) {
-      itemsToApply.push(...saleItems);
+      items.push(...saleItems);
     }
-    applySaleStateSnapshot({
-      itens: itemsToApply,
-      vendaPagamentos: [],
-      vendaDesconto: 0,
-      vendaAcrescimo: 0,
-      selectedProduct: null,
-      quantidade: 1,
-    });
-    state.vendaPagamentos = [];
-    state.vendaDesconto = 0;
-    state.vendaAcrescimo = 0;
-    const documentValue = appointment.customerDocument || '';
+    return items;
+  };
+  const buildSaleCustomerFromAppointment = (appointment) => {
+    const documentValue = appointment?.customerDocument || '';
     const documentDigits = normalizeDocumentDigits(documentValue);
     const normalizedDocument = documentValue || '';
     const customerId = normalizeId(
-      appointment.customerId ||
-        appointment.clienteId ||
-        (appointment.cliente && (appointment.cliente._id || appointment.cliente.id))
+      appointment?.customerId ||
+        appointment?.clienteId ||
+        (appointment?.cliente && (appointment.cliente._id || appointment.cliente.id))
     );
     const customer = {
-      nome: appointment.customerName || 'Cliente da agenda',
-      nomeCompleto: appointment.customerName || 'Cliente da agenda',
+      nome: appointment?.customerName || 'Cliente da agenda',
+      nomeCompleto: appointment?.customerName || 'Cliente da agenda',
       doc: normalizedDocument,
       documento: normalizedDocument,
       document: normalizedDocument,
-      email: appointment.customerEmail || '',
-      celular: appointment.customerPhone || '',
-      telefone: appointment.customerPhone || '',
+      email: appointment?.customerEmail || '',
+      celular: appointment?.customerPhone || '',
+      telefone: appointment?.customerPhone || '',
     };
     if (customerId) {
       customer._id = customerId;
@@ -17076,15 +17142,75 @@
     } else if (documentDigits && documentDigits.length === 14) {
       customer.cnpj = normalizedDocument;
     }
-    await enrichSaleCustomerFromAppointment(customer, appointment);
-    const pet = appointment.petName
+    return customer;
+  };
+  const applyAppointmentsToSale = async (appointments) => {
+    const selectedAppointments = (Array.isArray(appointments) ? appointments : [])
+      .map((entry) => cloneAppointmentRecord(entry))
+      .filter(Boolean);
+    if (!selectedAppointments.length) {
+      notify('Selecione pelo menos um atendimento para importar.', 'warning');
+      return false;
+    }
+    const blockedAppointment = selectedAppointments.find((entry) => entry.paid || entry.saleCode);
+    if (blockedAppointment) {
+      notify('Um dos atendimentos selecionados já foi faturado e não pode ser importado.', 'info');
+      return false;
+    }
+    const firstReference = getAppointmentCustomerReference(selectedAppointments[0]);
+    const hasDifferentCustomer = selectedAppointments.some((entry) => {
+      const reference = getAppointmentCustomerReference(entry);
+      return reference.key !== firstReference.key;
+    });
+    if (hasDifferentCustomer) {
+      notify('Só é permitido importar atendimentos do mesmo cliente na mesma venda.', 'warning');
+      return false;
+    }
+    const selectedIds = normalizeAppointmentIdList(selectedAppointments.map((entry) => entry.id));
+    const activeIds = normalizeAppointmentIdList(state.activeAppointmentIds);
+    const hasItems = state.itens.length > 0;
+    const sameSelection =
+      selectedIds.length === activeIds.length && selectedIds.every((id, index) => id === activeIds[index]);
+    if (hasItems && !sameSelection) {
+      const confirmed = window.confirm(
+        'Os itens atuais da venda serão substituídos pelos serviços e produtos dos atendimentos selecionados. Deseja continuar?'
+      );
+      if (!confirmed) return false;
+    }
+    const salesList = await Promise.all(
+      selectedAppointments.map((appointment) => loadAppointmentSalesForAppointment(appointment))
+    );
+    const itemsToApply = [];
+    selectedAppointments.forEach((appointment, index) => {
+      const appointmentSales = Array.isArray(salesList[index]) ? salesList[index] : [];
+      itemsToApply.push(...buildSaleItemsFromAppointment(appointment, appointmentSales));
+    });
+    if (!itemsToApply.length) {
+      notify('Os atendimentos selecionados não possuem serviços ou produtos para importar.', 'info');
+      return false;
+    }
+    applySaleStateSnapshot({
+      itens: itemsToApply,
+      vendaPagamentos: [],
+      vendaDesconto: 0,
+      vendaAcrescimo: 0,
+      selectedProduct: null,
+      quantidade: 1,
+    });
+    state.vendaPagamentos = [];
+    state.vendaDesconto = 0;
+    state.vendaAcrescimo = 0;
+    const primaryAppointment = selectedAppointments[0];
+    const customer = buildSaleCustomerFromAppointment(primaryAppointment);
+    await enrichSaleCustomerFromAppointment(customer, primaryAppointment);
+    const pet = primaryAppointment.petName
       ? {
-          nome: appointment.petName,
+          nome: primaryAppointment.petName,
         }
       : null;
-    if (pet && appointment.petId) {
-      pet._id = appointment.petId;
-      pet.id = appointment.petId;
+    if (pet && primaryAppointment.petId) {
+      pet._id = primaryAppointment.petId;
+      pet.id = primaryAppointment.petId;
     }
     setSaleCustomer(customer, pet);
     renderItemsList();
@@ -17092,12 +17218,19 @@
     updateFinalizeButton();
     updateSaleSummary();
     clearSaleSearchAreas();
-    state.activeAppointmentId = appointment.id;
+    setActiveSaleAppointments(selectedIds);
+    state.selectedAppointmentImportIds = [];
     setActiveTab('pdv-tab');
-    notify('Serviços e produtos do atendimento importados para a venda.', 'success');
+    notify(
+      selectedIds.length > 1
+        ? 'Atendimentos selecionados importados para a venda.'
+        : 'Serviços e produtos do atendimento importados para a venda.',
+      'success'
+    );
     renderAppointments();
     return true;
   };
+  const applyAppointmentToSale = async (appointment) => applyAppointmentsToSale([appointment]);
   const loadAppointmentsForCurrentFilter = async ({ forceReload = false } = {}) => {
     const range = getAppointmentRangeFromFilters(state.appointmentFilters);
     if (!range) {
@@ -17124,12 +17257,11 @@
       const normalizedList = dataset.map((item) => cloneAppointmentRecord(item)).filter(Boolean);
       normalizedList.sort((a, b) => getTimeValue(a?.scheduledAt) - getTimeValue(b?.scheduledAt));
       state.appointments = normalizedList;
-      if (state.activeAppointmentId) {
-        const stillExists = state.appointments.some((item) => item.id === state.activeAppointmentId);
-        if (!stillExists) {
-          state.activeAppointmentId = '';
-        }
-      }
+      const availableIds = new Set(state.appointments.map((item) => item.id));
+      setActiveSaleAppointments(
+        normalizeAppointmentIdList(state.activeAppointmentIds).filter((id) => availableIds.has(id))
+      );
+      syncSelectedAppointmentImports();
       state.appointmentsLoading = false;
       const presetKey = (state.appointmentFilters.preset || 'today').toLowerCase();
       if (['today', 'week', 'month'].includes(presetKey)) {
@@ -17198,9 +17330,9 @@
     await loadAppointmentsForCurrentFilter({ forceReload: true });
   };
   const handleAppointmentListClick = async (event) => {
-    const button = event.target.closest('[data-appointment-import]');
+    const button = event.target.closest('[data-appointment-select]');
     if (!button) return;
-    const appointmentId = button.getAttribute('data-appointment-import');
+    const appointmentId = button.getAttribute('data-appointment-select');
     if (!appointmentId) return;
     const appointment = findAppointmentById(appointmentId);
     if (!appointment) {
@@ -17211,38 +17343,61 @@
       notify('Este atendimento já foi faturado e não pode ser importado novamente.', 'info');
       return;
     }
-    const wasDisabled = button.disabled;
-    const hadCursorWait = button.classList.contains('cursor-wait');
-    const hadOpacity = button.classList.contains('opacity-60');
-    if (!wasDisabled) {
-      button.disabled = true;
-      if (!hadCursorWait) {
-        button.classList.add('cursor-wait');
+    const currentIds = normalizeAppointmentIdList(state.selectedAppointmentImportIds);
+    const selectedSet = new Set(currentIds);
+    if (selectedSet.has(appointment.id)) {
+      selectedSet.delete(appointment.id);
+      state.selectedAppointmentImportIds = Array.from(selectedSet);
+      renderAppointments();
+      return;
+    }
+    if (selectedSet.size > 0) {
+      const firstSelectedId = Array.from(selectedSet)[0];
+      const firstSelected = findAppointmentById(firstSelectedId);
+      if (firstSelected) {
+        const selectedReference = getAppointmentCustomerReference(firstSelected);
+        const currentReference = getAppointmentCustomerReference(appointment);
+        if (selectedReference.key !== currentReference.key) {
+          notify('Só é permitido selecionar atendimentos do mesmo cliente.', 'warning');
+          return;
+        }
       }
-      if (!hadOpacity) {
-        button.classList.add('opacity-60');
-      }
+    }
+    selectedSet.add(appointment.id);
+    state.selectedAppointmentImportIds = Array.from(selectedSet);
+    renderAppointments();
+  };
+  const handleAppointmentImportSelected = async () => {
+    const selectedIds = normalizeAppointmentIdList(state.selectedAppointmentImportIds);
+    if (!selectedIds.length) {
+      notify('Selecione pelo menos um atendimento para importar.', 'warning');
+      return;
+    }
+    const appointments = selectedIds.map((id) => findAppointmentById(id)).filter(Boolean);
+    if (!appointments.length) {
+      notify('Não foi possível carregar os atendimentos selecionados.', 'error');
+      return;
+    }
+    const triggerButton = elements.appointmentImportSelected;
+    const wasDisabled = triggerButton?.disabled;
+    if (triggerButton && !wasDisabled) {
+      triggerButton.disabled = true;
+      triggerButton.classList.add('cursor-wait', 'opacity-60');
     }
     let applied = false;
     try {
-      applied = await applyAppointmentToSale(appointment);
+      applied = await applyAppointmentsToSale(appointments);
       if (applied) {
         closeAppointmentModal();
       }
     } catch (error) {
-      console.error('Erro ao importar atendimento no PDV:', error);
-      notify('Não foi possível importar os serviços do atendimento selecionado.', 'error');
+      console.error('Erro ao importar atendimentos no PDV:', error);
+      notify('Não foi possível importar os atendimentos selecionados.', 'error');
     } finally {
-      if (!applied && button.isConnected) {
-        button.disabled = wasDisabled;
-        if (!wasDisabled) {
-          if (!hadCursorWait) {
-            button.classList.remove('cursor-wait');
-          }
-          if (!hadOpacity) {
-            button.classList.remove('opacity-60');
-          }
-        }
+      if (!applied && triggerButton) {
+        triggerButton.disabled = Boolean(wasDisabled);
+        triggerButton.classList.remove('cursor-wait', 'opacity-60');
+        renderAppointmentFilters();
       }
     }
   };
@@ -17283,6 +17438,7 @@
         applyUpdates(cached);
       }
     });
+    syncSelectedAppointmentImports();
     renderAppointments();
   };
   const syncAppointmentAfterSale = async (appointmentId, saleCode) => {
@@ -17330,51 +17486,68 @@
           status: 'agendado',
         });
       }
-      state.activeAppointmentId = '';
     }
+  };
+  const syncAppointmentsAfterSale = async (appointmentIds, saleCode) => {
+    const ids = normalizeAppointmentIdList(appointmentIds);
+    if (!ids.length) return;
+    for (const appointmentId of ids) {
+      await syncAppointmentAfterSale(appointmentId, saleCode);
+    }
+  };
+  const getSaleAppointmentIds = (sale) => {
+    if (!sale || typeof sale !== 'object') return [];
+    const ids = normalizeAppointmentIdList(sale.appointmentIds);
+    if (ids.length) return ids;
+    const fallbackId = normalizeId(sale.appointmentId || sale.receiptSnapshot?.meta?.appointmentId || '');
+    return fallbackId ? [fallbackId] : [];
   };
 
   const revertAppointmentAfterSaleCancellation = async (sale) => {
     if (!sale) return false;
-    const normalizedAppointmentId = normalizeId(
-      sale.appointmentId || sale.receiptSnapshot?.meta?.appointmentId || ''
-    );
-    if (!normalizedAppointmentId) {
+    const appointmentIds = getSaleAppointmentIds(sale);
+    if (!appointmentIds.length) {
       return false;
     }
-    const previousState = findAppointmentById(normalizedAppointmentId);
-    updateAppointmentRecord(normalizedAppointmentId, {
-      paid: false,
-      saleCode: '',
-    });
-    const token = getToken();
-    try {
-      await fetchWithOptionalAuth(`${API_BASE}/func/agendamentos/${normalizedAppointmentId}`, {
-        token,
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ codigoVenda: '', pago: false }),
-        errorMessage: 'Não foi possível atualizar o atendimento após cancelar a venda.',
+    let hasError = false;
+    for (const appointmentId of appointmentIds) {
+      const previousState = findAppointmentById(appointmentId);
+      updateAppointmentRecord(appointmentId, {
+        paid: false,
+        saleCode: '',
       });
-      refreshAppointmentMetrics({ force: true }).catch((error) =>
-        console.error('Erro ao atualizar indicadores após cancelar venda do atendimento:', error)
-      );
-      return true;
-    } catch (error) {
-      console.error('Erro ao sincronizar atendimento após cancelar a venda:', error);
-      if (previousState) {
-        updateAppointmentRecord(normalizedAppointmentId, {
-          paid: Boolean(previousState.paid),
-          saleCode: previousState.saleCode || '',
-          status: previousState.status || 'agendado',
+      const token = getToken();
+      try {
+        await fetchWithOptionalAuth(`${API_BASE}/func/agendamentos/${appointmentId}`, {
+          token,
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ codigoVenda: '', pago: false }),
+          errorMessage: 'Não foi possível atualizar o atendimento após cancelar a venda.',
         });
+      } catch (error) {
+        hasError = true;
+        console.error('Erro ao sincronizar atendimento após cancelar a venda:', error);
+        if (previousState) {
+          updateAppointmentRecord(appointmentId, {
+            paid: Boolean(previousState.paid),
+            saleCode: previousState.saleCode || '',
+            status: previousState.status || 'agendado',
+          });
+        }
       }
+    }
+    if (hasError) {
       notify(
-        'Venda cancelada, porém não foi possível atualizar o atendimento na agenda.',
+        'Venda cancelada, porém não foi possível atualizar todos os atendimentos na agenda.',
         'warning'
       );
       return false;
     }
+    refreshAppointmentMetrics({ force: true }).catch((error) =>
+      console.error('Erro ao atualizar indicadores após cancelar venda do atendimento:', error)
+    );
+    return true;
   };
 
   const registerCompletedSaleRecord = (options = {}) => {
@@ -17420,6 +17593,7 @@
       fiscalItemsSnapshot,
       cashContributions,
       appointmentId,
+      appointmentIds,
     } = updates;
     if (saleCode !== undefined) {
       sale.saleCode = saleCode || '';
@@ -17439,6 +17613,9 @@
     }
     if (appointmentId !== undefined) {
       sale.appointmentId = normalizeId(appointmentId);
+    }
+    if (appointmentIds !== undefined) {
+      sale.appointmentIds = normalizeAppointmentIdList(appointmentIds);
     }
     if (fiscalStatus !== undefined) {
       sale.fiscalStatus = fiscalStatus || 'pending';
@@ -18313,6 +18490,8 @@
     state.appointmentMetrics = { today: 0, week: 0, month: 0 };
     state.appointmentScrollPending = false;
     state.activeAppointmentId = '';
+    state.activeAppointmentIds = [];
+    state.selectedAppointmentImportIds = [];
     state.activeSaleCancellationId = '';
     state.activePdvStoreId = '';
     state.deliveryAddresses = [];
@@ -18787,6 +18966,8 @@
     state.appointmentMetrics = { today: 0, week: 0, month: 0 };
     state.appointmentScrollPending = false;
     state.activeAppointmentId = '';
+    state.activeAppointmentIds = [];
+    state.selectedAppointmentImportIds = [];
     appointmentCache.clear();
     appointmentSalesCache.clear();
     appointmentSalesRequestCache.clear();
@@ -19859,6 +20040,7 @@
     elements.appointmentPresets?.addEventListener('click', handleAppointmentPresetClick);
     elements.appointmentApply?.addEventListener('click', handleAppointmentApply);
     elements.appointmentList?.addEventListener('click', handleAppointmentListClick);
+    elements.appointmentImportSelected?.addEventListener('click', handleAppointmentImportSelected);
     elements.appointmentReload?.addEventListener('click', handleAppointmentRefresh);
     elements.appointmentClose?.addEventListener('click', closeAppointmentModal);
     elements.appointmentBackdrop?.addEventListener('click', closeAppointmentModal);
