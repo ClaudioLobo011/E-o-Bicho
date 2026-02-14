@@ -84,6 +84,10 @@
     hasUpdate: false,
     promptedVersion: '',
   };
+  const localAgentPrintersCache = {
+    fetchedAt: 0,
+    printers: [],
+  };
   let lastLocalAgentHealth = null;
 
   const PDV_NO_CUSTOMER_LABEL = 'Sem Cliente na Venda';
@@ -14856,6 +14860,54 @@
     }
   };
 
+  const fetchLocalAgentPrinters = async ({ force = false } = {}) => {
+    const now = Date.now();
+    if (
+      !force &&
+      localAgentPrintersCache.fetchedAt &&
+      now - localAgentPrintersCache.fetchedAt < 15000
+    ) {
+      return localAgentPrintersCache.printers;
+    }
+    try {
+      const response = await fetchWithTimeout(
+        `${LOCAL_AGENT_BASE_URL}/printers`,
+        { method: 'GET', cache: 'no-store' },
+        LOCAL_AGENT_HEALTH_TIMEOUT_MS
+      );
+      if (!response.ok) return [];
+      const payload = await response.json().catch(() => null);
+      const printers = Array.isArray(payload?.printers)
+        ? Array.from(
+            new Set(
+              payload.printers
+                .map((entry) => String(entry || '').trim())
+                .filter(Boolean)
+            )
+          )
+        : [];
+      localAgentPrintersCache.fetchedAt = now;
+      localAgentPrintersCache.printers = printers;
+      return printers;
+    } catch (_) {
+      return [];
+    }
+  };
+
+  const resolvePrinterNameFromAgent = async (name) => {
+    const raw = String(name || '').trim();
+    if (!raw) return '';
+    const printers = await fetchLocalAgentPrinters();
+    if (!printers.length) return raw;
+    const exact = printers.find((printer) => printer.toLowerCase() === raw.toLowerCase());
+    if (exact) return exact;
+    const contains = printers.find((printer) => printer.toLowerCase().includes(raw.toLowerCase()));
+    if (contains) return contains;
+    const inverseContains = printers.find((printer) => raw.toLowerCase().includes(printer.toLowerCase()));
+    if (inverseContains) return inverseContains;
+    return raw;
+  };
+
   const resolveAgentDownloadUrl = (value) => {
     if (!value) return '';
     const raw = String(value).trim();
@@ -15081,6 +15133,10 @@
     });
 
   const ensureLocalAgentUpdated = async ({ forcePrompt = false } = {}) => {
+    // Evita chamadas remotas de update durante o fluxo normal de impressão.
+    if (!forcePrompt) {
+      return true;
+    }
     const info = await getLocalAgentUpdateInfo({ health: lastLocalAgentHealth });
     if (!info?.latestVersion || !info?.localVersion || !info?.hasUpdate) {
       return true;
@@ -15221,16 +15277,7 @@
       }
       if (fallbackHtml) {
         if (disableFallbackOnError) return false;
-        return printViaLocalAgent({
-          html: fallbackHtml,
-          printerName,
-          copies,
-          jobName,
-          fallbackHtml,
-          logPrefix,
-          quietOnError,
-          disableFallbackOnError,
-        });
+        return printHtmlDocument(fallbackHtml, { logPrefix });
       }
       return false;
     }
@@ -15262,8 +15309,9 @@
       for (let index = 0; index < candidates.length; index += 1) {
         const printerName = candidates[index];
         const isLast = index === candidates.length - 1;
+        const resolvedPrinterName = await resolvePrinterNameFromAgent(printerName);
         const common = {
-          printerName,
+          printerName: resolvedPrinterName,
           copies: printerConfig.vias || 1,
           jobName: title,
           fallbackHtml: htmlDocument,
