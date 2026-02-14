@@ -366,7 +366,10 @@
 
   const fetchPdvs = async (storeId) => {
     const query = storeId ? `?empresa=${encodeURIComponent(storeId)}` : '';
-    const response = await fetch(`${API_BASE}/pdvs${query}`);
+    const token = getToken();
+    const response = await fetch(`${API_BASE}/pdvs${query}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
     if (!response.ok) {
       throw new Error('Não foi possível carregar os PDVs da empresa.');
     }
@@ -462,7 +465,10 @@
   };
 
   const fetchPdvDetails = async (pdvId) => {
-    const response = await fetch(`${API_BASE}/pdvs/${pdvId}`);
+    const token = getToken();
+    const response = await fetch(`${API_BASE}/pdvs/${pdvId}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
     if (!response.ok) {
       const message = await response.json().catch(() => null);
       throw new Error(message?.message || 'Não foi possível carregar as configurações do PDV.');

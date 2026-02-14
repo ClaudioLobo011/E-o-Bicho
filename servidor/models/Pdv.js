@@ -132,6 +132,7 @@ const pdvSchema = new mongoose.Schema(
     ambientePadrao: { type: String, enum: ambientesPermitidos, default: 'homologacao' },
     sincronizacaoAutomatica: { type: Boolean, default: true },
     permitirModoOffline: { type: Boolean, default: false },
+    mostrarParaFuncionarios: { type: Boolean, default: true },
     limiteOffline: { type: Number, min: 0, default: null },
     observacoes: { type: String, trim: true },
     ultimaSincronizacao: { type: Date, default: null },

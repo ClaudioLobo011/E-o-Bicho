@@ -38,6 +38,7 @@
     lastSync: '#pdv-last-sync',
     offline: '#pdv-offline',
     offlineLimit: '#pdv-offline-limit',
+    showForEmployees: '#pdv-show-for-employees',
     notes: '#pdv-notes',
     cancelEdit: '#pdv-cancel-edit',
     resetForm: '#pdv-reset-form',
@@ -540,6 +541,7 @@
       elements.offlineLimit.value = '';
       elements.offlineLimit.disabled = true;
     }
+    if (elements.showForEmployees) elements.showForEmployees.checked = true;
     if (elements.nfceLastNumber) elements.nfceLastNumber.value = '';
     if (elements.notes) elements.notes.value = '';
     resetAuditInfo();
@@ -600,6 +602,9 @@
         elements.offlineLimit.disabled = true;
         elements.offlineLimit.value = '';
       }
+    }
+    if (elements.showForEmployees) {
+      elements.showForEmployees.checked = pdv.mostrarParaFuncionarios !== false;
     }
     if (elements.notes) elements.notes.value = pdv.observacoes || '';
     if (elements.lastSync) {
@@ -814,6 +819,7 @@
       ambientePadrao,
       sincronizacaoAutomatica: Boolean(elements.syncAuto?.checked),
       permitirModoOffline,
+      mostrarParaFuncionarios: Boolean(elements.showForEmployees?.checked ?? true),
       limiteOffline: permitirModoOffline ? limiteOffline : null,
       observacoes: elements.notes?.value.trim() || '',
     };
@@ -869,7 +875,10 @@
     };
 
     const fetchPdvs = async () => {
-      const response = await fetch(`${API_BASE}/pdvs`);
+      const token = getToken();
+      const response = await fetch(`${API_BASE}/pdvs`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
     if (!response.ok) {
       throw new Error('Não foi possível carregar os PDVs cadastrados.');
     }
@@ -896,7 +905,10 @@
 
   const fetchNextCode = async () => {
     try {
-      const response = await fetch(`${API_BASE}/pdvs/next-code`);
+      const token = getToken();
+      const response = await fetch(`${API_BASE}/pdvs/next-code`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       if (!response.ok) {
         throw new Error('Falha ao obter o próximo código de PDV.');
       }

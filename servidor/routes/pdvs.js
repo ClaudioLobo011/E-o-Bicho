@@ -29,6 +29,14 @@ const tiposEmissao = ['matricial', 'fiscal', 'ambos'];
 const tiposEmissaoSet = new Set(tiposEmissao);
 const tiposImpressora = ['bematech', 'elgin'];
 const tiposImpressoraSet = new Set(tiposImpressora);
+const roleRank = {
+  cliente: 0,
+  funcionario: 1,
+  franqueado: 2,
+  franqueador: 3,
+  admin: 4,
+  admin_master: 5,
+};
 
 let qrCodeModulePromise;
 
@@ -47,6 +55,12 @@ const loadQrCodeModule = () => {
 const normalizeString = (value) => {
   if (value === undefined || value === null) return '';
   return String(value).trim();
+};
+
+const isBelowFranqueado = (role) => {
+  const normalizedRole = normalizeString(role).toLowerCase();
+  const rank = Number.isFinite(roleRank[normalizedRole]) ? roleRank[normalizedRole] : -1;
+  return rank < roleRank.franqueado;
 };
 
 const generateQrCodeDataUrl = async (payload) => {
@@ -1587,6 +1601,9 @@ const buildPdvPayload = ({ body, store }) => {
   const ativo = parseBoolean(body.ativo !== undefined ? body.ativo : true);
   const sincronizacaoAutomatica = parseBoolean(body.sincronizacaoAutomatica !== undefined ? body.sincronizacaoAutomatica : true);
   const permitirModoOffline = parseBoolean(body.permitirModoOffline);
+  const mostrarParaFuncionarios = parseBoolean(
+    body.mostrarParaFuncionarios !== undefined ? body.mostrarParaFuncionarios : true
+  );
   let limiteOffline = permitirModoOffline ? parseNumber(body.limiteOffline) : null;
   if (limiteOffline === null && permitirModoOffline) {
     limiteOffline = 0;
@@ -1646,17 +1663,21 @@ const buildPdvPayload = ({ body, store }) => {
     ambientePadrao,
     sincronizacaoAutomatica,
     permitirModoOffline,
+    mostrarParaFuncionarios,
     limiteOffline,
     observacoes,
   };
 };
 
-router.get('/', async (req, res) => {
+router.get('/', requireAuth, authorizeRoles('admin'), async (req, res) => {
   try {
     const { empresa } = req.query;
     const query = {};
     if (empresa) {
       query.empresa = empresa;
+    }
+    if (isBelowFranqueado(req.user?.role)) {
+      query.mostrarParaFuncionarios = { $ne: false };
     }
     const pdvs = await Pdv.find(query)
       .sort({ nome: 1 })
@@ -1669,7 +1690,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.get('/next-code', async (req, res) => {
+router.get('/next-code', requireAuth, authorizeRoles('admin'), async (req, res) => {
   try {
     const codigo = await generateNextCode();
     res.json({ codigo });
@@ -1679,7 +1700,7 @@ router.get('/next-code', async (req, res) => {
   }
 });
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', requireAuth, authorizeRoles('admin'), async (req, res) => {
   try {
     const pdv = await Pdv.findById(req.params.id)
       .populate('empresa')
@@ -1691,6 +1712,10 @@ router.get('/:id', async (req, res) => {
 
     if (!pdv) {
       return res.status(404).json({ message: 'PDV não encontrado.' });
+    }
+
+    if (isBelowFranqueado(req.user?.role) && pdv.mostrarParaFuncionarios === false) {
+      return res.status(404).json({ message: 'PDV nao encontrado.' });
     }
 
     const state = await PdvState.findOne({ pdv: pdv._id });
