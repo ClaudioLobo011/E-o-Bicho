@@ -237,7 +237,26 @@ const parsePrinterType = (value) => {
 const buildPrinterPayload = (payload) => {
   if (!payload) return null;
 
-  const nome = normalizeString(payload.nome || payload.printer || payload.nomeImpressora);
+  const nomesRaw = Array.isArray(payload.nomesImpressoras)
+    ? payload.nomesImpressoras
+    : Array.isArray(payload.nomes)
+    ? payload.nomes
+    : Array.isArray(payload.aliases)
+    ? payload.aliases
+    : [];
+  const nomesImpressoras = Array.from(
+    new Set(
+      nomesRaw
+        .map((entry) => normalizeString(entry))
+        .filter(Boolean)
+    )
+  );
+  const nomePrincipal = normalizeString(payload.nome || payload.printer || payload.nomeImpressora);
+  if (nomePrincipal) {
+    nomesImpressoras.unshift(nomePrincipal);
+  }
+  const nomesNormalizados = Array.from(new Set(nomesImpressoras.filter(Boolean)));
+  const nome = nomesNormalizados[0] || '';
   const vias = parseCopias(payload.vias ?? payload.copias ?? payload.copiasImpressao ?? '', {
     allowNull: !nome,
   });
@@ -254,6 +273,7 @@ const buildPrinterPayload = (payload) => {
 
   return {
     nome,
+    nomesImpressoras: nomesNormalizados,
     vias: vias ?? 1,
     larguraPapel,
     tipoImpressora,

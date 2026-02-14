@@ -10,6 +10,10 @@ const tiposImpressora = ['bematech', 'elgin'];
 const printerSchema = new mongoose.Schema(
   {
     nome: { type: String, trim: true, default: '' },
+    nomesImpressoras: {
+      type: [{ type: String, trim: true }],
+      default: [],
+    },
     vias: {
       type: Number,
       min: [1, 'O número mínimo de vias é 1.'],

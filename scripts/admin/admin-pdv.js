@@ -1247,13 +1247,28 @@
 
   const normalizePrinterConfig = (printer) => {
     if (!printer || typeof printer !== 'object') return null;
-    const nome = typeof printer.nome === 'string' ? printer.nome.trim() : '';
+    const nomePrincipal = typeof printer.nome === 'string' ? printer.nome.trim() : '';
+    const aliasesRaw = Array.isArray(printer.nomesImpressoras)
+      ? printer.nomesImpressoras
+      : Array.isArray(printer.nomes)
+      ? printer.nomes
+      : Array.isArray(printer.aliases)
+      ? printer.aliases
+      : [];
+    const nomesImpressoras = Array.from(
+      new Set(
+        [nomePrincipal, ...aliasesRaw]
+          .map((entry) => String(entry || '').trim())
+          .filter(Boolean)
+      )
+    );
+    const nome = nomesImpressoras[0] || '';
     if (!nome) return null;
     const viasValue = Number(printer.vias);
     const vias = Number.isFinite(viasValue) && viasValue >= 1 ? Math.min(Math.trunc(viasValue), 10) : 1;
     const larguraPapel = normalizePaperWidth(printer.larguraPapel || printer.largura);
     const tipoImpressora = normalizePrinterType(printer.tipoImpressora || printer.tipo || printer.printerType);
-    return { nome, vias, larguraPapel, tipoImpressora };
+    return { nome, nomesImpressoras, vias, larguraPapel, tipoImpressora };
   };
 
   const resolvePrinterConfigForType = (type) => {
@@ -15112,6 +15127,8 @@
     jobName,
     fallbackHtml,
     logPrefix,
+    quietOnError = false,
+    disableFallbackOnError = false,
   }) => {
     const ready = await checkLocalAgent();
     if (!ready) {
@@ -15145,8 +15162,10 @@
       return true;
     } catch (error) {
       console.error('Falha ao imprimir via agente local:', error);
-      notify('Falha ao imprimir via agente local. Abrindo impressao no navegador.', 'warning');
-      if (fallbackHtml) {
+      if (!quietOnError) {
+        notify('Falha ao imprimir via agente local. Abrindo impressao no navegador.', 'warning');
+      }
+      if (!disableFallbackOnError && fallbackHtml) {
         printHtmlDocument(fallbackHtml, { logPrefix });
       }
       return false;
@@ -15160,6 +15179,8 @@
     jobName,
     fallbackHtml,
     logPrefix,
+    quietOnError = false,
+    disableFallbackOnError = false,
   }) => {
     if (!payload) {
       return false;
@@ -15196,8 +15217,11 @@
       return true;
     } catch (error) {
       console.error('Falha ao imprimir via agente local (json):', error);
-      notify('Falha ao imprimir via agente local. Abrindo impressao no navegador.', 'warning');
+      if (!quietOnError) {
+        notify('Falha ao imprimir via agente local. Abrindo impressao no navegador.', 'warning');
+      }
       if (fallbackHtml) {
+        if (disableFallbackOnError) return false;
         return printViaLocalAgent({
           html: fallbackHtml,
           printerName,
@@ -15205,10 +15229,56 @@
           jobName,
           fallbackHtml,
           logPrefix,
+          quietOnError,
+          disableFallbackOnError,
         });
       }
       return false;
     }
+  };
+
+  const resolvePrinterCandidates = (printerConfig) => {
+    if (!printerConfig || typeof printerConfig !== 'object') return [];
+    return Array.from(
+      new Set(
+        [printerConfig.nome, ...(Array.isArray(printerConfig.nomesImpressoras) ? printerConfig.nomesImpressoras : [])]
+          .map((entry) => String(entry || '').trim())
+          .filter(Boolean)
+      )
+    );
+  };
+
+  const dispatchPrintToConfiguredPrinters = ({
+    printerConfig,
+    jsonPayload = null,
+    htmlDocument = '',
+    title = 'Impressao',
+    logPrefix = 'impressao',
+  }) => {
+    const candidates = resolvePrinterCandidates(printerConfig);
+    if (!candidates.length) {
+      return false;
+    }
+    void (async () => {
+      for (let index = 0; index < candidates.length; index += 1) {
+        const printerName = candidates[index];
+        const isLast = index === candidates.length - 1;
+        const common = {
+          printerName,
+          copies: printerConfig.vias || 1,
+          jobName: title,
+          fallbackHtml: htmlDocument,
+          logPrefix,
+          quietOnError: !isLast,
+          disableFallbackOnError: !isLast,
+        };
+        const ok = jsonPayload
+          ? await printViaLocalAgentJson({ payload: jsonPayload, ...common })
+          : await printViaLocalAgent({ html: htmlDocument, ...common });
+        if (ok) return;
+      }
+    })();
+    return true;
   };
 
   const printReceipt = (
@@ -15296,12 +15366,11 @@
           printerType,
         });
         if (nfcePayload) {
-          void printViaLocalAgentJson({
-            payload: nfcePayload,
-            printerName: printerConfig.nome,
-            copies: printerConfig.vias || 1,
-            jobName: title,
-            fallbackHtml: documentHtml,
+          dispatchPrintToConfiguredPrinters({
+            printerConfig,
+            jsonPayload: nfcePayload,
+            htmlDocument: documentHtml,
+            title,
             logPrefix: title.toLowerCase(),
           });
           return true;
@@ -15335,23 +15404,20 @@
                 useDanfeLayout: resolvedVariant === 'matricial',
               });
         if (jsonPayload) {
-          void printViaLocalAgentJson({
-            payload: jsonPayload,
-            printerName: printerConfig.nome,
-            copies: printerConfig.vias || 1,
-            jobName: title,
-            fallbackHtml: documentHtml,
+          dispatchPrintToConfiguredPrinters({
+            printerConfig,
+            jsonPayload,
+            htmlDocument: documentHtml,
+            title,
             logPrefix: title.toLowerCase(),
           });
           return true;
         }
       }
-      void printViaLocalAgent({
-        html: documentHtml,
-        printerName: printerConfig.nome,
-        copies: printerConfig.vias || 1,
-        jobName: title,
-        fallbackHtml: documentHtml,
+      dispatchPrintToConfiguredPrinters({
+        printerConfig,
+        htmlDocument: documentHtml,
+        title,
         logPrefix: title.toLowerCase(),
       });
       return true;

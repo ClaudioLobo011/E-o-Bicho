@@ -60,29 +60,95 @@
     elements.printerInputs = {
       venda: {
         nome: document.getElementById('impressora-venda-nome'),
+        aliasesContainer: document.getElementById('impressora-venda-aliases'),
+        aliasAddButton: document.getElementById('impressora-venda-alias-add'),
         vias: document.getElementById('impressora-venda-vias'),
         largura: document.getElementById('impressora-venda-largura'),
         tipo: document.getElementById('impressora-venda-tipo'),
       },
       orcamento: {
         nome: document.getElementById('impressora-orcamento-nome'),
+        aliasesContainer: document.getElementById('impressora-orcamento-aliases'),
+        aliasAddButton: document.getElementById('impressora-orcamento-alias-add'),
         vias: document.getElementById('impressora-orcamento-vias'),
         largura: document.getElementById('impressora-orcamento-largura'),
         tipo: document.getElementById('impressora-orcamento-tipo'),
       },
       contas: {
         nome: document.getElementById('impressora-contas-nome'),
+        aliasesContainer: document.getElementById('impressora-contas-aliases'),
+        aliasAddButton: document.getElementById('impressora-contas-alias-add'),
         vias: document.getElementById('impressora-contas-vias'),
         largura: document.getElementById('impressora-contas-largura'),
         tipo: document.getElementById('impressora-contas-tipo'),
       },
       caixa: {
         nome: document.getElementById('impressora-caixa-nome'),
+        aliasesContainer: document.getElementById('impressora-caixa-aliases'),
+        aliasAddButton: document.getElementById('impressora-caixa-alias-add'),
         vias: document.getElementById('impressora-caixa-vias'),
         largura: document.getElementById('impressora-caixa-largura'),
         tipo: document.getElementById('impressora-caixa-tipo'),
       },
     };
+  };
+
+  const createPrinterAliasRow = (value = '') => {
+    const row = document.createElement('div');
+    row.className = 'flex items-center gap-2';
+    row.innerHTML = `
+      <input type="text" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" data-printer-alias-input data-config-field placeholder="Nome alternativo da impressora" />
+      <button type="button" class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600" data-printer-alias-remove aria-label="Remover nome">
+        <i class="fas fa-trash text-[10px]"></i>
+      </button>
+    `;
+    const input = row.querySelector('[data-printer-alias-input]');
+    if (input) input.value = value || '';
+    const removeButton = row.querySelector('[data-printer-alias-remove]');
+    if (removeButton) {
+      removeButton.addEventListener('click', () => {
+        row.remove();
+      });
+    }
+    return row;
+  };
+
+  const setPrinterAliases = (inputs, aliases = []) => {
+    const container = inputs?.aliasesContainer;
+    if (!container) return;
+    container.innerHTML = '';
+    const normalized = Array.from(
+      new Set(
+        (Array.isArray(aliases) ? aliases : [])
+          .map((entry) => String(entry || '').trim())
+          .filter(Boolean)
+      )
+    );
+    normalized.forEach((alias) => {
+      container.appendChild(createPrinterAliasRow(alias));
+    });
+  };
+
+  const getPrinterAliases = (inputs) => {
+    const container = inputs?.aliasesContainer;
+    if (!container) return [];
+    return Array.from(container.querySelectorAll('[data-printer-alias-input]'))
+      .map((input) => String(input.value || '').trim())
+      .filter(Boolean);
+  };
+
+  const initPrinterAliasControls = () => {
+    Object.values(elements.printerInputs || {}).forEach((inputs) => {
+      const button = inputs?.aliasAddButton;
+      const container = inputs?.aliasesContainer;
+      if (!button || !container || button.dataset.aliasReady === 'true') return;
+      button.dataset.aliasReady = 'true';
+      button.addEventListener('click', () => {
+        container.appendChild(createPrinterAliasRow(''));
+        const last = container.querySelector('[data-printer-alias-input]:last-of-type');
+        if (last) last.focus();
+      });
+    });
   };
 
   const setStatus = (message) => {
@@ -116,6 +182,11 @@
   const disableConfigFields = (disabled) => {
     document.querySelectorAll('[data-config-field]').forEach((input) => {
       input.disabled = disabled;
+    });
+    Object.values(elements.printerInputs || {}).forEach((inputs) => {
+      if (inputs?.aliasAddButton) {
+        inputs.aliasAddButton.disabled = disabled;
+      }
     });
     if (elements.saveButton) {
       elements.saveButton.disabled = disabled || state.saving;
@@ -157,11 +228,12 @@
     resetRadios('input[name="sempre-imprimir"]', 'perguntar');
     resetRadios('input[name="tipo-emissao"]', 'fiscal');
 
-    Object.values(elements.printerInputs).forEach(({ nome, vias, largura, tipo }) => {
+    Object.values(elements.printerInputs).forEach(({ nome, vias, largura, tipo, aliasesContainer }) => {
       if (nome) nome.value = '';
       if (vias) vias.value = '';
       if (largura) largura.value = '80mm';
       if (tipo) tipo.value = 'bematech';
+      if (aliasesContainer) aliasesContainer.innerHTML = '';
     });
 
     document.querySelectorAll('.desconto-checkbox').forEach((checkbox) => {
@@ -480,6 +552,15 @@
     if (!inputs) return;
     const { nome, vias, largura, tipo } = inputs;
     if (nome) nome.value = printer?.nome || '';
+    const aliases = Array.isArray(printer?.nomesImpressoras)
+      ? printer.nomesImpressoras
+      : Array.isArray(printer?.nomes)
+      ? printer.nomes
+      : [];
+    setPrinterAliases(
+      inputs,
+      aliases.filter((alias) => String(alias || '').trim() && String(alias || '').trim() !== String(printer?.nome || '').trim())
+    );
     if (vias) vias.value = printer?.vias || '';
     if (largura) {
       largura.value = normalizePaperWidth(printer?.larguraPapel || printer?.largura) || '80mm';
@@ -583,17 +664,21 @@
     });
   };
 
-  const readPrinterConfig = ({ nome, vias, largura, tipo }, label) => {
+  const readPrinterConfig = ({ nome, vias, largura, tipo, aliasesContainer }, label) => {
     const nomeValue = nome?.value.trim() || '';
+    const aliases = Array.from(aliasesContainer?.querySelectorAll('[data-printer-alias-input]') || [])
+      .map((input) => String(input.value || '').trim())
+      .filter(Boolean);
+    const nomesImpressoras = Array.from(new Set([nomeValue, ...aliases].filter(Boolean)));
     const viasValue = vias?.value.trim() || '';
 
-    if (!nomeValue && !viasValue) {
+    if (!nomesImpressoras.length && !viasValue) {
       return { ok: true, value: null };
     }
 
-    if (!nomeValue) {
-      notify(`Informe o nome da ${label}.`, 'warning');
-      nome?.focus();
+    if (!nomesImpressoras.length) {
+      notify(`Informe ao menos um nome para a ${label}.`, 'warning');
+      nome?.focus?.();
       return { ok: false };
     }
 
@@ -630,7 +715,13 @@
 
     return {
       ok: true,
-      value: { nome: nomeValue, vias: viasNumber, larguraPapel: larguraValue, tipoImpressora: tipoValue },
+      value: {
+        nome: nomesImpressoras[0],
+        nomesImpressoras,
+        vias: viasNumber,
+        larguraPapel: larguraValue,
+        tipoImpressora: tipoValue,
+      },
     };
   };
 
@@ -834,6 +925,7 @@
 
   const init = async () => {
     queryElements();
+    initPrinterAliasControls();
     handleTabNavigation();
     disableConfigFields(true);
     try {
