@@ -16564,6 +16564,7 @@
       const isActive = activeIds.has(appointment.id);
       const isSelected = selectedIds.has(appointment.id);
       const alreadyPaid = Boolean(appointment.paid || appointment.saleCode);
+      const canSelect = !alreadyPaid;
       const scheduleLabel = getAppointmentScheduleLabel(appointment);
       const statusMeta = getAppointmentStatusMeta(appointment.status);
       const paidBadge = appointment.paid
@@ -16571,6 +16572,9 @@
         : '';
       const saleBadge = appointment.saleCode
         ? `<span class="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">Venda ${escapeHtml(appointment.saleCode)}</span>`
+        : '';
+      const selectedBadge = isSelected
+        ? '<span class="inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-1 text-xs font-semibold text-white"><i class="fas fa-check"></i><span>Selecionado</span></span>'
         : '';
       const services = Array.isArray(appointment.services) ? appointment.services : [];
       const serviceBadges = services.slice(0, 4).map((service) => `
@@ -16593,27 +16597,14 @@
       const notes = appointment.notes
         ? `<p class="text-xs text-gray-500 italic">Obs.: ${escapeHtml(appointment.notes)}</p>`
         : '';
-      const buttonDisabled = alreadyPaid;
-      const buttonClasses = buttonDisabled
-        ? 'inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-xs font-semibold text-gray-400 cursor-not-allowed'
-        : isSelected
-        ? 'inline-flex items-center justify-center gap-2 rounded-lg border border-primary bg-primary px-3 py-2 text-xs font-semibold text-white transition hover:bg-secondary'
-        : 'inline-flex items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary transition hover:bg-primary/20';
-      const buttonLabel = buttonDisabled
-        ? appointment.saleCode
-          ? `Venda ${escapeHtml(appointment.saleCode)}`
-          : 'Atendimento pago'
-        : isSelected
-        ? 'Selecionado'
-        : 'Selecionar';
-      const buttonAttributes = buttonDisabled
-        ? 'type="button" disabled'
-        : `type="button" data-appointment-select="${escapeHtml(appointment.id)}"`;
       const card = document.createElement('article');
       card.dataset.appointmentId = appointment.id;
+      if (canSelect) {
+        card.dataset.appointmentSelect = appointment.id;
+      }
       card.className = `rounded-xl border ${
         isSelected || isActive ? 'border-primary shadow-lg shadow-primary/10' : 'border-gray-200'
-      } bg-white p-4 transition`;
+      } bg-white p-4 transition ${canSelect ? 'cursor-pointer hover:border-primary/60' : 'cursor-not-allowed opacity-90'}`;
       card.innerHTML = `
         <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div class="flex flex-wrap items-center gap-2">
@@ -16629,11 +16620,8 @@
             </span>
             ${paidBadge}
             ${saleBadge}
+            ${selectedBadge}
           </div>
-          <button ${buttonAttributes} class="${buttonClasses}">
-            <i class="fas fa-file-import"></i>
-            <span>${escapeHtml(buttonLabel)}</span>
-          </button>
         </div>
         <div class="mt-3 space-y-2">
           <div>
@@ -17163,7 +17151,7 @@
       return reference.key !== firstReference.key;
     });
     if (hasDifferentCustomer) {
-      notify('Só é permitido importar atendimentos do mesmo cliente na mesma venda.', 'warning');
+      notify('Não é possível selecionar atendimentos de proprietários diferentes', 'warning');
       return false;
     }
     const selectedIds = normalizeAppointmentIdList(selectedAppointments.map((entry) => entry.id));
@@ -17330,9 +17318,9 @@
     await loadAppointmentsForCurrentFilter({ forceReload: true });
   };
   const handleAppointmentListClick = async (event) => {
-    const button = event.target.closest('[data-appointment-select]');
-    if (!button) return;
-    const appointmentId = button.getAttribute('data-appointment-select');
+    const card = event.target.closest('[data-appointment-select]');
+    if (!card) return;
+    const appointmentId = card.getAttribute('data-appointment-select');
     if (!appointmentId) return;
     const appointment = findAppointmentById(appointmentId);
     if (!appointment) {
@@ -17358,7 +17346,7 @@
         const selectedReference = getAppointmentCustomerReference(firstSelected);
         const currentReference = getAppointmentCustomerReference(appointment);
         if (selectedReference.key !== currentReference.key) {
-          notify('Só é permitido selecionar atendimentos do mesmo cliente.', 'warning');
+          notify('Não é possível selecionar atendimentos de proprietários diferentes', 'warning');
           return;
         }
       }
