@@ -196,11 +196,18 @@
     customerSearchLoading: false,
     customerSearchQuery: '',
     customerSearchTarget: 'sale',
+    customerLookupSearchResults: [],
+    customerLookupSearchLoading: false,
+    customerLookupSearchQuery: '',
     customerPets: [],
     customerPetsLoading: false,
     modalSelectedCliente: null,
     modalSelectedPet: null,
     modalActiveTab: 'cliente',
+    customerModalAddresses: [],
+    customerModalAddressesLoading: false,
+    customerModalSelectedAddressId: '',
+    customerModalAddressUf: '',
     financeSettings: { contaCorrente: null, contaContabilReceber: null },
     accountsReceivable: [],
     receivablesSearchQuery: '',
@@ -242,6 +249,7 @@
     deliveryAddressesLoading: false,
     deliveryAddressSaving: false,
     deliveryAddressFormVisible: false,
+    deliveryCreatingNewAddress: false,
     deliverySelectedAddressId: '',
     deliverySelectedAddress: null,
     deliveryStatusOverride: null,
@@ -255,6 +263,13 @@
     sellersLoaded: false,
     sellerLookupLoading: false,
     sellerLookupError: '',
+    deliveryCouriers: [],
+    deliveryCouriersCompanyId: '',
+    deliveryCouriersLoading: false,
+    deliveryOrderImportSelection: [],
+    deliveryOrderImportMap: {},
+    deliverySelectedCourierId: '',
+    deliverySelectedCourierLabel: '',
     selectedSeller: null,
     sellerSearchQuery: '',
     sellerSearchTarget: 'main',
@@ -300,6 +315,13 @@
       open: false,
       sale: null,
       selectedItemIds: [],
+    },
+    exchangeProductSearch: {
+      open: false,
+      target: 'return',
+      query: '',
+      loading: false,
+      results: [],
     },
     transferModal: {
       open: false,
@@ -388,6 +410,16 @@
   };
   let finalizeModalDefaults = { title: '', subtitle: '', confirm: '' };
   let deliveryAddressesController = null;
+  const deliveryFieldMasks = {};
+  const pdvModalFieldMasks = {};
+  let deliveryCustomerLookupDocTimeout = null;
+  let deliveryCustomerLookupPhoneTimeout = null;
+  let deliveryCustomerLookupCodeTimeout = null;
+  let deliveryCustomerLookupRequestSeq = 0;
+  let deliveryCustomerLastDocLookup = '';
+  let deliveryCustomerLastPhoneLookup = '';
+  let deliveryCustomerLastCodeLookup = '';
+  let deliveryCustomerRegisterMode = false;
   let statePersistTimeout = null;
   let statePersistInFlight = false;
   let statePersistPending = false;
@@ -714,7 +746,19 @@
   let searchTimeout = null;
   let customerSearchTimeout = null;
   let customerSearchController = null;
+  let customerLookupSearchTimeout = null;
+  let customerLookupSearchController = null;
+  let customerLookupSearchSelectHandler = null;
+  let customerModalLookupTimeout = null;
+  let customerModalLookupController = null;
+  let customerModalCepLookupTimeout = null;
+  let customerModalCepLookupController = null;
+  let customerModalCepLastDigits = '';
+  let customerModalCepLastResult = null;
+  let customerModalCepLastNotifiedDigits = '';
   let customerPetsController = null;
+  let customerModalAddressesController = null;
+  let customerModalConfirmSaving = false;
   let receivablesSearchTimeout = null;
   let receivablesSearchController = null;
   let receivablesCustomerController = null;
@@ -734,6 +778,7 @@
   let exchangeHistoryLookupTimeout = null;
   let exchangeHistoryLookupController = null;
   let exchangeSaleLookupTimeout = null;
+  let exchangeProductSearchTimeout = null;
   let exchangeSaveInFlight = false;
   let exchangeFinalizeInFlight = false;
   let customerRegisterPreviousFocus = null;
@@ -942,6 +987,55 @@
     }
   };
 
+  const applyCustomerModalAddressFromCep = (data) => {
+    if (!data) return;
+    if (elements.customerPreviewCep) elements.customerPreviewCep.value = data.cep || '';
+    if (elements.customerPreviewAddress) elements.customerPreviewAddress.value = data.logradouro || '';
+    if (elements.customerPreviewBairro) elements.customerPreviewBairro.value = data.bairro || '';
+    if (elements.customerPreviewCidade) elements.customerPreviewCidade.value = data.cidade || '';
+    state.customerModalAddressUf = (data.uf || '').toUpperCase();
+  };
+
+  const handleCustomerModalCepLookup = async ({ force = false } = {}) => {
+    const input = elements.customerPreviewCep;
+    if (!input) return null;
+    const digits = sanitizeCepDigits(input.value || '');
+    input.value = formatCep(digits);
+    if (digits.length !== 8) return null;
+
+    if (customerModalCepLastDigits === digits && customerModalCepLastResult) {
+      applyCustomerModalAddressFromCep(customerModalCepLastResult);
+      if (!force) return customerModalCepLastResult;
+    }
+
+    if (customerModalCepLookupController) {
+      customerModalCepLookupController.abort();
+    }
+    const controller = new AbortController();
+    customerModalCepLookupController = controller;
+    try {
+      const result = await fetchDeliveryCepData(digits, controller.signal);
+      if (customerModalCepLookupController !== controller) return null;
+      customerModalCepLastDigits = digits;
+      customerModalCepLastResult = result;
+      applyCustomerModalAddressFromCep(result);
+      if (customerModalCepLastNotifiedDigits !== digits) {
+        notify('Endereço preenchido automaticamente pelo CEP.', 'success');
+        customerModalCepLastNotifiedDigits = digits;
+      }
+      return result;
+    } catch (error) {
+      if (error?.name === 'AbortError') return null;
+      console.error('Erro ao consultar CEP no modal de cliente:', error);
+      notify(error?.message || 'Não foi possível buscar o CEP informado.', 'error');
+      return null;
+    } finally {
+      if (customerModalCepLookupController === controller) {
+        customerModalCepLookupController = null;
+      }
+    }
+  };
+
   const buildDeliveryAddressLine = (address) => {
     if (!address) return '';
     const firstLine = [address.logradouro, address.numero].filter(Boolean).join(', ');
@@ -990,6 +1084,47 @@
     }
 
     return { ...fallback, formatted: buildDeliveryAddressLine(fallback) };
+  };
+
+  const resolveCustomerAddressLabel = (cliente) => {
+    if (!cliente || typeof cliente !== 'object') return '';
+    const directFormatted = [
+      cliente.enderecoFormatado,
+      cliente.enderecoCompleto,
+      cliente.enderecoCompletoFormatado,
+      cliente.formattedAddress,
+      cliente.addressLine,
+      cliente.enderecoEntrega,
+      cliente.enderecoPrincipal,
+    ].find((value) => typeof value === 'string' && value.trim());
+    if (directFormatted) return String(directFormatted).trim();
+
+    const resolved = resolveCustomerAddressRecord(cliente);
+    if (resolved?.formatted) return resolved.formatted;
+
+    const fallback = {
+      logradouro:
+        cliente.logradouroResidencia ||
+        cliente.logradouroEntrega ||
+        cliente.ruaResidencia ||
+        cliente.enderecoResidencia ||
+        '',
+      numero: cliente.numeroResidencia || cliente.numeroEntrega || '',
+      complemento: cliente.complementoResidencia || cliente.complementoEntrega || '',
+      bairro: cliente.bairroResidencia || cliente.bairroEntrega || cliente.bairro || '',
+      cidade: cliente.cidadeResidencia || cliente.cidadeEntrega || cliente.cidade || cliente.municipio || '',
+      uf:
+        (cliente.ufResidencia || cliente.ufEntrega || cliente.uf || cliente.estado || '')
+          .toString()
+          .toUpperCase(),
+      cep: cliente.cepResidencia || cliente.cepEntrega || cliente.cep || '',
+    };
+    const formatted = buildDeliveryAddressLine(fallback);
+    if (formatted) return formatted;
+
+    // Último fallback: pelo menos cidade/bairro para evitar mostrar "-"
+    const partial = [fallback.bairro, fallback.cidade, fallback.uf].filter(Boolean).join(' - ');
+    return partial;
   };
 
   const normalizeCustomerAddressRecord = (address, index = 0) => {
@@ -1097,6 +1232,136 @@
   const formatCurrency = (value) => {
     const number = Number(value || 0);
     return `R$ ${number.toFixed(2).replace('.', ',')}`;
+  };
+
+  const createPhoneMaskOptions = () => ({
+    mask: [{ mask: '0000-0000' }, { mask: '00000-0000' }],
+    dispatch: (appended, dynamicMasked) => {
+      const number = (dynamicMasked.unmaskedValue + appended).replace(/\D+/g, '');
+      return dynamicMasked.compiledMasks[number.length > 8 ? 1 : 0];
+    },
+    lazy: true,
+  });
+
+  const createCpfCnpjMaskOptions = () => ({
+    mask: [{ mask: '000.000.000-00' }, { mask: '00.000.000/0000-00' }],
+    dispatch: (appended, dynamicMasked) => {
+      const digits = (dynamicMasked.unmaskedValue + appended).replace(/\D+/g, '');
+      return dynamicMasked.compiledMasks[digits.length > 11 ? 1 : 0];
+    },
+    lazy: true,
+  });
+
+  const createMoneyMaskOptions = () => ({
+    mask: Number,
+    scale: 2,
+    signed: false,
+    thousandsSeparator: '.',
+    padFractionalZeros: true,
+    normalizeZeros: true,
+    radix: ',',
+    mapToRadix: ['.'],
+    lazy: true,
+  });
+
+  const registerDeliveryMask = (key, element, options) => {
+    if (!element || typeof IMask === 'undefined') return null;
+    if (deliveryFieldMasks[key] && typeof deliveryFieldMasks[key].destroy === 'function') {
+      deliveryFieldMasks[key].destroy();
+    }
+    deliveryFieldMasks[key] = IMask(element, { ...options });
+    return deliveryFieldMasks[key];
+  };
+
+  const registerPdvModalMask = (key, element, options) => {
+    if (!element || typeof IMask === 'undefined') return null;
+    if (pdvModalFieldMasks[key] && typeof pdvModalFieldMasks[key].destroy === 'function') {
+      pdvModalFieldMasks[key].destroy();
+    }
+    pdvModalFieldMasks[key] = IMask(element, { ...options });
+    return pdvModalFieldMasks[key];
+  };
+
+  const getPdvModalInputMaskConfig = (input) => {
+    if (!input || !(input instanceof HTMLInputElement)) return null;
+    const type = String(input.type || 'text').toLowerCase();
+    if (
+      ['hidden', 'checkbox', 'radio', 'file', 'button', 'submit', 'password', 'email', 'date', 'time', 'number'].includes(
+        type
+      )
+    ) {
+      return null;
+    }
+    if (input.closest('#pdv-delivery-address-modal')) {
+      return null;
+    }
+    if (input.id === 'pdv-customer-search-modal-input') {
+      return null;
+    }
+
+    const id = String(input.id || '').toLowerCase();
+    const name = String(input.name || '').toLowerCase();
+    const placeholder = String(input.placeholder || '').toLowerCase();
+    const haystack = `${id} ${name} ${placeholder}`;
+
+    if (/(cpf|cnpj|cpfcnpj|doc\b|documento)/.test(haystack)) {
+      return createCpfCnpjMaskOptions();
+    }
+    if (/\bcep\b/.test(haystack)) {
+      return { mask: '00000-000', lazy: true };
+    }
+    if (/(^|[-_])ddd($|[-_])| ddd\b/.test(` ${haystack} `)) {
+      return { mask: '00', lazy: true };
+    }
+    if (/(telefone|celular|phone)/.test(haystack)) {
+      return createPhoneMaskOptions();
+    }
+    if (/(data|nascimento)/.test(haystack) && type === 'text') {
+      return { mask: '00/00/0000', lazy: true };
+    }
+    if (/(hora|time|previsao)/.test(haystack) && type === 'text') {
+      return { mask: '00:00', lazy: true };
+    }
+    if (
+      /(valor|preco|preço|total|saldo|credito|crédito|limite|desconto|acrescimo|acréscimo|amount)/.test(haystack) &&
+      type === 'text'
+    ) {
+      return createMoneyMaskOptions();
+    }
+
+    return null;
+  };
+
+  const applyPdvModalFieldMasks = () => {
+    if (typeof IMask === 'undefined') {
+      console.warn('Biblioteca IMask não carregada; campos dos modais do PDV ficarão sem máscara.');
+      return;
+    }
+    const modalInputs = Array.from(document.querySelectorAll('[id$="-modal"] input'));
+    modalInputs.forEach((input, index) => {
+      const config = getPdvModalInputMaskConfig(input);
+      if (!config) return;
+      const key = `modal:${input.id || input.name || index}`;
+      registerPdvModalMask(key, input, config);
+    });
+  };
+
+  const applyDeliveryFieldMasks = () => {
+    if (typeof IMask === 'undefined') {
+      console.warn('Biblioteca IMask não carregada; campos do delivery ficarão sem máscara.');
+      return;
+    }
+    registerDeliveryMask('deliveryCpf', elements.deliveryCustomerCpf, createCpfCnpjMaskOptions());
+    registerDeliveryMask('deliveryCep', elements.deliveryAddressFields?.cep, {
+      mask: '00000-000',
+      lazy: true,
+    });
+    registerDeliveryMask('deliveryDddMain', elements.deliveryPhoneDdd, { mask: '00', lazy: true });
+    registerDeliveryMask('deliveryDddOne', elements.deliveryPhone1Ddd, { mask: '00', lazy: true });
+    registerDeliveryMask('deliveryDddTwo', elements.deliveryPhone2Ddd, { mask: '00', lazy: true });
+    registerDeliveryMask('deliveryPhoneMain', elements.deliveryPhoneNumber, createPhoneMaskOptions());
+    registerDeliveryMask('deliveryPhoneOne', elements.deliveryPhone1Number, createPhoneMaskOptions());
+    registerDeliveryMask('deliveryPhoneTwo', elements.deliveryPhone2Number, createPhoneMaskOptions());
   };
 
   const parseDecimalInput = (value) => {
@@ -1630,6 +1895,68 @@
       ? payments.reduce((total, payment) => total + safeNumber(payment?.valor), 0)
       : 0;
 
+  const getCaixaMovementTotals = (history = state.history) => {
+    const currentCycleHistory = (() => {
+      if (!Array.isArray(history)) return [];
+      const openingIndex = history.findIndex(
+        (entry) => String(entry?.id || '').toLowerCase().trim() === 'abertura'
+      );
+      if (openingIndex < 0) return history;
+      // `history` é exibido do mais recente para o mais antigo.
+      // Mantemos apenas os lançamentos do ciclo atual (da última abertura para cá).
+      return history.slice(0, openingIndex + 1);
+    })();
+    const totals = { entradas: 0, saidas: 0, envioTesouraria: 0 };
+    if (!currentCycleHistory.length) return totals;
+    currentCycleHistory.forEach((entry) => {
+      if (!entry || typeof entry !== 'object') return;
+      const id = String(entry.id || '').toLowerCase().trim();
+      const amount = Math.abs(safeNumber(entry.amount ?? entry.delta ?? 0));
+      if (!(amount > 0)) return;
+      if (id === 'entrada') {
+        totals.entradas += amount;
+      } else if (id === 'saida') {
+        totals.saidas += amount;
+      } else if (id === 'envio') {
+        totals.envioTesouraria += amount;
+      }
+    });
+    return totals;
+  };
+
+  const applyDebitOnPayments = (paymentId, amount) => {
+    let remaining = safeNumber(amount);
+    if (!(remaining > 0) || !Array.isArray(state.pagamentos) || !state.pagamentos.length) {
+      return;
+    }
+
+    const applyToPayment = (entry) => {
+      if (!entry || !(remaining > 0)) return;
+      const current = safeNumber(entry.valor);
+      if (current > 0) {
+        const consumed = Math.min(current, remaining);
+        entry.valor = current - consumed;
+        remaining -= consumed;
+      }
+    };
+
+    const primary = state.pagamentos.find((item) => item.id === paymentId) || state.pagamentos[0];
+    applyToPayment(primary);
+
+    if (remaining > 0) {
+      state.pagamentos.forEach((entry) => {
+        if (remaining <= 0) return;
+        if (entry === primary) return;
+        applyToPayment(entry);
+      });
+    }
+
+    if (remaining > 0 && primary) {
+      primary.valor = safeNumber(primary.valor) - remaining;
+      remaining = 0;
+    }
+  };
+
   const describePaymentValues = (payments) =>
     (Array.isArray(payments) ? payments : [])
       .filter((payment) => safeNumber(payment?.valor) > 0)
@@ -1673,8 +2000,11 @@
     const saldoValor = safeNumber(state.summary.saldo);
     const recebimentosClienteValor = safeNumber(state.summary.recebimentosCliente);
 
-    const recebimentosItems = createPaymentItems(state.pagamentos);
-    const recebimentosTotal = sumPayments(state.pagamentos);
+    const recebimentosFonte = Array.isArray(state.caixaInfo.previstoPagamentos)
+      ? state.caixaInfo.previstoPagamentos
+      : [];
+    const recebimentosItems = createPaymentItems(recebimentosFonte);
+    const recebimentosTotal = sumPayments(recebimentosFonte);
 
     const hasPrevistoPagamentos = Array.isArray(state.caixaInfo.previstoPagamentos)
       ? state.caixaInfo.previstoPagamentos.length > 0
@@ -2590,6 +2920,62 @@
     };
   };
 
+  const normalizeDeliveryOrderForPersist = (order) => {
+    if (!order || typeof order !== 'object') return null;
+    const createdAt = parseDateValue(order.createdAt) || new Date().toISOString();
+    const updatedAt = parseDateValue(order.updatedAt || order.statusUpdatedAt || createdAt) || createdAt;
+    const statusUpdatedAt = parseDateValue(order.statusUpdatedAt || updatedAt) || updatedAt;
+    const finalizedAt = order.finalizedAt ? parseDateValue(order.finalizedAt) : null;
+    const addressSource = order.address && typeof order.address === 'object' ? order.address : {};
+    const customerSource = order.customer && typeof order.customer === 'object' ? order.customer : {};
+    const courierSource = order.courier && typeof order.courier === 'object' ? order.courier : {};
+    const payments = Array.isArray(order.payments) ? order.payments.map((payment) => ({ ...payment })) : [];
+    const items = Array.isArray(order.items) ? order.items.map((item) => ({ ...item })) : [];
+    const normalizedAddress = {
+      ...addressSource,
+      formatted:
+        String(addressSource.formatted || '').trim() ||
+        buildDeliveryAddressLine(addressSource) ||
+        '',
+    };
+    return {
+      id: normalizeId(order.id || order._id || createUid()),
+      status: String(order.status || 'registrado'),
+      createdAt,
+      updatedAt,
+      statusUpdatedAt,
+      total: safeNumber(order.total ?? 0),
+      payments,
+      paymentsLabel: String(order.paymentsLabel || summarizeDeliveryPayments(payments)),
+      discount: safeNumber(order.discount ?? 0),
+      addition: safeNumber(order.addition ?? 0),
+      items,
+      finalizedAt: finalizedAt || null,
+      customer: {
+        id: normalizeId(customerSource.id || order.customerId || ''),
+        nome: String(customerSource.nome || order.customerName || 'Cliente'),
+        documento: String(customerSource.documento || order.customerDocument || ''),
+        contato: String(customerSource.contato || order.customerContact || ''),
+        endereco: String(customerSource.endereco || ''),
+      },
+      customerId: normalizeId(order.customerId || customerSource.id || ''),
+      customerDocument: String(order.customerDocument || customerSource.documento || ''),
+      customerContact: String(order.customerContact || customerSource.contato || ''),
+      customerDetails:
+        order.customerDetails && typeof order.customerDetails === 'object'
+          ? { ...order.customerDetails }
+          : null,
+      address: normalizedAddress,
+      courier: {
+        id: normalizeId(courierSource.id || ''),
+        label: String(courierSource.label || ''),
+      },
+      receiptSnapshot: order.receiptSnapshot || null,
+      saleCode: String(order.saleCode || ''),
+      saleRecordId: normalizeId(order.saleRecordId || ''),
+    };
+  };
+
   const buildStatePersistPayload = () => {
     const pagamentos = (Array.isArray(state.pagamentos) ? state.pagamentos : [])
       .map((payment) => normalizePaymentSnapshotForPersist(payment))
@@ -2612,6 +2998,9 @@
       .filter(Boolean);
     const budgets = (Array.isArray(state.budgets) ? state.budgets : [])
       .map((budget) => normalizeBudgetRecordForPersist(budget))
+      .filter(Boolean);
+    const deliveryOrders = (Array.isArray(state.deliveryOrders) ? state.deliveryOrders : [])
+      .map((order) => normalizeDeliveryOrderForPersist(order))
       .filter(Boolean);
     const accountsReceivable = (Array.isArray(state.accountsReceivable)
       ? state.accountsReceivable
@@ -2639,6 +3028,7 @@
       history,
       completedSales,
       budgets,
+      deliveryOrders,
       lastMovement: state.lastMovement ? normalizeHistoryEntryForPersist(state.lastMovement) : null,
       saleCodeIdentifier: state.saleCodeIdentifier || '',
       saleCodeSequence: Math.max(1, Number.parseInt(state.saleCodeSequence, 10) || 1),
@@ -2991,6 +3381,15 @@
     elements.exchangeSaleInfo = document.getElementById('pdv-exchange-sale-info');
     elements.exchangeSaleItemsBody = document.getElementById('pdv-exchange-sale-items-body');
     elements.exchangeSaleItemsEmpty = document.getElementById('pdv-exchange-sale-items-empty');
+    elements.exchangeProductModal = document.getElementById('pdv-exchange-product-modal');
+    elements.exchangeProductBackdrop =
+      elements.exchangeProductModal?.querySelector('[data-exchange-product-dismiss="backdrop"]') || null;
+    elements.exchangeProductClose = document.getElementById('pdv-exchange-product-close');
+    elements.exchangeProductSearchInput = document.getElementById('pdv-exchange-product-search-input');
+    elements.exchangeProductIncludeInactive = document.getElementById('pdv-exchange-product-include-inactive');
+    elements.exchangeProductSearchButton = document.getElementById('pdv-exchange-product-search-btn');
+    elements.exchangeProductResultsBody = document.getElementById('pdv-exchange-product-results-body');
+    elements.exchangeProductResultsEmpty = document.getElementById('pdv-exchange-product-results-empty');
 
     elements.customerOpenButton = document.getElementById('pdv-open-customer');
     elements.customerOpenButtonLabel = document.getElementById('pdv-open-customer-label');
@@ -3011,10 +3410,34 @@
     elements.customerModalPanels =
       elements.customerModal?.querySelectorAll('[data-pdv-customer-panel]') || [];
     elements.customerSearchInput = document.getElementById('pdv-customer-search');
+    elements.customerPreviewCode = document.getElementById('pdv-customer-preview-code');
+    elements.customerPreviewDoc = document.getElementById('pdv-customer-preview-doc');
+    elements.customerPreviewSexo = document.getElementById('pdv-customer-preview-sexo');
+    elements.customerPreviewBirth = document.getElementById('pdv-customer-preview-birth');
+    elements.customerPreviewEmail = document.getElementById('pdv-customer-preview-email');
+    elements.customerPreviewAddress = document.getElementById('pdv-customer-preview-address');
+    elements.customerPreviewNumber = document.getElementById('pdv-customer-preview-number');
+    elements.customerPreviewBairro = document.getElementById('pdv-customer-preview-bairro');
+    elements.customerPreviewCep = document.getElementById('pdv-customer-preview-cep');
+    elements.customerPreviewComplemento = document.getElementById('pdv-customer-preview-complemento');
+    elements.customerPreviewCidade = document.getElementById('pdv-customer-preview-cidade');
+    elements.customerPreviewTelefone = document.getElementById('pdv-customer-preview-telefone');
+    elements.customerPreviewTelefone1Ddd = document.getElementById('pdv-customer-preview-telefone1-ddd');
+    elements.customerPreviewTelefone1 = document.getElementById('pdv-customer-preview-telefone1');
+    elements.customerPreviewTelefone2Ddd = document.getElementById('pdv-customer-preview-telefone2-ddd');
+    elements.customerPreviewTelefone2 = document.getElementById('pdv-customer-preview-telefone2');
+    elements.customerPreviewObservacao = document.getElementById('pdv-customer-preview-observacao');
+    elements.customerCreditLimit = document.getElementById('pdv-customer-credit-limit');
+    elements.customerCreditDebt = document.getElementById('pdv-customer-credit-debt');
+    elements.customerCreditAvailable = document.getElementById('pdv-customer-credit-available');
+    elements.customerCreditTotal = document.getElementById('pdv-customer-credit-total');
+    elements.customerFidelityTotal = document.getElementById('pdv-customer-fidelity-total');
     elements.customerResultsList = document.getElementById('pdv-customer-results');
     elements.customerResultsEmpty = document.getElementById('pdv-customer-results-empty');
     elements.customerResultsLoading = document.getElementById('pdv-customer-results-loading');
     elements.customerResultsTable = document.getElementById('pdv-customer-results-table');
+    elements.customerAddressCards = document.getElementById('pdv-customer-address-cards');
+    elements.customerAddressCardsStatus = document.getElementById('pdv-customer-address-cards-status');
     elements.customerPetsList = document.getElementById('pdv-customer-pets');
     elements.customerPetsEmpty = document.getElementById('pdv-customer-pets-empty');
     elements.customerPetsLoading = document.getElementById('pdv-customer-pets-loading');
@@ -3022,6 +3445,12 @@
     elements.customerClear = document.getElementById('pdv-customer-clear');
     elements.customerCancel = document.getElementById('pdv-customer-cancel');
     elements.customerRegisterButton = document.getElementById('pdv-customer-register');
+    elements.customerRegisterToggle = document.getElementById('pdv-customer-register-toggle');
+    elements.customerRequiredName = document.getElementById('pdv-customer-required-name');
+    elements.customerRequiredDoc = document.getElementById('pdv-customer-required-doc');
+    elements.customerRequiredSexo = document.getElementById('pdv-customer-required-sexo');
+    elements.customerRequiredCep = document.getElementById('pdv-customer-required-cep');
+    elements.customerRequiredNumber = document.getElementById('pdv-customer-required-number');
     elements.customerRegisterModal = document.getElementById('pdv-customer-register-modal');
     elements.customerRegisterBackdrop =
       elements.customerRegisterModal?.querySelector('[data-customer-register-dismiss="backdrop"]') || null;
@@ -3033,6 +3462,14 @@
       elements.customerRegisterModal?.querySelector('[data-customer-frame-loading]') || null;
     elements.customerRegisterShell =
       elements.customerRegisterModal?.querySelector('[data-customer-frame-shell]') || null;
+    elements.customerSearchModal = document.getElementById('pdv-customer-search-modal');
+    elements.customerSearchModalBackdrop =
+      elements.customerSearchModal?.querySelector('[data-customer-search-dismiss="backdrop"]') || null;
+    elements.customerSearchModalClose = document.getElementById('pdv-customer-search-modal-close');
+    elements.customerSearchModalInput = document.getElementById('pdv-customer-search-modal-input');
+    elements.customerSearchModalButton = document.getElementById('pdv-customer-search-modal-btn');
+    elements.customerSearchModalResults = document.getElementById('pdv-customer-search-modal-results');
+    elements.customerSearchModalEmpty = document.getElementById('pdv-customer-search-modal-empty');
 
     elements.receivablesSearchInput = document.getElementById('pdv-receivables-search');
     elements.receivablesSearchResults = document.getElementById('pdv-receivables-search-results');
@@ -3076,7 +3513,6 @@
 
     elements.historyList = document.getElementById('pdv-history-list');
     elements.historyEmpty = document.getElementById('pdv-history-empty');
-    elements.clearHistory = document.getElementById('pdv-clear-history');
 
     elements.salesList = document.getElementById('pdv-sales-list');
     elements.salesEmpty = document.getElementById('pdv-sales-empty');
@@ -3217,7 +3653,45 @@
     elements.deliveryAddressForm = document.getElementById('pdv-delivery-address-form');
     elements.deliveryAddressCancelForm = document.getElementById('pdv-delivery-address-cancel-form');
     elements.deliveryAddressConfirm = document.getElementById('pdv-delivery-address-confirm');
+    elements.deliveryAddressConfirmWrap = document.getElementById('pdv-delivery-address-confirm-wrap');
     elements.deliveryAddressCancel = document.getElementById('pdv-delivery-address-cancel');
+    elements.deliveryTabBtnCliente = document.getElementById('pdv-delivery-tab-btn-cliente');
+    elements.deliveryTabBtnPedido = document.getElementById('pdv-delivery-tab-btn-pedido');
+    elements.deliveryTabCliente = document.getElementById('pdv-delivery-tab-cliente');
+    elements.deliveryTabPedido = document.getElementById('pdv-delivery-tab-pedido');
+    elements.deliveryFooterCliente = document.getElementById('pdv-delivery-footer-cliente');
+    elements.deliveryFooterPedido = document.getElementById('pdv-delivery-footer-pedido');
+    elements.deliveryOrderConfirm = document.getElementById('pdv-delivery-order-confirm');
+    elements.deliveryOrderCancel = document.getElementById('pdv-delivery-order-cancel');
+    elements.deliveryClientConfirm = document.getElementById('pdv-delivery-client-confirm');
+    elements.deliveryClientCancel = document.getElementById('pdv-delivery-client-cancel');
+    elements.deliveryClientSince = document.getElementById('pdv-delivery-client-since');
+    elements.deliveryClientFidelity = document.getElementById('pdv-delivery-client-fidelity');
+    elements.deliveryClientPending = document.getElementById('pdv-delivery-client-pending');
+    elements.deliveryClientCredit = document.getElementById('pdv-delivery-client-credit');
+    elements.deliveryOrderDate = document.getElementById('pdv-delivery-order-date');
+    elements.deliveryOrderTime = document.getElementById('pdv-delivery-order-time');
+    elements.deliveryOrderCourier = document.getElementById('pdv-delivery-order-courier');
+    elements.deliveryOrderHistoryBody = document.getElementById('pdv-delivery-order-history-body');
+    elements.deliveryOrderHistoryEmpty = document.getElementById('pdv-delivery-order-history-empty');
+    elements.deliveryOrderHistoryImportAll = document.getElementById('pdv-delivery-order-history-import-all');
+    elements.deliveryRegisterClient = document.getElementById('pdv-delivery-register-client');
+    elements.deliveryChangeClient = document.getElementById('pdv-delivery-change-client');
+    elements.deliveryCustomerSearch = document.getElementById('pdv-delivery-procurar-cliente');
+    elements.deliveryCustomerCpf = document.getElementById('pdv-delivery-cpf');
+    elements.deliveryRequiredApe = document.getElementById('pdv-delivery-required-apelido');
+    elements.deliveryRequiredCpf = document.getElementById('pdv-delivery-required-cpf');
+    elements.deliveryRequiredCep = document.getElementById('pdv-delivery-required-cep');
+    elements.deliveryRequiredSexo = document.getElementById('pdv-delivery-required-sexo');
+    elements.deliveryCustomerSexo = document.getElementById('pdv-delivery-sexo');
+    elements.deliveryCustomerBirthDate = document.getElementById('pdv-delivery-data-nascimento');
+    elements.deliveryCustomerEmail = document.getElementById('pdv-delivery-email');
+    elements.deliveryPhoneDdd = document.getElementById('pdv-delivery-telefone-ddd');
+    elements.deliveryPhoneNumber = document.getElementById('pdv-delivery-telefone-numero');
+    elements.deliveryPhone1Ddd = document.getElementById('pdv-delivery-telefone1-ddd');
+    elements.deliveryPhone1Number = document.getElementById('pdv-delivery-telefone1-numero');
+    elements.deliveryPhone2Ddd = document.getElementById('pdv-delivery-telefone2-ddd');
+    elements.deliveryPhone2Number = document.getElementById('pdv-delivery-telefone2-numero');
     elements.deliveryAddressFields = {
       apelido: document.getElementById('pdv-delivery-address-apelido'),
       cep: document.getElementById('pdv-delivery-address-cep'),
@@ -3771,6 +4245,8 @@
     }
     updateSaleCustomerSummary();
     updateCrediarioCustomerSummary();
+    updateDeliveryCustomerSummary();
+    renderDeliveryOrderHistory();
     if (elements.crediarioError) {
       elements.crediarioError.classList.add('hidden');
       elements.crediarioError.textContent = '';
@@ -3851,8 +4327,7 @@
     elements.customerResultsLoading.classList.add('hidden');
     const query = state.customerSearchQuery.trim();
     if (!query) {
-      elements.customerResultsEmpty.textContent = 'Digite para buscar clientes.';
-      elements.customerResultsEmpty.classList.remove('hidden');
+      elements.customerResultsEmpty.classList.add('hidden');
       return;
     }
     if (!state.customerSearchResults.length) {
@@ -3886,6 +4361,169 @@
       fragment.appendChild(row);
     });
     elements.customerResultsList.appendChild(fragment);
+  };
+
+  const renderCustomerLookupSearchModalResults = () => {
+    if (!elements.customerSearchModalResults || !elements.customerSearchModalEmpty) return;
+    elements.customerSearchModalResults.innerHTML = '';
+    if (state.customerLookupSearchLoading) {
+      elements.customerSearchModalEmpty.textContent = 'Buscando clientes...';
+      elements.customerSearchModalEmpty.classList.remove('hidden');
+      return;
+    }
+    const query = String(state.customerLookupSearchQuery || '').trim();
+    const results = Array.isArray(state.customerLookupSearchResults) ? state.customerLookupSearchResults : [];
+    if (!results.length) {
+      elements.customerSearchModalEmpty.textContent = query
+        ? `Nenhum cliente encontrado para "${query}".`
+        : 'Digite para pesquisar clientes.';
+      elements.customerSearchModalEmpty.classList.remove('hidden');
+      return;
+    }
+    elements.customerSearchModalEmpty.classList.add('hidden');
+    const fragment = document.createDocumentFragment();
+    results.forEach((cliente, index) => {
+      const row = document.createElement('tr');
+      row.className = 'cursor-pointer text-[12px] text-gray-700 transition hover:bg-primary/5';
+      row.setAttribute('data-customer-search-result', String(index));
+      const codigo = getCustomerCode(cliente) || '-';
+      const nome = resolveCustomerName(cliente) || 'Cliente sem nome';
+      const documento = cliente?.cpf || cliente?.cnpj || cliente?.doc || '-';
+      const address = resolveCustomerAddressLabel(cliente) || '-';
+      row.innerHTML = `
+        <td class="px-3 py-2 font-semibold text-gray-700">${escapeHtml(codigo)}</td>
+        <td class="px-3 py-2 text-gray-700">${escapeHtml(nome)}</td>
+        <td class="px-3 py-2 text-gray-700">${escapeHtml(documento)}</td>
+        <td class="px-3 py-2 text-gray-600">${escapeHtml(address)}</td>
+      `;
+      fragment.appendChild(row);
+    });
+    elements.customerSearchModalResults.appendChild(fragment);
+  };
+
+  const searchCustomerLookupModal = async (rawTerm) => {
+    const term = String(rawTerm || '').trim();
+    state.customerLookupSearchQuery = term;
+    if (customerLookupSearchController) {
+      customerLookupSearchController.abort();
+      customerLookupSearchController = null;
+    }
+    if (!term || term.length < 2) {
+      state.customerLookupSearchLoading = false;
+      state.customerLookupSearchResults = [];
+      renderCustomerLookupSearchModalResults();
+      return;
+    }
+    state.customerLookupSearchLoading = true;
+    renderCustomerLookupSearchModalResults();
+    const controller = new AbortController();
+    customerLookupSearchController = controller;
+    try {
+      const token = getToken();
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const response = await fetch(
+        `${API_BASE}/func/clientes/buscar?q=${encodeURIComponent(term)}&limit=40`,
+        { headers, signal: controller.signal }
+      );
+      if (!response.ok) {
+        throw new Error('Não foi possível buscar clientes.');
+      }
+      const payload = await response.json();
+      state.customerLookupSearchResults = Array.isArray(payload) ? payload : [];
+    } catch (error) {
+      if (error?.name === 'AbortError') return;
+      state.customerLookupSearchResults = [];
+      console.error('Erro ao buscar clientes no modal de busca:', error);
+      notify(error?.message || 'Não foi possível buscar clientes.', 'error');
+    } finally {
+      if (customerLookupSearchController === controller) {
+        customerLookupSearchController = null;
+      }
+      state.customerLookupSearchLoading = false;
+      renderCustomerLookupSearchModalResults();
+    }
+  };
+
+  const openCustomerLookupSearchModal = (initialQuery = '', options = {}) => {
+    if (!elements.customerSearchModal) return;
+    document.body.appendChild(elements.customerSearchModal);
+    customerLookupSearchSelectHandler =
+      typeof options?.onSelect === 'function' ? options.onSelect : null;
+    state.customerLookupSearchQuery = String(initialQuery || '').trim();
+    state.customerLookupSearchResults = [];
+    state.customerLookupSearchLoading = false;
+    elements.customerSearchModal.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+    if (elements.customerSearchModalInput) {
+      elements.customerSearchModalInput.value = state.customerLookupSearchQuery;
+    }
+    renderCustomerLookupSearchModalResults();
+    if (state.customerLookupSearchQuery.length >= 2) {
+      searchCustomerLookupModal(state.customerLookupSearchQuery);
+    }
+    window.setTimeout(() => elements.customerSearchModalInput?.focus(), 80);
+  };
+
+  const closeCustomerLookupSearchModal = () => {
+    if (customerLookupSearchTimeout) {
+      clearTimeout(customerLookupSearchTimeout);
+      customerLookupSearchTimeout = null;
+    }
+    if (customerLookupSearchController) {
+      customerLookupSearchController.abort();
+      customerLookupSearchController = null;
+    }
+    state.customerLookupSearchLoading = false;
+    state.customerLookupSearchResults = [];
+    customerLookupSearchSelectHandler = null;
+    if (elements.customerSearchModal) {
+      elements.customerSearchModal.classList.add('hidden');
+    }
+    releaseBodyScrollIfNoModal();
+  };
+
+  const handleCustomerLookupSearchModalInput = (event) => {
+    const value = event?.target?.value || '';
+    state.customerLookupSearchQuery = value;
+    if (customerLookupSearchTimeout) {
+      clearTimeout(customerLookupSearchTimeout);
+      customerLookupSearchTimeout = null;
+    }
+    customerLookupSearchTimeout = setTimeout(() => {
+      searchCustomerLookupModal(value);
+    }, 250);
+  };
+
+  const handleCustomerLookupSearchModalSubmit = () => {
+    searchCustomerLookupModal(elements.customerSearchModalInput?.value || '');
+  };
+
+  const handleCustomerLookupSearchModalResultsClick = async (event) => {
+    const row = event.target.closest('tr[data-customer-search-result]');
+    if (!row) return;
+    const index = Number.parseInt(row.getAttribute('data-customer-search-result') || '-1', 10);
+    if (!Number.isInteger(index) || index < 0) return;
+    const cliente = state.customerLookupSearchResults[index];
+    if (!cliente) return;
+    try {
+      if (typeof customerLookupSearchSelectHandler === 'function') {
+        const result = await customerLookupSearchSelectHandler(cliente);
+        if (result === false) return;
+      } else {
+        setModalSelectedCliente(cliente);
+        elements.customerPreviewDoc?.focus();
+      }
+      closeCustomerLookupSearchModal();
+    } catch (error) {
+      console.error('Erro ao selecionar cliente no modal de busca:', error);
+      notify(error?.message || 'Não foi possível selecionar o cliente.', 'error');
+    }
+  };
+
+  const handleCustomerLookupSearchModalKeydown = (event) => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    closeCustomerLookupSearchModal();
   };
 
   const renderCustomerPets = () => {
@@ -4057,6 +4695,583 @@
     if (!normalizedCompany) return false;
     const companies = Array.isArray(seller?.empresas) ? seller.empresas : [];
     return companies.some((empresa) => extractNormalizedId(empresa) === normalizedCompany);
+  };
+
+  const isEmployeeFromCompany = (employee, companyId) => {
+    const normalizedCompany = normalizeId(companyId);
+    if (!normalizedCompany) return false;
+    const companies = Array.isArray(employee?.empresas) ? employee.empresas : [];
+    if (companies.some((empresa) => extractNormalizedId(empresa) === normalizedCompany)) {
+      return true;
+    }
+    const directCandidates = [employee?.empresa, employee?.empresaId, employee?.companyId, employee?.storeId];
+    return directCandidates.some((candidate) => extractNormalizedId(candidate) === normalizedCompany);
+  };
+
+  const getEmployeeGroups = (employee) => {
+    if (!employee || typeof employee !== 'object') return [];
+    const rawGroups = Array.isArray(employee.grupos)
+      ? employee.grupos
+      : Array.isArray(employee.groups)
+      ? employee.groups
+      : [];
+    return rawGroups
+      .map((group) => String(group || '').trim().toLowerCase())
+      .filter(Boolean);
+  };
+
+  const isDeliveryCourier = (employee) => {
+    const groups = getEmployeeGroups(employee);
+    return groups.includes('entregador') || groups.includes('gerente');
+  };
+
+  const getEmployeeDisplayName = (employee) => {
+    const name = String(employee?.nome || employee?.name || employee?.nomeCompleto || '').trim();
+    return name || 'Funcionario';
+  };
+
+  const getEmployeeCode = (employee) =>
+    sanitizeSellerCode(employee?.codigo || employee?.codigoCliente || employee?.id || employee?._id || '');
+
+  const renderDeliveryCourierOptions = () => {
+    const select = elements.deliveryOrderCourier;
+    if (!select) return;
+    const stateValue = normalizeId(state.deliverySelectedCourierId || '');
+    const currentValue = normalizeId(select.value || stateValue || '');
+    const couriers = Array.isArray(state.deliveryCouriers) ? state.deliveryCouriers : [];
+    const options = ['<option value="">Selecione</option>'];
+    couriers.forEach((employee) => {
+      const id = normalizeId(employee?._id || employee?.id || '');
+      if (!id) return;
+      const code = getEmployeeCode(employee);
+      const name = getEmployeeDisplayName(employee);
+      const label = code ? `${code} - ${name}` : name;
+      options.push(`<option value="${escapeHtml(id)}">${escapeHtml(label)}</option>`);
+    });
+    select.innerHTML = options.join('');
+    if (currentValue && couriers.some((employee) => normalizeId(employee?._id || employee?.id || '') === currentValue)) {
+      select.value = currentValue;
+    }
+    select.disabled = state.deliveryCouriersLoading;
+  };
+
+  const captureDeliveryCourierSelection = () => {
+    const select = elements.deliveryOrderCourier;
+    if (!select) return;
+    const id = normalizeId(select.value || '');
+    state.deliverySelectedCourierId = id;
+    if (!id) {
+      state.deliverySelectedCourierLabel = '';
+      return;
+    }
+    const option = select.selectedOptions?.[0] || null;
+    state.deliverySelectedCourierLabel = option?.textContent?.trim() || '';
+  };
+
+  const loadDeliveryCouriersForActiveCompany = async () => {
+    const companyId = getActiveSellerCompanyId();
+    if (!elements.deliveryOrderCourier) return;
+    if (!companyId) {
+      state.deliveryCouriers = [];
+      state.deliveryCouriersCompanyId = '';
+      state.deliveryCouriersLoading = false;
+      renderDeliveryCourierOptions();
+      return;
+    }
+    if (state.deliveryCouriersCompanyId === companyId && state.deliveryCouriers.length) {
+      renderDeliveryCourierOptions();
+      return;
+    }
+    state.deliveryCouriersLoading = true;
+    renderDeliveryCourierOptions();
+    try {
+      const token = getToken();
+      const payload = await fetchWithOptionalAuth(`${API_BASE}/admin/funcionarios`, {
+        token,
+        errorMessage: 'Não foi possível carregar os entregadores cadastrados.',
+      });
+      const funcionarios = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.funcionarios)
+        ? payload.funcionarios
+        : [];
+      state.deliveryCouriers = funcionarios.filter(
+        (funcionario) => isDeliveryCourier(funcionario) && isEmployeeFromCompany(funcionario, companyId)
+      );
+      state.deliveryCouriersCompanyId = companyId;
+    } catch (error) {
+      state.deliveryCouriers = [];
+      state.deliveryCouriersCompanyId = companyId;
+      console.error('Erro ao carregar entregadores:', error);
+      notify(error?.message || 'Não foi possível carregar entregadores.', 'error');
+    } finally {
+      state.deliveryCouriersLoading = false;
+      renderDeliveryCourierOptions();
+    }
+  };
+
+  const updateCustomerModalPreview = () => {
+    const cliente = state.modalSelectedCliente;
+    const address = cliente ? resolveCustomerAddressRecord(cliente) : null;
+    const setInputValue = (element, value = '') => {
+      if (!element) return;
+      element.value = String(value || '');
+    };
+    const setTextValue = (element, value = '') => {
+      if (!element) return;
+      element.textContent = String(value || '');
+    };
+    const resolveMoney = (...values) => {
+      for (const value of values) {
+        const parsed = safeNumber(value);
+        if (Number.isFinite(parsed) && parsed !== 0) return parsed;
+      }
+      return 0;
+    };
+
+    if (!cliente) {
+      setInputValue(elements.customerSearchInput, '');
+      setInputValue(elements.customerPreviewCode, '');
+      setInputValue(elements.customerPreviewDoc, '');
+      setInputValue(elements.customerPreviewSexo, '');
+      setInputValue(elements.customerPreviewBirth, '');
+      setInputValue(elements.customerPreviewEmail, '');
+      setInputValue(elements.customerPreviewAddress, '');
+      setInputValue(elements.customerPreviewNumber, '');
+      setInputValue(elements.customerPreviewBairro, '');
+      setInputValue(elements.customerPreviewCep, '');
+      setInputValue(elements.customerPreviewComplemento, '');
+      setInputValue(elements.customerPreviewCidade, '');
+      setInputValue(elements.customerPreviewTelefone, '');
+      setInputValue(elements.customerPreviewTelefone1Ddd, '');
+      setInputValue(elements.customerPreviewTelefone1, '');
+      setInputValue(elements.customerPreviewTelefone2Ddd, '');
+      setInputValue(elements.customerPreviewTelefone2, '');
+      setInputValue(elements.customerPreviewObservacao, '');
+      setTextValue(elements.customerCreditLimit, 'R$ 0,00');
+      setTextValue(elements.customerCreditDebt, 'R$ 0,00');
+      setTextValue(elements.customerCreditAvailable, 'R$ 0,00');
+      setTextValue(elements.customerCreditTotal, '0,00');
+      setTextValue(elements.customerFidelityTotal, '0,00');
+      return;
+    }
+
+    const doc = cliente.cpf || cliente.doc || cliente.cnpj || cliente.inscricaoEstadual || '';
+    const parsePhone = (rawValue) => {
+      const digits = String(rawValue || '').replace(/\D+/g, '');
+      if (!digits) return { ddd: '', number: '' };
+      if (digits.length <= 8) return { ddd: '', number: digits };
+      const ddd = digits.slice(0, 2);
+      const number = digits.slice(2);
+      return { ddd, number };
+    };
+    const phone1 = parsePhone(cliente.celular || cliente.telefone || '');
+    const phone2 = parsePhone(cliente.celular2 || cliente.telefone2 || '');
+    const sexoRaw = String(cliente.sexo || cliente.genero || '').trim().toUpperCase();
+    const sexo = sexoRaw.startsWith('F') ? 'F' : sexoRaw.startsWith('M') ? 'M' : '';
+    const nascimentoRaw = cliente.dataNascimento || cliente.nascimento || cliente.birthDate || '';
+    const nascimentoDate = nascimentoRaw ? new Date(nascimentoRaw) : null;
+    const nascimento = nascimentoDate && Number.isFinite(nascimentoDate.getTime())
+      ? nascimentoDate.toISOString().slice(0, 10)
+      : '';
+    const creditLimit = resolveMoney(
+      cliente.limiteCredito,
+      cliente.limite,
+      cliente.creditoLimite,
+      cliente.creditLimit
+    );
+    const debtBalance = resolveMoney(
+      cliente.saldoDevedor,
+      cliente.debito,
+      cliente.pending,
+      cliente.saldo
+    );
+    const availableCredit = Math.max(creditLimit - debtBalance, 0);
+    const fidelityPoints = resolveMoney(
+      cliente.pontosFidelidade,
+      cliente.fidelidade,
+      cliente.points
+    );
+
+    setInputValue(elements.customerSearchInput, resolveCustomerName(cliente) || '');
+    setInputValue(elements.customerPreviewCode, getCustomerCode(cliente) || '');
+    setInputValue(elements.customerPreviewDoc, doc);
+    setInputValue(elements.customerPreviewSexo, sexo);
+    setInputValue(elements.customerPreviewBirth, nascimento);
+    setInputValue(elements.customerPreviewEmail, cliente.email || '');
+    setInputValue(elements.customerPreviewAddress, address?.logradouro || '');
+    setInputValue(elements.customerPreviewNumber, address?.numero || '');
+    setInputValue(elements.customerPreviewBairro, address?.bairro || '');
+    setInputValue(elements.customerPreviewCep, address?.cep || '');
+    setInputValue(elements.customerPreviewComplemento, address?.complemento || '');
+    setInputValue(elements.customerPreviewCidade, address?.cidade || '');
+    state.customerModalAddressUf = (address?.uf || '').toUpperCase();
+    setInputValue(elements.customerPreviewTelefone, phone1.number || phone2.number || '');
+    setInputValue(elements.customerPreviewTelefone1Ddd, phone1.ddd);
+    setInputValue(elements.customerPreviewTelefone1, phone1.number);
+    setInputValue(elements.customerPreviewTelefone2Ddd, phone2.ddd);
+    setInputValue(elements.customerPreviewTelefone2, phone2.number);
+    setInputValue(
+      elements.customerPreviewObservacao,
+      address?.observacao || cliente.observacao || cliente.obs || ''
+    );
+    setTextValue(elements.customerCreditLimit, formatCurrency(creditLimit));
+    setTextValue(elements.customerCreditDebt, formatCurrency(debtBalance));
+    setTextValue(elements.customerCreditAvailable, formatCurrency(availableCredit));
+    setTextValue(elements.customerCreditTotal, formatDecimalValue(creditLimit, 2));
+    setTextValue(elements.customerFidelityTotal, formatDecimalValue(fidelityPoints, 2));
+  };
+
+  const clearCustomerModalAddressPreviewFields = () => {
+    if (elements.customerPreviewAddress) elements.customerPreviewAddress.value = '';
+    if (elements.customerPreviewNumber) elements.customerPreviewNumber.value = '';
+    if (elements.customerPreviewBairro) elements.customerPreviewBairro.value = '';
+    if (elements.customerPreviewCep) elements.customerPreviewCep.value = '';
+    if (elements.customerPreviewComplemento) elements.customerPreviewComplemento.value = '';
+    if (elements.customerPreviewCidade) elements.customerPreviewCidade.value = '';
+    if (elements.customerPreviewObservacao) elements.customerPreviewObservacao.value = '';
+    state.customerModalAddressUf = '';
+  };
+
+  const applyCustomerModalAddressToPreview = (address) => {
+    if (!address || typeof address !== 'object') return;
+    if (elements.customerPreviewAddress) elements.customerPreviewAddress.value = address.logradouro || '';
+    if (elements.customerPreviewNumber) elements.customerPreviewNumber.value = address.numero || '';
+    if (elements.customerPreviewBairro) elements.customerPreviewBairro.value = address.bairro || '';
+    if (elements.customerPreviewCep) elements.customerPreviewCep.value = formatCep(address.cep || '');
+    if (elements.customerPreviewComplemento)
+      elements.customerPreviewComplemento.value = address.complemento || '';
+    if (elements.customerPreviewCidade) elements.customerPreviewCidade.value = address.cidade || '';
+    if (elements.customerPreviewObservacao)
+      elements.customerPreviewObservacao.value = address.observacao || '';
+    state.customerModalAddressUf = String(address.uf || '').toUpperCase();
+  };
+
+  const ensureCustomerModalAddressSelection = ({ applyToFields = false } = {}) => {
+    const addresses = Array.isArray(state.customerModalAddresses) ? state.customerModalAddresses : [];
+    const currentId = normalizeId(state.customerModalSelectedAddressId);
+    let selected = addresses.find((item) => normalizeId(item?.id) === currentId) || null;
+    if (!selected && addresses.length) {
+      selected = addresses.find((item) => item?.isDefault) || addresses[0];
+      state.customerModalSelectedAddressId = normalizeId(selected?.id);
+    }
+    if (!selected && currentId && currentId !== '__new__') {
+      state.customerModalSelectedAddressId = '';
+    }
+    if (selected && applyToFields) {
+      applyCustomerModalAddressToPreview(selected);
+    }
+    return selected;
+  };
+
+  const renderCustomerModalAddressCards = () => {
+    if (!elements.customerAddressCards) return;
+    const container = elements.customerAddressCards;
+    const status = elements.customerAddressCardsStatus;
+    container.innerHTML = '';
+
+    const addresses = Array.isArray(state.customerModalAddresses) ? state.customerModalAddresses : [];
+    const hasCustomer = Boolean(state.modalSelectedCliente);
+    const selectedId = normalizeId(state.customerModalSelectedAddressId);
+
+    if (status) {
+      if (state.customerModalAddressesLoading) {
+        status.textContent = 'Carregando...';
+      } else if (!hasCustomer) {
+        status.textContent = 'Selecione um cliente';
+      } else if (addresses.length) {
+        status.textContent = `${addresses.length} endereco(s)`;
+      } else {
+        status.textContent = 'Nenhum endereco cadastrado';
+      }
+    }
+
+    const fragment = document.createDocumentFragment();
+
+    if (state.customerModalAddressesLoading) {
+      for (let index = 0; index < 3; index += 1) {
+        const skeleton = document.createElement('div');
+        skeleton.className =
+          'min-h-[110px] animate-pulse rounded-lg border border-gray-200 bg-white p-3';
+        skeleton.innerHTML = `
+          <div class="h-3 w-20 rounded bg-gray-200"></div>
+          <div class="mt-2 h-2.5 w-full rounded bg-gray-100"></div>
+          <div class="mt-1.5 h-2.5 w-5/6 rounded bg-gray-100"></div>
+          <div class="mt-1.5 h-2.5 w-2/3 rounded bg-gray-100"></div>
+        `;
+        fragment.appendChild(skeleton);
+      }
+    } else {
+      addresses.forEach((address) => {
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.setAttribute('data-customer-address-card', normalizeId(address.id));
+        const isSelected = selectedId && selectedId === normalizeId(address.id);
+        card.className = [
+          'group relative min-h-[110px] rounded-lg border bg-white p-3 text-left transition',
+          isSelected
+            ? 'border-primary ring-1 ring-primary/30'
+            : 'border-gray-200 hover:border-primary/50 hover:bg-primary/5',
+        ].join(' ');
+        const title = escapeHtml(address.apelido || 'Endereco');
+        const line1 = escapeHtml([address.logradouro, address.numero].filter(Boolean).join(', ') || 'Endereco');
+        const line2 = escapeHtml(
+          [address.bairro, [address.cidade, address.uf].filter(Boolean).join(' - ')].filter(Boolean).join(' • ')
+        );
+        const cepText = address.cep ? escapeHtml(formatCep(address.cep)) : '';
+        card.innerHTML = `
+          <span data-customer-address-delete="true" class="absolute right-2 top-2 inline-flex h-5 w-5 items-center justify-center rounded text-[11px] text-red-500 hover:bg-red-50 hover:text-red-600" title="Excluir endereço">
+            <i class="fas fa-trash"></i>
+          </span>
+          <div class="flex items-start justify-between gap-2">
+            <p class="pr-6 text-[12px] font-semibold text-gray-800">${title}</p>
+            ${address.isDefault ? '<span class="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Principal</span>' : ''}
+          </div>
+          <p class="mt-1 text-[11px] text-gray-700 line-clamp-2">${line1}</p>
+          <p class="mt-1 text-[10px] text-gray-500 line-clamp-2">${line2 || '&nbsp;'}</p>
+          <p class="mt-1 text-[10px] text-gray-400">${cepText || '&nbsp;'}</p>
+        `;
+        fragment.appendChild(card);
+      });
+    }
+
+    const allowNewAddressCard = hasCustomer && Boolean(elements.customerRegisterToggle?.checked);
+    if (allowNewAddressCard) {
+      const addCard = document.createElement('button');
+      addCard.type = 'button';
+      addCard.setAttribute('data-customer-address-card-new', 'true');
+      const isNewSelected = selectedId === '__new__';
+      addCard.className = [
+        'min-h-[110px] rounded-lg border border-dashed bg-white p-3 text-center transition',
+        'flex flex-col items-center justify-center gap-1',
+        isNewSelected
+          ? 'border-primary text-primary ring-1 ring-primary/30'
+          : 'border-gray-300 text-gray-400 hover:border-primary hover:text-primary',
+      ].join(' ');
+      addCard.innerHTML = `
+        <span class="text-2xl font-semibold leading-none">+</span>
+        <span class="text-[11px] font-semibold">Novo endereco</span>
+      `;
+      fragment.appendChild(addCard);
+    }
+
+    container.appendChild(fragment);
+  };
+
+  const loadCustomerModalAddresses = async () => {
+    const cliente = state.modalSelectedCliente;
+    const clienteId = normalizeId(cliente?._id || cliente?.id || cliente?._idCliente);
+    const inlineFallback = extractInlineCustomerAddresses(cliente)
+      .map((item, index) => normalizeCustomerAddressRecord(item, index))
+      .filter(Boolean);
+
+    if (!cliente) {
+      if (customerModalAddressesController) {
+        customerModalAddressesController.abort();
+        customerModalAddressesController = null;
+      }
+      state.customerModalAddresses = [];
+      state.customerModalAddressesLoading = false;
+      state.customerModalSelectedAddressId = '';
+      renderCustomerModalAddressCards();
+      return;
+    }
+
+    if (!clienteId) {
+      state.customerModalAddresses = inlineFallback.map((item) => ({ ...item }));
+      state.customerModalAddressesLoading = false;
+      ensureCustomerModalAddressSelection();
+      renderCustomerModalAddressCards();
+      return;
+    }
+
+    const cached = customerAddressesCache.get(clienteId);
+    if (cached) {
+      state.customerModalAddresses = cached.map((item) => ({ ...item }));
+      state.customerModalAddressesLoading = false;
+      ensureCustomerModalAddressSelection();
+      renderCustomerModalAddressCards();
+      return;
+    }
+
+    if (customerModalAddressesController) {
+      customerModalAddressesController.abort();
+    }
+    const controller = new AbortController();
+    customerModalAddressesController = controller;
+    state.customerModalAddressesLoading = true;
+    renderCustomerModalAddressCards();
+
+    try {
+      const token = getToken();
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const normalizeAddressList = (payload) =>
+        Array.isArray(payload)
+          ? payload.map((item, index) => normalizeCustomerAddressRecord(item, index)).filter(Boolean)
+          : [];
+      const mergeAddressLists = (...lists) => {
+        const merged = [];
+        const seen = new Set();
+        lists.forEach((list) => {
+          (Array.isArray(list) ? list : []).forEach((address) => {
+            if (!address) return;
+            const key =
+              normalizeId(address.id) ||
+              `${sanitizeCepDigits(address.cep || '')}|${String(address.logradouro || '').toLowerCase()}|${String(
+                address.numero || ''
+              ).toLowerCase()}`;
+            if (seen.has(key)) return;
+            seen.add(key);
+            merged.push(address);
+          });
+        });
+        return merged;
+      };
+
+      const [legacyResponse, customerResponse] = await Promise.all([
+        fetch(`${API_BASE}/addresses/${clienteId}`, {
+          headers,
+          signal: controller.signal,
+        }).catch(() => null),
+        fetch(`${API_BASE}/func/clientes/${clienteId}/enderecos`, {
+          headers,
+          signal: controller.signal,
+        }).catch(() => null),
+      ]);
+
+      const legacyPayload = legacyResponse?.ok ? await legacyResponse.json().catch(() => []) : [];
+      const customerPayload = customerResponse?.ok ? await customerResponse.json().catch(() => []) : [];
+      const merged = mergeAddressLists(normalizeAddressList(legacyPayload), normalizeAddressList(customerPayload));
+      const addresses = merged.length ? merged : inlineFallback;
+
+      if (!addresses.length && !legacyResponse?.ok && !customerResponse?.ok) {
+        throw new Error('Não foi possível carregar os endereços do cliente.');
+      }
+
+      if (normalizeId(state.modalSelectedCliente?._id || state.modalSelectedCliente?.id) !== clienteId) {
+        return;
+      }
+
+      state.customerModalAddresses = addresses.map((item) => ({ ...item }));
+      customerAddressesCache.set(
+        clienteId,
+        state.customerModalAddresses.map((item) => ({ ...item }))
+      );
+    } catch (error) {
+      if (error?.name !== 'AbortError') {
+        console.error('Erro ao carregar endereços (modal cliente):', error);
+        state.customerModalAddresses = inlineFallback.map((item) => ({ ...item }));
+      }
+    } finally {
+      if (customerModalAddressesController !== controller) return;
+      customerModalAddressesController = null;
+      state.customerModalAddressesLoading = false;
+      ensureCustomerModalAddressSelection();
+      renderCustomerModalAddressCards();
+    }
+  };
+
+  const deleteCustomerModalAddress = async (addressId) => {
+    const customerId = resolveCustomerId(state.modalSelectedCliente);
+    const normalizedCustomerId = normalizeId(customerId);
+    const normalizedAddressId = normalizeId(addressId);
+    if (!isValidObjectId(normalizedCustomerId) || !isValidObjectId(normalizedAddressId)) {
+      throw new Error('Endereço inválido para exclusão.');
+    }
+    const token = getToken();
+    await fetchWithOptionalAuth(
+      `${API_BASE}/func/clientes/${encodeURIComponent(normalizedCustomerId)}/enderecos/${encodeURIComponent(
+        normalizedAddressId
+      )}`,
+      {
+        method: 'DELETE',
+        token,
+        errorMessage: 'Não foi possível remover o endereço do cliente.',
+      }
+    );
+    const removedWasSelected =
+      normalizeId(state.customerModalSelectedAddressId) === normalizeId(normalizedAddressId);
+    state.customerModalAddresses = (state.customerModalAddresses || []).filter(
+      (item) => normalizeId(item?.id) !== normalizedAddressId
+    );
+    customerAddressesCache.delete(normalizedCustomerId);
+    if (removedWasSelected) {
+      state.customerModalSelectedAddressId = '';
+      const fallback = ensureCustomerModalAddressSelection({ applyToFields: true });
+      if (!fallback) {
+        clearCustomerModalAddressPreviewFields();
+      }
+    }
+    renderCustomerModalAddressCards();
+  };
+
+  const handleCustomerAddressCardsClick = async (event) => {
+    const deleteButton = event.target.closest('[data-customer-address-delete="true"]');
+    if (deleteButton) {
+      event.preventDefault();
+      const card = deleteButton.closest('[data-customer-address-card]');
+      const addressId = normalizeId(card?.getAttribute('data-customer-address-card'));
+      if (!addressId) return;
+      const address = (state.customerModalAddresses || []).find(
+        (item) => normalizeId(item?.id) === addressId
+      );
+      const label = address?.apelido || 'este endereço';
+      const question = `Remover ${label} do cadastro do cliente?`;
+      const confirmed = await new Promise((resolve) => {
+        if (typeof window?.showModal === 'function') {
+          window.showModal({
+            title: 'Excluir endereço',
+            message: question,
+            confirmText: 'Excluir',
+            cancelText: 'Cancelar',
+            onConfirm: () => resolve(true),
+            onCancel: () => resolve(false),
+          });
+          return;
+        }
+        resolve(window.confirm(question));
+      });
+      if (!confirmed) return;
+      try {
+        await deleteCustomerModalAddress(addressId);
+        notify('Endereço removido com sucesso.', 'success');
+      } catch (error) {
+        console.error('Erro ao remover endereço do cliente (modal):', error);
+        notify(error?.message || 'Não foi possível remover o endereço.', 'error');
+      }
+      return;
+    }
+    const newCard = event.target.closest('[data-customer-address-card-new="true"]');
+    if (newCard) {
+      state.customerModalSelectedAddressId = '__new__';
+      clearCustomerModalAddressPreviewFields();
+      renderCustomerModalAddressCards();
+      return;
+    }
+    const card = event.target.closest('[data-customer-address-card]');
+    if (!card) return;
+    const addressId = normalizeId(card.getAttribute('data-customer-address-card'));
+    if (!addressId) return;
+    const address = (state.customerModalAddresses || []).find((item) => normalizeId(item?.id) === addressId);
+    if (!address) return;
+    state.customerModalSelectedAddressId = addressId;
+    applyCustomerModalAddressToPreview(address);
+    renderCustomerModalAddressCards();
+  };
+
+  const setCustomerRegisterRequiredState = (enabled) => {
+    const required = Boolean(enabled);
+    if (elements.customerRequiredName) elements.customerRequiredName.classList.toggle('hidden', !required);
+    if (elements.customerRequiredDoc) elements.customerRequiredDoc.classList.toggle('hidden', !required);
+    if (elements.customerRequiredSexo) elements.customerRequiredSexo.classList.toggle('hidden', !required);
+    if (elements.customerRequiredCep) elements.customerRequiredCep.classList.toggle('hidden', !required);
+    if (elements.customerRequiredNumber) elements.customerRequiredNumber.classList.toggle('hidden', !required);
+
+    if (elements.customerSearchInput) elements.customerSearchInput.required = required;
+    if (elements.customerPreviewDoc) elements.customerPreviewDoc.required = required;
+    if (elements.customerPreviewSexo) elements.customerPreviewSexo.required = required;
+    if (elements.customerPreviewCep) elements.customerPreviewCep.required = required;
+    if (elements.customerPreviewNumber) elements.customerPreviewNumber.required = required;
   };
 
   const setSellerFeedback = (message, status = 'muted') => {
@@ -4630,6 +5845,11 @@
 
   const isHistorySaleMatchingCustomer = (sale, customer) => {
     if (!sale || !customer) return false;
+    const customerId = resolveCustomerId(customer);
+    const saleCustomerId = normalizeId(sale.customerId || '');
+    if (customerId && saleCustomerId && customerId === saleCustomerId) {
+      return true;
+    }
     const customerDoc = normalizeDocumentValue(resolveCustomerDocument(customer));
     const saleDoc = normalizeDocumentValue(sale.customerDocument || '');
     if (customerDoc && saleDoc) {
@@ -5449,7 +6669,248 @@
     if (fields.total) fields.total.value = formatDecimalValue(totalValue, 2);
   };
 
+  const exchangeCodeHasLetters = (value) => /\p{L}/u.test(String(value || ''));
+
+  const getExchangeFieldsByTarget = (target) => {
+    if (target === 'take') {
+      return {
+        code: elements.exchangeTakeCode,
+        desc: elements.exchangeTakeDesc,
+        qty: elements.exchangeTakeQty,
+        unit: elements.exchangeTakeUnit,
+        total: elements.exchangeTakeTotal,
+      };
+    }
+    return {
+      code: elements.exchangeReturnCode,
+      desc: elements.exchangeReturnDesc,
+      qty: elements.exchangeReturnQty,
+      unit: elements.exchangeReturnUnit,
+      total: elements.exchangeReturnTotal,
+    };
+  };
+
+  const getExchangeProductStock = (product) => {
+    const candidates = [
+      product?.estoque,
+      product?.saldo,
+      product?.quantity,
+      product?.quantidade,
+      product?.stock,
+    ];
+    for (const value of candidates) {
+      const parsed = safeNumber(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    return 0;
+  };
+
+  const isTruthyInactiveFlag = (value) => {
+    if (value === true) return true;
+    if (typeof value === 'number') return value === 1;
+    const normalized = String(value || '').trim().toLowerCase();
+    return ['1', 'true', 'sim', 's', 'inativo', 'inactive'].includes(normalized);
+  };
+
+  const isExchangeProductInactive = (product) => {
+    if (!product || typeof product !== 'object') return false;
+    const ativoRaw = String(product.ativo ?? '').trim().toLowerCase();
+    const isActiveFalse =
+      product.ativo === false || ['0', 'false', 'nao', 'não', 'n'].includes(ativoRaw);
+    const statusValues = [
+      product.status,
+      product.situacao,
+      product.situacaoCadastro,
+      product.statusCadastro,
+    ];
+    const hasInactiveStatus = statusValues.some((value) =>
+      ['inativo', 'inactive'].includes(String(value || '').trim().toLowerCase())
+    );
+    return Boolean(
+      isTruthyInactiveFlag(product.inativo) ||
+        isActiveFalse ||
+        hasInactiveStatus
+    );
+  };
+
+  const renderExchangeProductSearchResults = () => {
+    if (!elements.exchangeProductResultsBody || !elements.exchangeProductResultsEmpty) return;
+    const { loading, results, query } = state.exchangeProductSearch;
+    elements.exchangeProductResultsBody.innerHTML = '';
+    if (loading) {
+      elements.exchangeProductResultsEmpty.textContent = 'Buscando produtos...';
+      elements.exchangeProductResultsEmpty.classList.remove('hidden');
+      return;
+    }
+    if (!Array.isArray(results) || !results.length) {
+      elements.exchangeProductResultsEmpty.textContent = query
+        ? `Nenhum produto encontrado para "${query}".`
+        : 'Digite para pesquisar produtos.';
+      elements.exchangeProductResultsEmpty.classList.remove('hidden');
+      return;
+    }
+    elements.exchangeProductResultsEmpty.classList.add('hidden');
+    const fragment = document.createDocumentFragment();
+    results.forEach((product, index) => {
+      const row = document.createElement('tr');
+      row.className = 'cursor-pointer text-[12px] text-gray-700 transition hover:bg-primary/5';
+      row.setAttribute('data-exchange-product-result', String(index));
+      row.innerHTML = `
+        <td class="px-3 py-2 font-semibold text-gray-700">${escapeHtml(getProductCode(product) || '-')}</td>
+        <td class="px-3 py-2 text-gray-700">${escapeHtml(getProductBarcode(product) || '-')}</td>
+        <td class="px-3 py-2 text-gray-700">${escapeHtml(product?.nome || product?.descricao || 'Produto')}</td>
+        <td class="px-3 py-2 text-right text-gray-700">${escapeHtml(formatCurrency(getBasePrice(product)))}</td>
+        <td class="px-3 py-2 text-right text-gray-600">${escapeHtml(formatDecimalValue(getExchangeProductStock(product), 3))}</td>
+      `;
+      fragment.appendChild(row);
+    });
+    elements.exchangeProductResultsBody.appendChild(fragment);
+  };
+
+  const searchExchangeProducts = async (rawTerm) => {
+    const term = String(rawTerm || '').trim();
+    state.exchangeProductSearch.query = term;
+    if (!term || term.length < 2) {
+      state.exchangeProductSearch.loading = false;
+      state.exchangeProductSearch.results = [];
+      renderExchangeProductSearchResults();
+      return;
+    }
+    state.exchangeProductSearch.loading = true;
+    renderExchangeProductSearchResults();
+    try {
+      const token = getToken();
+      const includeInactive = Boolean(elements.exchangeProductIncludeInactive?.checked);
+      const endpoint =
+        `${API_BASE}/products?search=${encodeURIComponent(term)}&limit=40&includeHidden=${includeInactive ? 'true' : 'false'}&audience=pdv`;
+      const payload = await fetchWithOptionalAuth(endpoint, {
+        token,
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-store' },
+        errorMessage: 'Nao foi possivel buscar produtos.',
+      });
+      const products = Array.isArray(payload?.products)
+        ? payload.products
+        : Array.isArray(payload)
+        ? payload
+        : [];
+      const lookupValue = normalizeBarcodeValue(term);
+      const ranked = products
+        .map((product, index) => {
+          const code = normalizeBarcodeValue(getProductCode(product));
+          const barcode = normalizeBarcodeValue(getProductBarcode(product));
+          const isExact = lookupValue && (code === lookupValue || barcode === lookupValue);
+          return { product, index, isExact };
+        })
+        .sort((a, b) => {
+          if (a.isExact === b.isExact) return a.index - b.index;
+          return a.isExact ? -1 : 1;
+        })
+        .map((entry) => entry.product)
+        .filter((product) => (includeInactive ? true : !isExchangeProductInactive(product)));
+      state.exchangeProductSearch.results = ranked;
+    } catch (error) {
+      console.error('Erro ao pesquisar produtos para troca:', error);
+      state.exchangeProductSearch.results = [];
+      notify(error?.message || 'Erro ao pesquisar produtos.', 'error');
+    } finally {
+      state.exchangeProductSearch.loading = false;
+      renderExchangeProductSearchResults();
+    }
+  };
+
+  const openExchangeProductSearchModal = (target, initialQuery = '') => {
+    if (!elements.exchangeProductModal) return;
+    state.exchangeProductSearch.open = true;
+    state.exchangeProductSearch.target = target === 'take' ? 'take' : 'return';
+    state.exchangeProductSearch.query = String(initialQuery || '').trim();
+    state.exchangeProductSearch.results = [];
+    state.exchangeProductSearch.loading = false;
+    elements.exchangeProductModal.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+    if (elements.exchangeProductSearchInput) {
+      elements.exchangeProductSearchInput.value = state.exchangeProductSearch.query;
+    }
+    if (elements.exchangeProductIncludeInactive) {
+      elements.exchangeProductIncludeInactive.checked = false;
+    }
+    renderExchangeProductSearchResults();
+    if (state.exchangeProductSearch.query.length >= 2) {
+      searchExchangeProducts(state.exchangeProductSearch.query);
+    }
+    setTimeout(() => elements.exchangeProductSearchInput?.focus(), 80);
+  };
+
+  const closeExchangeProductSearchModal = () => {
+    state.exchangeProductSearch.open = false;
+    state.exchangeProductSearch.loading = false;
+    state.exchangeProductSearch.results = [];
+    if (exchangeProductSearchTimeout) {
+      clearTimeout(exchangeProductSearchTimeout);
+      exchangeProductSearchTimeout = null;
+    }
+    if (elements.exchangeProductModal) {
+      elements.exchangeProductModal.classList.add('hidden');
+    }
+    releaseBodyScrollIfNoModal();
+  };
+
+  const applyExchangeProductSearchSelection = (product) => {
+    if (!product) return;
+    const fields = getExchangeFieldsByTarget(state.exchangeProductSearch.target);
+    if (!fields?.code) return;
+    applyExchangeProductSelection(fields, product);
+    const code = getProductCode(product) || getProductBarcode(product) || '';
+    fields.code.value = code;
+    if (fields.code.dataset) {
+      fields.code.dataset.productId = product?._id || product?.id || '';
+    }
+    closeExchangeProductSearchModal();
+    fields.qty?.focus();
+  };
+
+  const handleExchangeProductSearchInput = (event) => {
+    const value = event?.target?.value || '';
+    state.exchangeProductSearch.query = value;
+    if (exchangeProductSearchTimeout) {
+      clearTimeout(exchangeProductSearchTimeout);
+      exchangeProductSearchTimeout = null;
+    }
+    exchangeProductSearchTimeout = setTimeout(() => {
+      searchExchangeProducts(value);
+    }, 250);
+  };
+
+  const handleExchangeProductSearchSubmit = () => {
+    const value = elements.exchangeProductSearchInput?.value || '';
+    searchExchangeProducts(value);
+  };
+
+  const handleExchangeProductSearchResultsClick = (event) => {
+    const row = event.target.closest('tr[data-exchange-product-result]');
+    if (!row) return;
+    const index = Number.parseInt(row.getAttribute('data-exchange-product-result') || '-1', 10);
+    if (!Number.isInteger(index) || index < 0) return;
+    const product = state.exchangeProductSearch.results[index];
+    if (!product) return;
+    applyExchangeProductSearchSelection(product);
+  };
+
+  const handleExchangeProductSearchModalKeydown = (event) => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    closeExchangeProductSearchModal();
+  };
+
   const lookupExchangeProductByCode = async (rawValue, fields) => {
+    if (exchangeCodeHasLetters(rawValue)) {
+      const target =
+        fields?.code === elements.exchangeTakeCode || fields?.desc === elements.exchangeTakeDesc
+          ? 'take'
+          : 'return';
+      openExchangeProductSearchModal(target, rawValue);
+      return null;
+    }
     const normalized = normalizeBarcodeValue(rawValue);
     if (!normalized) {
       resetExchangeProductFields(fields);
@@ -5464,6 +6925,15 @@
     try {
       const product = await fetchProductByBarcode(normalized);
       if (!product) {
+        notify('Nenhum produto encontrado para o codigo informado.', 'warning');
+        resetExchangeProductFields(fields);
+        if (fields?.code?.dataset) {
+          fields.code.dataset.productId = '';
+        }
+        return null;
+      }
+      const includeInactive = Boolean(elements.exchangeProductIncludeInactive?.checked);
+      if (!includeInactive && isExchangeProductInactive(product)) {
         notify('Nenhum produto encontrado para o codigo informado.', 'warning');
         resetExchangeProductFields(fields);
         if (fields?.code?.dataset) {
@@ -5511,6 +6981,12 @@
     if (product && onAdd) {
       onAdd();
     }
+  };
+
+  const handleExchangeProductCodeInput = (event, target) => {
+    const value = event?.target?.value || '';
+    if (!exchangeCodeHasLetters(value)) return;
+    openExchangeProductSearchModal(target, value);
   };
 
   const handleExchangeTotalKeydown = (event, type) => {
@@ -7133,6 +8609,155 @@
     }
   };
 
+  const fetchCustomerModalLookupResults = async (query, limit = 8) => {
+    const normalizedQuery = String(query || '').trim();
+    if (!normalizedQuery) return [];
+    if (customerModalLookupController) {
+      customerModalLookupController.abort();
+      customerModalLookupController = null;
+    }
+    const controller = new AbortController();
+    customerModalLookupController = controller;
+    const token = getToken();
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    try {
+      const response = await fetch(
+        `${API_BASE}/func/clientes/buscar?q=${encodeURIComponent(normalizedQuery)}&limit=${limit}`,
+        { headers, signal: controller.signal }
+      );
+      if (!response.ok) {
+        throw new Error('Não foi possível buscar clientes.');
+      }
+      const payload = await response.json();
+      return Array.isArray(payload) ? payload : [];
+    } finally {
+      if (customerModalLookupController === controller) {
+        customerModalLookupController = null;
+      }
+    }
+  };
+
+  const customerMatchesDocumentDigits = (cliente, targetDigits) => {
+    if (!cliente || !targetDigits) return false;
+    const docs = [
+      cliente?.cpf,
+      cliente?.cnpj,
+      cliente?.doc,
+      cliente?.documento,
+      cliente?.cpfCnpj,
+      cliente?.cpfcnpj,
+    ];
+    return docs.some((value) => normalizeDocumentDigits(value) === targetDigits);
+  };
+
+  const customerMatchesPhoneDigits = (cliente, targetDigits) => {
+    if (!cliente || !targetDigits) return false;
+    const phones = [cliente?.celular, cliente?.celular2, cliente?.telefone, cliente?.telefone2];
+    return phones.some((value) => {
+      const digits = normalizePhoneDigits(value);
+      if (!digits) return false;
+      if (digits === targetDigits) return true;
+      if (digits.endsWith(targetDigits)) return true;
+      if (targetDigits.length >= 8 && digits.slice(-8) === targetDigits.slice(-8)) return true;
+      if (targetDigits.length >= 9 && digits.slice(-9) === targetDigits.slice(-9)) return true;
+      return false;
+    });
+  };
+
+  const lookupAndApplyCustomerModalCustomer = async (kind, { force = false } = {}) => {
+    let query = '';
+    let finder = null;
+
+    if (kind === 'code') {
+      const code = sanitizeCustomerCode(elements.customerPreviewCode?.value || '');
+      if (elements.customerPreviewCode && elements.customerPreviewCode.value !== code) {
+        elements.customerPreviewCode.value = code;
+      }
+      if (!code) return;
+      if (!force && code.length < 1) return;
+      query = code;
+      finder = (results) => results.find((cliente) => getCustomerCode(cliente) === code) || null;
+    } else if (kind === 'doc') {
+      const docDigits = normalizeDocumentDigits(elements.customerPreviewDoc?.value || '');
+      if (!docDigits) return;
+      if (!force && docDigits.length !== 11 && docDigits.length !== 14) return;
+      query = docDigits;
+      finder = (results) => results.find((cliente) => customerMatchesDocumentDigits(cliente, docDigits)) || null;
+    } else {
+      const phoneIndex = kind === 'phone2' ? 2 : 1;
+      const dddInput = phoneIndex === 2 ? elements.customerPreviewTelefone2Ddd : elements.customerPreviewTelefone1Ddd;
+      const numberInput = phoneIndex === 2 ? elements.customerPreviewTelefone2 : elements.customerPreviewTelefone1;
+      const ddd = normalizePhoneDigits(dddInput?.value || '');
+      const number = normalizePhoneDigits(numberInput?.value || '');
+      if (dddInput && dddInput.value !== ddd) dddInput.value = ddd;
+      if (!number) return;
+      if (!force && number.length < 8) return;
+      const fullDigits = `${ddd}${number}`;
+      const queryCandidates = [fullDigits, number].filter(Boolean);
+      let exact = null;
+      for (const candidate of queryCandidates) {
+        const results = await fetchCustomerModalLookupResults(candidate, 8);
+        exact = results.find((cliente) => customerMatchesPhoneDigits(cliente, fullDigits || number))
+          || results.find((cliente) => customerMatchesPhoneDigits(cliente, number))
+          || null;
+        if (exact) break;
+      }
+      if (exact) {
+        setModalSelectedCliente(exact);
+      }
+      return;
+    }
+
+    try {
+      const results = await fetchCustomerModalLookupResults(query, 8);
+      const exact = typeof finder === 'function' ? finder(results) : null;
+      if (exact) {
+        setModalSelectedCliente(exact);
+      }
+    } catch (error) {
+      if (error?.name === 'AbortError') return;
+      console.error('Erro ao buscar cliente no modal por campo:', error);
+    }
+  };
+
+  const scheduleCustomerModalLookup = (kind) => {
+    if (customerModalLookupTimeout) {
+      clearTimeout(customerModalLookupTimeout);
+      customerModalLookupTimeout = null;
+    }
+    customerModalLookupTimeout = setTimeout(() => {
+      lookupAndApplyCustomerModalCustomer(kind).catch(() => {});
+    }, 350);
+  };
+
+  const handleCustomerModalLookupInput = (kind) => (event) => {
+    if (kind === 'code') {
+      const raw = String(event?.target?.value || '');
+      const trimmed = raw.trim();
+      if (/\p{L}/u.test(raw) || trimmed === '*') {
+        if (customerModalLookupTimeout) {
+          clearTimeout(customerModalLookupTimeout);
+          customerModalLookupTimeout = null;
+        }
+        openCustomerLookupSearchModal(trimmed);
+        return;
+      }
+    }
+    scheduleCustomerModalLookup(kind);
+  };
+
+  const handleCustomerModalLookupBlur = (kind) => () => {
+    if (kind === 'code') {
+      const value = String(elements.customerPreviewCode?.value || '');
+      if (/\p{L}/u.test(value)) return;
+    }
+    if (customerModalLookupTimeout) {
+      clearTimeout(customerModalLookupTimeout);
+      customerModalLookupTimeout = null;
+    }
+    lookupAndApplyCustomerModalCustomer(kind, { force: true }).catch(() => {});
+  };
+
   const fetchCustomerPets = async (clienteId) => {
     if (!clienteId) return;
     const cached = customerPetsCache.get(clienteId);
@@ -7185,6 +8810,7 @@
   const setModalSelectedCliente = (cliente) => {
     state.modalSelectedCliente = cliente ? { ...cliente } : null;
     state.modalSelectedPet = null;
+    state.customerModalSelectedAddressId = '';
     if (isExchangeCustomerSearchTarget(state.customerSearchTarget)) {
       state.customerPets = [];
       state.customerPetsLoading = false;
@@ -7206,6 +8832,8 @@
     renderCustomerPets();
     updateCustomerModalTabs();
     updateCustomerModalActions();
+    updateCustomerModalPreview();
+    loadCustomerModalAddresses();
   };
 
   const openCustomerModal = (target = 'sale', query = '') => {
@@ -7219,6 +8847,10 @@
     if (elements.customerSearchInput) {
       elements.customerSearchInput.value = query || '';
     }
+    if (elements.customerRegisterToggle) {
+      elements.customerRegisterToggle.checked = false;
+    }
+    setCustomerRegisterRequiredState(false);
     const initialCliente = isExchangeCustomerSearchTarget(state.customerSearchTarget)
       ? null
       : state.vendaCliente
@@ -7247,7 +8879,7 @@
       performCustomerSearch(state.customerSearchQuery);
     }
     setTimeout(() => {
-      elements.customerSearchInput?.focus();
+      elements.customerPreviewCode?.focus();
     }, 150);
   };
 
@@ -7264,6 +8896,23 @@
       customerSearchController.abort();
       customerSearchController = null;
     }
+    if (customerModalLookupTimeout) {
+      clearTimeout(customerModalLookupTimeout);
+      customerModalLookupTimeout = null;
+    }
+    if (customerModalLookupController) {
+      customerModalLookupController.abort();
+      customerModalLookupController = null;
+    }
+    if (customerModalCepLookupTimeout) {
+      clearTimeout(customerModalCepLookupTimeout);
+      customerModalCepLookupTimeout = null;
+    }
+    if (customerModalCepLookupController) {
+      customerModalCepLookupController.abort();
+      customerModalCepLookupController = null;
+    }
+    closeCustomerLookupSearchModal();
     if (customerPetsController) {
       customerPetsController.abort();
       customerPetsController = null;
@@ -7327,23 +8976,302 @@
     }
   };
 
-  const handleCustomerConfirm = () => {
-    if (!state.modalSelectedCliente) {
-      notify('Selecione um cliente para vincular à venda.', 'warning');
-      return;
+  const buildCustomerModalPhoneDigits = (dddElement, numberElement) => {
+    const ddd = normalizePhoneDigits(dddElement?.value || '').slice(0, 2);
+    const number = normalizePhoneDigits(numberElement?.value || '');
+    if (!number) return '';
+    return `${ddd}${number}`;
+  };
+
+  const buildCustomerModalPersistPayload = ({ isUpdate = false } = {}) => {
+    const name = String(elements.customerSearchInput?.value || '').trim();
+    const documentDigits = normalizeDocumentDigits(elements.customerPreviewDoc?.value || '');
+    const email = String(elements.customerPreviewEmail?.value || '').trim().toLowerCase();
+    const sexo = String(elements.customerPreviewSexo?.value || '').trim().toUpperCase();
+    const nascimento = String(elements.customerPreviewBirth?.value || '').trim();
+    const phone1 = buildCustomerModalPhoneDigits(
+      elements.customerPreviewTelefone1Ddd,
+      elements.customerPreviewTelefone1
+    );
+    const phone2 = buildCustomerModalPhoneDigits(
+      elements.customerPreviewTelefone2Ddd,
+      elements.customerPreviewTelefone2
+    );
+    const primaryPhone = phone1 || phone2;
+    const secondaryPhone = phone2 && phone2 !== primaryPhone ? phone2 : '';
+    const isCnpj = documentDigits.length === 14;
+    const tipoConta = isCnpj ? 'pessoa_juridica' : 'pessoa_fisica';
+    const empresaId = getActiveSellerCompanyId() || state.selectedStore || '';
+    const payload = {
+      tipoConta,
+      pais: 'Brasil',
+      empresaId,
+      email,
+      celular: primaryPhone,
+      telefone: primaryPhone,
+      celular2: secondaryPhone,
+      telefone2: secondaryPhone,
+    };
+    if (!isUpdate) payload.limiteCredito = 0;
+
+    if (isCnpj) {
+      payload.cnpj = documentDigits;
+      payload.razaoSocial = name;
+      payload.nomeFantasia = name;
+      payload.nomeContato = name;
+      payload.inscricaoEstadual = '';
+      payload.estadoIE = '';
+      payload.isentoIE = true;
+    } else {
+      payload.nome = name;
+      payload.apelido = name;
+      payload.cpf = documentDigits;
+      payload.nascimento = nascimento;
+      payload.sexo = sexo;
+      payload.rg = '';
     }
+    return payload;
+  };
+
+  const buildCustomerModalAddressPayload = () => {
+    const cep = sanitizeCepDigits(elements.customerPreviewCep?.value || '');
+    const logradouro = String(elements.customerPreviewAddress?.value || '').trim();
+    const numero = String(elements.customerPreviewNumber?.value || '').trim();
+    const complemento = String(elements.customerPreviewComplemento?.value || '').trim();
+    const bairro = String(elements.customerPreviewBairro?.value || '').trim();
+    const cidade = String(elements.customerPreviewCidade?.value || '').trim();
+    const selectedExisting = (state.customerModalAddresses || []).find(
+      (item) => normalizeId(item?.id) === normalizeId(state.customerModalSelectedAddressId)
+    );
+    const uf = String(state.customerModalAddressUf || selectedExisting?.uf || '').trim().toUpperCase();
+    const hasAddressData = Boolean(cep || logradouro || numero || complemento || bairro || cidade || uf);
+    if (!hasAddressData) return null;
+    if (cep.length !== 8 || !logradouro || !numero) return null;
+    const addressCount = Array.isArray(state.customerModalAddresses) ? state.customerModalAddresses.length : 0;
+    return {
+      apelido: addressCount ? `Endereco ${addressCount + 1}` : 'Principal',
+      cep,
+      logradouro,
+      numero,
+      complemento,
+      bairro,
+      cidade,
+      uf,
+      codUf: uf,
+      pais: 'Brasil',
+      isDefault: addressCount === 0,
+    };
+  };
+
+  const validateCustomerModalSave = ({ creatingNewCustomer = false, savingNewAddress = false } = {}) => {
+    const name = String(elements.customerSearchInput?.value || '').trim();
+    const documentDigits = normalizeDocumentDigits(elements.customerPreviewDoc?.value || '');
+    const sexo = String(elements.customerPreviewSexo?.value || '').trim().toUpperCase();
+    const phone1 = buildCustomerModalPhoneDigits(
+      elements.customerPreviewTelefone1Ddd,
+      elements.customerPreviewTelefone1
+    );
+    const phone2 = buildCustomerModalPhoneDigits(
+      elements.customerPreviewTelefone2Ddd,
+      elements.customerPreviewTelefone2
+    );
+    if (!name) {
+      elements.customerSearchInput?.focus();
+      notify('Informe o nome do cliente.', 'warning');
+      return false;
+    }
+    if (documentDigits.length !== 11 && documentDigits.length !== 14) {
+      elements.customerPreviewDoc?.focus();
+      notify('Informe um CPF/CNPJ válido.', 'warning');
+      return false;
+    }
+    if (documentDigits.length === 11 && !sexo) {
+      elements.customerPreviewSexo?.focus();
+      notify('Informe o sexo do cliente.', 'warning');
+      return false;
+    }
+    if (creatingNewCustomer && !(phone1 || phone2)) {
+      elements.customerPreviewTelefone1?.focus();
+      notify('Informe ao menos um telefone com DDD para cadastrar o cliente.', 'warning');
+      return false;
+    }
+    if (creatingNewCustomer || savingNewAddress) {
+      const addressPayload = buildCustomerModalAddressPayload();
+      if (!addressPayload) {
+        elements.customerPreviewAddress?.focus();
+        notify('Para salvar no cadastro, informe Endereço, Número e CEP válidos.', 'warning');
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const saveCustomerModalNewAddress = async (customerId) => {
+    const normalizedCustomerId = normalizeId(customerId);
+    if (!normalizedCustomerId || !isValidObjectId(normalizedCustomerId)) return null;
+    const payload = buildCustomerModalAddressPayload();
+    if (!payload) {
+      throw new Error('Para salvar no cadastro, informe Endereço, Número e CEP válidos.');
+    }
+    const token = getToken();
+    const savedAddress = await fetchWithOptionalAuth(
+      `${API_BASE}/func/clientes/${encodeURIComponent(normalizedCustomerId)}/enderecos`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        token,
+        errorMessage: 'Não foi possível salvar o endereço no cadastro do cliente.',
+      }
+    );
+    customerAddressesCache.delete(normalizedCustomerId);
+    return savedAddress;
+  };
+
+  const createCustomerFromCustomerModalForm = async () => {
+    if (!validateCustomerModalSave({ creatingNewCustomer: true, savingNewAddress: true })) {
+      throw new Error('Preencha os campos obrigatórios do cadastro do cliente.');
+    }
+    const payload = buildCustomerModalPersistPayload({ isUpdate: false });
+    const token = getToken();
+    try {
+      const response = await fetchWithOptionalAuth(`${API_BASE}/func/clientes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        token,
+        errorMessage: 'Não foi possível cadastrar o cliente.',
+      });
+      const createdId =
+        response?.id ||
+        response?._id ||
+        response?.clienteId ||
+        response?.customerId ||
+        response?.cliente?._id ||
+        response?.cliente?.id ||
+        '';
+      if (!createdId) {
+        throw new Error('Cliente cadastrado, mas não foi possível identificar o ID para salvar o endereço.');
+      }
+      await saveCustomerModalNewAddress(createdId);
+      const detailed = await fetchDeliveryCustomerDetails({ _id: String(createdId), id: String(createdId) });
+      return detailed && typeof detailed === 'object' ? detailed : { _id: String(createdId), id: String(createdId) };
+    } catch (error) {
+      if (isDuplicateEmailError(error) && payload.email) {
+        const existingCustomer = await fetchDeliveryCustomerByEmail(payload.email);
+        const existingId = resolveCustomerId(existingCustomer);
+        if (existingId && isValidObjectId(existingId)) {
+          await saveCustomerModalNewAddress(existingId);
+          const detailedExisting = await fetchDeliveryCustomerDetails(existingCustomer);
+          return detailedExisting && typeof detailedExisting === 'object'
+            ? detailedExisting
+            : existingCustomer;
+        }
+      }
+      throw error;
+    }
+  };
+
+  const updateCustomerFromCustomerModalForm = async (customer) => {
+    const customerId = resolveCustomerId(customer);
+    if (!customerId || !isValidObjectId(customerId)) {
+      throw new Error('Selecione um cliente válido para atualizar.');
+    }
+    const addingNewAddress = state.customerModalSelectedAddressId === '__new__';
+    if (!validateCustomerModalSave({ creatingNewCustomer: false, savingNewAddress: addingNewAddress })) {
+      throw new Error('Preencha os campos obrigatórios do cadastro do cliente.');
+    }
+    const payload = buildCustomerModalPersistPayload({ isUpdate: true });
+    const token = getToken();
+    await fetchWithOptionalAuth(`${API_BASE}/func/clientes/${encodeURIComponent(customerId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      token,
+      errorMessage: 'Não foi possível atualizar o cliente.',
+    });
+    if (addingNewAddress) {
+      await saveCustomerModalNewAddress(customerId);
+    }
+    const detailed = await fetchDeliveryCustomerDetails({ _id: customerId, id: customerId });
+    return detailed && typeof detailed === 'object' ? detailed : { _id: customerId, id: customerId };
+  };
+
+  const handleCustomerConfirm = async () => {
+    if (customerModalConfirmSaving) return;
     if (state.customerSearchTarget === 'exchange') {
+      if (!state.modalSelectedCliente) {
+        notify('Selecione um cliente para vincular à troca.', 'warning');
+        return;
+      }
       applyExchangeCustomerSelection(state.modalSelectedCliente);
       closeCustomerModal();
       return;
     }
     if (state.customerSearchTarget === 'exchangeHistory') {
+      if (!state.modalSelectedCliente) {
+        notify('Selecione um cliente para vincular ao histórico.', 'warning');
+        return;
+      }
       applyExchangeHistoryCustomerSelection(state.modalSelectedCliente);
       closeCustomerModal();
       return;
     }
-    setSaleCustomer(state.modalSelectedCliente, state.modalSelectedPet);
-    closeCustomerModal();
+    if (!state.modalSelectedCliente) {
+      if (!elements.customerRegisterToggle?.checked) {
+        notify('Selecione um cliente para vincular à venda.', 'warning');
+        return;
+      }
+    }
+    try {
+      customerModalConfirmSaving = true;
+      if (elements.customerConfirm) {
+        elements.customerConfirm.disabled = true;
+        elements.customerConfirm.classList.add('opacity-60', 'cursor-not-allowed');
+      }
+
+      let customerToBind = state.modalSelectedCliente ? { ...state.modalSelectedCliente } : null;
+      const shouldPersistCustomer = Boolean(elements.customerRegisterToggle?.checked);
+      if (shouldPersistCustomer) {
+        const preservedPet =
+          state.modalSelectedPet && typeof state.modalSelectedPet === 'object'
+            ? { ...state.modalSelectedPet }
+            : null;
+        if (customerToBind && resolveCustomerId(customerToBind) && isValidObjectId(resolveCustomerId(customerToBind))) {
+          customerToBind = await updateCustomerFromCustomerModalForm(customerToBind);
+          notify(
+            state.customerModalSelectedAddressId === '__new__'
+              ? 'Cliente atualizado e novo endereço cadastrado com sucesso.'
+              : 'Cliente atualizado com sucesso.',
+            'success'
+          );
+        } else {
+          customerToBind = await createCustomerFromCustomerModalForm();
+          notify('Cliente cadastrado com sucesso.', 'success');
+        }
+        setModalSelectedCliente(customerToBind);
+        if (preservedPet && resolveCustomerId(customerToBind) === resolveCustomerId(state.modalSelectedCliente)) {
+          state.modalSelectedPet = preservedPet;
+        }
+      }
+
+      if (!customerToBind) {
+        notify('Selecione um cliente para vincular à venda.', 'warning');
+        return;
+      }
+
+      setSaleCustomer(customerToBind, state.modalSelectedPet);
+      closeCustomerModal();
+    } catch (error) {
+      console.error('Erro ao salvar/vincular cliente no PDV:', error);
+      notify(error?.message || 'Não foi possível vincular o cliente.', 'error');
+    } finally {
+      customerModalConfirmSaving = false;
+      if (elements.customerConfirm) {
+        elements.customerConfirm.disabled = false;
+        elements.customerConfirm.classList.remove('opacity-60', 'cursor-not-allowed');
+      }
+    }
   };
 
   const handleCustomerClearSelection = () => {
@@ -7358,10 +9286,21 @@
     if (elements.customerSearchInput) {
       elements.customerSearchInput.value = '';
     }
+    if (elements.customerPreviewCode) elements.customerPreviewCode.value = '';
+    if (elements.customerPreviewDoc) elements.customerPreviewDoc.value = '';
+    if (elements.customerPreviewTelefone1Ddd) elements.customerPreviewTelefone1Ddd.value = '';
+    if (elements.customerPreviewTelefone1) elements.customerPreviewTelefone1.value = '';
+    if (elements.customerPreviewTelefone2Ddd) elements.customerPreviewTelefone2Ddd.value = '';
+    if (elements.customerPreviewTelefone2) elements.customerPreviewTelefone2.value = '';
+    if (elements.customerRegisterToggle) {
+      elements.customerRegisterToggle.checked = false;
+    }
+    setCustomerRegisterRequiredState(false);
     renderCustomerSearchResults();
     renderCustomerPets();
     updateCustomerModalTabs();
     updateCustomerModalActions();
+    updateCustomerModalPreview();
   };
 
   const handleCustomerRemove = () => {
@@ -7738,9 +9677,129 @@
     if (fields.uf) fields.uf.value = '';
     if (fields.complemento) fields.complemento.value = '';
     if (fields.isDefault) fields.isDefault.checked = !state.deliveryAddresses.length;
+    if (elements.deliveryCustomerSexo) elements.deliveryCustomerSexo.value = '';
+    if (elements.deliveryCustomerBirthDate) elements.deliveryCustomerBirthDate.value = '';
+    if (elements.deliveryCustomerEmail) elements.deliveryCustomerEmail.value = '';
     deliveryCepLastDigits = '';
     deliveryCepLastResult = null;
     deliveryCepLastNotifiedDigits = '';
+    deliveryCustomerLastDocLookup = '';
+    deliveryCustomerLastPhoneLookup = '';
+    deliveryCustomerLastCodeLookup = '';
+    if (deliveryCustomerLookupDocTimeout) {
+      clearTimeout(deliveryCustomerLookupDocTimeout);
+      deliveryCustomerLookupDocTimeout = null;
+    }
+    if (deliveryCustomerLookupPhoneTimeout) {
+      clearTimeout(deliveryCustomerLookupPhoneTimeout);
+      deliveryCustomerLookupPhoneTimeout = null;
+    }
+    if (deliveryCustomerLookupCodeTimeout) {
+      clearTimeout(deliveryCustomerLookupCodeTimeout);
+      deliveryCustomerLookupCodeTimeout = null;
+    }
+  };
+
+  const setDeliveryCustomerRegistrationRequired = (enabled) => {
+    const required = Boolean(enabled);
+    deliveryCustomerRegisterMode = required;
+    if (!required) {
+      state.deliveryCreatingNewAddress = false;
+    }
+    if (elements.deliveryAddressFields?.apelido) {
+      elements.deliveryAddressFields.apelido.required = required;
+    }
+    if (elements.deliveryCustomerCpf) {
+      elements.deliveryCustomerCpf.required = required;
+    }
+    if (elements.deliveryAddressFields?.cep) {
+      elements.deliveryAddressFields.cep.required = required;
+    }
+    if (elements.deliveryCustomerSexo) {
+      elements.deliveryCustomerSexo.required = required;
+    }
+    elements.deliveryRequiredApe?.classList.toggle('hidden', !required);
+    elements.deliveryRequiredCpf?.classList.toggle('hidden', !required);
+    elements.deliveryRequiredCep?.classList.toggle('hidden', !required);
+    elements.deliveryRequiredSexo?.classList.toggle('hidden', !required);
+    if (elements.deliveryAddressConfirmWrap) {
+      elements.deliveryAddressConfirmWrap.classList.toggle('hidden', !required);
+      elements.deliveryAddressConfirmWrap.classList.toggle('flex', required);
+    }
+    renderDeliveryAddresses();
+  };
+
+  const toIsoDateInputValue = (value) => {
+    if (!value && value !== 0) return '';
+    if (value instanceof Date) {
+      if (Number.isNaN(value.getTime())) return '';
+      return value.toISOString().slice(0, 10);
+    }
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      const asMs = value > 1e12 ? value : value * 1000;
+      const date = new Date(asMs);
+      return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10);
+    }
+    const text = String(value).trim();
+    if (!text) return '';
+    const br = text.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+    if (br) {
+      return `${br[3]}-${br[2]}-${br[1]}`;
+    }
+    const parsed = new Date(text);
+    if (Number.isNaN(parsed.getTime())) return '';
+    return parsed.toISOString().slice(0, 10);
+  };
+
+  const applyDeliveryDefaultDdd = () => {
+    if (elements.deliveryPhoneDdd) elements.deliveryPhoneDdd.value = '21';
+    if (elements.deliveryPhone1Ddd) elements.deliveryPhone1Ddd.value = '21';
+    if (elements.deliveryPhone2Ddd) elements.deliveryPhone2Ddd.value = '21';
+  };
+
+  const syncDeliveryAddressFormWithSelection = () => {
+    const fields = elements.deliveryAddressFields || {};
+    const selected = state.deliverySelectedAddress || null;
+    const customer = state.vendaCliente || null;
+
+    if (fields.apelido) {
+      fields.apelido.value = resolveCustomerName(customer) || selected?.apelido || '';
+    }
+    if (fields.logradouro) fields.logradouro.value = selected?.logradouro || '';
+    if (fields.numero) fields.numero.value = selected?.numero || '';
+    if (fields.cep) fields.cep.value = formatCep(selected?.cep || '');
+    if (fields.bairro) fields.bairro.value = selected?.bairro || '';
+    if (fields.cidade) {
+      fields.cidade.value = selected?.cidade || fields.cidade.value || 'RIO DE JANEIRO';
+    }
+    if (fields.uf) fields.uf.value = selected?.uf || fields.uf.value || 'RJ';
+    if (fields.complemento) fields.complemento.value = selected?.complemento || '';
+    if (fields.isDefault) fields.isDefault.checked = Boolean(selected?.isDefault || !state.deliveryAddresses.length);
+
+    if (elements.deliveryCustomerCpf) {
+      elements.deliveryCustomerCpf.value = resolveCustomerDocument(customer) || '';
+    }
+    if (elements.deliveryCustomerSexo) {
+      const sexoValue =
+        customer?.sexo || customer?.genero || customer?.gender || customer?.sex || '';
+      elements.deliveryCustomerSexo.value = sexoValue ? String(sexoValue).charAt(0).toUpperCase() : '';
+    }
+    if (elements.deliveryCustomerBirthDate) {
+      const birthSource =
+        customer?.dataNascimento ||
+        customer?.nascimento ||
+        customer?.dtNascimento ||
+        customer?.birthDate ||
+        customer?.data_nascimento ||
+        null;
+      elements.deliveryCustomerBirthDate.value = toIsoDateInputValue(birthSource);
+    }
+    if (elements.deliveryCustomerEmail) {
+      elements.deliveryCustomerEmail.value = customer?.email || customer?.contato?.email || '';
+    }
+    if (elements.deliveryCustomerSearch) {
+      elements.deliveryCustomerSearch.value = getCustomerCode(customer) || '';
+    }
   };
 
   const setDeliveryAddressFormVisible = (visible) => {
@@ -7758,21 +9817,119 @@
 
   const updateDeliveryAddressConfirmState = () => {
     if (!elements.deliveryAddressConfirm) return;
-    const disabled = state.deliveryAddressesLoading || !state.deliverySelectedAddressId;
+    const disabled = state.deliveryAddressesLoading;
     elements.deliveryAddressConfirm.disabled = disabled;
     elements.deliveryAddressConfirm.classList.toggle('opacity-60', disabled);
   };
 
+  const fillDeliveryOrderDateTimeNow = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    if (elements.deliveryOrderDate) {
+      elements.deliveryOrderDate.value = `${year}-${month}-${day}`;
+    }
+    if (elements.deliveryOrderTime) {
+      elements.deliveryOrderTime.value = `${hours}:${minutes}`;
+    }
+  };
+
+  const setDeliveryModalTab = (tab) => {
+    const isPedido = tab === 'pedido';
+    if (isPedido) {
+      fillDeliveryOrderDateTimeNow();
+      void loadDeliveryCouriersForActiveCompany();
+      renderDeliveryOrderHistory();
+    }
+    elements.deliveryTabCliente?.classList.toggle('hidden', isPedido);
+    elements.deliveryTabPedido?.classList.toggle('hidden', !isPedido);
+    elements.deliveryFooterCliente?.classList.toggle('hidden', isPedido);
+    elements.deliveryFooterPedido?.classList.toggle('hidden', !isPedido);
+    if (elements.deliveryTabBtnCliente) {
+      elements.deliveryTabBtnCliente.classList.toggle('bg-primary', !isPedido);
+      elements.deliveryTabBtnCliente.classList.toggle('text-white', !isPedido);
+      elements.deliveryTabBtnCliente.classList.toggle('bg-gray-200', isPedido);
+      elements.deliveryTabBtnCliente.classList.toggle('text-gray-500', isPedido);
+    }
+    if (elements.deliveryTabBtnPedido) {
+      elements.deliveryTabBtnPedido.classList.toggle('bg-primary', isPedido);
+      elements.deliveryTabBtnPedido.classList.toggle('text-white', isPedido);
+      elements.deliveryTabBtnPedido.classList.toggle('bg-gray-200', !isPedido);
+      elements.deliveryTabBtnPedido.classList.toggle('text-gray-500', !isPedido);
+    }
+    if (elements.deliveryOrderCancel) {
+      elements.deliveryOrderCancel.disabled = false;
+      elements.deliveryOrderCancel.removeAttribute('disabled');
+      elements.deliveryOrderCancel.setAttribute('aria-disabled', 'false');
+      elements.deliveryOrderCancel.classList.remove('opacity-60', 'cursor-not-allowed');
+      elements.deliveryOrderCancel.style.backgroundColor = '#b91c1c';
+      elements.deliveryOrderCancel.style.borderColor = '#7f1d1d';
+      elements.deliveryOrderCancel.style.color = '#ffffff';
+      elements.deliveryOrderCancel.style.opacity = '1';
+    }
+    if (elements.deliveryOrderConfirm) {
+      elements.deliveryOrderConfirm.disabled = false;
+      elements.deliveryOrderConfirm.removeAttribute('disabled');
+      elements.deliveryOrderConfirm.setAttribute('aria-disabled', 'false');
+      elements.deliveryOrderConfirm.classList.remove('opacity-60', 'cursor-not-allowed');
+      elements.deliveryOrderConfirm.style.opacity = '1';
+    }
+    if (elements.deliveryClientCancel) {
+      elements.deliveryClientCancel.disabled = false;
+      elements.deliveryClientCancel.removeAttribute('disabled');
+      elements.deliveryClientCancel.setAttribute('aria-disabled', 'false');
+      elements.deliveryClientCancel.classList.remove('opacity-60', 'cursor-not-allowed');
+      elements.deliveryClientCancel.style.backgroundColor = '#b91c1c';
+      elements.deliveryClientCancel.style.borderColor = '#7f1d1d';
+      elements.deliveryClientCancel.style.color = '#ffffff';
+      elements.deliveryClientCancel.style.opacity = '1';
+    }
+    if (elements.deliveryClientConfirm) {
+      elements.deliveryClientConfirm.disabled = false;
+      elements.deliveryClientConfirm.removeAttribute('disabled');
+      elements.deliveryClientConfirm.setAttribute('aria-disabled', 'false');
+      elements.deliveryClientConfirm.classList.remove('opacity-60', 'cursor-not-allowed');
+      elements.deliveryClientConfirm.style.opacity = '1';
+    }
+  };
+
+  const readDeliveryAddressFromForm = () => {
+    const fields = elements.deliveryAddressFields || {};
+    const cep = sanitizeCepDigits(fields.cep?.value || '');
+    const logradouro = (fields.logradouro?.value || '').trim();
+    const numero = (fields.numero?.value || '').trim();
+    if (!cep || !logradouro || !numero) return null;
+    const candidate = {
+      id: state.deliverySelectedAddressId || `manual-${Date.now()}`,
+      apelido: (fields.apelido?.value || '').trim() || resolveCustomerName(state.vendaCliente) || 'Principal',
+      cep,
+      logradouro,
+      numero,
+      bairro: (fields.bairro?.value || '').trim(),
+      cidade: (fields.cidade?.value || '').trim(),
+      uf: ((fields.uf?.value || '').trim() || 'RJ').toUpperCase(),
+      complemento: (fields.complemento?.value || '').trim(),
+      isDefault: Boolean(fields.isDefault?.checked),
+    };
+    return normalizeCustomerAddressRecord(candidate, 0);
+  };
+
   const setDeliverySelectedAddressId = (addressId) => {
     const normalizedId = addressId ? String(addressId) : '';
+    state.deliveryCreatingNewAddress = false;
     state.deliverySelectedAddressId = normalizedId;
     const selected = state.deliveryAddresses.find((item) => item.id === normalizedId) || null;
     state.deliverySelectedAddress = selected ? { ...selected } : null;
+    syncDeliveryAddressFormWithSelection();
     updateDeliveryAddressConfirmState();
   };
 
   const applyDefaultDeliveryAddressSelection = () => {
     if (!state.deliveryAddresses.length) {
+      state.deliveryCreatingNewAddress = false;
       setDeliverySelectedAddressId('');
       return;
     }
@@ -7780,6 +9937,7 @@
       const existing = state.deliveryAddresses.find((item) => item.id === state.deliverySelectedAddressId);
       if (existing) {
         state.deliverySelectedAddress = { ...existing };
+        syncDeliveryAddressFormWithSelection();
         return;
       }
     }
@@ -7792,12 +9950,13 @@
       return;
     }
     elements.deliveryAddressList.innerHTML = '';
+    const hasCustomer = Boolean(state.vendaCliente);
     if (state.deliveryAddressesLoading) {
       elements.deliveryAddressLoading.classList.remove('hidden');
     } else {
       elements.deliveryAddressLoading.classList.add('hidden');
     }
-    if (!state.deliveryAddressesLoading && !state.deliveryAddresses.length) {
+    if (!state.deliveryAddressesLoading && !state.deliveryAddresses.length && !hasCustomer) {
       elements.deliveryAddressEmpty.classList.remove('hidden');
       updateDeliveryAddressConfirmState();
       return;
@@ -7808,24 +9967,24 @@
       const isSelected = state.deliverySelectedAddressId === address.id;
       const label = document.createElement('label');
       label.className = [
-        'flex items-start gap-3 rounded-xl border px-4 py-3 transition',
+        'block cursor-pointer rounded-lg border bg-white px-3 py-3 transition min-h-[92px]',
         isSelected
-          ? 'border-primary bg-primary/5 text-primary'
-          : 'border-gray-200 text-gray-700 hover:border-primary hover:bg-primary/5',
+          ? 'border-primary ring-1 ring-primary/30'
+          : 'border-gray-200 text-gray-700 hover:border-primary',
       ].join(' ');
       const input = document.createElement('input');
       input.type = 'radio';
       input.name = 'pdv-delivery-address';
       input.value = address.id;
       input.checked = isSelected;
-      input.className = 'mt-1 h-4 w-4 text-primary focus:ring-primary';
+      input.className = 'sr-only';
       const content = document.createElement('div');
-      content.className = 'flex-1 space-y-1';
+      content.className = 'space-y-1';
       const title = document.createElement('p');
-      title.className = 'text-sm font-semibold';
+      title.className = 'text-[12px] font-semibold text-gray-800';
       title.textContent = address.apelido || 'Endereço';
       const detail = document.createElement('p');
-      detail.className = 'text-xs text-gray-500';
+      detail.className = 'text-[11px] text-gray-500 line-clamp-3';
       detail.textContent = address.formatted || 'Endereço não informado';
       content.append(title, detail);
       if (address.isDefault) {
@@ -7838,6 +9997,20 @@
       label.append(input, content);
       fragment.appendChild(label);
     });
+    if (hasCustomer && deliveryCustomerRegisterMode) {
+      const addButton = document.createElement('button');
+      addButton.type = 'button';
+      addButton.setAttribute('data-delivery-address-new', 'true');
+      addButton.className = [
+        'flex min-h-[92px] w-full items-center justify-center rounded-lg border border-dashed bg-white px-3 py-3 text-2xl font-semibold transition',
+        state.deliveryCreatingNewAddress
+          ? 'border-primary text-primary ring-1 ring-primary/30'
+          : 'border-gray-300 text-gray-400 hover:border-primary hover:text-primary',
+      ].join(' ');
+      addButton.title = 'Adicionar novo endereço';
+      addButton.textContent = '+';
+      fragment.appendChild(addButton);
+    }
     elements.deliveryAddressList.appendChild(fragment);
     updateDeliveryAddressConfirmState();
   };
@@ -7875,18 +10048,51 @@
     try {
       const token = getToken();
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const response = await fetch(`${API_BASE}/addresses/${clienteId}`, {
-        headers,
-        signal: deliveryAddressesController.signal,
-      });
-      if (!response.ok) {
+      const normalizeAddressList = (payload) =>
+        Array.isArray(payload)
+          ? payload.map((item, index) => normalizeCustomerAddressRecord(item, index)).filter(Boolean)
+          : [];
+      const mergeAddressLists = (...lists) => {
+        const merged = [];
+        const seen = new Set();
+        lists.forEach((list) => {
+          (Array.isArray(list) ? list : []).forEach((address) => {
+            if (!address) return;
+            const key =
+              normalizeId(address.id) ||
+              `${sanitizeCepDigits(address.cep || '')}|${String(address.logradouro || '').toLowerCase()}|${String(
+                address.numero || ''
+              ).toLowerCase()}`;
+            if (seen.has(key)) return;
+            seen.add(key);
+            merged.push(address);
+          });
+        });
+        return merged;
+      };
+
+      const [legacyResponse, customerResponse] = await Promise.all([
+        fetch(`${API_BASE}/addresses/${clienteId}`, {
+          headers,
+          signal: deliveryAddressesController.signal,
+        }).catch(() => null),
+        fetch(`${API_BASE}/func/clientes/${clienteId}/enderecos`, {
+          headers,
+          signal: deliveryAddressesController.signal,
+        }).catch(() => null),
+      ]);
+
+      const legacyPayload = legacyResponse?.ok ? await legacyResponse.json().catch(() => []) : [];
+      const customerPayload = customerResponse?.ok ? await customerResponse.json().catch(() => []) : [];
+
+      const legacyAddresses = normalizeAddressList(legacyPayload);
+      const customerAddresses = normalizeAddressList(customerPayload);
+      const mergedAddresses = mergeAddressLists(legacyAddresses, customerAddresses);
+      const addresses = mergedAddresses.length ? mergedAddresses : inlineFallback;
+
+      if (!addresses.length && !legacyResponse?.ok && !customerResponse?.ok) {
         throw new Error('Não foi possível carregar os endereços do cliente.');
       }
-      const payload = await response.json();
-      const normalized = Array.isArray(payload)
-        ? payload.map((item, index) => normalizeCustomerAddressRecord(item, index)).filter(Boolean)
-        : [];
-      const addresses = normalized.length ? normalized : inlineFallback;
       state.deliveryAddresses = addresses.map((item) => ({ ...item }));
       customerAddressesCache.set(
         clienteId,
@@ -7908,11 +10114,34 @@
 
   const openDeliveryAddressModal = async () => {
     if (!elements.deliveryAddressModal) return;
-    setDeliveryAddressFormVisible(false);
+    fillDeliveryOrderDateTimeNow();
+    setDeliveryCustomerRegistrationRequired(false);
+    if (state.vendaCliente) {
+      const detailedCustomer = await fetchDeliveryCustomerDetails(state.vendaCliente);
+      if (detailedCustomer && typeof detailedCustomer === 'object') {
+        setSaleCustomer(detailedCustomer, state.vendaPet || null, { skipRecalculate: true });
+      }
+    }
+    updateDeliveryCustomerSummary();
+    renderDeliveryOrderHistory();
+    setDeliveryModalTab('cliente');
+    await loadDeliveryCouriersForActiveCompany();
+    setDeliveryAddressFormVisible(true);
     resetDeliveryAddressForm();
+    applyDeliveryDefaultDdd();
     await loadDeliveryAddresses();
+    syncDeliveryAddressFormWithSelection();
     elements.deliveryAddressModal.classList.remove('hidden');
     document.body.classList.add('overflow-hidden');
+    if (elements.deliveryOrderCancel) {
+      elements.deliveryOrderCancel.disabled = false;
+      elements.deliveryOrderCancel.removeAttribute('disabled');
+      elements.deliveryOrderCancel.setAttribute('aria-disabled', 'false');
+      elements.deliveryOrderCancel.style.backgroundColor = '#b91c1c';
+      elements.deliveryOrderCancel.style.borderColor = '#7f1d1d';
+      elements.deliveryOrderCancel.style.color = '#ffffff';
+      elements.deliveryOrderCancel.style.opacity = '1';
+    }
   };
 
   const closeDeliveryAddressModal = () => {
@@ -7922,12 +10151,41 @@
   };
 
   const handleDeliveryAddressConfirm = () => {
+    if (deliveryCustomerRegisterMode) {
+      const missingRequired =
+        !(elements.deliveryAddressFields?.apelido?.value || '').trim() ||
+        !(elements.deliveryCustomerCpf?.value || '').trim() ||
+        !(elements.deliveryAddressFields?.cep?.value || '').trim() ||
+        !(elements.deliveryCustomerSexo?.value || '').trim();
+      if (missingRequired) {
+        elements.deliveryAddressForm?.reportValidity?.();
+        notify('Preencha os campos obrigatorios do cadastro do cliente.', 'warning');
+        return;
+      }
+    }
+    const fromForm = readDeliveryAddressFromForm();
+    if (fromForm) {
+      state.deliverySelectedAddress = { ...fromForm };
+      if (!state.deliverySelectedAddressId) {
+        state.deliverySelectedAddressId = fromForm.id;
+      }
+    }
     if (!state.deliverySelectedAddress) {
       notify('Selecione um endereço para continuar com o delivery.', 'warning');
       return;
     }
+    captureDeliveryCourierSelection();
+    const importedCount = importSelectedDeliveryHistoryItemsToSale();
+    state.saleSource = 'delivery';
     closeDeliveryAddressModal();
-    openFinalizeModal('delivery');
+    setActiveTab('pdv-tab');
+    updateFinalizeButton();
+    updateSaleSummary();
+    if (importedCount > 0) {
+      notify(`${importedCount} item(ns) importado(s) para a venda.`, 'success');
+    } else {
+      notify('Cliente vinculado ao PDV.', 'success');
+    }
   };
 
   const handleDeliveryAddressToggle = () => {
@@ -7941,8 +10199,8 @@
   };
 
   const handleDeliveryAddressCancelForm = () => {
-    setDeliveryAddressFormVisible(false);
     resetDeliveryAddressForm();
+    syncDeliveryAddressFormWithSelection();
   };
 
   const handleDeliveryAddressFormSubmit = async (event) => {
@@ -8005,8 +10263,9 @@
         );
         setDeliverySelectedAddressId(normalized.id);
         renderDeliveryAddresses();
-        setDeliveryAddressFormVisible(false);
+        setDeliveryAddressFormVisible(true);
         resetDeliveryAddressForm();
+        syncDeliveryAddressFormWithSelection();
         notify('Endereço cadastrado com sucesso.', 'success');
       }
     } catch (error) {
@@ -8028,17 +10287,31 @@
     renderDeliveryAddresses();
   };
 
+  const handleDeliveryAddressNewClick = (event) => {
+    const button = event.target.closest('button[data-delivery-address-new="true"]');
+    if (!button) return;
+    const fields = elements.deliveryAddressFields || {};
+    state.deliveryCreatingNewAddress = true;
+    state.deliverySelectedAddressId = '';
+    state.deliverySelectedAddress = null;
+    if (fields.logradouro) fields.logradouro.value = '';
+    if (fields.numero) fields.numero.value = '';
+    if (fields.cep) fields.cep.value = '';
+    if (fields.bairro) fields.bairro.value = '';
+    if (fields.cidade) fields.cidade.value = 'RIO DE JANEIRO';
+    if (fields.uf) fields.uf.value = 'RJ';
+    if (fields.complemento) fields.complemento.value = '';
+    if (fields.isDefault) fields.isDefault.checked = false;
+    deliveryCepLastDigits = '';
+    deliveryCepLastResult = null;
+    deliveryCepLastNotifiedDigits = '';
+    renderDeliveryAddresses();
+    fields.logradouro?.focus();
+  };
+
   const handleDeliveryAction = async () => {
     if (!state.caixaAberto) {
       notify('Abra o caixa para registrar um delivery.', 'warning');
-      return;
-    }
-    if (!state.vendaCliente) {
-      notify('Selecione um cliente para iniciar o delivery.', 'warning');
-      return;
-    }
-    if (!state.itens.length) {
-      notify('Adicione itens à venda para iniciar o delivery.', 'warning');
       return;
     }
     try {
@@ -8111,6 +10384,85 @@
   const normalizeDocumentDigits = (value) => {
     if (!value) return '';
     return String(value).replace(/\D+/g, '');
+  };
+
+  const normalizePhoneDigits = (value) => {
+    if (!value) return '';
+    return String(value).replace(/\D+/g, '');
+  };
+
+  const getCustomerPhoneCandidates = (customer) => {
+    if (!customer || typeof customer !== 'object') return [];
+    const candidates = [];
+    const add = (value) => {
+      const digits = normalizePhoneDigits(value);
+      if (!digits) return;
+      if (!candidates.includes(digits)) {
+        candidates.push(digits);
+      }
+    };
+    add(customer.telefone);
+    add(customer.celular);
+    add(customer.celular2);
+    add(customer.celular_2);
+    add(customer.telefoneFixo);
+    add(customer.telefone_fixo);
+    add(customer.fone);
+    add(customer.fone2);
+    add(customer.whatsapp);
+    add(customer.telefone1);
+    add(customer.telefone2);
+    add(customer.telefone3);
+    if (customer.contato && typeof customer.contato === 'object') {
+      add(customer.contato.telefone);
+      add(customer.contato.telefone2);
+      add(customer.contato.telefone_2);
+      add(customer.contato.celular);
+      add(customer.contato.celular2);
+      add(customer.contato.celular_2);
+      add(customer.contato.whatsapp);
+    }
+    if (Array.isArray(customer.telefones)) {
+      customer.telefones.forEach((entry) => {
+        if (!entry) return;
+        if (typeof entry === 'string') {
+          add(entry);
+        } else if (typeof entry === 'object') {
+          add(entry.telefone || entry.celular || entry.whatsapp || entry.numero || entry.number);
+        }
+      });
+    }
+    // Fallback amplo: captura campos de telefone/fone em estruturas aninhadas.
+    const queue = [customer];
+    const visited = new Set();
+    const phoneKeyPattern = /(telefone|fone|celular|whats|contato|residencial|comercial|fixo)/i;
+    while (queue.length) {
+      const current = queue.shift();
+      if (!current || typeof current !== 'object' || visited.has(current)) continue;
+      visited.add(current);
+      for (const [key, rawValue] of Object.entries(current)) {
+        if (rawValue == null) continue;
+        if (Array.isArray(rawValue)) {
+          rawValue.forEach((item) => {
+            if (item == null) return;
+            if (typeof item === 'string' || typeof item === 'number') {
+              if (phoneKeyPattern.test(String(key))) add(item);
+            } else if (typeof item === 'object') {
+              queue.push(item);
+            }
+          });
+          continue;
+        }
+        if (typeof rawValue === 'object') {
+          queue.push(rawValue);
+          continue;
+        }
+        if ((typeof rawValue === 'string' || typeof rawValue === 'number') && phoneKeyPattern.test(String(key))) {
+          add(rawValue);
+        }
+      }
+    }
+    return candidates;
   };
 
   const fetchDeliveryCustomerByDocument = async (document) => {
@@ -8215,6 +10567,10 @@
         ...address,
         formatted: address.formatted || buildDeliveryAddressLine(address),
       },
+      courier: {
+        id: normalizeId(state.deliverySelectedCourierId || ''),
+        label: String(state.deliverySelectedCourierLabel || '').trim(),
+      },
       receiptSnapshot: snapshot,
       saleCode: saleCode || snapshot?.meta?.saleCode || '',
     };
@@ -8232,46 +10588,57 @@
     state.deliveryOrders.forEach((order) => {
       const li = document.createElement('li');
       li.dataset.deliveryId = order.id;
-      li.className = 'rounded-xl border border-gray-200 bg-white p-5 space-y-4';
+      li.className = 'rounded-lg border border-gray-200 bg-white p-3 space-y-2';
 
       const header = document.createElement('div');
-      header.className = 'flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between';
+      header.className = 'flex items-start justify-between gap-2';
       const customerBox = document.createElement('div');
       const nameEl = document.createElement('p');
-      nameEl.className = 'text-sm font-semibold text-gray-800';
+      nameEl.className = 'text-[13px] font-semibold leading-tight text-gray-800';
       nameEl.textContent = order.customer.nome;
       customerBox.appendChild(nameEl);
       if (order.customer.documento) {
         const docEl = document.createElement('p');
-        docEl.className = 'text-xs text-gray-500';
+        docEl.className = 'text-[11px] leading-tight text-gray-500';
         docEl.textContent = `Documento: ${order.customer.documento}`;
         customerBox.appendChild(docEl);
       }
       if (order.customer.contato) {
         const contactEl = document.createElement('p');
-        contactEl.className = 'text-xs text-gray-500';
+        contactEl.className = 'text-[11px] leading-tight text-gray-500';
         contactEl.textContent = order.customer.contato;
         customerBox.appendChild(contactEl);
       }
       header.appendChild(customerBox);
 
       const statusBadge = document.createElement('span');
-      statusBadge.className = 'inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary';
+      statusBadge.className = 'inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary';
       statusBadge.textContent = getDeliveryStatusLabel(order.status);
       header.appendChild(statusBadge);
       li.appendChild(header);
 
       const details = document.createElement('div');
-      details.className = 'space-y-2 text-sm text-gray-600';
+      details.className = 'space-y-1 text-[12px] text-gray-600';
 
       const addressRow = document.createElement('p');
-      addressRow.className = 'flex items-start gap-2';
+      addressRow.className = 'flex items-start gap-1.5';
       const addressIcon = document.createElement('i');
-      addressIcon.className = 'fas fa-location-dot mt-0.5 text-gray-400';
+      addressIcon.className = 'fas fa-location-dot mt-0.5 text-[11px] text-gray-400';
       const addressText = document.createElement('span');
       addressText.textContent = order.address.formatted || 'Endereço não informado';
       addressRow.append(addressIcon, addressText);
       details.appendChild(addressRow);
+
+      if (order.courier?.label) {
+        const courierRow = document.createElement('p');
+        courierRow.className = 'flex items-start gap-1.5';
+        const courierIcon = document.createElement('i');
+        courierIcon.className = 'fas fa-motorcycle mt-0.5 text-[11px] text-gray-400';
+        const courierText = document.createElement('span');
+        courierText.textContent = `Entregador: ${order.courier.label}`;
+        courierRow.append(courierIcon, courierText);
+        details.appendChild(courierRow);
+      }
 
       const totalRow = document.createElement('p');
       const totalLabel = document.createElement('span');
@@ -8284,27 +10651,27 @@
 
       if (order.paymentsLabel) {
         const paymentRow = document.createElement('p');
-        paymentRow.className = 'text-xs text-gray-500';
+        paymentRow.className = 'text-[11px] text-gray-500';
         paymentRow.textContent = `Pagamentos: ${order.paymentsLabel}`;
         details.appendChild(paymentRow);
       }
 
       const updatedRow = document.createElement('p');
-      updatedRow.className = 'text-xs text-gray-400';
+      updatedRow.className = 'text-[10px] text-gray-400';
       updatedRow.textContent = `Atualizado em ${toDateLabel(order.statusUpdatedAt || order.updatedAt)}`;
       details.appendChild(updatedRow);
 
       li.appendChild(details);
 
       const steps = document.createElement('div');
-      steps.className = 'flex flex-wrap gap-2';
+      steps.className = 'flex flex-wrap gap-1.5';
       const currentIndex = getDeliveryStatusIndex(order.status);
       deliveryStatusSteps.forEach((step, index) => {
         const button = document.createElement('button');
         button.type = 'button';
         button.dataset.deliveryId = order.id;
         button.dataset.deliveryStatus = step.id;
-        const baseClass = 'inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[11px] font-semibold transition';
+        const baseClass = 'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold transition';
         let styleClass = 'border-gray-200 text-gray-500 hover:border-primary hover:text-primary';
         if (index < currentIndex) {
           styleClass = 'border-emerald-200 bg-emerald-50 text-emerald-700';
@@ -8319,12 +10686,12 @@
       li.appendChild(steps);
 
       const actions = document.createElement('div');
-      actions.className = 'flex flex-wrap items-center justify-between gap-2';
+      actions.className = 'flex flex-wrap items-center justify-between gap-1.5';
 
       const advanceButton = document.createElement('button');
       advanceButton.type = 'button';
       advanceButton.dataset.deliveryAdvance = order.id;
-      advanceButton.className = 'rounded-lg border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary';
+      advanceButton.className = 'rounded-md border border-gray-200 px-2.5 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary';
       advanceButton.textContent = 'Avançar status';
       if (currentIndex >= deliveryStatusSteps.length - 1) {
         advanceButton.disabled = true;
@@ -8335,7 +10702,7 @@
       const printButton = document.createElement('button');
       printButton.type = 'button';
       printButton.dataset.deliveryPrint = order.id;
-      printButton.className = 'rounded-lg bg-primary px-3 py-1 text-xs font-semibold text-white transition hover:bg-secondary';
+      printButton.className = 'rounded-md bg-primary px-2.5 py-1 text-[11px] font-semibold text-white transition hover:bg-secondary';
       printButton.textContent = 'Imprimir comprovante';
       actions.appendChild(printButton);
 
@@ -9668,7 +12035,8 @@
 
   const handleFinalizeButtonClick = () => {
     if (elements.finalizeButton?.disabled) return;
-    openFinalizeModal('sale');
+    const context = state.saleSource === 'delivery' ? 'delivery' : 'sale';
+    openFinalizeModal(context);
   };
 
   const describeSalePayments = (payments) => {
@@ -9788,6 +12156,30 @@
         remainingChange -= deduction;
       }
     }
+    const applyContributionToRecebimentosPrevistos = (entry) => {
+      if (!entry) return;
+      const amount = safeNumber(entry.amount);
+      if (!(amount > 0)) return;
+      if (!Array.isArray(state.caixaInfo.previstoPagamentos)) {
+        state.caixaInfo.previstoPagamentos = [];
+      }
+      let target =
+        state.caixaInfo.previstoPagamentos.find((item) => item.id === entry.paymentId) ||
+        state.caixaInfo.previstoPagamentos.find((item) => item.label === entry.paymentLabel);
+      if (!target) {
+        target = {
+          id: entry.paymentId || createUid(),
+          label: entry.paymentLabel || 'Pagamento',
+          type: entry.paymentType || 'avista',
+          aliases: [],
+          valor: 0,
+        };
+        state.caixaInfo.previstoPagamentos.push(target);
+      }
+      target.valor = safeNumber(target.valor) + amount;
+    };
+    Array.from(contributionsMap.values()).forEach(applyContributionToRecebimentosPrevistos);
+    state.caixaInfo.fechamentoPrevisto = sumPayments(state.caixaInfo.previstoPagamentos);
     renderPayments();
     if (historyAction) {
       addHistoryEntry(historyAction, total, '', paymentLabel);
@@ -9803,7 +12195,18 @@
       id: 'venda',
       label: saleCode ? `Venda ${saleCode} finalizada` : 'Venda finalizada',
     };
-    return applyPaymentsToCaixa({ payments, total, historyAction, paymentLabel: historyPaymentLabel });
+    const contributions = applyPaymentsToCaixa({
+      payments,
+      total,
+      historyAction,
+      paymentLabel: historyPaymentLabel,
+    });
+    const receivedValue = safeNumber(total);
+    if (receivedValue > 0) {
+      state.summary.recebido = safeNumber(state.summary.recebido) + receivedValue;
+      updateSummary();
+    }
+    return contributions;
   };
 
   const registerReceivablesOnCaixa = (payments, total, customer = null) => {
@@ -11011,6 +13414,7 @@
     promptDeliveryPrint(saleSnapshot);
     state.deliverySelectedAddress = null;
     state.deliverySelectedAddressId = '';
+    setActiveTab('delivery-tab');
   };
 
   const finalizeRegisteredDeliveryOrder = async () => {
@@ -11501,11 +13905,23 @@
     const recebimentosClienteFormatted =
       snapshot.resumo?.recebimentosCliente?.formatted ||
       formatCurrency(snapshot.resumo?.recebimentosCliente?.value || 0);
+    const movementTotals = getCaixaMovementTotals();
 
     lines.push('Resumo financeiro');
     lines.push(formatPrintLine('Abertura', snapshot.resumo.abertura.formatted));
     lines.push(formatPrintLine('Recebido', snapshot.resumo.recebido.formatted));
     lines.push(formatPrintLine('Recebimentos de Cliente', recebimentosClienteFormatted));
+    if (movementTotals.entradas > 0) {
+      lines.push(formatPrintLine('Entradas', formatCurrency(movementTotals.entradas)));
+    }
+    if (movementTotals.saidas > 0) {
+      lines.push(formatPrintLine('Saídas', formatCurrency(movementTotals.saidas)));
+    }
+    if (movementTotals.envioTesouraria > 0) {
+      lines.push(
+        formatPrintLine('Envio à Tesouraria', formatCurrency(movementTotals.envioTesouraria))
+      );
+    }
     lines.push(formatPrintLine('Saldo', snapshot.resumo.saldo.formatted));
     lines.push('');
     lines.push('Recebimentos por meio');
@@ -14813,6 +17229,963 @@
     }
   };
 
+  const updateDeliveryCustomerSummary = () => {
+    if (
+      !elements.deliveryClientSince ||
+      !elements.deliveryClientFidelity ||
+      !elements.deliveryClientPending ||
+      !elements.deliveryClientCredit
+    ) {
+      return;
+    }
+    const customer = state.vendaCliente;
+    if (!customer) {
+      elements.deliveryClientSince.textContent = '—';
+      elements.deliveryClientFidelity.textContent = '—';
+      elements.deliveryClientPending.textContent = formatCurrency(0);
+      elements.deliveryClientCredit.textContent = formatCurrency(0);
+      return;
+    }
+
+    const parseDateValueForCustomerSince = (value) => {
+      if (!value && value !== 0) return '';
+      if (value instanceof Date) {
+        return Number.isNaN(value.getTime()) ? '' : formatDateLabel(value);
+      }
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        const asMs = value > 1e12 ? value : value * 1000;
+        return formatDateLabel(new Date(asMs));
+      }
+      if (typeof value === 'object') {
+        if (typeof value.seconds === 'number') {
+          return formatDateLabel(new Date(value.seconds * 1000));
+        }
+        const nested =
+          value.date || value.data || value.valor || value.value || value.createdAt || value.dataCadastro;
+        if (nested != null && nested !== value) {
+          return parseDateValueForCustomerSince(nested);
+        }
+      }
+      const text = String(value).trim();
+      if (!text) return '';
+      if (/^\d{2}\/\d{2}\/\d{4}/.test(text)) {
+        return text.slice(0, 10);
+      }
+      return formatDateLabel(text);
+    };
+
+    const resolveCustomerSinceLabel = (sourceCustomer) => {
+      const directCandidates = [
+        sourceCustomer.criadoEm,
+        sourceCustomer.criado_em,
+        sourceCustomer.dataCadastro,
+        sourceCustomer.dtCadastro,
+        sourceCustomer.data_cadastro,
+        sourceCustomer.clienteDesde,
+        sourceCustomer.desde,
+        sourceCustomer.cadastradoEm,
+        sourceCustomer.dataCriacao,
+        sourceCustomer.createdAt,
+        sourceCustomer.created_at,
+        sourceCustomer.cadastro?.dataCadastro,
+        sourceCustomer.cadastro?.data,
+      ];
+      for (const candidate of directCandidates) {
+        const label = parseDateValueForCustomerSince(candidate);
+        if (label) return label;
+      }
+
+      const queue = [sourceCustomer];
+      const visited = new Set();
+      const keyPattern = /(cadastro|cadastr|criacao|criado|created|desde|inclusao|inclus[aã]o|registro)/i;
+      while (queue.length) {
+        const current = queue.shift();
+        if (!current || typeof current !== 'object' || visited.has(current)) continue;
+        visited.add(current);
+        for (const [key, rawValue] of Object.entries(current)) {
+          if (rawValue == null) continue;
+          if (keyPattern.test(String(key))) {
+            const label = parseDateValueForCustomerSince(rawValue);
+            if (label) return label;
+          }
+          if (rawValue && typeof rawValue === 'object') {
+            queue.push(rawValue);
+          }
+        }
+      }
+      return '—';
+    };
+
+    const sinceLabel = resolveCustomerSinceLabel(customer);
+
+    const fidelityValue =
+      customer.fidelidade ??
+      customer.fidelity ??
+      customer.pontosFidelidade ??
+      customer.pontuacaoFidelidade ??
+      null;
+
+    const pendingValue =
+      customer.pendencias ??
+      customer.saldoDevedor ??
+      customer.debitos ??
+      customer.emAberto ??
+      customer.financeiro?.saldoDevedor ??
+      customer.financeiro?.pendencias ??
+      0;
+
+    const creditValue =
+      customer.financeiro?.limiteCredito ??
+      customer.financeiro?.limite_credito ??
+      customer.limiteCredito ??
+      customer.limite_credito ??
+      customer.creditLimit ??
+      customer.limite ??
+      0;
+
+    elements.deliveryClientSince.textContent = sinceLabel;
+    elements.deliveryClientFidelity.textContent =
+      fidelityValue !== null && fidelityValue !== undefined && String(fidelityValue).trim()
+        ? String(fidelityValue)
+        : '—';
+    elements.deliveryClientPending.textContent = formatCurrency(safeNumber(pendingValue));
+    elements.deliveryClientCredit.textContent = formatCurrency(safeNumber(creditValue));
+  };
+
+  const getDeliveryOrderHistorySales = (limit = 12) => {
+    const customer = state.vendaCliente;
+    if (!customer) return [];
+    const sales = Array.isArray(state.completedSales) ? state.completedSales : [];
+    return sales
+      .filter((sale) => isHistorySaleMatchingCustomer(sale, customer))
+      .sort((a, b) => getTimeValue(b.createdAt) - getTimeValue(a.createdAt))
+      .slice(0, Math.max(1, Number(limit) || 12));
+  };
+
+  const getDeliveryHistorySaleCode = (sale) =>
+    sale?.saleCodeLabel || sale?.saleCode || sale?.receiptSnapshot?.meta?.saleCode || '-';
+
+  const getDeliveryHistoryDiscountLabel = (sale, item) => {
+    const itemDiscount = safeNumber(
+      item?.desconto ??
+        item?.descontoValor ??
+        item?.discount ??
+        item?.discountValue ??
+        item?.discount_value ??
+        0
+    );
+    if (itemDiscount > 0) return formatCurrency(itemDiscount);
+    const saleDiscount = safeNumber(sale?.discountValue ?? sale?.receiptSnapshot?.totais?.descontoValor ?? 0);
+    return formatCurrency(saleDiscount > 0 ? saleDiscount : 0);
+  };
+
+  const getDeliveryOrderHistoryImportKey = (sale, item, saleIndex, itemIndex) => {
+    const saleId = normalizeId(sale?.id || sale?._id || sale?.saleCode || saleIndex || '');
+    const itemId = normalizeId(
+      item?.id ||
+        item?.codigoInterno ||
+        item?.codInterno ||
+        item?.codigoBarras ||
+        item?.codigo ||
+        item?.barcode ||
+        itemIndex ||
+        ''
+    );
+    return `${saleId}:${itemId}`;
+  };
+
+  const syncDeliveryOrderHistoryImportAllControl = () => {
+    if (!elements.deliveryOrderHistoryImportAll) return;
+    const rowCheckboxes = Array.from(
+      elements.deliveryOrderHistoryBody?.querySelectorAll('input[type="checkbox"][data-delivery-history-import]') || []
+    );
+    if (!rowCheckboxes.length) {
+      elements.deliveryOrderHistoryImportAll.checked = false;
+      elements.deliveryOrderHistoryImportAll.indeterminate = false;
+      elements.deliveryOrderHistoryImportAll.disabled = true;
+      return;
+    }
+    const checkedCount = rowCheckboxes.filter((input) => input.checked).length;
+    elements.deliveryOrderHistoryImportAll.disabled = false;
+    elements.deliveryOrderHistoryImportAll.checked = checkedCount > 0 && checkedCount === rowCheckboxes.length;
+    elements.deliveryOrderHistoryImportAll.indeterminate =
+      checkedCount > 0 && checkedCount < rowCheckboxes.length;
+  };
+
+  const handleDeliveryOrderHistoryImportChange = (event) => {
+    const input = event?.target?.closest('input[type="checkbox"][data-delivery-history-import]');
+    if (!input) return;
+    const key = String(input.getAttribute('data-delivery-history-import') || '').trim();
+    if (!key) return;
+    const current = Array.isArray(state.deliveryOrderImportSelection)
+      ? [...state.deliveryOrderImportSelection]
+      : [];
+    const has = current.includes(key);
+    if (input.checked && !has) {
+      current.push(key);
+    } else if (!input.checked && has) {
+      state.deliveryOrderImportSelection = current.filter((item) => item !== key);
+      syncDeliveryOrderHistoryImportAllControl();
+      return;
+    }
+    state.deliveryOrderImportSelection = current;
+    syncDeliveryOrderHistoryImportAllControl();
+  };
+
+  const handleDeliveryOrderHistoryImportAllChange = (event) => {
+    const checked = Boolean(event?.target?.checked);
+    const rowCheckboxes = Array.from(
+      elements.deliveryOrderHistoryBody?.querySelectorAll('input[type="checkbox"][data-delivery-history-import]') || []
+    );
+    const current = new Set(
+      Array.isArray(state.deliveryOrderImportSelection) ? state.deliveryOrderImportSelection : []
+    );
+    rowCheckboxes.forEach((input) => {
+      const key = String(input.getAttribute('data-delivery-history-import') || '').trim();
+      if (!key) return;
+      input.checked = checked;
+      if (checked) {
+        current.add(key);
+      } else {
+        current.delete(key);
+      }
+    });
+    state.deliveryOrderImportSelection = Array.from(current);
+    syncDeliveryOrderHistoryImportAllControl();
+  };
+
+  const buildDeliveryImportedSaleItem = (sourceItem, index = 0) => {
+    const quantity = Math.max(1, safeNumber(sourceItem?.quantity ?? sourceItem?.quantidade ?? sourceItem?.qtd ?? 1));
+    const unitValue = Math.max(
+      0,
+      safeNumber(sourceItem?.unitValue ?? sourceItem?.valorUnitario ?? sourceItem?.valor ?? sourceItem?.preco ?? 0)
+    );
+    const code =
+      sourceItem?.barcode ||
+      sourceItem?.codigoBarras ||
+      sourceItem?.codigo ||
+      sourceItem?.codigoInterno ||
+      sourceItem?.codInterno ||
+      '';
+    const internalCode =
+      sourceItem?.codigoInterno ||
+      sourceItem?.codInterno ||
+      sourceItem?.codigo ||
+      sourceItem?.barcode ||
+      code;
+    const productName =
+      sourceItem?.product ||
+      sourceItem?.nome ||
+      sourceItem?.descricao ||
+      sourceItem?.produto ||
+      `Item ${index + 1}`;
+    const productId = normalizeId(sourceItem?.productId || sourceItem?._id || sourceItem?.id || '');
+    return {
+      id: productId || internalCode || code || `delivery-import-${Date.now()}-${index}`,
+      codigo: code || internalCode || '',
+      codigoInterno: internalCode || '',
+      codigoBarras: code || '',
+      nome: productName,
+      quantidade: quantity,
+      valorBase: unitValue,
+      valorPromocional: null,
+      usePromotion: false,
+      valor: unitValue,
+      subtotal: unitValue * quantity,
+      promoType: null,
+      generalPromo: false,
+      productSnapshot: null,
+    };
+  };
+
+  const importSelectedDeliveryHistoryItemsToSale = () => {
+    const selectedKeys = Array.isArray(state.deliveryOrderImportSelection)
+      ? state.deliveryOrderImportSelection
+      : [];
+    if (!selectedKeys.length) return 0;
+    const importMap = state.deliveryOrderImportMap && typeof state.deliveryOrderImportMap === 'object'
+      ? state.deliveryOrderImportMap
+      : {};
+    const importedItems = [];
+    selectedKeys.forEach((key, index) => {
+      const entry = importMap[key];
+      if (!entry?.item) return;
+      importedItems.push(buildDeliveryImportedSaleItem(entry.item, index));
+    });
+    if (!importedItems.length) return 0;
+    state.itens = [...state.itens, ...importedItems];
+    renderItemsList();
+    return importedItems.length;
+  };
+
+  const renderDeliveryOrderHistory = () => {
+    if (!elements.deliveryOrderHistoryBody || !elements.deliveryOrderHistoryEmpty) return;
+    const tbody = elements.deliveryOrderHistoryBody;
+    const emptyState = elements.deliveryOrderHistoryEmpty;
+    tbody.innerHTML = '';
+    const sales = getDeliveryOrderHistorySales(12);
+    state.deliveryOrderImportMap = {};
+    if (!sales.length) {
+      emptyState.classList.remove('hidden');
+      state.deliveryOrderImportSelection = [];
+      syncDeliveryOrderHistoryImportAllControl();
+      return;
+    }
+    emptyState.classList.add('hidden');
+    const validKeys = new Set();
+    const selectedKeys = new Set(
+      Array.isArray(state.deliveryOrderImportSelection) ? state.deliveryOrderImportSelection : []
+    );
+    const fragment = document.createDocumentFragment();
+    sales.forEach((sale, saleIndex) => {
+      const saleCode = getDeliveryHistorySaleCode(sale);
+      const items = Array.isArray(sale?.items) ? sale.items : [];
+      const rows = items.length ? items : [null];
+      rows.forEach((item, itemIndex) => {
+        const importKey = getDeliveryOrderHistoryImportKey(sale, item, saleIndex, itemIndex);
+        validKeys.add(importKey);
+        state.deliveryOrderImportMap[importKey] = { sale, item };
+        const isChecked = selectedKeys.has(importKey);
+        const row = document.createElement('tr');
+        row.className = 'divide-x divide-gray-100';
+        const itemCode = item ? getExchangeHistoryItemCode(item) : '-';
+        const itemDescription = item ? getExchangeHistoryItemDescription(item) : 'Venda sem itens';
+        const quantityLabel = item ? getHistoryItemQuantityLabel(item) : '1';
+        const unitLabel = item ? getHistoryItemUnitLabel(item) : formatCurrency(0);
+        const discountLabel = getDeliveryHistoryDiscountLabel(sale, item);
+        const totalLabel = item ? getHistoryItemTotalLabel(item) : formatCurrency(0);
+        row.innerHTML = `
+          <td class="px-3 py-2 text-gray-700">${escapeHtml(String(saleCode))}</td>
+          <td class="px-3 py-2 text-gray-600">${escapeHtml(String(itemCode))}</td>
+          <td class="px-3 py-2 text-gray-700">${escapeHtml(String(itemDescription))}</td>
+          <td class="px-3 py-2 text-gray-600">${escapeHtml(String(quantityLabel))}</td>
+          <td class="px-3 py-2 text-gray-600">${escapeHtml(String(unitLabel))}</td>
+          <td class="px-3 py-2 text-gray-600">${escapeHtml(String(discountLabel))}</td>
+          <td class="px-3 py-2 text-gray-700">${escapeHtml(String(totalLabel))}</td>
+          <td class="px-3 py-2 text-center text-gray-500"><input type="checkbox" data-delivery-history-import="${escapeHtml(importKey)}" ${isChecked ? 'checked' : ''}></td>
+        `;
+        fragment.appendChild(row);
+      });
+    });
+    state.deliveryOrderImportSelection = Array.from(validKeys).filter((key) => selectedKeys.has(key));
+    tbody.appendChild(fragment);
+    syncDeliveryOrderHistoryImportAllControl();
+  };
+
+  const fetchDeliveryCustomerByPhone = async (phone) => {
+    const target = normalizePhoneDigits(phone);
+    if (!target) return null;
+
+    const normalizePhoneForCompare = (value) => {
+      const digits = normalizePhoneDigits(value);
+      if (!digits) return '';
+      if (digits.length > 11 && digits.startsWith('55')) return digits.slice(2);
+      return digits;
+    };
+
+    const buildPhoneVariants = (value) => {
+      const normalized = normalizePhoneForCompare(value);
+      const variants = new Set();
+      if (!normalized) return variants;
+      variants.add(normalized);
+      if (normalized.length >= 11) variants.add(normalized.slice(-11));
+      if (normalized.length >= 10) variants.add(normalized.slice(-10));
+      if (normalized.length >= 9) variants.add(normalized.slice(-9));
+      if (normalized.length >= 8) variants.add(normalized.slice(-8));
+      if (normalized.length === 11 && normalized[2] === '9') {
+        variants.add(`${normalized.slice(0, 2)}${normalized.slice(3)}`);
+        variants.add(normalized.slice(3));
+      }
+      return variants;
+    };
+
+    const targetNormalized = normalizePhoneForCompare(target);
+    const targetVariants = buildPhoneVariants(targetNormalized);
+    const localNumber = targetNormalized.slice(-9);
+    const localNumber8 = targetNormalized.slice(-8);
+
+    const formatLocalPhone = (value) => {
+      const digits = normalizePhoneDigits(value);
+      if (digits.length === 8) {
+        return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+      }
+      if (digits.length === 9) {
+        return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+      }
+      return digits;
+    };
+
+    const formattedQueries = (() => {
+      const variants = new Set();
+      const ddd = targetNormalized.length >= 10 ? targetNormalized.slice(0, 2) : '';
+      const local = ddd ? targetNormalized.slice(2) : targetNormalized;
+      const localFormatted = formatLocalPhone(local);
+      if (local) {
+        variants.add(local);
+        variants.add(localFormatted);
+      }
+      if (ddd && local) {
+        variants.add(`${ddd}${local}`);
+        variants.add(`${ddd} ${local}`);
+        variants.add(`${ddd}-${local}`);
+        variants.add(`(${ddd})${local}`);
+        variants.add(`(${ddd}) ${local}`);
+        variants.add(`(${ddd}) ${localFormatted}`);
+        variants.add(`${ddd} ${localFormatted}`);
+      }
+      return Array.from(variants).filter(Boolean);
+    })();
+
+    const queries = Array.from(
+      new Set(
+        [target, targetNormalized, localNumber, localNumber8, ...formattedQueries].filter(
+          (value) => value && String(value).trim().length >= 8
+        )
+      )
+    );
+
+    const token = getToken();
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const findPhoneMatchInList = (list) => {
+      if (!Array.isArray(list) || !list.length) return null;
+      return (
+        list.find((entry) => {
+          const phones = getCustomerPhoneCandidates(entry);
+          return phones.some((candidate) => {
+            const candidateVariants = buildPhoneVariants(candidate);
+            for (const variant of candidateVariants) {
+              if (targetVariants.has(variant)) return true;
+              for (const targetVariant of targetVariants) {
+                if (!targetVariant || !variant) continue;
+                if (variant.endsWith(targetVariant) || targetVariant.endsWith(variant)) return true;
+              }
+            }
+            return false;
+          });
+        }) || null
+      );
+    };
+    try {
+      for (const query of queries) {
+        const response = await fetch(
+          `${API_BASE}/func/clientes/buscar?q=${encodeURIComponent(query)}&limit=12`,
+          { headers }
+        );
+        if (!response.ok) continue;
+        const payload = await response.json().catch(() => []);
+        const matched = findPhoneMatchInList(payload);
+        if (matched) return { ...matched };
+      }
+
+      // Fallback: usa listagem com `search` e valida localmente todos os campos de telefone.
+      for (const query of queries) {
+        const params = new URLSearchParams({
+          page: '1',
+          limit: '100',
+          search: String(query),
+        });
+        const response = await fetch(`${API_BASE}/func/clientes?${params.toString()}`, { headers });
+        if (!response.ok) continue;
+        const payload = await response.json().catch(() => null);
+        const items = Array.isArray(payload?.items) ? payload.items : [];
+        const matched = findPhoneMatchInList(items);
+        if (matched) return { ...matched };
+      }
+      return null;
+    } catch (error) {
+      console.error('Erro ao localizar cliente por telefone para o delivery:', error);
+      return null;
+    }
+  };
+
+  const fetchDeliveryCustomerByCode = async (code) => {
+    const query = sanitizeCustomerCode(code);
+    if (!query) return null;
+    const token = getToken();
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    try {
+      const response = await fetch(
+        `${API_BASE}/func/clientes/buscar?q=${encodeURIComponent(query)}&limit=8`,
+        { headers }
+      );
+      if (!response.ok) return null;
+      const payload = await response.json().catch(() => []);
+      if (!Array.isArray(payload) || !payload.length) return null;
+      const exact = payload.find((entry) => getCustomerCode(entry) === query);
+      return exact ? { ...exact } : null;
+    } catch (error) {
+      console.error('Erro ao localizar cliente por codigo para o delivery:', error);
+      return null;
+    }
+  };
+
+  const fetchDeliveryCustomerDetails = async (customer) => {
+    if (!customer || typeof customer !== 'object') return customer;
+    const resolveDetailCustomerId = async (source) => {
+      const directId =
+        source?._id ||
+        source?.id ||
+        source?._idCliente ||
+        source?.userId ||
+        source?.usuarioId ||
+        source?.clienteId ||
+        source?.customerId ||
+        source?.user?._id ||
+        '';
+      if (directId) return String(directId);
+
+      const code = getCustomerCode(source);
+      if (!code) return '';
+      const token = getToken();
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const response = await fetch(
+        `${API_BASE}/func/clientes/buscar?q=${encodeURIComponent(code)}&limit=8`,
+        { headers }
+      );
+      if (!response.ok) return '';
+      const payload = await response.json().catch(() => []);
+      if (!Array.isArray(payload) || !payload.length) return '';
+      const exact = payload.find((entry) => getCustomerCode(entry) === code) || payload[0];
+      return String(
+        exact?._id ||
+          exact?.id ||
+          exact?._idCliente ||
+          exact?.userId ||
+          exact?.usuarioId ||
+          exact?.clienteId ||
+          exact?.customerId ||
+          ''
+      );
+    };
+
+    const customerId = await resolveDetailCustomerId(customer);
+    if (!customerId) return customer;
+    const cached = customerReceivablesDetailsCache.get(customerId);
+    if (cached && typeof cached === 'object') {
+      return { ...customer, ...cached };
+    }
+    const token = getToken();
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    try {
+      const response = await fetch(`${API_BASE}/func/clientes/${customerId}`, { headers });
+      if (!response.ok) {
+        return customer;
+      }
+      const payload = await response.json().catch(() => null);
+      if (!payload || typeof payload !== 'object') {
+        return customer;
+      }
+      customerReceivablesDetailsCache.set(customerId, { ...payload });
+      return { ...customer, ...payload };
+    } catch (error) {
+      console.error('Erro ao carregar detalhes do cliente para o delivery:', error);
+      return customer;
+    }
+  };
+
+  const splitPhoneWithDdd = (value) => {
+    const digits = normalizePhoneDigits(value);
+    if (!digits) return { ddd: '', number: '' };
+    const base = digits.length > 11 && digits.startsWith('55') ? digits.slice(2) : digits;
+    if (base.length <= 2) return { ddd: base, number: '' };
+    return { ddd: base.slice(0, 2), number: base.slice(2, 11) };
+  };
+
+  const applyDeliveryCustomerToForm = async (customer) => {
+    if (!customer || typeof customer !== 'object') return;
+    const detailedCustomer = await fetchDeliveryCustomerDetails(customer);
+    const effectiveCustomer = detailedCustomer && typeof detailedCustomer === 'object'
+      ? detailedCustomer
+      : customer;
+    setSaleCustomer(effectiveCustomer, state.vendaPet || null, { skipRecalculate: true });
+    const name = resolveCustomerName(effectiveCustomer) || '';
+    if (elements.deliveryAddressFields?.apelido) {
+      elements.deliveryAddressFields.apelido.value = name;
+    }
+    if (elements.deliveryCustomerCpf) {
+      elements.deliveryCustomerCpf.value = resolveCustomerDocument(effectiveCustomer) || '';
+    }
+    if (elements.deliveryCustomerEmail) {
+      elements.deliveryCustomerEmail.value =
+        effectiveCustomer?.email || effectiveCustomer?.contato?.email || '';
+    }
+    const phones = getCustomerPhoneCandidates(effectiveCustomer);
+    const primary = splitPhoneWithDdd(phones[0] || '');
+    const secondary = splitPhoneWithDdd(phones[1] || '');
+    if (elements.deliveryPhoneDdd) elements.deliveryPhoneDdd.value = primary.ddd || '';
+    if (elements.deliveryPhoneNumber) elements.deliveryPhoneNumber.value = primary.number || '';
+    if (elements.deliveryPhone1Ddd) elements.deliveryPhone1Ddd.value = primary.ddd || '';
+    if (elements.deliveryPhone1Number) elements.deliveryPhone1Number.value = primary.number || '';
+    if (elements.deliveryPhone2Ddd) elements.deliveryPhone2Ddd.value = secondary.ddd || '';
+    if (elements.deliveryPhone2Number) elements.deliveryPhone2Number.value = secondary.number || '';
+
+    const address = resolveCustomerAddressRecord(effectiveCustomer);
+    if (address && elements.deliveryAddressFields) {
+      const fields = elements.deliveryAddressFields;
+      if (fields.logradouro) fields.logradouro.value = address.logradouro || '';
+      if (fields.numero) fields.numero.value = address.numero || '';
+      if (fields.cep) fields.cep.value = formatCep(address.cep || '');
+      if (fields.bairro) fields.bairro.value = address.bairro || '';
+      if (fields.cidade) fields.cidade.value = address.cidade || fields.cidade.value || '';
+      if (fields.uf) fields.uf.value = (address.uf || '').toUpperCase();
+      if (fields.complemento) fields.complemento.value = address.complemento || '';
+    }
+    await loadDeliveryAddresses();
+    syncDeliveryAddressFormWithSelection();
+    setDeliveryCustomerRegistrationRequired(false);
+  };
+
+  const buildDeliveryCustomerCreatePayload = () => {
+    const name = (elements.deliveryAddressFields?.apelido?.value || '').trim();
+    const documentDigits = normalizeDocumentDigits(elements.deliveryCustomerCpf?.value || '');
+    const sexo = String(elements.deliveryCustomerSexo?.value || '').trim().toUpperCase();
+    const nascimento = String(elements.deliveryCustomerBirthDate?.value || '').trim();
+    const email = String(elements.deliveryCustomerEmail?.value || '').trim().toLowerCase();
+    const cep = sanitizeCepDigits(elements.deliveryAddressFields?.cep?.value || '');
+    const logradouro = (elements.deliveryAddressFields?.logradouro?.value || '').trim();
+    const numero = (elements.deliveryAddressFields?.numero?.value || '').trim();
+    const bairro = (elements.deliveryAddressFields?.bairro?.value || '').trim();
+    const cidade = (elements.deliveryAddressFields?.cidade?.value || '').trim();
+    const uf = String(elements.deliveryAddressFields?.uf?.value || 'RJ').trim().toUpperCase();
+    const complemento = (elements.deliveryAddressFields?.complemento?.value || '').trim();
+    const dddMain = normalizePhoneDigits(elements.deliveryPhoneDdd?.value || '');
+    const phoneMain = normalizePhoneDigits(elements.deliveryPhoneNumber?.value || '');
+    const ddd1 = normalizePhoneDigits(elements.deliveryPhone1Ddd?.value || '');
+    const phone1 = normalizePhoneDigits(elements.deliveryPhone1Number?.value || '');
+    const ddd2 = normalizePhoneDigits(elements.deliveryPhone2Ddd?.value || '');
+    const phone2 = normalizePhoneDigits(elements.deliveryPhone2Number?.value || '');
+    const mainPhone = `${dddMain}${phoneMain}`;
+    const phoneOne = `${ddd1}${phone1}`;
+    const phoneTwo = `${ddd2}${phone2}`;
+    const isCnpj = documentDigits.length === 14;
+    const tipoConta = isCnpj ? 'pessoa_juridica' : 'pessoa_fisica';
+    const empresaId = getActiveSellerCompanyId() || state.selectedStore || '';
+    const payload = {
+      tipoConta,
+      pais: 'Brasil',
+      empresaId,
+      email,
+      celular: mainPhone,
+      telefone: phoneOne || mainPhone,
+      celular2: phoneTwo,
+      telefone2: phoneTwo,
+      limiteCredito: 0,
+    };
+    if (isCnpj) {
+      payload.cnpj = documentDigits;
+      payload.razaoSocial = name;
+      payload.nomeFantasia = name;
+      payload.nomeContato = name;
+      payload.inscricaoEstadual = '';
+      payload.estadoIE = '';
+      payload.isentoIE = true;
+    } else {
+      payload.nome = name;
+      payload.apelido = name;
+      payload.cpf = documentDigits;
+      payload.rg = '';
+      payload.nascimento = nascimento;
+      payload.sexo = sexo;
+    }
+    if (logradouro || numero || cep || bairro || cidade || uf || complemento) {
+      payload.logradouro = logradouro;
+      payload.numero = numero;
+      payload.cep = cep;
+      payload.bairro = bairro;
+      payload.cidade = cidade;
+      payload.uf = uf;
+      payload.complemento = complemento;
+    }
+    return payload;
+  };
+
+  const resolveCustomerEmail = (customer) =>
+    String(customer?.email || customer?.contato?.email || customer?.emailPrincipal || '')
+      .trim()
+      .toLowerCase();
+
+  const isDuplicateEmailError = (error) => {
+    const message = String(error?.message || '').toLowerCase();
+    const detailMessage = String(error?.details?.message || '').toLowerCase();
+    const detailCode = Number(error?.details?.code || error?.details?.errorResponse?.code || 0);
+    return (
+      detailCode === 11000 ||
+      message.includes('duplicate key') ||
+      message.includes('email_1') ||
+      message.includes('dup key') ||
+      detailMessage.includes('duplicate key') ||
+      detailMessage.includes('email_1') ||
+      detailMessage.includes('dup key')
+    );
+  };
+
+  const fetchDeliveryCustomerByEmail = async (emailValue) => {
+    const email = String(emailValue || '').trim().toLowerCase();
+    if (!email || !email.includes('@')) return null;
+    try {
+      const results = await fetchCustomersByQuery(email);
+      if (!Array.isArray(results) || !results.length) return null;
+      const match =
+        results.find((entry) => resolveCustomerEmail(entry) === email) || null;
+      return match ? { ...match } : null;
+    } catch (error) {
+      console.error('Erro ao localizar cliente por email para o delivery:', error);
+      return null;
+    }
+  };
+
+  const buildDeliveryCustomerAddressPayloadFromForm = () => {
+    const fields = elements.deliveryAddressFields || {};
+    const cep = sanitizeCepDigits(fields.cep?.value || '');
+    const logradouro = String(fields.logradouro?.value || '').trim();
+    const numero = String(fields.numero?.value || '').trim();
+    const complemento = String(fields.complemento?.value || '').trim();
+    const bairro = String(fields.bairro?.value || '').trim();
+    const cidade = String(fields.cidade?.value || '').trim();
+    const uf = String(fields.uf?.value || 'RJ').trim().toUpperCase();
+    const apelido = String(fields.apelido?.value || '').trim() || 'Principal';
+    const hasAddressData = Boolean(cep || logradouro || numero || bairro || cidade || complemento);
+    if (!hasAddressData) return null;
+    if (!cep || !logradouro || !numero) return null;
+    return {
+      cep,
+      logradouro,
+      numero,
+      complemento,
+      bairro,
+      cidade,
+      apelido,
+      codIbgeMunicipio: '',
+      codUf: uf,
+      pais: 'Brasil',
+    };
+  };
+
+  const saveDeliveryCustomerAddress = async (customerId) => {
+    const normalizedCustomerId = normalizeId(customerId);
+    if (!normalizedCustomerId) return;
+    const payload = buildDeliveryCustomerAddressPayloadFromForm();
+    if (!payload) return;
+    const token = getToken();
+    const selectedAddressId = normalizeId(state.deliverySelectedAddressId);
+    const canUpdateExistingAddress =
+      selectedAddressId &&
+      !selectedAddressId.startsWith('manual-') &&
+      state.deliveryAddresses.some((item) => normalizeId(item?.id) === selectedAddressId);
+    const endpoint = canUpdateExistingAddress
+      ? `${API_BASE}/func/clientes/${encodeURIComponent(normalizedCustomerId)}/enderecos/${encodeURIComponent(
+          selectedAddressId
+        )}`
+      : `${API_BASE}/func/clientes/${encodeURIComponent(normalizedCustomerId)}/enderecos`;
+    const savedAddress = await fetchWithOptionalAuth(endpoint, {
+      method: canUpdateExistingAddress ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      token,
+      errorMessage: 'Nao foi possivel salvar o endereco no cadastro do cliente.',
+    });
+    const normalized = normalizeCustomerAddressRecord(savedAddress, 0);
+    if (normalized?.id) {
+      state.deliverySelectedAddressId = normalized.id;
+      state.deliverySelectedAddress = { ...normalized };
+      state.deliveryCreatingNewAddress = false;
+    }
+    return savedAddress;
+  };
+
+  const createDeliveryCustomerFromForm = async () => {
+    const payload = buildDeliveryCustomerCreatePayload();
+    const missingRequired =
+      !String(payload.nome || payload.razaoSocial || '').trim() ||
+      !normalizeDocumentDigits(payload.cpf || payload.cnpj || '') ||
+      !sanitizeCepDigits(payload.cep || elements.deliveryAddressFields?.cep?.value || '') ||
+      !String(elements.deliveryCustomerSexo?.value || '').trim();
+    if (missingRequired) {
+      elements.deliveryAddressForm?.reportValidity?.();
+      throw new Error('Preencha os campos obrigatorios do cadastro do cliente.');
+    }
+    const token = getToken();
+    try {
+      const response = await fetchWithOptionalAuth(`${API_BASE}/func/clientes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        token,
+        errorMessage: 'Nao foi possivel cadastrar o cliente.',
+      });
+      const createdId =
+        response?.id ||
+        response?._id ||
+        response?.clienteId ||
+        response?.customerId ||
+        response?.cliente?._id ||
+        response?.cliente?.id ||
+        '';
+      await saveDeliveryCustomerAddress(createdId);
+      const createdCustomerRef = createdId ? { _id: String(createdId), id: String(createdId) } : response;
+      const detailed = await fetchDeliveryCustomerDetails(createdCustomerRef);
+      return {
+        customer: detailed && typeof detailed === 'object' ? detailed : createdCustomerRef,
+        resolvedDuplicate: false,
+      };
+    } catch (error) {
+      if (isDuplicateEmailError(error) && payload.email) {
+        const existingCustomer = await fetchDeliveryCustomerByEmail(payload.email);
+        if (existingCustomer) {
+          const existingCustomerId = resolveCustomerId(existingCustomer);
+          if (existingCustomerId) {
+            await saveDeliveryCustomerAddress(existingCustomerId);
+          }
+          const detailedExisting = await fetchDeliveryCustomerDetails(existingCustomer);
+          return {
+            customer:
+              detailedExisting && typeof detailedExisting === 'object'
+                ? detailedExisting
+                : existingCustomer,
+            resolvedDuplicate: true,
+          };
+        }
+      }
+      throw error;
+    }
+  };
+
+  const updateDeliveryCustomerFromForm = async (customerId) => {
+    const normalizedCustomerId = normalizeId(customerId);
+    if (!normalizedCustomerId) {
+      throw new Error('Cliente selecionado invalido para atualizacao.');
+    }
+    const payload = buildDeliveryCustomerCreatePayload();
+    const missingRequired =
+      !String(payload.nome || payload.razaoSocial || '').trim() ||
+      !normalizeDocumentDigits(payload.cpf || payload.cnpj || '') ||
+      !sanitizeCepDigits(payload.cep || elements.deliveryAddressFields?.cep?.value || '') ||
+      !String(elements.deliveryCustomerSexo?.value || '').trim();
+    if (missingRequired) {
+      elements.deliveryAddressForm?.reportValidity?.();
+      throw new Error('Preencha os campos obrigatorios do cadastro do cliente.');
+    }
+    const token = getToken();
+    await fetchWithOptionalAuth(`${API_BASE}/func/clientes/${encodeURIComponent(normalizedCustomerId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      token,
+      errorMessage: 'Nao foi possivel atualizar o cliente.',
+    });
+    await saveDeliveryCustomerAddress(normalizedCustomerId);
+    const detailed = await fetchDeliveryCustomerDetails({ _id: normalizedCustomerId, id: normalizedCustomerId });
+    return detailed && typeof detailed === 'object' ? detailed : { _id: normalizedCustomerId, id: normalizedCustomerId };
+  };
+
+  const handleDeliveryAddressSaveClick = async () => {
+    if (!deliveryCustomerRegisterMode) {
+      handleDeliveryAddressConfirm();
+      return;
+    }
+    try {
+      if (state.deliveryAddressSaving) return;
+      state.deliveryAddressSaving = true;
+      if (elements.deliveryAddressConfirm) {
+        elements.deliveryAddressConfirm.disabled = true;
+        elements.deliveryAddressConfirm.classList.add('opacity-60', 'cursor-not-allowed');
+      }
+      const editingCustomerId = resolveCustomerId(state.vendaCliente);
+      let savedCustomer = null;
+      let resolvedDuplicate = false;
+      if (editingCustomerId) {
+        savedCustomer = await updateDeliveryCustomerFromForm(editingCustomerId);
+      } else {
+        const createdResult = await createDeliveryCustomerFromForm();
+        savedCustomer = createdResult?.customer || null;
+        resolvedDuplicate = Boolean(createdResult?.resolvedDuplicate);
+      }
+      await applyDeliveryCustomerToForm(savedCustomer);
+      if (editingCustomerId) {
+        notify('Cliente atualizado com sucesso.', 'success');
+      } else if (resolvedDuplicate) {
+        notify('Email ja cadastrado. Cliente existente foi selecionado e atualizado no delivery.', 'info');
+      } else {
+        notify('Cliente cadastrado com sucesso.', 'success');
+      }
+    } catch (error) {
+      console.error('Erro ao cadastrar cliente no delivery:', error);
+      notify(error?.message || 'Nao foi possivel cadastrar o cliente.', 'error');
+    } finally {
+      state.deliveryAddressSaving = false;
+      if (elements.deliveryAddressConfirm) {
+        elements.deliveryAddressConfirm.disabled = false;
+        elements.deliveryAddressConfirm.classList.remove('opacity-60', 'cursor-not-allowed');
+      }
+    }
+  };
+
+  const clearDeliveryCustomerForm = () => {
+    setSaleCustomer(null, null, { skipRecalculate: true });
+    state.deliveryAddresses = [];
+    state.deliveryAddressesLoading = false;
+    state.deliveryCreatingNewAddress = false;
+    state.deliverySelectedAddressId = '';
+    state.deliverySelectedAddress = null;
+    resetDeliveryAddressForm();
+    if (elements.deliveryCustomerSearch) {
+      elements.deliveryCustomerSearch.value = '';
+    }
+    if (elements.deliveryCustomerCpf) {
+      elements.deliveryCustomerCpf.value = '';
+    }
+    if (elements.deliveryCustomerEmail) {
+      elements.deliveryCustomerEmail.value = '';
+    }
+    applyDeliveryDefaultDdd();
+    if (elements.deliveryPhoneNumber) elements.deliveryPhoneNumber.value = '';
+    if (elements.deliveryPhone1Number) elements.deliveryPhone1Number.value = '';
+    if (elements.deliveryPhone2Number) elements.deliveryPhone2Number.value = '';
+    const observacao = document.getElementById('pdv-delivery-observacao');
+    if (observacao) observacao.value = '';
+    renderDeliveryAddresses();
+    updateDeliveryAddressConfirmState();
+  };
+
+  const lookupAndApplyDeliveryCustomer = async (kind, options = {}) => {
+    const { notifyOnMissing = false } = options;
+    const sequence = ++deliveryCustomerLookupRequestSeq;
+    let customer = null;
+    if (kind === 'document') {
+      const digits = normalizeDocumentDigits(elements.deliveryCustomerCpf?.value || '');
+      if (digits.length !== 11 && digits.length !== 14) return;
+      if (deliveryCustomerLastDocLookup === digits) return;
+      deliveryCustomerLastDocLookup = digits;
+      customer = await fetchDeliveryCustomerByDocument(digits);
+    } else if (kind === 'code') {
+      const code = sanitizeCustomerCode(elements.deliveryCustomerSearch?.value || '');
+      if (!code) return;
+      if (elements.deliveryCustomerSearch && elements.deliveryCustomerSearch.value !== code) {
+        elements.deliveryCustomerSearch.value = code;
+      }
+      if (deliveryCustomerLastCodeLookup === code) return;
+      deliveryCustomerLastCodeLookup = code;
+      customer = await fetchDeliveryCustomerByCode(code);
+    } else {
+      const ddd = normalizePhoneDigits(elements.deliveryPhoneDdd?.value || '');
+      const number = normalizePhoneDigits(elements.deliveryPhoneNumber?.value || '');
+      const digits = `${ddd}${number}`;
+      if (digits.length !== 10 && digits.length !== 11) return;
+      if (deliveryCustomerLastPhoneLookup === digits) return;
+      deliveryCustomerLastPhoneLookup = digits;
+      customer = await fetchDeliveryCustomerByPhone(digits);
+    }
+    if (sequence !== deliveryCustomerLookupRequestSeq) return;
+    if (!customer) {
+      if (kind === 'code' && notifyOnMissing) {
+        clearDeliveryCustomerForm();
+        notify('Nao foi encontrado nenhum cliente para o codigo informado.', 'warning');
+      }
+      return;
+    }
+    await applyDeliveryCustomerToForm(customer);
+  };
+
   const parseVersionParts = (value) => {
     if (!value) return [];
     const matches = String(value).match(/\d+/g);
@@ -15522,12 +18895,14 @@
   };
 
   const updateSummary = () => {
+    const abertura = safeNumber(state.summary.abertura);
+    const recebido = safeNumber(state.summary.recebido);
+    const recebimentosCliente = safeNumber(state.summary.recebimentosCliente);
+    const saldoCalculado = abertura + recebido + recebimentosCliente;
+    state.summary.saldo = saldoCalculado;
     const total = sumPayments(state.pagamentos);
-    state.summary.saldo = total;
-    state.summary.recebido = Math.max(total - state.summary.abertura, 0);
     if (state.caixaAberto && !state.allowApuradoEdit) {
-      state.caixaInfo.previstoPagamentos = clonePayments(state.pagamentos);
-      state.caixaInfo.fechamentoPrevisto = total;
+      state.caixaInfo.fechamentoPrevisto = sumPayments(state.caixaInfo.previstoPagamentos || []);
     }
     if (!state.caixaAberto && !state.allowApuradoEdit) {
       state.caixaInfo.apuradoPagamentos = clonePayments(state.pagamentos);
@@ -17729,6 +21104,7 @@
     const record = createCompletedSaleRecord(options);
     if (!record) return null;
     state.completedSales.unshift(record);
+    renderDeliveryOrderHistory();
     renderSalesList();
     scheduleStatePersist();
     return record;
@@ -18020,12 +21396,14 @@
     const blockers = [
       elements.sellerModal,
       elements.customerRegisterModal,
+      elements.customerSearchModal,
       elements.customerModal,
       elements.finalizeModal,
       elements.paymentValueModal,
       elements.exchangeModal,
       elements.exchangeHistoryModal,
       elements.exchangeSaleModal,
+      elements.exchangeProductModal,
       elements.deliveryAddressModal,
       elements.crediarioModal,
       elements.fiscalStatusModal,
@@ -18202,6 +21580,9 @@
 
   const closeExchangeModal = () => {
     state.exchangeModal.open = false;
+    if (state.exchangeProductSearch.open) {
+      closeExchangeProductSearchModal();
+    }
     if (elements.exchangeModal) {
       elements.exchangeModal.classList.add('hidden');
     }
@@ -18267,6 +21648,12 @@
       }
     });
     renderPayments();
+    if (totalRemoved > 0) {
+      state.summary.recebido = Math.max(
+        0,
+        safeNumber(state.summary.recebido) - safeNumber(totalRemoved)
+      );
+    }
     updateSummary();
     updateStatusBadge();
     scheduleStatePersist();
@@ -18628,6 +22015,9 @@
     state.sellersLoaded = false;
     state.sellerLookupLoading = false;
     state.sellerLookupError = '';
+    state.deliveryCouriers = [];
+    state.deliveryCouriersCompanyId = '';
+    state.deliveryCouriersLoading = false;
     state.selectedSeller = null;
     state.sellerSearchQuery = '';
     state.customerSearchResults = [];
@@ -18721,8 +22111,8 @@
       elements.customerResultsLoading.classList.add('hidden');
     }
     if (elements.customerResultsEmpty) {
-      elements.customerResultsEmpty.textContent = 'Digite para buscar clientes.';
-      elements.customerResultsEmpty.classList.remove('hidden');
+      elements.customerResultsEmpty.textContent = '';
+      elements.customerResultsEmpty.classList.add('hidden');
     }
     if (elements.customerPetsList) {
       elements.customerPetsList.innerHTML = '';
@@ -18920,6 +22310,8 @@
     return normalizePdvRecord(payload);
   };
   const applyPdvData = (pdv) => {
+    const persistedState =
+      pdv?.state && typeof pdv.state === 'object' ? pdv.state : {};
     const companyId = getPdvCompanyId(pdv);
     if (companyId && companyId !== state.selectedStore) {
       state.selectedStore = companyId;
@@ -19059,6 +22451,8 @@
     }
     const historicoFonte = Array.isArray(pdv?.history)
       ? pdv.history
+      : Array.isArray(persistedState?.history)
+      ? persistedState.history
       : Array.isArray(pdv?.caixa?.historico)
       ? pdv.caixa.historico
       : [];
@@ -19067,6 +22461,8 @@
       .filter(Boolean);
     const rootReceivablesData = Array.isArray(pdv?.accountsReceivable)
       ? pdv.accountsReceivable
+      : Array.isArray(persistedState?.accountsReceivable)
+      ? persistedState.accountsReceivable
       : Array.isArray(pdv?.contasReceber)
       ? pdv.contasReceber
       : Array.isArray(pdv?.caixa?.accountsReceivable)
@@ -19077,6 +22473,8 @@
       .filter(Boolean);
     const vendasFonte = Array.isArray(pdv?.completedSales)
       ? pdv.completedSales
+      : Array.isArray(persistedState?.completedSales)
+      ? persistedState.completedSales
       : Array.isArray(pdv?.caixa?.vendas)
       ? pdv.caixa.vendas
       : [];
@@ -19122,10 +22520,22 @@
     renderReceivablesSelectedCustomer();
     const budgetsFonte = Array.isArray(pdv?.budgets)
       ? pdv.budgets
+      : Array.isArray(persistedState?.budgets)
+      ? persistedState.budgets
       : Array.isArray(pdv?.orcamentos)
       ? pdv.orcamentos
       : [];
     state.budgets = budgetsFonte.map((budget) => normalizeBudgetRecordForPersist(budget)).filter(Boolean);
+    const deliveryOrdersFonte = Array.isArray(pdv?.deliveryOrders)
+      ? pdv.deliveryOrders
+      : Array.isArray(persistedState?.deliveryOrders)
+      ? persistedState.deliveryOrders
+      : Array.isArray(pdv?.caixa?.deliveryOrders)
+      ? pdv.caixa.deliveryOrders
+      : [];
+    state.deliveryOrders = deliveryOrdersFonte
+      .map((order) => normalizeDeliveryOrderForPersist(order))
+      .filter(Boolean);
     if (pdv?.budgetSequence != null) {
       state.budgetSequence = Math.max(1, Number.parseInt(pdv.budgetSequence, 10) || 1);
     } else if (pdv?.orcamentoSequencia != null) {
@@ -19155,6 +22565,7 @@
     renderItemsList();
     renderSalesList();
     renderBudgets();
+    renderDeliveryOrders();
     renderAppointments();
     clearSelectedProduct();
     updateWorkspaceInfo();
@@ -19369,9 +22780,8 @@
   const appendProductToSale = (product, quantidade = 1) => {
     if (!product) return false;
     const quantidadeFinal = Math.max(1, Math.trunc(Number(quantidade) || 1));
-    const pricing = getItemPricing(product, true, quantidadeFinal);
-    const usePromotion = pricing.hasPromotion;
-    const subtotal = pricing.valor * quantidadeFinal;
+    const usePromotion = false;
+    const pricing = getItemPricing(product, usePromotion, quantidadeFinal);
     const codigo = getProductCode(product);
     const codigoInterno = product?.codigoInterno || product?.codInterno || codigo;
     const codigoBarras = getProductBarcode(product);
@@ -19392,7 +22802,7 @@
     if (existingWithSellerIndex >= 0) {
       const current = state.itens[existingWithSellerIndex];
       const shouldUsePromotion =
-        current.usePromotion !== undefined ? current.usePromotion : usePromotion;
+        current.usePromotion !== undefined ? current.usePromotion : false;
       current.quantidade += quantidadeFinal;
       const currentPricing = getItemPricing(product, shouldUsePromotion, current.quantidade);
       current.valorBase = currentPricing.valorBase;
@@ -19420,7 +22830,7 @@
         valorPromocional: pricingToApply.valorPromocional,
         usePromotion: pricingToApply.hasPromotion ? usePromotion : false,
         valor: pricingToApply.valor,
-        subtotal,
+        subtotal: pricingToApply.valor * quantidadeFinal,
         promoType: pricingToApply.promoType || null,
         generalPromo,
         productSnapshot: snapshot,
@@ -19546,11 +22956,11 @@
 
   const updatePaymentRow = (paymentId) => {
     if (!elements.paymentList) return;
-    const display = elements.paymentList.querySelector(`[data-payment-display="${paymentId}"]`);
-    if (display) {
-      const payment = state.pagamentos.find((item) => item.id === paymentId);
-      display.textContent = formatCurrency(payment?.valor || 0);
-    }
+    const input = elements.paymentList.querySelector(`input[data-payment-input="${paymentId}"]`);
+    if (!input) return;
+    const payment = state.pagamentos.find((item) => item.id === paymentId);
+    if (!payment) return;
+    input.value = safeNumber(payment.valor).toFixed(2);
   };
 
   const renderPayments = () => {
@@ -19592,7 +23002,6 @@
           <div class="flex items-center gap-2">
             <span class="text-xs text-gray-500">R$</span>
             <input type="number" min="0" step="0.01" value="${payment.valor.toFixed(2)}" data-payment-input="${payment.id}" class="${inputClasses}" aria-label="Atualizar ${payment.label}" ${disabledAttr}>
-            <span class="text-sm font-semibold text-gray-800" data-payment-display="${payment.id}">${formatCurrency(payment.valor)}</span>
           </div>
         `;
         fragment.appendChild(li);
@@ -19635,14 +23044,6 @@
     }
     resetPagamentos();
     notify('Valores dos meios de pagamento zerados.', 'info');
-    scheduleStatePersist();
-  };
-
-  const handleClearHistory = () => {
-    state.history = [];
-    setLastMovement(null);
-    renderHistory();
-    notify('Histórico de movimentações limpo.', 'info');
     scheduleStatePersist();
   };
 
@@ -19788,13 +23189,22 @@
       const aberturaTotal = sumPayments(state.pagamentos);
       state.caixaAberto = true;
       state.allowApuradoEdit = false;
+      // Cada abertura inicia um novo ciclo de histórico do caixa.
+      state.history = [];
+      state.lastMovement = null;
       state.summary.abertura = aberturaTotal;
+      state.summary.recebido = 0;
+      state.summary.recebimentosCliente = 0;
       state.caixaInfo.aberturaData = new Date().toISOString();
       state.caixaInfo.fechamentoData = null;
       state.caixaInfo.fechamentoApurado = 0;
-      state.caixaInfo.previstoPagamentos = clonePayments(state.pagamentos);
+      // "Recebimentos por meio" não deve considerar os valores de abertura.
+      state.caixaInfo.previstoPagamentos = state.pagamentos.map((payment) => ({
+        ...payment,
+        valor: 0,
+      }));
       state.caixaInfo.apuradoPagamentos = [];
-      state.caixaInfo.fechamentoPrevisto = aberturaTotal;
+      state.caixaInfo.fechamentoPrevisto = 0;
       addHistoryEntry(action, aberturaTotal, motivo, describePaymentValues(state.pagamentos));
       notify(action.successMessage, 'success');
       setActiveTab('pdv-tab');
@@ -19846,7 +23256,7 @@
         payment.valor += amountValue;
         addHistoryEntry(action, amountValue, motivo, payment.label);
       } else {
-        payment.valor = Math.max(0, payment.valor - amountValue);
+        applyDebitOnPayments(payment.id, amountValue);
         addHistoryEntry(action, amountValue, motivo, payment.label, -Math.abs(amountValue));
       }
       notify(action.successMessage, 'success');
@@ -19980,7 +23390,6 @@
     elements.itemsList?.addEventListener('click', handleItemsListClick);
     elements.paymentList?.addEventListener('input', handlePaymentInput);
     elements.resetPayments?.addEventListener('click', handleResetPayments);
-    elements.clearHistory?.addEventListener('click', handleClearHistory);
     elements.caixaActions?.addEventListener('click', handleActionClick);
     elements.actionConfirm?.addEventListener('click', handleActionConfirm);
     elements.printControls?.addEventListener('click', handlePrintToggleClick);
@@ -20121,6 +23530,23 @@
     );
     elements.exchangeHistoryStart?.addEventListener('change', handleExchangeHistoryDateChange);
     elements.exchangeHistoryEnd?.addEventListener('change', handleExchangeHistoryDateChange);
+    elements.exchangeProductClose?.addEventListener('click', closeExchangeProductSearchModal);
+    elements.exchangeProductBackdrop?.addEventListener('click', closeExchangeProductSearchModal);
+    elements.exchangeProductModal?.addEventListener('keydown', handleExchangeProductSearchModalKeydown);
+    elements.exchangeProductSearchInput?.addEventListener('input', handleExchangeProductSearchInput);
+    elements.exchangeProductSearchInput?.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      handleExchangeProductSearchSubmit();
+    });
+    elements.exchangeProductSearchButton?.addEventListener('click', handleExchangeProductSearchSubmit);
+    elements.exchangeProductIncludeInactive?.addEventListener('change', () => {
+      handleExchangeProductSearchSubmit();
+    });
+    elements.exchangeProductResultsBody?.addEventListener('click', handleExchangeProductSearchResultsClick);
+    elements.exchangeReturnCode?.addEventListener('input', (event) =>
+      handleExchangeProductCodeInput(event, 'return')
+    );
     elements.exchangeReturnCode?.addEventListener('blur', handleExchangeReturnCodeLookup);
     elements.exchangeReturnCode?.addEventListener('keydown', (event) =>
       handleExchangeProductCodeKeydown(event, handleExchangeReturnCodeLookup, () =>
@@ -20143,6 +23569,9 @@
     );
     elements.exchangeReturnTotal?.addEventListener('keydown', (event) =>
       handleExchangeTotalKeydown(event, 'return')
+    );
+    elements.exchangeTakeCode?.addEventListener('input', (event) =>
+      handleExchangeProductCodeInput(event, 'take')
     );
     elements.exchangeTakeCode?.addEventListener('blur', handleExchangeTakeCodeLookup);
     elements.exchangeTakeCode?.addEventListener('keydown', (event) =>
@@ -20179,8 +23608,45 @@
     });
     elements.customerConfirm?.addEventListener('click', handleCustomerConfirm);
     elements.customerClear?.addEventListener('click', handleCustomerClearSelection);
-    elements.customerSearchInput?.addEventListener('input', handleCustomerSearchInput);
+    elements.customerPreviewCode?.addEventListener('input', handleCustomerModalLookupInput('code'));
+    elements.customerPreviewCode?.addEventListener('blur', handleCustomerModalLookupBlur('code'));
+    elements.customerPreviewDoc?.addEventListener('input', handleCustomerModalLookupInput('doc'));
+    elements.customerPreviewDoc?.addEventListener('blur', handleCustomerModalLookupBlur('doc'));
+    elements.customerPreviewTelefone1Ddd?.addEventListener('input', handleCustomerModalLookupInput('phone1'));
+    elements.customerPreviewTelefone1?.addEventListener('input', handleCustomerModalLookupInput('phone1'));
+    elements.customerPreviewTelefone1Ddd?.addEventListener('blur', handleCustomerModalLookupBlur('phone1'));
+    elements.customerPreviewTelefone1?.addEventListener('blur', handleCustomerModalLookupBlur('phone1'));
+    elements.customerPreviewTelefone2Ddd?.addEventListener('input', handleCustomerModalLookupInput('phone2'));
+    elements.customerPreviewTelefone2?.addEventListener('input', handleCustomerModalLookupInput('phone2'));
+    elements.customerPreviewTelefone2Ddd?.addEventListener('blur', handleCustomerModalLookupBlur('phone2'));
+    elements.customerPreviewTelefone2?.addEventListener('blur', handleCustomerModalLookupBlur('phone2'));
+    elements.customerPreviewCep?.addEventListener('input', () => {
+      const input = elements.customerPreviewCep;
+      if (!input) return;
+      const digits = sanitizeCepDigits(input.value || '');
+      const formatted = formatCep(digits);
+      if (input.value !== formatted) {
+        input.value = formatted;
+      }
+      if (customerModalCepLookupTimeout) {
+        clearTimeout(customerModalCepLookupTimeout);
+        customerModalCepLookupTimeout = null;
+      }
+      if (digits.length === 8) {
+        customerModalCepLookupTimeout = setTimeout(() => {
+          handleCustomerModalCepLookup();
+        }, 200);
+      }
+    });
+    elements.customerPreviewCep?.addEventListener('blur', () => {
+      if (customerModalCepLookupTimeout) {
+        clearTimeout(customerModalCepLookupTimeout);
+        customerModalCepLookupTimeout = null;
+      }
+      handleCustomerModalCepLookup({ force: true });
+    });
     elements.customerResultsList?.addEventListener('click', handleCustomerResultsClick);
+    elements.customerAddressCards?.addEventListener('click', handleCustomerAddressCardsClick);
     elements.customerPetsList?.addEventListener('click', handleCustomerPetsClick);
     elements.receivablesSearchInput?.addEventListener('input', handleReceivablesSearchInput);
     elements.receivablesSearchResults?.addEventListener('click', handleReceivablesResultsClick);
@@ -20193,14 +23659,43 @@
       button.addEventListener('click', handleCustomerTabClick);
     });
     elements.customerModal?.addEventListener('keydown', handleCustomerModalKeydown);
+    elements.customerRegisterToggle?.addEventListener('change', (event) => {
+      setCustomerRegisterRequiredState(Boolean(event?.target?.checked));
+      if (!event?.target?.checked && state.customerModalSelectedAddressId === '__new__') {
+        state.customerModalSelectedAddressId = '';
+        ensureCustomerModalAddressSelection({ applyToFields: true });
+      }
+      renderCustomerModalAddressCards();
+    });
     elements.customerRegisterButton?.addEventListener('click', () => openCustomerRegisterModal());
     elements.customerRegisterClose?.addEventListener('click', closeCustomerRegisterModal);
     elements.customerRegisterBackdrop?.addEventListener('click', closeCustomerRegisterModal);
     elements.customerRegisterModal?.addEventListener('keydown', handleCustomerRegisterModalKeydown);
     elements.customerRegisterFrame?.addEventListener('load', handleCustomerRegisterFrameLoad);
+    elements.customerSearchModalClose?.addEventListener('click', closeCustomerLookupSearchModal);
+    elements.customerSearchModalBackdrop?.addEventListener('click', closeCustomerLookupSearchModal);
+    elements.customerSearchModal?.addEventListener('keydown', handleCustomerLookupSearchModalKeydown);
+    elements.customerSearchModalInput?.addEventListener('input', handleCustomerLookupSearchModalInput);
+    elements.customerSearchModalInput?.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      handleCustomerLookupSearchModalSubmit();
+    });
+    elements.customerSearchModalButton?.addEventListener('click', handleCustomerLookupSearchModalSubmit);
+    elements.customerSearchModalResults?.addEventListener('click', handleCustomerLookupSearchModalResultsClick);
     elements.deliveryAddressList?.addEventListener('change', handleDeliveryAddressSelection);
-    elements.deliveryAddressConfirm?.addEventListener('click', handleDeliveryAddressConfirm);
+    elements.deliveryAddressList?.addEventListener('click', handleDeliveryAddressNewClick);
+    elements.deliveryAddressConfirm?.addEventListener('click', handleDeliveryAddressSaveClick);
     elements.deliveryAddressCancel?.addEventListener('click', closeDeliveryAddressModal);
+    elements.deliveryTabBtnCliente?.addEventListener('click', () => setDeliveryModalTab('cliente'));
+    elements.deliveryTabBtnPedido?.addEventListener('click', () => setDeliveryModalTab('pedido'));
+    elements.deliveryOrderConfirm?.addEventListener('click', handleDeliveryAddressConfirm);
+    elements.deliveryOrderCancel?.addEventListener('click', closeDeliveryAddressModal);
+    elements.deliveryOrderHistoryBody?.addEventListener('change', handleDeliveryOrderHistoryImportChange);
+    elements.deliveryOrderHistoryImportAll?.addEventListener('change', handleDeliveryOrderHistoryImportAllChange);
+    elements.deliveryOrderCourier?.addEventListener('change', captureDeliveryCourierSelection);
+    elements.deliveryClientConfirm?.addEventListener('click', handleDeliveryAddressConfirm);
+    elements.deliveryClientCancel?.addEventListener('click', closeDeliveryAddressModal);
     elements.deliveryAddressBackdrop?.addEventListener('click', closeDeliveryAddressModal);
     elements.deliveryAddressClose?.addEventListener('click', closeDeliveryAddressModal);
     elements.deliveryAddressAdd?.addEventListener('click', handleDeliveryAddressToggle);
@@ -20280,10 +23775,81 @@
         }
       });
     }
+    if (elements.deliveryCustomerCpf) {
+      elements.deliveryCustomerCpf.addEventListener('input', () => {
+        if (deliveryCustomerLookupDocTimeout) {
+          clearTimeout(deliveryCustomerLookupDocTimeout);
+        }
+        deliveryCustomerLookupDocTimeout = setTimeout(() => {
+          lookupAndApplyDeliveryCustomer('document');
+        }, 350);
+      });
+      elements.deliveryCustomerCpf.addEventListener('blur', () => {
+        lookupAndApplyDeliveryCustomer('document');
+      });
+    }
+    const handleDeliveryPhoneLookupInput = () => {
+      if (deliveryCustomerLookupPhoneTimeout) {
+        clearTimeout(deliveryCustomerLookupPhoneTimeout);
+      }
+      deliveryCustomerLookupPhoneTimeout = setTimeout(() => {
+        lookupAndApplyDeliveryCustomer('phone');
+      }, 350);
+    };
+    elements.deliveryPhoneDdd?.addEventListener('input', handleDeliveryPhoneLookupInput);
+    elements.deliveryPhoneNumber?.addEventListener('input', handleDeliveryPhoneLookupInput);
+    elements.deliveryPhoneDdd?.addEventListener('blur', () => lookupAndApplyDeliveryCustomer('phone'));
+    elements.deliveryPhoneNumber?.addEventListener('blur', () => lookupAndApplyDeliveryCustomer('phone'));
+    if (elements.deliveryCustomerSearch) {
+      elements.deliveryCustomerSearch.addEventListener('input', () => {
+        const input = elements.deliveryCustomerSearch;
+        if (!input) return;
+        const raw = String(input.value || '');
+        const trimmed = raw.trim();
+        if (/\p{L}/u.test(raw) || trimmed === '*') {
+          if (deliveryCustomerLookupCodeTimeout) {
+            clearTimeout(deliveryCustomerLookupCodeTimeout);
+            deliveryCustomerLookupCodeTimeout = null;
+          }
+          openCustomerLookupSearchModal(trimmed, {
+            onSelect: async (cliente) => {
+              await applyDeliveryCustomerToForm(cliente);
+              elements.deliveryCustomerSearch?.focus();
+            },
+          });
+          return;
+        }
+        const normalized = sanitizeCustomerCode(input.value || '');
+        if (input.value !== normalized) {
+          input.value = normalized;
+        }
+        if (deliveryCustomerLookupCodeTimeout) {
+          clearTimeout(deliveryCustomerLookupCodeTimeout);
+        }
+        deliveryCustomerLookupCodeTimeout = setTimeout(() => {
+          lookupAndApplyDeliveryCustomer('code');
+        }, 350);
+      });
+      elements.deliveryCustomerSearch.addEventListener('blur', () => {
+        lookupAndApplyDeliveryCustomer('code', { notifyOnMissing: true });
+      });
+    }
+    elements.deliveryRegisterClient?.addEventListener('click', () => {
+      setDeliveryCustomerRegistrationRequired(true);
+      elements.deliveryAddressFields?.apelido?.focus();
+    });
+    elements.deliveryChangeClient?.addEventListener('click', () => {
+      setDeliveryCustomerRegistrationRequired(false);
+      clearDeliveryCustomerForm();
+      applyDeliveryDefaultDdd();
+      elements.deliveryCustomerSearch?.focus();
+    });
   };
 
   const init = async () => {
     queryElements();
+    applyDeliveryFieldMasks();
+    applyPdvModalFieldMasks();
     applyFullscreenState();
     pendingActiveTabPreference = loadActiveTabPreference();
     const selectionPreference = loadPdvSelectionPreference();
@@ -20313,6 +23879,15 @@
       console.error('Erro ao carregar empresas para o PDV:', error);
       notify(error.message || 'Erro ao carregar a lista de empresas.', 'error');
       updateSelectionHint('Não foi possível carregar as empresas.');
+    }
+    if (elements.deliveryOrderDate && !elements.deliveryOrderDate.value) {
+      elements.deliveryOrderDate.value = getTodayIsoDate();
+    }
+    if (elements.deliveryOrderTime && !elements.deliveryOrderTime.value) {
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2, '0');
+      const mm = String(now.getMinutes()).padStart(2, '0');
+      elements.deliveryOrderTime.value = `${hh}:${mm}`;
     }
   };
 
@@ -20796,8 +24371,9 @@
       if (!state.caixaAberto) {
         notify('Pedido importado. Abra o caixa para registrar o delivery.', 'info');
       } else {
-        setDeliveryAddressFormVisible(false);
+        setDeliveryAddressFormVisible(true);
         resetDeliveryAddressForm();
+        syncDeliveryAddressFormWithSelection();
         elements.deliveryAddressModal.classList.remove('hidden');
         document.body.classList.add('overflow-hidden');
       }

@@ -609,6 +609,23 @@ function mapAddressDoc(doc) {
   };
 }
 
+function buildAddressLabel(address) {
+  if (!address || typeof address !== 'object') return '';
+  const logradouro = sanitizeString(address.logradouro || address.endereco || '');
+  const numero = sanitizeString(address.numero || '');
+  const complemento = sanitizeString(address.complemento || '');
+  const bairro = sanitizeString(address.bairro || '');
+  const cidade = sanitizeString(address.cidade || address.municipio || '');
+  const uf = sanitizeString(address.uf || address.estado || '').toUpperCase();
+  const cep = formatCep(address.cep || '');
+
+  const firstLine = [logradouro, numero].filter(Boolean).join(', ');
+  const cityLine = cidade && uf ? `${cidade} - ${uf}` : (cidade || uf);
+  const parts = [firstLine, complemento, bairro, cityLine];
+  if (cep) parts.push(`CEP: ${cep}`);
+  return parts.filter(Boolean).join(' - ');
+}
+
 function extractAllowedStaffTypes(serviceDoc) {
   if (!serviceDoc) return [];
   const raw = [];
@@ -2009,11 +2026,43 @@ router.get('/clientes/buscar', authMiddleware, requireStaff, async (req, res) =>
     }
 
     const users = await User.find({ $or: or })
-      .select('_id nomeCompleto nomeContato razaoSocial email cpf cnpj inscricaoEstadual celular tipoConta codigoCliente')
+      .select(
+        '_id nomeCompleto nomeContato razaoSocial email cpf cnpj inscricaoEstadual celular tipoConta codigoCliente genero sexo dataNascimento'
+      )
       .limit(limit)
       .lean();
 
+    const userIds = users.map((u) => u?._id).filter(Boolean);
+    const addressByUserId = new Map();
+    if (userIds.length) {
+      const addressDocs = await UserAddress.find({ user: { $in: userIds } })
+        .select('user apelido cep logradouro numero complemento bairro cidade uf isDefault updatedAt')
+        .sort({ isDefault: -1, updatedAt: -1, _id: -1 })
+        .lean();
+
+      for (const doc of addressDocs) {
+        const userId = String(doc?.user || '');
+        if (!userId || addressByUserId.has(userId)) continue;
+        const mapped = mapAddressDoc(doc);
+        if (!mapped) continue;
+        addressByUserId.set(userId, {
+          ...mapped,
+          formatted: buildAddressLabel(mapped),
+        });
+      }
+    }
+
     res.json(users.map(u => ({
+      ...(addressByUserId.get(String(u._id)) ? {
+        enderecoFormatado: addressByUserId.get(String(u._id)).formatted || '',
+        logradouro: addressByUserId.get(String(u._id)).logradouro || '',
+        numero: addressByUserId.get(String(u._id)).numero || '',
+        complemento: addressByUserId.get(String(u._id)).complemento || '',
+        bairro: addressByUserId.get(String(u._id)).bairro || '',
+        cidade: addressByUserId.get(String(u._id)).cidade || '',
+        uf: addressByUserId.get(String(u._id)).uf || '',
+        cep: addressByUserId.get(String(u._id)).cep || '',
+      } : {}),
       _id: u._id,
       codigo: (() => {
         const parsed = parseCodigoCliente(u.codigoCliente);
@@ -2022,6 +2071,9 @@ router.get('/clientes/buscar', authMiddleware, requireStaff, async (req, res) =>
       nome: userDisplayName(u),
       email: isGeneratedCustomerEmail(u.email) ? '' : (u.email || ''),
       celular: u.celular || '',
+      genero: u.genero || u.sexo || '',
+      sexo: u.sexo || u.genero || '',
+      dataNascimento: u.dataNascimento || null,
       doc: u.cpf || u.cnpj || u.inscricaoEstadual || '',
       cpf: u.cpf || '',
       cnpj: u.cnpj || '',

@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
@@ -113,7 +113,7 @@
                         </div>
                         <div class="flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-[11px] text-gray-500">
                             <i class="fas fa-cash-register text-primary text-xs"></i>
-                            <span class="font-medium uppercase tracking-wide">Movimentação direta no PDV</span>
+                            <span class="font-medium uppercase tracking-wide">MovimentaÃ§Ã£o direta no PDV</span>
                         </div>
                     </div>
 
@@ -132,7 +132,7 @@
                         </div>
                     </div>
 
-                    <p id="pdv-selection-hint" class="text-[11px] text-gray-500">Escolha a empresa para carregar os PDVs disponíveis.</p>
+                    <p id="pdv-selection-hint" class="text-[11px] text-gray-500">Escolha a empresa para carregar os PDVs disponÃ­veis.</p>
                 </section>
 
                 <section class="bg-white border border-gray-100 rounded-xl shadow-sm p-6 space-y-6">
@@ -152,11 +152,11 @@
                                         </span>
                                         <span id="pdv-sale-code-wrapper" class="hidden items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 px-3 py-1 text-xs font-semibold text-primary">
                                             <i class="fas fa-hashtag text-[10px]"></i>
-                                            <span id="pdv-sale-code">?</span>
+                                            <span id="pdv-sale-code">â€”</span>
                                         </span>
                                     </div>
                                     <div id="pdv-print-controls" class="flex flex-wrap items-center gap-2">
-                                        <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Tipos de impressão</span>
+                                        <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Tipos de impressÃ£o</span>
                                         <button type="button" class="inline-flex items-center justify-between gap-3 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-print-type="venda" aria-pressed="true">
                                             <span class="flex items-center gap-1.5">
                                                 <i class="fas fa-receipt text-[10px]"></i>
@@ -190,17 +190,17 @@
                                 <p id="pdv-selected-info" class="text-sm text-gray-500">Configure o caixa para iniciar as vendas.</p>
                             </div>
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-gray-600">
-                                <p><span class="font-semibold text-gray-700">Empresa:</span> <span id="pdv-company-label">?</span></p>
-                                <p><span class="font-semibold text-gray-700">PDV:</span> <span id="pdv-name-label">?</span></p>
+                                <p><span class="font-semibold text-gray-700">Empresa:</span> <span id="pdv-company-label">â€”</span></p>
+                                <p><span class="font-semibold text-gray-700">PDV:</span> <span id="pdv-name-label">â€”</span></p>
                             </div>
                         </div>
 
-                        <nav class="flex flex-wrap gap-2 border-b border-gray-200 pb-1 items-center justify-between" aria-label="Seções do PDV">
+                        <nav class="flex flex-wrap gap-2 border-b border-gray-200 pb-1 items-center justify-between" aria-label="SeÃ§Ãµes do PDV">
                             <div class="flex flex-wrap gap-2">
                                 <button type="button" class="pdv-tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary rounded-t" data-tab-target="pdv-tab" aria-disabled="true">PDV</button>
                                 <button type="button" class="pdv-tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-primary text-primary rounded-t" data-tab-target="caixa-tab">Caixa</button>
                                 <button type="button" class="pdv-tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary rounded-t" data-tab-target="sales-tab">Vendas</button>
-                                <button type="button" class="pdv-tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary rounded-t" data-tab-target="orcamentos-tab">Orçamentos</button>
+                                <button type="button" class="pdv-tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary rounded-t" data-tab-target="orcamentos-tab">OrÃ§amentos</button>
                                 <button type="button" class="pdv-tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary rounded-t" data-tab-target="delivery-tab">Delivery</button>
                                 <button type="button" class="pdv-tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary rounded-t" data-tab-target="cliente-tab">Contas a receber</button>
                             </div>
@@ -224,14 +224,14 @@
                                                     <div class="md:col-span-4">
                                                         <label for="pdv-product-search" class="block text-sm font-semibold text-gray-700 mb-1">Pesquisar produtos</label>
                                                         <div class="relative">
-                                                            <input id="pdv-product-search" type="search" placeholder="Busque por código interno, código de barras ou nome" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" autocomplete="off">
+                                                            <input id="pdv-product-search" type="search" placeholder="Busque por cÃ³digo interno, cÃ³digo de barras ou nome" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" autocomplete="off">
                                                             <div id="pdv-product-results" class="absolute left-0 right-0 top-full z-20 mt-2 hidden max-h-[400px] overflow-y-auto overflow-x-hidden rounded-xl border border-gray-200 bg-white shadow-lg"></div>
                                                         </div>
-                                                        <p class="text-xs text-gray-500 mt-1">Os resultados são atualizados conforme a digitação, seguindo o mesmo critério de busca do site.</p>
+                                                        <p class="text-xs text-gray-500 mt-1">Os resultados sÃ£o atualizados conforme a digitaÃ§Ã£o, seguindo o mesmo critÃ©rio de busca do site.</p>
                                                     </div>
                                                     <div>
                                                         <label for="pdv-seller" class="block text-sm font-semibold text-gray-700 mb-1">Vendedor</label>
-                                                        <input id="pdv-seller" type="text" placeholder="Informe o código do vendedor" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" inputmode="numeric" autocomplete="off">
+                                                        <input id="pdv-seller" type="text" placeholder="Informe o cÃ³digo do vendedor" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" inputmode="numeric" autocomplete="off">
                                                         <p id="pdv-seller-feedback" class="text-xs text-gray-500 mt-1">Insira o vendedor.</p>
                                                     </div>
                                                 </div>
@@ -239,7 +239,7 @@
 
                                             <div id="pdv-selected-preview" class="rounded-lg border border-gray-200 bg-gray-50 p-4 flex gap-4">
                                                 <div class="h-24 w-24 flex items-center justify-center rounded-md bg-white border border-gray-200 overflow-hidden">
-                                                    <img id="pdv-selected-image" src="" alt="Pré-visualização do produto" class="h-full w-full object-contain hidden">
+                                                    <img id="pdv-selected-image" src="" alt="PrÃ©-visualizaÃ§Ã£o do produto" class="h-full w-full object-contain hidden">
                                                     <span id="pdv-selected-placeholder" class="text-xs text-gray-400">Sem imagem</span>
                                                 </div>
                                                 <div class="flex-1 space-y-2">
@@ -248,9 +248,9 @@
                                                     <div class="flex flex-wrap items-center gap-3 text-sm">
                                                         <span id="pdv-selected-price" class="text-base font-semibold text-gray-800">R$ 0,00</span>
                                                         <span id="pdv-selected-original-price" class="hidden text-xs text-gray-500 line-through">R$ 0,00</span>
-                                                        <span id="pdv-selected-promo" class="hidden rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">Promoção ativa</span>
+                                                        <span id="pdv-selected-promo" class="hidden rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">PromoÃ§Ã£o ativa</span>
                                                     </div>
-                                                    <p id="pdv-selected-general-warning" class="hidden text-[11px] font-medium text-amber-600">Vincule um cliente para aplicar a promoção geral deste item.</p>
+                                                    <p id="pdv-selected-general-warning" class="hidden text-[11px] font-medium text-amber-600">Vincule um cliente para aplicar a promoÃ§Ã£o geral deste item.</p>
                                                 </div>
                                             </div>
 
@@ -280,7 +280,7 @@
                                             </div>
 
                                             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                                <p class="text-xs text-gray-500">Confirme os dados e adicione o item à pré-visualização antes de registrar o pagamento.</p>
+                                                <p class="text-xs text-gray-500">Confirme os dados e adicione o item Ã  prÃ©-visualizaÃ§Ã£o antes de registrar o pagamento.</p>
                                                 <button id="pdv-add-item" type="button" class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-secondary">
                                                     <i class="fas fa-cart-plus"></i>
                                                     <span>Adicionar item</span>
@@ -292,7 +292,7 @@
                                     <aside class="space-y-5">
                                             <div class="rounded-xl border border-gray-200 bg-gray-50 p-5 space-y-4">
                                                 <div class="space-y-2">
-                                                    <span class="block text-[10px] font-semibold uppercase tracking-wide text-gray-400">Ações da venda</span>
+                                                    <span class="block text-[10px] font-semibold uppercase tracking-wide text-gray-400">AÃ§Ãµes da venda</span>
                                                     <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                                         <button type="button" class="inline-flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="delivery">
                                                             <i class="fas fa-truck text-[10px]"></i>
@@ -300,7 +300,7 @@
                                                         </button>
                                                         <button type="button" class="inline-flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="orcamento">
                                                             <i class="fas fa-file-lines text-[10px]"></i>
-                                                            <span class="text-xs font-semibold text-gray-700">Orçamento</span>
+                                                            <span class="text-xs font-semibold text-gray-700">OrÃ§amento</span>
                                                         </button>
                                                         <button type="button" class="inline-flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="importar-atendimento">
                                                             <i class="fas fa-paw text-[10px]"></i>
@@ -312,7 +312,7 @@
                                                         </button>
                                                         <button type="button" class="inline-flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="solicitacao-transferencia">
                                                             <i class="fas fa-exchange-alt text-[10px]"></i>
-                                                            <span class="text-xs font-semibold text-gray-700">Sol. Transferência</span>
+                                                            <span class="text-xs font-semibold text-gray-700">Sol. TransferÃªncia</span>
                                                         </button>
                                                         <button id="pdv-open-customer" type="button" class="inline-flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="customer">
                                                             <i class="fas fa-user-plus text-[10px]"></i>
@@ -326,21 +326,21 @@
                                                 </div>
                                                 <div class="space-y-3">
                                                     <div id="pdv-customer-summary-empty" class="rounded-lg border border-dashed border-gray-300 bg-white px-4 py-3 text-xs text-gray-500">
-                                                        Vincule um cliente para aplicar promoções gerais e registrar o responsável pela compra.
+                                                        Vincule um cliente para aplicar promoÃ§Ãµes gerais e registrar o responsÃ¡vel pela compra.
                                                     </div>
                                                     <div id="pdv-customer-summary-info" class="hidden rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700">
                                                         <div class="flex items-start justify-between gap-3">
                                                             <div class="space-y-1">
-                                                                <p id="pdv-customer-name" class="text-sm font-semibold text-gray-800">?</p>
-                                                                <p id="pdv-customer-doc" class="text-xs text-gray-500">Documento: ?</p>
-                                                                <p id="pdv-customer-contact" class="text-xs text-gray-500">Contato: ?</p>
-                                                                <p id="pdv-customer-pet" class="hidden text-xs text-gray-500">Pet: ?</p>
+                                                                <p id="pdv-customer-name" class="text-sm font-semibold text-gray-800">â€”</p>
+                                                                <p id="pdv-customer-doc" class="text-xs text-gray-500">Documento: â€”</p>
+                                                                <p id="pdv-customer-contact" class="text-xs text-gray-500">Contato: â€”</p>
+                                                                <p id="pdv-customer-pet" class="hidden text-xs text-gray-500">Pet: â€”</p>
                                                             </div>
                                                             <button type="button" id="pdv-customer-remove" class="text-xs font-semibold text-red-500 transition hover:text-red-600">Remover</button>
                                                         </div>
                                                     </div>
                                                 </div>
-                                                <div id="pdv-items-empty" class="rounded-lg border border-dashed border-gray-300 bg-white px-4 py-6 text-center text-sm text-gray-500">Nenhum item adicionado até o momento.</div>
+                                                <div id="pdv-items-empty" class="rounded-lg border border-dashed border-gray-300 bg-white px-4 py-6 text-center text-sm text-gray-500">Nenhum item adicionado atÃ© o momento.</div>
                                                 <ul id="pdv-items-list" class="hidden divide-y divide-gray-200"></ul>
                                                 <div class="mt-4 border-t border-gray-200 pt-4">
                                                     <div class="flex items-center justify-between text-sm font-semibold text-gray-700">
@@ -361,14 +361,14 @@
                                     <div class="space-y-5">
                                         <div class="rounded-xl border border-gray-200 p-5 space-y-4">
                                             <div class="flex items-center justify-between">
-                                                <h3 class="text-base font-semibold text-gray-800">Situação do caixa</h3>
+                                                <h3 class="text-base font-semibold text-gray-800">SituaÃ§Ã£o do caixa</h3>
                                                 <span id="pdv-caixa-state-label" class="text-xs font-semibold text-gray-500">Caixa fechado</span>
                                             </div>
                                             <div id="pdv-caixa-actions" class="grid grid-cols-1 gap-3"></div>
                                             <div id="pdv-caixa-action-details" class="hidden space-y-4 border-t border-gray-200 pt-4">
                                                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4" id="pdv-action-values-wrapper">
                                                     <div>
-                                                        <label for="pdv-action-amount" class="block text-sm font-medium text-gray-700 mb-1">Valor da operação</label>
+                                                        <label for="pdv-action-amount" class="block text-sm font-medium text-gray-700 mb-1">Valor da operaÃ§Ã£o</label>
                                                         <div class="relative">
                                                             <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">R$</span>
                                                             <input type="number" min="0" step="0.01" id="pdv-action-amount" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm pl-9 focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="0,00">
@@ -381,10 +381,10 @@
                                                 </div>
                                                 <div id="pdv-caixa-motivo-wrapper" class="hidden">
                                                     <label for="pdv-caixa-motivo" class="block text-sm font-medium text-gray-700 mb-1">Motivo</label>
-                                                    <textarea id="pdv-caixa-motivo" rows="2" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Descreva o motivo da movimentação"></textarea>
+                                                    <textarea id="pdv-caixa-motivo" rows="2" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Descreva o motivo da movimentaÃ§Ã£o"></textarea>
                                                 </div>
                                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                                    <p id="pdv-caixa-action-hint" class="text-xs text-gray-500">Informe os detalhes para registrar a operação.</p>
+                                                    <p id="pdv-caixa-action-hint" class="text-xs text-gray-500">Informe os detalhes para registrar a operaÃ§Ã£o.</p>
                                                     <button id="pdv-caixa-action-confirm" type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-secondary">
                                                         <i class="fas fa-check-circle"></i>
                                                         <span>Registrar</span>
@@ -399,7 +399,7 @@
                                                 <button id="pdv-reset-payments" type="button" class="text-xs font-semibold text-primary hover:underline">Zerar valores</button>
                                             </div>
                                             <ul id="pdv-payment-list" class="space-y-3"></ul>
-                                            <p class="text-xs text-gray-500">Atualize os valores conforme os recebimentos são registrados no caixa.</p>
+                                            <p class="text-xs text-gray-500">Atualize os valores conforme os recebimentos sÃ£o registrados no caixa.</p>
                                         </div>
                                     </div>
 
@@ -407,20 +407,20 @@
                                         <div class="rounded-xl border border-gray-200 bg-gray-50 p-6 space-y-4">
                                             <div class="flex items-center justify-between gap-3">
                                                 <h3 class="text-base font-semibold text-gray-800">Resumo financeiro</h3>
-                                                <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Pré-visualização matricial</span>
+                                                <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">PrÃ©-visualizaÃ§Ã£o matricial</span>
                                             </div>
                                             <div class="rounded-lg border border-dashed border-gray-300 bg-white p-4">
                                                 <pre id="pdv-summary-print" class="whitespace-pre-wrap font-mono text-[11px] leading-6 text-gray-700">Selecione uma empresa e um PDV para visualizar os dados do caixa.</pre>
                                             </div>
-                                            <p id="pdv-summary-last-move" class="text-xs text-gray-500">Nenhuma movimentação registrada.</p>
+                                            <p id="pdv-summary-last-move" class="text-xs text-gray-500">Nenhuma movimentaÃ§Ã£o registrada.</p>
                                         </div>
 
                                         <div class="rounded-xl border border-gray-200 p-6 space-y-4">
                                             <div class="flex items-center justify-between">
-                                                <h3 class="text-base font-semibold text-gray-800">Histórico do caixa</h3>
+                                                <h3 class="text-base font-semibold text-gray-800">HistÃ³rico do caixa</h3>
                                             </div>
                                             <ul id="pdv-history-list" class="space-y-3 text-sm text-gray-600">
-                                                <li id="pdv-history-empty" class="text-xs text-gray-400">Nenhuma movimentação registrada ainda.</li>
+                                                <li id="pdv-history-empty" class="text-xs text-gray-400">Nenhuma movimentaÃ§Ã£o registrada ainda.</li>
                                             </ul>
                                         </div>
                                     </div>
@@ -430,20 +430,20 @@
                                 <section class="rounded-xl border border-gray-200 bg-white p-6 space-y-6">
                                     <header class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                                         <div>
-                                            <h2 class="text-lg font-semibold text-gray-800">Orçamentos registrados</h2>
-                                            <p class="text-sm text-gray-500">Visualize, importe ou gerencie os orçamentos salvos no PDV.</p>
+                                            <h2 class="text-lg font-semibold text-gray-800">OrÃ§amentos registrados</h2>
+                                            <p class="text-sm text-gray-500">Visualize, importe ou gerencie os orÃ§amentos salvos no PDV.</p>
                                         </div>
                                         <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
                                             <div class="flex flex-wrap items-center gap-2" id="pdv-budget-presets">
                                                 <button type="button" data-budget-preset="hoje" class="rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary">Hoje</button>
                                                 <button type="button" data-budget-preset="semana" class="rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary">Semana</button>
-                                                <button type="button" data-budget-preset="mes" class="rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary">Mês</button>
+                                                <button type="button" data-budget-preset="mes" class="rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary">MÃªs</button>
                                                 <button type="button" data-budget-preset="todos" class="rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary">Todos</button>
                                             </div>
                                             <div class="flex items-center gap-2 text-xs text-gray-500">
-                                                <label for="pdv-budget-start" class="font-semibold">Período</label>
+                                                <label for="pdv-budget-start" class="font-semibold">PerÃ­odo</label>
                                                 <input type="date" id="pdv-budget-start" class="rounded border border-gray-200 px-2 py-1 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20">
-                                                <span class="text-gray-400">até</span>
+                                                <span class="text-gray-400">atÃ©</span>
                                                 <input type="date" id="pdv-budget-end" class="rounded border border-gray-200 px-2 py-1 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20">
                                             </div>
                                         </div>
@@ -451,48 +451,48 @@
                                     <div class="grid grid-cols-1 gap-6 lg:grid-cols-5">
                                         <section class="lg:col-span-2 space-y-4">
                                             <div class="flex items-center justify-between">
-                                                <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Lista de orçamentos</h3>
+                                                <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Lista de orÃ§amentos</h3>
                                                 <span id="pdv-budget-count" class="text-xs font-semibold text-gray-500">0 registros</span>
                                             </div>
                                             <div class="rounded-xl border border-gray-200">
                                                 <table class="min-w-full divide-y divide-gray-200 text-sm">
                                                     <thead class="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                                                         <tr>
-                                                            <th scope="col" class="px-4 py-3">Código</th>
+                                                            <th scope="col" class="px-4 py-3">CÃ³digo</th>
                                                             <th scope="col" class="px-4 py-3">Cliente</th>
                                                             <th scope="col" class="px-4 py-3">Validade</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody id="pdv-budget-list" class="divide-y divide-gray-100"></tbody>
                                                 </table>
-                                                <div id="pdv-budget-empty" class="hidden px-4 py-6 text-sm text-gray-500">Nenhum orçamento encontrado para o filtro selecionado.</div>
+                                                <div id="pdv-budget-empty" class="hidden px-4 py-6 text-sm text-gray-500">Nenhum orÃ§amento encontrado para o filtro selecionado.</div>
                                             </div>
                                         </section>
                                         <section class="lg:col-span-3 space-y-4">
                                             <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                                                 <div>
-                                                    <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Detalhes do orçamento</h3>
-                                                    <p id="pdv-budget-details-hint" class="text-xs text-gray-500">Selecione um orçamento para visualizar os detalhes.</p>
+                                                    <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Detalhes do orÃ§amento</h3>
+                                                    <p id="pdv-budget-details-hint" class="text-xs text-gray-500">Selecione um orÃ§amento para visualizar os detalhes.</p>
                                                 </div>
                                                 <div class="flex flex-wrap gap-2">
-                                                    <button id="pdv-budget-import" type="button" class="rounded-lg border border-gray-200 px-4 py-2 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60">Importar orçamento</button>
-                                                    <button id="pdv-budget-print" type="button" class="rounded-lg border border-gray-200 px-4 py-2 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60">Imprimir orçamento</button>
-                                                    <button id="pdv-budget-delete" type="button" class="rounded-lg border border-red-200 px-4 py-2 text-xs font-semibold text-red-600 transition hover:border-red-500 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60">Excluir orçamento</button>
+                                                    <button id="pdv-budget-import" type="button" class="rounded-lg border border-gray-200 px-4 py-2 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60">Importar orÃ§amento</button>
+                                                    <button id="pdv-budget-print" type="button" class="rounded-lg border border-gray-200 px-4 py-2 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60">Imprimir orÃ§amento</button>
+                                                    <button id="pdv-budget-delete" type="button" class="rounded-lg border border-red-200 px-4 py-2 text-xs font-semibold text-red-600 transition hover:border-red-500 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60">Excluir orÃ§amento</button>
                                                 </div>
                                             </div>
                                             <div id="pdv-budget-details" class="space-y-4 rounded-xl border border-gray-200 bg-white p-5">
                                                 <div id="pdv-budget-info" class="space-y-2 text-sm text-gray-600">
-                                                    <p><span class="font-semibold text-gray-700">Código:</span> <span id="pdv-budget-code">?</span></p>
-                                                    <p><span class="font-semibold text-gray-700">Cliente:</span> <span id="pdv-budget-customer">?</span></p>
-                                                    <p><span class="font-semibold text-gray-700">Validade:</span> <span id="pdv-budget-validity">?</span></p>
-                                                    <p><span class="font-semibold text-gray-700">Situação:</span> <span id="pdv-budget-status">?</span></p>
+                                                    <p><span class="font-semibold text-gray-700">CÃ³digo:</span> <span id="pdv-budget-code">â€”</span></p>
+                                                    <p><span class="font-semibold text-gray-700">Cliente:</span> <span id="pdv-budget-customer">â€”</span></p>
+                                                    <p><span class="font-semibold text-gray-700">Validade:</span> <span id="pdv-budget-validity">â€”</span></p>
+                                                    <p><span class="font-semibold text-gray-700">SituaÃ§Ã£o:</span> <span id="pdv-budget-status">â€”</span></p>
                                                     <p><span class="font-semibold text-gray-700">Total:</span> <span id="pdv-budget-total">R$ 0,00</span></p>
                                                 </div>
                                                 <div class="overflow-x-auto">
                                                     <table class="min-w-full divide-y divide-gray-200 text-sm">
                                                         <thead class="bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-500">
                                                             <tr>
-                                                                <th scope="col" class="px-4 py-3">Cód. barras</th>
+                                                                <th scope="col" class="px-4 py-3">CÃ³d. barras</th>
                                                                 <th scope="col" class="px-4 py-3">Nome</th>
                                                                 <th scope="col" class="px-4 py-3">Qtd</th>
                                                                 <th scope="col" class="px-4 py-3">Valor uni.</th>
@@ -518,11 +518,11 @@
                                         </div>
                                         <div class="flex items-center gap-2 text-xs text-gray-500">
                                             <span class="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 font-semibold uppercase tracking-wide">Status</span>
-                                            <span>Registrado ? Em separação ? Em rota ? Finalizado</span>
+                                            <span>Registrado â€¢ Em separaÃ§Ã£o â€¢ Em rota â€¢ Finalizado</span>
                                         </div>
                                     </div>
                                     <div id="pdv-delivery-empty" class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center text-sm text-gray-500">
-                                        Nenhum delivery registrado até o momento.
+                                        Nenhum delivery registrado atÃ© o momento.
                                     </div>
                                     <ul id="pdv-delivery-list" class="hidden grid grid-cols-1 gap-3 lg:grid-cols-3"></ul>
                                 </div>
@@ -535,14 +535,14 @@
                                             <p class="text-xs text-gray-500">Consulte as vendas encerradas e seus detalhes.</p>
                                         </div>
                                         <div class="flex items-center gap-2 text-xs text-gray-500">
-                                            <label for="pdv-sales-start" class="font-semibold">Período</label>
+                                            <label for="pdv-sales-start" class="font-semibold">PerÃ­odo</label>
                                             <input type="date" id="pdv-sales-start" class="rounded border border-gray-200 px-2 py-1 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20">
-                                            <span class="text-gray-400">até</span>
+                                            <span class="text-gray-400">atÃ©</span>
                                             <input type="date" id="pdv-sales-end" class="rounded border border-gray-200 px-2 py-1 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20">
                                         </div>
                                     </div>
                                     <div id="pdv-sales-empty" class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center text-sm text-gray-500">
-                                        Nenhuma venda finalizada até o momento.
+                                        Nenhuma venda finalizada atÃ© o momento.
                                     </div>
                                     <ul id="pdv-sales-list" class="hidden space-y-4"></ul>
                                 </div>
@@ -552,7 +552,7 @@
                                     <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                                         <div class="space-y-1">
                                             <h3 class="text-sm font-semibold text-gray-800">Contas a receber por cliente</h3>
-                                            <p class="text-[11px] text-gray-500">Localize o cliente pelo CPF/CNPJ, celular ou e-mail e acompanhe rapidamente as pendências.</p>
+                                            <p class="text-[11px] text-gray-500">Localize o cliente pelo CPF/CNPJ, celular ou e-mail e acompanhe rapidamente as pendÃªncias.</p>
                                         </div>
                                         <div class="w-full lg:w-64">
                                             <label for="pdv-receivables-search" class="block text-xs font-semibold uppercase tracking-wide text-gray-500">Buscar cliente</label>
@@ -576,19 +576,19 @@
                                     <div id="pdv-receivables-selected" class="hidden rounded-lg border border-gray-200 bg-gray-50 p-3">
                                         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                             <div class="space-y-0.5">
-                                                <p id="pdv-receivables-customer-name" class="text-sm font-semibold text-gray-800">?</p>
-                                                <p id="pdv-receivables-customer-doc" class="text-xs text-gray-500">Documento: ?</p>
-                                                <p id="pdv-receivables-customer-contact" class="text-xs text-gray-500">Contato: ?</p>
+                                                <p id="pdv-receivables-customer-name" class="text-sm font-semibold text-gray-800">â€”</p>
+                                                <p id="pdv-receivables-customer-doc" class="text-xs text-gray-500">Documento: â€”</p>
+                                                <p id="pdv-receivables-customer-contact" class="text-xs text-gray-500">Contato: â€”</p>
                                             </div>
-                                            <button type="button" id="pdv-receivables-clear" class="self-start rounded-full border border-gray-200 px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-rose-300 hover:text-rose-600">Remover seleção</button>
+                                            <button type="button" id="pdv-receivables-clear" class="self-start rounded-full border border-gray-200 px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-rose-300 hover:text-rose-600">Remover seleÃ§Ã£o</button>
                                         </div>
                                         <dl class="mt-3 grid grid-cols-1 gap-2 text-xs text-gray-600 sm:grid-cols-2">
                                             <div class="rounded-lg border border-gray-200 bg-white px-3 py-2">
-                                                <dt class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Limite de crédito</dt>
-                                                <dd id="pdv-receivables-customer-limit" class="mt-1 text-sm font-semibold text-gray-700">?</dd>
+                                                <dt class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Limite de crÃ©dito</dt>
+                                                <dd id="pdv-receivables-customer-limit" class="mt-1 text-sm font-semibold text-gray-700">â€”</dd>
                                             </div>
                                             <div class="rounded-lg border border-gray-200 bg-white px-3 py-2">
-                                                <dt class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Pendências de crediário</dt>
+                                                <dt class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">PendÃªncias de crediÃ¡rio</dt>
                                                 <dd id="pdv-receivables-customer-pending" class="mt-1 text-sm font-semibold text-gray-700">R$ 0,00</dd>
                                             </div>
                                         </dl>
@@ -597,7 +597,7 @@
                                 <section class="rounded-xl border border-gray-200 bg-white p-4 space-y-3">
                                     <div class="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
                                         <div>
-                                            <h4 class="text-sm font-semibold text-gray-800">Pendências do crediário</h4>
+                                            <h4 class="text-sm font-semibold text-gray-800">PendÃªncias do crediÃ¡rio</h4>
                                             <p class="text-[11px] text-gray-500">Visualize rapidamente as parcelas do cliente selecionado.</p>
                                         </div>
                                         <div class="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-[11px] font-semibold text-gray-600">
@@ -606,11 +606,11 @@
                                         </div>
                                     </div>
                                     <div id="pdv-receivables-loading" class="hidden rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2 text-xs text-gray-500">
-                                        Carregando pendências do cliente selecionado...
+                                        Carregando pendÃªncias do cliente selecionado...
                                     </div>
                                     <div id="pdv-receivables-error" class="hidden rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-600"></div>
                                     <div id="pdv-receivables-empty" class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2 text-xs text-gray-500">
-                                        Selecione um cliente para visualizar as pendências de crediário.
+                                        Selecione um cliente para visualizar as pendÃªncias de crediÃ¡rio.
                                     </div>
                                     <div id="pdv-receivables-actions" class="hidden flex flex-col gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-gray-700 sm:flex-row sm:items-center sm:justify-between">
                                         <div class="flex flex-wrap items-center gap-2">
@@ -687,12 +687,11 @@
 
     <div id="pdv-customer-modal" class="fixed inset-0 z-[90] hidden">
         <div class="absolute inset-0 bg-slate-900/60" data-pdv-customer-dismiss="backdrop"></div>
-        <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
-        <div class="relative flex w-full max-w-[1352px] min-h-0 flex-col overflow-hidden rounded-2xl bg-white text-[12px] leading-[1.35] shadow-2xl" style="height:90vh; min-height:90vh; max-height:90vh;">
-            <div class="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-                <h2 class="text-[16px] font-semibold text-gray-800">Informar Cliente na Venda</h2>
-                <button type="button" id="pdv-customer-close" class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600" aria-label="Fechar modal de clientes">
-                    <i class="fas fa-times"></i>
+        <div class="relative mx-auto mt-12 flex max-h-[82vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-gray-300 bg-gray-50 shadow-2xl">
+            <div class="flex items-center justify-between bg-gray-500 px-4 py-2 text-white">
+                <h2 class="text-lg font-semibold">Informar Cliente na Venda</h2>
+                <button type="button" id="pdv-customer-close" class="rounded p-1 text-gray-900 transition hover:bg-black/10" aria-label="Fechar modal de clientes">
+                    <i class="fas fa-times text-xl"></i>
                 </button>
             </div>
 
@@ -701,123 +700,97 @@
                 <button type="button" data-pdv-customer-tab="pet" aria-selected="false">Pet</button>
             </div>
 
-            <div class="min-h-0 flex-1 overflow-y-auto bg-gray-100 px-3 py-3">
-                <div data-pdv-customer-panel="cliente" class="space-y-3">
-                    <div class="grid grid-cols-1 gap-4 md:grid-cols-12">
-                    <div class="space-y-2 md:col-span-9">
-                    <div class="grid grid-cols-1 gap-2 md:grid-cols-12">
-                        <div class="md:col-span-2">
-                            <label for="pdv-customer-preview-code" class="block text-[11px] font-semibold text-gray-700">Codigo:</label>
-                            <input id="pdv-customer-preview-code" type="text" class="mt-1 h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-[12px] text-gray-700">
-                        </div>
-                        <div class="md:col-span-5">
-                            <label for="pdv-customer-search" class="block text-[11px] font-semibold text-gray-700">Nome:<span id="pdv-customer-required-name" class="ml-1 hidden text-red-600">*</span></label>
-                            <input id="pdv-customer-search" type="text" class="mt-1 h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-[12px] text-gray-700" autocomplete="off">
-                        </div>
-                        <div class="md:col-span-5">
-                            <label for="pdv-customer-preview-doc" class="block text-[11px] font-semibold text-gray-700">CPF/CNPJ:<span id="pdv-customer-required-doc" class="ml-1 hidden text-red-600">*</span></label>
-                            <input id="pdv-customer-preview-doc" type="text" class="mt-1 h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-[12px] text-gray-700">
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 gap-2 md:grid-cols-12">
-                        <div class="md:col-span-3">
-                            <label for="pdv-customer-preview-sexo" class="block text-[11px] font-semibold text-gray-700">Sexo:<span id="pdv-customer-required-sexo" class="ml-1 hidden text-red-600">*</span></label>
-                            <select id="pdv-customer-preview-sexo" class="mt-1 h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-[12px] text-gray-700">
-                                <option value=""></option>
-                                <option value="M">Masculino</option>
-                                <option value="F">Feminino</option>
-                            </select>
-                        </div>
-                        <div class="md:col-span-3">
-                            <label for="pdv-customer-preview-birth" class="block text-[11px] font-semibold text-gray-700">Data de Nascimento:</label>
-                            <input id="pdv-customer-preview-birth" type="date" class="mt-1 h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-[12px] text-gray-700">
-                        </div>
-                        <div class="md:col-span-6">
-                            <label for="pdv-customer-preview-email" class="block text-[11px] font-semibold text-gray-700">Email:</label>
-                            <input id="pdv-customer-preview-email" type="text" class="mt-1 h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-[12px] text-gray-700">
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 gap-2">
-                        <div>
-                            <label for="pdv-customer-preview-address" class="block text-[11px] font-semibold text-gray-700">Endereco:</label>
-                            <input id="pdv-customer-preview-address" type="text" class="mt-1 h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-[12px] text-gray-700">
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 gap-2 md:grid-cols-12">
-                        <div class="md:col-span-3">
-                            <label for="pdv-customer-preview-number" class="block text-[11px] font-semibold text-gray-700">Numero:<span id="pdv-customer-required-number" class="ml-1 hidden text-red-600">*</span></label>
-                            <input id="pdv-customer-preview-number" type="text" class="mt-1 h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-[12px] text-gray-700">
-                        </div>
-                        <div class="md:col-span-3">
-                            <label for="pdv-customer-preview-cep" class="block text-[11px] font-semibold text-gray-700">Cep:<span id="pdv-customer-required-cep" class="ml-1 hidden text-red-600">*</span></label>
-                            <input id="pdv-customer-preview-cep" type="text" class="mt-1 h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-[12px] text-gray-700">
-                        </div>
-                        <div class="md:col-span-6">
-                            <label for="pdv-customer-preview-bairro" class="block text-[11px] font-semibold text-gray-700">Bairro:</label>
-                            <input id="pdv-customer-preview-bairro" type="text" class="mt-1 h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-[12px] text-gray-700">
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 gap-2 md:grid-cols-12">
-                        <div class="md:col-span-4">
-                            <label for="pdv-customer-preview-cidade" class="block text-[11px] font-semibold text-gray-700">Cidade:</label>
-                            <input id="pdv-customer-preview-cidade" type="text" class="mt-1 h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-[12px] text-gray-700">
-                        </div>
-                        <div class="md:col-span-4">
-                            <label for="pdv-customer-preview-observacao" class="block text-[11px] font-semibold text-gray-700">Observacao:</label>
-                            <input id="pdv-customer-preview-observacao" type="text" class="mt-1 h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-[12px] text-gray-700">
-                        </div>
-                        <div class="md:col-span-4">
-                            <label for="pdv-customer-preview-complemento" class="block text-[11px] font-semibold text-gray-700">Complemento:</label>
-                            <input id="pdv-customer-preview-complemento" type="text" class="mt-1 h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-[12px] text-gray-700">
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
-                        <div>
-                            <label for="pdv-customer-preview-telefone1" class="block text-[11px] font-semibold text-gray-700">Telefone 1:</label>
-                            <div class="mt-1 flex gap-2">
-                                <input id="pdv-customer-preview-telefone1-ddd" type="text" class="h-9 w-12 rounded-md border border-gray-300 bg-white px-2 text-[12px] text-gray-700">
-                                <input id="pdv-customer-preview-telefone1" type="text" class="h-9 flex-1 rounded-md border border-gray-300 bg-white px-3 text-[12px] text-gray-700">
+            <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+                <div data-pdv-customer-panel="cliente" class="grid grid-cols-1 gap-4 md:grid-cols-12">
+                    <div class="space-y-3 md:col-span-8">
+                        <div class="grid grid-cols-12 gap-2">
+                            <div class="col-span-2">
+                                <label for="pdv-customer-preview-code" class="block text-sm font-semibold text-gray-700">Cliente (F2)</label>
+                                <input id="pdv-customer-preview-code" type="text" readonly class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700" placeholder="Codigo">
+                            </div>
+                            <div class="col-span-10">
+                                <label for="pdv-customer-search" class="block text-sm font-semibold text-gray-700">*</label>
+                                <input id="pdv-customer-search" type="search" placeholder="*Nome" class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" autocomplete="off">
                             </div>
                         </div>
-                        <div>
-                            <label for="pdv-customer-preview-telefone2" class="block text-[11px] font-semibold text-gray-700">Telefone 2:</label>
-                            <div class="mt-1 flex gap-2">
-                                <input id="pdv-customer-preview-telefone2-ddd" type="text" class="h-9 w-12 rounded-md border border-gray-300 bg-white px-2 text-[12px] text-gray-700">
-                                <input id="pdv-customer-preview-telefone2" type="text" class="h-9 flex-1 rounded-md border border-gray-300 bg-white px-3 text-[12px] text-gray-700">
+
+                        <div class="grid grid-cols-12 gap-2">
+                            <div class="col-span-6">
+                                <label for="pdv-customer-preview-doc" class="block text-sm font-semibold text-gray-700">*CPF/CNPJ (F2)</label>
+                                <input id="pdv-customer-preview-doc" type="text" readonly class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700">
+                            </div>
+                            <div class="col-span-4">
+                                <label class="block text-sm font-semibold text-gray-700">Convenio (F2)</label>
+                                <input type="text" readonly class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-12 gap-2">
+                            <div class="col-span-10">
+                                <label for="pdv-customer-preview-address" class="block text-sm font-semibold text-gray-700">Endereco</label>
+                                <input id="pdv-customer-preview-address" type="text" readonly class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700" placeholder="Endereco">
+                            </div>
+                            <div class="col-span-2">
+                                <label for="pdv-customer-preview-number" class="block text-sm font-semibold text-gray-700">Numero</label>
+                                <input id="pdv-customer-preview-number" type="text" readonly class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-12 gap-2">
+                            <div class="col-span-4">
+                                <label for="pdv-customer-preview-bairro" class="block text-sm font-semibold text-gray-700">Bairro</label>
+                                <input id="pdv-customer-preview-bairro" type="text" readonly class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700">
+                            </div>
+                            <div class="col-span-2">
+                                <label for="pdv-customer-preview-cep" class="block text-sm font-semibold text-gray-700">CEP</label>
+                                <input id="pdv-customer-preview-cep" type="text" readonly class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700">
+                            </div>
+                            <div class="col-span-3">
+                                <label for="pdv-customer-preview-complemento" class="block text-sm font-semibold text-gray-700">Complemento</label>
+                                <input id="pdv-customer-preview-complemento" type="text" readonly class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700">
+                            </div>
+                            <div class="col-span-3">
+                                <label for="pdv-customer-preview-cidade" class="block text-sm font-semibold text-gray-700">Cidade</label>
+                                <input id="pdv-customer-preview-cidade" type="text" readonly class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-12 gap-2">
+                            <div class="col-span-5">
+                                <label for="pdv-customer-preview-telefone" class="block text-sm font-semibold text-gray-700">Telefone</label>
+                                <input id="pdv-customer-preview-telefone" type="text" readonly class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700">
+                            </div>
+                            <div class="col-span-7">
+                                <label for="pdv-customer-preview-observacao" class="block text-sm font-semibold text-gray-700">Observacao</label>
+                                <input id="pdv-customer-preview-observacao" type="text" readonly class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700">
                             </div>
                         </div>
                     </div>
 
-                    </div>
-                    <div class="space-y-2 md:col-span-3">
-                        <div class="rounded-2xl border border-gray-200 bg-gray-50 p-4 shadow-sm">
-                            <p class="text-[14px] font-semibold text-gray-700">Limite de Crédito</p>
-                            <p id="pdv-customer-credit-limit" class="mt-1 text-[24px] font-semibold leading-none text-gray-800">R$ 0,00</p>
+                    <div class="space-y-3 md:col-span-4">
+                        <div class="rounded-2xl border border-gray-400 bg-white p-4 shadow-sm">
+                            <p class="text-2xl font-semibold text-gray-700">Limite de Credito</p>
+                            <p id="pdv-customer-credit-limit" class="mt-3 text-2xl font-semibold text-gray-800">R$ 0,00</p>
                         </div>
-                        <div class="rounded-2xl border border-gray-200 bg-gray-50 p-4 shadow-sm">
-                            <p class="text-[14px] font-semibold text-gray-700">Saldo Devedor</p>
-                            <p id="pdv-customer-credit-debt" class="mt-1 text-[24px] font-semibold leading-none text-gray-800">R$ 0,00</p>
+                        <div class="rounded-2xl border border-gray-400 bg-white p-4 shadow-sm">
+                            <p class="text-2xl font-semibold text-gray-700">Saldo Devedor</p>
+                            <p id="pdv-customer-credit-debt" class="mt-3 text-2xl font-semibold text-gray-800">R$ 0,00</p>
                         </div>
-                        <div class="rounded-2xl border border-gray-200 bg-gray-50 p-4 shadow-sm">
-                            <p class="text-[14px] font-semibold text-gray-700">Disponível</p>
-                            <p id="pdv-customer-credit-available" class="mt-1 text-[24px] font-semibold leading-none text-gray-800">R$ 0,00</p>
+                        <div class="rounded-2xl border border-gray-400 bg-white p-4 shadow-sm">
+                            <p class="text-2xl font-semibold text-gray-700">Disponivel</p>
+                            <p id="pdv-customer-credit-available" class="mt-3 text-2xl font-semibold text-gray-800">R$ 0,00</p>
                         </div>
-                        <div class="grid grid-cols-2 gap-2 px-1 pt-1 text-[12px] font-semibold text-gray-700">
-                            <span>Crédito</span>
+                        <div class="grid grid-cols-2 gap-2 px-2 pt-2 text-sm font-semibold text-gray-700">
+                            <span>Credito</span>
                             <span id="pdv-customer-credit-total" class="text-right">0,00</span>
                             <span>Pontos Fidelidade</span>
                             <span id="pdv-customer-fidelity-total" class="text-right">0,00</span>
                         </div>
                     </div>
-                    </div>
-                    <div class="space-y-2 md:col-span-12">
+
+                    <div class="col-span-12 space-y-2">
                         <div id="pdv-customer-results-loading" class="hidden rounded-lg border border-dashed border-gray-300 bg-white px-4 py-3 text-sm text-gray-500">Buscando clientes...</div>
-                        <div id="pdv-customer-results-empty" class="hidden rounded-lg border border-dashed border-gray-300 bg-white px-4 py-3 text-sm text-gray-500"></div>
+                        <div id="pdv-customer-results-empty" class="rounded-lg border border-dashed border-gray-300 bg-white px-4 py-3 text-sm text-gray-500">Digite para buscar clientes.</div>
                         <div id="pdv-customer-results-table" class="hidden overflow-hidden rounded-lg border border-gray-300 bg-white">
                             <div class="max-h-[220px] overflow-auto">
                                 <table class="min-w-full divide-y divide-gray-200 text-left text-[12px] text-gray-700">
@@ -834,13 +807,6 @@
                             </div>
                         </div>
                     </div>
-                    <div class="space-y-2 md:col-span-12">
-                        <div class="flex items-center justify-between">
-                            <p class="text-[11px] font-semibold uppercase tracking-wide text-primary">Enderecos cadastrados</p>
-                            <span id="pdv-customer-address-cards-status" class="text-[11px] text-gray-500"></span>
-                        </div>
-                        <div id="pdv-customer-address-cards" class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4"></div>
-                    </div>
                 </div>
 
                 <div data-pdv-customer-panel="pet" class="hidden space-y-2 pt-2">
@@ -850,63 +816,19 @@
                 </div>
             </div>
 
-            <div class="shrink-0 border-t border-gray-200 bg-gray-50 px-4 py-3">
+            <div class="border-t border-gray-300 bg-white px-4 py-3">
                 <div class="mb-2 flex justify-end">
-                    <label for="pdv-customer-register-toggle" class="inline-flex cursor-pointer items-center gap-2 text-[12px] font-semibold text-gray-700">
-                        <input id="pdv-customer-register-toggle" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/30">
+                    <button type="button" id="pdv-customer-register" class="inline-flex items-center gap-2 text-sm font-semibold text-gray-700 transition hover:text-primary">
+                        <i class="far fa-circle text-gray-400"></i>
                         Gravar Cliente
-                    </label>
-                </div>
-                <div class="flex flex-wrap items-center justify-end gap-2">
-                    <button type="button" id="pdv-customer-clear" class="rounded-lg border border-gray-200 bg-white px-5 py-2 text-[12px] font-semibold text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60">Limpar (CTRL+L)</button>
-                    <button type="button" id="pdv-customer-confirm" class="rounded-lg bg-primary px-5 py-2 text-[12px] font-semibold text-white transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60">Confirmar (F5)</button>
-                    <button type="button" id="pdv-customer-cancel" class="rounded-lg border border-rose-900 bg-red-700 px-5 py-2 text-[12px] font-semibold text-white transition hover:bg-red-800">Cancelar (ESC)</button>
-                </div>
-            </div>
-        </div>
-        </div>
-    </div>
-
-    <div id="pdv-customer-search-modal" class="fixed inset-0 z-[99999] hidden" aria-hidden="true" style="z-index: 100010;">
-        <div class="absolute inset-0 bg-slate-900/60" data-customer-search-dismiss="backdrop"></div>
-        <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
-        <div class="relative z-[100000] flex w-full max-w-[1352px] min-h-0 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white text-[12px] leading-[1.35] shadow-2xl" style="z-index: 100011; height:90vh; min-height:90vh; max-height:90vh;">
-            <div class="flex items-center justify-between rounded-t-2xl bg-gray-600 px-4 py-3 text-white">
-                <h3 class="text-sm font-semibold">Procurar cliente</h3>
-                <button type="button" id="pdv-customer-search-modal-close" class="rounded-full p-1 text-gray-800 transition hover:bg-black/5 hover:text-gray-900" aria-label="Fechar busca de cliente">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            <div class="flex min-h-0 flex-1 flex-col gap-3 p-4">
-                <div class="flex flex-col gap-2 md:flex-row md:items-center">
-                    <div class="relative flex-1">
-                        <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                            <i class="fas fa-search"></i>
-                        </span>
-                        <input id="pdv-customer-search-modal-input" type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 pl-9 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Digite código, CPF/CNPJ ou nome">
-                    </div>
-                    <button type="button" id="pdv-customer-search-modal-btn" class="rounded-lg border border-gray-200 bg-gray-50 px-5 py-2 text-sm font-semibold text-gray-700 transition hover:border-primary hover:text-primary">
-                        Buscar
                     </button>
                 </div>
-                <div class="min-h-0 flex-1 overflow-auto rounded-lg border border-gray-200">
-                    <table class="min-w-full divide-y divide-gray-200 text-sm">
-                        <thead class="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                            <tr>
-                                <th class="px-3 py-2">Código</th>
-                                <th class="px-3 py-2">Nome</th>
-                                <th class="px-3 py-2">CPF/CNPJ</th>
-                                <th class="px-3 py-2">Endereço</th>
-                            </tr>
-                        </thead>
-                        <tbody id="pdv-customer-search-modal-results" class="divide-y divide-gray-100"></tbody>
-                    </table>
-                    <div id="pdv-customer-search-modal-empty" class="px-3 py-6 text-center text-sm text-gray-500">
-                        Digite para pesquisar clientes.
-                    </div>
+                <div class="flex flex-wrap items-center justify-end gap-2">
+                    <button type="button" id="pdv-customer-clear" class="rounded-xl bg-sky-500 px-6 py-2 text-sm font-semibold text-white transition hover:bg-sky-600 disabled:cursor-not-allowed disabled:opacity-60">Limpar (CTRL+L)</button>
+                    <button type="button" id="pdv-customer-confirm" class="rounded-xl bg-emerald-500 px-6 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60">Confirmar (F5)</button>
+                    <button type="button" id="pdv-customer-cancel" class="rounded-xl bg-red-700 px-6 py-2 text-sm font-semibold text-white transition hover:bg-red-800">Cancelar (ESC)</button>
                 </div>
             </div>
-        </div>
         </div>
     </div>
 
@@ -918,7 +840,7 @@
                     <div class="space-y-1">
                         <span class="text-[11px] font-semibold uppercase tracking-wide text-primary">Cadastro de cliente</span>
                         <h3 class="text-lg font-semibold text-gray-900">Adicionar novo cliente</h3>
-                        <p class="text-sm text-gray-500">Abra o formulário completo para cadastrar o cliente sem sair do PDV.</p>
+                        <p class="text-sm text-gray-500">Abra o formulÃ¡rio completo para cadastrar o cliente sem sair do PDV.</p>
                     </div>
                     <button type="button" class="inline-flex items-center justify-center rounded-full border border-gray-200 p-2 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700" data-customer-register-dismiss="close" aria-label="Fechar cadastro de cliente">
                         <i class="fas fa-times"></i>
@@ -946,7 +868,7 @@
                     <h2 class="text-lg font-semibold text-gray-800">Finalizar venda</h2>
                     <p class="text-sm text-gray-500">Defina as formas de pagamento e confirme o fechamento da venda.</p>
                 </div>
-                <button type="button" id="pdv-finalize-close" class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600" aria-label="Fechar modal de finalização">
+                <button type="button" id="pdv-finalize-close" class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600" aria-label="Fechar modal de finalizaÃ§Ã£o">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -983,23 +905,23 @@
                         <div id="pdv-receivables-residual" class="hidden rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                             <div class="flex items-center justify-between gap-3">
                                 <div>
-                                    <span class="text-[11px] font-semibold uppercase tracking-wide text-amber-700">Resíduo pendente</span>
-                                    <p id="pdv-receivables-residual-hint" class="mt-1 text-xs text-amber-700">Defina o novo vencimento para manter o saldo disponível.</p>
+                                    <span class="text-[11px] font-semibold uppercase tracking-wide text-amber-700">ResÃ­duo pendente</span>
+                                    <p id="pdv-receivables-residual-hint" class="mt-1 text-xs text-amber-700">Defina o novo vencimento para manter o saldo disponÃ­vel.</p>
                                 </div>
                                 <span id="pdv-receivables-residual-amount" class="text-sm font-semibold text-amber-900">R$ 0,00</span>
                             </div>
                             <label class="mt-3 block text-xs font-semibold text-amber-800" for="pdv-receivables-residual-due">
-                                Novo vencimento do resíduo
+                                Novo vencimento do resÃ­duo
                             </label>
                             <input id="pdv-receivables-residual-due" type="date" class="mt-1 w-full rounded-lg border border-amber-200 px-3 py-2 text-sm text-amber-900 focus:border-amber-400 focus:ring-2 focus:ring-amber-200">
                             <p id="pdv-receivables-residual-error" class="mt-2 hidden text-xs font-semibold text-amber-700"></p>
                         </div>
                         <div class="flex items-center gap-2 text-xs">
                             <button id="pdv-sale-adjust" type="button" class="rounded border border-gray-200 px-3 py-1 font-semibold text-gray-600 transition hover:border-primary hover:text-primary">
-                                Acréscimo/Desconto
+                                AcrÃ©scimo/Desconto
                             </button>
                             <button id="pdv-sale-item-adjust" type="button" class="rounded border border-gray-200 px-3 py-1 font-semibold text-gray-600 transition hover:border-primary hover:text-primary">
-                                Acréscimo/Desconto Item
+                                AcrÃ©scimo/Desconto Item
                             </button>
                         </div>
                         <div class="flex items-center justify-between gap-3">
@@ -1021,10 +943,10 @@
         <div class="relative mx-auto mt-10 flex h-[85vh] w-full max-w-[calc(64rem+120px)] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
             <div class="flex items-center justify-between border-b border-gray-200 px-6 py-4">
                 <div>
-                    <h2 class="text-lg font-semibold text-gray-800">Crediário</h2>
-                    <p class="text-sm text-gray-500">Configure as parcelas e vincule o cliente para registrar o crediário desta venda.</p>
+                    <h2 class="text-lg font-semibold text-gray-800">CrediÃ¡rio</h2>
+                    <p class="text-sm text-gray-500">Configure as parcelas e vincule o cliente para registrar o crediÃ¡rio desta venda.</p>
                 </div>
-                <button type="button" id="pdv-crediario-close" class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600" aria-label="Fechar modal de crediário">
+                <button type="button" id="pdv-crediario-close" class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600" aria-label="Fechar modal de crediÃ¡rio">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -1046,12 +968,12 @@
                         </div>
                         <div class="grid gap-2 sm:grid-cols-3 sm:gap-3">
                             <div class="rounded-xl border border-gray-200 bg-white px-4 py-3 text-center shadow-sm">
-                                <span class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400">Limite de crédito</span>
-                                <p id="pdv-crediario-limit" class="mt-1 text-sm font-semibold text-gray-800">?</p>
+                                <span class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400">Limite de crÃ©dito</span>
+                                <p id="pdv-crediario-limit" class="mt-1 text-sm font-semibold text-gray-800">â€”</p>
                             </div>
                             <div class="rounded-xl border border-gray-200 bg-white px-4 py-3 text-center shadow-sm">
-                                <span class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400">Pendências</span>
-                                <p id="pdv-crediario-pending" class="mt-1 text-sm font-semibold text-gray-800">?</p>
+                                <span class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400">PendÃªncias</span>
+                                <p id="pdv-crediario-pending" class="mt-1 text-sm font-semibold text-gray-800">â€”</p>
                             </div>
                             <div class="rounded-xl border border-gray-200 bg-white px-4 py-3 text-center shadow-sm">
                                 <span class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400">Fidelidade</span>
@@ -1065,7 +987,7 @@
                     <div class="space-y-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
                         <div class="grid grid-cols-1 gap-3 md:grid-cols-12 md:items-end">
                             <div class="md:col-span-4">
-                                <label for="pdv-crediario-method" class="block text-sm font-semibold text-gray-700">Meio de pagamento (liquidação)</label>
+                                <label for="pdv-crediario-method" class="block text-sm font-semibold text-gray-700">Meio de pagamento (liquidaÃ§Ã£o)</label>
                                 <select id="pdv-crediario-method" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"></select>
                             </div>
                             <div class="md:col-span-3">
@@ -1086,7 +1008,7 @@
                                 </div>
                             </div>
                         </div>
-                        <p class="text-xs text-gray-500">Distribua o valor restante da venda informando as parcelas que serão recebidas no crediário.</p>
+                        <p class="text-xs text-gray-500">Distribua o valor restante da venda informando as parcelas que serÃ£o recebidas no crediÃ¡rio.</p>
                         <div class="flex items-center justify-between rounded-xl border border-dashed border-primary/30 bg-primary/5 px-4 py-3">
                             <div class="flex flex-col">
                                 <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Restante da venda</span>
@@ -1112,7 +1034,7 @@
             </div>
             <div class="flex flex-col gap-3 border-t border-gray-200 bg-gray-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <button type="button" id="pdv-crediario-cancel" class="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100">Cancelar</button>
-                <button type="button" id="pdv-crediario-confirm" class="rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-white transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60">Adicionar crediário</button>
+                <button type="button" id="pdv-crediario-confirm" class="rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-white transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60">Adicionar crediÃ¡rio</button>
             </div>
         </div>
     </div>
@@ -1123,7 +1045,7 @@
             <div class="flex items-center justify-between border-b border-gray-200 px-6 py-4">
                 <div>
                     <h2 class="text-lg font-semibold text-gray-800">Importar atendimento</h2>
-                    <p class="text-sm text-gray-500">Localize o atendimento na agenda para importar os serviços e registrar o pagamento.</p>
+                    <p class="text-sm text-gray-500">Localize o atendimento na agenda para importar os serviÃ§os e registrar o pagamento.</p>
                 </div>
                 <button type="button" id="pdv-appointment-close" class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600" aria-label="Fechar modal de atendimentos">
                     <i class="fas fa-times"></i>
@@ -1141,11 +1063,11 @@
                                     Semana
                                 </button>
                                 <button type="button" class="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary" data-appointment-preset="month">
-                                    Mês
+                                    MÃªs
                                 </button>
                                 <span class="hidden h-4 w-px bg-gray-300 sm:inline-block"></span>
                                 <label class="flex items-center gap-2 text-sm font-medium text-gray-700" for="pdv-appointment-start">
-                                    <span class="text-xs font-semibold uppercase tracking-wide text-gray-500">Início</span>
+                                    <span class="text-xs font-semibold uppercase tracking-wide text-gray-500">InÃ­cio</span>
                                     <input id="pdv-appointment-start" type="date" class="w-32 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
                                 </label>
                                 <label class="flex items-center gap-2 text-sm font-medium text-gray-700" for="pdv-appointment-end">
@@ -1166,7 +1088,7 @@
                                     <button type="button" class="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary" data-appointment-status="agendado" aria-pressed="false">Agendado</button>
                                     <button type="button" class="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary" data-appointment-status="em_espera" aria-pressed="false">Em Espera</button>
                                     <button type="button" class="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary" data-appointment-status="em_atendimento" aria-pressed="false">Em Atendimento</button>
-                                    <button type="button" class="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary" data-appointment-status="concluido" aria-pressed="false">Concluído</button>
+                                    <button type="button" class="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary" data-appointment-status="concluido" aria-pressed="false">ConcluÃ­do</button>
                                 </div>
                             </div>
                             <div class="flex items-center gap-2">
@@ -1186,7 +1108,7 @@
                 <div class="px-6 py-5">
                     <div class="space-y-3">
                         <div id="pdv-appointment-loading" class="hidden rounded-xl border border-dashed border-gray-300 bg-white px-4 py-4 text-sm text-gray-500">Carregando atendimentos da agenda...</div>
-                        <div id="pdv-appointment-empty" class="hidden rounded-xl border border-dashed border-gray-300 bg-white px-4 py-4 text-sm text-gray-500">Nenhum atendimento encontrado para o período selecionado.</div>
+                        <div id="pdv-appointment-empty" class="hidden rounded-xl border border-dashed border-gray-300 bg-white px-4 py-4 text-sm text-gray-500">Nenhum atendimento encontrado para o perÃ­odo selecionado.</div>
                         <div id="pdv-appointment-list" class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"></div>
                     </div>
                 </div>
@@ -1199,17 +1121,17 @@
         <div class="relative mx-auto mt-32 w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
             <div class="flex items-center justify-between border-b border-gray-200 px-6 py-4">
                 <div>
-                    <h2 class="text-lg font-semibold text-gray-800">Salvar orçamento</h2>
-                    <p class="text-sm text-gray-500">Informe por quantos dias o orçamento será válido.</p>
+                    <h2 class="text-lg font-semibold text-gray-800">Salvar orÃ§amento</h2>
+                    <p class="text-sm text-gray-500">Informe por quantos dias o orÃ§amento serÃ¡ vÃ¡lido.</p>
                 </div>
-                <button type="button" id="pdv-budget-close" class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600" aria-label="Fechar modal de orçamento">
+                <button type="button" id="pdv-budget-close" class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600" aria-label="Fechar modal de orÃ§amento">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
             <div class="space-y-4 px-6 py-5">
-                <label for="pdv-budget-validity" class="block text-sm font-semibold text-gray-700">Validade do orçamento (em dias)</label>
+                <label for="pdv-budget-validity" class="block text-sm font-semibold text-gray-700">Validade do orÃ§amento (em dias)</label>
                 <input type="number" id="pdv-budget-validity" min="1" max="365" value="7" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: 7">
-                <p id="pdv-budget-error" class="hidden text-sm font-semibold text-red-600">Informe um período de 1 a 365 dias.</p>
+                <p id="pdv-budget-error" class="hidden text-sm font-semibold text-red-600">Informe um perÃ­odo de 1 a 365 dias.</p>
             </div>
             <div class="flex items-center justify-between gap-3 border-t border-gray-200 bg-gray-50 px-6 py-4">
                 <button type="button" id="pdv-budget-cancel" class="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100">Cancelar</button>
@@ -1230,7 +1152,7 @@
                 Emitindo nota fiscal...
             </h2>
             <p class="mt-2 text-center text-sm text-gray-500">
-                Aguarde enquanto concluímos as etapas de emissão fiscal.
+                Aguarde enquanto concluÃ­mos as etapas de emissÃ£o fiscal.
             </p>
             <ul id="pdv-fiscal-status-steps" class="mt-6 space-y-3 text-left">
                 <li data-fiscal-step="montando" class="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
@@ -1262,7 +1184,7 @@
                 </li>
             </ul>
             <p class="mt-6 text-center text-xs text-gray-400">
-                Não feche esta janela até que a emissão seja concluída.
+                NÃ£o feche esta janela atÃ© que a emissÃ£o seja concluÃ­da.
             </p>
         </div>
     </div>
@@ -1275,29 +1197,29 @@
                     <div>
                         <span class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
                             <i class="fas fa-arrow-right-arrow-left"></i>
-                            Transferência de estoque
+                            TransferÃªncia de estoque
                         </span>
-                        <h2 class="mt-1.5 text-[18px] font-semibold text-gray-900">Solicitar transferência</h2>
-                        <p class="mt-1 max-w-2xl text-[11px] text-gray-600">Defina depósitos, responsável e itens para enviar a solicitação para aprovação.</p>
+                        <h2 class="mt-1.5 text-[18px] font-semibold text-gray-900">Solicitar transferÃªncia</h2>
+                        <p class="mt-1 max-w-2xl text-[11px] text-gray-600">Defina depÃ³sitos, responsÃ¡vel e itens para enviar a solicitaÃ§Ã£o para aprovaÃ§Ã£o.</p>
                     </div>
-                    <button type="button" id="pdv-transfer-close" class="inline-flex items-center justify-center rounded-full border border-gray-200 p-1.5 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700" aria-label="Fechar modal de transferência">
+                    <button type="button" id="pdv-transfer-close" class="inline-flex items-center justify-center rounded-full border border-gray-200 p-1.5 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700" aria-label="Fechar modal de transferÃªncia">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
                 <div class="flex-1 overflow-y-auto px-5 py-5">
                     <div id="pdv-transfer-loading" class="mb-5 hidden rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-3 text-[11px] font-medium text-gray-600">
-                        Carregando dados necessários para a solicitação de transferência...
+                        Carregando dados necessÃ¡rios para a solicitaÃ§Ã£o de transferÃªncia...
                     </div>
                     <div id="pdv-transfer-form" class="space-y-5">
                         <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                             <div>
-                                <label for="pdv-transfer-date" class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Data da solicitação</label>
+                                <label for="pdv-transfer-date" class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Data da solicitaÃ§Ã£o</label>
                                 <input type="date" id="pdv-transfer-date" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[12px] focus:border-primary focus:ring-2 focus:ring-primary/20">
                             </div>
                             <div>
-                                <label for="pdv-transfer-responsible" class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Responsável</label>
+                                <label for="pdv-transfer-responsible" class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">ResponsÃ¡vel</label>
                                 <select id="pdv-transfer-responsible" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[12px] focus:border-primary focus:ring-2 focus:ring-primary/20">
-                                    <option value="">Selecione o responsável</option>
+                                    <option value="">Selecione o responsÃ¡vel</option>
                                 </select>
                             </div>
                         </div>
@@ -1310,9 +1232,9 @@
                                     </select>
                                 </div>
                                 <div>
-                                    <label for="pdv-transfer-origin-deposit" class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Depósito de origem</label>
+                                    <label for="pdv-transfer-origin-deposit" class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">DepÃ³sito de origem</label>
                                     <select id="pdv-transfer-origin-deposit" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[12px] focus:border-primary focus:ring-2 focus:ring-primary/20">
-                                        <option value="">Selecione o depósito de origem</option>
+                                        <option value="">Selecione o depÃ³sito de origem</option>
                                     </select>
                                 </div>
                             </div>
@@ -1324,21 +1246,21 @@
                                     </select>
                                 </div>
                                 <div>
-                                    <label for="pdv-transfer-destination-deposit" class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Depósito de destino</label>
+                                    <label for="pdv-transfer-destination-deposit" class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">DepÃ³sito de destino</label>
                                     <select id="pdv-transfer-destination-deposit" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[12px] focus:border-primary focus:ring-2 focus:ring-primary/20">
-                                        <option value="">Selecione o depósito de destino</option>
+                                        <option value="">Selecione o depÃ³sito de destino</option>
                                     </select>
                                 </div>
                             </div>
                         </div>
                         <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                             <div>
-                                <label for="pdv-transfer-reference" class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Documento de referência</label>
-                                <input type="text" id="pdv-transfer-reference" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[12px] focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: Ordem de serviço, NF-e">
+                                <label for="pdv-transfer-reference" class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Documento de referÃªncia</label>
+                                <input type="text" id="pdv-transfer-reference" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[12px] focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: Ordem de serviÃ§o, NF-e">
                             </div>
                             <div>
-                                <label for="pdv-transfer-observations" class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Observações</label>
-                                <textarea id="pdv-transfer-observations" rows="2" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[12px] focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Informações adicionais sobre a transferência"></textarea>
+                                <label for="pdv-transfer-observations" class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">ObservaÃ§Ãµes</label>
+                                <textarea id="pdv-transfer-observations" rows="2" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[12px] focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="InformaÃ§Ãµes adicionais sobre a transferÃªncia"></textarea>
                             </div>
                         </div>
                         <div class="space-y-4 rounded-xl border border-gray-200 bg-gray-50/60 p-4">
@@ -1347,7 +1269,7 @@
                                     <label for="pdv-transfer-product-search" class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Buscar produto</label>
                                     <div class="relative mt-1">
                                         <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"><i class="fas fa-search"></i></span>
-                                        <input type="text" id="pdv-transfer-product-search" class="w-full rounded-lg border border-gray-200 px-3 py-2 pl-9 text-[12px] focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Digite nome, código ou código de barras">
+                                        <input type="text" id="pdv-transfer-product-search" class="w-full rounded-lg border border-gray-200 px-3 py-2 pl-9 text-[12px] focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Digite nome, cÃ³digo ou cÃ³digo de barras">
                                     </div>
                                     <p class="mt-2 text-[11px] text-gray-500">Digite ao menos 2 caracteres para pesquisar.</p>
                                 </div>
@@ -1362,14 +1284,14 @@
                                     </button>
                                 </div>
                             </div>
-                            <div id="pdv-transfer-product-feedback" class="text-[11px] text-gray-600">Selecione um produto nos resultados para adicioná-lo à lista.</div>
+                            <div id="pdv-transfer-product-feedback" class="text-[11px] text-gray-600">Selecione um produto nos resultados para adicionÃ¡-lo Ã  lista.</div>
                             <div id="pdv-transfer-product-results" class="hidden max-h-48 overflow-y-auto rounded-lg border border-gray-200 bg-white"></div>
                             <div class="space-y-3">
                                 <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                                     <h3 class="text-[12px] font-semibold text-gray-900">Itens selecionados</h3>
                                     <span id="pdv-transfer-items-count" class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">0 itens</span>
                                 </div>
-                                <div id="pdv-transfer-items-empty" class="rounded-lg border border-dashed border-gray-300 bg-white px-4 py-6 text-center text-[11px] text-gray-500">Nenhum produto adicionado até o momento.</div>
+                                <div id="pdv-transfer-items-empty" class="rounded-lg border border-dashed border-gray-300 bg-white px-4 py-6 text-center text-[11px] text-gray-500">Nenhum produto adicionado atÃ© o momento.</div>
                                 <div class="overflow-x-auto">
                                     <table class="min-w-full divide-y divide-gray-200 text-left text-[12px]">
                                         <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
@@ -1377,7 +1299,7 @@
                                                 <th scope="col" class="px-4 py-3 font-semibold">Produto</th>
                                                 <th scope="col" class="px-4 py-3 font-semibold">Quantidade</th>
                                                 <th scope="col" class="px-4 py-3 font-semibold">Unidade</th>
-                                                <th scope="col" class="px-4 py-3 text-right font-semibold">Ações</th>
+                                                <th scope="col" class="px-4 py-3 text-right font-semibold">AÃ§Ãµes</th>
                                             </tr>
                                         </thead>
                                         <tbody id="pdv-transfer-items-body" class="divide-y divide-gray-100"></tbody>
@@ -1389,12 +1311,12 @@
                     </div>
                 </div>
                 <div class="flex flex-col gap-3 border-t border-gray-100 bg-gray-50 px-5 py-4 text-[11px] sm:flex-row sm:items-center sm:justify-between">
-                    <p class="text-gray-500">Após o envio, a solicitação ficará disponível na tela de aprovações de transferências.</p>
+                    <p class="text-gray-500">ApÃ³s o envio, a solicitaÃ§Ã£o ficarÃ¡ disponÃ­vel na tela de aprovaÃ§Ãµes de transferÃªncias.</p>
                     <div class="flex items-center gap-2">
                         <button type="button" id="pdv-transfer-cancel" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-600 transition hover:bg-gray-50">Cancelar</button>
                         <button type="button" id="pdv-transfer-submit" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60">
                             <i class="fas fa-paper-plane"></i>
-                            <span>Enviar solicitação</span>
+                            <span>Enviar solicitaÃ§Ã£o</span>
                         </button>
                     </div>
                 </div>
@@ -1999,8 +1921,8 @@
 
             <div id="pdv-delivery-footer-cliente" class="hidden shrink-0 border-t border-gray-200 bg-gray-50 px-4 py-3">
                 <div class="mb-2 flex items-center justify-between rounded bg-gray-700 px-3 py-1 text-[11px] text-white">
-                    <span>Cliente desde: <strong id="pdv-delivery-client-since" class="ml-1">?</strong></span>
-                    <span>P. de Fidelidade: <strong id="pdv-delivery-client-fidelity" class="ml-1">?</strong></span>
+                    <span>Cliente desde: <strong id="pdv-delivery-client-since" class="ml-1">â€”</strong></span>
+                    <span>P. de Fidelidade: <strong id="pdv-delivery-client-fidelity" class="ml-1">â€”</strong></span>
                     <span>Saldo devedor: <strong id="pdv-delivery-client-pending" class="ml-1">R$ 0,00</strong></span>
                     <span>Credito: <strong id="pdv-delivery-client-credit" class="ml-1">R$ 0,00</strong></span>
                 </div>
@@ -2038,7 +1960,7 @@
                     <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
                         <i class="fas fa-search"></i>
                     </span>
-                    <input id="pdv-exchange-product-search-input" type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 pl-9 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Digite código, barras ou nome">
+                    <input id="pdv-exchange-product-search-input" type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 pl-9 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Digite cÃ³digo, barras ou nome">
                 </div>
                 <label class="inline-flex items-center gap-2 text-sm text-gray-700">
                     <input id="pdv-exchange-product-include-inactive" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/30">
@@ -2052,10 +1974,10 @@
                 <table class="min-w-full divide-y divide-gray-200 text-sm">
                     <thead class="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                         <tr>
-                            <th class="px-3 py-2">Código</th>
+                            <th class="px-3 py-2">CÃ³digo</th>
                             <th class="px-3 py-2">Codigo de barras</th>
                             <th class="px-3 py-2">Nome</th>
-                            <th class="px-3 py-2 text-right">Preço Unit.</th>
+                            <th class="px-3 py-2 text-right">PreÃ§o Unit.</th>
                             <th class="px-3 py-2 text-right">Estoque</th>
                         </tr>
                     </thead>
@@ -2108,9 +2030,9 @@
             <div class="px-6 pt-4 pb-2 border-b border-gray-200 bg-gray-50">
                 <div class="flex flex-wrap gap-2">
                     <button type="button" data-ifood-tab="pedidos" class="ifood-tab-btn px-3 py-2 text-xs font-semibold rounded-full border border-gray-200 text-gray-700 bg-white hover:border-primary hover:text-primary transition">Pedidos</button>
-                    <button type="button" data-ifood-tab="separacao" class="ifood-tab-btn px-3 py-2 text-xs font-semibold rounded-full border border-gray-200 text-gray-700 bg-white hover:border-primary hover:text-primary transition">Separação</button>
-                    <button type="button" data-ifood-tab="empacotar" class="ifood-tab-btn px-3 py-2 text-xs font-semibold rounded-full border border-gray-200 text-gray-700 bg-white hover:border-primary hover:text-primary transition">Expedição</button>
-                    <button type="button" data-ifood-tab="concluidos" class="ifood-tab-btn px-3 py-2 text-xs font-semibold rounded-full border border-gray-200 text-gray-700 bg-white hover:border-primary hover:text-primary transition">Concluídos</button>
+                    <button type="button" data-ifood-tab="separacao" class="ifood-tab-btn px-3 py-2 text-xs font-semibold rounded-full border border-gray-200 text-gray-700 bg-white hover:border-primary hover:text-primary transition">SeparaÃ§Ã£o</button>
+                    <button type="button" data-ifood-tab="empacotar" class="ifood-tab-btn px-3 py-2 text-xs font-semibold rounded-full border border-gray-200 text-gray-700 bg-white hover:border-primary hover:text-primary transition">ExpediÃ§Ã£o</button>
+                    <button type="button" data-ifood-tab="concluidos" class="ifood-tab-btn px-3 py-2 text-xs font-semibold rounded-full border border-gray-200 text-gray-700 bg-white hover:border-primary hover:text-primary transition">ConcluÃ­dos</button>
                     <button type="button" data-ifood-tab="cancelados" class="ifood-tab-btn px-3 py-2 text-xs font-semibold rounded-full border border-gray-200 text-gray-700 bg-white hover:border-primary hover:text-primary transition">Cancelados</button>
                 </div>
             </div>
@@ -2130,3 +2052,9 @@
     <script src="/scripts/common/modal-bridge.js"></script>
 </body>
 </html>
+
+
+
+
+ 
+ 

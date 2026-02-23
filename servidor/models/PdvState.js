@@ -189,6 +189,7 @@ const pdvStateSchema = new mongoose.Schema(
     },
     inventoryMovements: { type: [inventoryMovementSchema], default: [] },
     accountsReceivable: { type: [receivableSchema], default: [] },
+    deliveryOrders: { type: [mongoose.Schema.Types.Mixed], default: [] },
   },
   { timestamps: true }
 );

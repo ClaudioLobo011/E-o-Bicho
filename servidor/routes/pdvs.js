@@ -1393,6 +1393,11 @@ const normalizePrintPreference = (value, fallback = 'PM') => {
   return allowed.has(normalized) ? normalized : fallback;
 };
 
+const normalizeDeliveryOrderPayload = (order) => {
+  if (!order || typeof order !== 'object') return null;
+  return { ...order };
+};
+
 const buildStateUpdatePayload = ({ body = {}, existingState = {}, empresaId }) => {
   const caixaAberto = Boolean(
     body.caixaAberto ?? body.caixa?.aberto ?? body.statusCaixa === 'aberto' ?? existingState.caixaAberto
@@ -1422,6 +1427,12 @@ const buildStateUpdatePayload = ({ body = {}, existingState = {}, empresaId }) =
       : Array.isArray(body.orcamentos)
       ? body.orcamentos
       : existingState.budgets || [];
+  const deliveryOrdersSource =
+    Array.isArray(body.deliveryOrders)
+      ? body.deliveryOrders
+      : Array.isArray(body.caixa?.deliveryOrders)
+      ? body.caixa.deliveryOrders
+      : existingState.deliveryOrders || [];
   const budgetSequenceRaw =
     body.budgetSequence ??
     body.orcamentoSequencia ??
@@ -1472,6 +1483,9 @@ const buildStateUpdatePayload = ({ body = {}, existingState = {}, empresaId }) =
     budgets: (Array.isArray(budgetsSource) ? budgetsSource : [])
       .map((budget) => normalizeBudgetRecordPayload(budget, { useDefaults: true }))
       .filter(Boolean),
+    deliveryOrders: (Array.isArray(deliveryOrdersSource) ? deliveryOrdersSource : [])
+      .map(normalizeDeliveryOrderPayload)
+      .filter(Boolean),
     lastMovement: normalizeHistoryEntryPayload(lastMovementSource) || null,
     saleCodeIdentifier,
     saleCodeSequence: Number.isFinite(saleCodeSequence) && saleCodeSequence > 0
@@ -1506,6 +1520,7 @@ const serializeStateForResponse = (stateDoc) => {
         ultimoLancamento: null,
         saleCodeIdentifier: '',
         saleCodeSequence: 1,
+        deliveryOrders: [],
       },
       pagamentos: [],
       summary: { abertura: 0, recebido: 0, saldo: 0 },
@@ -1520,6 +1535,7 @@ const serializeStateForResponse = (stateDoc) => {
       history: [],
       completedSales: [],
       budgets: [],
+      deliveryOrders: [],
       orcamentos: [],
       lastMovement: null,
       saleCodeIdentifier: '',
@@ -1538,6 +1554,7 @@ const serializeStateForResponse = (stateDoc) => {
   const history = Array.isArray(plain.history) ? plain.history : [];
   const completedSales = Array.isArray(plain.completedSales) ? plain.completedSales : [];
   const budgetsSource = Array.isArray(plain.budgets) ? plain.budgets : [];
+  const deliveryOrders = Array.isArray(plain.deliveryOrders) ? plain.deliveryOrders : [];
   const budgets = budgetsSource
     .map((budget) => normalizeBudgetRecordPayload(budget, { useDefaults: false }))
     .filter(Boolean);
@@ -1567,6 +1584,7 @@ const serializeStateForResponse = (stateDoc) => {
       ultimoLancamento: plain.lastMovement || null,
       saleCodeIdentifier: plain.saleCodeIdentifier || '',
       saleCodeSequence: plain.saleCodeSequence || 1,
+      deliveryOrders,
     },
     pagamentos,
     summary: {
@@ -1585,6 +1603,7 @@ const serializeStateForResponse = (stateDoc) => {
     history,
     completedSales,
     budgets,
+    deliveryOrders,
     orcamentos: budgets,
     lastMovement: plain.lastMovement || null,
     saleCodeIdentifier: plain.saleCodeIdentifier || '',
