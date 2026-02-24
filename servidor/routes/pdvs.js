@@ -5,6 +5,7 @@ const Pdv = require('../models/Pdv');
 const Store = require('../models/Store');
 const Deposit = require('../models/Deposit');
 const PdvState = require('../models/PdvState');
+const PdvCaixaSession = require('../models/PdvCaixaSession');
 const Product = require('../models/Product');
 const {
   recalculateFractionalStockForProduct,
@@ -1708,6 +1709,79 @@ const buildPdvPayload = ({ body, store }) => {
   };
 };
 
+const parseDateOrNull = (value) => {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const syncPdvCaixaSessionHistory = async ({ pdvDoc, existingState, updatedState }) => {
+  if (!pdvDoc || !updatedState) return;
+
+  const pdvId = String(updatedState.pdv || pdvDoc._id || '');
+  if (!mongoose.Types.ObjectId.isValid(pdvId)) return;
+
+  const prevOpen = Boolean(existingState?.caixaAberto);
+  const nextOpen = Boolean(updatedState?.caixaAberto);
+  const caixaInfo = updatedState?.caixaInfo || {};
+  const aberturaData = parseDateOrNull(caixaInfo?.aberturaData);
+  const fechamentoData = parseDateOrNull(caixaInfo?.fechamentoData);
+
+  const baseSet = {
+    empresa: updatedState.empresa || pdvDoc.empresa || null,
+    pdvNome: pdvDoc.apelido || pdvDoc.nome || '',
+    pdvCodigo: pdvDoc.codigo || '',
+    status: nextOpen ? 'aberto' : 'fechado',
+    caixaAberto: nextOpen,
+    aberturaData: aberturaData || null,
+    fechamentoData: fechamentoData || null,
+    fechamentoPrevisto: Number(caixaInfo?.fechamentoPrevisto || 0),
+    fechamentoApurado: Number(caixaInfo?.fechamentoApurado || 0),
+    summary: updatedState.summary || {},
+    caixaInfoSnapshot: caixaInfo,
+    stateUpdatedAt: updatedState.updatedAt || new Date(),
+  };
+
+  if (aberturaData) {
+    await PdvCaixaSession.findOneAndUpdate(
+      { pdv: pdvId, aberturaData },
+      { $set: baseSet, $setOnInsert: { pdv: pdvId } },
+      { upsert: true, new: true }
+    );
+  }
+
+  if (!nextOpen) {
+    const openSession = await PdvCaixaSession.findOne({ pdv: pdvId, status: 'aberto' })
+      .sort({ aberturaData: -1, updatedAt: -1 });
+
+    if (openSession) {
+      openSession.status = 'fechado';
+      openSession.caixaAberto = false;
+      if (aberturaData && !openSession.aberturaData) {
+        openSession.aberturaData = aberturaData;
+      }
+      if (fechamentoData) {
+        openSession.fechamentoData = fechamentoData;
+      }
+      openSession.fechamentoPrevisto = Number(caixaInfo?.fechamentoPrevisto || 0);
+      openSession.fechamentoApurado = Number(caixaInfo?.fechamentoApurado || 0);
+      openSession.summary = updatedState.summary || {};
+      openSession.caixaInfoSnapshot = caixaInfo;
+      openSession.stateUpdatedAt = updatedState.updatedAt || new Date();
+      openSession.empresa = updatedState.empresa || pdvDoc.empresa || openSession.empresa;
+      openSession.pdvNome = pdvDoc.apelido || pdvDoc.nome || openSession.pdvNome || '';
+      openSession.pdvCodigo = pdvDoc.codigo || openSession.pdvCodigo || '';
+      await openSession.save();
+    } else if (aberturaData || fechamentoData || prevOpen) {
+      await PdvCaixaSession.findOneAndUpdate(
+        { pdv: pdvId, aberturaData: aberturaData || fechamentoData || new Date(0) },
+        { $set: baseSet, $setOnInsert: { pdv: pdvId } },
+        { upsert: true, new: true }
+      );
+    }
+  }
+};
+
 router.get('/', requireAuth, authorizeRoles('admin'), async (req, res) => {
   try {
     const { empresa } = req.query;
@@ -1736,6 +1810,68 @@ router.get('/next-code', requireAuth, authorizeRoles('admin'), async (req, res) 
   } catch (error) {
     console.error('Erro ao gerar próximo código de PDV:', error);
     res.status(500).json({ message: 'Erro ao gerar próximo código.' });
+  }
+});
+
+router.get('/:id/caixas', requireAuth, authorizeRoles('admin'), async (req, res) => {
+  try {
+    const pdvId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(pdvId)) {
+      return res.status(400).json({ message: 'PDV inválido.' });
+    }
+
+    const startDate = parseDateOrNull(req.query.start);
+    const endDate = parseDateOrNull(req.query.end);
+    const match = { pdv: pdvId };
+    if (startDate || endDate) {
+      const and = [];
+      if (endDate) {
+        and.push({
+          $or: [
+            { aberturaData: { $lte: endDate } },
+            { fechamentoData: { $lte: endDate } },
+          ],
+        });
+      }
+      if (startDate) {
+        and.push({
+          $or: [
+            { fechamentoData: { $gte: startDate } },
+            { fechamentoData: null, aberturaData: { $gte: startDate } },
+            { fechamentoData: null, aberturaData: { $lte: startDate } },
+          ],
+        });
+      }
+      if (and.length) {
+        match.$and = and;
+      }
+    }
+
+    const sessions = await PdvCaixaSession.find(match)
+      .sort({ aberturaData: -1, stateUpdatedAt: -1, updatedAt: -1 })
+      .lean();
+
+    res.json({
+      caixas: sessions.map((item) => ({
+        id: item._id,
+        pdv: item.pdv,
+        empresa: item.empresa,
+        status: item.status || (item.caixaAberto ? 'aberto' : 'fechado'),
+        aberto: Boolean(item.caixaAberto),
+        aberturaData: item.aberturaData || null,
+        fechamentoData: item.fechamentoData || null,
+        fechamentoPrevisto: Number(item.fechamentoPrevisto || 0),
+        fechamentoApurado: Number(item.fechamentoApurado || 0),
+        summary: item.summary || {},
+        caixaInfo: item.caixaInfoSnapshot || {},
+        pdvNome: item.pdvNome || '',
+        pdvCodigo: item.pdvCodigo || '',
+        atualizadoEm: item.stateUpdatedAt || item.updatedAt || null,
+      })),
+    });
+  } catch (error) {
+    console.error('Erro ao listar caixas do PDV:', error);
+    res.status(500).json({ message: 'Erro ao listar caixas do PDV.' });
   }
 });
 
@@ -2485,6 +2621,16 @@ router.put('/:id/state', requireAuth, async (req, res) => {
       },
       { new: true, upsert: true, setDefaultsOnInsert: true }
     );
+
+    try {
+      await syncPdvCaixaSessionHistory({
+        pdvDoc: pdv,
+        existingState,
+        updatedState,
+      });
+    } catch (historyError) {
+      console.error('Erro ao sincronizar histórico de caixas do PDV:', historyError);
+    }
 
     const serialized = serializeStateForResponse(updatedState);
 

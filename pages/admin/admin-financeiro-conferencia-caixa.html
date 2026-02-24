@@ -1,0 +1,271 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin: Conferência de Caixa - E o Bicho</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="../../src/output.css">
+</head>
+<body class="bg-gray-100">
+  <div id="admin-header-placeholder"></div>
+
+  <main class="container mx-auto px-4 pt-1 pb-8 min-h-screen">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <aside class="md:col-span-4">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
+
+      <div class="md:col-span-4 space-y-6">
+        <header class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 class="text-2xl font-bold text-gray-800">Conferência de Caixa</h1>
+            <p class="text-sm text-gray-600">Tela interativa para conferência financeira por área operacional.</p>
+          </div>
+          <span class="inline-flex items-center gap-2 rounded-full bg-primary/10 text-primary text-xs font-semibold px-3 py-1">
+            <i class="fas fa-cash-register"></i>
+            Financeiro
+          </span>
+        </header>
+
+        <section class="grid grid-cols-1 xl:grid-cols-4 gap-6">
+          <div class="xl:col-span-3 space-y-6">
+            <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4">
+              <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <h2 class="text-lg font-semibold text-gray-800">Filtros da Conferência</h2>
+                  <p class="text-sm text-gray-600">Escolha empresa, PDV, caixa e período para navegar entre as abas.</p>
+                </div>
+                <div id="cashcheck-feedback" class="inline-flex items-center gap-2 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2 text-xs text-gray-600">
+                  <i class="fas fa-circle-info text-primary"></i>
+                  Estrutura inicial interativa pronta.
+                </div>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+                <div>
+                  <label for="cashcheck-company" class="block text-sm font-medium text-gray-700 mb-1">Empresa</label>
+                  <select id="cashcheck-company" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                    <option value="">Selecione uma empresa</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="cashcheck-pdv" class="block text-sm font-medium text-gray-700 mb-1">PDV</label>
+                  <select id="cashcheck-pdv" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                    <option value="">Selecione uma empresa</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="cashcheck-caixa" class="block text-sm font-medium text-gray-700 mb-1">Caixa</label>
+                  <select id="cashcheck-caixa" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                    <option value="">Selecione um PDV</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="cashcheck-start" class="block text-sm font-medium text-gray-700 mb-1">Data inicial</label>
+                  <input id="cashcheck-start" type="date" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                </div>
+                <div>
+                  <label for="cashcheck-end" class="block text-sm font-medium text-gray-700 mb-1">Data final</label>
+                  <input id="cashcheck-end" type="date" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                </div>
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <button type="button" id="cashcheck-apply" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-secondary transition">
+                  <i class="fas fa-filter"></i>
+                  Aplicar filtros
+                </button>
+                <button type="button" id="cashcheck-clear" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">
+                  <i class="fas fa-rotate-left"></i>
+                  Limpar
+                </button>
+              </div>
+            </section>
+
+            <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+              <div class="mb-4 border-b border-gray-100">
+                <div class="flex flex-wrap gap-2" role="tablist" aria-label="Abas da conferência de caixa">
+                  <button type="button" class="cashcheck-tab inline-flex items-center gap-2 rounded-t-lg border-b-2 px-3 py-2 text-sm font-semibold border-primary text-primary" data-cashcheck-tab="conferencia" aria-selected="true">
+                    <i class="fas fa-scale-balanced text-xs"></i>
+                    Conferência
+                  </button>
+                  <button type="button" class="cashcheck-tab inline-flex items-center gap-2 rounded-t-lg border-b-2 px-3 py-2 text-sm font-semibold border-transparent text-gray-500 hover:text-primary" data-cashcheck-tab="produtos" aria-selected="false">
+                    <i class="fas fa-box-open text-xs"></i>
+                    Produtos Vendidos
+                  </button>
+                  <button type="button" class="cashcheck-tab inline-flex items-center gap-2 rounded-t-lg border-b-2 px-3 py-2 text-sm font-semibold border-transparent text-gray-500 hover:text-primary" data-cashcheck-tab="banho-tosa" aria-selected="false">
+                    <i class="fas fa-bath text-xs"></i>
+                    Serviços do Banho e Tosa
+                  </button>
+                  <button type="button" class="cashcheck-tab inline-flex items-center gap-2 rounded-t-lg border-b-2 px-3 py-2 text-sm font-semibold border-transparent text-gray-500 hover:text-primary" data-cashcheck-tab="veterinario" aria-selected="false">
+                    <i class="fas fa-stethoscope text-xs"></i>
+                    Serviços Veterinários
+                  </button>
+                  <button type="button" class="cashcheck-tab inline-flex items-center gap-2 rounded-t-lg border-b-2 px-3 py-2 text-sm font-semibold border-transparent text-gray-500 hover:text-primary" data-cashcheck-tab="internacao" aria-selected="false">
+                    <i class="fas fa-bed-pulse text-xs"></i>
+                    Serviços de Internação
+                  </button>
+                </div>
+              </div>
+
+              <div class="space-y-4">
+                <div data-cashcheck-panel="conferencia" class="space-y-4">
+                  <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                    <div class="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                      <p class="text-xs uppercase tracking-wide text-gray-500">Total previsto</p>
+                      <p id="cashcheck-total-previsto" class="mt-1 text-xl font-semibold text-gray-800">R$ 0,00</p>
+                    </div>
+                    <div class="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                      <p class="text-xs uppercase tracking-wide text-gray-500">Total apurado</p>
+                      <p id="cashcheck-total-apurado" class="mt-1 text-xl font-semibold text-gray-800">R$ 0,00</p>
+                    </div>
+                    <div class="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                      <p class="text-xs uppercase tracking-wide text-gray-500">Diferença</p>
+                      <p id="cashcheck-total-diferenca" class="mt-1 text-xl font-semibold text-amber-600">R$ 0,00</p>
+                    </div>
+                    <div class="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                      <p class="text-xs uppercase tracking-wide text-gray-500">Status</p>
+                      <p id="cashcheck-status" class="mt-1 text-sm font-semibold text-gray-700">Aguardando conferência</p>
+                    </div>
+                  </div>
+                  <div class="overflow-hidden rounded-xl border border-gray-200">
+                    <table class="min-w-full divide-y divide-gray-200 text-sm">
+                      <thead class="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        <tr>
+                          <th class="px-4 py-3">Meio de pagamento</th>
+                          <th class="px-4 py-3 text-right">Previsto</th>
+                          <th class="px-4 py-3 text-right">Apurado</th>
+                          <th class="px-4 py-3 text-right">Diferença</th>
+                          <th class="px-4 py-3">Observação</th>
+                        </tr>
+                      </thead>
+                      <tbody id="cashcheck-conference-payment-methods-body" class="divide-y divide-gray-100">
+                        <tr>
+                          <td colspan="5" class="px-4 py-6 text-center text-sm text-gray-500">
+                            Selecione uma empresa para carregar os meios de pagamento.
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div data-cashcheck-panel="produtos" class="hidden space-y-4">
+                  <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h3 class="text-base font-semibold text-gray-800">Produtos Vendidos</h3>
+                      <p class="text-sm text-gray-600">Conferência de itens vendidos no período selecionado.</p>
+                    </div>
+                    <input type="search" class="w-full sm:w-72 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Filtrar por código ou nome">
+                  </div>
+                  <div class="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-10 text-center text-sm text-gray-500">
+                    Painel de produtos vendidos pronto para receber listagem, totais e divergências.
+                  </div>
+                </div>
+
+                <div data-cashcheck-panel="banho-tosa" class="hidden space-y-4">
+                  <div>
+                    <h3 class="text-base font-semibold text-gray-800">Serviços do Banho e Tosa</h3>
+                    <p class="text-sm text-gray-600">Conferência de atendimentos, serviços executados e totais do setor.</p>
+                  </div>
+                  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="rounded-xl border border-gray-100 bg-gray-50 p-4"><p class="text-xs text-gray-500 uppercase">Atendimentos</p><p class="mt-1 text-lg font-semibold text-gray-800">0</p></div>
+                    <div class="rounded-xl border border-gray-100 bg-gray-50 p-4"><p class="text-xs text-gray-500 uppercase">Total bruto</p><p class="mt-1 text-lg font-semibold text-gray-800">R$ 0,00</p></div>
+                    <div class="rounded-xl border border-gray-100 bg-gray-50 p-4"><p class="text-xs text-gray-500 uppercase">Diferenças</p><p class="mt-1 text-lg font-semibold text-amber-600">R$ 0,00</p></div>
+                  </div>
+                  <div class="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
+                    Aqui entram a listagem dos serviços de banho e tosa e conciliação por profissional/caixa.
+                  </div>
+                </div>
+
+                <div data-cashcheck-panel="veterinario" class="hidden space-y-4">
+                  <div>
+                    <h3 class="text-base font-semibold text-gray-800">Serviços Veterinários</h3>
+                    <p class="text-sm text-gray-600">Conferência de consultas, procedimentos e recebimentos da área veterinária.</p>
+                  </div>
+                  <div class="overflow-hidden rounded-xl border border-gray-200">
+                    <table class="min-w-full divide-y divide-gray-200 text-sm">
+                      <thead class="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        <tr>
+                          <th class="px-4 py-3">Serviço</th>
+                          <th class="px-4 py-3">Profissional</th>
+                          <th class="px-4 py-3 text-right">Quantidade</th>
+                          <th class="px-4 py-3 text-right">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td colspan="4" class="px-4 py-8 text-center text-gray-500">Sem dados carregados. Use os filtros para iniciar a conferência.</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div data-cashcheck-panel="internacao" class="hidden space-y-4">
+                  <div>
+                    <h3 class="text-base font-semibold text-gray-800">Serviços de Internação</h3>
+                    <p class="text-sm text-gray-600">Conferência de diárias, procedimentos e cobranças de internação.</p>
+                  </div>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="rounded-xl border border-gray-200 p-4">
+                      <p class="text-sm font-semibold text-gray-800">Resumo por paciente</p>
+                      <p class="mt-2 text-sm text-gray-500">Tabela/resumo por paciente internado no período.</p>
+                    </div>
+                    <div class="rounded-xl border border-gray-200 p-4">
+                      <p class="text-sm font-semibold text-gray-800">Resumo por lançamento</p>
+                      <p class="mt-2 text-sm text-gray-500">Conferência de itens cobrados versus itens previstos.</p>
+                    </div>
+                  </div>
+                  <div class="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
+                    Espaço preparado para conciliação financeira de internação.
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <aside class="space-y-4">
+            <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+              <h3 class="text-sm font-semibold text-gray-800 mb-3">Navegação das abas</h3>
+              <p class="text-sm text-gray-600 mb-4">Cada aba organiza um tipo de conferência para facilitar a operação.</p>
+              <div class="space-y-2 text-sm">
+                <div class="flex items-center gap-2 text-gray-700"><i class="fas fa-scale-balanced text-primary w-4"></i><span>Conferência geral do caixa</span></div>
+                <div class="flex items-center gap-2 text-gray-700"><i class="fas fa-box-open text-primary w-4"></i><span>Produtos vendidos</span></div>
+                <div class="flex items-center gap-2 text-gray-700"><i class="fas fa-bath text-primary w-4"></i><span>Banho e tosa</span></div>
+                <div class="flex items-center gap-2 text-gray-700"><i class="fas fa-stethoscope text-primary w-4"></i><span>Veterinário</span></div>
+                <div class="flex items-center gap-2 text-gray-700"><i class="fas fa-bed-pulse text-primary w-4"></i><span>Internação</span></div>
+              </div>
+            </section>
+
+            <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+              <h3 class="text-sm font-semibold text-gray-800 mb-3">Ações rápidas</h3>
+              <div class="grid grid-cols-1 gap-2">
+                <button type="button" class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">
+                  <i class="fas fa-file-export text-primary"></i>
+                  Exportar conferência
+                </button>
+                <button type="button" class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">
+                  <i class="fas fa-print text-primary"></i>
+                  Imprimir resumo
+                </button>
+              </div>
+            </section>
+          </aside>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <div id="admin-footer-placeholder"></div>
+  <div id="modal-placeholder"></div>
+  <div id="confirm-modal-placeholder"></div>
+
+  <script>var basePath = '../../';</script>
+  <script src="../../scripts/core/config.js"></script>
+  <script src="../../scripts/core/ui.js"></script>
+  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/admin/admin.js"></script>
+  <script src="../../scripts/admin/admin-financeiro-conferencia-caixa.js"></script>
+  <script src="/scripts/common/modal-bridge.js"></script>
+</body>
+</html>
