@@ -838,12 +838,19 @@
   const getLoggedUserName = () => {
     const payload = getLoggedUserPayload();
     return (
+      payload?.nomeCompleto ||
+      payload?.apelido ||
       payload?.nome ||
       payload?.name ||
+      payload?.usuario?.nomeCompleto ||
+      payload?.usuario?.apelido ||
       payload?.usuario?.nome ||
       payload?.usuario?.name ||
+      payload?.user?.nomeCompleto ||
+      payload?.user?.apelido ||
       payload?.user?.nome ||
       payload?.user?.name ||
+      payload?.email ||
       payload?.login ||
       ''
     );
@@ -2647,6 +2654,19 @@
       motivo: entry.motivo ? String(entry.motivo) : '',
       paymentLabel: entry.paymentLabel ? String(entry.paymentLabel) : '',
       paymentId: entry.paymentId ? String(entry.paymentId) : '',
+      userId:
+        entry.userId || entry.usuarioId || entry.responsavelId
+          ? String(entry.userId || entry.usuarioId || entry.responsavelId)
+          : '',
+      userName:
+        entry.userName || entry.nomeUsuario || entry.responsavel || entry.usuario
+          ? String(entry.userName || entry.nomeUsuario || entry.responsavel || entry.usuario)
+          : '',
+      userLogin: entry.userLogin || entry.login ? String(entry.userLogin || entry.login) : '',
+      responsavel:
+        entry.responsavel || entry.userName || entry.nomeUsuario || entry.userLogin || entry.usuario
+          ? String(entry.responsavel || entry.userName || entry.nomeUsuario || entry.userLogin || entry.usuario)
+          : '',
       timestamp: timestamp.toISOString(),
     };
   };
@@ -3108,6 +3128,27 @@
       product?.sku ||
       ''
     );
+  };
+
+  const getLoggedUserHistoryMeta = () => {
+    const payload = getLoggedUserPayload();
+    const userId =
+      payload?._id ||
+      payload?.id ||
+      payload?.userId ||
+      payload?.usuarioId ||
+      payload?.usuario?._id ||
+      payload?.usuario?.id ||
+      payload?.user?._id ||
+      payload?.user?.id ||
+      '';
+    const userName = getLoggedUserName() || '';
+    const userLogin = payload?.login || payload?.username || payload?.email || '';
+    return {
+      userId: userId ? String(userId) : '',
+      userName: userName ? String(userName) : '',
+      userLogin: userLogin ? String(userLogin) : '',
+    };
   };
 
   const getProductBarcode = (product) => {
@@ -21952,6 +21993,7 @@
       : action.id === 'saida' || action.id === 'envio' || action.id === 'fechamento'
       ? -Math.abs(amount)
       : Math.abs(amount);
+    const userMeta = getLoggedUserHistoryMeta();
     const entry = {
       id: action.id,
       label: action.label,
@@ -21959,6 +22001,10 @@
       delta,
       motivo: motivo || '',
       paymentLabel: paymentLabel || '',
+      userId: userMeta.userId || '',
+      userName: userMeta.userName || '',
+      userLogin: userMeta.userLogin || '',
+      responsavel: userMeta.userName || userMeta.userLogin || '',
       timestamp: new Date().toISOString(),
     };
     state.history.unshift(entry);

@@ -1082,6 +1082,16 @@ const normalizeHistoryEntryPayload = (entry) => {
   const motivo = normalizeString(entry.motivo || entry.observacao);
   const paymentLabel = normalizeString(entry.paymentLabel || entry.meioPagamento || entry.formaPagamento);
   const paymentId = normalizeString(entry.paymentId || entry.formaPagamentoId || entry.payment || entry.paymentMethodId);
+  const userId = normalizeString(entry.userId || entry.usuarioId || entry.responsavelId || entry.user?._id || entry.user?.id);
+  const userName = normalizeString(
+    entry.userName ||
+    entry.nomeUsuario ||
+    entry.usuario ||
+    entry.responsavel ||
+    entry.user?.nome ||
+    entry.user?.name
+  );
+  const userLogin = normalizeString(entry.userLogin || entry.login || entry.user?.login || entry.user?.email);
   const timestamp = safeDate(entry.timestamp || entry.data || entry.createdAt || entry.atualizadoEm) || new Date();
   return {
     id: id || undefined,
@@ -1091,6 +1101,10 @@ const normalizeHistoryEntryPayload = (entry) => {
     motivo,
     paymentLabel,
     paymentId,
+    userId,
+    userName,
+    userLogin,
+    responsavel: userName || userLogin || '',
     timestamp,
   };
 };
@@ -1738,6 +1752,9 @@ const syncPdvCaixaSessionHistory = async ({ pdvDoc, existingState, updatedState 
     fechamentoPrevisto: Number(caixaInfo?.fechamentoPrevisto || 0),
     fechamentoApurado: Number(caixaInfo?.fechamentoApurado || 0),
     summary: updatedState.summary || {},
+    historySnapshot: Array.isArray(updatedState.history) ? updatedState.history : [],
+    completedSalesSnapshot: Array.isArray(updatedState.completedSales) ? updatedState.completedSales : [],
+    pagamentosSnapshot: Array.isArray(updatedState.pagamentos) ? updatedState.pagamentos : [],
     caixaInfoSnapshot: caixaInfo,
     stateUpdatedAt: updatedState.updatedAt || new Date(),
   };
@@ -1863,6 +1880,9 @@ router.get('/:id/caixas', requireAuth, authorizeRoles('admin'), async (req, res)
         fechamentoPrevisto: Number(item.fechamentoPrevisto || 0),
         fechamentoApurado: Number(item.fechamentoApurado || 0),
         summary: item.summary || {},
+        history: Array.isArray(item.historySnapshot) ? item.historySnapshot : [],
+        completedSales: Array.isArray(item.completedSalesSnapshot) ? item.completedSalesSnapshot : [],
+        pagamentos: Array.isArray(item.pagamentosSnapshot) ? item.pagamentosSnapshot : [],
         caixaInfo: item.caixaInfoSnapshot || {},
         pdvNome: item.pdvNome || '',
         pdvCodigo: item.pdvCodigo || '',

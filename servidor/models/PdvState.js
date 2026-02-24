@@ -21,6 +21,10 @@ const historyEntrySchema = new mongoose.Schema(
     motivo: { type: String, trim: true },
     paymentLabel: { type: String, trim: true },
     paymentId: { type: String, trim: true },
+    userId: { type: String, trim: true },
+    userName: { type: String, trim: true },
+    userLogin: { type: String, trim: true },
+    responsavel: { type: String, trim: true },
     timestamp: { type: Date, default: Date.now },
   },
   { _id: false }
