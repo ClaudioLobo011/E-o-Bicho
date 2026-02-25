@@ -4485,6 +4485,13 @@
     }
   };
 
+  const resetRegularSaleDeliveryContext = () => {
+    state.saleSource = '';
+    state.deliveryStatusOverride = null;
+    state.deliverySelectedAddressId = '';
+    state.deliverySelectedAddress = null;
+  };
+
   const openCustomerLookupSearchModal = (initialQuery = '', options = {}) => {
     if (!elements.customerSearchModal) return;
     document.body.appendChild(elements.customerSearchModal);
@@ -9301,6 +9308,9 @@
         return;
       }
 
+      if (state.customerSearchTarget === 'sale' && state.saleSource !== 'ifood') {
+        resetRegularSaleDeliveryContext();
+      }
       setSaleCustomer(customerToBind, state.modalSelectedPet);
       closeCustomerModal();
     } catch (error) {
@@ -20778,6 +20788,7 @@
     state.vendaPagamentos = [];
     state.vendaDesconto = 0;
     state.vendaAcrescimo = 0;
+    resetRegularSaleDeliveryContext();
     const primaryAppointment = selectedAppointments[0];
     const customer = buildSaleCustomerFromAppointment(primaryAppointment);
     await enrichSaleCustomerFromAppointment(customer, primaryAppointment);
