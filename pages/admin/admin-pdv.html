@@ -516,9 +516,17 @@
                                             <h3 class="text-base font-semibold text-gray-800">Entregas registradas</h3>
                                             <p class="text-xs text-gray-500">Acompanhe o andamento das vendas realizadas via delivery.</p>
                                         </div>
-                                        <div class="flex items-center gap-2 text-xs text-gray-500">
-                                            <span class="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 font-semibold uppercase tracking-wide">Status</span>
-                                            <span>Registrado ? Em separação ? Em rota ? Finalizado</span>
+                                        <div class="flex flex-col items-start gap-2 sm:items-end">
+                                            <div class="flex items-center gap-2 text-xs text-gray-500">
+                                                <label for="pdv-delivery-start" class="font-semibold">Período</label>
+                                                <input type="date" id="pdv-delivery-start" class="rounded border border-gray-200 px-2 py-1 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20">
+                                                <span class="text-gray-400">até</span>
+                                                <input type="date" id="pdv-delivery-end" class="rounded border border-gray-200 px-2 py-1 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20">
+                                            </div>
+                                            <div class="flex items-center gap-2 text-xs text-gray-500">
+                                                <span class="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 font-semibold uppercase tracking-wide">Status</span>
+                                                <span>Registrado ? Em separação ? Em rota ? Finalizado</span>
+                                            </div>
                                         </div>
                                     </div>
                                     <div id="pdv-delivery-empty" class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center text-sm text-gray-500">

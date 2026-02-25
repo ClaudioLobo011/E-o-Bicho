@@ -277,6 +277,7 @@
     finalizeProcessing: false,
     skipInventoryForNextSale: false,
     completedSales: [],
+    deliveryFilters: { start: getTodayIsoDate(), end: getTodayIsoDate() },
     salesFilters: { start: getTodayIsoDate(), end: getTodayIsoDate() },
     budgets: [],
     selectedBudgetId: '',
@@ -1994,6 +1995,37 @@
     return filtered.length ? filtered : items;
   };
 
+  const buildCaixaPrevistoPagamentosWithoutCancelledSales = (payments = state.caixaInfo.previstoPagamentos) => {
+    const base = clonePayments(Array.isArray(payments) ? payments : []);
+    const cancelledSales = (Array.isArray(state.completedSales) ? state.completedSales : []).filter(
+      (sale) => sale && sale.status === 'cancelled'
+    );
+    if (!cancelledSales.length || !base.length) {
+      return base;
+    }
+    cancelledSales.forEach((sale) => {
+      const contributions = normalizeCashContributions(sale?.cashContributions || []);
+      contributions.forEach((entry) => {
+        const amount = safeNumber(entry.amount);
+        if (!(amount > 0)) return;
+        const paymentId = entry.paymentId || '';
+        const paymentLabel = entry.paymentLabel || '';
+        let target =
+          (paymentId &&
+            (base.find((item) => item.id === paymentId) ||
+              base.find((item) => String(item.raw?._id || '') === paymentId))) ||
+          null;
+        if (!target && paymentLabel) {
+          target = base.find((item) => String(item.label || '') === String(paymentLabel || ''));
+        }
+        if (target) {
+          target.valor = Math.max(0, safeNumber(target.valor) - amount);
+        }
+      });
+    });
+    return base;
+  };
+
   const getFechamentoSnapshot = () => {
     if (!state.selectedStore || !state.selectedPdv) {
       return null;
@@ -2008,7 +2040,7 @@
     const recebimentosClienteValor = safeNumber(state.summary.recebimentosCliente);
 
     const recebimentosFonte = Array.isArray(state.caixaInfo.previstoPagamentos)
-      ? state.caixaInfo.previstoPagamentos
+      ? buildCaixaPrevistoPagamentosWithoutCancelledSales(state.caixaInfo.previstoPagamentos)
       : [];
     const recebimentosItems = createPaymentItems(recebimentosFonte);
     const recebimentosTotal = sumPayments(recebimentosFonte);
@@ -2017,10 +2049,10 @@
       ? state.caixaInfo.previstoPagamentos.length > 0
       : false;
     const previstoFonte = hasPrevistoPagamentos
-      ? state.caixaInfo.previstoPagamentos
+      ? buildCaixaPrevistoPagamentosWithoutCancelledSales(state.caixaInfo.previstoPagamentos)
       : state.pagamentos;
     const previstoItems = createPaymentItems(previstoFonte);
-    const previstoTotal = state.caixaInfo.fechamentoPrevisto || sumPayments(previstoFonte);
+    const previstoTotal = sumPayments(previstoFonte);
 
     const apuradoFonte = state.allowApuradoEdit
       ? state.pagamentos
@@ -3561,6 +3593,8 @@
     elements.salesEmpty = document.getElementById('pdv-sales-empty');
     elements.salesStart = document.getElementById('pdv-sales-start');
     elements.salesEnd = document.getElementById('pdv-sales-end');
+    elements.deliveryStart = document.getElementById('pdv-delivery-start');
+    elements.deliveryEnd = document.getElementById('pdv-delivery-end');
 
     elements.budgetPresets = document.getElementById('pdv-budget-presets');
     elements.budgetStart = document.getElementById('pdv-budget-start');
@@ -10634,15 +10668,50 @@
     return order;
   };
 
+  const getFilteredDeliveryOrders = () => {
+    const orders = Array.isArray(state.deliveryOrders) ? state.deliveryOrders : [];
+    const filters = state.deliveryFilters || { start: getTodayIsoDate(), end: getTodayIsoDate() };
+    if (!state.deliveryFilters) {
+      state.deliveryFilters = { ...filters };
+    }
+    const startDate = parseDateInputValue(filters.start || '');
+    const endDate = parseDateInputValue(filters.end || '');
+    const start = startDate ? toStartOfDay(startDate) : null;
+    const end = endDate ? toEndOfDay(endDate) : null;
+    if (!start && !end) {
+      return orders;
+    }
+    return orders.filter((order) => {
+      const referenceDate = order.createdAt ? new Date(order.createdAt) : null;
+      if (!referenceDate || Number.isNaN(referenceDate.getTime())) return false;
+      return isDateWithinRange(referenceDate, start, end);
+    });
+  };
+
+  const renderDeliveryFilters = () => {
+    if (!state.deliveryFilters) {
+      state.deliveryFilters = { start: getTodayIsoDate(), end: getTodayIsoDate() };
+    }
+    if (elements.deliveryStart) {
+      elements.deliveryStart.value = state.deliveryFilters?.start || '';
+    }
+    if (elements.deliveryEnd) {
+      elements.deliveryEnd.value = state.deliveryFilters?.end || '';
+    }
+  };
+
   const renderDeliveryOrders = () => {
     if (!elements.deliveryList || !elements.deliveryEmpty) return;
-    const hasOrders = state.deliveryOrders.length > 0;
+    pruneCancelledDeliveryOrders();
+    renderDeliveryFilters();
+    const orders = getFilteredDeliveryOrders();
+    const hasOrders = orders.length > 0;
     elements.deliveryEmpty.classList.toggle('hidden', hasOrders);
     elements.deliveryList.classList.toggle('hidden', !hasOrders);
     elements.deliveryList.innerHTML = '';
     if (!hasOrders) return;
     const fragment = document.createDocumentFragment();
-    state.deliveryOrders.forEach((order) => {
+    orders.forEach((order) => {
       const li = document.createElement('li');
       li.dataset.deliveryId = order.id;
       li.className = 'rounded-lg border border-gray-200 bg-white p-3 space-y-2';
@@ -11998,6 +12067,26 @@
       end: endValue,
     };
     renderSalesList();
+  };
+
+  const handleDeliveryDateChange = () => {
+    const startInput = elements.deliveryStart;
+    const endInput = elements.deliveryEnd;
+    if (!startInput || !endInput) return;
+    let startValue = startInput.value || '';
+    let endValue = endInput.value || '';
+    const startDate = parseDateInputValue(startValue || '');
+    const endDate = parseDateInputValue(endValue || '');
+    if (startDate && endDate && startDate.getTime() > endDate.getTime()) {
+      const temp = startValue;
+      startValue = endValue;
+      endValue = temp;
+    }
+    state.deliveryFilters = {
+      start: startValue,
+      end: endValue,
+    };
+    renderDeliveryOrders();
   };
 
   const handleBudgetListClick = (event) => {
@@ -20876,6 +20965,7 @@
       const normalizedList = dataset.map((item) => cloneAppointmentRecord(item)).filter(Boolean);
       normalizedList.sort((a, b) => getTimeValue(a?.scheduledAt) - getTimeValue(b?.scheduledAt));
       state.appointments = normalizedList;
+      await repairLoadedAppointmentsFromCancelledSales();
       const availableIds = new Set(state.appointments.map((item) => item.id));
       setActiveSaleAppointments(
         normalizeAppointmentIdList(state.activeAppointmentIds).filter((id) => availableIds.has(id))
@@ -21189,9 +21279,21 @@
     return fallbackId ? [fallbackId] : [];
   };
 
-  const revertAppointmentAfterSaleCancellation = async (sale) => {
+  const getAppointmentIdsFromDeliveryOrder = (order) => {
+    if (!order || typeof order !== 'object') return [];
+    const ids = normalizeAppointmentIdList(order.appointmentIds);
+    if (ids.length) return ids;
+    const fallbackId = normalizeId(order.appointmentId || '');
+    return fallbackId ? [fallbackId] : [];
+  };
+
+  const revertAppointmentAfterSaleCancellation = async (sale, options = {}) => {
     if (!sale) return false;
-    const appointmentIds = getSaleAppointmentIds(sale);
+    const fallbackAppointmentIds = normalizeAppointmentIdList(options.appointmentIds);
+    const appointmentIds = normalizeAppointmentIdList([
+      ...getSaleAppointmentIds(sale),
+      ...fallbackAppointmentIds,
+    ]);
     if (!appointmentIds.length) {
       return false;
     }
@@ -21201,6 +21303,7 @@
       updateAppointmentRecord(appointmentId, {
         paid: false,
         saleCode: '',
+        status: 'em_atendimento',
       });
       const token = getToken();
       try {
@@ -21208,7 +21311,7 @@
           token,
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ codigoVenda: '', pago: false }),
+          body: JSON.stringify({ codigoVenda: '', pago: false, status: 'em_atendimento' }),
           errorMessage: 'Não foi possível atualizar o atendimento após cancelar a venda.',
         });
       } catch (error) {
@@ -21234,6 +21337,61 @@
       console.error('Erro ao atualizar indicadores após cancelar venda do atendimento:', error)
     );
     return true;
+  };
+
+  const repairLoadedAppointmentsFromCancelledSales = async () => {
+    const appointments = Array.isArray(state.appointments) ? state.appointments : [];
+    if (!appointments.length) return 0;
+    const cancelledSales = (Array.isArray(state.completedSales) ? state.completedSales : []).filter(
+      (sale) => sale && sale.status === 'cancelled'
+    );
+    if (!cancelledSales.length) return 0;
+    const byAppointmentId = new Map();
+    cancelledSales.forEach((sale) => {
+      const saleCode = String(sale.saleCode || '').trim();
+      if (!saleCode) return;
+      getSaleAppointmentIds(sale).forEach((appointmentId) => {
+        if (!appointmentId) return;
+        byAppointmentId.set(appointmentId, saleCode);
+      });
+    });
+    if (!byAppointmentId.size) return 0;
+    let repaired = 0;
+    for (const appointment of appointments) {
+      const appointmentId = normalizeId(appointment?.id || '');
+      if (!appointmentId) continue;
+      const cancelledSaleCode = byAppointmentId.get(appointmentId);
+      if (!cancelledSaleCode) continue;
+      const currentSaleCode = String(appointment.saleCode || '').trim();
+      const currentPaid = Boolean(appointment.paid);
+      if (currentSaleCode !== cancelledSaleCode && !(currentPaid && !currentSaleCode)) {
+        continue;
+      }
+      updateAppointmentRecord(appointmentId, {
+        paid: false,
+        saleCode: '',
+        status: 'em_atendimento',
+      });
+      const token = getToken();
+      try {
+        await fetchWithOptionalAuth(`${API_BASE}/func/agendamentos/${appointmentId}`, {
+          token,
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ codigoVenda: '', pago: false, status: 'em_atendimento' }),
+          errorMessage: 'Não foi possível corrigir um atendimento vinculado a venda cancelada.',
+        });
+        repaired += 1;
+      } catch (error) {
+        console.error('Erro ao corrigir atendimento de venda cancelada:', error);
+      }
+    }
+    if (repaired > 0) {
+      refreshAppointmentMetrics({ force: true }).catch((error) =>
+        console.error('Erro ao atualizar métricas após corrigir atendimentos cancelados:', error)
+      );
+    }
+    return repaired;
   };
 
   const registerCompletedSaleRecord = (options = {}) => {
@@ -21474,6 +21632,66 @@
 
   const findCompletedSaleById = (saleId) =>
     state.completedSales.find((sale) => sale.id === saleId);
+
+  const findDeliveryOrderIndexBySale = (sale) => {
+    if (!sale || typeof sale !== 'object') return -1;
+    const saleId = normalizeId(sale.id || '');
+    const saleCode = String(sale.saleCode || '').trim();
+    return state.deliveryOrders.findIndex((order) => {
+      if (!order || typeof order !== 'object') return false;
+      const orderSaleRecordId = normalizeId(order.saleRecordId || '');
+      if (saleId && orderSaleRecordId && orderSaleRecordId === saleId) return true;
+      if (!orderSaleRecordId && saleCode && String(order.saleCode || '').trim() === saleCode) return true;
+      return false;
+    });
+  };
+
+  const removeDeliveryOrderLinkedToSale = (sale) => {
+    const index = findDeliveryOrderIndexBySale(sale);
+    if (index < 0) return null;
+    const [removed] = state.deliveryOrders.splice(index, 1);
+    if (state.deliveryFinalizingOrderId && removed?.id === state.deliveryFinalizingOrderId) {
+      state.deliveryFinalizingOrderId = '';
+    }
+    return removed || null;
+  };
+
+  const pruneCancelledDeliveryOrders = () => {
+    if (!Array.isArray(state.deliveryOrders) || !state.deliveryOrders.length) return 0;
+    const cancelledSalesById = new Set(
+      (Array.isArray(state.completedSales) ? state.completedSales : [])
+        .filter((sale) => sale && sale.status === 'cancelled' && sale.id)
+        .map((sale) => normalizeId(sale.id))
+        .filter(Boolean)
+    );
+    const cancelledSalesByCode = new Set(
+      (Array.isArray(state.completedSales) ? state.completedSales : [])
+        .filter((sale) => sale && sale.status === 'cancelled' && sale.saleCode)
+        .map((sale) => String(sale.saleCode).trim())
+        .filter(Boolean)
+    );
+    if (!cancelledSalesById.size && !cancelledSalesByCode.size) return 0;
+    const before = state.deliveryOrders.length;
+    state.deliveryOrders = state.deliveryOrders.filter((order) => {
+      if (!order || typeof order !== 'object') return false;
+      const orderSaleRecordId = normalizeId(order.saleRecordId || '');
+      const orderSaleCode = String(order.saleCode || '').trim();
+      if (orderSaleRecordId && cancelledSalesById.has(orderSaleRecordId)) {
+        if (state.deliveryFinalizingOrderId === order.id) {
+          state.deliveryFinalizingOrderId = '';
+        }
+        return false;
+      }
+      if (!orderSaleRecordId && orderSaleCode && cancelledSalesByCode.has(orderSaleCode)) {
+        if (state.deliveryFinalizingOrderId === order.id) {
+          state.deliveryFinalizingOrderId = '';
+        }
+        return false;
+      }
+      return true;
+    });
+    return Math.max(0, before - state.deliveryOrders.length);
+  };
 
   const handleSaleCardToggle = (saleId) => {
     const sale = findCompletedSaleById(saleId);
@@ -21782,6 +22000,30 @@
       if (method) {
         method.valor = Math.max(0, safeNumber(method.valor) - amount);
       }
+      if (Array.isArray(state.caixaInfo.previstoPagamentos)) {
+        let previstoMethod = null;
+        if (paymentId) {
+          previstoMethod =
+            state.caixaInfo.previstoPagamentos.find((item) => item.id === paymentId) ||
+            state.caixaInfo.previstoPagamentos.find(
+              (item) => String(item.raw?._id || '') === paymentId
+            );
+        }
+        if (!previstoMethod && paymentLabel) {
+          previstoMethod = state.caixaInfo.previstoPagamentos.find((item) => item.label === paymentLabel);
+        }
+        if (!previstoMethod && paymentType) {
+          const normalizedType = String(paymentType || '').toLowerCase();
+          previstoMethod = state.caixaInfo.previstoPagamentos.find((item) => {
+            const baseType = String(item.type || '').toLowerCase();
+            const rawType = String(item.raw?.tipo || item.raw?.type || '').toLowerCase();
+            return baseType === normalizedType || rawType === normalizedType;
+          });
+        }
+        if (previstoMethod) {
+          previstoMethod.valor = Math.max(0, safeNumber(previstoMethod.valor) - amount);
+        }
+      }
     });
     renderPayments();
     if (totalRemoved > 0) {
@@ -21791,6 +22033,7 @@
       );
     }
     updateSummary();
+    state.caixaInfo.fechamentoPrevisto = sumPayments(state.caixaInfo.previstoPagamentos || []);
     updateStatusBadge();
     scheduleStatePersist();
     if (totalRemoved > 0) {
@@ -21900,10 +22143,14 @@
       sale.cancellationAtLabel = toDateLabel(sale.cancellationAt);
       sale.inventoryProcessed = false;
       sale.inventoryProcessedAt = null;
+      const removedDeliveryOrder = removeDeliveryOrderLinkedToSale(sale);
       revertSaleCashMovements(sale);
       await removeSaleAccountsReceivable(sale);
       renderSalesList();
-      await revertAppointmentAfterSaleCancellation(sale);
+      renderDeliveryOrders();
+      await revertAppointmentAfterSaleCancellation(sale, {
+        appointmentIds: getAppointmentIdsFromDeliveryOrder(removedDeliveryOrder),
+      });
       closeSaleCancelModal();
       notify('Venda cancelada com sucesso.', 'success');
       scheduleStatePersist({ immediate: true });
@@ -22646,6 +22893,7 @@
         };
       });
     state.salesFilters = { start: getTodayIsoDate(), end: getTodayIsoDate() };
+    state.deliveryFilters = { start: getTodayIsoDate(), end: getTodayIsoDate() };
     const mergedReceivables = [...saleReceivables];
     normalizedRootReceivables.forEach((entry) => {
       const alreadyRegistered = mergedReceivables.some((item) => item.id === entry.id);
@@ -22677,6 +22925,10 @@
     state.deliveryOrders = deliveryOrdersFonte
       .map((order) => normalizeDeliveryOrderForPersist(order))
       .filter(Boolean);
+    const removedCancelledDeliveryOrders = pruneCancelledDeliveryOrders();
+    if (removedCancelledDeliveryOrders > 0) {
+      scheduleStatePersist();
+    }
     if (pdv?.budgetSequence != null) {
       state.budgetSequence = Math.max(1, Number.parseInt(pdv.budgetSequence, 10) || 1);
     } else if (pdv?.orcamentoSequencia != null) {
@@ -23612,6 +23864,8 @@
     elements.budgetPresets?.addEventListener('click', handleBudgetPresetClick);
     elements.budgetStart?.addEventListener('change', handleBudgetDateChange);
     elements.budgetEnd?.addEventListener('change', handleBudgetDateChange);
+    elements.deliveryStart?.addEventListener('change', handleDeliveryDateChange);
+    elements.deliveryEnd?.addEventListener('change', handleDeliveryDateChange);
     elements.salesStart?.addEventListener('change', handleSalesDateChange);
     elements.salesEnd?.addEventListener('change', handleSalesDateChange);
     elements.budgetList?.addEventListener('click', handleBudgetListClick);
