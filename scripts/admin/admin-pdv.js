@@ -9310,11 +9310,9 @@
         return;
       }
 
-      if (
-        state.customerSearchTarget === 'sale' &&
-        state.saleSource !== 'ifood' &&
-        state.saleSource !== 'delivery'
-      ) {
+      const keepDeliveryContext =
+        state.saleSource === 'delivery' && Boolean(state.deliverySelectedAddress);
+      if (state.customerSearchTarget === 'sale' && state.saleSource !== 'ifood' && !keepDeliveryContext) {
         resetRegularSaleDeliveryContext();
       }
       setSaleCustomer(customerToBind, state.modalSelectedPet);
@@ -13470,6 +13468,7 @@
     state.vendaDesconto = 0;
     state.vendaAcrescimo = 0;
     state.deliveryStatusOverride = null;
+    state.saleSource = '';
     setSaleCustomer(null, null);
     clearSelectedProduct();
     clearSaleSearchAreas();
@@ -20815,7 +20814,9 @@
     state.vendaPagamentos = [];
     state.vendaDesconto = 0;
     state.vendaAcrescimo = 0;
-    if (state.saleSource !== 'delivery' && state.saleSource !== 'ifood') {
+    const keepDeliveryContext =
+      state.saleSource === 'delivery' && Boolean(state.deliverySelectedAddress);
+    if (state.saleSource !== 'ifood' && !keepDeliveryContext) {
       resetRegularSaleDeliveryContext();
     }
     const primaryAppointment = selectedAppointments[0];
