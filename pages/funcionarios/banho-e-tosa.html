@@ -91,16 +91,16 @@
   <script type="module" src="../../scripts/funcionarios/banhoetosa/index.js"></script>
 
   <!-- MODAL: Adicionar Serviço na Agenda -->
-  <div id="modal-add-servico" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
-    <div class="bg-white w-full max-w-3xl rounded-lg shadow-lg">
-      <div class="flex justify-between items-center px-6 py-4 border-b">
+  <div id="modal-add-servico" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 p-3 sm:p-4">
+    <div class="agenda-add-modal-shell bg-white w-full rounded-2xl shadow-xl flex flex-col overflow-hidden">
+      <div class="flex justify-between items-center px-5 py-3 border-b">
         <h2 class="text-xl font-semibold">Adicionar Serviço</h2>
         <button id="modal-add-close" class="text-gray-500 hover:text-gray-700">
-          <i class="fa-solid fa-xmark text-xl"></i>
+          <i class="fa-solid fa-xmark text-lg"></i>
         </button>
       </div>
 
-      <div class="px-6 py-5 space-y-4">
+      <div class="agenda-add-modal-body px-5 py-4 space-y-4 overflow-y-auto flex-1">
         <!-- Empresa e Data -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -175,7 +175,7 @@
         <!-- Itens do Agendamento (lista de serviços) -->
         <div id="add-serv-list-wrap" class="border-t pt-4">
           <div class="text-sm font-medium text-gray-700 mb-2">Serviços adicionados</div>
-          <div class="overflow-x-auto rounded-md border border-gray-200">
+          <div class="agenda-add-services-table-wrap overflow-x-auto rounded-md border border-gray-200">
             <table class="min-w-full divide-y divide-gray-200 text-sm">
               <thead class="bg-gray-50">
                 <tr class="text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
@@ -199,7 +199,7 @@
           </div>
         </div>
 
-      <div class="px-6 py-4 border-t flex items-center justify-between gap-3">
+      <div class="agenda-add-modal-footer px-5 py-3 border-t flex items-center justify-between gap-3">
         <button id="modal-add-delete" class="px-4 py-2 rounded-lg border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 hidden">
           Excluir
         </button>

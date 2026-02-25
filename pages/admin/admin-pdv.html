@@ -1127,7 +1127,7 @@
 
     <div id="pdv-appointment-modal" class="fixed inset-0 z-[55] hidden">
         <div class="absolute inset-0 bg-slate-900/60" data-appointment-dismiss="backdrop"></div>
-        <div class="relative mx-auto mt-10 flex h-[85vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div id="pdv-appointment-modal-shell" class="relative mx-auto mt-10 flex w-full max-w-[1352px] min-h-0 transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl transition-all duration-200 ease-out" style="height:90vh; min-height:90vh; max-height:90vh;">
             <div class="flex items-center justify-between border-b border-gray-200 px-6 py-4">
                 <div>
                     <h2 class="text-lg font-semibold text-gray-800">Importar atendimento</h2>

@@ -2039,17 +2039,23 @@
     const saldoValor = safeNumber(state.summary.saldo);
     const recebimentosClienteValor = safeNumber(state.summary.recebimentosCliente);
 
-    const recebimentosFonte = Array.isArray(state.caixaInfo.previstoPagamentos)
+    const caixaAbertoComSaldoPrevistoAtual = state.caixaAberto && !state.allowApuradoEdit;
+    const previstoSemCanceladas = Array.isArray(state.caixaInfo.previstoPagamentos)
       ? buildCaixaPrevistoPagamentosWithoutCancelledSales(state.caixaInfo.previstoPagamentos)
       : [];
+    const recebimentosFonte = caixaAbertoComSaldoPrevistoAtual
+      ? state.pagamentos
+      : previstoSemCanceladas;
     const recebimentosItems = createPaymentItems(recebimentosFonte);
     const recebimentosTotal = sumPayments(recebimentosFonte);
 
     const hasPrevistoPagamentos = Array.isArray(state.caixaInfo.previstoPagamentos)
       ? state.caixaInfo.previstoPagamentos.length > 0
       : false;
-    const previstoFonte = hasPrevistoPagamentos
-      ? buildCaixaPrevistoPagamentosWithoutCancelledSales(state.caixaInfo.previstoPagamentos)
+    const previstoFonte = caixaAbertoComSaldoPrevistoAtual
+      ? state.pagamentos
+      : hasPrevistoPagamentos
+      ? previstoSemCanceladas
       : state.pagamentos;
     const previstoItems = createPaymentItems(previstoFonte);
     const previstoTotal = sumPayments(previstoFonte);
@@ -18014,15 +18020,14 @@
     const cidade = (elements.deliveryAddressFields?.cidade?.value || '').trim();
     const uf = String(elements.deliveryAddressFields?.uf?.value || 'RJ').trim().toUpperCase();
     const complemento = (elements.deliveryAddressFields?.complemento?.value || '').trim();
-    const dddMain = normalizePhoneDigits(elements.deliveryPhoneDdd?.value || '');
-    const phoneMain = normalizePhoneDigits(elements.deliveryPhoneNumber?.value || '');
     const ddd1 = normalizePhoneDigits(elements.deliveryPhone1Ddd?.value || '');
     const phone1 = normalizePhoneDigits(elements.deliveryPhone1Number?.value || '');
     const ddd2 = normalizePhoneDigits(elements.deliveryPhone2Ddd?.value || '');
     const phone2 = normalizePhoneDigits(elements.deliveryPhone2Number?.value || '');
-    const mainPhone = `${dddMain}${phoneMain}`;
     const phoneOne = `${ddd1}${phone1}`;
     const phoneTwo = `${ddd2}${phone2}`;
+    const primaryRegisteredPhone = phoneOne || phoneTwo;
+    const secondaryRegisteredPhone = phoneOne && phoneTwo ? phoneTwo : '';
     const isCnpj = documentDigits.length === 14;
     const tipoConta = isCnpj ? 'pessoa_juridica' : 'pessoa_fisica';
     const empresaId = getActiveSellerCompanyId() || state.selectedStore || '';
@@ -18031,10 +18036,11 @@
       pais: 'Brasil',
       empresaId,
       email,
-      celular: mainPhone,
-      telefone: phoneOne || mainPhone,
-      celular2: phoneTwo,
-      telefone2: phoneTwo,
+      // Campo "Telefone" do topo do modal é somente pesquisa; cadastro usa apenas Telefone 1/2.
+      celular: primaryRegisteredPhone,
+      telefone: primaryRegisteredPhone,
+      celular2: secondaryRegisteredPhone,
+      telefone2: secondaryRegisteredPhone,
       limiteCredito: 0,
     };
     if (isCnpj) {
@@ -18063,6 +18069,19 @@
       payload.complemento = complemento;
     }
     return payload;
+  };
+
+  const syncDeliveryLookupPhoneFromCustomerFields = () => {
+    if (!elements.deliveryPhoneDdd || !elements.deliveryPhoneNumber) return;
+    const ddd1 = normalizePhoneDigits(elements.deliveryPhone1Ddd?.value || '');
+    const phone1 = normalizePhoneDigits(elements.deliveryPhone1Number?.value || '');
+    const ddd2 = normalizePhoneDigits(elements.deliveryPhone2Ddd?.value || '');
+    const phone2 = normalizePhoneDigits(elements.deliveryPhone2Number?.value || '');
+    const preferredDdd = ddd1 || ddd2;
+    const preferredNumber = phone1 || phone2;
+    if (!preferredDdd && !preferredNumber) return;
+    elements.deliveryPhoneDdd.value = preferredDdd || elements.deliveryPhoneDdd.value || '';
+    elements.deliveryPhoneNumber.value = preferredNumber || '';
   };
 
   const resolveCustomerEmail = (customer) =>
@@ -18267,6 +18286,7 @@
         resolvedDuplicate = Boolean(createdResult?.resolvedDuplicate);
       }
       await applyDeliveryCustomerToForm(savedCustomer);
+      syncDeliveryLookupPhoneFromCustomerFields();
       if (editingCustomerId) {
         notify('Cliente atualizado com sucesso.', 'success');
       } else if (resolvedDuplicate) {
@@ -20070,11 +20090,22 @@
   const getFilteredAppointmentsByStatus = (appointments) => {
     const list = Array.isArray(appointments) ? appointments : [];
     const statusFilter = normalizeAppointmentStatusFilter(state.appointmentStatusFilter);
-    if (statusFilter === 'todos') return list;
-    return list.filter((appointment) => {
-      const appointmentStatus = normalizeAppointmentStatusFilter(appointment?.status || '');
-      return appointmentStatus === statusFilter;
+    const filtered =
+      statusFilter === 'todos'
+        ? [...list]
+        : list.filter((appointment) => {
+            const appointmentStatus = normalizeAppointmentStatusFilter(appointment?.status || '');
+            return appointmentStatus === statusFilter;
+          });
+    filtered.sort((a, b) => {
+      const aPaid = Boolean(a?.paid || a?.saleCode);
+      const bPaid = Boolean(b?.paid || b?.saleCode);
+      if (aPaid !== bPaid) {
+        return aPaid ? 1 : -1;
+      }
+      return getTimeValue(a?.scheduledAt) - getTimeValue(b?.scheduledAt);
     });
+    return filtered;
   };
   const getAppointmentRangeFromFilters = (filters = state.appointmentFilters) => {
     const preset = (filters?.preset || 'today').toLowerCase();
@@ -21633,6 +21664,49 @@
   const findCompletedSaleById = (saleId) =>
     state.completedSales.find((sale) => sale.id === saleId);
 
+  const hasCashContributionsToRevert = (sale) =>
+    normalizeCashContributions(sale?.cashContributions || []).some((entry) => safeNumber(entry.amount) > 0);
+
+  const hasSaleCancellationHistoryEntry = (sale) => {
+    if (!sale || typeof sale !== 'object') return false;
+    const saleCode = String(sale.saleCode || sale.saleCodeLabel || '').trim().toLowerCase();
+    const cancelledAt = sale.cancellationAt ? String(sale.cancellationAt) : '';
+    return (Array.isArray(state.history) ? state.history : []).some((entry) => {
+      if (!entry || entry.id !== 'cancelamento-venda') return false;
+      const label = String(entry.label || '').toLowerCase();
+      const paymentLabel = String(entry.paymentLabel || '').toLowerCase();
+      if (saleCode && (label.includes(saleCode) || paymentLabel.includes(saleCode))) {
+        return true;
+      }
+      if (cancelledAt && entry.timestamp && String(entry.timestamp) >= cancelledAt) {
+        const sameAmount =
+          Math.abs(safeNumber(entry.amount) - normalizeCashContributions(sale.cashContributions || []).reduce(
+            (sum, item) => sum + safeNumber(item.amount),
+            0
+          )) <= 0.009;
+        return sameAmount;
+      }
+      return false;
+    });
+  };
+
+  const repairCancelledSalesCashReversals = () => {
+    const cancelledSales = (Array.isArray(state.completedSales) ? state.completedSales : []).filter(
+      (sale) => sale && sale.status === 'cancelled'
+    );
+    if (!cancelledSales.length) return 0;
+    let repaired = 0;
+    cancelledSales.forEach((sale) => {
+      if (!hasCashContributionsToRevert(sale)) return;
+      if (hasSaleCancellationHistoryEntry(sale)) return;
+      const reverted = revertSaleCashMovements(sale);
+      if (reverted > 0) {
+        repaired += 1;
+      }
+    });
+    return repaired;
+  };
+
   const findDeliveryOrderIndexBySale = (sale) => {
     if (!sale || typeof sale !== 'object') return -1;
     const saleId = normalizeId(sale.id || '');
@@ -22927,6 +23001,10 @@
       .filter(Boolean);
     const removedCancelledDeliveryOrders = pruneCancelledDeliveryOrders();
     if (removedCancelledDeliveryOrders > 0) {
+      scheduleStatePersist();
+    }
+    const repairedCancelledSalesCash = repairCancelledSalesCashReversals();
+    if (repairedCancelledSalesCash > 0) {
       scheduleStatePersist();
     }
     if (pdv?.budgetSequence != null) {

@@ -93,6 +93,32 @@
     }
   }
 
+  function applyAgendaTextClamp(element, lines = 2) {
+    if (!element) return;
+    element.style.display = '-webkit-box';
+    element.style.webkitBoxOrient = 'vertical';
+    element.style.WebkitBoxOrient = 'vertical';
+    element.style.webkitLineClamp = String(lines);
+    element.style.WebkitLineClamp = String(lines);
+    element.style.overflow = 'hidden';
+    element.style.wordBreak = 'break-word';
+  }
+
+  function getAgendaServicesPreview(rawServices, maxVisible = 2) {
+    const names = String(rawServices || '')
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean);
+    if (!names.length) return { preview: '', tooltip: '', names: [] };
+    const hiddenCount = Math.max(0, names.length - maxVisible);
+    const visible = hiddenCount ? names.slice(0, maxVisible) : names;
+    return {
+      preview: hiddenCount ? `${visible.join(', ')} +${hiddenCount}` : visible.join(', '),
+      tooltip: names.join('\n'),
+      names,
+    };
+  }
+
   const SALE_VIA_PDV_MESSAGE = 'Finalize a venda pelo PDV para gerar o código automaticamente.';
 
   function openVendaModal() {
@@ -735,20 +761,26 @@
           ${renderStatusBadge(a.status)}
         `;
 
+        const servicesInfo = getAgendaServicesPreview(a.servico);
         const bodyEl = document.createElement('div');
         bodyEl.classList.add('agenda-card__body');
+        if (servicesInfo.tooltip) bodyEl.title = servicesInfo.tooltip;
         if (a.observacoes && String(a.observacoes).trim()) {
           const svc = document.createElement('div');
           svc.className = 'agenda-card__service text-gray-600 clamp-2';
-          svc.textContent = a.servico || '';
+          svc.textContent = servicesInfo.preview || '';
+          if (servicesInfo.tooltip) svc.title = servicesInfo.tooltip;
+          applyAgendaTextClamp(svc, 2);
           const obs = document.createElement('div');
           obs.className = 'agenda-card__note mt-1 text-gray-700 italic clamp-2';
           obs.textContent = String(a.observacoes).trim();
+          applyAgendaTextClamp(obs, 2);
           bodyEl.appendChild(svc);
           bodyEl.appendChild(obs);
         } else {
           bodyEl.classList.add('text-gray-600', 'clamp-2');
-          bodyEl.textContent = a.servico || '';
+          bodyEl.textContent = servicesInfo.preview || '';
+          applyAgendaTextClamp(bodyEl, 2);
         }
 
         const footerEl = document.createElement('div');

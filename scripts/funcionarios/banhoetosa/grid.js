@@ -15,6 +15,37 @@ const DEFAULT_BUSINESS_START = 8;
 const DEFAULT_BUSINESS_END = 19;
 const WEEKDAY_KEYS = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
 
+function applyAgendaTextClamp(element, lines = 2) {
+  if (!element) return;
+  element.style.display = '-webkit-box';
+  element.style.webkitBoxOrient = 'vertical';
+  element.style.WebkitBoxOrient = 'vertical';
+  element.style.webkitLineClamp = String(lines);
+  element.style.WebkitLineClamp = String(lines);
+  element.style.overflow = 'hidden';
+  element.style.wordBreak = 'break-word';
+}
+
+function getAgendaServicesPreview(rawServices, maxVisible = 2) {
+  const names = String(rawServices || '')
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (!names.length) {
+    return { preview: '', tooltip: '', names: [] };
+  }
+
+  const hiddenCount = Math.max(0, names.length - maxVisible);
+  const previewNames = hiddenCount ? names.slice(0, maxVisible) : names;
+  const preview = hiddenCount
+    ? `${previewNames.join(', ')} +${hiddenCount}`
+    : previewNames.join(', ');
+  const tooltip = names.join('\n');
+
+  return { preview, tooltip, names };
+}
+
 function pickFirst(...values) {
   for (const value of values) {
     if (value === null || value === undefined) continue;
@@ -980,20 +1011,26 @@ export function renderGrid() {
     headerEl.appendChild(titleEl);
     headerEl.appendChild(createStatusBadgeElement(a, { size: 'compact' }));
 
+    const servicesInfo = getAgendaServicesPreview(a.servico);
     const bodyEl = document.createElement('div');
     bodyEl.classList.add('agenda-card__body');
+    if (servicesInfo.tooltip) bodyEl.title = servicesInfo.tooltip;
     if (a.observacoes && String(a.observacoes).trim()) {
       const svc = document.createElement('div');
       svc.className = 'agenda-card__service text-gray-600 clamp-2';
-      svc.textContent = a.servico || '';
+      svc.textContent = servicesInfo.preview || '';
+      if (servicesInfo.tooltip) svc.title = servicesInfo.tooltip;
+      applyAgendaTextClamp(svc, 2);
       const obs = document.createElement('div');
       obs.className = 'agenda-card__note mt-1 text-gray-700 italic clamp-2';
       obs.textContent = String(a.observacoes).trim();
+      applyAgendaTextClamp(obs, 2);
       bodyEl.appendChild(svc);
       bodyEl.appendChild(obs);
     } else {
       bodyEl.classList.add('text-gray-600', 'clamp-2');
-      bodyEl.textContent = a.servico || '';
+      bodyEl.textContent = servicesInfo.preview || '';
+      applyAgendaTextClamp(bodyEl, 2);
     }
 
     const footerEl = document.createElement('div');
@@ -1102,7 +1139,12 @@ export function renderWeekGrid() {
     card.className = 'agenda-card agenda-card--compact cursor-pointer select-none px-2 py-1';
     card.dataset.status = meta.key;
     card.setAttribute('draggable', 'true');
-    card.title = [ a.pet || '', a.servico || '', (a.observacoes ? `Obs: ${String(a.observacoes).trim()}` : '') ].filter(Boolean).join(' • ');
+    const weekServicesInfo = getAgendaServicesPreview(a.servico);
+    card.title = [
+      a.pet || '',
+      weekServicesInfo.tooltip ? `Serviços:\n${weekServicesInfo.tooltip}` : '',
+      (a.observacoes ? `Obs: ${String(a.observacoes).trim()}` : ''),
+    ].filter(Boolean).join('\n');
 
     const headerEl = document.createElement('div');
     headerEl.className = 'agenda-card__head flex justify-between';
@@ -1116,7 +1158,8 @@ export function renderWeekGrid() {
     bodyEl.classList.add('agenda-card__body');
     const svc = document.createElement('div');
     svc.className = 'agenda-card__service text-gray-600 truncate';
-    svc.textContent = a.servico || '';
+    svc.textContent = weekServicesInfo.preview || '';
+    if (weekServicesInfo.tooltip) svc.title = weekServicesInfo.tooltip;
     bodyEl.appendChild(svc);
     if (a.observacoes && String(a.observacoes).trim()) {
       const obs = document.createElement('div');
@@ -1217,7 +1260,12 @@ export function renderMonthGrid() {
       card.className = 'agenda-card agenda-card--compact cursor-pointer select-none px-2 py-1';
       card.dataset.status = meta.key;
       card.setAttribute('draggable', 'true');
-      card.title = [ a.pet || '', a.servico || '', (a.observacoes ? `Obs: ${String(a.observacoes).trim()}` : '') ].filter(Boolean).join(' • ');
+      const monthServicesInfo = getAgendaServicesPreview(a.servico);
+      card.title = [
+        a.pet || '',
+        monthServicesInfo.tooltip ? `Serviços:\n${monthServicesInfo.tooltip}` : '',
+        (a.observacoes ? `Obs: ${String(a.observacoes).trim()}` : ''),
+      ].filter(Boolean).join('\n');
       const headerEl = document.createElement('div');
       headerEl.className = 'agenda-card__head flex items-center gap-2';
       const timeChip = document.createElement('span');
