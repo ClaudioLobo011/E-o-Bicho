@@ -9310,7 +9310,11 @@
         return;
       }
 
-      if (state.customerSearchTarget === 'sale' && state.saleSource !== 'ifood') {
+      if (
+        state.customerSearchTarget === 'sale' &&
+        state.saleSource !== 'ifood' &&
+        state.saleSource !== 'delivery'
+      ) {
         resetRegularSaleDeliveryContext();
       }
       setSaleCustomer(customerToBind, state.modalSelectedPet);
@@ -20811,7 +20815,9 @@
     state.vendaPagamentos = [];
     state.vendaDesconto = 0;
     state.vendaAcrescimo = 0;
-    resetRegularSaleDeliveryContext();
+    if (state.saleSource !== 'delivery' && state.saleSource !== 'ifood') {
+      resetRegularSaleDeliveryContext();
+    }
     const primaryAppointment = selectedAppointments[0];
     const customer = buildSaleCustomerFromAppointment(primaryAppointment);
     await enrichSaleCustomerFromAppointment(customer, primaryAppointment);
