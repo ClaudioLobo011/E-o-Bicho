@@ -847,6 +847,7 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
     } = req.body || {};
 
     const hasStatusField = Object.prototype.hasOwnProperty.call(req.body || {}, 'status');
+    const hasProfessionalField = Object.prototype.hasOwnProperty.call(req.body || {}, 'profissionalId');
     let normalizedStatus = null;
     if (hasStatusField) {
       normalizedStatus = normalizeServiceStatus(status, null);
@@ -859,7 +860,10 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
     if (storeId && mongoose.Types.ObjectId.isValid(storeId)) set.store = storeId;
     if (clienteId && mongoose.Types.ObjectId.isValid(clienteId)) set.cliente = clienteId;
     if (servicoId && mongoose.Types.ObjectId.isValid(servicoId)) set.servico = servicoId; // compat
-    if (profissionalId && mongoose.Types.ObjectId.isValid(profissionalId)) set.profissional = profissionalId;
+    if (hasProfessionalField) {
+      if (profissionalId && mongoose.Types.ObjectId.isValid(profissionalId)) set.profissional = profissionalId;
+      else set.profissional = null;
+    }
     if (typeof valor !== 'undefined') set.valor = Number(valor);
     if (typeof codigoVenda !== 'undefined') {
       const normalizedSaleCode = String(codigoVenda || '').trim();
@@ -962,6 +966,7 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
       && normalizedServiceItemIds.length
       && (
         (profissionalId && mongoose.Types.ObjectId.isValid(profissionalId))
+        || hasProfessionalField
         || hasStatusField
       )
     ) {
@@ -979,8 +984,12 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
         if (currentProf && mongoose.Types.ObjectId.isValid(currentProf)) {
           payload.profissional = currentProf;
         }
-        if (target && profissionalId && mongoose.Types.ObjectId.isValid(profissionalId)) {
-          payload.profissional = profissionalId;
+        if (target && hasProfessionalField) {
+          if (profissionalId && mongoose.Types.ObjectId.isValid(profissionalId)) {
+            payload.profissional = profissionalId;
+          } else {
+            delete payload.profissional;
+          }
         }
         if (typeof it.hora === 'string' && it.hora.trim()) {
           payload.hora = it.hora.trim();
@@ -2653,13 +2662,13 @@ router.get('/agendamentos/range', authMiddleware, requireStaff, async (req, res)
 router.post('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
   try {
     const { storeId, clienteId, petId, servicoId, profissionalId, scheduledAt, valor, pago, status, servicos, observacoes } = req.body || {};
-    if (!storeId || !clienteId || !petId || !profissionalId || !scheduledAt) {
+    if (!storeId || !clienteId || !petId || !scheduledAt) {
       return res.status(400).json({ message: 'Campos obrigatórios ausentes.' });
     }
     if (!mongoose.Types.ObjectId.isValid(storeId)
       || !mongoose.Types.ObjectId.isValid(clienteId)
       || !mongoose.Types.ObjectId.isValid(petId)
-      || !mongoose.Types.ObjectId.isValid(profissionalId)) {
+      || (profissionalId && !mongoose.Types.ObjectId.isValid(profissionalId))) {
       return res.status(400).json({ message: 'IDs inválidos.' });
     }
 

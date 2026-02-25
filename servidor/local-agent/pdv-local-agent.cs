@@ -15,7 +15,7 @@ namespace PdvLocalAgent
 {
     public class Program
     {
-        private static readonly string Version = "1.0.3";
+        private static readonly string Version = "1.1.3";
         private static readonly JavaScriptSerializer Serializer = new JavaScriptSerializer();
         private static AgentConfig Config;
         private static Logger Log;
@@ -816,6 +816,10 @@ try {
         public string name { get; set; }
         public string document { get; set; }
         public string contact { get; set; }
+        public string celular { get; set; }
+        public string telefone { get; set; }
+        public string celular2 { get; set; }
+        public string telefone2 { get; set; }
         public string address { get; set; }
         public string pet { get; set; }
     }
@@ -1340,6 +1344,7 @@ try {
                 {
                     AddLineCentered(("CONSUMIDOR: " + doc.customer.document).ToUpperInvariant(), false);
                 }
+                PrintCustomerPhonesCenteredCompact(doc.customer);
                 if (!string.IsNullOrWhiteSpace(doc.customer.address))
                 {
                     string upperAddress = doc.customer.address.ToUpperInvariant();
@@ -1496,7 +1501,11 @@ try {
                 PrintSubsectionTitle("Cliente");
                 AddLine("Nome: " + doc.customer.name);
                 PrintMetaLine("Documento", doc.customer.document);
-                PrintMetaLine("Contato", doc.customer.contact);
+                if (!IsPhoneDuplicateOfCustomerPhones(doc.customer.contact, doc.customer))
+                {
+                    PrintMetaLine("Contato", doc.customer.contact);
+                }
+                PrintCustomerPhonesCompact(doc.customer);
                 PrintMetaLine("Endereco", doc.customer.address);
                 PrintMetaLine("Pet", doc.customer.pet);
             }
@@ -1702,6 +1711,115 @@ try {
             if (!string.IsNullOrWhiteSpace(right))
             {
                 AddLine(right);
+            }
+        }
+
+        private string NormalizePhoneDigitsText(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return string.Empty;
+            }
+            var sb = new StringBuilder();
+            foreach (char ch in value)
+            {
+                if (ch >= '0' && ch <= '9')
+                {
+                    sb.Append(ch);
+                }
+            }
+            return sb.ToString();
+        }
+
+        private List<KeyValuePair<string, string>> BuildUniqueCustomerPhoneEntries(ReceiptCustomer customer)
+        {
+            var result = new List<KeyValuePair<string, string>>();
+            if (customer == null)
+            {
+                return result;
+            }
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            Action<string, string> add = (label, value) =>
+            {
+                string raw = (value ?? string.Empty).Trim();
+                if (raw.Length == 0) return;
+                string digits = NormalizePhoneDigitsText(raw);
+                string key = digits.Length > 0 ? digits : raw.ToUpperInvariant();
+                if (seen.Contains(key)) return;
+                seen.Add(key);
+                result.Add(new KeyValuePair<string, string>(label, raw));
+            };
+
+            add("Cel", customer.celular);
+            add("Tel", customer.telefone);
+            add("Cel2", customer.celular2);
+            add("Tel2", customer.telefone2);
+
+            return result;
+        }
+
+        private bool IsPhoneDuplicateOfCustomerPhones(string value, ReceiptCustomer customer)
+        {
+            if (string.IsNullOrWhiteSpace(value) || customer == null)
+            {
+                return false;
+            }
+            string valueDigits = NormalizePhoneDigitsText(value);
+            if (valueDigits.Length == 0)
+            {
+                return false;
+            }
+            foreach (var pair in BuildUniqueCustomerPhoneEntries(customer))
+            {
+                string candidateDigits = NormalizePhoneDigitsText(pair.Value);
+                if (candidateDigits.Length == 0) continue;
+                if (string.Equals(candidateDigits, valueDigits, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private void PrintCustomerPhonesCompact(ReceiptCustomer customer)
+        {
+            var entries = BuildUniqueCustomerPhoneEntries(customer);
+            for (int i = 0; i < entries.Count; i += 2)
+            {
+                var left = entries[i];
+                if (i + 1 < entries.Count)
+                {
+                    var right = entries[i + 1];
+                    PrintMetaPair(left.Key, left.Value, right.Key, right.Value);
+                }
+                else
+                {
+                    PrintMetaLine(left.Key, left.Value);
+                }
+            }
+        }
+
+        private void PrintCustomerPhonesCenteredCompact(ReceiptCustomer customer)
+        {
+            var entries = BuildUniqueCustomerPhoneEntries(customer);
+            for (int i = 0; i < entries.Count; i += 2)
+            {
+                string line;
+                if (i + 1 < entries.Count)
+                {
+                    line = string.Format("{0}: {1} | {2}: {3}",
+                        entries[i].Key, entries[i].Value,
+                        entries[i + 1].Key, entries[i + 1].Value);
+                }
+                else
+                {
+                    line = string.Format("{0}: {1}", entries[i].Key, entries[i].Value);
+                }
+                foreach (var wrapped in WrapText(line.ToUpperInvariant(), Width))
+                {
+                    AddLineCentered(wrapped, false);
+                }
             }
         }
 

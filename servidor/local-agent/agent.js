@@ -480,7 +480,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'GET' && req.url === '/health') {
-    sendJson(res, 200, { ok: true, version: '1.1.0' });
+    sendJson(res, 200, { ok: true, version: '1.1.3' });
     return;
   }
 

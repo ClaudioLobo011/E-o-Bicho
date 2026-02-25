@@ -18,7 +18,7 @@ const AppointmentSchema = new Schema({
     },
     observacao: { type: String, trim: true },
   }],
-  profissional: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  profissional: { type: Schema.Types.ObjectId, ref: 'User', required: false, default: null },
   scheduledAt: { type: Date, required: true },
   valor: { type: Number, required: true, min: 0 },
   pago: { type: Boolean, default: false },

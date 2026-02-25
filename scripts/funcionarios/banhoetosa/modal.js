@@ -1,4 +1,4 @@
-import { api, els, state, money, debounce, todayStr, pad, buildLocalDateTime, isPrivilegedRole, confirmWithModal, notify, statusMeta } from './core.js';
+import { api, els, state, money, debounce, todayStr, pad, buildLocalDateTime, isPrivilegedRole, confirmWithModal, notify, statusMeta, isNoPreferenceProfessionalId, AGENDA_NO_PREFERENCE_PROF_ID } from './core.js';
 import { populateModalProfissionais, updateModalProfissionalLabel, getModalProfissionalTipo, getModalProfissionaisList } from './profissionais.js';
 import { loadAgendamentos } from './agendamentos.js';
 import { renderKpis, renderFilters } from './filters.js';
@@ -161,12 +161,24 @@ window.closeVendaModal = closeVendaModal;
 // Bridges globais para facilitar chamadas diretas a partir do UI sem import circular
 window.__openEditFromUI = (item) => openEditModal(item);
 window.__updateStatusQuick = (id, status, opts) => updateStatusQuick(id, status, opts);
+window.__openAddFromUI = (opts) => openAddModal(opts);
 
 export function openAddModal(preselectProfId) {
   let preselectedId = '';
+  let prefilledDate = '';
+  let prefilledHour = '';
   if (preselectProfId && typeof preselectProfId === 'object') {
     if (typeof preselectProfId.preventDefault === 'function') {
       try { preselectProfId.preventDefault(); } catch {}
+    } else {
+      preselectedId = String(
+        preselectProfId.preselectProfId ??
+        preselectProfId.profissionalId ??
+        preselectProfId.profId ??
+        ''
+      );
+      prefilledDate = String(preselectProfId.date || preselectProfId.day || '').trim();
+      prefilledHour = String(preselectProfId.hour || preselectProfId.hh || '').trim();
     }
   } else if (preselectProfId != null) {
     preselectedId = String(preselectProfId);
@@ -197,12 +209,18 @@ export function openAddModal(preselectProfId) {
     try { if (sid) { populateModalProfissionais(sid, preselectedId); } } catch{}
   }
   if (els.addDateInput) {
-    const date = (els.dateInput?.value) || todayStr();
+    const date = prefilledDate || (els.dateInput?.value) || todayStr();
     els.addDateInput.value = date;
   }
-  const now = new Date();
-  const hh = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
-  if (els.horaInput) els.horaInput.value = hh;
+  if (els.horaInput) {
+    if (/^\d{2}:\d{2}$/.test(prefilledHour)) {
+      els.horaInput.value = prefilledHour;
+    } else {
+      const now = new Date();
+      const hh = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+      els.horaInput.value = hh;
+    }
+  }
   if (els.obsInput) { els.obsInput.value = ''; }
   if (els.statusSelect) els.statusSelect.value = 'agendado';
   if (preselectedId && els.profSelect) {
@@ -385,9 +403,9 @@ export function openEditModal(a) {
     const match = state.profissionais.find(p => String(p.nome || '').trim().toLowerCase() === key);
     if (match) profId = String(match._id);
   }
-  if (els.profSelect && profId) {
-    els.profSelect.value = profId;
-    updateModalProfissionalLabel(profId);
+  if (els.profSelect) {
+    els.profSelect.value = profId || AGENDA_NO_PREFERENCE_PROF_ID;
+    updateModalProfissionalLabel(profId || AGENDA_NO_PREFERENCE_PROF_ID);
   }
   try {
     const sid = els.addStoreSelect?.value || a.storeId || '';
@@ -755,7 +773,8 @@ export async function saveAgendamento() {
     const dateRaw = (els.addDateInput?.value) || (els.dateInput?.value) || todayStr();
     const storeIdSelected = (els.addStoreSelect?.value) || state.selectedStoreId || els.storeSelect?.value;
     const hora = els.horaInput?.value;
-    const defaultProfissionalId = (els.profSelect?.value || '').trim();
+    const defaultProfissionalIdRaw = (els.profSelect?.value || '').trim();
+    const defaultProfissionalId = isNoPreferenceProfessionalId(defaultProfissionalIdRaw) ? '' : defaultProfissionalIdRaw;
     const status = (els.statusSelect?.value) || 'agendado';
     if (!hora) { try { els.horaInput.classList.add('border-red-500'); const p=document.createElement('p'); p.className='form-err text-xs text-red-600 mt-1'; p.textContent='Informe a hora.'; els.horaInput.parentElement.appendChild(p);} catch{}; return; }
     if (!storeIdSelected) { try { (els.addStoreSelect||els.storeSelect).classList.add('border-red-500'); const p=document.createElement('p'); p.className='form-err text-xs text-red-600 mt-1'; p.textContent='Selecione a empresa.'; (els.addStoreSelect||els.storeSelect).parentElement.appendChild(p);} catch{}; return; }
@@ -765,7 +784,8 @@ export async function saveAgendamento() {
     const itemsRaw = Array.isArray(state.tempServicos) ? state.tempServicos : [];
     const normalizedServices = itemsRaw.map((svc) => {
       const profId = svc && svc.profissionalId ? String(svc.profissionalId).trim() : '';
-      const resolvedProf = profId || defaultProfissionalId;
+      const resolvedProfRaw = profId || defaultProfissionalIdRaw;
+      const resolvedProf = isNoPreferenceProfessionalId(resolvedProfRaw) ? '' : resolvedProfRaw;
       const serviceHour = normalizeHourValue((svc && (svc.hora || svc.horario)) || baseHora);
       const obsValueRaw = svc?.observacao ?? svc?.observacoes ?? '';
       const obsValue = typeof obsValueRaw === 'string' ? obsValueRaw : '';
@@ -773,12 +793,13 @@ export async function saveAgendamento() {
       return {
         ...svc,
         profissionalId: resolvedProf ? String(resolvedProf) : '',
+        profissionalSemPreferencia: Boolean(resolvedProfRaw && isNoPreferenceProfessionalId(resolvedProfRaw)),
         hora: serviceHour,
         observacao: obsValue,
         status: statusValue,
       };
     });
-    const missingProfessional = normalizedServices.some((svc) => !svc.profissionalId);
+    const missingProfessional = normalizedServices.some((svc) => !svc.profissionalId && !svc.profissionalSemPreferencia);
     if (missingProfessional) {
       if (window.showToast) window.showToast('Defina um profissional para cada serviço adicionado.', 'warning'); else alert('Defina um profissional para cada serviço adicionado.');
       return;
@@ -790,7 +811,7 @@ export async function saveAgendamento() {
       if (!normalizedServices.length) { try { els.servInput.classList.add('border-red-500'); const p=document.createElement('p'); p.className='form-err text-xs text-red-600 mt-1'; p.textContent='Adicione pelo menos 1 serviço.'; els.servInput.parentElement.appendChild(p);} catch{}; return; }
       const body = {
         storeId: storeIdSelected,
-        profissionalId: primaryProfissionalId,
+        ...(primaryProfissionalId ? { profissionalId: primaryProfissionalId } : {}),
         scheduledAt,
         status,
         observacoes: (els.obsInput?.value || '').trim(),
@@ -846,7 +867,7 @@ export async function saveAgendamento() {
         if (obs) payload.observacao = obs;
         return payload;
       }),
-      profissionalId: primaryProfissionalId,
+      ...(primaryProfissionalId ? { profissionalId: primaryProfissionalId } : {}),
       scheduledAt,
       status,
       observacoes: (els.obsInput?.value || '').trim(),

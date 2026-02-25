@@ -2244,7 +2244,28 @@
       safeNumber(promotionTotals.club);
 
     const clienteAddress = resolveCustomerAddressRecord(customerSource);
-
+    const buildDigitsPhone = (dddValue, numberValue) => {
+      const ddd = normalizePhoneDigits(dddValue || '').slice(0, 2);
+      const number = normalizePhoneDigits(numberValue || '');
+      if (!number) return '';
+      return `${ddd}${number}`;
+    };
+    const uiPhoneCandidates = Array.from(
+      new Set(
+        [
+          buildDigitsPhone(elements.customerPreviewTelefone1Ddd?.value, elements.customerPreviewTelefone1?.value),
+          buildDigitsPhone(elements.customerPreviewTelefone2Ddd?.value, elements.customerPreviewTelefone2?.value),
+          buildDigitsPhone(elements.deliveryPhone1Ddd?.value, elements.deliveryPhone1Number?.value),
+          buildDigitsPhone(elements.deliveryPhone2Ddd?.value, elements.deliveryPhone2Number?.value),
+          buildDigitsPhone(elements.deliveryPhoneDdd?.value, elements.deliveryPhoneNumber?.value),
+        ]
+          .map((value) => normalizePhoneDigits(value))
+          .filter(Boolean)
+      )
+    );
+    const customerPhoneCandidates = Array.from(
+      new Set([...(getCustomerPhoneCandidates(customerSource) || []), ...uiPhoneCandidates])
+    );
     const cliente = customerSource
       ? {
           nome:
@@ -2260,7 +2281,20 @@
           contato:
             customerSource.telefone ||
             customerSource.celular ||
+            customerPhoneCandidates[0] ||
             customerSource.email ||
+            '',
+          celular: customerSource.celular || customerPhoneCandidates[0] || '',
+          telefone: customerSource.telefone || customerPhoneCandidates[1] || '',
+          celular2:
+            customerSource.celularSecundario ||
+            customerSource.celular2 ||
+            customerPhoneCandidates[2] ||
+            '',
+          telefone2:
+            customerSource.telefoneSecundario ||
+            customerSource.telefone2 ||
+            customerPhoneCandidates[3] ||
             '',
           pet: petSource?.nome || '',
           endereco: clienteAddress?.formatted || '',
@@ -2996,6 +3030,12 @@
         buildDeliveryAddressLine(addressSource) ||
         '',
     };
+    const normalizedCustomerPhones = getCustomerPhoneCandidates(
+      (order.customerDetails && typeof order.customerDetails === 'object' ? order.customerDetails : null) ||
+        customerSource ||
+        order.receiptSnapshot?.cliente ||
+        null
+    );
     return {
       id: normalizeId(order.id || order._id || createUid()),
       status: String(order.status || 'registrado'),
@@ -3014,6 +3054,14 @@
         nome: String(customerSource.nome || order.customerName || 'Cliente'),
         documento: String(customerSource.documento || order.customerDocument || ''),
         contato: String(customerSource.contato || order.customerContact || ''),
+        celular: String(customerSource.celular || normalizedCustomerPhones[0] || ''),
+        telefone: String(customerSource.telefone || normalizedCustomerPhones[1] || ''),
+        celular2: String(
+          customerSource.celular2 || customerSource.celularSecundario || normalizedCustomerPhones[2] || ''
+        ),
+        telefone2: String(
+          customerSource.telefone2 || customerSource.telefoneSecundario || normalizedCustomerPhones[3] || ''
+        ),
         endereco: String(customerSource.endereco || ''),
       },
       customerId: normalizeId(order.customerId || customerSource.id || ''),
@@ -10632,6 +10680,26 @@
       state.vendaCliente?.email ||
       clienteBase.contato ||
       '';
+    const buildDigitsPhone = (dddValue, numberValue) => {
+      const ddd = normalizePhoneDigits(dddValue || '').slice(0, 2);
+      const number = normalizePhoneDigits(numberValue || '');
+      if (!number) return '';
+      return `${ddd}${number}`;
+    };
+    const deliveryFormPhones = Array.from(
+      new Set(
+        [
+          buildDigitsPhone(elements.deliveryPhone1Ddd?.value, elements.deliveryPhone1Number?.value),
+          buildDigitsPhone(elements.deliveryPhone2Ddd?.value, elements.deliveryPhone2Number?.value),
+          buildDigitsPhone(elements.deliveryPhoneDdd?.value, elements.deliveryPhoneNumber?.value),
+        ]
+          .map((value) => normalizePhoneDigits(value))
+          .filter(Boolean)
+      )
+    );
+    const deliveryCustomerPhones = Array.from(
+      new Set([...(getCustomerPhoneCandidates(customerDetails || clienteBase || null) || []), ...deliveryFormPhones])
+    );
     const customerAddress =
       clienteBase.endereco || resolveCustomerAddressRecord(state.vendaCliente)?.formatted || '';
     const order = {
@@ -10651,7 +10719,19 @@
         id: customerId || '',
         nome: customerName,
         documento: customerDocument,
-        contato: customerContact,
+        contato: customerContact || deliveryCustomerPhones[0] || '',
+        celular: state.vendaCliente?.celular || deliveryCustomerPhones[0] || '',
+        telefone: state.vendaCliente?.telefone || deliveryCustomerPhones[1] || '',
+        celular2:
+          state.vendaCliente?.celularSecundario ||
+          state.vendaCliente?.celular2 ||
+          deliveryCustomerPhones[2] ||
+          '',
+        telefone2:
+          state.vendaCliente?.telefoneSecundario ||
+          state.vendaCliente?.telefone2 ||
+          deliveryCustomerPhones[3] ||
+          '',
         endereco: customerAddress,
       },
       customerId: customerId || '',
@@ -10895,16 +10975,19 @@
       const orderId = printButton.getAttribute('data-delivery-print');
       const order = state.deliveryOrders.find((item) => item.id === orderId);
       if (order?.receiptSnapshot) {
-        handleConfiguredPrint('venda', { snapshot: order.receiptSnapshot });
+        handleConfiguredPrint('venda', {
+          snapshot: order.receiptSnapshot,
+          customer: order.customerDetails || order.customer || null,
+        });
       }
     }
   };
 
-  const promptDeliveryPrint = (snapshot) => {
+  const promptDeliveryPrint = (snapshot, customer = null) => {
     if (!snapshot) return;
     const shouldPrint = window.confirm('Deseja imprimir o comprovante de delivery?');
     if (shouldPrint) {
-      handleConfiguredPrint('venda', { snapshot });
+      handleConfiguredPrint('venda', { snapshot, customer });
     }
   };
 
@@ -13344,12 +13427,13 @@
           xmlContent: updatedSale.fiscalXmlContent || '',
           qrCodeDataUrl: updatedSale.fiscalQrCodeImage || '',
           qrCodePayload: updatedSale.fiscalQrCodeData || '',
+          customer: updatedSale.customer || saleRecord?.customer || null,
         });
       } else {
-        handleConfiguredPrint('venda', { snapshot: saleSnapshot });
+        handleConfiguredPrint('venda', { snapshot: saleSnapshot, customer: saleRecord?.customer || null });
       }
     } else {
-      handleConfiguredPrint('venda', { snapshot: saleSnapshot });
+      handleConfiguredPrint('venda', { snapshot: saleSnapshot, customer: saleRecord?.customer || null });
     }
   };
 
@@ -13573,7 +13657,7 @@
     updateSaleSummary();
     closeFinalizeModal();
     advanceSaleCode();
-    promptDeliveryPrint(saleSnapshot);
+    promptDeliveryPrint(saleSnapshot, orderRecord.customerDetails || orderRecord.customer || null);
     state.deliverySelectedAddress = null;
     state.deliverySelectedAddressId = '';
     setActiveTab('delivery-tab');
@@ -13796,7 +13880,7 @@
     if (!existingSaleCode && saleCode) {
       advanceSaleCode();
     }
-    promptDeliveryPrint(saleSnapshot);
+    promptDeliveryPrint(saleSnapshot, order.customerDetails || order.customer || saleCustomer || null);
   };
 
   const handleFinalizeConfirm = async () => {
@@ -16270,6 +16354,43 @@
       </main>`;
   };
 
+  const getReceiptCustomerPhoneDisplay = (customer) => {
+    if (!customer || typeof customer !== 'object') {
+      return { phones: [], line: '', contact: '' };
+    }
+    const entries = [
+      customer.celular,
+      customer.telefone,
+      customer.celular2,
+      customer.telefone2,
+    ];
+    const seen = new Set();
+    const phones = [];
+    entries.forEach((value) => {
+      const raw = String(value || '').trim();
+      if (!raw) return;
+      const digits = normalizePhoneDigits(raw);
+      const key = digits || raw.toLowerCase();
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      phones.push(raw);
+    });
+    const rawContact = String(customer.contato || '').trim();
+    let contact = rawContact;
+    if (rawContact) {
+      const contactDigits = normalizePhoneDigits(rawContact);
+      const phoneKey = contactDigits || rawContact.toLowerCase();
+      if (phoneKey && seen.has(phoneKey)) {
+        contact = '';
+      }
+    }
+    return {
+      phones,
+      line: phones.join(' • '),
+      contact,
+    };
+  };
+
   const buildMatricialReceiptMarkup = (snapshot, options = {}) => {
     if (!snapshot) {
       return '<main class="receipt"><p class="receipt-empty">Nenhuma venda disponível para impressão.</p></main>';
@@ -16506,10 +16627,12 @@
         ? `<ul class="nfce-compact__totals-list">${pagamentosRows}</ul>`
         : '<p class="nfce-compact__empty">Nenhum pagamento registrado.</p>';
 
+    const clientePhoneDisplay = getReceiptCustomerPhoneDisplay(snapshot.cliente);
     const clienteLines = [];
     if (snapshot.cliente?.nome) clienteLines.push(snapshot.cliente.nome);
     if (snapshot.cliente?.documento) clienteLines.push(`Doc.: ${snapshot.cliente.documento}`);
-    if (snapshot.cliente?.contato) clienteLines.push(`Contato: ${snapshot.cliente.contato}`);
+    if (clientePhoneDisplay.contact) clienteLines.push(`Contato: ${clientePhoneDisplay.contact}`);
+    if (clientePhoneDisplay.line) clienteLines.push(`Telefones: ${clientePhoneDisplay.line}`);
     if (snapshot.cliente?.endereco) clienteLines.push(`End.: ${snapshot.cliente.endereco}`);
     if (snapshot.cliente?.pet) clienteLines.push(`Pet: ${snapshot.cliente.pet}`);
     const clienteSection = clienteLines.length
@@ -16677,6 +16800,7 @@
             .join('')
         : '<li class="receipt-list__empty">Nenhum pagamento registrado.</li>';
 
+    const clientePhoneDisplayList = getReceiptCustomerPhoneDisplay(snapshot.cliente);
     const clienteSection = snapshot.cliente
       ? `
           <section class="receipt__section">
@@ -16689,8 +16813,11 @@
               ${snapshot.cliente.documento
                 ? `<li class="receipt-row"><span class="receipt-row__label">Documento</span><span class="receipt-row__value">${escapeHtml(snapshot.cliente.documento)}</span></li>`
                 : ''}
-              ${snapshot.cliente.contato
-                ? `<li class="receipt-row"><span class="receipt-row__label">Contato</span><span class="receipt-row__value">${escapeHtml(snapshot.cliente.contato)}</span></li>`
+              ${clientePhoneDisplayList.contact
+                ? `<li class="receipt-row"><span class="receipt-row__label">Contato</span><span class="receipt-row__value">${escapeHtml(clientePhoneDisplayList.contact)}</span></li>`
+                : ''}
+              ${clientePhoneDisplayList.line
+                ? `<li class="receipt-row"><span class="receipt-row__label">Telefones</span><span class="receipt-row__value">${escapeHtml(clientePhoneDisplayList.line)}</span></li>`
                 : ''}
               ${snapshot.cliente.endereco
                 ? `<li class="receipt-row"><span class="receipt-row__label">Endereço</span><span class="receipt-row__value">${escapeHtml(snapshot.cliente.endereco)}</span></li>`
@@ -17006,6 +17133,11 @@
       payload.customer = {
         name: customerName,
         document: customerDocument,
+        contact: fallbackCustomer?.contato || '',
+        celular: fallbackCustomer?.celular || '',
+        telefone: fallbackCustomer?.telefone || '',
+        celular2: fallbackCustomer?.celular2 || '',
+        telefone2: fallbackCustomer?.telefone2 || '',
         address: customerAddress,
       };
     }
@@ -17114,6 +17246,10 @@
         name: snapshot.cliente.nome || '',
         document: snapshot.cliente.documento || '',
         contact: snapshot.cliente.contato || '',
+        celular: snapshot.cliente.celular || '',
+        telefone: snapshot.cliente.telefone || '',
+        celular2: snapshot.cliente.celular2 || '',
+        telefone2: snapshot.cliente.telefone2 || '',
         address: customerAddress,
         pet: snapshot.cliente.pet || '',
       };
@@ -18483,6 +18619,21 @@
     return `${origin}/${raw}`;
   };
 
+  const appendAgentCacheBuster = (url, token) => {
+    const resolved = resolveAgentDownloadUrl(url);
+    if (!resolved) return '';
+    const cacheToken = String(token || '').trim();
+    if (!cacheToken) return resolved;
+    try {
+      const parsed = new URL(resolved, typeof window !== 'undefined' ? window.location.origin : undefined);
+      parsed.searchParams.set('v', cacheToken);
+      return parsed.toString();
+    } catch (_) {
+      const separator = resolved.includes('?') ? '&' : '?';
+      return `${resolved}${separator}v=${encodeURIComponent(cacheToken)}`;
+    }
+  };
+
   const resolveAvailableUrl = async (urls = []) => {
     const candidates = Array.isArray(urls) ? urls : [];
     for (const raw of candidates) {
@@ -18583,26 +18734,43 @@
 
   const triggerLocalAgentDownload = async () => {
     if (typeof window === 'undefined') return;
+    const cacheToken = localAgentUpdateState.latestVersion || Date.now();
     const installerUrl = await resolveAvailableUrl(LOCAL_AGENT_INSTALLER_URLS);
     if (installerUrl) {
-      window.location.href = installerUrl;
+      window.location.href = appendAgentCacheBuster(installerUrl, cacheToken);
       return;
     }
     const packageUrl = await resolveAvailableUrl(LOCAL_AGENT_PACKAGE_URLS);
     if (packageUrl) {
-      window.location.href = packageUrl;
+      window.location.href = appendAgentCacheBuster(packageUrl, cacheToken);
     }
   };
 
   const triggerLocalAgentUpdate = async (updateInfo = {}) => {
+    const cacheToken =
+      updateInfo.latestVersion ||
+      localAgentUpdateState.latestVersion ||
+      Date.now();
     const packageUrl =
-      resolveAgentDownloadUrl(updateInfo.downloadUrl) ||
-      localAgentUpdateState.downloadUrl ||
-      (await resolveAvailableUrl(LOCAL_AGENT_PACKAGE_URLS));
+      appendAgentCacheBuster(
+        resolveAgentDownloadUrl(updateInfo.downloadUrl) ||
+          localAgentUpdateState.downloadUrl ||
+          (await resolveAvailableUrl(LOCAL_AGENT_PACKAGE_URLS)),
+        cacheToken
+      ) || '';
     const installerUrl =
-      resolveAgentDownloadUrl(updateInfo.installerUrl) ||
-      localAgentUpdateState.installerUrl ||
-      (await resolveAvailableUrl(LOCAL_AGENT_INSTALLER_URLS));
+      appendAgentCacheBuster(
+        resolveAgentDownloadUrl(updateInfo.installerUrl) ||
+          localAgentUpdateState.installerUrl ||
+          (await resolveAvailableUrl(LOCAL_AGENT_INSTALLER_URLS)),
+        cacheToken
+      ) || '';
+    // Evita conflito 409 do endpoint local /update quando o agente ainda está processando fila.
+    // Como o botão já é "Baixar atualização", priorizamos o setup.exe.
+    if (installerUrl) {
+      window.location.href = installerUrl;
+      return false;
+    }
     if (LOCAL_AGENT_BASE_URL) {
       try {
         const response = await fetchWithTimeout(
@@ -18909,10 +19077,56 @@
     return true;
   };
 
+  const enrichReceiptSnapshotCustomerContacts = (snapshot, customerRef = null) => {
+    if (!snapshot || typeof snapshot !== 'object') return snapshot;
+    const currentCustomer = snapshot.cliente && typeof snapshot.cliente === 'object' ? snapshot.cliente : null;
+    const candidateSource =
+      (customerRef && typeof customerRef === 'object' ? customerRef : null) ||
+      currentCustomer ||
+      null;
+    if (!candidateSource && !currentCustomer) return snapshot;
+
+    const phones = getCustomerPhoneCandidates(candidateSource);
+    const nextCustomer = {
+      ...(currentCustomer || {}),
+    };
+
+    if (!nextCustomer.contato) {
+      nextCustomer.contato =
+        candidateSource?.telefone ||
+        candidateSource?.celular ||
+        phones[0] ||
+        candidateSource?.email ||
+        '';
+    }
+    if (!nextCustomer.celular) nextCustomer.celular = candidateSource?.celular || phones[0] || '';
+    if (!nextCustomer.telefone) nextCustomer.telefone = candidateSource?.telefone || phones[1] || '';
+    if (!nextCustomer.celular2) {
+      nextCustomer.celular2 =
+        candidateSource?.celularSecundario || candidateSource?.celular2 || phones[2] || '';
+    }
+    if (!nextCustomer.telefone2) {
+      nextCustomer.telefone2 =
+        candidateSource?.telefoneSecundario || candidateSource?.telefone2 || phones[3] || '';
+    }
+    if (!nextCustomer.documento) {
+      nextCustomer.documento =
+        resolveCustomerDocument(candidateSource) || candidateSource?.documento || candidateSource?.document || '';
+    }
+    if (!nextCustomer.nome) {
+      nextCustomer.nome = resolveCustomerName(candidateSource) || candidateSource?.nome || 'Cliente';
+    }
+
+    return {
+      ...snapshot,
+      cliente: nextCustomer,
+    };
+  };
+
   const printReceipt = (
     type,
     variant,
-    { snapshot, budget, fallbackText, xmlContent, qrCodeDataUrl, qrCodePayload } = {}
+    { snapshot, budget, fallbackText, xmlContent, qrCodeDataUrl, qrCodePayload, customer } = {}
   ) => {
     const resolvedVariant = variant || 'matricial';
     let bodyHtml = '';
@@ -18936,6 +19150,7 @@
         notify('Nenhum dado disponível para imprimir a venda.', 'warning');
         return false;
       }
+      receiptSnapshot = enrichReceiptSnapshotCustomerContacts(receiptSnapshot, customer);
       let markup = '';
       if (resolvedVariant === 'fiscal') {
         const xmlSource =
@@ -21791,6 +22006,7 @@
         xmlContent: sale.fiscalXmlContent,
         qrCodeDataUrl: sale.fiscalQrCodeImage,
         qrCodePayload: sale.fiscalQrCodeData,
+        customer: sale.customer || null,
       });
       return;
     }
@@ -21799,6 +22015,7 @@
       xmlContent: sale.fiscalXmlContent,
       qrCodeDataUrl: sale.fiscalQrCodeImage,
       qrCodePayload: sale.fiscalQrCodeData,
+      customer: sale.customer || null,
     });
   };
 

@@ -1,4 +1,4 @@
-import { els, state, isPrivilegedRole, notify, buildLocalDateTime, todayStr, normalizeDate, pad, api, statusMeta } from './core.js';
+import { els, state, isPrivilegedRole, notify, buildLocalDateTime, todayStr, normalizeDate, pad, api, statusMeta, isNoPreferenceProfessionalId, getVisibleProfissionais } from './core.js';
 import { loadAgendamentos } from './agendamentos.js';
 import { renderKpis, renderFilters } from './filters.js';
 import { renderGrid } from './grid.js';
@@ -57,6 +57,7 @@ export function enhanceAgendaUI() {
   try {
     applyZebraAndSublines();
     decorateCards();
+    enableSlotQuickAdd();
     if (state.view === 'day' || state.view === 'week' || state.view === 'month') {
       enableDragDrop();
     }
@@ -73,13 +74,61 @@ export function enhanceAgendaUI() {
   } catch (e) { console.info('[enhanceAgendaUI] skip', e); }
 }
 
+export function enableSlotQuickAdd() {
+  if (!(state.view === 'day' || state.view === 'week' || state.view === 'month')) return;
+  const grids = els.agendaList?.querySelectorAll(':scope > div[style*="grid"]') || [];
+  const body  = Array.from(grids).find(el => el.querySelector('.agenda-slot')) || grids[1] || grids[0];
+  if (!body) return;
+  if (body.__quickAddDelegated) return;
+  body.__quickAddDelegated = true;
+
+  body.addEventListener('click', (ev) => {
+    if (ev.defaultPrevented) return;
+    if (ev.button !== 0) return;
+    const target = ev.target;
+    if (!(target instanceof Element)) return;
+
+    // Ignore clicks on cards/actions/inputs and interactive controls.
+    if (target.closest('button, a, input, select, textarea, label')) return;
+    if (target.closest('[data-appointment-id]')) return;
+    if (target.closest('.agenda-card__actions')) return;
+
+    const slot = target.closest('.agenda-slot');
+    if (!slot || !(slot instanceof HTMLElement)) return;
+    const hasDay = Boolean(String(slot.dataset.day || '').trim());
+    const hasHour = Boolean(String(slot.dataset.hh || '').trim());
+    if (state.view === 'month') {
+      if (!hasDay) return;
+    } else {
+      if (!hasHour) return; // hourly squares only (day/week)
+      if (slot.classList.contains('is-off')) return;
+    }
+
+    const open = window.__openAddFromUI;
+    if (typeof open !== 'function') return;
+
+    const date = (slot.dataset.day || normalizeDate(els.dateInput?.value || todayStr())).trim();
+    const hour = String(slot.dataset.hh || '').trim();
+    const profissionalId = String(slot.dataset.profissionalId || '').trim();
+
+    open({
+      day: date,
+      hh: hour,
+      profissionalId,
+    });
+  });
+}
+
 export function scrollToNow() {
   const grids = els.agendaList?.querySelectorAll(':scope > div[style*="grid"]') || [];
   const body  = Array.from(grids).find(el => el.querySelector('.agenda-slot')) || grids[1] || grids[0];
-  if (!body || !state.profissionais?.length) return;
+  if (!body) return;
   const now = new Date();
   const hh = String(now.getHours()).padStart(2, '0') + ':00';
-  const firstProfId = String(state.profissionais[0]._id);
+  const visibleProfs = getVisibleProfissionais() || [];
+  const firstProf = visibleProfs.find((p) => !isNoPreferenceProfessionalId(p?._id)) || visibleProfs[0];
+  const firstProfId = String(firstProf?._id || '');
+  if (!firstProfId) return;
   const target = body.querySelector(`div[data-profissional-id="${firstProfId}"][data-hh="${hh}"]`);
   if (target) {
     const top = target.getBoundingClientRect().top + window.pageYOffset;
@@ -93,7 +142,9 @@ export function applyZebraAndSublines() {
   const body  = Array.from(grids).find(el => el.querySelector('.agenda-slot')) || grids[1] || grids[0];
   if (!body) return;
   body.style.position = 'relative';
-  const totalCols = 1 + (state.profissionais?.length || 0);
+  const totalCols = state.view === 'day'
+    ? 1 + (getVisibleProfissionais()?.length || 0)
+    : 1 + (state.profissionais?.length || 0);
   if (totalCols <= 0) return;
   const cells = Array.from(body.children);
   const totalRows = Math.floor(cells.length / totalCols);
@@ -521,7 +572,12 @@ export function enableDragDrop() {
       : normalizedServiceIds.slice();
 
     const payload = {};
-    if (slot.dataset.profissionalId) payload.profissionalId = slot.dataset.profissionalId;
+    const slotProfId = String(slot.dataset.profissionalId || '').trim();
+    if (slotProfId && !isNoPreferenceProfessionalId(slotProfId)) {
+      payload.profissionalId = slotProfId;
+    } else if (slotProfId && isNoPreferenceProfessionalId(slotProfId)) {
+      payload.profissionalId = null;
+    }
 
     const originalDay = getAppointmentDayISO(item.h || item.scheduledAt);
     const sameDay = originalDay && day ? originalDay === day : false;

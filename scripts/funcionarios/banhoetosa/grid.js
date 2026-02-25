@@ -3,7 +3,7 @@ import {
   normalizeDate, todayStr, pad, money, shortTutorName,
   clearChildren, getFilteredAgendamentos, getVisibleProfissionais,
   updateHeaderLabel, localDateStr, addDays, startOfWeek, startOfMonth, startOfNextMonth,
-  renderStatusBadge, statusMeta
+  renderStatusBadge, statusMeta, AGENDA_NO_PREFERENCE_PROF_ID
 } from './core.js';
 import { openAddModal } from './modal.js';
 
@@ -965,13 +965,7 @@ export function renderGrid() {
       const normalized = String(nameCandidate || '').trim().toLowerCase();
       if (normalized && byNameAll.has(normalized)) profId = String(byNameAll.get(normalized));
       if (!profId) {
-        const fallbackVisible = (profs || []).find(p => p && p._id);
-        if (fallbackVisible) {
-          profId = String(fallbackVisible._id);
-        } else {
-          const fallbackAny = (profsAll || []).find(p => p && p._id);
-          if (fallbackAny) profId = String(fallbackAny._id);
-        }
+        profId = AGENDA_NO_PREFERENCE_PROF_ID;
       }
     }
     if (!profId) continue;

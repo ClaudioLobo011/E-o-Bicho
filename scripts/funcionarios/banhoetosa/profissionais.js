@@ -1,4 +1,4 @@
-import { api, state, els } from './core.js';
+import { api, state, els, AGENDA_NO_PREFERENCE_PROF_ID, buildNoPreferenceProfessional } from './core.js';
 
 const DEFAULT_PROF_TYPE = 'esteticista';
 const TYPE_LABELS = {
@@ -21,7 +21,7 @@ function normalizeProfissionais(list) {
 
 function renderProfOptions(list) {
   if (!els.profSelect) return;
-  els.profSelect.innerHTML = list
+  els.profSelect.innerHTML = (Array.isArray(list) ? list : [])
     .map((p) => `<option value="${p._id || ''}">${p.nome || ''}</option>`)
     .join('');
 }
@@ -39,7 +39,7 @@ export function updateModalProfissionalLabel(preferredId) {
   let tipo = '';
   if (currentId) {
     const match = arr.find((p) => String(p._id) === currentId);
-    if (match) tipo = match.tipo || '';
+    if (match && !String(match._id).includes(AGENDA_NO_PREFERENCE_PROF_ID)) tipo = match.tipo || '';
   }
   if (!tipo && arr.length) {
     tipo = arr[0].tipo || '';
@@ -62,7 +62,7 @@ export function getModalProfissionalTipo(preferredId) {
 }
 
 function applyModalProfissionais(list, preselectId) {
-  modalProfissionais = normalizeProfissionais(list);
+  modalProfissionais = [buildNoPreferenceProfessional(), ...normalizeProfissionais(list)];
   renderProfOptions(modalProfissionais);
   const pid = preselectId != null ? String(preselectId) : '';
   if (els.profSelect) {
@@ -102,11 +102,15 @@ export async function loadProfissionais() {
   const resp = await api(`/func/profissionais?storeId=${state.selectedStoreId}`);
   const list = await resp.json().catch(() => []);
   state.profissionais = normalizeProfissionais(list);
-  modalProfissionais = state.profissionais.slice();
+  modalProfissionais = [buildNoPreferenceProfessional(), ...state.profissionais];
   if (els.profSelect) {
     const prevValue = els.profSelect.value;
-    renderProfOptions(state.profissionais);
-    if (prevValue && state.profissionais.some((p) => String(p._id) === prevValue)) {
+    renderProfOptions(modalProfissionais);
+    if (
+      prevValue &&
+      (prevValue === AGENDA_NO_PREFERENCE_PROF_ID ||
+        state.profissionais.some((p) => String(p._id) === prevValue))
+    ) {
       els.profSelect.value = prevValue;
     } else if (els.profSelect.options.length) {
       els.profSelect.selectedIndex = 0;

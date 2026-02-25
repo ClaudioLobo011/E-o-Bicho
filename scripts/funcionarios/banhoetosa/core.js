@@ -161,6 +161,8 @@ export const els = {
 
 // ----- State -----
 export const FILTER_STORAGE_KEY = 'agenda_filters_v1';
+export const AGENDA_NO_PREFERENCE_PROF_ID = '__SEM_PREFERENCIA__';
+export const AGENDA_NO_PREFERENCE_PROF_NAME = 'Sem Preferência';
 export const state = {
   stores: [],
   profissionais: [],
@@ -179,6 +181,19 @@ export const state = {
     profTipo: '', // 'esteticista' | 'veterinario' | ''
   },
 };
+
+export function isNoPreferenceProfessionalId(value) {
+  return String(value || '').trim() === AGENDA_NO_PREFERENCE_PROF_ID;
+}
+
+export function buildNoPreferenceProfessional() {
+  return {
+    _id: AGENDA_NO_PREFERENCE_PROF_ID,
+    nome: AGENDA_NO_PREFERENCE_PROF_NAME,
+    tipo: 'esteticista',
+    __synthetic: true,
+  };
+}
 
 // ----- Date/time utils -----
 export function todayStr() {
@@ -372,7 +387,11 @@ export function getVisibleProfissionais() {
   if (state.filters.profIds && state.filters.profIds.size) {
     profs = profs.filter(p => state.filters.profIds.has(String(p._id)));
   }
-
+  const allowNoPreference =
+    (!state.filters.profIds?.size || state.filters.profIds.has(AGENDA_NO_PREFERENCE_PROF_ID));
+  if (allowNoPreference) {
+    profs = [buildNoPreferenceProfessional(), ...profs];
+  }
   return profs;
 }
 
