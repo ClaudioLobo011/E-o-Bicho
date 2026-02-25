@@ -2993,6 +2993,8 @@
       receiptSnapshot: order.receiptSnapshot || null,
       saleCode: String(order.saleCode || ''),
       saleRecordId: normalizeId(order.saleRecordId || ''),
+      appointmentId: normalizeId(order.appointmentId || ''),
+      appointmentIds: normalizeAppointmentIdList(order.appointmentIds),
     };
   };
 
@@ -10624,6 +10626,8 @@
       },
       receiptSnapshot: snapshot,
       saleCode: saleCode || snapshot?.meta?.saleCode || '',
+      appointmentId: normalizeId(options.appointmentId || ''),
+      appointmentIds: normalizeAppointmentIdList(options.appointmentIds),
     };
     return order;
   };
@@ -13404,6 +13408,7 @@
         saleCode,
       });
     const statusOverride = resolveDeliveryStatusOverride(state.deliveryStatusOverride);
+    const appointmentIdsForDelivery = normalizeAppointmentIdList(state.activeAppointmentIds);
       const orderRecord = createDeliveryOrderRecord(
         saleSnapshot,
         state.deliverySelectedAddress,
@@ -13413,7 +13418,11 @@
         state.vendaDesconto,
         state.vendaAcrescimo,
         saleCode,
-        { status: statusOverride }
+        {
+          status: statusOverride,
+          appointmentId: appointmentIdsForDelivery[0] || '',
+          appointmentIds: appointmentIdsForDelivery,
+        }
       );
     const cashContributions = normalizeCashContributions([]);
     const isIfoodSale = isIfoodSaleContext({
@@ -13434,6 +13443,8 @@
       createdAt: orderRecord.createdAt,
       receivables: saleReceivables.entries,
       cashContributions,
+      appointmentId: appointmentIdsForDelivery[0] || '',
+      appointmentIds: appointmentIdsForDelivery,
       seller: state.selectedSeller,
     });
     if (saleRecord) {
@@ -13448,6 +13459,8 @@
       ? `Delivery ${saleCode} registrado com sucesso.`
       : 'Delivery registrado com sucesso.';
     notify(successMessage, 'success');
+    await syncAppointmentsAfterDeliveryRegistration(appointmentIdsForDelivery, saleCode);
+    setActiveSaleAppointments([]);
     state.itens = [];
     state.vendaPagamentos = [];
     state.vendaDesconto = 0;
@@ -13556,6 +13569,11 @@
       }
     }
     const saleCode = existingSaleCode || state.currentSaleCode || '';
+    const appointmentIdsForDelivery = normalizeAppointmentIdList(
+      Array.isArray(order.appointmentIds) ? order.appointmentIds : [order.appointmentId]
+    );
+    order.appointmentId = appointmentIdsForDelivery[0] || '';
+    order.appointmentIds = appointmentIdsForDelivery;
     const itensSnapshot = state.itens.map((item) => ({ ...item }));
     const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
     const saleDate = order.createdAt ? new Date(order.createdAt) : new Date();
@@ -13614,6 +13632,8 @@
         customer: saleCustomer,
         receivables: saleReceivables.entries,
         cashContributions,
+        appointmentId: appointmentIdsForDelivery[0] || '',
+        appointmentIds: appointmentIdsForDelivery,
       });
       if (saleRecord) {
         saleRecord.cashContributions = cashContributions;
@@ -13645,6 +13665,8 @@
         createdAt: order.createdAt,
         receivables: saleReceivables.entries,
         cashContributions,
+        appointmentId: appointmentIdsForDelivery[0] || '',
+        appointmentIds: appointmentIdsForDelivery,
       });
       if (saleRecord) {
         saleRecord.cashContributions = cashContributions;
@@ -13668,6 +13690,7 @@
       ? `Delivery ${saleCode} finalizado e registrado no caixa.`
       : 'Delivery finalizado e registrado no caixa.';
     notify(successMessage, 'success');
+    await syncAppointmentsAfterSale(appointmentIdsForDelivery, saleCode);
     setSaleCustomer(null, null);
     state.saleSource = '';
     clearSaleSearchAreas();
@@ -21095,6 +21118,60 @@
     if (!ids.length) return;
     for (const appointmentId of ids) {
       await syncAppointmentAfterSale(appointmentId, saleCode);
+    }
+  };
+  const syncAppointmentAfterDeliveryRegistration = async (appointmentId, saleCode) => {
+    const normalized = normalizeId(appointmentId);
+    const normalizedSaleCode = String(saleCode || '').trim();
+    if (!normalized || !normalizedSaleCode) return;
+    const previousState = findAppointmentById(normalized);
+    updateAppointmentRecord(normalized, {
+      paid: false,
+      saleCode: normalizedSaleCode,
+    });
+    const token = getToken();
+    let syncSucceeded = false;
+    try {
+      await fetchWithOptionalAuth(`${API_BASE}/func/agendamentos/${normalized}`, {
+        token,
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ codigoVenda: normalizedSaleCode, pago: false }),
+        errorMessage: 'Não foi possível vincular o atendimento ao delivery.',
+      });
+      syncSucceeded = true;
+      refreshAppointmentMetrics({ force: true }).catch((error) =>
+        console.error('Erro ao atualizar indicadores após vincular atendimento ao delivery:', error)
+      );
+    } catch (error) {
+      console.error('Erro ao vincular atendimento ao delivery na agenda:', error);
+      if (previousState) {
+        updateAppointmentRecord(normalized, {
+          paid: Boolean(previousState.paid),
+          saleCode: previousState.saleCode || '',
+          status: previousState.status || 'agendado',
+        });
+      }
+      notify(
+        'Delivery registrado, porém não foi possível vincular o atendimento na agenda.',
+        'warning'
+      );
+    } finally {
+      if (!syncSucceeded && !previousState) {
+        updateAppointmentRecord(normalized, {
+          paid: false,
+          saleCode: '',
+          status: 'agendado',
+        });
+      }
+    }
+  };
+  const syncAppointmentsAfterDeliveryRegistration = async (appointmentIds, saleCode) => {
+    const ids = normalizeAppointmentIdList(appointmentIds);
+    const normalizedSaleCode = String(saleCode || '').trim();
+    if (!ids.length || !normalizedSaleCode) return;
+    for (const appointmentId of ids) {
+      await syncAppointmentAfterDeliveryRegistration(appointmentId, normalizedSaleCode);
     }
   };
   const getSaleAppointmentIds = (sale) => {
