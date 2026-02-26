@@ -2788,9 +2788,12 @@ router.get('/vet/agendamentos/em-espera', authMiddleware, requireStaff, async (r
   try {
     const clienteId = normalizeObjectId(req.query.clienteId);
     const petId = normalizeObjectId(req.query.petId);
+    const hasCliente = !!clienteId;
+    const hasPet = !!petId;
+    const hasSelection = hasCliente && hasPet;
 
-    if (!(clienteId && petId)) {
-      return res.status(400).json({ message: 'clienteId e petId são obrigatórios.' });
+    if (hasCliente !== hasPet) {
+      return res.status(400).json({ message: 'clienteId e petId devem ser informados juntos.' });
     }
 
     const role = String(req.user?.role || '').toLowerCase();
@@ -2803,11 +2806,11 @@ router.get('/vet/agendamentos/em-espera', authMiddleware, requireStaff, async (r
       profissionalId = normalizeObjectId(req.user?.id || req.user?._id || req.query.profissionalId);
     }
 
-    const filter = {
-      cliente: clienteId,
-      pet: petId,
-      status: 'em_espera',
-    };
+    const filter = { status: 'em_espera' };
+    if (hasSelection) {
+      filter.cliente = clienteId;
+      filter.pet = petId;
+    }
 
     if (profissionalId) {
       filter.profissional = profissionalId;

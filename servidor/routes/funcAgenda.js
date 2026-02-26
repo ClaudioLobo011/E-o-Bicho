@@ -1157,6 +1157,8 @@ router.get('/clientes', authMiddleware, requireStaff, async (req, res) => {
         or.push({ cnpj: new RegExp(only) });
         or.push({ celular: new RegExp(only) });
         or.push({ telefone: new RegExp(only) });
+        or.push({ celularSecundario: new RegExp(only) });
+        or.push({ telefoneSecundario: new RegExp(only) });
       }
       if (mongoose.Types.ObjectId.isValid(search)) {
         or.push({ _id: new mongoose.Types.ObjectId(search) });
@@ -1199,6 +1201,8 @@ router.get('/clientes', authMiddleware, requireStaff, async (req, res) => {
         email: isGeneratedCustomerEmail(doc.email) ? '' : (doc.email || ''),
         celular: doc.celular || '',
         telefone: doc.telefone || '',
+        celularSecundario: doc.celularSecundario || '',
+        telefoneSecundario: doc.telefoneSecundario || '',
         documento,
         empresa: empresaNome,
         pais: doc.pais || 'Brasil',
@@ -2032,11 +2036,14 @@ router.get('/clientes/buscar', authMiddleware, requireStaff, async (req, res) =>
       or.push({ cpf: new RegExp(onlyDigits) });
       or.push({ cnpj: new RegExp(onlyDigits) });
       or.push({ celular: new RegExp(onlyDigits) });
+      or.push({ telefone: new RegExp(onlyDigits) });
+      or.push({ celularSecundario: new RegExp(onlyDigits) });
+      or.push({ telefoneSecundario: new RegExp(onlyDigits) });
     }
 
     const users = await User.find({ $or: or })
       .select(
-        '_id nomeCompleto nomeContato razaoSocial email cpf cnpj inscricaoEstadual celular tipoConta codigoCliente genero sexo dataNascimento'
+        '_id nomeCompleto nomeContato razaoSocial email cpf cnpj inscricaoEstadual celular telefone celularSecundario telefoneSecundario tipoConta codigoCliente genero sexo dataNascimento'
       )
       .limit(limit)
       .lean();
@@ -2080,6 +2087,9 @@ router.get('/clientes/buscar', authMiddleware, requireStaff, async (req, res) =>
       nome: userDisplayName(u),
       email: isGeneratedCustomerEmail(u.email) ? '' : (u.email || ''),
       celular: u.celular || '',
+      telefone: u.telefone || '',
+      celularSecundario: u.celularSecundario || '',
+      telefoneSecundario: u.telefoneSecundario || '',
       genero: u.genero || u.sexo || '',
       sexo: u.sexo || u.genero || '',
       dataNascimento: u.dataNascimento || null,

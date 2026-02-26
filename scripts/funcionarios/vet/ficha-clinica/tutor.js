@@ -392,6 +392,7 @@ export async function onSelectPet(petId, opts = {}) {
 
 export function clearCliente() {
   state.selectedCliente = null;
+  state.selectedPetId = null;
   state.petsById = {};
   state.currentCardMode = 'tutor';
   state.agendaContext = null;
@@ -422,10 +423,12 @@ export function clearCliente() {
   state.historicosLoadKey = null;
   state.historicosLoading = false;
   persistAgendaContext(null);
+  persistPetId(null);
   if (els.cliInput) els.cliInput.value = '';
   hideSugestoes();
   if (els.petSelect) {
     els.petSelect.innerHTML = `<option value="">Selecione o tutor para listar os pets</option>`;
+    els.petSelect.value = '';
   }
   setActiveMainTab('consulta');
   loadHistoricoForSelection();
@@ -436,6 +439,7 @@ export function clearCliente() {
   updatePageVisibility();
   updateConsultaAgendaCard();
   updateFichaRealTimeSelection().catch(() => {});
+  loadWaitingAppointments({ force: true }).catch(() => {});
 }
 
 export function clearPet() {
@@ -471,6 +475,9 @@ export function clearPet() {
   updateCardDisplay();
   updatePageVisibility();
   updateFichaRealTimeSelection().catch(() => {});
+  if (!state.selectedCliente?._id) {
+    loadWaitingAppointments({ force: true }).catch(() => {});
+  }
 }
 
 export function restorePersistedSelection() {

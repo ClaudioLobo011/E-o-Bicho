@@ -41,7 +41,7 @@
                                 class="fas fa-magnifying-glass"></i></button>
                         <button id="vet-cli-clear" class="text-gray-500 hover:text-gray-700" title="Limpar"><i
                                 class="fas fa-xmark"></i></button>
-                        <button class="text-primary hover:text-primary/80" title="Novo"><i
+                        <button id="vet-cli-add" class="text-primary hover:text-primary/80" title="Novo cliente"><i
                                 class="fas fa-circle-plus"></i></button>
                     </div>
                 </div>
@@ -60,7 +60,7 @@
                                 class="fas fa-magnifying-glass"></i></button>
                         <button id="vet-pet-clear" class="text-gray-500 hover:text-gray-700" title="Limpar"><i
                                 class="fas fa-xmark"></i></button>
-                        <button class="text-primary hover:text-primary/80" title="Novo"><i
+                        <button id="vet-pet-add" class="text-primary hover:text-primary/80" title="Novo pet"><i
                                 class="fas fa-circle-plus"></i></button>
                     </div>
                 </div>
@@ -82,6 +82,8 @@
         </section>
 
         <!-- GRID principal: esquerda (prancha) + direita (cards do cliente e ações) -->
+        <section id="vet-no-client-waiting-area" class="hidden"></section>
+
         <div id="vet-ficha-content" class="grid grid-cols-12 gap-6 hidden">
             <!-- ESQUERDA -->
             <section class="col-span-12 lg:col-span-9">
@@ -358,6 +360,7 @@
 
     <!-- Scripts base do projeto -->
     <script>var basePath = '../../';</script>
+    <script src="https://unpkg.com/imask"></script>
     <script src="../../scripts/core/config.js"></script>
     <script src="../../scripts/core/ui.js"></script>
     <script src="../../scripts/core/main.js"></script>

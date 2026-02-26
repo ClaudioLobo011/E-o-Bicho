@@ -99,7 +99,7 @@ export function getConsultasKey(clienteId, petId) {
 function getWaitingAppointmentsKey(clienteId, petId) {
   const tutor = normalizeId(clienteId);
   const pet = normalizeId(petId);
-  if (!(tutor && pet)) return null;
+  if (!(tutor && pet)) return '__global__';
   return `${tutor}|${pet}`;
 }
 
@@ -369,8 +369,9 @@ export async function loadWaitingAppointments(options = {}) {
   const { force = false } = options || {};
   const clienteId = normalizeId(state.selectedCliente?._id);
   const petId = normalizeId(state.selectedPetId);
+  const hasSelection = !!(clienteId && petId);
 
-  if (!(clienteId && petId)) {
+  if (!!clienteId !== !!petId) {
     state.waitingAppointments = [];
     state.waitingAppointmentsLoadKey = null;
     state.waitingAppointmentsLoading = false;
@@ -380,7 +381,7 @@ export async function loadWaitingAppointments(options = {}) {
 
   const key = getWaitingAppointmentsKey(clienteId, petId);
 
-  if (isFinalizadoSelection(clienteId, petId)) {
+  if (hasSelection && isFinalizadoSelection(clienteId, petId)) {
     state.waitingAppointments = [];
     state.waitingAppointmentsLoadKey = key;
     state.waitingAppointmentsLoading = false;
@@ -394,8 +395,13 @@ export async function loadWaitingAppointments(options = {}) {
   updateConsultaAgendaCard();
 
   try {
-    const params = new URLSearchParams({ clienteId, petId });
-    const resp = await api(`/func/vet/agendamentos/em-espera?${params.toString()}`);
+    const params = new URLSearchParams();
+    if (hasSelection) {
+      params.set('clienteId', clienteId);
+      params.set('petId', petId);
+    }
+    const query = params.toString();
+    const resp = await api(`/func/vet/agendamentos/em-espera${query ? `?${query}` : ''}`);
     const payload = await resp.json().catch(() => (resp.ok ? [] : {}));
     if (!resp.ok) {
       const message = typeof payload?.message === 'string'
@@ -416,7 +422,7 @@ export async function loadWaitingAppointments(options = {}) {
     normalized.sort((a, b) => {
       const aTime = a?.scheduledAt ? new Date(a.scheduledAt).getTime() : 0;
       const bTime = b?.scheduledAt ? new Date(b.scheduledAt).getTime() : 0;
-      return aTime - bTime;
+      return bTime - aTime;
     });
 
     state.waitingAppointments = normalized;
@@ -649,7 +655,11 @@ function createWaitingAppointmentItem(appointment) {
 }
 
 function createWaitingAppointmentsCard(appointments, options = {}) {
-  const { loading = false } = options || {};
+  const {
+    loading = false,
+    title: titleText = 'Agendamentos em espera',
+    emptyText = 'Nenhum agendamento em espera para este tutor e pet.',
+  } = options || {};
   const list = Array.isArray(appointments) ? appointments : [];
   if (!loading && !list.length) return null;
 
@@ -662,7 +672,7 @@ function createWaitingAppointmentsCard(appointments, options = {}) {
 
   const title = document.createElement('h3');
   title.className = 'text-base font-semibold text-amber-800';
-  title.textContent = 'Agendamentos em espera';
+  title.textContent = String(titleText || '').trim() || 'Agendamentos em espera';
   header.appendChild(title);
 
   if (loading && !list.length) {
@@ -695,13 +705,72 @@ function createWaitingAppointmentsCard(appointments, options = {}) {
   if (!container.children.length) {
     const emptyBox = document.createElement('div');
     emptyBox.className = 'rounded-lg border border-dashed border-amber-200 bg-amber-50 px-4 py-6 text-center text-sm text-amber-700';
-    emptyBox.textContent = 'Nenhum agendamento em espera para este tutor e pet.';
+    emptyBox.textContent = String(emptyText || '').trim() || 'Nenhum agendamento em espera.';
     card.appendChild(emptyBox);
     return card;
   }
 
   card.appendChild(container);
   return card;
+}
+
+export function renderNoClientWaitingAppointmentsArea() {
+  const area = els.noClientWaitingArea;
+  if (!area) return;
+
+  const hasCliente = !!normalizeId(state.selectedCliente?._id);
+  if (hasCliente) {
+    area.classList.add('hidden');
+    area.innerHTML = '';
+    return;
+  }
+
+  const waitingAppointments = Array.isArray(state.waitingAppointments) ? state.waitingAppointments : [];
+  const isLoadingWaitingAppointments = !!state.waitingAppointmentsLoading;
+  const waitingCard = createWaitingAppointmentsCard(waitingAppointments, {
+    loading: isLoadingWaitingAppointments,
+    title: 'Serviços em espera para iniciar atendimento',
+    emptyText: 'Nenhum serviço veterinário em espera no momento.',
+  });
+
+  area.innerHTML = '';
+  if (!waitingCard) {
+    area.classList.add('hidden');
+    return;
+  }
+
+  area.className = 'space-y-4';
+  area.appendChild(waitingCard);
+}
+
+async function ensureSelectionForWaitingAppointment(appointment) {
+  const targetClienteId = normalizeId(appointment?.clienteId);
+  const targetPetId = normalizeId(appointment?.petId);
+  if (!(targetClienteId && targetPetId)) {
+    notify('Não foi possível identificar o tutor e o pet do agendamento selecionado.', 'error');
+    return false;
+  }
+
+  const currentClienteId = normalizeId(state.selectedCliente?._id);
+  const currentPetId = normalizeId(state.selectedPetId);
+  if (currentClienteId === targetClienteId && currentPetId === targetPetId) {
+    return true;
+  }
+
+  const tutorModule = await import('./tutor.js');
+  if (currentClienteId !== targetClienteId) {
+    await tutorModule.onSelectCliente(
+      { _id: targetClienteId, nome: pickFirst(appointment?.tutorNome) || '' },
+      { clearPersistedPet: false, persistedPetId: targetPetId },
+    );
+  } else if (currentPetId !== targetPetId) {
+    await tutorModule.onSelectPet(targetPetId);
+  }
+
+  return (
+    normalizeId(state.selectedCliente?._id) === targetClienteId
+    && normalizeId(state.selectedPetId) === targetPetId
+  );
 }
 
 export async function deleteConsulta(record, options = {}) {
@@ -2983,13 +3052,6 @@ async function startWaitingAppointment(appointment, triggerButton) {
   const appointmentId = normalizeId(appointment?.appointmentId || appointment?.id || appointment?._id);
   if (!appointmentId) return;
 
-  const clienteId = normalizeId(state.selectedCliente?._id);
-  const petId = normalizeId(state.selectedPetId);
-  if (!(clienteId && petId)) {
-    notify('Selecione um tutor e um pet para iniciar o atendimento.', 'warning');
-    return;
-  }
-
   if (waitingAppointmentProcessing.has(appointmentId)) return;
 
   waitingAppointmentProcessing.add(appointmentId);
@@ -3005,13 +3067,24 @@ async function startWaitingAppointment(appointment, triggerButton) {
     triggerButton.classList.add('opacity-60', 'cursor-not-allowed');
     labelSpan = triggerButton.querySelector('[data-label]');
     if (labelSpan) {
-      labelSpan.textContent = 'Iniciando...';
+      labelSpan.textContent = 'Preparando...';
     } else {
-      triggerButton.textContent = 'Iniciando...';
+      triggerButton.textContent = 'Preparando...';
     }
   }
 
   try {
+    const selectionReady = await ensureSelectionForWaitingAppointment(appointment);
+    if (!selectionReady) {
+      throw new Error('Não foi possível preparar o tutor e o pet deste agendamento.');
+    }
+
+    if (labelSpan) {
+      labelSpan.textContent = 'Iniciando...';
+    } else if (triggerButton) {
+      triggerButton.textContent = 'Iniciando...';
+    }
+
     const response = await api(`/func/agendamentos/${appointmentId}`, {
       method: 'PUT',
       body: JSON.stringify({ status: 'em_atendimento' }),
@@ -3062,6 +3135,7 @@ async function startWaitingAppointment(appointment, triggerButton) {
 }
 
 export function updateConsultaAgendaCard() {
+  renderNoClientWaitingAppointmentsArea();
   const area = els.consultaArea;
   if (!area) return;
   const isConsultaTabActive = state.activeMainTab === 'consulta';

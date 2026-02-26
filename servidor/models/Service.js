@@ -3,6 +3,7 @@ const { Schema } = mongoose;
 
 const PORTES = ['Todos', 'Mini', 'Pequeno', 'Médio', 'Grande', 'Gigante'];
 const SERVICE_CATEGORIES = [
+  'tosa',
   'banho',
   'taxi_pet',
   'internacao',

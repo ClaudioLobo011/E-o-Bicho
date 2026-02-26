@@ -27,6 +27,7 @@ import {
   restorePersistedSelection,
 } from './tutor.js';
 import { updateCardDisplay, updatePageVisibility, setCardMode } from './ui.js';
+import { openFichaCadastroModal } from './cadastro-modal.js';
 import {
   initAtendimentoActions,
   activateHistoricoTab,
@@ -147,6 +148,20 @@ export function initFichaClinica() {
     });
   }
 
+  if (els.cliAdd) {
+    els.cliAdd.addEventListener('click', (event) => {
+      event.preventDefault();
+      openFichaCadastroModal({ tab: 'cliente' });
+    });
+  }
+
+  if (els.petAdd) {
+    els.petAdd.addEventListener('click', (event) => {
+      event.preventDefault();
+      openFichaCadastroModal({ tab: 'pet' });
+    });
+  }
+
   if (els.toggleTutor) {
     els.toggleTutor.addEventListener('click', (event) => {
       event.preventDefault();
@@ -253,6 +268,7 @@ export function initFichaClinica() {
   initAtendimentoActions();
   updateCardDisplay();
   restorePersistedSelection();
+  loadWaitingAppointments({ force: true }).catch(() => {});
   updatePageVisibility();
 }
 
