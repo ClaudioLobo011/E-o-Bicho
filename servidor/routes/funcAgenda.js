@@ -365,7 +365,7 @@ async function buildClientePayload(body = {}, opts = {}) {
     }
     payload.nomeCompleto = nomeCompleto || currentUser?.nomeCompleto || '';
     payload.cpf = cpf || '';
-    payload.genero = sanitizeString(body.sexo || body.genero || currentUser?.genero || '');
+    payload.genero = normalizeClienteGenero(body.sexo || body.genero || currentUser?.genero || '');
     const dataNascimento = parseDate(body.nascimento || body.dataNascimento);
     if (dataNascimento) payload.dataNascimento = dataNascimento;
     payload.rgNumero = sanitizeString(body.rg || body.rgNumero || currentUser?.rgNumero || '');
@@ -506,6 +506,14 @@ function parseImportSexo(value) {
   if (normalized === 'm' || normalized.startsWith('masc')) return 'masculino';
   if (normalized === 'f' || normalized.startsWith('fem')) return 'feminino';
   return '';
+}
+
+function normalizeClienteGenero(value) {
+  const normalized = normalizeImportText(value);
+  if (!normalized) return '';
+  if (normalized === 'm' || normalized.startsWith('masc')) return 'masculino';
+  if (normalized === 'f' || normalized.startsWith('fem')) return 'feminino';
+  return sanitizeString(value);
 }
 
 function buildStoreNameIndex(stores = []) {

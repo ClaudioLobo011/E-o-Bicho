@@ -84,6 +84,14 @@
     return value || '';
   }
 
+  function normalizeSexoValue(value = '') {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (!normalized) return '';
+    if (normalized === 'm' || normalized.startsWith('masc')) return 'masculino';
+    if (normalized === 'f' || normalized.startsWith('fem')) return 'feminino';
+    return normalized;
+  }
+
   function buildPhoneMaskOptions() {
     return {
       mask: [
@@ -1201,7 +1209,7 @@
         elements.inputCpf.value = formatCpf(data.cpf || '');
         elements.inputRg.value = data.rgNumero || '';
         elements.inputNascimento.value = data.dataNascimento || '';
-        elements.selectSexo.value = data.genero || '';
+        elements.selectSexo.value = normalizeSexoValue(data.genero || data.sexo || '');
         elements.inputRazao.value = data.razaoSocial || '';
         elements.inputFantasia.value = data.nomeFantasia || '';
         elements.inputContato.value = data.nomeContato || '';
