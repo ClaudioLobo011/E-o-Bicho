@@ -7,6 +7,18 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <link rel="stylesheet" href="../../src/output.css">
   <style>
+    body {
+      padding-bottom: 104px;
+    }
+
+    #transfer-action-bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 40;
+    }
+
     .transfer-items-table thead th {
       position: sticky;
       top: 0;
@@ -63,18 +75,6 @@
                 <h1 class="text-2xl font-bold text-gray-800">Cadastro de transferência</h1>
                 <p class="text-sm text-gray-600">Informe depósitos, itens e documentos fiscais relacionados para emissão de NF-e ou NF3-e quando aplicável.</p>
               </div>
-            </div>
-            <div class="flex flex-wrap items-center gap-2">
-              <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
-                <i class="fas fa-file-import"></i>
-                Importar via planilha</button>
-              <button type="button" id="transfer-clear-button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
-                <i class="fas fa-broom"></i>
-                Limpar
-              </button>
-              <button type="submit" id="transfer-save-button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
-                <i class="fas fa-save"></i>
-                Salvar transferência</button>
             </div>
           </div>
           <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -358,6 +358,23 @@
       </div>
     </div>
   </main>
+
+  <div id="transfer-action-bar" class="border-t border-gray-200 bg-white/95 shadow-[0_-10px_30px_-22px_rgba(15,23,42,0.45)] supports-[backdrop-filter]:backdrop-blur">
+    <div class="container mx-auto flex items-center justify-end gap-3 px-4 py-3">
+      <button type="button" id="transfer-import-button" class="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 hover:shadow-sm">
+        <i class="fas fa-file-import"></i>
+        Imprimir
+      </button>
+      <button type="button" id="transfer-clear-button" class="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 hover:shadow-sm">
+        <i class="fas fa-broom"></i>
+        Limpar
+      </button>
+      <button form="transfer-form" type="submit" id="transfer-save-button" class="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90 hover:shadow">
+        <i class="fas fa-save"></i>
+        Salvar Transfer?ncia
+      </button>
+    </div>
+  </div>
 
   <div id="admin-footer-placeholder"></div>
   <div id="modal-placeholder"></div>

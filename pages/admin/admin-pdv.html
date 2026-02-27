@@ -704,9 +704,11 @@
                 </button>
             </div>
 
-            <div class="hidden px-6 pt-3" role="tablist">
-                <button type="button" data-pdv-customer-tab="cliente" aria-selected="true">Cliente</button>
-                <button type="button" data-pdv-customer-tab="pet" aria-selected="false">Pet</button>
+            <div class="px-4 pt-3" role="tablist">
+                <div class="inline-flex rounded-lg bg-gray-200 p-1">
+                    <button type="button" data-pdv-customer-tab="cliente" aria-selected="true" class="rounded-md px-4 py-2 text-[12px] font-semibold text-white bg-primary transition">Cliente</button>
+                    <button type="button" data-pdv-customer-tab="pet" aria-selected="false" class="rounded-md px-4 py-2 text-[12px] font-semibold text-gray-500 transition">Pet</button>
+                </div>
             </div>
 
             <div class="min-h-0 flex-1 overflow-y-auto bg-gray-100 px-3 py-3">
@@ -851,10 +853,100 @@
                     </div>
                 </div>
 
-                <div data-pdv-customer-panel="pet" class="hidden space-y-2 pt-2">
+                <div data-pdv-customer-panel="pet" class="hidden space-y-3 pt-2">
+                    <div class="rounded-lg border border-gray-300 bg-white p-3">
+                        <div class="mb-2">
+                            <p class="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-primary"><i class="fas fa-paw text-primary"></i><span>Pet</span></p>
+                        </div>
+                        <div class="grid grid-cols-1 gap-2 md:grid-cols-12">
+                            <div class="md:col-span-4">
+                                <label for="pdv-customer-pet-nome" class="block text-[11px] font-semibold text-gray-700">Nome do Pet:</label>
+                                <input id="pdv-customer-pet-nome" type="text" class="mt-1 h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-[12px] text-gray-700">
+                            </div>
+                            <div class="md:col-span-2">
+                                <label for="pdv-customer-pet-tipo" class="block text-[11px] font-semibold text-gray-700">Tipo:</label>
+                                <select id="pdv-customer-pet-tipo" class="mt-1 h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-[12px] text-gray-700">
+                                    <option value=""></option>
+                                    <option value="cachorro">Cachorro</option>
+                                    <option value="gato">Gato</option>
+                                    <option value="passaro">Passaro</option>
+                                    <option value="peixe">Peixe</option>
+                                    <option value="roedor">Roedor</option>
+                                    <option value="lagarto">Lagarto</option>
+                                    <option value="tartaruga">Tartaruga</option>
+                                </select>
+                            </div>
+                            <div class="md:col-span-2">
+                                <label for="pdv-customer-pet-sexo" class="block text-[11px] font-semibold text-gray-700">Sexo:</label>
+                                <select id="pdv-customer-pet-sexo" class="mt-1 h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-[12px] text-gray-700">
+                                    <option value=""></option>
+                                    <option value="M">Macho</option>
+                                    <option value="F">Femea</option>
+                                </select>
+                            </div>
+                            <div class="md:col-span-2">
+                                <label for="pdv-customer-pet-porte" class="block text-[11px] font-semibold text-gray-700">Porte:</label>
+                                <select id="pdv-customer-pet-porte" class="mt-1 h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-[12px] text-gray-700">
+                                    <option value="">Sem porte definido</option>
+                                    <option value="mini">Mini</option>
+                                    <option value="pequeno">Pequeno</option>
+                                    <option value="medio">Medio</option>
+                                    <option value="grande">Grande</option>
+                                    <option value="gigante">Gigante</option>
+                                </select>
+                            </div>
+                            <div class="md:col-span-2">
+                                <label for="pdv-customer-pet-peso" class="block text-[11px] font-semibold text-gray-700">Peso:</label>
+                                <input id="pdv-customer-pet-peso" type="text" class="mt-1 h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-[12px] text-gray-700">
+                            </div>
+                        </div>
+                        <div class="mt-2 grid grid-cols-1 gap-2 md:grid-cols-12">
+                            <div class="md:col-span-4">
+                                <label for="pdv-customer-pet-raca" class="block text-[11px] font-semibold text-gray-700">Raca:</label>
+                                <div class="relative mt-1">
+                                    <input id="pdv-customer-pet-raca" type="text" autocomplete="off" class="h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-[12px] text-gray-700">
+                                    <div id="pdv-customer-pet-raca-suggest" class="absolute z-30 mt-1 hidden max-h-56 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-lg"></div>
+                                </div>
+                            </div>
+                            <div class="md:col-span-3">
+                                <label for="pdv-customer-pet-nasc" class="block text-[11px] font-semibold text-gray-700">Data de Nascimento:</label>
+                                <input id="pdv-customer-pet-nasc" type="date" class="mt-1 h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-[12px] text-gray-700">
+                            </div>
+                            <div class="md:col-span-3">
+                                <label for="pdv-customer-pet-cor" class="block text-[11px] font-semibold text-gray-700">Pelagem/Cor:</label>
+                                <input id="pdv-customer-pet-cor" type="text" class="mt-1 h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-[12px] text-gray-700">
+                            </div>
+                            <div class="md:col-span-2">
+                                <label for="pdv-customer-pet-cod-ant" class="block text-[11px] font-semibold text-gray-700">Cod. Antigo:</label>
+                                <input id="pdv-customer-pet-cod-ant" type="text" class="mt-1 h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-[12px] text-gray-700">
+                            </div>
+                        </div>
+                        <div class="mt-2 grid grid-cols-1 gap-2 md:grid-cols-12">
+                            <div class="md:col-span-4">
+                                <label for="pdv-customer-pet-microchip" class="block text-[11px] font-semibold text-gray-700">Microchip:</label>
+                                <input id="pdv-customer-pet-microchip" type="text" class="mt-1 h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-[12px] text-gray-700">
+                            </div>
+                            <div class="md:col-span-3">
+                                <label for="pdv-customer-pet-rga" class="block text-[11px] font-semibold text-gray-700">RGA:</label>
+                                <input id="pdv-customer-pet-rga" type="text" class="mt-1 h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-[12px] text-gray-700">
+                            </div>
+                            <div class="md:col-span-2 flex items-end">
+                                <label class="inline-flex items-center gap-2 text-[12px] text-gray-700">
+                                    <input id="pdv-customer-pet-castrado" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/30">
+                                    <span>Castrado</span>
+                                </label>
+                            </div>
+                            <div class="md:col-span-2 flex items-end">
+                                <label class="inline-flex items-center gap-2 text-[12px] text-gray-700">
+                                    <input id="pdv-customer-pet-obito" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/30">
+                                    <span>Obito</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
                     <div id="pdv-customer-pets-loading" class="hidden rounded-lg border border-dashed border-gray-300 bg-white px-4 py-3 text-sm text-gray-500">Carregando pets do cliente...</div>
                     <div id="pdv-customer-pets-empty" class="rounded-lg border border-dashed border-gray-300 bg-white px-4 py-3 text-sm text-gray-500">Nenhum pet disponível.</div>
-                    <div id="pdv-customer-pets" class="space-y-2"></div>
+                    <div id="pdv-customer-pets" class="grid grid-cols-1 gap-2 md:grid-cols-2"></div>
                 </div>
             </div>
 

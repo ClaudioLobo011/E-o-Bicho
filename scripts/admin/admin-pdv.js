@@ -246,6 +246,7 @@
     searchController: null,
     deliveryOrders: [],
     deliveryAddresses: [],
+    deliveryModalCustomer: null,
     deliveryAddressesLoading: false,
     deliveryAddressSaving: false,
     deliveryAddressFormVisible: false,
@@ -354,6 +355,9 @@
   let budgetImportDefaultLabel = 'Importar orçamento';
   const BUDGET_IMPORT_FINALIZED_LABEL = 'Orçamento finalizado';
   const customerPetsCache = new Map();
+  let customerModalPetSpeciesMap = null;
+  let customerModalPetSpeciesMapPromise = null;
+  let customerModalPetBreedOptions = [];
   const customerAddressesCache = new Map();
   const appointmentCache = new Map();
   const appointmentCustomerCache = new Map();
@@ -944,7 +948,7 @@
   const applyDeliveryAddressFromCep = (data) => {
     if (!data) return;
     const fields = elements.deliveryAddressFields || {};
-    if (fields.cep) fields.cep.value = data.cep || '';
+    setDeliveryMaskedFieldValue('deliveryCep', fields.cep, data.cep || '');
     if (fields.logradouro) fields.logradouro.value = data.logradouro || '';
     if (fields.bairro) fields.bairro.value = data.bairro || '';
     if (fields.cidade) fields.cidade.value = data.cidade || '';
@@ -1370,6 +1374,31 @@
     registerDeliveryMask('deliveryPhoneMain', elements.deliveryPhoneNumber, createPhoneMaskOptions());
     registerDeliveryMask('deliveryPhoneOne', elements.deliveryPhone1Number, createPhoneMaskOptions());
     registerDeliveryMask('deliveryPhoneTwo', elements.deliveryPhone2Number, createPhoneMaskOptions());
+  };
+
+  const getDeliveryModalCustomer = () => {
+    const customer = state.deliveryModalCustomer;
+    return customer && typeof customer === 'object' ? customer : null;
+  };
+
+  const setDeliveryMaskedFieldValue = (maskKey, element, value, options = {}) => {
+    if (!element) return;
+    const { unmasked = false } = options;
+    const mask = deliveryFieldMasks[maskKey];
+    if (mask && typeof mask === 'object') {
+      if (unmasked && 'unmaskedValue' in mask) {
+        mask.unmaskedValue = value == null ? '' : String(value);
+      } else if ('value' in mask) {
+        mask.value = value == null ? '' : String(value);
+      } else {
+        element.value = value == null ? '' : String(value);
+      }
+      if (typeof mask.updateValue === 'function') {
+        mask.updateValue();
+      }
+      return;
+    }
+    element.value = value == null ? '' : String(value);
   };
 
   const parseDecimalInput = (value) => {
@@ -3570,6 +3599,20 @@
     elements.customerPetsList = document.getElementById('pdv-customer-pets');
     elements.customerPetsEmpty = document.getElementById('pdv-customer-pets-empty');
     elements.customerPetsLoading = document.getElementById('pdv-customer-pets-loading');
+    elements.customerPetNome = document.getElementById('pdv-customer-pet-nome');
+    elements.customerPetTipo = document.getElementById('pdv-customer-pet-tipo');
+    elements.customerPetSexo = document.getElementById('pdv-customer-pet-sexo');
+    elements.customerPetPorte = document.getElementById('pdv-customer-pet-porte');
+    elements.customerPetPeso = document.getElementById('pdv-customer-pet-peso');
+    elements.customerPetRaca = document.getElementById('pdv-customer-pet-raca');
+    elements.customerPetRacaSuggest = document.getElementById('pdv-customer-pet-raca-suggest');
+    elements.customerPetNasc = document.getElementById('pdv-customer-pet-nasc');
+    elements.customerPetCor = document.getElementById('pdv-customer-pet-cor');
+    elements.customerPetCodAnt = document.getElementById('pdv-customer-pet-cod-ant');
+    elements.customerPetMicrochip = document.getElementById('pdv-customer-pet-microchip');
+    elements.customerPetRga = document.getElementById('pdv-customer-pet-rga');
+    elements.customerPetCastrado = document.getElementById('pdv-customer-pet-castrado');
+    elements.customerPetObito = document.getElementById('pdv-customer-pet-obito');
     elements.customerConfirm = document.getElementById('pdv-customer-confirm');
     elements.customerClear = document.getElementById('pdv-customer-clear');
     elements.customerCancel = document.getElementById('pdv-customer-cancel');
@@ -4405,12 +4448,14 @@
     buttons.forEach((button) => {
       const tab = button.getAttribute('data-pdv-customer-tab');
       const isActive = tab === state.modalActiveTab;
-      const isPetTab = tab === 'pet';
-      const disabled = isPetTab && !state.modalSelectedCliente;
-      button.classList.toggle('text-primary', isActive);
-      button.classList.toggle('border-primary', isActive);
+      const disabled = false;
+      button.classList.toggle('bg-primary', isActive);
+      button.classList.toggle('text-white', isActive);
+      button.classList.toggle('bg-gray-200', !isActive);
       button.classList.toggle('text-gray-500', !isActive);
-      button.classList.toggle('border-transparent', !isActive);
+      button.classList.toggle('text-primary', false);
+      button.classList.toggle('border-primary', false);
+      button.classList.toggle('border-transparent', false);
       button.setAttribute('aria-selected', isActive ? 'true' : 'false');
       button.disabled = disabled;
       button.setAttribute('aria-disabled', disabled ? 'true' : 'false');
@@ -4425,11 +4470,16 @@
 
   const updateCustomerModalActions = () => {
     const hasSelection = Boolean(state.modalSelectedCliente);
+    const shouldPersistCustomer = Boolean(elements.customerRegisterToggle?.checked);
+    const isExchangeTarget = isExchangeCustomerSearchTarget(state.customerSearchTarget);
+    const canConfirm = isExchangeTarget ? hasSelection : hasSelection || shouldPersistCustomer;
     if (elements.customerConfirm) {
-      elements.customerConfirm.disabled = !hasSelection;
-      elements.customerConfirm.classList.toggle('opacity-60', !hasSelection);
-      if (isExchangeCustomerSearchTarget(state.customerSearchTarget)) {
+      elements.customerConfirm.disabled = !canConfirm;
+      elements.customerConfirm.classList.toggle('opacity-60', !canConfirm);
+      if (isExchangeTarget) {
         elements.customerConfirm.textContent = 'Selecionar cliente';
+      } else if (shouldPersistCustomer) {
+        elements.customerConfirm.textContent = 'Gravar';
       } else {
         elements.customerConfirm.textContent = state.vendaCliente
           ? 'Atualizar vínculo'
@@ -4669,24 +4719,33 @@
       return;
     }
     elements.customerPetsList.innerHTML = '';
-    if (!state.modalSelectedCliente) {
+    const hasCustomer = Boolean(state.modalSelectedCliente);
+    const allowNewPetCard =
+      Boolean(elements.customerRegisterToggle?.checked) &&
+      !isExchangeCustomerSearchTarget(state.customerSearchTarget);
+
+    if (!hasCustomer && !allowNewPetCard) {
       elements.customerPetsLoading.classList.add('hidden');
       elements.customerPetsEmpty.textContent = 'Selecione um cliente para visualizar os pets vinculados.';
       elements.customerPetsEmpty.classList.remove('hidden');
       return;
     }
-    if (state.customerPetsLoading) {
+    if (hasCustomer && state.customerPetsLoading) {
       elements.customerPetsLoading.classList.remove('hidden');
       elements.customerPetsEmpty.classList.add('hidden');
       return;
     }
     elements.customerPetsLoading.classList.add('hidden');
     if (!state.customerPets.length) {
-      elements.customerPetsEmpty.textContent = 'Nenhum pet cadastrado para este cliente.';
+      elements.customerPetsEmpty.textContent = hasCustomer
+        ? allowNewPetCard
+          ? 'Nenhum pet cadastrado. Clique em + para adicionar um novo pet.'
+          : 'Nenhum pet cadastrado para este cliente.'
+        : 'Clique em + para preencher os dados de um novo pet.';
       elements.customerPetsEmpty.classList.remove('hidden');
-      return;
+    } else {
+      elements.customerPetsEmpty.classList.add('hidden');
     }
-    elements.customerPetsEmpty.classList.add('hidden');
     const fragment = document.createDocumentFragment();
     state.customerPets.forEach((pet) => {
       const isSelected = Boolean(state.modalSelectedPet && state.modalSelectedPet._id === pet._id);
@@ -4694,7 +4753,7 @@
       button.type = 'button';
       button.setAttribute('data-pet-id', pet._id);
       button.className = [
-        'w-full text-left rounded-lg border px-4 py-3 transition flex flex-col gap-1',
+        'w-full min-h-[92px] text-left rounded-lg border px-4 py-3 transition flex flex-col gap-1 bg-white',
         isSelected
           ? 'border-primary bg-primary/5 text-primary'
           : 'border-gray-200 text-gray-700 hover:border-primary hover:bg-primary/5',
@@ -4706,7 +4765,242 @@
       `;
       fragment.appendChild(button);
     });
+    if (allowNewPetCard) {
+      const isCreatingNewPet = !state.modalSelectedPet;
+      const addCard = document.createElement('button');
+      addCard.type = 'button';
+      addCard.setAttribute('data-pet-new', 'true');
+      addCard.className = [
+        'min-h-[92px] rounded-lg border border-dashed bg-white p-3 text-center transition',
+        'flex flex-col items-center justify-center gap-1',
+        isCreatingNewPet
+          ? 'border-primary text-primary ring-1 ring-primary/30'
+          : 'border-gray-300 text-gray-400 hover:border-primary hover:text-primary',
+      ].join(' ');
+      addCard.innerHTML = '<span class="text-2xl leading-none">+</span><span class="text-[11px] font-semibold">Novo pet</span>';
+      fragment.appendChild(addCard);
+    }
     elements.customerPetsList.appendChild(fragment);
+  };
+
+  const normalizeCustomerPetText = (value) => {
+    const raw = String(value || '').trim().toLowerCase();
+    if (!raw) return '';
+    const normalized = typeof raw.normalize === 'function' ? raw.normalize('NFD') : raw;
+    return normalized.replace(/[\u0300-\u036f]/g, '');
+  };
+
+  const normalizeCustomerPetPorte = (value) => {
+    const raw = normalizeCustomerPetText(value);
+    if (!raw) return '';
+    if (raw.startsWith('mini')) return 'mini';
+    if (raw.startsWith('pequen')) return 'pequeno';
+    if (raw.startsWith('medi')) return 'medio';
+    if (raw.startsWith('grand')) return 'grande';
+    if (raw.startsWith('gigan')) return 'gigante';
+    return raw;
+  };
+
+  const closeCustomerPetBreedSuggestions = () => {
+    if (!elements.customerPetRacaSuggest) return;
+    elements.customerPetRacaSuggest.classList.add('hidden');
+    elements.customerPetRacaSuggest.innerHTML = '';
+  };
+
+  const clearCustomerPetForm = () => {
+    if (elements.customerPetNome) elements.customerPetNome.value = '';
+    if (elements.customerPetTipo) elements.customerPetTipo.value = '';
+    if (elements.customerPetSexo) elements.customerPetSexo.value = '';
+    if (elements.customerPetPorte) elements.customerPetPorte.value = '';
+    if (elements.customerPetPeso) elements.customerPetPeso.value = '';
+    if (elements.customerPetRaca) elements.customerPetRaca.value = '';
+    if (elements.customerPetNasc) elements.customerPetNasc.value = '';
+    if (elements.customerPetCor) elements.customerPetCor.value = '';
+    if (elements.customerPetCodAnt) elements.customerPetCodAnt.value = '';
+    if (elements.customerPetMicrochip) elements.customerPetMicrochip.value = '';
+    if (elements.customerPetRga) elements.customerPetRga.value = '';
+    if (elements.customerPetCastrado) elements.customerPetCastrado.checked = false;
+    if (elements.customerPetObito) elements.customerPetObito.checked = false;
+    closeCustomerPetBreedSuggestions();
+  };
+
+  const setCustomerPetFormFromPet = (pet) => {
+    if (!pet || typeof pet !== 'object') {
+      clearCustomerPetForm();
+      return;
+    }
+    if (elements.customerPetNome) elements.customerPetNome.value = pet.nome || '';
+    if (elements.customerPetTipo) elements.customerPetTipo.value = String(pet.tipo || '').toLowerCase();
+    if (elements.customerPetSexo) elements.customerPetSexo.value = String(pet.sexo || '').toUpperCase();
+    if (elements.customerPetPorte) elements.customerPetPorte.value = normalizeCustomerPetPorte(pet.porte || '');
+    if (elements.customerPetPeso) elements.customerPetPeso.value = pet.peso || '';
+    if (elements.customerPetRaca) elements.customerPetRaca.value = pet.raca || '';
+    if (elements.customerPetNasc) {
+      const raw = pet.dataNascimento || pet.nascimento || '';
+      const dt = raw ? new Date(raw) : null;
+      elements.customerPetNasc.value =
+        dt && Number.isFinite(dt.getTime()) ? dt.toISOString().slice(0, 10) : '';
+    }
+    if (elements.customerPetCor) elements.customerPetCor.value = pet.pelagemCor || pet.cor || '';
+    if (elements.customerPetCodAnt) elements.customerPetCodAnt.value = pet.codAntigoPet || '';
+    if (elements.customerPetMicrochip) elements.customerPetMicrochip.value = pet.microchip || '';
+    if (elements.customerPetRga) elements.customerPetRga.value = pet.rga || '';
+    if (elements.customerPetCastrado) elements.customerPetCastrado.checked = Boolean(pet.castrado);
+    if (elements.customerPetObito) elements.customerPetObito.checked = Boolean(pet.obito);
+  };
+
+  const loadCustomerModalPetSpeciesMap = async () => {
+    if (customerModalPetSpeciesMap) return customerModalPetSpeciesMap;
+    if (customerModalPetSpeciesMapPromise) return customerModalPetSpeciesMapPromise;
+    const buildMap = (payload) => {
+      const species = {};
+      const dogPayload = payload?.cachorro || {};
+      const portes = dogPayload.portes || {};
+      const dogMap = {
+        mini: Array.from(new Set(portes.mini || [])),
+        pequeno: Array.from(new Set(portes.pequeno || [])),
+        medio: Array.from(new Set(portes.medio || [])),
+        grande: Array.from(new Set(portes.grande || [])),
+        gigante: Array.from(new Set(portes.gigante || [])),
+      };
+      const dogAll = Array.from(
+        new Set([
+          ...(Array.isArray(dogPayload.all) ? dogPayload.all : []),
+          ...dogMap.mini,
+          ...dogMap.pequeno,
+          ...dogMap.medio,
+          ...dogMap.grande,
+          ...dogMap.gigante,
+        ])
+      );
+      const dogLookup = {};
+      const sourceMap = dogPayload.map || {};
+      dogAll.forEach((breed) => {
+        const key = normalizeCustomerPetText(breed);
+        const porte =
+          sourceMap[key] ||
+          sourceMap[breed] ||
+          (dogMap.mini.includes(breed)
+            ? 'mini'
+            : dogMap.pequeno.includes(breed)
+            ? 'pequeno'
+            : dogMap.medio.includes(breed)
+            ? 'medio'
+            : dogMap.grande.includes(breed)
+            ? 'grande'
+            : 'gigante');
+        dogLookup[key] = normalizeCustomerPetPorte(porte);
+      });
+      species.cachorro = { all: dogAll, map: dogLookup };
+      ['gato', 'passaro', 'peixe', 'roedor', 'lagarto', 'tartaruga'].forEach((tipo) => {
+        species[tipo] = Array.from(new Set(Array.isArray(payload?.[tipo]) ? payload[tipo] : []));
+      });
+      return species;
+    };
+    customerModalPetSpeciesMapPromise = (async () => {
+      try {
+        const response = await fetch('/data/racas.json', { headers: { Accept: 'application/json' } });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        customerModalPetSpeciesMap = buildMap(await response.json());
+        return customerModalPetSpeciesMap;
+      } catch (error) {
+        console.warn('Nao foi possivel carregar data/racas.json para o modal de cliente.', error);
+        customerModalPetSpeciesMap = null;
+        return null;
+      } finally {
+        customerModalPetSpeciesMapPromise = null;
+      }
+    })();
+    return customerModalPetSpeciesMapPromise;
+  };
+
+  const inferCustomerPetTypeFromBreed = (breedValue) => {
+    const speciesMap = customerModalPetSpeciesMap;
+    const breedKey = normalizeCustomerPetText(breedValue);
+    if (!speciesMap || !breedKey) return '';
+    if ((speciesMap?.cachorro?.all || []).some((item) => normalizeCustomerPetText(item) === breedKey)) return 'cachorro';
+    for (const tipo of ['gato', 'passaro', 'peixe', 'roedor', 'lagarto', 'tartaruga']) {
+      if ((speciesMap?.[tipo] || []).some((item) => normalizeCustomerPetText(item) === breedKey)) return tipo;
+    }
+    return '';
+  };
+
+  const setCustomerPetPorteFromBreedIfDog = () => {
+    if (!elements.customerPetTipo || !elements.customerPetRaca || !elements.customerPetPorte) return;
+    if (normalizeCustomerPetText(elements.customerPetTipo.value) !== 'cachorro') return;
+    const lookup = customerModalPetSpeciesMap?.cachorro?.map || null;
+    if (!lookup) return;
+    const porte = lookup[normalizeCustomerPetText(elements.customerPetRaca.value)] || '';
+    if (!porte) return;
+    elements.customerPetPorte.value = normalizeCustomerPetPorte(porte);
+  };
+
+  const refreshCustomerPetBreedOptions = async () => {
+    await loadCustomerModalPetSpeciesMap().catch(() => {});
+    const speciesMap = customerModalPetSpeciesMap;
+    if (!speciesMap) {
+      customerModalPetBreedOptions = [];
+      closeCustomerPetBreedSuggestions();
+      return;
+    }
+    const tipo = normalizeCustomerPetText(elements.customerPetTipo?.value || '');
+    let breeds = [];
+    if (tipo === 'cachorro') breeds = (speciesMap?.cachorro?.all || []).slice();
+    else if (tipo && Array.isArray(speciesMap?.[tipo])) breeds = (speciesMap?.[tipo] || []).slice();
+    else {
+      breeds = Array.from(
+        new Set([
+          ...(speciesMap?.cachorro?.all || []),
+          ...(speciesMap?.gato || []),
+          ...(speciesMap?.passaro || []),
+          ...(speciesMap?.peixe || []),
+          ...(speciesMap?.roedor || []),
+          ...(speciesMap?.lagarto || []),
+          ...(speciesMap?.tartaruga || []),
+        ])
+      );
+    }
+    customerModalPetBreedOptions = breeds.sort((a, b) => String(a).localeCompare(String(b), 'pt-BR'));
+  };
+
+  const renderCustomerPetBreedSuggestions = async () => {
+    const input = elements.customerPetRaca;
+    const container = elements.customerPetRacaSuggest;
+    if (!input || !container) return;
+    await refreshCustomerPetBreedOptions();
+    const term = normalizeCustomerPetText(input.value);
+    const options = (customerModalPetBreedOptions || [])
+      .filter((item) => !term || normalizeCustomerPetText(item).includes(term))
+      .slice(0, 80);
+    if (!options.length) {
+      closeCustomerPetBreedSuggestions();
+      return;
+    }
+    container.innerHTML = options
+      .map(
+        (breed) =>
+          `<button type="button" class="block w-full border-b border-gray-100 px-3 py-2 text-left text-[12px] text-gray-700 hover:bg-primary/5 last:border-b-0" data-pdv-customer-pet-breed-option="${escapeHtml(String(breed))}">${escapeHtml(String(breed))}</button>`
+      )
+      .join('');
+    container.classList.remove('hidden');
+  };
+
+  const handleCustomerPetBreedTypePorteSync = async (source = '') => {
+    await refreshCustomerPetBreedOptions();
+    const tipoInput = elements.customerPetTipo;
+    const racaInput = elements.customerPetRaca;
+    if (!tipoInput || !racaInput) return;
+    const breed = String(racaInput.value || '').trim();
+    if (breed) {
+      const inferredType = inferCustomerPetTypeFromBreed(breed);
+      if (inferredType && normalizeCustomerPetText(tipoInput.value) !== inferredType) {
+        tipoInput.value = inferredType;
+        await refreshCustomerPetBreedOptions();
+      }
+    }
+    if (source !== 'tipo') {
+      setCustomerPetPorteFromBreedIfDog();
+    }
   };
 
   const normalizeReceivableCustomerId = (entry) => {
@@ -5410,6 +5704,7 @@
     if (elements.customerPreviewSexo) elements.customerPreviewSexo.required = required;
     if (elements.customerPreviewCep) elements.customerPreviewCep.required = required;
     if (elements.customerPreviewNumber) elements.customerPreviewNumber.required = required;
+    renderCustomerPets();
   };
 
   const setSellerFeedback = (message, status = 'muted') => {
@@ -8948,6 +9243,7 @@
   const setModalSelectedCliente = (cliente) => {
     state.modalSelectedCliente = cliente ? { ...cliente } : null;
     state.modalSelectedPet = null;
+    clearCustomerPetForm();
     state.customerModalSelectedAddressId = '';
     if (isExchangeCustomerSearchTarget(state.customerSearchTarget)) {
       state.customerPets = [];
@@ -9005,6 +9301,7 @@
     ) {
       state.modalSelectedPet = { ...state.vendaPet };
       renderCustomerPets();
+      setCustomerPetFormFromPet(state.modalSelectedPet);
       updateCustomerModalActions();
     }
     elements.customerModal.classList.remove('hidden');
@@ -9083,6 +9380,17 @@
   };
 
   const handleCustomerPetsClick = (event) => {
+    const addButton = event.target.closest('[data-pet-new]');
+    if (addButton) {
+      state.modalSelectedPet = null;
+      clearCustomerPetForm();
+      state.modalActiveTab = 'pet';
+      renderCustomerPets();
+      updateCustomerModalTabs();
+      updateCustomerModalActions();
+      elements.customerPetNome?.focus();
+      return;
+    }
     const button = event.target.closest('[data-pet-id]');
     if (!button) return;
     const id = button.getAttribute('data-pet-id');
@@ -9090,8 +9398,10 @@
     if (!pet) return;
     if (state.modalSelectedPet && state.modalSelectedPet._id === id) {
       state.modalSelectedPet = null;
+      clearCustomerPetForm();
     } else {
       state.modalSelectedPet = { ...pet };
+      setCustomerPetFormFromPet(state.modalSelectedPet);
     }
     renderCustomerPets();
     updateCustomerModalActions();
@@ -9100,11 +9410,6 @@
   const handleCustomerTabClick = (event) => {
     const tab = event.currentTarget.getAttribute('data-pdv-customer-tab');
     if (!tab) return;
-    if (tab === 'pet' && !state.modalSelectedCliente) {
-      event.preventDefault();
-      notify('Selecione um cliente para visualizar os pets.', 'info');
-      return;
-    }
     state.modalActiveTab = tab;
     updateCustomerModalTabs();
     if (tab === 'pet' && state.modalSelectedCliente && state.modalSelectedCliente._id) {
@@ -9201,6 +9506,105 @@
     };
   };
 
+  const buildCustomerModalPetPayload = () => {
+    const nome = String(elements.customerPetNome?.value || '').trim();
+    const tipo = String(elements.customerPetTipo?.value || '').trim().toLowerCase();
+    const sexo = String(elements.customerPetSexo?.value || '').trim().toUpperCase();
+    const porte = String(elements.customerPetPorte?.value || '').trim().toLowerCase();
+    const peso = String(elements.customerPetPeso?.value || '').trim();
+    const raca = String(elements.customerPetRaca?.value || '').trim();
+    const nascimento = String(elements.customerPetNasc?.value || '').trim();
+    const pelagemCor = String(elements.customerPetCor?.value || '').trim();
+    const codAntigoPet = String(elements.customerPetCodAnt?.value || '').trim();
+    const microchip = String(elements.customerPetMicrochip?.value || '').trim();
+    const rga = String(elements.customerPetRga?.value || '').trim();
+    const castrado = Boolean(elements.customerPetCastrado?.checked);
+    const obito = Boolean(elements.customerPetObito?.checked);
+
+    const hasAnyField = Boolean(
+      nome ||
+        tipo ||
+        sexo ||
+        porte ||
+        peso ||
+        raca ||
+        nascimento ||
+        pelagemCor ||
+        codAntigoPet ||
+        microchip ||
+        rga ||
+        castrado ||
+        obito
+    );
+
+    if (!hasAnyField) return null;
+
+    return {
+      nome,
+      tipo,
+      sexo,
+      porte,
+      peso,
+      raca,
+      nascimento,
+      pelagemCor,
+      codAntigoPet,
+      microchip,
+      rga,
+      castrado,
+      obito,
+    };
+  };
+
+  const validateCustomerModalPetDraft = () => {
+    const payload = buildCustomerModalPetPayload();
+    if (!payload) return true;
+    if (!payload.nome) {
+      elements.customerPetNome?.focus();
+      notify('Informe o nome do pet.', 'warning');
+      return false;
+    }
+    if (!payload.tipo) {
+      elements.customerPetTipo?.focus();
+      notify('Informe o tipo do pet.', 'warning');
+      return false;
+    }
+    if (!payload.sexo) {
+      elements.customerPetSexo?.focus();
+      notify('Informe o sexo do pet.', 'warning');
+      return false;
+    }
+    return true;
+  };
+
+  const saveCustomerModalPetIfNeeded = async (customerId) => {
+    const normalizedCustomerId = normalizeId(customerId);
+    if (!normalizedCustomerId || !isValidObjectId(normalizedCustomerId)) return null;
+    const payload = buildCustomerModalPetPayload();
+    if (!payload) return null;
+    const token = getToken();
+    const selectedPetId = normalizeId(state.modalSelectedPet?._id || state.modalSelectedPet?.id || '');
+    const canUpdateExistingPet = Boolean(selectedPetId && isValidObjectId(selectedPetId));
+    const endpoint = canUpdateExistingPet
+      ? `${API_BASE}/func/clientes/${encodeURIComponent(normalizedCustomerId)}/pets/${encodeURIComponent(selectedPetId)}`
+      : `${API_BASE}/func/clientes/${encodeURIComponent(normalizedCustomerId)}/pets`;
+    const savedPet = await fetchWithOptionalAuth(endpoint, {
+      method: canUpdateExistingPet ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      token,
+      errorMessage: canUpdateExistingPet
+        ? 'Nao foi possivel atualizar o pet no cadastro do cliente.'
+        : 'Nao foi possivel cadastrar o pet no cadastro do cliente.',
+    });
+    customerPetsCache.delete(normalizedCustomerId);
+    if (savedPet && typeof savedPet === 'object') {
+      state.modalSelectedPet = { ...savedPet };
+      return savedPet;
+    }
+    return null;
+  };
+
   const validateCustomerModalSave = ({ creatingNewCustomer = false, savingNewAddress = false } = {}) => {
     const name = String(elements.customerSearchInput?.value || '').trim();
     const documentDigits = normalizeDocumentDigits(elements.customerPreviewDoc?.value || '');
@@ -9240,6 +9644,9 @@
         notify('Para salvar no cadastro, informe Endereço, Número e CEP válidos.', 'warning');
         return false;
       }
+    }
+    if (!validateCustomerModalPetDraft()) {
+      return false;
     }
     return true;
   };
@@ -9292,6 +9699,7 @@
         throw new Error('Cliente cadastrado, mas não foi possível identificar o ID para salvar o endereço.');
       }
       await saveCustomerModalNewAddress(createdId);
+      await saveCustomerModalPetIfNeeded(createdId);
       const detailed = await fetchDeliveryCustomerDetails({ _id: String(createdId), id: String(createdId) });
       return detailed && typeof detailed === 'object' ? detailed : { _id: String(createdId), id: String(createdId) };
     } catch (error) {
@@ -9300,6 +9708,7 @@
         const existingId = resolveCustomerId(existingCustomer);
         if (existingId && isValidObjectId(existingId)) {
           await saveCustomerModalNewAddress(existingId);
+          await saveCustomerModalPetIfNeeded(existingId);
           const detailedExisting = await fetchDeliveryCustomerDetails(existingCustomer);
           return detailedExisting && typeof detailedExisting === 'object'
             ? detailedExisting
@@ -9331,6 +9740,7 @@
     if (addingNewAddress) {
       await saveCustomerModalNewAddress(customerId);
     }
+    await saveCustomerModalPetIfNeeded(customerId);
     const detailed = await fetchDeliveryCustomerDetails({ _id: customerId, id: customerId });
     return detailed && typeof detailed === 'object' ? detailed : { _id: customerId, id: customerId };
   };
@@ -9387,10 +9797,20 @@
           customerToBind = await createCustomerFromCustomerModalForm();
           notify('Cliente cadastrado com sucesso.', 'success');
         }
+        const postSavePet =
+          state.modalSelectedPet && typeof state.modalSelectedPet === 'object'
+            ? { ...state.modalSelectedPet }
+            : null;
         setModalSelectedCliente(customerToBind);
         if (preservedPet && resolveCustomerId(customerToBind) === resolveCustomerId(state.modalSelectedCliente)) {
           state.modalSelectedPet = preservedPet;
+          setCustomerPetFormFromPet(state.modalSelectedPet);
+        } else if (postSavePet && resolveCustomerId(customerToBind) === resolveCustomerId(state.modalSelectedCliente)) {
+          state.modalSelectedPet = postSavePet;
+          setCustomerPetFormFromPet(state.modalSelectedPet);
         }
+        renderCustomerPets();
+        updateCustomerModalActions();
       }
 
       if (!customerToBind) {
@@ -9426,6 +9846,7 @@
     state.customerSearchResults = [];
     state.customerSearchLoading = false;
     state.modalActiveTab = 'cliente';
+    clearCustomerPetForm();
     if (elements.customerSearchInput) {
       elements.customerSearchInput.value = '';
     }
@@ -9812,7 +10233,7 @@
   const resetDeliveryAddressForm = () => {
     const fields = elements.deliveryAddressFields || {};
     if (fields.apelido) fields.apelido.value = '';
-    if (fields.cep) fields.cep.value = '';
+    setDeliveryMaskedFieldValue('deliveryCep', fields.cep, '', { unmasked: true });
     if (fields.logradouro) fields.logradouro.value = '';
     if (fields.numero) fields.numero.value = '';
     if (fields.bairro) fields.bairro.value = '';
@@ -9895,22 +10316,22 @@
   };
 
   const applyDeliveryDefaultDdd = () => {
-    if (elements.deliveryPhoneDdd) elements.deliveryPhoneDdd.value = '21';
-    if (elements.deliveryPhone1Ddd) elements.deliveryPhone1Ddd.value = '21';
-    if (elements.deliveryPhone2Ddd) elements.deliveryPhone2Ddd.value = '21';
+    setDeliveryMaskedFieldValue('deliveryDddMain', elements.deliveryPhoneDdd, '21', { unmasked: true });
+    setDeliveryMaskedFieldValue('deliveryDddOne', elements.deliveryPhone1Ddd, '21', { unmasked: true });
+    setDeliveryMaskedFieldValue('deliveryDddTwo', elements.deliveryPhone2Ddd, '21', { unmasked: true });
   };
 
   const syncDeliveryAddressFormWithSelection = () => {
     const fields = elements.deliveryAddressFields || {};
     const selected = state.deliverySelectedAddress || null;
-    const customer = state.vendaCliente || null;
+    const customer = getDeliveryModalCustomer();
 
     if (fields.apelido) {
       fields.apelido.value = resolveCustomerName(customer) || selected?.apelido || '';
     }
     if (fields.logradouro) fields.logradouro.value = selected?.logradouro || '';
     if (fields.numero) fields.numero.value = selected?.numero || '';
-    if (fields.cep) fields.cep.value = formatCep(selected?.cep || '');
+    setDeliveryMaskedFieldValue('deliveryCep', fields.cep, selected?.cep || '', { unmasked: true });
     if (fields.bairro) fields.bairro.value = selected?.bairro || '';
     if (fields.cidade) {
       fields.cidade.value = selected?.cidade || fields.cidade.value || 'RIO DE JANEIRO';
@@ -9919,8 +10340,9 @@
     if (fields.complemento) fields.complemento.value = selected?.complemento || '';
     if (fields.isDefault) fields.isDefault.checked = Boolean(selected?.isDefault || !state.deliveryAddresses.length);
 
-    if (elements.deliveryCustomerCpf) {
-      elements.deliveryCustomerCpf.value = resolveCustomerDocument(customer) || '';
+    const resolvedCustomerDocument = resolveCustomerDocument(customer);
+    if (elements.deliveryCustomerCpf && (resolvedCustomerDocument || !customer)) {
+      setDeliveryMaskedFieldValue('deliveryCpf', elements.deliveryCustomerCpf, resolvedCustomerDocument || '', { unmasked: true });
     }
     if (elements.deliveryCustomerSexo) {
       const sexoValue =
@@ -9940,9 +10362,12 @@
     if (elements.deliveryCustomerEmail) {
       elements.deliveryCustomerEmail.value = customer?.email || customer?.contato?.email || '';
     }
-    if (elements.deliveryCustomerSearch) {
-      elements.deliveryCustomerSearch.value = getCustomerCode(customer) || '';
+    const resolvedCustomerCode = getCustomerCode(customer);
+    if (elements.deliveryCustomerSearch && (resolvedCustomerCode || !customer)) {
+      elements.deliveryCustomerSearch.value = resolvedCustomerCode || '';
     }
+    updateDeliveryCustomerSummary();
+    renderDeliveryOrderHistory();
   };
 
   const setDeliveryAddressFormVisible = (visible) => {
@@ -10047,7 +10472,7 @@
     if (!cep || !logradouro || !numero) return null;
     const candidate = {
       id: state.deliverySelectedAddressId || `manual-${Date.now()}`,
-      apelido: (fields.apelido?.value || '').trim() || resolveCustomerName(state.vendaCliente) || 'Principal',
+      apelido: (fields.apelido?.value || '').trim() || resolveCustomerName(getDeliveryModalCustomer()) || 'Principal',
       cep,
       logradouro,
       numero,
@@ -10093,7 +10518,7 @@
       return;
     }
     elements.deliveryAddressList.innerHTML = '';
-    const hasCustomer = Boolean(state.vendaCliente);
+    const hasCustomer = Boolean(getDeliveryModalCustomer());
     if (state.deliveryAddressesLoading) {
       elements.deliveryAddressLoading.classList.remove('hidden');
     } else {
@@ -10159,7 +10584,7 @@
   };
 
   const loadDeliveryAddresses = async () => {
-    const cliente = state.vendaCliente;
+    const cliente = getDeliveryModalCustomer();
     const clienteId = cliente?._id || cliente?.id || cliente?._idCliente || '';
     const inlineFallback = extractInlineCustomerAddresses(cliente)
       .map((item, index) => normalizeCustomerAddressRecord(item, index))
@@ -10259,10 +10684,11 @@
     if (!elements.deliveryAddressModal) return;
     fillDeliveryOrderDateTimeNow();
     setDeliveryCustomerRegistrationRequired(false);
+    state.deliveryModalCustomer = null;
     if (state.vendaCliente) {
       const detailedCustomer = await fetchDeliveryCustomerDetails(state.vendaCliente);
       if (detailedCustomer && typeof detailedCustomer === 'object') {
-        setSaleCustomer(detailedCustomer, state.vendaPet || null, { skipRecalculate: true });
+        state.deliveryModalCustomer = { ...detailedCustomer };
       }
     }
     updateDeliveryCustomerSummary();
@@ -10289,7 +10715,11 @@
 
   const closeDeliveryAddressModal = () => {
     if (!elements.deliveryAddressModal) return;
+    setDeliveryCustomerRegistrationRequired(false);
+    clearDeliveryCustomerForm();
+    setDeliveryModalTab('cliente');
     elements.deliveryAddressModal.classList.add('hidden');
+    state.deliveryModalCustomer = null;
     releaseBodyScrollIfNoModal();
   };
 
@@ -10317,6 +10747,8 @@
       notify('Selecione um endereço para continuar com o delivery.', 'warning');
       return;
     }
+    const modalCustomer = getDeliveryModalCustomer();
+    setSaleCustomer(modalCustomer || null, modalCustomer ? state.vendaPet || null : null, { skipRecalculate: true });
     captureDeliveryCourierSelection();
     const importedCount = importSelectedDeliveryHistoryItemsToSale();
     state.saleSource = 'delivery';
@@ -10348,7 +10780,8 @@
 
   const handleDeliveryAddressFormSubmit = async (event) => {
     event.preventDefault();
-    if (!state.vendaCliente || !state.vendaCliente._id) {
+    const deliveryModalCustomer = getDeliveryModalCustomer();
+    if (!deliveryModalCustomer || !deliveryModalCustomer._id) {
       notify('Selecione um cliente para cadastrar o endereço.', 'warning');
       return;
     }
@@ -10362,7 +10795,7 @@
       return;
     }
     const payload = {
-      userId: state.vendaCliente._id,
+      userId: deliveryModalCustomer._id,
       apelido: fields.apelido?.value?.trim(),
       cep: cepValue.replace(/\D+/g, ''),
       logradouro: logradouroValue,
@@ -10398,7 +10831,7 @@
       const saved = await response.json();
       const normalized = normalizeCustomerAddressRecord(saved, state.deliveryAddresses.length);
       if (normalized) {
-        const clienteId = state.vendaCliente._id;
+        const clienteId = deliveryModalCustomer._id;
         state.deliveryAddresses.push({ ...normalized });
         customerAddressesCache.set(
           clienteId,
@@ -10439,7 +10872,7 @@
     state.deliverySelectedAddress = null;
     if (fields.logradouro) fields.logradouro.value = '';
     if (fields.numero) fields.numero.value = '';
-    if (fields.cep) fields.cep.value = '';
+    setDeliveryMaskedFieldValue('deliveryCep', fields.cep, '', { unmasked: true });
     if (fields.bairro) fields.bairro.value = '';
     if (fields.cidade) fields.cidade.value = 'RIO DE JANEIRO';
     if (fields.uf) fields.uf.value = 'RJ';
@@ -17546,7 +17979,7 @@
     ) {
       return;
     }
-    const customer = state.vendaCliente;
+    const customer = getDeliveryModalCustomer();
     if (!customer) {
       elements.deliveryClientSince.textContent = '—';
       elements.deliveryClientFidelity.textContent = '—';
@@ -17661,7 +18094,7 @@
   };
 
   const getDeliveryOrderHistorySales = (limit = 12) => {
-    const customer = state.vendaCliente;
+    const customer = getDeliveryModalCustomer();
     if (!customer) return [];
     const sales = Array.isArray(state.completedSales) ? state.completedSales : [];
     return sales
@@ -18105,34 +18538,46 @@
     const effectiveCustomer = detailedCustomer && typeof detailedCustomer === 'object'
       ? detailedCustomer
       : customer;
-    setSaleCustomer(effectiveCustomer, state.vendaPet || null, { skipRecalculate: true });
+    state.deliveryModalCustomer = { ...effectiveCustomer };
     const name = resolveCustomerName(effectiveCustomer) || '';
     if (elements.deliveryAddressFields?.apelido) {
       elements.deliveryAddressFields.apelido.value = name;
     }
-    if (elements.deliveryCustomerCpf) {
-      elements.deliveryCustomerCpf.value = resolveCustomerDocument(effectiveCustomer) || '';
-    }
+    const effectiveDocument =
+      resolveCustomerDocument(effectiveCustomer) ||
+      resolveCustomerDocument(customer) ||
+      elements.deliveryCustomerCpf?.value ||
+      '';
+    setDeliveryMaskedFieldValue('deliveryCpf', elements.deliveryCustomerCpf, effectiveDocument, {
+      unmasked: true,
+    });
     if (elements.deliveryCustomerEmail) {
       elements.deliveryCustomerEmail.value =
         effectiveCustomer?.email || effectiveCustomer?.contato?.email || '';
     }
+    if (elements.deliveryCustomerSearch) {
+      elements.deliveryCustomerSearch.value =
+        getCustomerCode(effectiveCustomer) ||
+        getCustomerCode(customer) ||
+        elements.deliveryCustomerSearch.value ||
+        '';
+    }
     const phones = getCustomerPhoneCandidates(effectiveCustomer);
     const primary = splitPhoneWithDdd(phones[0] || '');
     const secondary = splitPhoneWithDdd(phones[1] || '');
-    if (elements.deliveryPhoneDdd) elements.deliveryPhoneDdd.value = primary.ddd || '';
-    if (elements.deliveryPhoneNumber) elements.deliveryPhoneNumber.value = primary.number || '';
-    if (elements.deliveryPhone1Ddd) elements.deliveryPhone1Ddd.value = primary.ddd || '';
-    if (elements.deliveryPhone1Number) elements.deliveryPhone1Number.value = primary.number || '';
-    if (elements.deliveryPhone2Ddd) elements.deliveryPhone2Ddd.value = secondary.ddd || '';
-    if (elements.deliveryPhone2Number) elements.deliveryPhone2Number.value = secondary.number || '';
+    setDeliveryMaskedFieldValue('deliveryDddMain', elements.deliveryPhoneDdd, primary.ddd || '', { unmasked: true });
+    setDeliveryMaskedFieldValue('deliveryPhoneMain', elements.deliveryPhoneNumber, primary.number || '', { unmasked: true });
+    setDeliveryMaskedFieldValue('deliveryDddOne', elements.deliveryPhone1Ddd, primary.ddd || '', { unmasked: true });
+    setDeliveryMaskedFieldValue('deliveryPhoneOne', elements.deliveryPhone1Number, primary.number || '', { unmasked: true });
+    setDeliveryMaskedFieldValue('deliveryDddTwo', elements.deliveryPhone2Ddd, secondary.ddd || '', { unmasked: true });
+    setDeliveryMaskedFieldValue('deliveryPhoneTwo', elements.deliveryPhone2Number, secondary.number || '', { unmasked: true });
 
     const address = resolveCustomerAddressRecord(effectiveCustomer);
     if (address && elements.deliveryAddressFields) {
       const fields = elements.deliveryAddressFields;
       if (fields.logradouro) fields.logradouro.value = address.logradouro || '';
       if (fields.numero) fields.numero.value = address.numero || '';
-      if (fields.cep) fields.cep.value = formatCep(address.cep || '');
+      setDeliveryMaskedFieldValue('deliveryCep', fields.cep, address.cep || '', { unmasked: true });
       if (fields.bairro) fields.bairro.value = address.bairro || '';
       if (fields.cidade) fields.cidade.value = address.cidade || fields.cidade.value || '';
       if (fields.uf) fields.uf.value = (address.uf || '').toUpperCase();
@@ -18216,8 +18661,12 @@
     const preferredDdd = ddd1 || ddd2;
     const preferredNumber = phone1 || phone2;
     if (!preferredDdd && !preferredNumber) return;
-    elements.deliveryPhoneDdd.value = preferredDdd || elements.deliveryPhoneDdd.value || '';
-    elements.deliveryPhoneNumber.value = preferredNumber || '';
+    setDeliveryMaskedFieldValue('deliveryDddMain', elements.deliveryPhoneDdd, preferredDdd || elements.deliveryPhoneDdd.value || '', {
+      unmasked: true,
+    });
+    setDeliveryMaskedFieldValue('deliveryPhoneMain', elements.deliveryPhoneNumber, preferredNumber || '', {
+      unmasked: true,
+    });
   };
 
   const resolveCustomerEmail = (customer) =>
@@ -18311,7 +18760,16 @@
       state.deliverySelectedAddress = { ...normalized };
       state.deliveryCreatingNewAddress = false;
     }
+    customerAddressesCache.delete(normalizedCustomerId);
+    customerReceivablesDetailsCache.delete(normalizedCustomerId);
     return savedAddress;
+  };
+
+  const invalidateDeliveryCustomerCaches = (customerId) => {
+    const normalizedCustomerId = normalizeId(customerId);
+    if (!normalizedCustomerId) return;
+    customerAddressesCache.delete(normalizedCustomerId);
+    customerReceivablesDetailsCache.delete(normalizedCustomerId);
   };
 
   const createDeliveryCustomerFromForm = async () => {
@@ -18342,6 +18800,7 @@
         response?.cliente?._id ||
         response?.cliente?.id ||
         '';
+      invalidateDeliveryCustomerCaches(createdId);
       await saveDeliveryCustomerAddress(createdId);
       const createdCustomerRef = createdId ? { _id: String(createdId), id: String(createdId) } : response;
       const detailed = await fetchDeliveryCustomerDetails(createdCustomerRef);
@@ -18355,6 +18814,7 @@
         if (existingCustomer) {
           const existingCustomerId = resolveCustomerId(existingCustomer);
           if (existingCustomerId) {
+            invalidateDeliveryCustomerCaches(existingCustomerId);
             await saveDeliveryCustomerAddress(existingCustomerId);
           }
           const detailedExisting = await fetchDeliveryCustomerDetails(existingCustomer);
@@ -18394,7 +18854,9 @@
       token,
       errorMessage: 'Nao foi possivel atualizar o cliente.',
     });
+    invalidateDeliveryCustomerCaches(normalizedCustomerId);
     await saveDeliveryCustomerAddress(normalizedCustomerId);
+    invalidateDeliveryCustomerCaches(normalizedCustomerId);
     const detailed = await fetchDeliveryCustomerDetails({ _id: normalizedCustomerId, id: normalizedCustomerId });
     return detailed && typeof detailed === 'object' ? detailed : { _id: normalizedCustomerId, id: normalizedCustomerId };
   };
@@ -18411,7 +18873,7 @@
         elements.deliveryAddressConfirm.disabled = true;
         elements.deliveryAddressConfirm.classList.add('opacity-60', 'cursor-not-allowed');
       }
-      const editingCustomerId = resolveCustomerId(state.vendaCliente);
+      const editingCustomerId = resolveCustomerId(getDeliveryModalCustomer());
       let savedCustomer = null;
       let resolvedDuplicate = false;
       if (editingCustomerId) {
@@ -18443,7 +18905,7 @@
   };
 
   const clearDeliveryCustomerForm = () => {
-    setSaleCustomer(null, null, { skipRecalculate: true });
+    state.deliveryModalCustomer = null;
     state.deliveryAddresses = [];
     state.deliveryAddressesLoading = false;
     state.deliveryCreatingNewAddress = false;
@@ -18454,18 +18916,20 @@
       elements.deliveryCustomerSearch.value = '';
     }
     if (elements.deliveryCustomerCpf) {
-      elements.deliveryCustomerCpf.value = '';
+      setDeliveryMaskedFieldValue('deliveryCpf', elements.deliveryCustomerCpf, '', { unmasked: true });
     }
     if (elements.deliveryCustomerEmail) {
       elements.deliveryCustomerEmail.value = '';
     }
     applyDeliveryDefaultDdd();
-    if (elements.deliveryPhoneNumber) elements.deliveryPhoneNumber.value = '';
-    if (elements.deliveryPhone1Number) elements.deliveryPhone1Number.value = '';
-    if (elements.deliveryPhone2Number) elements.deliveryPhone2Number.value = '';
+    setDeliveryMaskedFieldValue('deliveryPhoneMain', elements.deliveryPhoneNumber, '', { unmasked: true });
+    setDeliveryMaskedFieldValue('deliveryPhoneOne', elements.deliveryPhone1Number, '', { unmasked: true });
+    setDeliveryMaskedFieldValue('deliveryPhoneTwo', elements.deliveryPhone2Number, '', { unmasked: true });
     const observacao = document.getElementById('pdv-delivery-observacao');
     if (observacao) observacao.value = '';
     renderDeliveryAddresses();
+    updateDeliveryCustomerSummary();
+    renderDeliveryOrderHistory();
     updateDeliveryAddressConfirmState();
   };
 
@@ -24338,6 +24802,13 @@
     elements.customerResultsList?.addEventListener('click', handleCustomerResultsClick);
     elements.customerAddressCards?.addEventListener('click', handleCustomerAddressCardsClick);
     elements.customerPetsList?.addEventListener('click', handleCustomerPetsClick);
+    elements.customerPetRacaSuggest?.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-pdv-customer-pet-breed-option]');
+      if (!button || !elements.customerPetRaca) return;
+      elements.customerPetRaca.value = button.getAttribute('data-pdv-customer-pet-breed-option') || '';
+      closeCustomerPetBreedSuggestions();
+      void handleCustomerPetBreedTypePorteSync('raca');
+    });
     elements.receivablesSearchInput?.addEventListener('input', handleReceivablesSearchInput);
     elements.receivablesSearchResults?.addEventListener('click', handleReceivablesResultsClick);
     elements.receivablesClear?.addEventListener('click', handleReceivablesClear);
@@ -24348,6 +24819,29 @@
     Array.from(elements.customerTabButtons || []).forEach((button) => {
       button.addEventListener('click', handleCustomerTabClick);
     });
+    elements.customerPetTipo?.addEventListener('input', () => {
+      void handleCustomerPetBreedTypePorteSync('tipo');
+    });
+    elements.customerPetTipo?.addEventListener('change', () => {
+      void handleCustomerPetBreedTypePorteSync('tipo');
+    });
+    elements.customerPetRaca?.addEventListener('focus', () => {
+      void renderCustomerPetBreedSuggestions();
+    });
+    elements.customerPetRaca?.addEventListener('input', () => {
+      void renderCustomerPetBreedSuggestions();
+      void handleCustomerPetBreedTypePorteSync('raca');
+    });
+    elements.customerPetRaca?.addEventListener('change', () => {
+      void handleCustomerPetBreedTypePorteSync('raca');
+    });
+    elements.customerPetRaca?.addEventListener('blur', () => {
+      setTimeout(() => closeCustomerPetBreedSuggestions(), 120);
+      void handleCustomerPetBreedTypePorteSync('raca');
+    });
+    elements.customerPetRaca?.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closeCustomerPetBreedSuggestions();
+    });
     elements.customerModal?.addEventListener('keydown', handleCustomerModalKeydown);
     elements.customerRegisterToggle?.addEventListener('change', (event) => {
       setCustomerRegisterRequiredState(Boolean(event?.target?.checked));
@@ -24356,6 +24850,7 @@
         ensureCustomerModalAddressSelection({ applyToFields: true });
       }
       renderCustomerModalAddressCards();
+      updateCustomerModalActions();
     });
     elements.customerRegisterButton?.addEventListener('click', () => openCustomerRegisterModal());
     elements.customerRegisterClose?.addEventListener('click', closeCustomerRegisterModal);
@@ -24447,7 +24942,7 @@
         const digits = sanitizeCepDigits(cepInput.value || '');
         const formatted = formatCep(digits);
         if (cepInput.value !== formatted) {
-          cepInput.value = formatted;
+          setDeliveryMaskedFieldValue('deliveryCep', cepInput, digits, { unmasked: true });
         }
         if (digits.length === 8) {
           handleDeliveryCepLookup();

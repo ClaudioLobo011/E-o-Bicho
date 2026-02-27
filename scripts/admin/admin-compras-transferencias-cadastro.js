@@ -36,6 +36,7 @@
     totalSale: document.getElementById('transfer-total-sale'),
     saveButton: document.getElementById('transfer-save-button'),
     clearButton: document.getElementById('transfer-clear-button'),
+    printButton: document.getElementById('transfer-import-button'),
     transportMode: document.getElementById('transfer-transport'),
     selectedProductContainer: document.getElementById('transfer-selected-product'),
     selectedProductName: document.getElementById('transfer-selected-product-name'),
@@ -114,7 +115,7 @@
 
     admin_master: 'Admin Master',
 
-    funcionario: 'Funcionário',
+    funcionario: 'Funcionario',
 
     franqueado: 'Franqueado',
 
@@ -127,7 +128,7 @@
       const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
       return loggedInUser?.token || '';
     } catch (error) {
-      console.warn('Não foi possível obter o token de autenticação.', error);
+      console.warn('Nao foi possivel obter o token de autenticacao.', error);
       return '';
     }
   }
@@ -236,16 +237,16 @@
     container.classList.remove('hidden');
 
     if (selectors.selectedProductName) {
-      selectors.selectedProductName.textContent = product.description || 'Produto sem descrição';
+      selectors.selectors.selectedProductName.textContent = product.description || 'Produto sem descricao';
     }
     if (selectors.selectedProductSku) {
-      selectors.selectedProductSku.textContent = product.sku || '—';
+      selectors.selectors.selectedProductSku.textContent = product.sku || '-';
     }
     if (selectors.selectedProductBarcode) {
-      selectors.selectedProductBarcode.textContent = product.barcode || '—';
+      selectors.selectors.selectedProductBarcode.textContent = product.barcode || '-';
     }
     if (selectors.selectedProductUnit) {
-      selectors.selectedProductUnit.textContent = product.unit || '—';
+      selectors.selectors.selectedProductUnit.textContent = product.unit || '-';
     }
 
     const originDepositId = selectors.originDeposit?.value || '';
@@ -253,11 +254,11 @@
 
     if (selectors.selectedOriginDeposit) {
       const originName = getDepositNameById(originDepositId);
-      selectors.selectedOriginDeposit.textContent = originName || 'Selecione o depósito';
+      selectors.selectors.selectedOriginDeposit.textContent = originName || 'Selecione o deposito';
     }
     if (selectors.selectedDestinationDeposit) {
       const destinationName = getDepositNameById(destinationDepositId);
-      selectors.selectedDestinationDeposit.textContent = destinationName || 'Selecione o depósito';
+      selectors.selectors.selectedDestinationDeposit.textContent = destinationName || 'Selecione o deposito';
     }
 
     const originStock = findStockForDeposit(product.stocks, originDepositId);
@@ -287,10 +288,10 @@
     }
 
     if (selectors.selectedOriginUnit) {
-      selectors.selectedOriginUnit.textContent = originStock?.unit || product.unit || '—';
+      selectors.selectors.selectedOriginUnit.textContent = originStock?.unit || product.unit || '-';
     }
     if (selectors.selectedDestinationUnit) {
-      selectors.selectedDestinationUnit.textContent = destinationStock?.unit || product.unit || '—';
+      selectors.selectors.selectedDestinationUnit.textContent = destinationStock?.unit || product.unit || '-';
     }
 
     toggleSelectedProductWarning(!originDepositId || !destinationDepositId);
@@ -423,6 +424,7 @@
           sku: item.sku || '',
           barcode: item.barcode || '',
           description: item.description || item.productName || '',
+          ncm: item.ncm || '',
           quantity: Number(item.quantity) || 0,
           unit: item.unit || '',
           lot: item.lot || '',
@@ -457,7 +459,7 @@
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(data?.message || 'Não foi possível gerar o próximo número da transferência.');
+        throw new Error(data?.message || 'Nao foi possivel gerar o proximo numero da transferencia.');
       }
 
       const number = Number(data?.number);
@@ -468,7 +470,7 @@
         }
       }
     } catch (error) {
-      console.error('Erro ao obter próximo número da transferência:', error);
+      console.error('Erro ao obter proximo numero da transferencia:', error);
     }
   }
 
@@ -477,8 +479,8 @@
     const token = getToken();
     if (!token) {
       showModal({
-        title: 'Sessão expirada',
-        message: 'Sua sessão expirou. Faça login novamente para continuar.',
+        title: 'Sessao expirada',
+        message: 'Sua sessao expirou. Faca login novamente para continuar.',
         confirmText: 'Fazer login',
         onConfirm: () => window.location.replace('/pages/login.html'),
       });
@@ -495,19 +497,19 @@
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        const message = data?.message || 'Não foi possível carregar a transferência informada.';
+        const message = data?.message || 'Nao foi possivel carregar a transferencia informada.';
         throw new Error(message);
       }
 
       if (!data?.transfer) {
-        throw new Error('Transferência não encontrada.');
+        throw new Error('Transferencia nao encontrada.');
       }
 
       applyTransferToForm(data.transfer);
     } catch (error) {
-      console.error('Erro ao carregar transferência por número:', error);
-      const message = error?.message || 'Não foi possível carregar a transferência informada.';
-      const type = /não encontrada/i.test(message) ? 'warning' : 'error';
+      console.error('Erro ao carregar transferencia por numero:', error);
+      const message = error?.message || 'Nao foi possivel carregar a transferencia informada.';
+      const type = /nao encontrada/i.test(message) ? 'warning' : 'error';
       showToast(message, type, 4000);
       restoreNumberInputValue();
     } finally {
@@ -533,7 +535,7 @@
 
     const number = Number(rawValue);
     if (!Number.isFinite(number) || number <= 0) {
-      showToast('Informe um número válido de transferência.', 'warning', 4000);
+      showToast('Informe um numero valido de transferencia.', 'warning', 4000);
       restoreNumberInputValue();
       return;
     }
@@ -572,7 +574,7 @@
   function buildStoreLabel(store) {
     const name = store?.nomeFantasia || store?.nome || 'Empresa sem nome';
     const cnpj = formatCnpj(store?.cnpj);
-    return cnpj ? `${name} • CNPJ ${cnpj}` : name;
+    return cnpj ? `${name} - CNPJ ${cnpj}` : name;
   }
 
   function populateCompanySelect(select, stores = state.stores) {
@@ -605,7 +607,7 @@
     if (!availableDeposits.length) {
       const option = document.createElement('option');
       option.value = '';
-      option.textContent = 'Nenhum depósito cadastrado para esta empresa';
+      option.textContent = 'Nenhum deposito cadastrado para esta empresa';
       option.disabled = true;
       depositSelect.appendChild(option);
       depositSelect.disabled = false;
@@ -616,7 +618,7 @@
     availableDeposits.forEach((deposit) => {
       const option = document.createElement('option');
       option.value = deposit._id;
-      option.textContent = deposit.nome || 'Depósito sem nome';
+      option.textContent = deposit.nome || 'Depositos sem nome';
       depositSelect.appendChild(option);
     });
 
@@ -630,7 +632,7 @@
     const name = user?.nomeCompleto || user?.apelido || user?.email;
     const roleLabel = allowedRolesLabels[user?.role] || 'Colaborador';
     const email = user?.email || '';
-    return [name, roleLabel, email].filter(Boolean).join(' • ');
+    return [name, roleLabel, email].filter(Boolean).join(' - ');
   }
 
   function populateResponsibleList() {
@@ -666,7 +668,7 @@
       const id = findResponsibleId(selectors.responsibleInput.value);
       selectors.responsibleId.value = id;
       if (!id && selectors.responsibleInput.value) {
-        showToast('Selecione um responsável válido a partir da lista sugerida.', 'warning', 4000);
+        showToast('Selecione um responsavel valido a partir da lista sugerida.', 'warning', 4000);
       }
     });
   }
@@ -733,9 +735,9 @@
       const quantity = Number.isFinite(quantityValue) ? quantityValue : 0;
       const lot = escapeHtml(item.lot || '');
       const unit = escapeHtml(item.unit || '');
-      const description = escapeHtml(item.description || 'Produto sem descrição');
-      const sku = escapeHtml(item.sku || '—');
-      const barcode = escapeHtml(item.barcode || '—');
+      const description = escapeHtml(item.description || 'Produto sem descricao');
+      const sku = escapeHtml(item.sku || '-');
+      const barcode = escapeHtml(item.barcode || '-');
       const validity = item.validity ? escapeHtml(item.validity) : '';
       const unitCost = Number(item.unitCost);
       const unitSale = Number(item.unitSale);
@@ -767,7 +769,7 @@
           <td class="px-4 py-3 align-top font-medium text-gray-800">
             <div class="flex flex-col">
               <span>${sku}</span>
-              <span class="text-xs font-normal text-gray-500">EAN: ${barcode || '—'}</span>
+              <span class="text-xs font-normal text-gray-500">EAN: ${barcode || '-'}</span>
             </div>
           </td>
           <td class="px-4 py-3 align-top text-gray-700">
@@ -864,7 +866,7 @@
       if (!Number.isInteger(index) || index < 0 || index >= state.items.length) return;
       state.items.splice(index, 1);
       renderItemsTable();
-      showToast('Item removido da transferência.', 'info');
+      showToast('Item removido da transferencia.', 'info');
     });
   }
 
@@ -897,7 +899,7 @@
     if (productSearchSelectors.input) {
       productSearchSelectors.input.value = '';
     }
-    renderProductSearchMessage('Digite ao menos três caracteres para localizar produtos cadastrados.', 'neutral', {
+    renderProductSearchMessage('Digite ao menos tres caracteres para localizar produtos cadastrados.', 'neutral', {
       show: false,
     });
     hideProductResults();
@@ -906,31 +908,31 @@
   function renderSearchResults(products) {
     if (!productSearchSelectors.results) return;
     if (!products.length) {
-      renderProductSearchMessage('Nenhum produto encontrado com os critérios informados.', 'info');
+      renderProductSearchMessage('Nenhum produto encontrado com os criterios informados.', 'info');
       return;
     }
 
     const rows = products.map((product, index) => {
       const nome = escapeHtml(product.nome || 'Produto sem nome');
-      const sku = escapeHtml(product.cod || '—');
-      const barcode = escapeHtml(product.codbarras || '—');
+      const sku = escapeHtml(product.cod || '-');
+      const barcode = escapeHtml(product.codbarras || '-');
       const unidade = escapeHtml(product.unidade || '');
       const peso = Number.isFinite(Number(product.peso))
         ? `${Number(product.peso).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kg`
-        : '—';
+        : '-';
       const unitCost = Number.isFinite(Number(product.custo))
         ? formatCurrency(Number(product.custo))
-        : '—';
+        : '-';
 
       return `
         <li>
           <button type="button" class="flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-primary/5 focus:bg-primary/5" data-action="select-product" data-index="${index}">
             <div class="flex-1">
               <p class="text-sm font-semibold text-gray-800">${nome}</p>
-              <p class="mt-1 text-xs text-gray-500">SKU ${sku} • EAN ${barcode}</p>
+              <p class="mt-1 text-xs text-gray-500">SKU ${sku} - EAN ${barcode}</p>
             </div>
             <div class="flex flex-col items-end gap-1 text-xs text-gray-500">
-              <span class="font-medium text-gray-600">Unidade: <span class="text-gray-700">${unidade || '—'}</span></span>
+              <span class="font-medium text-gray-600">Unidade: <span class="text-gray-700">${unidade || '-'}</span></span>
               <span class="font-medium text-gray-600">Peso: <span class="text-gray-700">${peso}</span></span>
               <span class="font-medium text-gray-600">Custo: <span class="text-gray-700">${unitCost}</span></span>
             </div>
@@ -952,9 +954,9 @@
     if (!term || term.length < 3) {
       searchState.lastResults = [];
       if (!term) {
-        renderProductSearchMessage('Digite ao menos três caracteres para localizar produtos cadastrados.');
+        renderProductSearchMessage('Digite ao menos tres caracteres para localizar produtos cadastrados.');
       } else {
-        renderProductSearchMessage('Digite ao menos três caracteres para localizar produtos cadastrados.', 'info');
+        renderProductSearchMessage('Digite ao menos tres caracteres para localizar produtos cadastrados.', 'info');
       }
       return;
     }
@@ -973,7 +975,7 @@
     try {
       const token = getToken();
       if (!token) {
-        throw new Error('Sessão expirada. Faça login novamente.');
+        throw new Error('Sessao expirada. Faca login novamente.');
       }
 
       const response = await fetch(`${API_CONFIG.BASE_URL}/transfers/search-products?term=${encodeURIComponent(term)}`, {
@@ -983,7 +985,7 @@
 
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
-        throw new Error(payload?.message || 'Não foi possível buscar produtos.');
+        throw new Error(payload?.message || 'Nao foi possivel buscar produtos.');
       }
 
       const data = await response.json();
@@ -1005,12 +1007,12 @@
 
   async function fetchProductDetails(productId) {
     if (!productId) {
-      throw new Error('Produto inválido selecionado.');
+      throw new Error('Produto invalido selecionado.');
     }
 
     const token = getToken();
     if (!token) {
-      throw new Error('Sessão expirada. Faça login novamente.');
+      throw new Error('Sessao expirada. Faca login novamente.');
     }
 
     const response = await fetch(`${API_CONFIG.BASE_URL}/transfers/products/${productId}`, {
@@ -1020,7 +1022,7 @@
     const data = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      throw new Error(data?.message || 'Não foi possível carregar os detalhes do produto.');
+      throw new Error(data?.message || 'Nao foi possivel carregar os detalhes do produto.');
     }
 
     const product = data?.product || {};
@@ -1037,6 +1039,7 @@
       sku: product?.cod || '',
       barcode: product?.codbarras || '',
       description: product?.nome || '',
+      ncm: product?.ncm || '',
       unit: product?.unidade || '',
       unitWeight: normalizeFiniteNumber(product?.peso),
       unitCost: normalizeFiniteNumber(product?.custo),
@@ -1048,7 +1051,7 @@
   async function handleProductSelection(product) {
     if (state.isReadOnly) return;
     if (!product || !product._id) {
-      showToast('Produto inválido selecionado.', 'error');
+      showToast('Produto invalido selecionado.', 'error');
       return;
     }
 
@@ -1066,7 +1069,7 @@
       }
     } catch (error) {
       console.error('Erro ao carregar detalhes do produto selecionado:', error);
-      showToast(error.message || 'Não foi possível carregar os detalhes do produto selecionado.', 'error');
+      showToast(error.message || 'Nao foi possivel carregar os detalhes do produto selecionado.', 'error');
       renderProductSearchMessage(escapeHtml(error.message || 'Erro ao carregar detalhes do produto.'), 'error');
     }
   }
@@ -1099,13 +1102,13 @@
 
         if (!term) {
           searchState.lastResults = [];
-          renderProductSearchMessage('Digite ao menos três caracteres para localizar produtos cadastrados.');
+          renderProductSearchMessage('Digite ao menos tres caracteres para localizar produtos cadastrados.');
           return;
         }
 
         if (term.length < 3) {
           searchState.lastResults = [];
-          renderProductSearchMessage('Digite ao menos três caracteres para localizar produtos cadastrados.', 'info');
+          renderProductSearchMessage('Digite ao menos tres caracteres para localizar produtos cadastrados.', 'info');
           return;
         }
 
@@ -1117,7 +1120,7 @@
           event.preventDefault();
           const term = event.target.value.trim();
           if (!term) {
-            renderProductSearchMessage('Digite ao menos três caracteres para localizar produtos cadastrados.');
+            renderProductSearchMessage('Digite ao menos tres caracteres para localizar produtos cadastrados.');
             return;
           }
           searchProducts(term);
@@ -1127,7 +1130,7 @@
       input.addEventListener('focus', () => {
         if (!productSearchSelectors.results) return;
         if (!input.value.trim()) {
-          renderProductSearchMessage('Digite ao menos três caracteres para localizar produtos cadastrados.', 'neutral', {
+          renderProductSearchMessage('Digite ao menos tres caracteres para localizar produtos cadastrados.', 'neutral', {
             show: false,
           });
         } else if (searchState.lastResults.length) {
@@ -1204,14 +1207,14 @@
     const originDepositId = selectors.originDeposit?.value || '';
     const destinationDepositId = selectors.destinationDeposit?.value || '';
     if (!originDepositId || !destinationDepositId) {
-      showToast('Defina os depósitos de origem e destino antes de adicionar o item.', 'warning');
+      showToast('Defina os depositos de origem e destino antes de adicionar o item.', 'warning');
       return;
     }
 
     const quantityInput = selectors.selectedProductQuantity;
     const quantityValue = Number(quantityInput?.value);
     if (!Number.isFinite(quantityValue) || quantityValue <= 0) {
-      showToast('Informe uma quantidade válida para transferir.', 'warning');
+      showToast('Informe uma quantidade valida para transferir.', 'warning');
       if (quantityInput) {
         quantityInput.focus();
       }
@@ -1240,6 +1243,7 @@
         sku: selected.sku || '',
         barcode: selected.barcode || '',
         description: selected.description || '',
+        ncm: selected.ncm || '',
         quantity: quantityValue,
         unit: selected.unit || '',
         lot: '',
@@ -1249,7 +1253,7 @@
         unitSale: normalizeFiniteNumber(selected.unitSale),
       });
       renderItemsTable();
-      showToast('Item adicionado à transferência.', 'success');
+      showToast('Item adicionado a transferencia.', 'success');
     }
 
     clearSelectedProduct();
@@ -1262,7 +1266,7 @@
     try {
       const token = getToken();
       if (!token) {
-        throw new Error('Sessão expirada. Faça login novamente.');
+        throw new Error('Sessao expirada. Faca login novamente.');
       }
 
       const [response, allowedResponse] = await Promise.all([
@@ -1276,7 +1280,7 @@
 
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
-        throw new Error(payload?.message || 'Não foi possível carregar os dados da transferência.');
+        throw new Error(payload?.message || 'Nao foi possivel carregar os dados da transferencia.');
       }
 
       const data = await response.json();
@@ -1304,7 +1308,7 @@
       console.error('Erro ao carregar dados iniciais:', error);
       showModal({
         title: 'Erro ao carregar dados',
-        message: error.message || 'Não foi possível carregar as empresas e colaboradores. Atualize a página e tente novamente.',
+        message: error.message || 'Nao foi possivel carregar as empresas e colaboradores. Atualize a pagina e tente novamente.',
         confirmText: 'Entendi',
       });
     }
@@ -1341,16 +1345,14 @@
     }
 
     if (hasTransferData()) {
-      const confirmed = window.confirm(
-        'Limpar os dados atuais da transferência? Esta ação apagará as informações não salvas.'
-      );
+      const confirmed = window.confirm('Limpar os dados atuais da transferencia? Esta acao apagara as informacoes nao salvas.');
       if (!confirmed) {
         return;
       }
     }
 
     resetForm();
-    showToast('Formulário limpo para nova transferência.', 'info', 3000);
+    showToast('Formulario limpo para nova transferencia.', 'info', 3000);
   }
 
   function resetForm() {
@@ -1381,8 +1383,8 @@
 
     if (!state.items.length) {
       showModal({
-        title: 'Itens obrigatórios',
-        message: 'Adicione ao menos um item antes de salvar a transferência.',
+        title: 'Itens obrigatorios',
+        message: 'Adicione ao menos um item antes de salvar a transferencia.',
         confirmText: 'Entendi',
       });
       return;
@@ -1391,7 +1393,7 @@
     const invalidItem = state.items.find((item) => !Number.isFinite(Number(item.quantity)) || Number(item.quantity) <= 0);
     if (invalidItem) {
       showModal({
-        title: 'Quantidade inválida',
+        title: 'Quantidade invalida',
         message: 'Todas as quantidades devem ser maiores que zero.',
         confirmText: 'Ajustar',
       });
@@ -1400,8 +1402,8 @@
 
     if (!selectors.responsibleId.value) {
       showModal({
-        title: 'Responsável não definido',
-        message: 'Selecione um responsável válido na lista de colaboradores autorizados.',
+        title: 'Responsavel nao definido',
+        message: 'Selecione um responsavel valido na lista de colaboradores autorizados.',
         confirmText: 'Entendi',
       });
       selectors.responsibleInput?.focus();
@@ -1455,8 +1457,8 @@
 
     if (requiredFields.some((value) => !value)) {
       showModal({
-        title: 'Campos obrigatórios',
-        message: 'Preencha todos os campos obrigatórios da transferência.',
+        title: 'Campos obrigatorios',
+        message: 'Preencha todos os campos obrigatorios da transferencia.',
         confirmText: 'Entendi',
       });
       return;
@@ -1466,8 +1468,8 @@
     const token = getToken();
     if (!token) {
       showModal({
-        title: 'Sessão expirada',
-        message: 'Sua sessão expirou. Faça login novamente para continuar.',
+        title: 'Sessao expirada',
+        message: 'Sua sessao expirou. Faca login novamente para continuar.',
         confirmText: 'Fazer login',
         onConfirm: () => window.location.replace('/pages/login.html'),
       });
@@ -1495,26 +1497,26 @@
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(data?.message || 'Não foi possível salvar a transferência.');
+        throw new Error(data?.message || 'Nao foi possivel salvar a transferencia.');
       }
 
       if (isEditing) {
-        showToast('Transferência atualizada com sucesso!', 'success', 4000);
+        showToast('Transferencia atualizada com sucesso!', 'success', 4000);
         if (data?.transfer) {
           applyTransferToForm(data.transfer);
         }
       } else {
-        showToast('Transferência salva com sucesso!', 'success', 4000);
+        showToast('Transferencia salva com sucesso!', 'success', 4000);
         if (selectors.numberInput && Number.isFinite(Number(data?.transfer?.number))) {
           selectors.numberInput.value = String(Number(data.transfer.number));
         }
         resetForm();
       }
     } catch (error) {
-      console.error('Erro ao salvar transferência:', error);
+      console.error('Erro ao salvar transferencia:', error);
       showModal({
         title: 'Erro ao salvar',
-        message: error.message || 'Não foi possível salvar a transferência. Tente novamente mais tarde.',
+        message: error.message || 'Nao foi possivel salvar a transferencia. Tente novamente mais tarde.',
         confirmText: 'Entendi',
       });
     } finally {
@@ -1522,6 +1524,1160 @@
       selectors.saveButton?.classList.remove('opacity-70', 'cursor-not-allowed');
     }
   }
+
+
+  function normalizeDigits(value) {
+    return String(value || '').replace(/\D/g, '');
+  }
+
+  function pickFirstValue(...values) {
+    for (const value of values) {
+      if (typeof value === 'string' && value.trim()) return value.trim();
+      if (value !== null && value !== undefined && value !== '') return String(value).trim();
+    }
+    return '';
+  }
+
+  function escapeXml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  }
+
+  function toIsoDateTimeForDanfe(value) {
+    if (!value) return new Date().toISOString();
+    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      return `${value}T00:00:00-03:00`;
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return new Date().toISOString();
+    return date.toISOString();
+  }
+
+  function toNfeDecimal(value, decimals = 2) {
+    const num = Number(value);
+    const safe = Number.isFinite(num) ? num : 0;
+    return safe.toFixed(decimals);
+  }
+
+  function splitPhone(raw) {
+    const digits = String(raw || '').replace(/\D/g, '');
+    if (!digits) return { ddd: '', number: '' };
+    if (digits.length >= 10) return { ddd: digits.slice(0, 2), number: digits.slice(2) };
+    return { ddd: '', number: digits };
+  }
+
+  function buildFallbackAddressFromStore(store, depositName) {
+    const addressObj = store?.endereco || store?.enderecoFiscal || store?.address || store?.enderecos?.[0] || {};
+    const street = pickFirstValue(
+      addressObj.logradouro,
+      addressObj.rua,
+      addressObj.endereco,
+      store?.logradouro,
+      store?.rua,
+      store?.endereco,
+      depositName ? `Deposito ${depositName}` : ''
+    );
+    const number = pickFirstValue(addressObj.numero, store?.numero, 'S/N');
+    const complement = pickFirstValue(addressObj.complemento, store?.complemento);
+    const bairro = pickFirstValue(addressObj.bairro, store?.bairro);
+    const city = pickFirstValue(addressObj.cidade, addressObj.municipio, store?.cidade, store?.municipio, 'RIO DE JANEIRO');
+    const uf = pickFirstValue(addressObj.uf, store?.uf, 'RJ').toUpperCase();
+    const cep = String(pickFirstValue(addressObj.cep, store?.cep)).replace(/\D/g, '');
+    const phone = splitPhone(pickFirstValue(addressObj.telefone, store?.telefone, store?.celular));
+    return { street, number, complement, bairro, city, uf, cep, phone };
+  }
+
+  function buildTransferDanfeAccessKey(number) {
+    const dt = new Date();
+    const year = String(dt.getFullYear()).slice(-2);
+    const month = String(dt.getMonth() + 1).padStart(2, '0');
+    const cnpjBase = '00000000000000';
+    const model = '55';
+    const serie = '001';
+    const nNF = String(Number(number) || 0).padStart(9, '0').slice(-9);
+    const tpEmis = '1';
+    const code = String(Date.now()).replace(/\D/g, '').slice(-8).padStart(8, '0');
+    const body43 = `35${year}${month}${cnpjBase}${model}${serie}${nNF}${tpEmis}${code}`.slice(0, 43);
+    let weight = 2;
+    let sum = 0;
+    for (let i = body43.length - 1; i >= 0; i--) {
+      sum += Number(body43[i]) * weight;
+      weight = weight === 9 ? 2 : weight + 1;
+    }
+    const mod = sum % 11;
+    const dv = mod === 0 || mod === 1 ? 0 : 11 - mod;
+    return `${body43}${dv}`;
+  }
+
+  async function ensureDanfeItemsNcmLoaded() {
+    const items = Array.isArray(state.items) ? state.items : [];
+    const missingItems = items.filter(
+      (item) => item?.productId && !normalizeDigits(item?.ncm).slice(0, 8),
+    );
+    if (!missingItems.length) return;
+
+    const cache = new Map();
+    await Promise.all(
+      missingItems.map(async (item) => {
+        const productId = String(item.productId || '').trim();
+        if (!productId) return;
+        if (!cache.has(productId)) {
+          cache.set(productId, fetchProductDetails(productId).catch(() => null));
+        }
+        const product = await cache.get(productId);
+        const ncm = normalizeDigits(product?.ncm).slice(0, 8);
+        if (ncm) {
+          item.ncm = ncm;
+        }
+        if (!Number.isFinite(Number(item?.unitWeight)) && Number.isFinite(Number(product?.unitWeight))) {
+          item.unitWeight = Number(product.unitWeight);
+        }
+      }),
+    );
+  }
+
+  async function buildTransferDanfeXmlFromCurrentState() {
+    const numberValue = selectors.numberInput?.value?.trim();
+    const transferNumber = Number(numberValue) || state.currentTransferNumber || state.autoGeneratedNumber || 1;
+    const requestDate = selectors.dateInput?.value || new Date().toISOString();
+    const originCompanyId = selectors.originCompany?.value || '';
+    const originDepositId = selectors.originDeposit?.value || '';
+    const destinationCompanyId = selectors.destinationCompany?.value || '';
+    const destinationDepositId = selectors.destinationDeposit?.value || '';
+
+    const originStore = state.stores.find((item) => String(item?._id) === String(originCompanyId)) || null;
+    const destinationStore = state.stores.find((item) => String(item?._id) === String(destinationCompanyId)) || null;
+    const originDeposit = state.deposits.find((item) => String(item?._id) === String(originDepositId)) || null;
+    const destinationDeposit = state.deposits.find((item) => String(item?._id) === String(destinationDepositId)) || null;
+    const responsible = state.responsaveis.find((item) => String(item?._id) === String(selectors.responsibleId?.value || '')) || null;
+
+    const required = [requestDate, originCompanyId, originDepositId, destinationCompanyId, destinationDepositId];
+    if (required.some((value) => !String(value || '').trim())) {
+      throw new Error('Preencha origem, destino e data para imprimir a DANFE.');
+    }
+    if (!Array.isArray(state.items) || !state.items.length) {
+      throw new Error('Adicione ao menos um item para imprimir a DANFE.');
+    }
+
+    const emitName = pickFirstValue(originStore?.razaoSocial, originStore?.nomeFantasia, originStore?.nome, 'Empresa de origem');
+    const emitFant = pickFirstValue(originStore?.nomeFantasia, originStore?.nome);
+    const emitCnpj = normalizeDigits(originStore?.cnpj).padStart(14, '0').slice(-14);
+    const emitIe = pickFirstValue(originStore?.inscricaoEstadual, originStore?.ie, 'ISENTO');
+    const emitAddress = buildFallbackAddressFromStore(originStore, originDeposit?.nome);
+
+    const destName = pickFirstValue(destinationStore?.razaoSocial, destinationStore?.nomeFantasia, destinationStore?.nome, 'Empresa de destino');
+    const destCnpj = normalizeDigits(destinationStore?.cnpj).padStart(14, '0').slice(-14);
+    const destIe = pickFirstValue(destinationStore?.inscricaoEstadual, destinationStore?.ie, 'ISENTO');
+    const destAddress = buildFallbackAddressFromStore(destinationStore, destinationDeposit?.nome);
+
+    const totalProducts = state.items.reduce((sum, item) => {
+      const qty = Number(item?.quantity);
+      const unitCost = Number(item?.unitCost);
+      const unitSale = Number(item?.unitSale);
+      const unitValue = Number.isFinite(unitCost) ? unitCost : (Number.isFinite(unitSale) ? unitSale : 0);
+      return Number.isFinite(qty) ? sum + qty * unitValue : sum;
+    }, 0);
+
+    const totalVolume = state.items.reduce((sum, item) => {
+      const qty = Number(item?.quantity);
+      return Number.isFinite(qty) ? sum + qty : sum;
+    }, 0);
+    const totalWeight = state.items.reduce((sum, item) => {
+      const qty = Number(item?.quantity);
+      const unitWeight = Number(item?.unitWeight);
+      if (!Number.isFinite(qty) || !Number.isFinite(unitWeight)) return sum;
+      return sum + qty * unitWeight;
+    }, 0);
+
+    const adicionais = [
+      'DOCUMENTO INTERNO DE TRANSFERENCIA - SEM VALOR FISCAL.',
+      originDeposit?.nome ? `DEPOSITO ORIGEM: ${originDeposit.nome}` : '',
+      destinationDeposit?.nome ? `DEPOSITO DESTINO: ${destinationDeposit.nome}` : '',
+      selectors.referenceInput?.value ? `DOC REF: ${selectors.referenceInput.value}` : '',
+      selectors.driverInput?.value ? `MOTORISTA: ${selectors.driverInput.value}` : '',
+      responsible ? `RESPONSAVEL: ${pickFirstValue(responsible?.nomeCompleto, responsible?.apelido, responsible?.email)}` : '',
+      selectors.notesInput?.value || '',
+    ].filter(Boolean).join(' ');
+
+    const chave = buildTransferDanfeAccessKey(transferNumber);
+    const dhEmi = toIsoDateTimeForDanfe(requestDate);
+    const vehiclePlate = pickFirstValue(selectors.vehicleInput?.value);
+    const driverName = pickFirstValue(selectors.driverInput?.value);
+
+    await ensureDanfeItemsNcmLoaded();
+
+    const itemXml = state.items.map((item, index) => {
+      const qty = Number(item?.quantity);
+      const quantity = Number.isFinite(qty) && qty > 0 ? qty : 0;
+      const unitCost = Number(item?.unitCost);
+      const unitSale = Number(item?.unitSale);
+      const unitValue = Number.isFinite(unitCost) ? unitCost : (Number.isFinite(unitSale) ? unitSale : 0);
+      const total = Math.round(quantity * unitValue * 100) / 100;
+      const sku = pickFirstValue(item?.sku, item?.productId, String(index + 1));
+      const desc = pickFirstValue(item?.description, 'Produto sem descricao');
+      const unit = pickFirstValue(item?.unit, 'UN').toUpperCase();
+      const ncm = normalizeDigits(item?.ncm).slice(0, 8) || '00000000';
+      const cfop = pickFirstValue(item?.cfop, '5152');
+      return `
+        <det nItem="${index + 1}">
+          <prod>
+            <cProd>${escapeXml(sku)}</cProd>
+            <xProd>${escapeXml(desc)}</xProd>
+            <NCM>${escapeXml(ncm)}</NCM>
+            <CFOP>${escapeXml(cfop)}</CFOP>
+            <uCom>${escapeXml(unit)}</uCom>
+            <qCom>${toNfeDecimal(quantity, 4)}</qCom>
+            <vUnCom>${toNfeDecimal(unitValue, 3)}</vUnCom>
+            <vProd>${toNfeDecimal(total, 2)}</vProd>
+          </prod>
+          <imposto>
+            <ICMS><ICMS00><orig>0</orig><CST>00</CST><modBC>3</modBC><vBC>0.00</vBC><pICMS>0.00</pICMS><vICMS>0.00</vICMS></ICMS00></ICMS>
+            <IPI><IPITrib><CST>99</CST><vBC>0.00</vBC><pIPI>0.00</pIPI><vIPI>0.00</vIPI></IPITrib></IPI>
+          </imposto>
+        </det>`;
+    }).join('');
+
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<nfeProc>
+  <NFe>
+    <infNFe Id="NFe${chave}">
+      <ide>
+        <cUF>35</cUF>
+        <natOp>Transferencia entre depositos</natOp>
+        <mod>55</mod>
+        <serie>1</serie>
+        <nNF>${Math.max(1, Number(transferNumber) || 1)}</nNF>
+        <dhEmi>${escapeXml(dhEmi)}</dhEmi>
+        <dhSaiEnt>${escapeXml(dhEmi)}</dhSaiEnt>
+        <tpNF>1</tpNF>
+        <tpAmb>2</tpAmb>
+      </ide>
+      <emit>
+        <xNome>${escapeXml(emitName)}</xNome>
+        <xFant>${escapeXml(emitFant)}</xFant>
+        <CNPJ>${emitCnpj}</CNPJ>
+        <IE>${escapeXml(emitIe)}</IE>
+        <enderEmit>
+          <xLgr>${escapeXml(emitAddress.street)}</xLgr>
+          <nro>${escapeXml(emitAddress.number)}</nro>
+          <xCpl>${escapeXml(emitAddress.complement)}</xCpl>
+          <xBairro>${escapeXml(emitAddress.bairro)}</xBairro>
+          <xMun>${escapeXml(emitAddress.city)}</xMun>
+          <UF>${escapeXml(emitAddress.uf)}</UF>
+          <CEP>${escapeXml(emitAddress.cep)}</CEP>
+        </enderEmit>
+      </emit>
+      <dest>
+        <xNome>${escapeXml(destName)}</xNome>
+        <CNPJ>${destCnpj}</CNPJ>
+        <IE>${escapeXml(destIe)}</IE>
+        <fone>${escapeXml(destAddress.phone.ddd + destAddress.phone.number)}</fone>
+        <enderDest>
+          <xLgr>${escapeXml(destAddress.street)}</xLgr>
+          <nro>${escapeXml(destAddress.number)}</nro>
+          <xCpl>${escapeXml(destAddress.complement)}</xCpl>
+          <xBairro>${escapeXml(destAddress.bairro)}</xBairro>
+          <xMun>${escapeXml(destAddress.city)}</xMun>
+          <UF>${escapeXml(destAddress.uf)}</UF>
+          <CEP>${escapeXml(destAddress.cep)}</CEP>
+        </enderDest>
+      </dest>
+      ${itemXml}
+      <total>
+        <ICMSTot>
+          <vBC>0.00</vBC><vICMS>0.00</vICMS><vBCST>0.00</vBCST><vST>0.00</vST>
+          <vProd>${toNfeDecimal(totalProducts, 2)}</vProd><vFrete>0.00</vFrete><vSeg>0.00</vSeg><vDesc>0.00</vDesc><vOutro>0.00</vOutro>
+          <vIPI>0.00</vIPI><vTotTrib>0.00</vTotTrib><vNF>${toNfeDecimal(totalProducts, 2)}</vNF>
+        </ICMSTot>
+      </total>
+      <transp>
+        <modFrete>9</modFrete>
+        <transporta>
+          <xNome>${escapeXml(driverName || 'NAO INFORMADO')}</xNome>
+          <xEnder>${escapeXml(vehiclePlate)}</xEnder>
+          <xMun>${escapeXml(destAddress.city)}</xMun>
+          <UF>${escapeXml(destAddress.uf)}</UF>
+        </transporta>
+        <vol><qVol>${toNfeDecimal(totalVolume, 0)}</qVol><esp>VOLUMES</esp><marca>TRANSFERENCIA</marca><pesoB>${toNfeDecimal(totalWeight, 3)}</pesoB></vol>
+      </transp>
+      <infAdic><infCpl>${escapeXml(adicionais)}</infCpl></infAdic>
+    </infNFe>
+  </NFe>
+</nfeProc>`;
+  }
+
+  async function handlePrintDanfeClick() {
+    try {
+      const xmlText = await buildTransferDanfeXmlFromCurrentState();
+      const xmlDoc = parseXml(xmlText);
+      if (!xmlDoc || xmlDoc.querySelector('parsererror')) {
+        throw new Error('Nao foi possivel montar a DANFE da transferencia.');
+      }
+      const chave = (xmlDoc.querySelector('infNFe')?.getAttribute('Id') || '').replace(/^NFe/, '');
+      const html = buildDanfeHtml(xmlDoc, { mode: 'full' });
+      openPrintWindow(html, 'DANFE', { withBarcode: true, chave });
+    } catch (error) {
+      console.error('Erro ao imprimir DANFE da transferencia:', error);
+      showModal({
+        title: 'Erro ao imprimir',
+        message: error.message || 'Nao foi possivel gerar a DANFE da transferencia.',
+        confirmText: 'Entendi',
+      });
+    }
+  }
+  function parseXml(xmlText) {
+    const parser = new DOMParser();
+    return parser.parseFromString(xmlText || '', 'text/xml');
+  }
+
+  function xmlGetText(node, selector) {
+    if (!node) return '';
+    const target = selector ? node.querySelector(selector) : node;
+    return target?.textContent?.trim() || '';
+  }
+
+  function parseXmlNumber(raw) {
+    if (typeof raw === 'number') return raw;
+    const value = String(raw || '').trim();
+    if (!value) return 0;
+    const hasComma = value.includes(',');
+    const hasDot = value.includes('.');
+    let normalized = value;
+    if (hasComma && hasDot) {
+      normalized = value.replace(/\./g, '').replace(',', '.');
+    } else if (hasComma) {
+      normalized = value.replace(/\./g, '').replace(',', '.');
+    } else if (hasDot) {
+      normalized = value.replace(/,/g, '');
+    } else {
+      normalized = value;
+    }
+    normalized = normalized.replace(/[^\d.-]/g, '');
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function formatNumber(value, decimals = 2) {
+    const num = parseXmlNumber(value);
+    return Number.isFinite(num) ? num.toFixed(decimals).replace('.', ',') : '0,00';
+  }
+
+  function formatBRL(value) {
+    return formatNumber(value, 2);
+  }
+
+  function formatDateTime(iso) {
+    if (!iso) return '';
+    const normalized = iso.replace('T', ' ');
+    return normalized.length > 19 ? normalized.slice(0, 19) : normalized;
+  }
+
+
+  function onlyDigits(value) {
+    return String(value || '').replace(/\D/g, '');
+  }
+
+  function formatCep(value) {
+    const digits = onlyDigits(value);
+    return digits ? digits.slice(0, 8) : '';
+  }
+
+  function formatChave(value) {
+    const digits = onlyDigits(value);
+    if (!digits) return '';
+    return digits.replace(/(.{4})/g, '$1 ').trim();
+  }
+
+  function formatDateTimeBR(value) {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return formatDateTime(String(value));
+    }
+    const pad = (num) => String(num).padStart(2, '0');
+    return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(
+      date.getHours(),
+    )}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  }
+
+  function buildDanfeHtml(xmlDoc, { mode = 'full' } = {}) {
+    const infNFe = xmlDoc.querySelector('infNFe');
+    const ide = xmlDoc.querySelector('ide');
+    const emit = xmlDoc.querySelector('emit');
+    const dest = xmlDoc.querySelector('dest');
+    const total = xmlDoc.querySelector('total ICMSTot');
+    const prot = xmlDoc.querySelector('protNFe infProt');
+    const transp = xmlDoc.querySelector('transp');
+    const volumes = Array.from(xmlDoc.querySelectorAll('vol'));
+    const cobr = xmlDoc.querySelector('cobr');
+    const dupList = Array.from(xmlDoc.querySelectorAll('dup'));
+    const dets = Array.from(xmlDoc.querySelectorAll('det'));
+
+    const modeKey = mode === 'simple' || mode === 'simplified' ? 'simple' : 'full';
+    const chave = (infNFe?.getAttribute('Id') || '').replace(/^NFe/, '');
+    const chaveFormatada = formatChave(chave);
+    const numero = xmlGetText(ide, 'nNF');
+    const serie = xmlGetText(ide, 'serie');
+    const natOp = xmlGetText(ide, 'natOp');
+    const naturezaCodigo = xmlGetText(dets[0]?.querySelector('prod'), 'CFOP');
+    const naturezaDescricao = natOp;
+    const naturezaLabel =
+      naturezaCodigo && naturezaDescricao
+        ? normalizeDigits(naturezaDescricao).startsWith(naturezaCodigo)
+          ? naturezaDescricao
+          : `${naturezaCodigo} - ${naturezaDescricao}`
+        : naturezaDescricao || naturezaCodigo || '';
+    const dhEmiRaw = xmlGetText(ide, 'dhEmi') || xmlGetText(ide, 'dEmi');
+    const dhEmi = formatDateTimeBR(dhEmiRaw);
+    const tpNF = xmlGetText(ide, 'tpNF');
+    const tpAmb = xmlGetText(ide, 'tpAmb');
+    const mod = xmlGetText(ide, 'mod');
+    const dhSaiEntRaw = xmlGetText(ide, 'dhSaiEnt') || '';
+    const dSaiEnt = xmlGetText(ide, 'dSaiEnt');
+    const hSaiEnt = xmlGetText(ide, 'hSaiEnt');
+    const saidaDateTime = dhSaiEntRaw ? formatDateTimeBR(dhSaiEntRaw) : '';
+    const saidaDate = saidaDateTime ? saidaDateTime.split(' ')[0] : dSaiEnt || '';
+    const saidaTime = saidaDateTime ? saidaDateTime.split(' ')[1] : hSaiEnt || '';
+    const protocolo = prot
+      ? `${xmlGetText(prot, 'nProt')} - ${formatDateTimeBR(xmlGetText(prot, 'dhRecbto'))}`
+      : 'SEM PROTOCOLO';
+    const adicionais = xmlGetText(xmlDoc, 'infAdic infCpl') || xmlGetText(xmlDoc, 'infAdic infAdFisco') || '';
+    const isHomologacao = tpAmb === '2';
+    const emitFant = xmlGetText(emit, 'xFant');
+    const emitFantHtml = emitFant ? `<div>${emitFant}</div>` : '';
+    const homologRowFull = isHomologacao
+      ? '<tr><td colspan="4" class="homolog">NF-e EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL</td></tr>'
+      : '';
+    const homologRowSimple = isHomologacao
+      ? '<tr><td colspan="3" class="homolog">NF-e EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL</td></tr>'
+      : '';
+
+    const emitAddressLine = [
+      xmlGetText(emit, 'enderEmit xLgr'),
+      xmlGetText(emit, 'enderEmit nro'),
+      xmlGetText(emit, 'enderEmit xCpl'),
+      xmlGetText(emit, 'enderEmit xBairro'),
+      xmlGetText(emit, 'enderEmit xMun'),
+      xmlGetText(emit, 'enderEmit UF'),
+    ]
+      .filter(Boolean)
+      .join(' - ');
+
+    const emitCep = formatCep(xmlGetText(emit, 'enderEmit CEP'));
+
+    const destStreet = xmlGetText(dest, 'enderDest xLgr');
+    const destNumber = xmlGetText(dest, 'enderDest nro');
+    const destComplement = xmlGetText(dest, 'enderDest xCpl');
+    const destBairro = xmlGetText(dest, 'enderDest xBairro');
+    const destMunicipio = xmlGetText(dest, 'enderDest xMun');
+    const destUf = xmlGetText(dest, 'enderDest UF');
+    const destCep = formatCep(xmlGetText(dest, 'enderDest CEP'));
+    const destFone = xmlGetText(dest, 'fone') || xmlGetText(dest, 'enderDest fone');
+    const destAddress = [
+      destStreet,
+      destNumber,
+      destComplement,
+      destBairro,
+      destMunicipio && destUf ? `${destMunicipio} - ${destUf}` : destMunicipio || destUf,
+    ]
+      .filter(Boolean)
+      .join(' - ');
+
+    const transportName = xmlGetText(transp, 'transporta xNome');
+    const transportDoc = xmlGetText(transp, 'transporta CNPJ') || xmlGetText(transp, 'transporta CPF');
+    const transportIe = xmlGetText(transp, 'transporta IE');
+    const transportAddress = xmlGetText(transp, 'transporta xEnder');
+    const transportMun = xmlGetText(transp, 'transporta xMun');
+    const transportUf = xmlGetText(transp, 'transporta UF');
+    const modFrete = xmlGetText(transp, 'modFrete');
+
+    const productsRows = dets
+      .map((det, index) => {
+        const prod = det.querySelector('prod');
+        const imposto = det.querySelector('imposto');
+        const icmsNode = imposto?.querySelector('ICMS')?.firstElementChild || null;
+        const ipiNode = imposto?.querySelector('IPI')?.firstElementChild || null;
+        const cst = xmlGetText(icmsNode, 'CST') || xmlGetText(icmsNode, 'CSOSN');
+        const cfop = xmlGetText(prod, 'CFOP');
+        const vBC = xmlGetText(icmsNode, 'vBC');
+        const vICMS = xmlGetText(icmsNode, 'vICMS');
+        const pICMS = xmlGetText(icmsNode, 'pICMS');
+        const vIPI = xmlGetText(ipiNode, 'vIPI');
+        const pIPI = xmlGetText(ipiNode, 'pIPI');
+        return `
+          <tr>
+            <td class="center">${index + 1}</td>
+            <td>${xmlGetText(prod, 'cProd')}</td>
+            <td>${xmlGetText(prod, 'xProd')}</td>
+            <td class="center ncm">${xmlGetText(prod, 'NCM')}</td>
+            <td class="center">${cst || '0'}</td>
+            <td class="center">${cfop}</td>
+            <td class="center">${xmlGetText(prod, 'uCom')}</td>
+            <td class="num">${formatNumber(xmlGetText(prod, 'qCom'), 4)}</td>
+            <td class="num">${formatNumber(xmlGetText(prod, 'vUnCom'), 3)}</td>
+            <td class="num">${formatNumber(xmlGetText(prod, 'vProd'), 2)}</td>
+            <td class="num">${formatNumber(vBC, 2)}</td>
+            <td class="num">${formatNumber(vICMS, 2)}</td>
+            <td class="num">${formatNumber(vIPI, 2)}</td>
+            <td class="num">${formatNumber(pICMS, 2)}</td>
+            <td class="num">${formatNumber(pIPI, 2)}</td>
+          </tr>
+        `;
+      })
+      .join('');
+
+    const dupCards = dupList.map(
+      (dup) => `
+        <table class="dup-card">
+          <tr>
+            <td class="label">Num.</td>
+            <td class="value right">${xmlGetText(dup, 'nDup')}</td>
+          </tr>
+          <tr>
+            <td class="label">Venc.</td>
+            <td class="value right">${xmlGetText(dup, 'dVenc')}</td>
+          </tr>
+          <tr>
+            <td class="label">Valor</td>
+            <td class="value right">${formatBRL(xmlGetText(dup, 'vDup'))}</td>
+          </tr>
+        </table>
+      `,
+    );
+
+    const dupGridRows = (() => {
+      if (!dupCards.length) {
+        return '<tr><td class="value">Sem duplicatas.</td></tr>';
+      }
+      const rows = [];
+      const columns = 6;
+      for (let i = 0; i < dupCards.length; i += columns) {
+        const chunk = dupCards.slice(i, i + columns);
+        rows.push(`<tr>${chunk.map((card) => `<td>${card}</td>`).join('')}</tr>`);
+      }
+      return rows.join('');
+    })();
+
+    const faturaHtml = cobr
+      ? `
+        <table class="block grid small">
+          <colgroup>
+            <col style="width:20%">
+            <col style="width:30%">
+            <col style="width:20%">
+            <col style="width:30%">
+          </colgroup>
+          <tr>
+            <td colspan="4" class="section-title">FATURA / DUPLICATA</td>
+          </tr>
+          <tr>
+            <td class="label">Numero</td>
+            <td class="value">${xmlGetText(cobr, 'fat nFat')}</td>
+            <td class="label">Valor</td>
+            <td class="value right">${formatBRL(xmlGetText(cobr, 'fat vLiq'))}</td>
+          </tr>
+          <tr>
+            <td colspan="4" class="dup-grid-wrapper">
+              <table class="dup-grid">
+                <tbody>
+                  ${dupGridRows}
+                </tbody>
+              </table>
+            </td>
+          </tr>
+        </table>
+      `
+      : '';
+
+    const volumesHtml = volumes.length
+      ? volumes
+          .map(
+            (vol) => `
+              <tr>
+                <td>
+                  <div class="label">Qtd</div>
+                  <div class="value right">${xmlGetText(vol, 'qVol')}</div>
+                </td>
+                <td>
+                  <div class="label">Especie</div>
+                  <div class="value">${xmlGetText(vol, 'esp')}</div>
+                </td>
+                <td>
+                  <div class="label">Marca</div>
+                  <div class="value">${xmlGetText(vol, 'marca')}</div>
+                </td>
+                <td>
+                  <div class="label">Peso Bruto</div>
+                  <div class="value right">${xmlGetText(vol, 'pesoB')}</div>
+                </td>
+              </tr>
+            `,
+          )
+          .join('')
+      : `
+        <tr>
+          <td colspan="4" class="value">Sem volumes informados.</td>
+        </tr>
+      `;
+    if (modeKey === 'simple') {
+      return `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Transferencia</title>
+  <style>
+    @page { size: A4; margin: 6mm; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 7.5pt; color: #111; line-height: 1.25; }
+    table { width: 100%; border-collapse: collapse; }
+    td, th { border: 1px solid #000; padding: 2px 3px; vertical-align: top; }
+    .label { font-size: 6.3pt; text-transform: uppercase; }
+    .value { font-size: 7.5pt; font-weight: 600; }
+    .center { text-align: center; }
+    .right { text-align: right; }
+    .num { text-align: right; white-space: nowrap; }
+    .block { margin-bottom: 4px; }
+    .section-title { font-size: 6.5pt; font-weight: 700; text-transform: uppercase; text-align: center; }
+    .barcode-box { display: flex; flex-direction: column; gap: 2px; }
+    .barcode-fallback { border: 1px solid #000; height: 36px; display: flex; align-items: center; justify-content: center; font-size: 7pt; }
+    .homolog { font-weight: 700; text-align: center; }
+    thead { display: table-header-group; }
+    .items { table-layout: fixed; }
+    .items thead th { background: #f5f5f5; }
+    .items tbody tr { page-break-inside: avoid; }
+    .items .ncm { font-size: 6.2pt; letter-spacing: -0.2px; white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <table>
+    <tr>
+      <td colspan="3" class="section-title">TRANSFERENCIA</td>
+    </tr>
+    <tr>
+      <td>
+        <div class="label">Emitente</div>
+        <div class="value">${xmlGetText(emit, 'xNome')}</div>
+        <div>${emitAddressLine}</div>
+      </td>
+      <td class="center">
+        <div class="label">Transferencia</div>
+        <div class="value">N&#186; ${numero}</div>
+        <div class="label">Serie</div>
+        <div class="value">${serie}</div>
+        <div class="label">Modelo</div>
+        <div class="value">${mod || '55'}</div>
+      </td>
+      <td class="center">
+        <div class="label">Chave de Acesso</div>
+        <div class="value">${chaveFormatada}</div>
+        <svg id="danfe-barcode"></svg>
+        <div class="barcode-fallback" data-barcode-fallback>${chave}</div>
+      </td>
+    </tr>
+    <tr>
+      <td colspan="3">
+        <div class="label">Destinatario</div>
+        <div class="value">${xmlGetText(dest, 'xNome')}</div>
+        <div>${destAddress}</div>
+      </td>
+    </tr>
+    ${homologRowSimple}
+    <tr>
+      <td colspan="3" class="section-title">DADOS DOS PRODUTOS / SERVICOS</td>
+    </tr>
+  </table>
+  <table class="items">
+    <colgroup>
+      <col style="width:6%">
+      <col style="width:44%">
+      <col style="width:12%">
+      <col style="width:12%">
+      <col style="width:12%">
+      <col style="width:14%">
+    </colgroup>
+    <thead>
+      <tr>
+        <th class="center">Item</th>
+        <th>Descricao</th>
+        <th class="center">Qtde</th>
+        <th class="center">V. Unit</th>
+        <th class="center">V. Total</th>
+        <th class="center">CFOP</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${
+        dets.length
+          ? dets
+              .map((det, index) => {
+                const prod = det.querySelector('prod');
+                return `
+                  <tr>
+                    <td class="center">${index + 1}</td>
+                    <td>${xmlGetText(prod, 'xProd')}</td>
+                    <td class="right">${formatNumber(xmlGetText(prod, 'qCom'), 4)}</td>
+                    <td class="right">${formatNumber(xmlGetText(prod, 'vUnCom'), 3)}</td>
+                    <td class="right">${formatNumber(xmlGetText(prod, 'vProd'), 2)}</td>
+                    <td class="center">${xmlGetText(prod, 'CFOP')}</td>
+                  </tr>
+                `;
+              })
+              .join('')
+          : '<tr><td colspan="6" class="center">Nenhum item informado.</td></tr>'
+      }
+    </tbody>
+  </table>
+  <table>
+    <tr>
+      <td>
+        <div class="label">Total Transferencia</div>
+        <div class="value right">${formatBRL(xmlGetText(total, 'vNF'))}</div>
+      </td>
+      <td>
+        <div class="label">Data de Emissao</div>
+        <div class="value">${dhEmi}</div>
+      </td>
+      <td>
+        <div class="label">Protocolo</div>
+        <div class="value">${protocolo}</div>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+    }
+
+    return `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Transferencia</title>
+  <style>
+    @page { size: A4; margin: 6mm; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 7.5pt; color: #111; line-height: 1.25; }
+    table { width: 100%; border-collapse: collapse; }
+    td, th { border: 1px solid #000; padding: 2px 3px; vertical-align: top; }
+    .danfe { width: 100%; }
+    .label { font-size: 6.2pt; text-transform: uppercase; }
+    .value { font-size: 7.5pt; font-weight: 600; }
+    .center { text-align: center; }
+    .right { text-align: right; }
+    .num { text-align: right; white-space: nowrap; }
+    .nowrap { white-space: nowrap; }
+    .block { margin-bottom: 4px; }
+    .small { font-size: 6.8pt; }
+    .section-title { font-size: 6.5pt; font-weight: 700; text-transform: uppercase; text-align: center; }
+    .muted { font-weight: 400; font-size: 6.5pt; }
+    .barcode-box { display: flex; flex-direction: column; gap: 2px; }
+    .barcode-fallback { border: 1px solid #000; height: 38px; display: flex; align-items: center; justify-content: center; font-size: 7pt; }
+    .homolog { font-weight: 700; text-align: center; font-size: 7.5pt; }
+    .items { table-layout: fixed; }
+    .items thead th { background: #f5f5f5; }
+    .items tbody tr { page-break-inside: avoid; }
+    thead { display: table-header-group; }
+    tfoot { display: table-footer-group; }
+    .danfe-box { display: flex; flex-direction: column; gap: 2px; align-items: stretch; }
+    .danfe-title { font-size: 12pt; font-weight: 700; letter-spacing: 0.5px; }
+    .danfe-subtitle { font-size: 6.5pt; text-transform: uppercase; }
+    .danfe-entry-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+    .danfe-entry-text { font-size: 6.5pt; text-transform: uppercase; text-align: left; line-height: 1.2; }
+    .danfe-entry-box { width: 18px; height: 18px; border: 1px solid #000; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 9pt; }
+    .danfe-meta { font-size: 8pt; font-weight: 700; }
+    .danfe-folha { font-size: 7pt; text-transform: uppercase; font-weight: 600; }
+    .dup-grid { width: auto; border-collapse: collapse; table-layout: fixed; }
+    .dup-grid td { border: 1px solid #000; padding: 1px 2px; vertical-align: top; width: 86px; text-align: left; }
+    .dup-grid-wrapper { padding: 0; text-align: left; }
+    .dup-card { width: 100%; border-collapse: collapse; font-size: 6pt; text-align: left; }
+    .dup-card td { border: none; padding: 0 1px; line-height: 1.1; text-align: left; }
+    .dup-card .label { font-size: 5.2pt; }
+    .dup-card .value { font-size: 6pt; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div class="danfe">
+    <table class="block">
+      <colgroup>
+        <col style="width:82%">
+        <col style="width:18%">
+      </colgroup>
+      <tr>
+        <td class="label">
+          RECEBEMOS DE ${xmlGetText(emit, 'xNome')} OS PRODUTOS E/OU SERVICOS CONSTANTES DA NOTA FISCAL
+          ELETRONICA INDICADA ABAIXO. EMISSAO: ${dhEmi} VALOR TOTAL: ${formatBRL(xmlGetText(total, 'vNF'))}
+          DESTINATARIO: ${xmlGetText(dest, 'xNome')} - ${destAddress}
+        </td>
+        <td class="center" rowspan="2">
+          <div class="section-title">Transferencia</div>
+          <div class="value">N&#186; ${numero}</div>
+          <div class="value">Serie ${serie}</div>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <table style="width:100%; border-collapse:collapse;">
+            <colgroup>
+              <col style="width:20%">
+              <col style="width:80%">
+            </colgroup>
+            <tr>
+              <td style="height:14px; position:relative;">
+                <span style="font-size:5pt; text-transform:uppercase; position:absolute; left:2px; bottom:2px;">Data de Recebimento</span>
+              </td>
+              <td style="height:14px; position:relative;">
+                <span style="font-size:5pt; text-transform:uppercase; position:absolute; left:2px; bottom:2px;">Identificacao e Assinatura do Recebedor</span>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <table class="block">
+      <colgroup>
+        <col style="width:46%">
+        <col style="width:24%">
+        <col style="width:30%">
+      </colgroup>
+      <tr>
+        <td>
+          <div class="section-title" style="font-style:italic;">Identificacao do Emitente</div>
+          <div class="value">${xmlGetText(emit, 'xNome')}</div>
+          ${emitFantHtml}
+          <div>${emitAddressLine}</div>
+          <div class="muted">CEP ${emitCep}</div>
+          <div class="muted">CNPJ ${xmlGetText(emit, 'CNPJ')}</div>
+          <div class="muted">IE ${xmlGetText(emit, 'IE')}</div>
+        </td>
+        <td class="center">
+          <div class="danfe-box">
+            <div class="danfe-title">Transferencia</div>
+            <div class="danfe-subtitle">Documento Auxiliar da Transferencia</div>
+            <div class="danfe-entry-row">
+              <div class="danfe-entry-text">
+                0 - ENTRADA<br>
+                1 - SAIDA
+              </div>
+              <div class="danfe-entry-box">${tpNF || ''}</div>
+            </div>
+            <div class="danfe-meta">N&#186; ${numero}</div>
+            <div class="danfe-meta">Serie ${serie}</div>
+            <div class="danfe-folha">Folha 1/1</div>
+          </div>
+        </td>
+        <td>
+          <table style="width:100%; border-collapse:collapse;">
+            <tr>
+              <td style="border:1px solid #000; padding:2px 3px;">
+                <div class="barcode-box">
+                  <svg id="danfe-barcode"></svg>
+                  <div class="barcode-fallback" data-barcode-fallback>${chave}</div>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td style="border:1px solid #000; padding:2px 3px;">
+                <div class="label center">Chave de Acesso</div>
+                <div class="value center">${chaveFormatada}</div>
+              </td>
+            </tr>
+            <tr>
+              <td style="border:1px solid #000; padding:2px 3px;">
+                <div class="muted center">
+                  Consulta de autenticidade no portal nacional da NF-e
+                  www.nfe.fazenda.gov.br/portal
+                  ou no site da SEFAZ Autorizadora
+                </div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <table class="block">
+      <colgroup>
+        <col style="width:70%">
+        <col style="width:30%">
+      </colgroup>
+      <tr>
+        <td>
+          <div class="label">Natureza da Operacao</div>
+          <div class="value">${naturezaLabel}</div>
+        </td>
+        <td>
+          <div class="label">Protocolo de Autorizacao de Uso</div>
+          <div class="value">${protocolo}</div>
+        </td>
+      </tr>
+    </table>
+
+    <table class="block">
+      <colgroup>
+        <col style="width:48%">
+        <col style="width:17%">
+        <col style="width:13%">
+        <col style="width:22%">
+      </colgroup>
+      <tr>
+        <td>
+          <div class="label">Destinatario / Remetente</div>
+          <div class="value">${xmlGetText(dest, 'xNome')}</div>
+        </td>
+        <td>
+          <div class="label">CNPJ/CPF</div>
+          <div class="value">${xmlGetText(dest, 'CPF') || xmlGetText(dest, 'CNPJ')}</div>
+        </td>
+        <td>
+          <div class="label">IE</div>
+          <div class="value">${xmlGetText(dest, 'IE')}</div>
+        </td>
+        <td>
+          <div class="label">Data Emissao</div>
+          <div class="value">${dhEmi}</div>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <div class="label">Endereco</div>
+          <div class="value">${[destStreet, destNumber, destComplement].filter(Boolean).join(', ')}</div>
+        </td>
+        <td>
+          <div class="label">Bairro</div>
+          <div class="value">${destBairro}</div>
+        </td>
+        <td>
+          <div class="label">CEP</div>
+          <div class="value">${destCep}</div>
+        </td>
+        <td>
+          <div class="label">Data Saida/Entrada</div>
+          <div class="value">${saidaDate}</div>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <div class="label">Municipio</div>
+          <div class="value">${destMunicipio}</div>
+        </td>
+        <td>
+          <div class="label">UF</div>
+          <div class="value">${destUf}</div>
+        </td>
+        <td>
+          <div class="label">Fone/Fax</div>
+          <div class="value">${destFone}</div>
+        </td>
+        <td>
+          <div class="label">Hora Saida/Entrada</div>
+          <div class="value">${saidaTime}</div>
+        </td>
+      </tr>
+      ${homologRowFull}
+    </table>
+
+    ${faturaHtml}
+
+    <table class="block">
+      <colgroup>
+        <col style="width:8.33%">
+        <col style="width:8.33%">
+        <col style="width:8.33%">
+        <col style="width:8.33%">
+        <col style="width:8.33%">
+        <col style="width:8.33%">
+        <col style="width:8.33%">
+        <col style="width:8.33%">
+        <col style="width:8.33%">
+        <col style="width:8.33%">
+        <col style="width:8.33%">
+        <col style="width:8.33%">
+      </colgroup>
+      <tr>
+        <td colspan="12" class="section-title">Calculo do Imposto</td>
+      </tr>
+      <tr>
+        <td class="label">BC ICMS</td>
+        <td class="value right">${formatBRL(xmlGetText(total, 'vBC'))}</td>
+        <td class="label">V. ICMS</td>
+        <td class="value right">${formatBRL(xmlGetText(total, 'vICMS'))}</td>
+        <td class="label">BC ICMS ST</td>
+        <td class="value right">${formatBRL(xmlGetText(total, 'vBCST'))}</td>
+        <td class="label">V. ICMS ST</td>
+        <td class="value right">${formatBRL(xmlGetText(total, 'vST'))}</td>
+        <td class="label">V. IPI</td>
+        <td class="value right">${formatBRL(xmlGetText(total, 'vIPI'))}</td>
+        <td class="label">V. Total Transferencia</td>
+        <td class="value right">${formatBRL(xmlGetText(total, 'vNF'))}</td>
+      </tr>
+      <tr>
+        <td class="label">V. Frete</td>
+        <td class="value right">${formatBRL(xmlGetText(total, 'vFrete'))}</td>
+        <td class="label">V. Seguro</td>
+        <td class="value right">${formatBRL(xmlGetText(total, 'vSeg'))}</td>
+        <td class="label">Desconto</td>
+        <td class="value right">${formatBRL(xmlGetText(total, 'vDesc'))}</td>
+        <td class="label">Outras Desp.</td>
+        <td class="value right">${formatBRL(xmlGetText(total, 'vOutro'))}</td>
+        <td class="label">V. Produtos</td>
+        <td class="value right">${formatBRL(xmlGetText(total, 'vProd'))}</td>
+        <td class="label">V. Tot. Trib.</td>
+        <td class="value right">${formatBRL(xmlGetText(total, 'vTotTrib'))}</td>
+      </tr>
+    </table>
+
+    <table class="block small">
+      <colgroup>
+        <col style="width:35%">
+        <col style="width:15%">
+        <col style="width:15%">
+        <col style="width:35%">
+      </colgroup>
+      <tr>
+        <td colspan="4" class="section-title">Transportador / Volumes Transportados</td>
+      </tr>
+      <tr>
+        <td>
+          <div class="label">Nome / Razao Social</div>
+          <div class="value">${transportName}</div>
+        </td>
+        <td>
+          <div class="label">Frete</div>
+          <div class="value">${modFrete}</div>
+        </td>
+        <td>
+          <div class="label">CNPJ/CPF</div>
+          <div class="value">${transportDoc}</div>
+        </td>
+        <td>
+          <div class="label">Endereco</div>
+          <div class="value">${transportAddress}</div>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <div class="label">Municipio</div>
+          <div class="value">${transportMun}</div>
+        </td>
+        <td>
+          <div class="label">UF</div>
+          <div class="value">${transportUf}</div>
+        </td>
+        <td>
+          <div class="label">IE</div>
+          <div class="value">${transportIe}</div>
+        </td>
+        <td></td>
+      </tr>
+      ${volumesHtml}
+    </table>
+
+    <table class="items">
+      <colgroup>
+        <col style="width:4%">
+        <col style="width:6%">
+        <col style="width:22%">
+        <col style="width:6%">
+        <col style="width:5%">
+        <col style="width:5%">
+        <col style="width:4%">
+        <col style="width:6%">
+        <col style="width:7%">
+        <col style="width:7%">
+        <col style="width:7%">
+        <col style="width:6%">
+        <col style="width:5%">
+        <col style="width:5%">
+        <col style="width:5%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th class="center">Item</th>
+          <th class="center">Cod</th>
+          <th>Descricao</th>
+          <th class="center ncm">NCM</th>
+          <th class="center">CST</th>
+          <th class="center">CFOP</th>
+          <th class="center">UN</th>
+          <th class="center">QTD</th>
+          <th class="center">V. Unit</th>
+          <th class="center">V. Total</th>
+          <th class="center">BC ICMS</th>
+          <th class="center">V. ICMS</th>
+          <th class="center">V. IPI</th>
+          <th class="center">Aliq ICMS</th>
+          <th class="center">Aliq IPI</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${productsRows || '<tr><td colspan="15" class="center">Nenhum item informado.</td></tr>'}
+      </tbody>
+    </table>
+
+    <table class="block">
+      <colgroup>
+        <col style="width:75%">
+        <col style="width:25%">
+      </colgroup>
+      <tr>
+        <td class="section-title">Dados Adicionais</td>
+        <td class="section-title">Reservado ao Fisco</td>
+      </tr>
+      <tr>
+        <td>${adicionais || 'Sem informacoes adicionais.'}</td>
+        <td></td>
+      </tr>
+    </table>
+  </div>
+</body>
+</html>`;
+  }
+
+  function openPrintWindow(html, title, { withBarcode = false, chave = '' } = {}) {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      throw new Error('Nao foi possivel abrir a janela de impressao.');
+    }
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    if (withBarcode && chave) {
+      const script = printWindow.document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js';
+      script.onload = () => {
+        try {
+          const svg = printWindow.document.getElementById('danfe-barcode');
+          if (svg && typeof printWindow.JsBarcode === 'function') {
+            printWindow.JsBarcode(svg, chave, {
+              format: 'CODE128',
+              displayValue: false,
+              height: 48,
+              margin: 0,
+              width: 1.2,
+            });
+            const fallback = printWindow.document.querySelector('[data-barcode-fallback]');
+            if (fallback) fallback.style.display = 'none';
+          }
+        } catch (_) {
+          // ignore
+        } finally {
+          printWindow.focus();
+          setTimeout(() => printWindow.print(), 250);
+        }
+      };
+      script.onerror = () => {
+        printWindow.focus();
+        setTimeout(() => printWindow.print(), 250);
+      };
+      printWindow.document.head.appendChild(script);
+    } else {
+      printWindow.focus();
+      setTimeout(() => printWindow.print(), 250);
+    }
+  }
+
 
   function attachFormEvents() {
     selectors.originCompany?.addEventListener('change', () => {
@@ -1544,6 +2700,7 @@
 
     selectors.form?.addEventListener('submit', handleSubmit);
     selectors.clearButton?.addEventListener('click', handleClearButtonClick);
+    selectors.printButton?.addEventListener('click', handlePrintDanfeClick);
   }
 
   function init() {
