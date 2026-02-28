@@ -2022,6 +2022,32 @@
       ? payments.reduce((total, payment) => total + safeNumber(payment?.valor), 0)
       : 0;
 
+  const getDisplayedCaixaPayments = (payments = state.pagamentos, { includeOpening = true } = {}) => {
+    const base = clonePayments(Array.isArray(payments) ? payments : []);
+    if (!includeOpening) {
+      return base;
+    }
+    const openingAmount = safeNumber(state.summary.abertura);
+    if (!(openingAmount > 0)) {
+      return base;
+    }
+    let moneyPayment =
+      base.find((item) => String(item.label || '').toLowerCase() === 'dinheiro') ||
+      base.find((item) => String(item.type || '').toLowerCase() === 'dinheiro');
+    if (!moneyPayment) {
+      moneyPayment = {
+        id: 'Dinheiro',
+        label: 'Dinheiro',
+        type: 'dinheiro',
+        aliases: [],
+        valor: 0,
+      };
+      base.unshift(moneyPayment);
+    }
+    moneyPayment.valor = safeNumber(moneyPayment.valor) + openingAmount;
+    return base;
+  };
+
   const getCaixaMovementTotals = (history = state.history) => {
     const currentCycleHistory = (() => {
       if (!Array.isArray(history)) return [];
@@ -2162,20 +2188,26 @@
     const previstoSemCanceladas = Array.isArray(state.caixaInfo.previstoPagamentos)
       ? buildCaixaPrevistoPagamentosWithoutCancelledSales(state.caixaInfo.previstoPagamentos)
       : [];
-    const recebimentosFonte = caixaAbertoComSaldoPrevistoAtual
+    const recebimentosFonteBase = caixaAbertoComSaldoPrevistoAtual
       ? state.pagamentos
       : previstoSemCanceladas;
+    const recebimentosFonte = getDisplayedCaixaPayments(recebimentosFonteBase, {
+      includeOpening: true,
+    });
     const recebimentosItems = createPaymentItems(recebimentosFonte);
     const recebimentosTotal = sumPayments(recebimentosFonte);
 
     const hasPrevistoPagamentos = Array.isArray(state.caixaInfo.previstoPagamentos)
       ? state.caixaInfo.previstoPagamentos.length > 0
       : false;
-    const previstoFonte = caixaAbertoComSaldoPrevistoAtual
+    const previstoFonteBase = caixaAbertoComSaldoPrevistoAtual
       ? state.pagamentos
       : hasPrevistoPagamentos
       ? previstoSemCanceladas
       : state.pagamentos;
+    const previstoFonte = getDisplayedCaixaPayments(previstoFonteBase, {
+      includeOpening: true,
+    });
     const previstoItems = createPaymentItems(previstoFonte);
     const previstoTotal = sumPayments(previstoFonte);
 
@@ -22853,8 +22885,15 @@
   };
 
   const repairCancelledSalesCashReversals = () => {
+    const cycleStart = state.caixaInfo?.aberturaData ? new Date(state.caixaInfo.aberturaData) : null;
     const cancelledSales = (Array.isArray(state.completedSales) ? state.completedSales : []).filter(
-      (sale) => sale && sale.status === 'cancelled'
+      (sale) => {
+        if (!sale || sale.status !== 'cancelled') return false;
+        if (!cycleStart || Number.isNaN(cycleStart.getTime())) return true;
+        const saleCreatedAt = sale.createdAt ? new Date(sale.createdAt) : null;
+        if (!saleCreatedAt || Number.isNaN(saleCreatedAt.getTime())) return false;
+        return saleCreatedAt.getTime() >= cycleStart.getTime();
+      }
     );
     if (!cancelledSales.length) return 0;
     let repaired = 0;
@@ -23951,15 +23990,30 @@
     }
     const appointmentStoreId = getPdvStoreId(pdv) || companyId || state.selectedStore || '';
     state.activePdvStoreId = appointmentStoreId;
+    const persistedCaixaInfo =
+      persistedState?.caixaInfo && typeof persistedState.caixaInfo === 'object'
+        ? persistedState.caixaInfo
+        : {};
     const caixaAberto = Boolean(
-      pdv?.caixa?.aberto ||
+      persistedState?.caixaAberto ||
+        persistedState?.caixa?.aberto ||
+        pdv?.caixa?.aberto ||
         pdv?.caixaAberto ||
         pdv?.statusCaixa === 'aberto' ||
         pdv?.status === 'aberto'
     );
     state.caixaAberto = caixaAberto;
     renderReceivablesSelectionSummary();
-    const summarySource = pdv?.summary || pdv?.caixa?.resumo || {};
+    const summarySource =
+      (persistedState?.summary && typeof persistedState.summary === 'object'
+        ? persistedState.summary
+        : null) ||
+      (persistedState?.caixa?.resumo && typeof persistedState.caixa.resumo === 'object'
+        ? persistedState.caixa.resumo
+        : null) ||
+      pdv?.summary ||
+      pdv?.caixa?.resumo ||
+      {};
     state.summary.abertura = safeNumber(
       summarySource.abertura ||
         summarySource.valorAbertura ||
@@ -23979,6 +24033,9 @@
         0
     );
     const aberturaData =
+      persistedCaixaInfo?.aberturaData ||
+      persistedState?.caixa?.dataAbertura ||
+      persistedState?.caixa?.aberturaData ||
       pdv?.caixa?.dataAbertura ||
       pdv?.caixa?.aberturaData ||
       pdv?.caixa?.abertura ||
@@ -23988,6 +24045,9 @@
       pdv?.dataAbertura ||
       pdv?.abertura;
     const fechamentoData =
+      persistedCaixaInfo?.fechamentoData ||
+      persistedState?.caixa?.dataFechamento ||
+      persistedState?.caixa?.fechamentoData ||
       pdv?.caixa?.dataFechamento ||
       pdv?.caixa?.fechamentoData ||
       pdv?.caixa?.fechamento ||
@@ -23996,14 +24056,22 @@
       pdv?.caixa?.closedAt ||
       pdv?.dataFechamento ||
       pdv?.fechamento;
-    const previstoPagamentosData = Array.isArray(pdv?.caixa?.previstoPagamentos)
+    const previstoPagamentosData = Array.isArray(persistedCaixaInfo?.previstoPagamentos)
+      ? persistedCaixaInfo.previstoPagamentos
+      : Array.isArray(persistedState?.caixa?.previstoPagamentos)
+      ? persistedState.caixa.previstoPagamentos
+      : Array.isArray(pdv?.caixa?.previstoPagamentos)
       ? pdv.caixa.previstoPagamentos
       : Array.isArray(pdv?.caixa?.pagamentosPrevistos)
       ? pdv.caixa.pagamentosPrevistos
       : Array.isArray(pdv?.previstoPagamentos)
       ? pdv.previstoPagamentos
       : [];
-    const apuradoPagamentosData = Array.isArray(pdv?.caixa?.apuradoPagamentos)
+    const apuradoPagamentosData = Array.isArray(persistedCaixaInfo?.apuradoPagamentos)
+      ? persistedCaixaInfo.apuradoPagamentos
+      : Array.isArray(persistedState?.caixa?.apuradoPagamentos)
+      ? persistedState.caixa.apuradoPagamentos
+      : Array.isArray(pdv?.caixa?.apuradoPagamentos)
       ? pdv.caixa.apuradoPagamentos
       : Array.isArray(pdv?.caixa?.pagamentosApurados)
       ? pdv.caixa.pagamentosApurados
@@ -24014,7 +24082,9 @@
       aberturaData: parseDateValue(aberturaData),
       fechamentoData: parseDateValue(fechamentoData),
       fechamentoPrevisto: safeNumber(
-        pdv?.caixa?.fechamentoPrevisto ||
+        persistedCaixaInfo?.fechamentoPrevisto ||
+          persistedState?.caixa?.fechamentoPrevisto ||
+          pdv?.caixa?.fechamentoPrevisto ||
           pdv?.caixa?.valorPrevisto ||
           pdv?.caixa?.saldoPrevisto ||
           pdv?.fechamentoPrevisto ||
@@ -24022,7 +24092,9 @@
           0
       ),
       fechamentoApurado: safeNumber(
-        pdv?.caixa?.fechamentoApurado ||
+        persistedCaixaInfo?.fechamentoApurado ||
+          persistedState?.caixa?.fechamentoApurado ||
+          pdv?.caixa?.fechamentoApurado ||
           pdv?.caixa?.valorApurado ||
           pdv?.fechamentoApurado ||
           summarySource.fechamentoApurado ||
@@ -24071,27 +24143,43 @@
       venda: normalizePrintMode(storedPreferences?.venda, vendaMode),
     };
     updatePrintControls();
-    const pagamentosData = pdv?.caixa?.pagamentos || pdv?.pagamentos || {};
+    const pagamentosData =
+      persistedState?.pagamentos ||
+      persistedState?.caixa?.pagamentos ||
+      pdv?.caixa?.pagamentos ||
+      pdv?.pagamentos ||
+      {};
     applyPagamentosData(pagamentosData);
     if (state.summary.abertura > 0 && !state.pagamentos.some((payment) => payment.valor > 0)) {
       state.pagamentos = state.pagamentos.map((payment, index) =>
         index === 0 ? { ...payment, valor: state.summary.abertura } : payment
       );
     }
-    const historicoFonte = Array.isArray(pdv?.history)
-      ? pdv.history
-      : Array.isArray(persistedState?.history)
+    const historicoFonte = Array.isArray(persistedState?.history)
       ? persistedState.history
+      : Array.isArray(pdv?.history)
+      ? pdv.history
       : Array.isArray(pdv?.caixa?.historico)
       ? pdv.caixa.historico
       : [];
     state.history = historicoFonte
       .map((entry) => normalizeHistoryEntryForPersist(entry))
       .filter(Boolean);
-    const rootReceivablesData = Array.isArray(pdv?.accountsReceivable)
-      ? pdv.accountsReceivable
-      : Array.isArray(persistedState?.accountsReceivable)
+    if (state.caixaAberto && state.caixaInfo.aberturaData) {
+      const cycleStart = new Date(state.caixaInfo.aberturaData);
+      if (!Number.isNaN(cycleStart.getTime())) {
+        state.history = state.history.filter((entry) => {
+          const timestamp = entry?.timestamp ? new Date(entry.timestamp) : null;
+          return timestamp && !Number.isNaN(timestamp.getTime())
+            ? timestamp.getTime() >= cycleStart.getTime()
+            : false;
+        });
+      }
+    }
+    const rootReceivablesData = Array.isArray(persistedState?.accountsReceivable)
       ? persistedState.accountsReceivable
+      : Array.isArray(pdv?.accountsReceivable)
+      ? pdv.accountsReceivable
       : Array.isArray(pdv?.contasReceber)
       ? pdv.contasReceber
       : Array.isArray(pdv?.caixa?.accountsReceivable)
@@ -24100,10 +24188,10 @@
     const normalizedRootReceivables = rootReceivablesData
       .map((entry) => normalizeReceivableForPersist(entry))
       .filter(Boolean);
-    const vendasFonte = Array.isArray(pdv?.completedSales)
-      ? pdv.completedSales
-      : Array.isArray(persistedState?.completedSales)
+    const vendasFonte = Array.isArray(persistedState?.completedSales)
       ? persistedState.completedSales
+      : Array.isArray(pdv?.completedSales)
+      ? pdv.completedSales
       : Array.isArray(pdv?.caixa?.vendas)
       ? pdv.caixa.vendas
       : [];
@@ -24148,18 +24236,18 @@
     state.receivablesListError = '';
     renderReceivablesList();
     renderReceivablesSelectedCustomer();
-    const budgetsFonte = Array.isArray(pdv?.budgets)
-      ? pdv.budgets
-      : Array.isArray(persistedState?.budgets)
+    const budgetsFonte = Array.isArray(persistedState?.budgets)
       ? persistedState.budgets
+      : Array.isArray(pdv?.budgets)
+      ? pdv.budgets
       : Array.isArray(pdv?.orcamentos)
       ? pdv.orcamentos
       : [];
     state.budgets = budgetsFonte.map((budget) => normalizeBudgetRecordForPersist(budget)).filter(Boolean);
-    const deliveryOrdersFonte = Array.isArray(pdv?.deliveryOrders)
-      ? pdv.deliveryOrders
-      : Array.isArray(persistedState?.deliveryOrders)
+    const deliveryOrdersFonte = Array.isArray(persistedState?.deliveryOrders)
       ? persistedState.deliveryOrders
+      : Array.isArray(pdv?.deliveryOrders)
+      ? pdv.deliveryOrders
       : Array.isArray(pdv?.caixa?.deliveryOrders)
       ? pdv.caixa.deliveryOrders
       : [];

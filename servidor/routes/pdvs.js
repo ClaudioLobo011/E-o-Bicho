@@ -1219,11 +1219,13 @@ const normalizeSaleRecordPayload = (record) => {
     ? record.cashContributions
     : Array.isArray(record.caixaContributions)
     ? record.caixaContributions
+    : Array.isArray(record.receiptSnapshot?.pagamentos?.items)
+    ? record.receiptSnapshot.pagamentos.items
     : [];
   const cashContributions = cashContributionsSource
     .map((entry) => {
       if (!entry || typeof entry !== 'object') return null;
-      const paymentId = normalizeString(entry.paymentId || entry.id);
+      const paymentId = normalizeString(entry.paymentId || entry.id || entry.label);
       const paymentLabel = normalizeString(entry.paymentLabel || entry.label) || '';
       const amount = safeNumber(entry.amount ?? entry.valor ?? entry.total ?? 0, 0);
       if (!(amount > 0)) {
@@ -1899,6 +1901,19 @@ const clonePaymentSnapshots = (payments = []) =>
     .map((entry) => normalizePaymentSnapshotPayload(entry))
     .filter(Boolean)
     .map((entry) => ({ ...entry }));
+
+const filterHistoryForCurrentCycle = (historyEntries, cycleStart) => {
+  if (!Array.isArray(historyEntries)) return [];
+  const startDate = safeDate(cycleStart);
+  if (!startDate) {
+    return historyEntries;
+  }
+  return historyEntries.filter((entry) => {
+    if (!entry || typeof entry !== 'object') return false;
+    const timestamp = safeDate(entry.timestamp);
+    return Boolean(timestamp) && timestamp.getTime() >= startDate.getTime();
+  });
+};
 
 const reconcileCashStateFromSales = ({ existingState, updatePayload }) => {
   const sales = Array.isArray(updatePayload?.completedSales) ? updatePayload.completedSales : [];
@@ -3099,6 +3114,13 @@ router.put('/:id/state', requireAuth, async (req, res) => {
             updatePayload.history || [],
             'history'
           );
+      updatePayload.history = filterHistoryForCurrentCycle(
+        updatePayload.history,
+        updatePayload?.caixaInfo?.aberturaData || existingState?.caixaInfo?.aberturaData || null
+      );
+      updatePayload.lastMovement = Array.isArray(updatePayload.history) && updatePayload.history.length
+        ? updatePayload.history[0]
+        : null;
       updatePayload.accountsReceivable = mergeRecordsByKey(
         existingState?.accountsReceivable || [],
         updatePayload.accountsReceivable || [],
