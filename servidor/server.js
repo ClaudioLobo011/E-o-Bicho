@@ -19,12 +19,26 @@ verifyMailer();
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*', methods: ['GET', 'POST'] } });
+const buildPdvRoomKey = (pdvId) => {
+  const id = typeof pdvId === 'string' ? pdvId.trim() : '';
+  if (!/^[a-fA-F0-9]{24}$/.test(id)) return null;
+  return `pdv:${id}`;
+};
 
 const BODY_PARSER_LIMIT = '10mb';
 
 
 // Middleware
 app.set('socketio', io);
+app.set('emitPdvStateUpdate', ({ pdvId, payload = {} } = {}) => {
+  const room = buildPdvRoomKey(pdvId);
+  if (!room) return;
+  io.to(room).emit('pdv:state-updated', {
+    pdvId,
+    timestamp: Date.now(),
+    ...payload,
+  });
+});
 app.use(express.json({
   limit: BODY_PARSER_LIMIT,
   verify: (req, _res, buf) => {
@@ -139,6 +153,7 @@ io.on('connection', (socket) => {
   console.log('Um utilizador conectou-se via WebSocket');
   const joinedRooms = new Set();
   const joinedWhatsappRooms = new Set();
+  const joinedPdvRooms = new Set();
 
   socket.on('vet:ficha:join', (payload = {}) => {
     const room = sanitizeRoomKey(payload.room);
@@ -179,9 +194,24 @@ io.on('connection', (socket) => {
     joinedWhatsappRooms.delete(room);
   });
 
+  socket.on('pdv:join', (payload = {}) => {
+    const room = buildPdvRoomKey(payload.pdvId);
+    if (!room) return;
+    socket.join(room);
+    joinedPdvRooms.add(room);
+  });
+
+  socket.on('pdv:leave', (payload = {}) => {
+    const room = buildPdvRoomKey(payload.pdvId);
+    if (!room) return;
+    socket.leave(room);
+    joinedPdvRooms.delete(room);
+  });
+
   socket.on('disconnect', () => {
     joinedRooms.clear();
     joinedWhatsappRooms.clear();
+    joinedPdvRooms.clear();
     console.log('Utilizador desconectou-se');
   });
 });

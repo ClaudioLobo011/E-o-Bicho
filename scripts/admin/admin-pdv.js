@@ -243,6 +243,7 @@
     },
     history: [],
     lastMovement: null,
+    remoteUpdatedAt: '',
     searchController: null,
     deliveryOrders: [],
     deliveryAddresses: [],
@@ -429,6 +430,12 @@
   let statePersistInFlight = false;
   let statePersistPending = false;
   let lastPersistSignature = '';
+  let stateHasLocalPendingChanges = false;
+  let deferredRemotePdvState = null;
+  let pdvSocket = null;
+  let pdvSocketPromise = null;
+  let pdvSocketScriptPromise = null;
+  let pdvSocketJoinedPdvId = '';
   const normalizeId = (value) => (value == null ? '' : String(value));
   const isValidObjectId = (value) => /^[a-fA-F0-9]{24}$/.test(String(value || '').trim());
   const getDefaultPdvSelectionPreference = () => ({ storeId: '', pdvId: '' });
@@ -790,7 +797,12 @@
   let customerRegisterFrameUrl = '';
   let customerRegisterFrameWindow = null;
 
-  const createUid = () => `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+  const createUid = () => {
+    if (typeof crypto !== 'undefined' && crypto && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    return `${Date.now()}-${Math.random().toString(16).slice(2, 12)}`;
+  };
 
   const notify = (message, type = 'info') => {
     if (typeof window?.showToast === 'function') {
@@ -1188,6 +1200,84 @@
       sources.push({ logradouro: cliente.endereco });
     }
     return sources;
+  };
+
+  const ensureActiveDeliveryAddressSelection = () => {
+    if (state.deliverySelectedAddress && typeof state.deliverySelectedAddress === 'object') {
+      return state.deliverySelectedAddress;
+    }
+
+    const customerSource = getDeliveryModalCustomer() || state.vendaCliente || null;
+    const customerId = resolveCustomerId(customerSource);
+    const cachedAddresses = customerId ? customerAddressesCache.get(customerId) : null;
+    const inlineAddresses = extractInlineCustomerAddresses(customerSource)
+      .map((item, index) => normalizeCustomerAddressRecord(item, index))
+      .filter(Boolean);
+    const stateAddresses = Array.isArray(state.deliveryAddresses)
+      ? state.deliveryAddresses.map((item, index) => normalizeCustomerAddressRecord(item, index)).filter(Boolean)
+      : [];
+
+    const mergedAddresses = [];
+    const seen = new Set();
+    const appendAddress = (address) => {
+      const normalized = normalizeCustomerAddressRecord(address, mergedAddresses.length);
+      if (!normalized) return;
+      const key =
+        normalizeId(normalized.id) ||
+        `${sanitizeCepDigits(normalized.cep || '')}|${String(normalized.logradouro || '').toLowerCase()}|${String(
+          normalized.numero || ''
+        ).toLowerCase()}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      mergedAddresses.push(normalized);
+    };
+
+    stateAddresses.forEach(appendAddress);
+    (Array.isArray(cachedAddresses) ? cachedAddresses : []).forEach(appendAddress);
+    inlineAddresses.forEach(appendAddress);
+
+    if (!mergedAddresses.length) {
+      const fallbackAddress = resolveCustomerAddressRecord(customerSource);
+      if (fallbackAddress) {
+        appendAddress(fallbackAddress);
+      }
+    }
+
+    if (!mergedAddresses.length) {
+      return null;
+    }
+
+    state.deliveryAddresses = mergedAddresses.map((item) => ({ ...item }));
+
+    const selectedId = normalizeId(state.deliverySelectedAddressId);
+    let selected = selectedId
+      ? mergedAddresses.find((item) => normalizeId(item.id) === selectedId) || null
+      : null;
+
+    if (!selected && state.deliverySelectedAddress && typeof state.deliverySelectedAddress === 'object') {
+      const current = normalizeCustomerAddressRecord(state.deliverySelectedAddress, 0);
+      selected =
+        mergedAddresses.find(
+          (item) =>
+            sanitizeCepDigits(item.cep || '') === sanitizeCepDigits(current?.cep || '') &&
+            String(item.logradouro || '').trim().toLowerCase() ===
+              String(current?.logradouro || '').trim().toLowerCase() &&
+            String(item.numero || '').trim().toLowerCase() ===
+              String(current?.numero || '').trim().toLowerCase()
+        ) || null;
+    }
+
+    if (!selected) {
+      selected = mergedAddresses.find((item) => item.isDefault) || mergedAddresses[0] || null;
+    }
+
+    if (!selected) {
+      return null;
+    }
+
+    state.deliverySelectedAddressId = selected.id;
+    state.deliverySelectedAddress = { ...selected };
+    return state.deliverySelectedAddress;
   };
 
   const getDeliveryStatusIndex = (statusId) => {
@@ -2637,10 +2727,6 @@
           item?.label,
           item?.nome,
           item?.name,
-          item?.tipo,
-          item?.type,
-          item?.payment,
-          item?.forma,
         ].forEach((key) => register(key, value));
       });
     } else if (data && typeof data === 'object') {
@@ -2656,8 +2742,6 @@
             rawValue?.label,
             rawValue?.nome,
             rawValue?.name,
-            rawValue?.tipo,
-            rawValue?.type,
           ].forEach((nested) => register(nested, value));
         }
       });
@@ -2878,6 +2962,9 @@
       sellerName,
       sellerCode,
       additionValue: safeNumber(record.additionValue ?? 0),
+      total: safeNumber(record.total ?? record.totalLiquido ?? record.totalBruto ?? 0),
+      totalLiquido: safeNumber(record.totalLiquido ?? record.total ?? record.totalBruto ?? 0),
+      totalBruto: safeNumber(record.totalBruto ?? record.totalLiquido ?? record.total ?? 0),
       createdAt: createdAt.toISOString(),
       createdAtLabel: record.createdAtLabel ? String(record.createdAtLabel) : '',
       receiptSnapshot: record.receiptSnapshot || null,
@@ -2916,6 +3003,7 @@
       cancellationAtLabel: record.cancellationAtLabel ? String(record.cancellationAtLabel) : '',
       inventoryProcessed,
       inventoryProcessedAt,
+      cashContributions: normalizeCashContributions(record.cashContributions),
       appointmentId: normalizedAppointmentId,
       appointmentIds: normalizedAppointmentIds,
     };
@@ -3178,17 +3266,238 @@
     };
   };
 
-  const sendStatePersistRequest = async (payload) => {
+  const mergeRecordsByKey = (serverRecords, localRecords, kind = 'generic') => {
+    const getKey = (record) => {
+      if (!record || typeof record !== 'object') return '';
+      const createdAt = String(record.createdAt || '').trim();
+      if (kind === 'history') {
+        const timestamp = String(record.timestamp || '').trim();
+        const entryId = String(record.id || '').trim();
+        const label = String(record.label || '').trim();
+        if (timestamp || entryId || label) {
+          return `history:${timestamp}:${entryId}:${label}`;
+        }
+      }
+      if (kind === 'receivable') {
+        const receivableId = normalizeId(record.id || record._id || '');
+        const saleId = normalizeId(record.saleId || '');
+        const parcel = String(record.parcelNumber || '').trim();
+        if (receivableId) return `receivable:${receivableId}`;
+        if (saleId || parcel) return `receivable:${saleId}:${parcel}`;
+      }
+      const id = normalizeId(record.id || record._id || '');
+      if (kind === 'sale' && id) {
+        return `id:${id}:${createdAt}`;
+      }
+      if (kind === 'budget' && id) {
+        return `id:${id}:${createdAt}`;
+      }
+      if (id) return `id:${id}`;
+      if (kind === 'sale') {
+        const code = String(record.saleCode || record.saleCodeLabel || '')
+          .trim()
+          .toUpperCase();
+        if (code) return `code:${code}`;
+      }
+      if (kind === 'budget') {
+        const code = String(record.code || '').trim().toUpperCase();
+        if (code) return `code:${code}`;
+      }
+      if (kind === 'delivery') {
+        const saleRecordId = normalizeId(record.saleRecordId || '');
+        if (saleRecordId) return `sale:${saleRecordId}`;
+        const saleCode = String(record.saleCode || '').trim().toUpperCase();
+        if (saleCode) return `code:${saleCode}`;
+      }
+      return '';
+    };
+
+    const merged = [];
+    const indexByKey = new Map();
+    const push = (record, source) => {
+      if (!record || typeof record !== 'object') return;
+      const key = getKey(record);
+      if (!key) {
+        merged.push(record);
+        return;
+      }
+      const found = indexByKey.get(key);
+      if (found === undefined) {
+        indexByKey.set(key, merged.length);
+        merged.push(record);
+        return;
+      }
+      if (source === 'local') {
+        merged[found] = record;
+      }
+    };
+
+    (Array.isArray(serverRecords) ? serverRecords : []).forEach((record) => push(record, 'server'));
+    (Array.isArray(localRecords) ? localRecords : []).forEach((record) => push(record, 'local'));
+    return merged;
+  };
+
+  const sendStatePersistRequest = async (payload, options = {}) => {
     const pdvId = normalizeId(state.selectedPdv);
     if (!pdvId) return;
+    const expectedUpdatedAtOverride =
+      options && typeof options === 'object' ? options.expectedUpdatedAt : '';
+    const signature = JSON.stringify(payload || {});
+    const hash = (() => {
+      let result = 0;
+      for (let index = 0; index < signature.length; index += 1) {
+        result = (result * 31 + signature.charCodeAt(index)) >>> 0;
+      }
+      return result.toString(36);
+    })();
+    const idempotencyKey = `pdv-state:${pdvId}:${hash}`;
     const token = getToken();
-    await fetchWithOptionalAuth(`${API_BASE}/pdvs/${encodeURIComponent(pdvId)}/state`, {
+    return fetchWithOptionalAuth(`${API_BASE}/pdvs/${encodeURIComponent(pdvId)}/state`, {
       method: 'PUT',
       token,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify({
+        ...payload,
+        _meta: {
+          idempotencyKey,
+          expectedUpdatedAt: expectedUpdatedAtOverride || state.remoteUpdatedAt || '',
+          clientTime: new Date().toISOString(),
+        },
+      }),
       errorMessage: 'Não foi possível salvar o estado do PDV.',
     });
+  };
+
+  const applyPersistedStateResponse = (persisted) => {
+    if (!persisted || typeof persisted !== 'object') return;
+
+    if (persisted.caixa && typeof persisted.caixa === 'object') {
+      if (typeof persisted.caixa.aberto === 'boolean') {
+        state.caixaAberto = persisted.caixa.aberto;
+      }
+    }
+
+    if (persisted.summary && typeof persisted.summary === 'object') {
+      state.summary.abertura = safeNumber(persisted.summary.abertura);
+      state.summary.recebido = safeNumber(persisted.summary.recebido);
+      state.summary.saldo = safeNumber(persisted.summary.saldo);
+      state.summary.recebimentosCliente = safeNumber(
+        persisted.summary.recebimentosCliente ?? state.summary.recebimentosCliente
+      );
+    }
+
+    if (persisted.caixaInfo && typeof persisted.caixaInfo === 'object') {
+      state.caixaInfo = {
+        ...state.caixaInfo,
+        aberturaData: parseDateValue(persisted.caixaInfo.aberturaData),
+        fechamentoData: parseDateValue(persisted.caixaInfo.fechamentoData),
+        fechamentoPrevisto: safeNumber(persisted.caixaInfo.fechamentoPrevisto),
+        fechamentoApurado: safeNumber(persisted.caixaInfo.fechamentoApurado),
+        previstoPagamentos: Array.isArray(persisted.caixaInfo.previstoPagamentos)
+          ? persisted.caixaInfo.previstoPagamentos
+              .map((payment) => normalizePaymentSnapshotForPersist(payment))
+              .filter(Boolean)
+          : [],
+        apuradoPagamentos: Array.isArray(persisted.caixaInfo.apuradoPagamentos)
+          ? persisted.caixaInfo.apuradoPagamentos
+              .map((payment) => normalizePaymentSnapshotForPersist(payment))
+              .filter(Boolean)
+          : [],
+      };
+    }
+
+    if (Array.isArray(persisted.pagamentos)) {
+      applyPagamentosData(persisted.pagamentos);
+    }
+
+    if (Array.isArray(persisted.history)) {
+      state.history = persisted.history
+        .map((entry) => normalizeHistoryEntryForPersist(entry))
+        .filter(Boolean);
+      renderHistory();
+      setLastMovement(state.history[0] || null);
+    }
+
+    if (Array.isArray(persisted.deliveryOrders)) {
+      state.deliveryOrders = persisted.deliveryOrders
+        .map((order) => normalizeDeliveryOrderForPersist(order))
+        .filter(Boolean);
+    }
+
+    if (Array.isArray(persisted.accountsReceivable)) {
+      state.accountsReceivable = persisted.accountsReceivable
+        .map((entry) => normalizeReceivableForPersist(entry))
+        .filter(Boolean);
+    }
+
+    if (Array.isArray(persisted.completedSales)) {
+      state.completedSales = persisted.completedSales
+        .map((sale) => normalizeSaleRecordForPersist(sale))
+        .filter(Boolean);
+      renderSalesList();
+    }
+
+    const budgetsSource = Array.isArray(persisted.budgets)
+      ? persisted.budgets
+      : Array.isArray(persisted.orcamentos)
+      ? persisted.orcamentos
+      : null;
+    if (Array.isArray(budgetsSource)) {
+      state.budgets = budgetsSource
+        .map((budget) => normalizeBudgetRecordForPersist(budget))
+        .filter(Boolean);
+      renderBudgets();
+    }
+
+    if (persisted.saleCodeIdentifier !== undefined) {
+      state.saleCodeIdentifier = sanitizeSaleCodeIdentifier(persisted.saleCodeIdentifier);
+    }
+    if (persisted.saleCodeSequence !== undefined) {
+      const parsed = Number.parseInt(persisted.saleCodeSequence, 10);
+      if (Number.isFinite(parsed) && parsed >= 1) {
+        state.saleCodeSequence = parsed;
+      }
+    }
+    if (persisted.budgetSequence !== undefined) {
+      const parsed = Number.parseInt(persisted.budgetSequence, 10);
+      if (Number.isFinite(parsed) && parsed >= 1) {
+        state.budgetSequence = parsed;
+      }
+    }
+    if (persisted.updatedAt) {
+      state.remoteUpdatedAt = String(persisted.updatedAt);
+    }
+
+    refreshCurrentSaleCode();
+    updateSaleCodeDisplay();
+    renderPayments();
+    updateSummary();
+    updateStatusBadge();
+    renderCaixaActions();
+    updateActionDetails();
+    updateTabAvailability();
+    renderReceivablesSelectionSummary();
+    renderDeliveryOrders();
+  };
+
+  const processDeferredRemotePdvState = () => {
+    if (stateHasLocalPendingChanges || statePersistInFlight || statePersistPending) {
+      return;
+    }
+    if (!deferredRemotePdvState || typeof deferredRemotePdvState !== 'object') {
+      return;
+    }
+    const remote = deferredRemotePdvState;
+    deferredRemotePdvState = null;
+    const remoteUpdatedAt = String(remote.updatedAt || '');
+    const currentUpdatedAt = String(state.remoteUpdatedAt || '');
+    if (remoteUpdatedAt && currentUpdatedAt && remoteUpdatedAt <= currentUpdatedAt) {
+      return;
+    }
+    applyPersistedStateResponse(remote);
   };
 
   const flushStatePersist = async () => {
@@ -3200,9 +3509,53 @@
       return;
     }
     try {
-      await sendStatePersistRequest(payload);
+      const persisted = await sendStatePersistRequest(payload);
+      applyPersistedStateResponse(persisted);
       lastPersistSignature = signature;
+      stateHasLocalPendingChanges = false;
+      processDeferredRemotePdvState();
     } catch (error) {
+      if (error?.status === 409 && error?.details?.state) {
+        const serverState = error.details.state;
+        const latestLocalPayload = buildStatePersistPayload();
+        const mergedPayload = {
+          ...latestLocalPayload,
+          completedSales: mergeRecordsByKey(
+            serverState.completedSales || [],
+            latestLocalPayload.completedSales || [],
+            'sale'
+          ),
+          budgets: mergeRecordsByKey(
+            serverState.budgets || [],
+            latestLocalPayload.budgets || [],
+            'budget'
+          ),
+          deliveryOrders: mergeRecordsByKey(
+            serverState.deliveryOrders || [],
+            latestLocalPayload.deliveryOrders || [],
+            'delivery'
+          ),
+          history: mergeRecordsByKey(
+            serverState.history || [],
+            latestLocalPayload.history || [],
+            'history'
+          ),
+          accountsReceivable: mergeRecordsByKey(
+            serverState.accountsReceivable || [],
+            latestLocalPayload.accountsReceivable || [],
+            'receivable'
+          ),
+        };
+        const retried = await sendStatePersistRequest(mergedPayload, {
+          expectedUpdatedAt: serverState.updatedAt || '',
+        });
+        applyPersistedStateResponse(retried);
+        lastPersistSignature = JSON.stringify(buildStatePersistPayload());
+        stateHasLocalPendingChanges = false;
+        processDeferredRemotePdvState();
+        notify('PDV sincronizado e venda reaplicada com sucesso.', 'success');
+        return;
+      }
       console.error('Erro ao salvar estado do PDV:', error);
     }
   };
@@ -3210,6 +3563,7 @@
   const scheduleStatePersist = ({ immediate = false } = {}) => {
     if (!state.selectedPdv) return;
     if (typeof window === 'undefined') return;
+    stateHasLocalPendingChanges = true;
     if (statePersistTimeout) {
       window.clearTimeout(statePersistTimeout);
       statePersistTimeout = null;
@@ -3232,6 +3586,95 @@
         }
       }
     }, delay);
+  };
+
+  const getSocketServerBaseUrl = () => {
+    const raw = String(SERVER_URL || '').trim();
+    if (!raw) return '';
+    const noTrailingSlash = raw.replace(/\/+$/, '');
+    return noTrailingSlash.endsWith('/api')
+      ? noTrailingSlash.slice(0, -4)
+      : noTrailingSlash;
+  };
+
+  const ensureSocketIoScript = () => {
+    if (typeof window === 'undefined') return Promise.reject(new Error('socket-unavailable'));
+    if (typeof window.io === 'function') return Promise.resolve();
+    if (pdvSocketScriptPromise) return pdvSocketScriptPromise;
+    const baseUrl = getSocketServerBaseUrl();
+    const src = baseUrl ? `${baseUrl}/socket.io/socket.io.js` : '/socket.io/socket.io.js';
+    pdvSocketScriptPromise = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = src;
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => {
+        pdvSocketScriptPromise = null;
+        reject(new Error('socket-io-load-failed'));
+      };
+      document.head.appendChild(script);
+    });
+    return pdvSocketScriptPromise;
+  };
+
+  const syncPdvSocketRoom = () => {
+    if (!pdvSocket || !pdvSocket.connected) return;
+    const nextPdvId = normalizeId(state.selectedPdv || '');
+    if (pdvSocketJoinedPdvId && pdvSocketJoinedPdvId !== nextPdvId) {
+      pdvSocket.emit('pdv:leave', { pdvId: pdvSocketJoinedPdvId });
+      pdvSocketJoinedPdvId = '';
+    }
+    if (nextPdvId && pdvSocketJoinedPdvId !== nextPdvId) {
+      pdvSocket.emit('pdv:join', { pdvId: nextPdvId });
+      pdvSocketJoinedPdvId = nextPdvId;
+    }
+  };
+
+  const ensurePdvSocketConnection = async () => {
+    if (typeof window === 'undefined') return null;
+    if (pdvSocket) return pdvSocket;
+    if (!pdvSocketPromise) {
+      pdvSocketPromise = ensureSocketIoScript()
+        .then(() => {
+          if (typeof window.io !== 'function') {
+            throw new Error('socket-io-unavailable');
+          }
+          const baseUrl = getSocketServerBaseUrl();
+          pdvSocket = window.io(baseUrl || undefined, {
+            transports: ['websocket', 'polling'],
+          });
+          pdvSocket.on('connect', () => {
+            syncPdvSocketRoom();
+          });
+          pdvSocket.on('reconnect', () => {
+            syncPdvSocketRoom();
+          });
+          pdvSocket.on('disconnect', () => {
+            pdvSocketJoinedPdvId = '';
+          });
+          pdvSocket.on('pdv:state-updated', (payload = {}) => {
+            const payloadPdvId = normalizeId(payload?.pdvId || '');
+            const activePdvId = normalizeId(state.selectedPdv || '');
+            if (!payloadPdvId || !activePdvId || payloadPdvId !== activePdvId) {
+              return;
+            }
+            if (payload?.state && typeof payload.state === 'object') {
+              if (stateHasLocalPendingChanges || statePersistInFlight || statePersistPending) {
+                deferredRemotePdvState = payload.state;
+                return;
+              }
+              applyPersistedStateResponse(payload.state);
+            }
+          });
+          return pdvSocket;
+        })
+        .catch((error) => {
+          pdvSocketPromise = null;
+          pdvSocket = null;
+          throw error;
+        });
+    }
+    return pdvSocketPromise;
   };
 
   const getProductCode = (product) => {
@@ -10325,6 +10768,28 @@
     const fields = elements.deliveryAddressFields || {};
     const selected = state.deliverySelectedAddress || null;
     const customer = getDeliveryModalCustomer();
+    const phones = getCustomerPhoneCandidates(customer);
+    const primaryPhone = splitPhoneWithDdd(phones[0] || '');
+    const secondaryPhone = splitPhoneWithDdd(phones[1] || '');
+
+    setDeliveryMaskedFieldValue('deliveryDddMain', elements.deliveryPhoneDdd, primaryPhone.ddd || '21', {
+      unmasked: true,
+    });
+    setDeliveryMaskedFieldValue('deliveryPhoneMain', elements.deliveryPhoneNumber, primaryPhone.number || '', {
+      unmasked: true,
+    });
+    setDeliveryMaskedFieldValue('deliveryDddOne', elements.deliveryPhone1Ddd, primaryPhone.ddd || '21', {
+      unmasked: true,
+    });
+    setDeliveryMaskedFieldValue('deliveryPhoneOne', elements.deliveryPhone1Number, primaryPhone.number || '', {
+      unmasked: true,
+    });
+    setDeliveryMaskedFieldValue('deliveryDddTwo', elements.deliveryPhone2Ddd, secondaryPhone.ddd || '21', {
+      unmasked: true,
+    });
+    setDeliveryMaskedFieldValue('deliveryPhoneTwo', elements.deliveryPhone2Number, secondaryPhone.number || '', {
+      unmasked: true,
+    });
 
     if (fields.apelido) {
       fields.apelido.value = resolveCustomerName(customer) || selected?.apelido || '';
@@ -10713,13 +11178,18 @@
     }
   };
 
-  const closeDeliveryAddressModal = () => {
+  const closeDeliveryAddressModal = (options = {}) => {
     if (!elements.deliveryAddressModal) return;
+    const { resetForm = true, resetModalCustomer = true } = options;
     setDeliveryCustomerRegistrationRequired(false);
-    clearDeliveryCustomerForm();
+    if (resetForm) {
+      clearDeliveryCustomerForm();
+    }
     setDeliveryModalTab('cliente');
     elements.deliveryAddressModal.classList.add('hidden');
-    state.deliveryModalCustomer = null;
+    if (resetModalCustomer) {
+      state.deliveryModalCustomer = null;
+    }
     releaseBodyScrollIfNoModal();
   };
 
@@ -10752,7 +11222,7 @@
     captureDeliveryCourierSelection();
     const importedCount = importSelectedDeliveryHistoryItemsToSale();
     state.saleSource = 'delivery';
-    closeDeliveryAddressModal();
+    closeDeliveryAddressModal({ resetForm: false, resetModalCustomer: false });
     setActiveTab('pdv-tab');
     updateFinalizeButton();
     updateSaleSummary();
@@ -11669,7 +12139,7 @@
       notify('Cadastre meios de pagamento para concluir a operação.', 'warning');
       return;
     }
-    if (context === 'delivery' && !state.deliverySelectedAddress) {
+    if (context === 'delivery' && !ensureActiveDeliveryAddressSelection()) {
       notify('Selecione um endereço de entrega para continuar.', 'warning');
       return;
     }
@@ -13996,7 +14466,8 @@
       closeFinalizeModal();
       return;
     }
-    if (!state.deliverySelectedAddress) {
+    const activeDeliveryAddress = ensureActiveDeliveryAddressSelection();
+    if (!activeDeliveryAddress) {
       notify('Selecione um endereço de entrega para continuar.', 'warning');
       closeFinalizeModal();
       void openDeliveryAddressModal();
@@ -14018,14 +14489,14 @@
         saleDate,
       });
       const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda, {
-        deliveryAddress: state.deliverySelectedAddress,
+        deliveryAddress: activeDeliveryAddress,
         saleCode,
       });
     const statusOverride = resolveDeliveryStatusOverride(state.deliveryStatusOverride);
     const appointmentIdsForDelivery = normalizeAppointmentIdList(state.activeAppointmentIds);
       const orderRecord = createDeliveryOrderRecord(
         saleSnapshot,
-        state.deliverySelectedAddress,
+        activeDeliveryAddress,
         pagamentosVenda,
         total,
         itensSnapshot,
@@ -14042,7 +14513,7 @@
     const isIfoodSale = isIfoodSaleContext({
       items: itensSnapshot,
       payments: pagamentosVenda,
-      address: state.deliverySelectedAddress,
+      address: activeDeliveryAddress,
     });
     const saleRecord = registerCompletedSaleRecord({
       type: 'delivery',
@@ -19951,6 +20422,15 @@
       };
     });
     const normalizedCashContributions = normalizeCashContributions(cashContributions);
+    const totalBruto = Math.max(
+      0,
+      safeNumber(snapshot?.totais?.bruto ?? saleItems.reduce((sum, item) => sum + safeNumber(item?.subtotal), 0))
+    );
+    const totalLiquido = Math.max(
+      0,
+      safeNumber(snapshot?.totais?.liquido ?? totalBruto - discountValue + additionValue)
+    );
+    const total = totalLiquido;
 
     return {
       id: createUid(),
@@ -19968,6 +20448,9 @@
       discountValue,
       discountLabel: formatCurrency(discountValue),
       additionValue,
+      total,
+      totalLiquido,
+      totalBruto,
       createdAt: createdIso,
       createdAtLabel: toDateLabel(createdIso),
       receiptSnapshot: snapshot,
@@ -23124,6 +23607,8 @@
   };
 
   const resetWorkspace = () => {
+    stateHasLocalPendingChanges = false;
+    deferredRemotePdvState = null;
     state.caixaAberto = false;
     state.allowApuradoEdit = false;
     state.selectedAction = null;
@@ -23145,6 +23630,7 @@
     };
     state.history = [];
     state.lastMovement = null;
+    state.remoteUpdatedAt = '';
     state.pendingPagamentosData = null;
     state.pagamentos = state.paymentMethods.map((method) => ({ ...method, valor: 0 }));
     state.vendaPagamentos = [];
@@ -23737,6 +24223,15 @@
     }
     pendingActiveTabPreference = '';
     setActiveTab(targetTab);
+    state.remoteUpdatedAt = String(
+      pdv?.caixaAtualizadoEm ||
+        pdv?.state?.updatedAt ||
+        pdv?.updatedAt ||
+        state.remoteUpdatedAt ||
+        ''
+    );
+    stateHasLocalPendingChanges = false;
+    deferredRemotePdvState = null;
     lastPersistSignature = JSON.stringify(buildStatePersistPayload());
   };
 
@@ -24432,6 +24927,7 @@
     const value = normalizeId(elements.companySelect?.value || '');
     state.selectedStore = value;
     state.selectedPdv = '';
+    syncPdvSocketRoom();
     persistPdvSelectionPreference({ storeId: value, pdvId: '' });
     state.paymentMethods = [];
     state.paymentMethodsLoading = false;
@@ -24466,6 +24962,7 @@
   const handlePdvChange = async () => {
     const value = normalizeId(elements.pdvSelect?.value || '');
     state.selectedPdv = value;
+    syncPdvSocketRoom();
     persistPdvSelectionPreference({ pdvId: value });
     resetWorkspace();
     if (!value) {
@@ -25042,6 +25539,9 @@
     resetWorkspace();
     updateWorkspaceVisibility(false);
     bindEvents();
+    ensurePdvSocketConnection().catch((error) => {
+      console.error('Não foi possível inicializar sincronização em tempo real do PDV:', error);
+    });
     renderSalePaymentMethods();
     renderBudgets();
     renderAppointments();

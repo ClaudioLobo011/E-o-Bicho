@@ -7,6 +7,11 @@ const authMiddleware = require('../middlewares/authMiddleware');
 const mongoose = require('mongoose');
 const Store = require('../models/Store');
 const UserGroup = require('../models/UserGroup');
+const {
+  ensureScopedSequenceAtLeast,
+  nextScopedSequence,
+  customerSequenceKey,
+} = require('../utils/sequences');
 
 // ----- helpers / policies -----
 const STAFF_ROLES = ['funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master'];
@@ -82,7 +87,16 @@ async function obterMaiorCodigoCliente() {
 
 async function gerarCodigoClienteSequencial() {
   const maior = await obterMaiorCodigoCliente();
-  return maior + 1;
+  const key = customerSequenceKey();
+  await ensureScopedSequenceAtLeast({
+    scope: key.scope,
+    reference: key.reference,
+    value: maior,
+  });
+  return nextScopedSequence({
+    scope: key.scope,
+    reference: key.reference,
+  });
 }
 
 async function corrigirCodigoClienteSeInvalido(userId) {

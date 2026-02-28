@@ -169,6 +169,7 @@ const pdvStateSchema = new mongoose.Schema(
     summary: {
       abertura: { type: Number, default: 0 },
       recebido: { type: Number, default: 0 },
+      recebimentosCliente: { type: Number, default: 0 },
       saldo: { type: Number, default: 0 },
     },
     caixaInfo: {
@@ -194,6 +195,7 @@ const pdvStateSchema = new mongoose.Schema(
     inventoryMovements: { type: [inventoryMovementSchema], default: [] },
     accountsReceivable: { type: [receivableSchema], default: [] },
     deliveryOrders: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    recentStateMutationKeys: { type: [String], default: [] },
   },
   { timestamps: true }
 );

@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const mongoose = require('mongoose');
 const router = express.Router();
 const Pdv = require('../models/Pdv');
@@ -19,6 +19,14 @@ const { uploadBufferToR2, isR2Configured } = require('../utils/cloudflareR2');
 const { emitPdvSaleFiscal } = require('../services/nfceEmitter');
 const { buildFiscalR2Key } = require('../utils/fiscalDrivePath');
 const { buildFiscalXmlFileName } = require('../utils/fiscalXmlFileName');
+const {
+  ensureScopedSequenceAtLeast,
+  nextScopedSequence,
+  getScopedSequence,
+  pdvSaleSequenceKey,
+  pdvBudgetSequenceKey,
+} = require('../utils/sequences');
+const pdvStateWriteQueues = new Map();
 
 const ambientesPermitidos = ['homologacao', 'producao'];
 const ambientesSet = new Set(ambientesPermitidos);
@@ -30,6 +38,9 @@ const tiposEmissao = ['matricial', 'fiscal', 'ambos'];
 const tiposEmissaoSet = new Set(tiposEmissao);
 const tiposImpressora = ['bematech', 'elgin'];
 const tiposImpressoraSet = new Set(tiposImpressora);
+const SALE_CODE_PADDING = 6;
+const BUDGET_CODE_PADDING = 6;
+const BUDGET_CODE_PREFIX = 'ORC';
 const roleRank = {
   cliente: 0,
   funcionario: 1,
@@ -46,7 +57,7 @@ const loadQrCodeModule = () => {
     qrCodeModulePromise = import('qrcode')
       .then((mod) => mod?.default || mod)
       .catch((error) => {
-        console.error('Não foi possível carregar a dependência "qrcode".', error);
+        console.error('NÃ£o foi possÃ­vel carregar a dependÃªncia "qrcode".', error);
         return null;
       });
   }
@@ -70,7 +81,7 @@ const generateQrCodeDataUrl = async (payload) => {
 
   const qrCode = await loadQrCodeModule();
   if (!qrCode || typeof qrCode.toDataURL !== 'function') {
-    console.error('Dependência "qrcode" indisponível para gerar imagem.');
+    console.error('DependÃªncia "qrcode" indisponÃ­vel para gerar imagem.');
     return '';
   }
 
@@ -177,8 +188,8 @@ const parseFiscalNumber = (value, { label, allowZero = false }) => {
 
   if (!Number.isFinite(normalized)) {
     const message = allowZero
-      ? `Informe um número atual válido para ${label}.`
-      : `Informe um número inicial válido para ${label}.`;
+      ? `Informe um nÃºmero atual vÃ¡lido para ${label}.`
+      : `Informe um nÃºmero inicial vÃ¡lido para ${label}.`;
     throw createValidationError(message);
   }
 
@@ -186,8 +197,8 @@ const parseFiscalNumber = (value, { label, allowZero = false }) => {
   const min = allowZero ? 0 : 1;
   if (integer < min) {
     const message = allowZero
-      ? `O número atual de ${label} deve ser maior ou igual a ${min}.`
-      : `O número inicial de ${label} deve ser maior ou igual a ${min}.`;
+      ? `O nÃºmero atual de ${label} deve ser maior ou igual a ${min}.`
+      : `O nÃºmero inicial de ${label} deve ser maior ou igual a ${min}.`;
     throw createValidationError(message);
   }
 
@@ -198,7 +209,7 @@ const parseSempreImprimir = (value) => {
   const normalized = normalizeString(value).toLowerCase();
   if (!normalized) return 'perguntar';
   if (!opcoesImpressaoSet.has(normalized)) {
-    throw createValidationError('Selecione uma opção válida para "Sempre imprimir".');
+    throw createValidationError('Selecione uma opÃ§Ã£o vÃ¡lida para "Sempre imprimir".');
   }
   return normalized;
 };
@@ -209,11 +220,11 @@ const parseCopias = (value, { allowNull = true } = {}) => {
   }
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) {
-    throw createValidationError('Informe um número válido de vias para a impressora selecionada.');
+    throw createValidationError('Informe um nÃºmero vÃ¡lido de vias para a impressora selecionada.');
   }
   const inteiro = Math.trunc(parsed);
   if (inteiro < 1 || inteiro > 10) {
-    throw createValidationError('O número de vias deve estar entre 1 e 10.');
+    throw createValidationError('O nÃºmero de vias deve estar entre 1 e 10.');
   }
   return inteiro;
 };
@@ -300,7 +311,7 @@ const parseTipoEmissao = (value) => {
   const normalized = normalizeString(value).toLowerCase();
   if (!normalized) return 'fiscal';
   if (!tiposEmissaoSet.has(normalized)) {
-    throw createValidationError('Selecione um tipo de emissão padrão válido.');
+    throw createValidationError('Selecione um tipo de emissÃ£o padrÃ£o vÃ¡lido.');
   }
   return normalized;
 };
@@ -732,7 +743,7 @@ const updateProductStockForDeposit = async ({
 
   const product = await Product.findById(productObjectId);
   if (!product) {
-    console.warn('Produto não encontrado para movimentação de estoque no PDV.', {
+    console.warn('Produto nÃ£o encontrado para movimentaÃ§Ã£o de estoque no PDV.', {
       productId: productObjectId.toString(),
     });
     return { updated: false, operations: [] };
@@ -778,7 +789,7 @@ const updateProductStockForDeposit = async ({
   try {
     await product.save();
   } catch (error) {
-    console.error('Erro ao salvar movimentação de estoque do produto no PDV.', {
+    console.error('Erro ao salvar movimentaÃ§Ã£o de estoque do produto no PDV.', {
       productId: product._id.toString(),
       depositId: depositObjectId.toString(),
     }, error);
@@ -943,6 +954,9 @@ const applyInventoryMovementsToSales = async ({ sales, depositId, existingMoveme
         processedAt,
         items: movementItems,
       });
+    } else {
+      sale.inventoryProcessed = true;
+      sale.inventoryProcessedAt = new Date();
     }
   }
 
@@ -1076,7 +1090,7 @@ const normalizePaymentSnapshotPayload = (snapshot) => {
 const normalizeHistoryEntryPayload = (entry) => {
   if (!entry || typeof entry !== 'object') return null;
   const id = normalizeString(entry.id || entry._id);
-  const label = normalizeString(entry.label || entry.descricao || entry.tipo) || 'Movimentação';
+  const label = normalizeString(entry.label || entry.descricao || entry.tipo) || 'MovimentaÃ§Ã£o';
   const amount = safeNumber(entry.amount ?? entry.valor ?? entry.delta ?? 0, 0);
   const delta = safeNumber(entry.delta ?? entry.valor ?? amount, 0);
   const motivo = normalizeString(entry.motivo || entry.observacao);
@@ -1115,9 +1129,9 @@ const normalizeSaleRecordPayload = (record) => {
   const type = normalizeString(record.type) || 'venda';
   const typeLabel = normalizeString(record.typeLabel) || (type === 'delivery' ? 'Delivery' : 'Venda');
   const saleCode = normalizeString(record.saleCode);
-  const saleCodeLabel = normalizeString(record.saleCodeLabel) || saleCode || 'Sem código';
+  const saleCodeLabel = normalizeString(record.saleCodeLabel) || saleCode || 'Sem cÃ³digo';
   const customerName =
-    normalizeString(record.customerName) || normalizeString(record.cliente) || 'Cliente não informado';
+    normalizeString(record.customerName) || normalizeString(record.cliente) || 'Cliente nÃ£o informado';
   const customerDocument = normalizeString(record.customerDocument);
   const sellerSource = record.seller || record.vendedor || null;
   const sellerName =
@@ -1425,6 +1439,12 @@ const buildStateUpdatePayload = ({ body = {}, existingState = {}, empresaId }) =
   const previstoSource = caixaSource.previstoPagamentos || caixaSource.pagamentosPrevistos;
   const apuradoSource = caixaSource.apuradoPagamentos || caixaSource.pagamentosApurados;
   const lastMovementSource = body.lastMovement || body.caixa?.ultimoLancamento;
+  const accountsReceivableSource =
+    Array.isArray(body.accountsReceivable)
+      ? body.accountsReceivable
+      : Array.isArray(body.caixa?.accountsReceivable)
+      ? body.caixa.accountsReceivable
+      : existingState.accountsReceivable || [];
   const saleCodeIdentifier =
     normalizeString(body.saleCodeIdentifier || body.saleCode?.identifier || caixaSource.saleCodeIdentifier) ||
     existingState.saleCodeIdentifier ||
@@ -1468,6 +1488,10 @@ const buildStateUpdatePayload = ({ body = {}, existingState = {}, empresaId }) =
         0
       ),
       recebido: safeNumber(summarySource.recebido ?? existingState.summary?.recebido ?? 0, 0),
+      recebimentosCliente: safeNumber(
+        summarySource.recebimentosCliente ?? existingState.summary?.recebimentosCliente ?? 0,
+        0
+      ),
       saldo: safeNumber(summarySource.saldo ?? existingState.summary?.saldo ?? 0, 0),
     },
     caixaInfo: {
@@ -1500,6 +1524,9 @@ const buildStateUpdatePayload = ({ body = {}, existingState = {}, empresaId }) =
       .filter(Boolean),
     deliveryOrders: (Array.isArray(deliveryOrdersSource) ? deliveryOrdersSource : [])
       .map(normalizeDeliveryOrderPayload)
+      .filter(Boolean),
+    accountsReceivable: (Array.isArray(accountsReceivableSource) ? accountsReceivableSource : [])
+      .map(normalizeReceivableRecordPayload)
       .filter(Boolean),
     lastMovement: normalizeHistoryEntryPayload(lastMovementSource) || null,
     saleCodeIdentifier,
@@ -1538,7 +1565,7 @@ const serializeStateForResponse = (stateDoc) => {
         deliveryOrders: [],
       },
       pagamentos: [],
-      summary: { abertura: 0, recebido: 0, saldo: 0 },
+      summary: { abertura: 0, recebido: 0, recebimentosCliente: 0, saldo: 0 },
       caixaInfo: {
         aberturaData: null,
         fechamentoData: null,
@@ -1570,6 +1597,7 @@ const serializeStateForResponse = (stateDoc) => {
   const completedSales = Array.isArray(plain.completedSales) ? plain.completedSales : [];
   const budgetsSource = Array.isArray(plain.budgets) ? plain.budgets : [];
   const deliveryOrders = Array.isArray(plain.deliveryOrders) ? plain.deliveryOrders : [];
+  const accountsReceivable = Array.isArray(plain.accountsReceivable) ? plain.accountsReceivable : [];
   const budgets = budgetsSource
     .map((budget) => normalizeBudgetRecordPayload(budget, { useDefaults: false }))
     .filter(Boolean);
@@ -1586,6 +1614,7 @@ const serializeStateForResponse = (stateDoc) => {
       resumo: {
         abertura: summary.abertura || 0,
         recebido: summary.recebido || 0,
+        recebimentosCliente: summary.recebimentosCliente || 0,
         saldo: summary.saldo || 0,
       },
       pagamentos,
@@ -1605,6 +1634,7 @@ const serializeStateForResponse = (stateDoc) => {
     summary: {
       abertura: summary.abertura || 0,
       recebido: summary.recebido || 0,
+      recebimentosCliente: summary.recebimentosCliente || 0,
       saldo: summary.saldo || 0,
     },
     caixaInfo: {
@@ -1619,6 +1649,7 @@ const serializeStateForResponse = (stateDoc) => {
     completedSales,
     budgets,
     deliveryOrders,
+    accountsReceivable,
     orcamentos: budgets,
     lastMovement: plain.lastMovement || null,
     saleCodeIdentifier: plain.saleCodeIdentifier || '',
@@ -1664,7 +1695,7 @@ const buildPdvPayload = ({ body, store }) => {
   }
 
   if (limiteOffline !== null && limiteOffline < 0) {
-    throw new Error('O limite de emissões offline deve ser maior ou igual a zero.');
+    throw new Error('O limite de emissÃµes offline deve ser maior ou igual a zero.');
   }
 
   if (!ambientesHabilitados.length) {
@@ -1672,34 +1703,34 @@ const buildPdvPayload = ({ body, store }) => {
   }
 
   if (!ambientePadrao) {
-    throw new Error('Informe o ambiente padrão de emissão.');
+    throw new Error('Informe o ambiente padrÃ£o de emissÃ£o.');
   }
 
   if (!ambientesHabilitados.includes(ambientePadrao)) {
-    throw new Error('O ambiente padrão precisa estar entre os ambientes habilitados.');
+    throw new Error('O ambiente padrÃ£o precisa estar entre os ambientes habilitados.');
   }
 
   for (const env of ambientesHabilitados) {
     if (!storeSupportsEnvironment(store, env)) {
       if (env === 'producao') {
-        throw new Error('A empresa selecionada não possui CSC configurado para Produção.');
+        throw new Error('A empresa selecionada nÃ£o possui CSC configurado para ProduÃ§Ã£o.');
       }
       if (env === 'homologacao') {
-        throw new Error('A empresa selecionada não possui CSC configurado para Homologação.');
+        throw new Error('A empresa selecionada nÃ£o possui CSC configurado para HomologaÃ§Ã£o.');
       }
-      throw new Error('Ambiente fiscal indisponível para a empresa selecionada.');
+      throw new Error('Ambiente fiscal indisponÃ­vel para a empresa selecionada.');
     }
   }
 
   if (numeroNfeInicial !== null && numeroNfeAtual !== null && numeroNfeAtual < numeroNfeInicial - 1) {
     throw createValidationError(
-      'O número atual da NF-e não pode ser inferior ao número inicial menos um.'
+      'O nÃºmero atual da NF-e nÃ£o pode ser inferior ao nÃºmero inicial menos um.'
     );
   }
 
   if (numeroNfceInicial !== null && numeroNfceAtual !== null && numeroNfceAtual < numeroNfceInicial - 1) {
     throw createValidationError(
-      'O número atual da NFC-e não pode ser inferior ao número inicial menos um.'
+      'O nÃºmero atual da NFC-e nÃ£o pode ser inferior ao nÃºmero inicial menos um.'
     );
   }
 
@@ -1727,6 +1758,450 @@ const parseDateOrNull = (value) => {
   if (!value) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const normalizeCodeToken = (value, fallback = 'PDV') => {
+  const raw = String(value || '');
+  const normalized = typeof raw.normalize === 'function' ? raw.normalize('NFD') : raw;
+  const token = normalized
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .toUpperCase()
+    .slice(0, 12);
+  return token || fallback;
+};
+
+const parseTrailingSequence = (value) => {
+  const normalized = normalizeString(value);
+  if (!normalized) return 0;
+  const match = normalized.match(/(\d+)\s*$/);
+  if (!match) return 0;
+  const parsed = Number.parseInt(match[1], 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+};
+
+const enqueuePdvStateWrite = async (pdvId, task) => {
+  const queueKey = normalizeString(pdvId);
+  const previous = pdvStateWriteQueues.get(queueKey) || Promise.resolve();
+  const current = previous
+    .catch(() => {})
+    .then(task)
+    .finally(() => {
+      if (pdvStateWriteQueues.get(queueKey) === current) {
+        pdvStateWriteQueues.delete(queueKey);
+      }
+    });
+  pdvStateWriteQueues.set(queueKey, current);
+  return current;
+};
+
+const buildSaleCodeValue = (identifier, sequence) =>
+  `${normalizeCodeToken(identifier)}-${String(Math.max(1, Number.parseInt(sequence, 10) || 1)).padStart(
+    SALE_CODE_PADDING,
+    '0'
+  )}`;
+
+const buildBudgetCodeValue = (sequence) =>
+  `${BUDGET_CODE_PREFIX}-${String(Math.max(1, Number.parseInt(sequence, 10) || 1)).padStart(
+    BUDGET_CODE_PADDING,
+    '0'
+  )}`;
+
+const resolveSaleCodeIdentifierForPdv = (pdvDoc) =>
+  normalizeCodeToken(
+    pdvDoc?.codigo || pdvDoc?.apelido || pdvDoc?.nome || pdvDoc?._id || 'PDV',
+    'PDV'
+  );
+
+const resolveRecordMergeKey = (record, kind = 'generic') => {
+  if (!record || typeof record !== 'object') return '';
+  const id = normalizeString(record.id || record._id);
+  const createdAt = normalizeString(record.createdAt);
+  if ((kind === 'sale' || kind === 'budget') && id) {
+    return `id:${id}:${createdAt}`;
+  }
+  if (kind === 'history') {
+    const timestamp = normalizeString(record.timestamp);
+    const label = normalizeString(record.label);
+    const amount = safeNumber(record.amount ?? record.delta ?? 0, 0);
+    if (id) return `id:${id}:${timestamp}`;
+    if (timestamp || label) return `history:${timestamp}:${label}:${amount}`;
+  }
+  if (kind === 'receivable') {
+    if (id) return `receivable:${id}`;
+    const saleId = normalizeString(record.saleId);
+    const parcelNumber = Number.parseInt(record.parcelNumber ?? record.parcela ?? 0, 10) || 0;
+    if (saleId || parcelNumber) return `receivable:${saleId}:${parcelNumber}`;
+  }
+  if (id) return `id:${id}`;
+  if (kind === 'sale') {
+    const code = normalizeString(record.saleCode || record.saleCodeLabel).toUpperCase();
+    if (code) return `code:${code}`;
+  }
+  if (kind === 'budget') {
+    const code = normalizeString(record.code).toUpperCase();
+    if (code) return `code:${code}`;
+  }
+  if (kind === 'delivery') {
+    const saleRecordId = normalizeString(record.saleRecordId);
+    if (saleRecordId) return `sale:${saleRecordId}`;
+    const saleCode = normalizeString(record.saleCode).toUpperCase();
+    if (saleCode) return `code:${saleCode}`;
+  }
+  return '';
+};
+
+const sortRecordsByDateDesc = (records, kind = 'generic') => {
+  const resolveDate = (record) => {
+    if (!record || typeof record !== 'object') return 0;
+    const dateSource =
+      kind === 'history'
+        ? record.timestamp || record.createdAt || record.updatedAt
+        : kind === 'budget'
+        ? record.updatedAt || record.createdAt
+        : record.createdAt || record.updatedAt;
+    const date = dateSource ? new Date(dateSource) : null;
+    if (!date || Number.isNaN(date.getTime())) return 0;
+    return date.getTime();
+  };
+  return [...records].sort((a, b) => resolveDate(b) - resolveDate(a));
+};
+
+const normalizeReceivableRecordPayload = (entry) => {
+  if (!entry || typeof entry !== 'object') return null;
+  const parcelNumber = Number.parseInt(entry.parcelNumber ?? entry.parcela ?? entry.numeroParcela, 10);
+  const dueDate = safeDate(entry.dueDate ?? entry.vencimento ?? null);
+  return {
+    id:
+      normalizeString(entry.id || entry._id) ||
+      `${normalizeString(entry.saleId)}:${Number.isFinite(parcelNumber) && parcelNumber >= 1 ? parcelNumber : 1}`,
+    parcelNumber: Number.isFinite(parcelNumber) && parcelNumber >= 1 ? parcelNumber : 1,
+    value: safeNumber(entry.value ?? entry.valor ?? entry.amount ?? 0, 0),
+    formattedValue: normalizeString(entry.formattedValue),
+    dueDate: dueDate || null,
+    dueDateLabel: normalizeString(entry.dueDateLabel),
+    paymentMethodId: normalizeString(entry.paymentMethodId),
+    paymentMethodLabel: normalizeString(entry.paymentMethodLabel),
+    contaCorrente:
+      entry.contaCorrente && typeof entry.contaCorrente === 'object' ? { ...entry.contaCorrente } : null,
+    contaContabil:
+      entry.contaContabil && typeof entry.contaContabil === 'object' ? { ...entry.contaContabil } : null,
+    saleCode: normalizeString(entry.saleCode),
+    crediarioMethodId: normalizeString(entry.crediarioMethodId),
+    clienteId: normalizeString(entry.clienteId),
+    clienteNome: normalizeString(entry.clienteNome),
+    saleId: normalizeString(entry.saleId),
+  };
+};
+
+const clonePaymentSnapshots = (payments = []) =>
+  (Array.isArray(payments) ? payments : [])
+    .map((entry) => normalizePaymentSnapshotPayload(entry))
+    .filter(Boolean)
+    .map((entry) => ({ ...entry }));
+
+const reconcileCashStateFromSales = ({ existingState, updatePayload }) => {
+  const sales = Array.isArray(updatePayload?.completedSales) ? updatePayload.completedSales : [];
+  const isStartingNewCaixaCycle =
+    !Boolean(existingState?.caixaAberto) && Boolean(updatePayload?.caixaAberto);
+  if (!Boolean(updatePayload?.caixaAberto) || isStartingNewCaixaCycle) {
+    return;
+  }
+  if (!sales.length && !Array.isArray(existingState?.completedSales)) {
+    return;
+  }
+
+  const cycleStart = safeDate(
+    updatePayload?.caixaInfo?.aberturaData || existingState?.caixaInfo?.aberturaData || null
+  );
+  const paymentMap = new Map();
+  let receivedTotal = 0;
+  sales.forEach((sale) => {
+    if (!sale || typeof sale !== 'object') return;
+    if (normalizeString(sale.status).toLowerCase() === 'cancelled') return;
+    if (cycleStart) {
+      const saleCreatedAt = safeDate(sale.createdAt);
+      if (!saleCreatedAt || saleCreatedAt.getTime() < cycleStart.getTime()) {
+        return;
+      }
+    }
+    receivedTotal += safeNumber(sale.totalLiquido ?? sale.total ?? sale.totalBruto ?? 0, 0);
+    (Array.isArray(sale.cashContributions) ? sale.cashContributions : []).forEach((entry) => {
+      if (!entry || typeof entry !== 'object') return;
+      const amount = safeNumber(entry.amount ?? entry.valor ?? entry.total ?? 0, 0);
+      if (!(amount > 0)) return;
+      const paymentId = normalizeString(entry.paymentId || entry.id);
+      const paymentLabel = normalizeString(entry.paymentLabel || entry.label) || 'Pagamento';
+      const paymentType = normalizeString(entry.paymentType || entry.type).toLowerCase() || 'avista';
+      const key = paymentId || `${paymentLabel}:${paymentType}`;
+      if (!paymentMap.has(key)) {
+        paymentMap.set(key, {
+          id: paymentId || paymentLabel,
+          label: paymentLabel,
+          type: paymentType,
+          aliases: [],
+          valor: 0,
+          parcelas: 1,
+        });
+      }
+      paymentMap.get(key).valor += amount;
+    });
+  });
+
+  const mergedPayments = Array.from(paymentMap.values())
+    .map((entry) => normalizePaymentSnapshotPayload(entry))
+    .filter(Boolean);
+  const abertura = safeNumber(updatePayload?.summary?.abertura ?? existingState?.summary?.abertura ?? 0, 0);
+  const recebimentosCliente = safeNumber(
+    updatePayload?.summary?.recebimentosCliente ?? existingState?.summary?.recebimentosCliente ?? 0,
+    0
+  );
+  const fechamentoPrevisto = mergedPayments.reduce(
+    (sum, payment) => sum + safeNumber(payment?.valor ?? 0, 0),
+    0
+  );
+
+  updatePayload.pagamentos = mergedPayments;
+  updatePayload.summary = {
+    ...updatePayload.summary,
+    abertura,
+    recebido: receivedTotal,
+    recebimentosCliente,
+    saldo: abertura + receivedTotal + recebimentosCliente,
+  };
+  updatePayload.caixaInfo = {
+    ...updatePayload.caixaInfo,
+    previstoPagamentos: clonePaymentSnapshots(mergedPayments),
+    fechamentoPrevisto,
+    apuradoPagamentos: updatePayload.caixaAberto
+      ? clonePaymentSnapshots(updatePayload.caixaInfo?.apuradoPagamentos || existingState?.caixaInfo?.apuradoPagamentos || [])
+      : clonePaymentSnapshots(mergedPayments),
+    fechamentoApurado: updatePayload.caixaAberto
+      ? safeNumber(updatePayload.caixaInfo?.fechamentoApurado ?? existingState?.caixaInfo?.fechamentoApurado ?? 0, 0)
+      : fechamentoPrevisto,
+  };
+};
+
+const mergeRecordsByKey = (existingRecords, incomingRecords, kind = 'generic') => {
+  const merged = [];
+  const keyIndex = new Map();
+  const append = (record, source) => {
+    if (!record || typeof record !== 'object') return;
+    const key = resolveRecordMergeKey(record, kind);
+    if (!key) {
+      merged.push(record);
+      return;
+    }
+    const foundIndex = keyIndex.get(key);
+    if (foundIndex === undefined) {
+      keyIndex.set(key, merged.length);
+      merged.push(record);
+      return;
+    }
+    if (source === 'incoming') {
+      merged[foundIndex] = record;
+    }
+  };
+
+  (Array.isArray(existingRecords) ? existingRecords : []).forEach((record) => append(record, 'existing'));
+  (Array.isArray(incomingRecords) ? incomingRecords : []).forEach((record) => append(record, 'incoming'));
+
+  return sortRecordsByDateDesc(merged, kind);
+};
+
+const dedupeSalesById = (sales) => {
+  if (!Array.isArray(sales)) return [];
+  const byId = new Map();
+  const withoutId = [];
+  for (const sale of sales) {
+    if (!sale || typeof sale !== 'object') continue;
+    const saleId = normalizeString(sale.id || sale._id);
+    if (!saleId) {
+      withoutId.push(sale);
+      continue;
+    }
+    const previous = byId.get(saleId);
+    if (!previous) {
+      byId.set(saleId, sale);
+      continue;
+    }
+    const previousUpdatedAt = safeDate(previous.updatedAt || previous.createdAt);
+    const currentUpdatedAt = safeDate(sale.updatedAt || sale.createdAt);
+    if (
+      currentUpdatedAt &&
+      (!previousUpdatedAt || currentUpdatedAt.getTime() >= previousUpdatedAt.getTime())
+    ) {
+      byId.set(saleId, sale);
+    }
+  }
+  return sortRecordsByDateDesc([...byId.values(), ...withoutId], 'sale');
+};
+
+const ensureUniquePdvCodes = async ({ pdvId, pdvDoc, sales, budgets, existingSales, existingBudgets }) => {
+  const resolvedPdvId = normalizeString(pdvId || pdvDoc?._id);
+  if (!resolvedPdvId) {
+    return { sales, budgets, nextSaleSequence: 1, nextBudgetSequence: 1 };
+  }
+
+  const saleIdentifier = resolveSaleCodeIdentifierForPdv(pdvDoc);
+  const saleCounterKey = pdvSaleSequenceKey(resolvedPdvId);
+  const budgetCounterKey = pdvBudgetSequenceKey(resolvedPdvId);
+
+  const salesList = Array.isArray(sales) ? sales : [];
+  const budgetsList = Array.isArray(budgets) ? budgets : [];
+  const existingSaleIdSet = new Set(
+    (Array.isArray(existingSales) ? existingSales : [])
+      .map((sale) => normalizeString(sale?.id || sale?._id))
+      .filter(Boolean)
+  );
+  const existingBudgetIdSet = new Set(
+    (Array.isArray(existingBudgets) ? existingBudgets : [])
+      .map((budget) => normalizeString(budget?.id || budget?._id))
+      .filter(Boolean)
+  );
+
+  let maxSaleSequence = 0;
+  salesList.forEach((sale) => {
+    const currentCode = normalizeString(sale?.saleCode || sale?.saleCodeLabel);
+    if (!currentCode.toUpperCase().startsWith(`${saleIdentifier}-`)) return;
+    maxSaleSequence = Math.max(maxSaleSequence, parseTrailingSequence(currentCode));
+  });
+  await ensureScopedSequenceAtLeast({
+    scope: saleCounterKey.scope,
+    reference: saleCounterKey.reference,
+    value: maxSaleSequence,
+  });
+
+  const usedSaleCodes = new Set();
+  const orderedSales = [...salesList].sort((a, b) => {
+    const aDate = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const bDate = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+    if (aDate !== bDate) return aDate - bDate;
+    const aId = normalizeString(a?.id || a?._id);
+    const bId = normalizeString(b?.id || b?._id);
+    return aId.localeCompare(bId);
+  });
+  for (const sale of orderedSales) {
+    if (!sale || typeof sale !== 'object') continue;
+    const saleId = normalizeString(sale.id || sale._id);
+    const isNewSale = saleId ? !existingSaleIdSet.has(saleId) : true;
+    let code = normalizeString(sale.saleCode || sale.saleCodeLabel).toUpperCase();
+    const hasValidProvidedCode =
+      Boolean(code) &&
+      code.startsWith(`${saleIdentifier}-`) &&
+      parseTrailingSequence(code) > 0 &&
+      !usedSaleCodes.has(code);
+    if (!hasValidProvidedCode) {
+      let nextSeq = await nextScopedSequence({
+        scope: saleCounterKey.scope,
+        reference: saleCounterKey.reference,
+      });
+      code = buildSaleCodeValue(saleIdentifier, nextSeq).toUpperCase();
+      while (usedSaleCodes.has(code)) {
+        nextSeq = await nextScopedSequence({
+          scope: saleCounterKey.scope,
+          reference: saleCounterKey.reference,
+        });
+        code = buildSaleCodeValue(saleIdentifier, nextSeq).toUpperCase();
+      }
+      sale.saleCode = code;
+      sale.saleCodeLabel = code;
+      if (sale.receiptSnapshot && typeof sale.receiptSnapshot === 'object') {
+        sale.receiptSnapshot.meta = sale.receiptSnapshot.meta || {};
+        sale.receiptSnapshot.meta.saleCode = code;
+      }
+      if (Array.isArray(sale.receivables)) {
+        sale.receivables = sale.receivables.map((entry) =>
+          entry && typeof entry === 'object' ? { ...entry, saleCode: code } : entry
+        );
+      }
+    } else {
+      sale.saleCode = code;
+      sale.saleCodeLabel = code;
+      if (isNewSale) {
+        await ensureScopedSequenceAtLeast({
+          scope: saleCounterKey.scope,
+          reference: saleCounterKey.reference,
+          value: parseTrailingSequence(code),
+        });
+      }
+    }
+    usedSaleCodes.add(code);
+  }
+
+  let maxBudgetSequence = 0;
+  budgetsList.forEach((budget) => {
+    const code = normalizeString(budget?.code).toUpperCase();
+    if (!code.startsWith(`${BUDGET_CODE_PREFIX}-`)) return;
+    maxBudgetSequence = Math.max(maxBudgetSequence, parseTrailingSequence(code));
+  });
+  await ensureScopedSequenceAtLeast({
+    scope: budgetCounterKey.scope,
+    reference: budgetCounterKey.reference,
+    value: maxBudgetSequence,
+  });
+
+  const usedBudgetCodes = new Set();
+  const orderedBudgets = [...budgetsList].sort((a, b) => {
+    const aDate = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const bDate = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+    if (aDate !== bDate) return aDate - bDate;
+    const aId = normalizeString(a?.id || a?._id);
+    const bId = normalizeString(b?.id || b?._id);
+    return aId.localeCompare(bId);
+  });
+  for (const budget of orderedBudgets) {
+    if (!budget || typeof budget !== 'object') continue;
+    const budgetId = normalizeString(budget.id || budget._id);
+    const isNewBudget = budgetId ? !existingBudgetIdSet.has(budgetId) : true;
+    let code = normalizeString(budget.code).toUpperCase();
+    const hasValidProvidedCode =
+      Boolean(code) &&
+      code.startsWith(`${BUDGET_CODE_PREFIX}-`) &&
+      parseTrailingSequence(code) > 0 &&
+      !usedBudgetCodes.has(code);
+    if (!hasValidProvidedCode) {
+      let nextSeq = await nextScopedSequence({
+        scope: budgetCounterKey.scope,
+        reference: budgetCounterKey.reference,
+      });
+      code = buildBudgetCodeValue(nextSeq).toUpperCase();
+      while (usedBudgetCodes.has(code)) {
+        nextSeq = await nextScopedSequence({
+          scope: budgetCounterKey.scope,
+          reference: budgetCounterKey.reference,
+        });
+        code = buildBudgetCodeValue(nextSeq).toUpperCase();
+      }
+      budget.code = code;
+    } else {
+      budget.code = code;
+      if (isNewBudget) {
+        await ensureScopedSequenceAtLeast({
+          scope: budgetCounterKey.scope,
+          reference: budgetCounterKey.reference,
+          value: parseTrailingSequence(code),
+        });
+      }
+    }
+    usedBudgetCodes.add(code);
+  }
+
+  const currentSaleSequence = await getScopedSequence({
+    scope: saleCounterKey.scope,
+    reference: saleCounterKey.reference,
+  });
+  const currentBudgetSequence = await getScopedSequence({
+    scope: budgetCounterKey.scope,
+    reference: budgetCounterKey.reference,
+  });
+
+  return {
+    sales: salesList,
+    budgets: budgetsList,
+    nextSaleSequence: Math.max(1, currentSaleSequence + 1),
+    nextBudgetSequence: Math.max(1, currentBudgetSequence + 1),
+  };
 };
 
 const syncPdvCaixaSessionHistory = async ({ pdvDoc, existingState, updatedState }) => {
@@ -1825,8 +2300,8 @@ router.get('/next-code', requireAuth, authorizeRoles('admin'), async (req, res) 
     const codigo = await generateNextCode();
     res.json({ codigo });
   } catch (error) {
-    console.error('Erro ao gerar próximo código de PDV:', error);
-    res.status(500).json({ message: 'Erro ao gerar próximo código.' });
+    console.error('Erro ao gerar prÃ³ximo cÃ³digo de PDV:', error);
+    res.status(500).json({ message: 'Erro ao gerar prÃ³ximo cÃ³digo.' });
   }
 });
 
@@ -1834,7 +2309,7 @@ router.get('/:id/caixas', requireAuth, authorizeRoles('admin'), async (req, res)
   try {
     const pdvId = req.params.id;
     if (!mongoose.Types.ObjectId.isValid(pdvId)) {
-      return res.status(400).json({ message: 'PDV inválido.' });
+      return res.status(400).json({ message: 'PDV invÃ¡lido.' });
     }
 
     const startDate = parseDateOrNull(req.query.start);
@@ -1906,7 +2381,7 @@ router.get('/:id', requireAuth, authorizeRoles('admin'), async (req, res) => {
       .lean();
 
     if (!pdv) {
-      return res.status(404).json({ message: 'PDV não encontrado.' });
+      return res.status(404).json({ message: 'PDV nÃ£o encontrado.' });
     }
 
     if (isBelowFranqueado(req.user?.role) && pdv.mostrarParaFuncionarios === false) {
@@ -1951,15 +2426,15 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
     const nome = normalizeString(req.body.nome);
 
     if (!nome) {
-      return res.status(400).json({ message: 'O nome do PDV é obrigatório.' });
+      return res.status(400).json({ message: 'O nome do PDV Ã© obrigatÃ³rio.' });
     }
     if (!empresaId) {
-      return res.status(400).json({ message: 'Selecione a empresa responsável pelo PDV.' });
+      return res.status(400).json({ message: 'Selecione a empresa responsÃ¡vel pelo PDV.' });
     }
 
     const store = await Store.findById(empresaId).lean();
     if (!store) {
-      return res.status(400).json({ message: 'Empresa informada não foi encontrada.' });
+      return res.status(400).json({ message: 'Empresa informada nÃ£o foi encontrada.' });
     }
 
     let codigo = normalizeString(req.body.codigo);
@@ -1969,7 +2444,7 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
 
     const codigoDuplicado = await Pdv.exists({ codigo });
     if (codigoDuplicado) {
-      return res.status(409).json({ message: 'Já existe um PDV com este código.' });
+      return res.status(409).json({ message: 'JÃ¡ existe um PDV com este cÃ³digo.' });
     }
 
     let payload;
@@ -2004,15 +2479,15 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
     const nome = normalizeString(req.body.nome);
 
     if (!nome) {
-      return res.status(400).json({ message: 'O nome do PDV é obrigatório.' });
+      return res.status(400).json({ message: 'O nome do PDV Ã© obrigatÃ³rio.' });
     }
     if (!empresaId) {
-      return res.status(400).json({ message: 'Selecione a empresa responsável pelo PDV.' });
+      return res.status(400).json({ message: 'Selecione a empresa responsÃ¡vel pelo PDV.' });
     }
 
     const store = await Store.findById(empresaId).lean();
     if (!store) {
-      return res.status(400).json({ message: 'Empresa informada não foi encontrada.' });
+      return res.status(400).json({ message: 'Empresa informada nÃ£o foi encontrada.' });
     }
 
     let payload;
@@ -2024,12 +2499,12 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
 
     const codigo = normalizeString(req.body.codigo);
     if (!codigo) {
-      return res.status(400).json({ message: 'O código do PDV é obrigatório.' });
+      return res.status(400).json({ message: 'O cÃ³digo do PDV Ã© obrigatÃ³rio.' });
     }
 
     const duplicado = await Pdv.findOne({ codigo, _id: { $ne: pdvId } });
     if (duplicado) {
-      return res.status(409).json({ message: 'Já existe outro PDV com este código.' });
+      return res.status(409).json({ message: 'JÃ¡ existe outro PDV com este cÃ³digo.' });
     }
 
     const atualizadoPor = req.user?.email || req.user?.id || 'Sistema';
@@ -2046,7 +2521,7 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
     ).populate('empresa');
 
     if (!updated) {
-      return res.status(404).json({ message: 'PDV não encontrado.' });
+      return res.status(404).json({ message: 'PDV nÃ£o encontrado.' });
     }
 
     res.json(updated);
@@ -2067,28 +2542,28 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
     const saleId = normalizeString(req.params.saleId);
 
     if (!mongoose.Types.ObjectId.isValid(pdvId)) {
-      return res.status(400).json({ message: 'Identificador de PDV inválido.' });
+      return res.status(400).json({ message: 'Identificador de PDV invÃ¡lido.' });
     }
 
     if (!saleId) {
-      return res.status(400).json({ message: 'Identificador da venda é obrigatório.' });
+      return res.status(400).json({ message: 'Identificador da venda Ã© obrigatÃ³rio.' });
     }
 
     if (!isR2Configured()) {
       return res
         .status(500)
-        .json({ message: 'Armazenamento externo não está configurado (Cloudflare R2).' });
+        .json({ message: 'Armazenamento externo nÃ£o estÃ¡ configurado (Cloudflare R2).' });
     }
 
     const pdv = await Pdv.findById(pdvId).populate('empresa');
 
     if (!pdv) {
-      return res.status(404).json({ message: 'PDV não encontrado.' });
+      return res.status(404).json({ message: 'PDV nÃ£o encontrado.' });
     }
 
     const empresaId = pdv.empresa?._id || pdv.empresa;
     if (!empresaId) {
-      return res.status(400).json({ message: 'Empresa vinculada ao PDV não foi encontrada.' });
+      return res.status(400).json({ message: 'Empresa vinculada ao PDV nÃ£o foi encontrada.' });
     }
 
     const empresa = await Store.findById(empresaId).select(
@@ -2096,11 +2571,11 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
     );
 
     if (!empresa) {
-      return res.status(400).json({ message: 'Empresa vinculada ao PDV não foi encontrada.' });
+      return res.status(400).json({ message: 'Empresa vinculada ao PDV nÃ£o foi encontrada.' });
     }
 
     if (!empresa.certificadoArquivoCriptografado || !empresa.certificadoSenhaCriptografada) {
-      return res.status(400).json({ message: 'A empresa não possui certificado digital configurado.' });
+      return res.status(400).json({ message: 'A empresa nÃ£o possui certificado digital configurado.' });
     }
 
     const requestedEnvironment = normalizeString(
@@ -2122,14 +2597,14 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
     if (!habilitados.includes(ambiente)) {
       return res
         .status(400)
-        .json({ message: 'O ambiente selecionado não está habilitado para este PDV.' });
+        .json({ message: 'O ambiente selecionado nÃ£o estÃ¡ habilitado para este PDV.' });
     }
 
     if (!storeSupportsEnvironment(empresa, ambiente)) {
-      const ambienteLabel = ambiente === 'producao' ? 'Produção' : 'Homologação';
+      const ambienteLabel = ambiente === 'producao' ? 'ProduÃ§Ã£o' : 'HomologaÃ§Ã£o';
       return res
         .status(400)
-        .json({ message: `A empresa não possui CSC configurado para ${ambienteLabel}.` });
+        .json({ message: `A empresa nÃ£o possui CSC configurado para ${ambienteLabel}.` });
     }
 
     state = await PdvState.findOne({ pdv: pdvId });
@@ -2145,17 +2620,17 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
       : null;
 
     if (!sale) {
-      return res.status(404).json({ message: 'Venda informada não foi encontrada.' });
+      return res.status(404).json({ message: 'Venda informada nÃ£o foi encontrada.' });
     }
 
     if (sale.status === 'cancelled') {
       return res
         .status(400)
-        .json({ message: 'Não é possível emitir nota fiscal para uma venda cancelada.' });
+        .json({ message: 'NÃ£o Ã© possÃ­vel emitir nota fiscal para uma venda cancelada.' });
     }
 
     if (sale.fiscalStatus === 'emitted' && (sale.fiscalDriveFileId || sale.fiscalXmlUrl)) {
-      return res.status(409).json({ message: 'Esta venda já possui XML emitido.' });
+      return res.status(409).json({ message: 'Esta venda jÃ¡ possui XML emitido.' });
     }
 
     const snapshotFromRequest = req.body?.snapshot;
@@ -2165,13 +2640,13 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
 
     if (!sale.saleCode && req.body?.saleCode) {
       sale.saleCode = normalizeString(req.body.saleCode);
-      sale.saleCodeLabel = sale.saleCode || 'Sem código';
+      sale.saleCodeLabel = sale.saleCode || 'Sem cÃ³digo';
     }
 
     if (!sale.receiptSnapshot) {
       return res
         .status(400)
-        .json({ message: 'Snapshot da venda indisponível para emissão fiscal.' });
+        .json({ message: 'Snapshot da venda indisponÃ­vel para emissÃ£o fiscal.' });
     }
 
     const serieNfce = normalizeString(pdv.serieNfce || pdv.serieNfe);
@@ -2179,7 +2654,7 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
     if (!serieNfce) {
       return res
         .status(400)
-        .json({ message: 'Configure a série fiscal do PDV antes de emitir a nota.' });
+        .json({ message: 'Configure a sÃ©rie fiscal do PDV antes de emitir a nota.' });
     }
 
     const numeroInicialNfce = Number.isInteger(pdv.numeroNfceInicial)
@@ -2191,7 +2666,7 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
     if (!numeroInicial || numeroInicial < 1) {
       return res
         .status(400)
-        .json({ message: 'Configure o número inicial de emissão para o PDV.' });
+        .json({ message: 'Configure o nÃºmero inicial de emissÃ£o para o PDV.' });
     }
 
     const numeroAtualNfce = Number.isInteger(pdv.numeroNfceAtual) ? pdv.numeroNfceAtual : null;
@@ -2394,7 +2869,7 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
           state.markModified('completedSales');
           await state.save();
         } catch (persistError) {
-          console.error('Falha ao restaurar status fiscal após rejeição:', persistError);
+          console.error('Falha ao restaurar status fiscal apÃ³s rejeiÃ§Ã£o:', persistError);
         }
       }
     }
@@ -2429,7 +2904,7 @@ router.put('/:id/configuracoes', requireAuth, authorizeRoles('admin', 'admin_mas
     const pdv = await Pdv.findById(pdvId);
 
     if (!pdv) {
-      return res.status(404).json({ message: 'PDV não encontrado.' });
+      return res.status(404).json({ message: 'PDV nÃ£o encontrado.' });
     }
 
     const impressaoPayload = req.body?.impressao || {};
@@ -2452,11 +2927,11 @@ router.put('/:id/configuracoes', requireAuth, authorizeRoles('admin', 'admin_mas
       depositoPadraoId = normalizeString(estoquePayload.depositoPadrao);
       if (depositoPadraoId) {
         if (!mongoose.Types.ObjectId.isValid(depositoPadraoId)) {
-          throw createValidationError('Depósito selecionado é inválido.');
+          throw createValidationError('DepÃ³sito selecionado Ã© invÃ¡lido.');
         }
         const deposito = await Deposit.findOne({ _id: depositoPadraoId, empresa: pdv.empresa });
         if (!deposito) {
-          throw createValidationError('Depósito selecionado não pertence à mesma empresa do PDV.');
+          throw createValidationError('DepÃ³sito selecionado nÃ£o pertence Ã  mesma empresa do PDV.');
         }
       }
     }
@@ -2465,14 +2940,14 @@ router.put('/:id/configuracoes', requireAuth, authorizeRoles('admin', 'admin_mas
     const contaCorrenteRaw = normalizeString(financeiroPayload.contaCorrente);
     if (contaCorrenteRaw) {
       if (!mongoose.Types.ObjectId.isValid(contaCorrenteRaw)) {
-        throw createValidationError('Conta corrente selecionada é inválida.');
+        throw createValidationError('Conta corrente selecionada Ã© invÃ¡lida.');
       }
       const contaCorrente = await BankAccount.findOne({
         _id: contaCorrenteRaw,
         company: pdv.empresa,
       });
       if (!contaCorrente) {
-        throw createValidationError('Conta corrente selecionada não pertence à mesma empresa do PDV.');
+        throw createValidationError('Conta corrente selecionada nÃ£o pertence Ã  mesma empresa do PDV.');
       }
       contaCorrenteId = contaCorrente._id;
     }
@@ -2481,7 +2956,7 @@ router.put('/:id/configuracoes', requireAuth, authorizeRoles('admin', 'admin_mas
     const contaContabilReceberRaw = normalizeString(financeiroPayload.contaContabilReceber);
     if (contaContabilReceberRaw) {
       if (!mongoose.Types.ObjectId.isValid(contaContabilReceberRaw)) {
-        throw createValidationError('Conta contábil de receber selecionada é inválida.');
+        throw createValidationError('Conta contÃ¡bil de receber selecionada Ã© invÃ¡lida.');
       }
       const contaReceber = await AccountingAccount.findOne({
         _id: contaContabilReceberRaw,
@@ -2490,7 +2965,7 @@ router.put('/:id/configuracoes', requireAuth, authorizeRoles('admin', 'admin_mas
       });
       if (!contaReceber) {
         throw createValidationError(
-          'Conta contábil de receber selecionada não pertence à empresa ou não está classificada como contas a receber.'
+          'Conta contÃ¡bil de receber selecionada nÃ£o pertence Ã  empresa ou nÃ£o estÃ¡ classificada como contas a receber.'
         );
       }
       contaContabilReceberId = contaReceber._id;
@@ -2500,7 +2975,7 @@ router.put('/:id/configuracoes', requireAuth, authorizeRoles('admin', 'admin_mas
     const contaContabilPagarRaw = normalizeString(financeiroPayload.contaContabilPagar);
     if (contaContabilPagarRaw) {
       if (!mongoose.Types.ObjectId.isValid(contaContabilPagarRaw)) {
-        throw createValidationError('Conta contábil de pagar selecionada é inválida.');
+        throw createValidationError('Conta contÃ¡bil de pagar selecionada Ã© invÃ¡lida.');
       }
       const contaPagar = await AccountingAccount.findOne({
         _id: contaContabilPagarRaw,
@@ -2509,7 +2984,7 @@ router.put('/:id/configuracoes', requireAuth, authorizeRoles('admin', 'admin_mas
       });
       if (!contaPagar) {
         throw createValidationError(
-          'Conta contábil de pagar selecionada não pertence à empresa ou não está classificada como contas a pagar.'
+          'Conta contÃ¡bil de pagar selecionada nÃ£o pertence Ã  empresa ou nÃ£o estÃ¡ classificada como contas a pagar.'
         );
       }
       contaContabilPagarId = contaPagar._id;
@@ -2559,8 +3034,8 @@ router.put('/:id/configuracoes', requireAuth, authorizeRoles('admin', 'admin_mas
     const message =
       error?.message && typeof error.message === 'string'
         ? error.message
-        : 'Erro ao salvar configurações do PDV.';
-    console.error('Erro ao salvar configurações do PDV:', error);
+        : 'Erro ao salvar configuraÃ§Ãµes do PDV.';
+    console.error('Erro ao salvar configuraÃ§Ãµes do PDV:', error);
     res.status(statusCode).json({ message });
   }
 });
@@ -2568,104 +3043,213 @@ router.put('/:id/configuracoes', requireAuth, authorizeRoles('admin', 'admin_mas
 router.put('/:id/state', requireAuth, async (req, res) => {
   try {
     const pdvId = req.params.id;
+    const idempotencyKey = normalizeString(
+      req.get('x-idempotency-key') || req.body?._meta?.idempotencyKey || ''
+    );
 
     if (!mongoose.Types.ObjectId.isValid(pdvId)) {
-      return res.status(400).json({ message: 'Identificador de PDV inválido.' });
+      return res.status(400).json({ message: 'Identificador de PDV invÃ¡lido.' });
     }
 
     const pdv = await Pdv.findById(pdvId).lean();
 
     if (!pdv) {
-      return res.status(404).json({ message: 'PDV não encontrado.' });
+      return res.status(404).json({ message: 'PDV nÃ£o encontrado.' });
     }
 
-    const existingState = await PdvState.findOne({ pdv: pdvId });
+    return enqueuePdvStateWrite(pdvId, async () => {
+      const existingState = await PdvState.findOne({ pdv: pdvId });
+      if (
+        idempotencyKey &&
+        Array.isArray(existingState?.recentStateMutationKeys) &&
+        existingState.recentStateMutationKeys.includes(idempotencyKey)
+      ) {
+        return res.json(serializeStateForResponse(existingState));
+      }
 
-    const updatePayload = buildStateUpdatePayload({
-      body: req.body || {},
-      existingState: existingState || {},
-      empresaId: pdv.empresa,
-    });
-
-    const productIds = collectProductIdsFromSales(updatePayload.completedSales);
-    if (productIds.length) {
-      const products = await Product.find({ _id: { $in: productIds } })
-        .select('custo custoMedio custoCalculado precoCusto precoCustoUnitario')
-        .lean();
-      const productMap = new Map(products.map((product) => [product._id.toString(), product]));
-      ensureSalesHaveCostData(updatePayload.completedSales, productMap);
-    }
-
-    updatePayload.completedSales = mergeInventoryProcessingStatus(
-      updatePayload.completedSales || [],
-      existingState?.completedSales || []
-    );
-
-    const depositConfig = pdv?.configuracoesEstoque?.depositoPadrao || null;
-    const existingInventoryMovements = Array.isArray(existingState?.inventoryMovements)
-      ? existingState.inventoryMovements.map((movement) =>
-          movement && typeof movement.toObject === 'function' ? movement.toObject() : movement
-        )
-      : [];
-    let newInventoryMovements = [];
-
-    if (depositConfig) {
-      const inventoryResult = await applyInventoryMovementsToSales({
-        sales: updatePayload.completedSales,
-        depositId: depositConfig,
-        existingMovements: existingInventoryMovements,
+      const updatePayload = buildStateUpdatePayload({
+        body: req.body || {},
+        existingState: existingState || {},
+        empresaId: pdv.empresa,
       });
-      updatePayload.completedSales = inventoryResult.sales;
-      newInventoryMovements = inventoryResult.movements || [];
-      const revertedSales = new Set(inventoryResult.revertedSales || []);
-      let combinedMovements = existingInventoryMovements;
-      if (revertedSales.size) {
-        combinedMovements = combinedMovements.filter(
-          (movement) => movement && !revertedSales.has(movement.saleId)
+
+      const isStartingNewCaixaCycle =
+        !Boolean(existingState?.caixaAberto) && Boolean(updatePayload.caixaAberto);
+
+      updatePayload.completedSales = mergeRecordsByKey(
+        existingState?.completedSales || [],
+        updatePayload.completedSales || [],
+        'sale'
+      );
+      updatePayload.completedSales = dedupeSalesById(updatePayload.completedSales);
+      updatePayload.budgets = mergeRecordsByKey(
+        existingState?.budgets || [],
+        updatePayload.budgets || [],
+        'budget'
+      );
+      updatePayload.deliveryOrders = mergeRecordsByKey(
+        existingState?.deliveryOrders || [],
+        updatePayload.deliveryOrders || [],
+        'delivery'
+      );
+      updatePayload.history = isStartingNewCaixaCycle
+        ? (Array.isArray(updatePayload.history) ? updatePayload.history : [])
+        : mergeRecordsByKey(
+            existingState?.history || [],
+            updatePayload.history || [],
+            'history'
+          );
+      updatePayload.accountsReceivable = mergeRecordsByKey(
+        existingState?.accountsReceivable || [],
+        updatePayload.accountsReceivable || [],
+        'receivable'
+      );
+
+      const ensuredCodes = await ensureUniquePdvCodes({
+        pdvId,
+        pdvDoc: pdv,
+        sales: updatePayload.completedSales,
+        budgets: updatePayload.budgets,
+        existingSales: existingState?.completedSales || [],
+        existingBudgets: existingState?.budgets || [],
+      });
+      updatePayload.completedSales = ensuredCodes.sales;
+      updatePayload.budgets = ensuredCodes.budgets;
+      updatePayload.saleCodeSequence = ensuredCodes.nextSaleSequence;
+      updatePayload.budgetSequence = ensuredCodes.nextBudgetSequence;
+
+      const productIds = collectProductIdsFromSales(updatePayload.completedSales);
+      if (productIds.length) {
+        const products = await Product.find({ _id: { $in: productIds } })
+          .select('custo custoMedio custoCalculado precoCusto precoCustoUnitario')
+          .lean();
+        const productMap = new Map(products.map((product) => [product._id.toString(), product]));
+        ensureSalesHaveCostData(updatePayload.completedSales, productMap);
+      }
+
+      updatePayload.completedSales = mergeInventoryProcessingStatus(
+        updatePayload.completedSales || [],
+        existingState?.completedSales || []
+      );
+
+      const depositConfig = pdv?.configuracoesEstoque?.depositoPadrao || null;
+      const existingInventoryMovements = Array.isArray(existingState?.inventoryMovements)
+        ? existingState.inventoryMovements.map((movement) =>
+            movement && typeof movement.toObject === 'function' ? movement.toObject() : movement
+          )
+        : [];
+
+      if (depositConfig) {
+        const inventoryResult = await applyInventoryMovementsToSales({
+          sales: updatePayload.completedSales,
+          depositId: depositConfig,
+          existingMovements: existingInventoryMovements,
+        });
+        updatePayload.completedSales = inventoryResult.sales;
+        const newInventoryMovements = inventoryResult.movements || [];
+        const revertedSales = new Set(inventoryResult.revertedSales || []);
+        let combinedMovements = existingInventoryMovements;
+        if (revertedSales.size) {
+          combinedMovements = combinedMovements.filter(
+            (movement) => movement && !revertedSales.has(movement.saleId)
+          );
+        }
+        if (newInventoryMovements.length) {
+          combinedMovements = [...combinedMovements, ...newInventoryMovements];
+        }
+        if (revertedSales.size || newInventoryMovements.length) {
+          updatePayload.inventoryMovements = combinedMovements;
+        }
+      }
+
+      reconcileCashStateFromSales({ existingState, updatePayload });
+
+      let updatedState;
+      try {
+        updatedState = await PdvState.findOneAndUpdate(
+          { pdv: pdvId },
+          {
+            ...updatePayload,
+            pdv: pdvId,
+            empresa: updatePayload.empresa || pdv.empresa,
+          },
+          { new: true, upsert: true, setDefaultsOnInsert: true }
+        );
+      } catch (updateError) {
+        if (updateError?.code === 11000 && updateError?.keyPattern?.pdv) {
+          const currentState = await PdvState.findOne({ pdv: pdvId });
+          return res.status(409).json({
+            message:
+              'O estado do PDV foi criado ou atualizado por outro operador durante a gravaÃ§Ã£o. Recarregue o estado atual antes de persistir novas alteraÃ§Ãµes.',
+            conflict: true,
+            state: serializeStateForResponse(currentState),
+          });
+        }
+        throw updateError;
+      }
+
+      if (idempotencyKey && updatedState) {
+        await PdvState.updateOne(
+          { _id: updatedState._id },
+          [
+            {
+              $set: {
+                recentStateMutationKeys: {
+                  $slice: [
+                    {
+                      $setUnion: [
+                        { $ifNull: ['$recentStateMutationKeys', []] },
+                        [idempotencyKey],
+                      ],
+                    },
+                    -100,
+                  ],
+                },
+              },
+            },
+          ]
         );
       }
-      if (newInventoryMovements.length) {
-        combinedMovements = [...combinedMovements, ...newInventoryMovements];
+
+      try {
+        await syncPdvCaixaSessionHistory({
+          pdvDoc: pdv,
+          existingState,
+          updatedState,
+        });
+      } catch (historyError) {
+        console.error('Erro ao sincronizar histÃ³rico de caixas do PDV:', historyError);
       }
-      if (revertedSales.size || newInventoryMovements.length) {
-        updatePayload.inventoryMovements = combinedMovements;
+
+      const serialized = serializeStateForResponse(updatedState);
+      try {
+        const emitPdvStateUpdate =
+          req.app && typeof req.app.get === 'function' ? req.app.get('emitPdvStateUpdate') : null;
+        if (typeof emitPdvStateUpdate === 'function') {
+          emitPdvStateUpdate({
+            pdvId,
+            payload: {
+              updatedAt: serialized.updatedAt || new Date().toISOString(),
+              state: serialized,
+            },
+          });
+        }
+      } catch (emitError) {
+        console.error('Erro ao emitir atualizaÃ§Ã£o em tempo real do PDV:', emitError);
       }
-    }
 
-    const updatedState = await PdvState.findOneAndUpdate(
-      { pdv: pdvId },
-      {
-        ...updatePayload,
-        pdv: pdvId,
-        empresa: updatePayload.empresa || pdv.empresa,
-      },
-      { new: true, upsert: true, setDefaultsOnInsert: true }
-    );
-
-    try {
-      await syncPdvCaixaSessionHistory({
-        pdvDoc: pdv,
-        existingState,
-        updatedState,
-      });
-    } catch (historyError) {
-      console.error('Erro ao sincronizar histórico de caixas do PDV:', historyError);
-    }
-
-    const serialized = serializeStateForResponse(updatedState);
-
-    res.json(serialized);
+      return res.json(serialized);
+    });
   } catch (error) {
     console.error('Erro ao salvar estado do PDV:', error);
     res.status(500).json({ message: 'Erro ao salvar estado do PDV.' });
   }
 });
-
 router.delete('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
   try {
     const deleted = await Pdv.findByIdAndDelete(req.params.id);
     if (!deleted) {
-      return res.status(404).json({ message: 'PDV não encontrado.' });
+      return res.status(404).json({ message: 'PDV nÃ£o encontrado.' });
     }
     res.json({ message: 'PDV removido com sucesso.' });
   } catch (error) {
@@ -2675,3 +3259,4 @@ router.delete('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), asyn
 });
 
 module.exports = router;
+

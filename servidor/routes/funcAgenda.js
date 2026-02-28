@@ -11,11 +11,60 @@ const Service = require('../models/Service');
 const Appointment = require('../models/Appointment');
 const UserAddress = require('../models/UserAddress');
 const Store = require('../models/Store');
+const IdempotencyRecord = require('../models/IdempotencyRecord');
 const bcrypt = require('bcryptjs');
 const { randomBytes } = require('crypto');
+const {
+  ensureScopedSequenceAtLeast,
+  nextScopedSequence,
+  customerSequenceKey,
+} = require('../utils/sequences');
 
 const requireStaff = authorizeRoles('funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master');
 const MAX_CODIGO_CLIENTE_SEQUENCIAL = 999999999;
+const IDEMPOTENCY_SCOPE_CLIENTE_CREATE = 'func:clientes:create';
+const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
+
+function normalizeIdempotencyKey(value = '') {
+  const normalized = String(value || '').trim();
+  if (!normalized) return '';
+  return normalized.slice(0, 180);
+}
+
+async function readIdempotencyRecord(scope, key) {
+  const idemKey = normalizeIdempotencyKey(key);
+  if (!idemKey) return null;
+  return IdempotencyRecord.findOne({
+    scope: String(scope || '').trim(),
+    key: idemKey,
+    expiresAt: { $gt: new Date() },
+  }).lean();
+}
+
+async function writeIdempotencyRecord(scope, key, { status = 200, body = {} } = {}) {
+  const idemKey = normalizeIdempotencyKey(key);
+  if (!idemKey) return;
+  const normalizedScope = String(scope || '').trim();
+  try {
+    await IdempotencyRecord.updateOne(
+      { scope: normalizedScope, key: idemKey },
+      {
+        $setOnInsert: {
+          scope: normalizedScope,
+          key: idemKey,
+          status,
+          body,
+          expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_MS),
+        },
+      },
+      { upsert: true }
+    );
+  } catch (error) {
+    if (error?.code !== 11000) {
+      throw error;
+    }
+  }
+}
 
 function escapeRegex(s) { return String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 function userDisplayName(u) { return u?.nomeCompleto || u?.nomeContato || u?.razaoSocial || u?.email; }
@@ -204,7 +253,16 @@ async function atribuirCodigosParaClientesSemCodigo() {
 
 async function gerarCodigoClienteSequencial() {
   const maior = await obterMaiorCodigoCliente();
-  return maior + 1;
+  const key = customerSequenceKey();
+  await ensureScopedSequenceAtLeast({
+    scope: key.scope,
+    reference: key.reference,
+    value: maior,
+  });
+  return nextScopedSequence({
+    scope: key.scope,
+    reference: key.reference,
+  });
 }
 
 async function obterMaiorCodigoPet() {
@@ -1236,6 +1294,19 @@ router.get('/clientes', authMiddleware, requireStaff, async (req, res) => {
 
 router.post('/clientes', authMiddleware, requireStaff, async (req, res) => {
   try {
+    const idempotencyKey = normalizeIdempotencyKey(
+      req.get('x-idempotency-key') || req.body?._meta?.idempotencyKey || ''
+    );
+    if (idempotencyKey) {
+      const cached = await readIdempotencyRecord(
+        IDEMPOTENCY_SCOPE_CLIENTE_CREATE,
+        idempotencyKey
+      );
+      if (cached?.body && typeof cached.body === 'object') {
+        return res.status(Number(cached.status) || 200).json(cached.body);
+      }
+    }
+
     const payload = await buildClientePayload(req.body, { isUpdate: false });
     payload.role = 'cliente';
 
@@ -1262,12 +1333,21 @@ router.post('/clientes', authMiddleware, requireStaff, async (req, res) => {
       }
     }
 
-    res.status(201).json({
+    const responsePayload = {
       message: 'Cliente criado com sucesso.',
       id: created._id,
       codigo: created.codigoCliente,
       senhaTemporaria: senhaGerada ? plainPassword : undefined,
-    });
+    };
+
+    if (idempotencyKey) {
+      await writeIdempotencyRecord(IDEMPOTENCY_SCOPE_CLIENTE_CREATE, idempotencyKey, {
+        status: 201,
+        body: responsePayload,
+      });
+    }
+
+    res.status(201).json(responsePayload);
   } catch (err) {
     console.error('POST /func/clientes', err);
     if (err?.code === 11000) {
