@@ -11,6 +11,7 @@ const Appointment = require('../models/Appointment');
 const UserGroup = require('../models/UserGroup');
 const CommissionClosing = require('../models/CommissionClosing');
 const Exchange = require('../models/Exchange');
+const ProfessionalCommissionConfig = require('../models/ProfessionalCommissionConfig');
 
 const router = express.Router();
 const requireStaff = authorizeRoles('funcionario', 'admin', 'admin_master');
@@ -58,6 +59,66 @@ const normalizeDigits = (value) => {
   const str = String(value);
   const digits = str.replace(/\D/g, '');
   return digits;
+};
+
+const normalizeObjectId = (value) => {
+  if (!value) return '';
+  const raw = typeof value === 'object' && value !== null ? value._id || value.id : value;
+  return raw ? String(raw) : '';
+};
+
+const buildProfessionalCommissionContext = (config = null) => {
+  const serviceRuleMap = new Map();
+  const groupRuleMap = new Map();
+
+  (Array.isArray(config?.serviceRules) ? config.serviceRules : []).forEach((rule) => {
+    const serviceId = normalizeObjectId(rule?.service);
+    const percent = parseNumber(rule?.percent);
+    if (!serviceId || percent === null) return;
+    serviceRuleMap.set(serviceId, percent);
+  });
+
+  (Array.isArray(config?.groupRules) ? config.groupRules : []).forEach((rule) => {
+    const groupId = normalizeObjectId(rule?.group);
+    const percent = parseNumber(rule?.percent);
+    if (!groupId || percent === null) return;
+    groupRuleMap.set(groupId, percent);
+  });
+
+  return { serviceRuleMap, groupRuleMap };
+};
+
+const firstNumericValue = (...values) => {
+  for (const value of values) {
+    const parsed = parseNumber(value);
+    if (parsed !== null) return parsed;
+  }
+  return null;
+};
+
+const resolveServiceCommissionPercent = ({
+  professionalCommission = null,
+  serviceId = '',
+  groupId = '',
+  servicePercent = null,
+  groupPercent = null,
+  itemPercent = null,
+  fallbackPercent = 0,
+} = {}) => {
+  const normalizedServiceId = normalizeObjectId(serviceId);
+  const normalizedGroupId = normalizeObjectId(groupId);
+
+  if (normalizedServiceId && professionalCommission?.serviceRuleMap?.has(normalizedServiceId)) {
+    return professionalCommission.serviceRuleMap.get(normalizedServiceId);
+  }
+  if (normalizedGroupId && professionalCommission?.groupRuleMap?.has(normalizedGroupId)) {
+    return professionalCommission.groupRuleMap.get(normalizedGroupId);
+  }
+
+  return (
+    firstNumericValue(servicePercent, groupPercent, itemPercent, fallbackPercent) ??
+    0
+  );
 };
 
 const normalizeStatus = (status) => {
@@ -517,23 +578,31 @@ const resolveServicoItemsForUser = (appointment = {}, userId = '') => {
 
 const mapAppointmentToServicoRecord = (
   appointment = {},
-  { userId } = {},
+  { userId, professionalCommission = null, defaultPercent = 0 } = {},
 ) => {
   const normalizedUserId = userId ? String(userId) : '';
   const { items, matchedByTopLevel } = resolveServicoItemsForUser(appointment, normalizedUserId);
   if (!items.length && !matchedByTopLevel) return null;
 
-  const getItemPercent = (item) => {
-    const raw =
-      item?.servico?.grupo?.comissaoPercent ??
-      item?.servico?.comissaoPercent ??
-      item?.grupo?.comissaoPercent ??
-      item?.comissaoPercent ??
-      appointment?.servico?.grupo?.comissaoPercent ??
-      0;
-    const parsed = parseNumber(raw);
-    return parsed !== null ? parsed : 0;
-  };
+  const getItemPercent = (item) =>
+    resolveServiceCommissionPercent({
+      professionalCommission,
+      serviceId: item?.servico?._id || item?.servico || appointment?.servico?._id || appointment?.servico,
+      groupId:
+        item?.servico?.grupo?._id ||
+        item?.servico?.grupo ||
+        item?.grupo?._id ||
+        item?.grupo ||
+        appointment?.servico?.grupo?._id ||
+        appointment?.servico?.grupo,
+      servicePercent: item?.servico?.comissaoPercent ?? appointment?.servico?.comissaoPercent,
+      groupPercent:
+        item?.servico?.grupo?.comissaoPercent ??
+        item?.grupo?.comissaoPercent ??
+        appointment?.servico?.grupo?.comissaoPercent,
+      itemPercent: item?.comissaoPercent,
+      fallbackPercent: defaultPercent,
+    });
 
   const valorServico = items.length
     ? items.reduce((sum, item) => sum + (parseNumber(item.valor) || 0), 0)
@@ -545,7 +614,8 @@ const mapAppointmentToServicoRecord = (
         const percent = getItemPercent(item);
         return sum + base * (percent / 100);
       }, 0)
-    : valorServico * ((parseNumber(appointment?.servico?.grupo?.comissaoPercent) || 0) / 100);
+    : valorServico *
+      (getItemPercent(null) / 100);
   const isFinalizado = items.length
     ? items.every((it) => isServicoFinalizado(it.status))
     : isServicoFinalizado(appointment.status);
@@ -896,15 +966,19 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
       return res.status(404).json({ message: 'UsuÇ­rio nÇœo encontrado' });
     }
 
-    let userGroup = null;
+  let userGroup = null;
     if (user.userGroup) {
       userGroup = await UserGroup.findById(user.userGroup)
         .select('comissaoPercent comissaoServicoPercent')
         .lean();
     }
 
-    const comissaoPercent = Number(userGroup?.comissaoPercent ?? 0);
-    const comissaoServicoPercent = Number(userGroup?.comissaoServicoPercent ?? 0);
+  const comissaoPercent = Number(userGroup?.comissaoPercent ?? 0);
+  const comissaoServicoPercent = Number(userGroup?.comissaoServicoPercent ?? 0);
+  const professionalCommissionConfig = await ProfessionalCommissionConfig.findOne({ user: user._id })
+    .select('groupRules serviceRules')
+    .lean();
+  const professionalCommission = buildProfessionalCommissionContext(professionalCommissionConfig);
 
     const sellerIds = new Set([String(user._id)]);
     const sellerCodes = new Set();
@@ -1009,12 +1083,28 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
 
     const ids = Array.from(itemIdSet);
     const [Services, products] = await Promise.all([
-      ids.length ? Service.find({ _id: { $in: ids } }).select('_id nome valor').lean() : [],
+      ids.length
+        ? Service.find({ _id: { $in: ids } })
+            .select('_id nome valor grupo comissaoPercent')
+            .populate('grupo', 'comissaoPercent')
+            .lean()
+        : [],
       ids.length ? Product.find({ _id: { $in: ids } }).select('_id nome venda').lean() : [],
     ]);
 
     const ServiceIdSet = new Set(Services.map((svc) => String(svc._id)));
     const productIdSet = new Set(products.map((prod) => String(prod._id)));
+    const serviceMetaMap = new Map(
+      Services.map((service) => [
+        String(service._id),
+        {
+          serviceId: String(service._id),
+          groupId: normalizeObjectId(service.grupo),
+          servicePercent: parseNumber(service.comissaoPercent),
+          groupPercent: parseNumber(service?.grupo?.comissaoPercent),
+        },
+      ]),
+    );
 
     const historicoBase = [];
     const prodPercentDefault = comissaoPercent || 0;
@@ -1061,7 +1151,26 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
         const isProdutoId = oid && productIdSet.has(oid);
         const isProdutoSnapshot = item.productSnapshot || item.product || item.produto;
         const isServico = isServicoId || (!isProdutoId && !isProdutoSnapshot);
-        const percent = resolvePercent(item);
+        const serviceMeta = oid ? serviceMetaMap.get(oid) : null;
+        const percent = isServico
+          ? resolveServiceCommissionPercent({
+              professionalCommission,
+              serviceId: serviceMeta?.serviceId || oid,
+              groupId:
+                serviceMeta?.groupId ||
+                item?.servico?.grupo?._id ||
+                item?.servico?.grupo ||
+                item?.grupo?._id ||
+                item?.grupo,
+              servicePercent: serviceMeta?.servicePercent ?? item?.servico?.comissaoPercent,
+              groupPercent:
+                serviceMeta?.groupPercent ??
+                item?.servico?.grupo?.comissaoPercent ??
+                item?.grupo?.comissaoPercent,
+              itemPercent: resolvePercent(item),
+              fallbackPercent: svcPercentDefault,
+            })
+          : resolvePercent(item);
         const applied = percent !== null ? percent : (isServico ? svcPercentDefault : prodPercentDefault);
         const comissaoValue = netTotal * (applied / 100);
         const comissaoVenda = isServico ? 0 : comissaoValue;
@@ -1166,7 +1275,9 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
 
     const servicoRecords = buildServicosRecords(appointments, {
       userId: user._id,
+      professionalCommission,
       comissaoServicoPercent,
+      defaultPercent: comissaoServicoPercent,
     });
 
     const servicosView = buildServicosViewPayload(servicoRecords, { extraProximos, closingsKpi });

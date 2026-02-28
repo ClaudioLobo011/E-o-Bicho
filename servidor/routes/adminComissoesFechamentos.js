@@ -17,6 +17,7 @@ const Store = require('../models/Store');
 const AccountingAccount = require('../models/AccountingAccount');
 const BankAccount = require('../models/BankAccount');
 const AccountPayable = require('../models/AccountPayable');
+const ProfessionalCommissionConfig = require('../models/ProfessionalCommissionConfig');
 
 const ADMIN_ROLES = ['admin', 'admin_master'];
 const DEFAULT_WINDOW_DAYS = 90;
@@ -35,6 +36,63 @@ const emptyTotals = () => ({
 });
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ''));
+
+const normalizeObjectId = (value) => {
+  if (!value) return '';
+  const raw = typeof value === 'object' && value !== null ? value._id || value.id : value;
+  return raw ? String(raw) : '';
+};
+
+const buildProfessionalCommissionContext = (config = null) => {
+  const serviceRuleMap = new Map();
+  const groupRuleMap = new Map();
+
+  (Array.isArray(config?.serviceRules) ? config.serviceRules : []).forEach((rule) => {
+    const serviceId = normalizeObjectId(rule?.service);
+    const percent = parseNumber(rule?.percent);
+    if (!serviceId || percent === null) return;
+    serviceRuleMap.set(serviceId, percent);
+  });
+
+  (Array.isArray(config?.groupRules) ? config.groupRules : []).forEach((rule) => {
+    const groupId = normalizeObjectId(rule?.group);
+    const percent = parseNumber(rule?.percent);
+    if (!groupId || percent === null) return;
+    groupRuleMap.set(groupId, percent);
+  });
+
+  return { serviceRuleMap, groupRuleMap };
+};
+
+const firstNumericValue = (...values) => {
+  for (const value of values) {
+    const parsed = parseNumber(value);
+    if (parsed !== null) return parsed;
+  }
+  return null;
+};
+
+const resolveServiceCommissionPercent = ({
+  professionalCommission = null,
+  serviceId = '',
+  groupId = '',
+  servicePercent = null,
+  groupPercent = null,
+  itemPercent = null,
+  fallbackPercent = 0,
+} = {}) => {
+  const normalizedServiceId = normalizeObjectId(serviceId);
+  const normalizedGroupId = normalizeObjectId(groupId);
+
+  if (normalizedServiceId && professionalCommission?.serviceRuleMap?.has(normalizedServiceId)) {
+    return professionalCommission.serviceRuleMap.get(normalizedServiceId);
+  }
+  if (normalizedGroupId && professionalCommission?.groupRuleMap?.has(normalizedGroupId)) {
+    return professionalCommission.groupRuleMap.get(normalizedGroupId);
+  }
+
+  return firstNumericValue(servicePercent, groupPercent, itemPercent, fallbackPercent) ?? 0;
+};
 
 const parseDateUtcMidnight = (value) => {
   if (!value) return null;
@@ -487,23 +545,34 @@ const resolveServicoItemsForUser = (appointment = {}, userId = '') => {
   return { items: [], matchedByTopLevel: false };
 };
 
-const mapAppointmentToServicoRecord = (appointment = {}, { userId, defaultPercent = 0 } = {}) => {
+const mapAppointmentToServicoRecord = (
+  appointment = {},
+  { userId, defaultPercent = 0, professionalCommission = null } = {},
+) => {
   const normalizedUserId = userId ? String(userId) : '';
   const { items, matchedByTopLevel } = resolveServicoItemsForUser(appointment, normalizedUserId);
   if (!items.length && !matchedByTopLevel) return null;
 
   const fallbackPercent = Number.isFinite(defaultPercent) ? defaultPercent : 0;
-  const getItemPercent = (item) => {
-    const raw =
-      item?.servico?.grupo?.comissaoPercent ??
-      item?.servico?.comissaoPercent ??
-      item?.grupo?.comissaoPercent ??
-      item?.comissaoPercent ??
-      appointment?.servico?.grupo?.comissaoPercent ??
-      0;
-    const parsed = parseNumber(raw);
-    return parsed !== null ? parsed : null;
-  };
+  const getItemPercent = (item) =>
+    resolveServiceCommissionPercent({
+      professionalCommission,
+      serviceId: item?.servico?._id || item?.servico || appointment?.servico?._id || appointment?.servico,
+      groupId:
+        item?.servico?.grupo?._id ||
+        item?.servico?.grupo ||
+        item?.grupo?._id ||
+        item?.grupo ||
+        appointment?.servico?.grupo?._id ||
+        appointment?.servico?.grupo,
+      servicePercent: item?.servico?.comissaoPercent ?? appointment?.servico?.comissaoPercent,
+      groupPercent:
+        item?.servico?.grupo?.comissaoPercent ??
+        item?.grupo?.comissaoPercent ??
+        appointment?.servico?.grupo?.comissaoPercent,
+      itemPercent: item?.comissaoPercent,
+      fallbackPercent,
+    });
 
   const valorServico = items.length
     ? items.reduce((sum, item) => sum + (parseNumber(item.valor) || 0), 0)
@@ -516,8 +585,7 @@ const mapAppointmentToServicoRecord = (appointment = {}, { userId, defaultPercen
         const applied = percent !== null ? percent : fallbackPercent;
         return sum + base * (applied / 100);
       }, 0)
-    : valorServico *
-      (((parseNumber(appointment?.servico?.grupo?.comissaoPercent) || fallbackPercent) / 100));
+    : valorServico * (getItemPercent(null) / 100);
   const isFinalizado = items.length
     ? items.every((it) => isServicoFinalizado(it.status))
     : isServicoFinalizado(appointment.status);
@@ -582,7 +650,14 @@ const summarizeSaleRecords = (records = []) => {
 
 const buildSaleRecord = (
   sale = {},
-  { comissaoPercent = 0, comissaoServicoPercent = 0, serviceIdSet = new Set(), productIdSet = new Set() },
+  {
+    comissaoPercent = 0,
+    comissaoServicoPercent = 0,
+    serviceIdSet = new Set(),
+    productIdSet = new Set(),
+    serviceMetaMap = new Map(),
+    professionalCommission = null,
+  },
 ) => {
   const items = collectSaleItems(sale);
   let valorProdutos = 0;
@@ -617,7 +692,24 @@ const buildSaleRecord = (
 
     if (isServico) {
       valorServicos += total;
-      const percent = resolvePercent(item);
+      const serviceMeta = oid ? serviceMetaMap.get(oid) : null;
+      const percent = resolveServiceCommissionPercent({
+        professionalCommission,
+        serviceId: serviceMeta?.serviceId || oid,
+        groupId:
+          serviceMeta?.groupId ||
+          item?.servico?.grupo?._id ||
+          item?.servico?.grupo ||
+          item?.grupo?._id ||
+          item?.grupo,
+        servicePercent: serviceMeta?.servicePercent ?? item?.servico?.comissaoPercent,
+        groupPercent:
+          serviceMeta?.groupPercent ??
+          item?.servico?.grupo?.comissaoPercent ??
+          item?.grupo?.comissaoPercent,
+        itemPercent: resolvePercent(item),
+        fallbackPercent: comissaoServicoPercent,
+      });
       const applied = percent !== null ? percent : comissaoServicoPercent;
       if (percent !== null) hasItemSvcPercent = true;
       comissaoServicos += total * (applied / 100);
@@ -732,6 +824,7 @@ const fetchServicoRecords = async ({
   endDate = null,
   storeId = null,
   defaultPercent = 0,
+  professionalCommission = null,
 }) => {
   if (!user?._id) return [];
 
@@ -785,6 +878,7 @@ const fetchServicoRecords = async ({
     userId: user._id,
     comissaoServicoPercent: defaultPercent,
     defaultPercent,
+    professionalCommission,
   });
 };
 
@@ -802,6 +896,10 @@ const computeCommissionSummaryForUser = async ({ user, startDate = null, endDate
 
   const comissaoPercent = Number(group?.comissaoPercent ?? DEFAULT_COMISSAO_PERCENT);
   const comissaoServicoPercent = Number(group?.comissaoServicoPercent ?? DEFAULT_COMISSAO_SERVICO_PERCENT);
+  const professionalCommissionConfig = await ProfessionalCommissionConfig.findOne({ user: user._id })
+    .select('groupRules serviceRules')
+    .lean();
+  const professionalCommission = buildProfessionalCommissionContext(professionalCommissionConfig);
 
   const { sales, aggregatedTotal, matched, unmatched } = await fetchSalesForUser({
     user,
@@ -821,12 +919,28 @@ const computeCommissionSummaryForUser = async ({ user, startDate = null, endDate
 
   const ids = Array.from(itemIdSet);
   const [services, products] = await Promise.all([
-    ids.length ? Service.find({ _id: { $in: ids } }).select('_id').lean() : [],
+    ids.length
+      ? Service.find({ _id: { $in: ids } })
+          .select('_id grupo comissaoPercent')
+          .populate('grupo', 'comissaoPercent')
+          .lean()
+      : [],
     ids.length ? Product.find({ _id: { $in: ids } }).select('_id').lean() : [],
   ]);
 
   const serviceIdSet = new Set(services.map((svc) => String(svc._id)));
   const productIdSet = new Set(products.map((prod) => String(prod._id)));
+  const serviceMetaMap = new Map(
+    services.map((service) => [
+      String(service._id),
+      {
+        serviceId: String(service._id),
+        groupId: normalizeObjectId(service.grupo),
+        servicePercent: parseNumber(service.comissaoPercent),
+        groupPercent: parseNumber(service?.grupo?.comissaoPercent),
+      },
+    ]),
+  );
 
   const saleRecords = sales.map((sale) =>
     buildSaleRecord(sale, {
@@ -834,6 +948,8 @@ const computeCommissionSummaryForUser = async ({ user, startDate = null, endDate
       comissaoServicoPercent,
       serviceIdSet,
       productIdSet,
+      serviceMetaMap,
+      professionalCommission,
     }),
   );
 
@@ -845,6 +961,7 @@ const computeCommissionSummaryForUser = async ({ user, startDate = null, endDate
     endDate,
     storeId,
     defaultPercent: comissaoServicoPercent,
+    professionalCommission,
   });
   const servicoTotals = summarizeServiceRecords(servicoRecords);
 
