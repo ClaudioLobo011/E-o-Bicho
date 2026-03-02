@@ -301,6 +301,7 @@
     fiscalEmissionModalOpen: false,
     activePdvStoreId: '',
     fullscreenActive: false,
+    selectionSectionForcedVisible: false,
     exchangeModal: {
       open: false,
       saleId: '',
@@ -4020,6 +4021,7 @@
     elements.pdvSelect = document.getElementById('pdv-select');
     elements.selectionHint = document.getElementById('pdv-selection-hint');
     elements.selectionSection = document.getElementById('pdv-selection-section');
+    elements.changeSelectionButton = document.getElementById('pdv-change-selection-button');
 
     elements.emptyState = document.getElementById('pdv-empty-state');
     elements.workspace = document.getElementById('pdv-workspace');
@@ -4537,6 +4539,19 @@
     }
     if (elements.emptyState) {
       elements.emptyState.classList.toggle('hidden', visible);
+    }
+    updateSelectionSectionVisibility();
+  };
+
+  const updateSelectionSectionVisibility = () => {
+    const hasCompleteSelection = Boolean(state.selectedStore && state.selectedPdv);
+    const shouldHideSelection = hasCompleteSelection && !state.selectionSectionForcedVisible;
+    if (elements.selectionSection) {
+      elements.selectionSection.classList.toggle('hidden', shouldHideSelection);
+    }
+    if (elements.changeSelectionButton) {
+      const canChangeSelection = hasCompleteSelection && !elements.workspace?.classList.contains('hidden');
+      elements.changeSelectionButton.classList.toggle('hidden', !canChangeSelection);
     }
   };
 
@@ -25534,6 +25549,7 @@
     const value = normalizeId(elements.companySelect?.value || '');
     state.selectedStore = value;
     state.selectedPdv = '';
+    state.selectionSectionForcedVisible = false;
     syncPdvSocketRoom();
     persistPdvSelectionPreference({ storeId: value, pdvId: '' });
     state.paymentMethods = [];
@@ -25573,12 +25589,14 @@
     persistPdvSelectionPreference({ pdvId: value });
     resetWorkspace();
     if (!value) {
+      state.selectionSectionForcedVisible = false;
       updateWorkspaceVisibility(false);
       return;
     }
     updateSelectionHint('Carregando dados do PDV selecionado...');
     try {
       const pdv = await fetchPdvDetails(value);
+      state.selectionSectionForcedVisible = false;
       updateWorkspaceVisibility(true);
       applyPdvData(pdv);
       updateSelectionHint('PDV carregado com sucesso.');
@@ -25626,6 +25644,12 @@
   const bindEvents = () => {
     elements.companySelect?.addEventListener('change', handleCompanyChange);
     elements.pdvSelect?.addEventListener('change', handlePdvChange);
+    elements.changeSelectionButton?.addEventListener('click', () => {
+      state.selectionSectionForcedVisible = true;
+      updateSelectionSectionVisibility();
+      updateSelectionHint('Selecione a empresa e o PDV desejados.');
+      elements.pdvSelect?.focus();
+    });
     elements.searchInput?.addEventListener('input', handleSearchInput);
     elements.searchInput?.addEventListener('keydown', handleSearchKeydown);
     elements.searchResults?.addEventListener('click', handleSearchResultsClick);

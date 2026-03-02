@@ -11,6 +11,7 @@ const AccountingAccount = require('../models/AccountingAccount');
 const PaymentMethod = require('../models/PaymentMethod');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
+const { ensureScopedSequenceAtLeast, nextScopedSequence } = require('../utils/sequences');
 
 const AUTH_ROLES = ['admin', 'admin_master', 'funcionario'];
 
@@ -181,16 +182,28 @@ async function generateSequentialCode() {
   const now = new Date();
   const year = now.getUTCFullYear();
   const prefix = `CR-${year}-`;
-  const latest = await AccountReceivable.findOne({
+  const latestReceivable = await AccountReceivable.findOne({
     code: { $regex: `^${prefix}` },
   })
-    .sort({ code: -1 })
     .select('code')
+    .sort({ code: -1 })
     .lean();
-  const latestCode = typeof latest?.code === 'string' ? latest.code.trim() : '';
-  const match = latestCode.match(new RegExp(`^${prefix}(\\d+)$`));
-  const latestNumber = match ? Number.parseInt(match[1], 10) : 0;
-  const sequential = String((Number.isFinite(latestNumber) ? latestNumber : 0) + 1).padStart(5, '0');
+
+  const latestCode = normalizeString(latestReceivable?.code).toUpperCase();
+  const latestMatch = latestCode.match(/(\d+)$/);
+  const latestValue = latestMatch ? Number.parseInt(latestMatch[1], 10) : 0;
+
+  await ensureScopedSequenceAtLeast({
+    scope: 'account_receivable',
+    reference: String(year),
+    value: latestValue,
+  });
+
+  const nextValue = await nextScopedSequence({
+    scope: 'account_receivable',
+    reference: String(year),
+  });
+  const sequential = String(Math.max(1, nextValue)).padStart(5, '0');
   return `CR-${year}-${sequential}`;
 }
 

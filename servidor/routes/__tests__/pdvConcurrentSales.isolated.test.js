@@ -18,6 +18,7 @@ const PaymentMethod = require('../../models/PaymentMethod');
 const AccountReceivable = require('../../models/AccountReceivable');
 const Pdv = require('../../models/Pdv');
 const PdvState = require('../../models/PdvState');
+const SequenceCounter = require('../../models/SequenceCounter');
 
 let mongo;
 let currentUserId = null;
@@ -272,6 +273,55 @@ test.describe('PDV isolated concurrency checks', () => {
     const notes = receivables.map((entry) => entry.notes || '').join('\n');
     assert.match(notes, new RegExp(saleCodeA));
     assert.match(notes, new RegExp(saleCodeB));
+  });
+
+  test('continues annual receivable code sequence from existing records even without initialized counter', async () => {
+    const base = await createBaseFixture();
+    const app = createApp();
+    const request = supertest(app);
+
+    const existing = await AccountReceivable.create({
+      code: 'CR-2026-00037',
+      company: base.company._id,
+      customer: base.customer._id,
+      customerName: base.customer.nomeCompleto,
+      installmentsCount: 1,
+      issueDate: new Date('2026-03-02T10:00:00.000Z'),
+      dueDate: new Date('2026-03-02T10:00:00.000Z'),
+      totalValue: 10,
+      bankAccount: base.bankAccount._id,
+      accountingAccount: base.accountingAccount._id,
+      paymentMethod: base.paymentMethod._id,
+      documentNumber: 'LEGACY-1',
+      installments: [
+        {
+          number: 1,
+          issueDate: new Date('2026-03-02T10:00:00.000Z'),
+          dueDate: new Date('2026-03-02T10:00:00.000Z'),
+          value: 10,
+          originalValue: 10,
+          paidValue: 0,
+          residualValue: 0,
+          bankAccount: base.bankAccount._id,
+          accountingAccount: base.accountingAccount._id,
+          paymentMethod: base.paymentMethod._id,
+        },
+      ],
+    });
+
+    assert.ok(existing);
+    await SequenceCounter.deleteMany({
+      scope: 'account_receivable',
+      reference: '2026',
+    });
+
+    const response = await request
+      .post('/accounts-receivable')
+      .set('Authorization', 'Bearer token')
+      .send(buildReceivablePayload(base, 'PDV001-000501', 1));
+
+    assert.equal(response.status, 201, response.text);
+    assert.equal(response.body.code, 'CR-2026-00038');
   });
 
   test('marks service appointments as paid and reverts them cleanly on cancellation', async () => {

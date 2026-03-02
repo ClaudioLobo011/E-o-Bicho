@@ -7,7 +7,28 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     <link rel="stylesheet" href="../../src/output.css">
     <style>
-        body.pdv-fullscreen-active main.container {
+        body {
+            min-height: 100vh;
+        }
+
+        main.pdv-page-shell {
+            width: 100%;
+            max-width: none;
+        }
+
+        #pdv-workspace {
+            min-height: calc(100vh - 10rem);
+        }
+
+        .pdv-sale-items-panel {
+            min-height: 0;
+        }
+
+        .pdv-sale-items-scroll {
+            min-height: 0;
+        }
+
+        body.pdv-fullscreen-active main.pdv-page-shell {
             max-width: 100vw;
             width: 100%;
         }
@@ -93,13 +114,39 @@
         #info-modal {
             z-index: 2000;
         }
+
+        @media (min-width: 1280px) {
+            .pdv-sale-items-panel {
+                display: flex;
+                flex-direction: column;
+                height: min(72vh, 920px);
+            }
+
+            .pdv-sale-items-scroll {
+                flex: 1 1 auto;
+                overflow-y: auto;
+                padding-right: 0.35rem;
+            }
+        }
+
+        @media (max-width: 1024px) {
+            #pdv-workspace {
+                min-height: calc(100vh - 8rem);
+            }
+        }
+
+        @media (max-width: 640px) {
+            #pdv-workspace {
+                min-height: auto;
+            }
+        }
     </style>
 </head>
 <body class="bg-gray-100">
     <div id="admin-header-placeholder"></div>
 
-    <main class="container mx-auto px-4 pt-1 pb-6 min-h-screen">
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+    <main class="pdv-page-shell px-3 pt-1 pb-4 min-h-screen sm:px-4 lg:px-5 xl:px-6 2xl:px-8 lg:pb-6">
+        <div class="grid grid-cols-1 gap-4 lg:gap-5 xl:gap-6">
             <aside class="md:col-span-4">
                 <div id="admin-sidebar-placeholder"></div>
             </aside>
@@ -135,7 +182,7 @@
                     <p id="pdv-selection-hint" class="text-[11px] text-gray-500">Escolha a empresa para carregar os PDVs disponíveis.</p>
                 </section>
 
-                <section class="bg-white border border-gray-100 rounded-xl shadow-sm p-6 space-y-6">
+                <section class="bg-white border border-gray-100 rounded-xl shadow-sm p-4 space-y-6 sm:p-5 xl:p-6">
                     <div id="pdv-empty-state" class="flex flex-col items-center justify-center text-center text-gray-500 py-12">
                         <i class="fas fa-store text-3xl mb-3 text-gray-400"></i>
                         <p class="text-sm font-medium">Selecione uma empresa e um PDV para iniciar o caixa.</p>
@@ -187,7 +234,13 @@
                                         </button>
                                     </div>
                                 </div>
-                                <p id="pdv-selected-info" class="text-sm text-gray-500">Configure o caixa para iniciar as vendas.</p>
+                                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                    <p id="pdv-selected-info" class="text-sm text-gray-500">Configure o caixa para iniciar as vendas.</p>
+                                    <button type="button" id="pdv-change-selection-button" class="hidden inline-flex items-center gap-2 self-start rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+                                        <i class="fas fa-repeat text-[10px]"></i>
+                                        <span>Trocar PDV</span>
+                                    </button>
+                                </div>
                             </div>
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-gray-600">
                                 <p><span class="font-semibold text-gray-700">Empresa:</span> <span id="pdv-company-label">?</span></p>
@@ -216,9 +269,9 @@
 
                         <div class="space-y-5">
                             <div data-tab-panel="pdv-tab" class="hidden space-y-5">
-                                <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 xl:gap-5">
-                                    <div class="xl:col-span-2 space-y-5">
-                                        <div class="rounded-xl border border-gray-200 p-5 space-y-5">
+                                <div class="grid grid-cols-1 gap-4 xl:grid-cols-12 xl:gap-5 2xl:gap-6">
+                                    <div class="space-y-5 xl:col-span-8 2xl:col-span-9">
+                                        <div class="rounded-xl border border-gray-200 p-4 space-y-5 sm:p-5">
                                             <div class="space-y-4">
                                                 <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
                                                     <div class="md:col-span-4">
@@ -286,62 +339,62 @@
                                                     <span>Adicionar item</span>
                                                 </button>
                                             </div>
+
+                                            <div class="flex flex-wrap gap-2">
+                                                <button type="button" class="inline-flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="delivery">
+                                                    <i class="fas fa-truck text-[10px]"></i>
+                                                    <span class="text-xs font-semibold text-gray-700">Delivery</span>
+                                                </button>
+                                                <button type="button" class="inline-flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="orcamento">
+                                                    <i class="fas fa-file-lines text-[10px]"></i>
+                                                    <span class="text-xs font-semibold text-gray-700">Orçamento</span>
+                                                </button>
+                                                <button type="button" class="inline-flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="importar-atendimento">
+                                                    <i class="fas fa-paw text-[10px]"></i>
+                                                    <span class="text-xs font-semibold text-gray-700">Importar atendimento</span>
+                                                </button>
+                                                <button type="button" class="inline-flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="troca">
+                                                    <i class="fas fa-right-left text-[10px]"></i>
+                                                    <span class="text-xs font-semibold text-gray-700">Troca</span>
+                                                </button>
+                                                <button type="button" class="inline-flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="solicitacao-transferencia">
+                                                    <i class="fas fa-exchange-alt text-[10px]"></i>
+                                                    <span class="text-xs font-semibold text-gray-700">Sol. Transferência</span>
+                                                </button>
+                                                <button id="pdv-open-customer" type="button" class="inline-flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="customer">
+                                                    <i class="fas fa-user-plus text-[10px]"></i>
+                                                    <span id="pdv-open-customer-label" class="text-xs font-semibold text-gray-700">Adicionar cliente</span>
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
 
-                                    <aside class="space-y-5">
-                                            <div class="rounded-xl border border-gray-200 bg-gray-50 p-5 space-y-4">
-                                                <div class="space-y-2">
-                                                    <span class="block text-[10px] font-semibold uppercase tracking-wide text-gray-400">Ações da venda</span>
-                                                    <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                                        <button type="button" class="inline-flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="delivery">
-                                                            <i class="fas fa-truck text-[10px]"></i>
-                                                            <span class="text-xs font-semibold text-gray-700">Delivery</span>
-                                                        </button>
-                                                        <button type="button" class="inline-flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="orcamento">
-                                                            <i class="fas fa-file-lines text-[10px]"></i>
-                                                            <span class="text-xs font-semibold text-gray-700">Orçamento</span>
-                                                        </button>
-                                                        <button type="button" class="inline-flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="importar-atendimento">
-                                                            <i class="fas fa-paw text-[10px]"></i>
-                                                            <span class="text-xs font-semibold text-gray-700">Importar atendimento</span>
-                                                        </button>
-                                                        <button type="button" class="inline-flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="troca">
-                                                            <i class="fas fa-right-left text-[10px]"></i>
-                                                            <span class="text-xs font-semibold text-gray-700">Troca</span>
-                                                        </button>
-                                                        <button type="button" class="inline-flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="solicitacao-transferencia">
-                                                            <i class="fas fa-exchange-alt text-[10px]"></i>
-                                                            <span class="text-xs font-semibold text-gray-700">Sol. Transferência</span>
-                                                        </button>
-                                                        <button id="pdv-open-customer" type="button" class="inline-flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="customer">
-                                                            <i class="fas fa-user-plus text-[10px]"></i>
-                                                            <span id="pdv-open-customer-label" class="text-xs font-semibold text-gray-700">Adicionar cliente</span>
-                                                        </button>
-                                                    </div>
-                                                </div>
+                                    <aside class="space-y-5 xl:col-span-4 2xl:col-span-3">
+                                            <div class="pdv-sale-items-panel rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-4 sm:p-5">
                                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                                     <h3 class="text-base font-semibold text-gray-800">Itens da venda</h3>
                                                     <span id="pdv-items-count" class="text-xs font-semibold text-gray-500">0 itens</span>
                                                 </div>
-                                                <div class="space-y-3">
-                                                    <div id="pdv-customer-summary-empty" class="rounded-lg border border-dashed border-gray-300 bg-white px-4 py-3 text-xs text-gray-500">
-                                                        Vincule um cliente para aplicar promoções gerais e registrar o responsável pela compra.
-                                                    </div>
-                                                    <div id="pdv-customer-summary-info" class="hidden rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700">
-                                                        <div class="flex items-start justify-between gap-3">
-                                                            <div class="space-y-1">
-                                                                <p id="pdv-customer-name" class="text-sm font-semibold text-gray-800">?</p>
-                                                                <p id="pdv-customer-doc" class="text-xs text-gray-500">Documento: ?</p>
-                                                                <p id="pdv-customer-contact" class="text-xs text-gray-500">Contato: ?</p>
-                                                                <p id="pdv-customer-pet" class="hidden text-xs text-gray-500">Pet: ?</p>
+                                                <div class="pdv-sale-items-scroll space-y-4">
+                                                    <div class="space-y-3">
+                                                        <div id="pdv-customer-summary-empty" class="rounded-lg border border-dashed border-gray-300 bg-white px-4 py-3 text-xs text-gray-500">
+                                                            Vincule um cliente para aplicar promoções gerais e registrar o responsável pela compra.
+                                                        </div>
+                                                        <div id="pdv-customer-summary-info" class="hidden rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700">
+                                                            <div class="flex items-start justify-between gap-3">
+                                                                <div class="space-y-1">
+                                                                    <p id="pdv-customer-name" class="text-sm font-semibold text-gray-800">?</p>
+                                                                    <p id="pdv-customer-doc" class="text-xs text-gray-500">Documento: ?</p>
+                                                                    <p id="pdv-customer-contact" class="text-xs text-gray-500">Contato: ?</p>
+                                                                    <p id="pdv-customer-pet" class="hidden text-xs text-gray-500">Pet: ?</p>
+                                                                </div>
+                                                                <button type="button" id="pdv-customer-remove" class="text-xs font-semibold text-red-500 transition hover:text-red-600">Remover</button>
                                                             </div>
-                                                            <button type="button" id="pdv-customer-remove" class="text-xs font-semibold text-red-500 transition hover:text-red-600">Remover</button>
                                                         </div>
                                                     </div>
+                                                    <div id="pdv-items-empty" class="rounded-lg border border-dashed border-gray-300 bg-white px-4 py-6 text-center text-sm text-gray-500">Nenhum item adicionado até o momento.</div>
+                                                    <ul id="pdv-items-list" class="hidden divide-y divide-gray-200"></ul>
                                                 </div>
-                                                <div id="pdv-items-empty" class="rounded-lg border border-dashed border-gray-300 bg-white px-4 py-6 text-center text-sm text-gray-500">Nenhum item adicionado até o momento.</div>
-                                                <ul id="pdv-items-list" class="hidden divide-y divide-gray-200"></ul>
                                                 <div class="mt-4 border-t border-gray-200 pt-4">
                                                     <div class="flex items-center justify-between text-sm font-semibold text-gray-700">
                                                         <span>Total da venda</span>
@@ -357,9 +410,9 @@
                                 </div>
 
                             <div data-tab-panel="caixa-tab" class="space-y-5">
-                                <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 xl:gap-5">
-                                    <div class="space-y-5">
-                                        <div class="rounded-xl border border-gray-200 p-5 space-y-4">
+                                <div class="grid grid-cols-1 gap-4 xl:grid-cols-12 xl:gap-5 2xl:gap-6">
+                                    <div class="space-y-5 xl:col-span-7">
+                                        <div class="rounded-xl border border-gray-200 p-4 space-y-4 sm:p-5">
                                             <div class="flex items-center justify-between">
                                                 <h3 class="text-base font-semibold text-gray-800">Situação do caixa</h3>
                                                 <span id="pdv-caixa-state-label" class="text-xs font-semibold text-gray-500">Caixa fechado</span>
@@ -393,7 +446,7 @@
                                             </div>
                                         </div>
 
-                                        <div class="rounded-xl border border-gray-200 p-5 space-y-4">
+                                        <div class="rounded-xl border border-gray-200 p-4 space-y-4 sm:p-5">
                                             <div class="flex items-center justify-between">
                                                 <h3 class="text-base font-semibold text-gray-800">Meios de pagamento</h3>
                                                 <button id="pdv-reset-payments" type="button" class="text-xs font-semibold text-primary hover:underline">Zerar valores</button>
@@ -403,8 +456,8 @@
                                         </div>
                                     </div>
 
-                                    <div class="space-y-6">
-                                        <div class="rounded-xl border border-gray-200 bg-gray-50 p-6 space-y-4">
+                                    <div class="space-y-6 xl:col-span-5">
+                                        <div class="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-4 sm:p-5 xl:p-6">
                                             <div class="flex items-center justify-between gap-3">
                                                 <h3 class="text-base font-semibold text-gray-800">Resumo financeiro</h3>
                                                 <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Pré-visualização matricial</span>
@@ -415,7 +468,7 @@
                                             <p id="pdv-summary-last-move" class="text-xs text-gray-500">Nenhuma movimentação registrada.</p>
                                         </div>
 
-                                        <div class="rounded-xl border border-gray-200 p-6 space-y-4">
+                                        <div class="rounded-xl border border-gray-200 p-4 space-y-4 sm:p-5 xl:p-6">
                                             <div class="flex items-center justify-between">
                                                 <h3 class="text-base font-semibold text-gray-800">Histórico do caixa</h3>
                                             </div>
