@@ -280,7 +280,7 @@
                                                             <input id="pdv-product-search" type="search" placeholder="Busque por código interno, código de barras ou nome" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" autocomplete="off">
                                                             <div id="pdv-product-results" class="absolute left-0 right-0 top-full z-20 mt-2 hidden max-h-[400px] overflow-y-auto overflow-x-hidden rounded-xl border border-gray-200 bg-white shadow-lg"></div>
                                                         </div>
-                                                        <p class="text-xs text-gray-500 mt-1">Os resultados são atualizados conforme a digitação, seguindo o mesmo critério de busca do site.</p>
+                                                        <p class="text-xs text-gray-500 mt-1">Ao digitar letras, a busca abre em modal. Use `*` como curinga na pesquisa.</p>
                                                     </div>
                                                     <div>
                                                         <label for="pdv-seller" class="block text-sm font-semibold text-gray-700 mb-1">Vendedor</label>
@@ -2253,6 +2253,53 @@
                 <div class="flex items-center justify-end gap-2">
                     <button type="button" id="pdv-delivery-order-confirm" class="rounded-lg bg-emerald-600 px-6 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700">Confirmar (F5)</button>
                     <button type="button" id="pdv-delivery-order-cancel" class="rounded-lg border border-rose-900 bg-red-700 px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-800 disabled:opacity-100">Cancelar (Esc)</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="pdv-product-search-modal" class="fixed inset-0 z-[99998] hidden" aria-hidden="true">
+    <div class="absolute inset-0 bg-slate-900/60" data-pdv-product-search-dismiss="backdrop"></div>
+    <div id="pdv-product-search-modal-shell" class="relative mx-auto mt-6 flex w-full max-w-[1352px] min-h-0 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl" style="height:90vh; min-height:90vh; max-height:90vh;">
+        <div class="flex items-center justify-between rounded-t-2xl bg-gray-600 px-4 py-3 text-white">
+            <h3 class="text-sm font-semibold">Pesquisar produtos</h3>
+            <button type="button" id="pdv-product-search-close" class="rounded-full p-1 text-white transition hover:bg-white/10" aria-label="Fechar busca de produto">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="flex min-h-0 flex-1 flex-col gap-3 p-4">
+            <div class="flex flex-col gap-2 md:flex-row md:items-center">
+                <div class="relative flex-1">
+                    <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                        <i class="fas fa-search"></i>
+                    </span>
+                    <input id="pdv-product-search-modal-input" type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 pl-9 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Digite código, barras ou nome. Use * como curinga.">
+                </div>
+                <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+                    <input id="pdv-product-search-include-inactive" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/30">
+                    <span>Mostrar Inativos</span>
+                </label>
+                <button type="button" id="pdv-product-search-button" class="rounded-lg border border-gray-200 bg-gray-50 px-5 py-2 text-sm font-semibold text-gray-700 transition hover:border-primary hover:text-primary">
+                    Pesquisar
+                </button>
+            </div>
+            <div class="min-h-0 flex-1 overflow-auto rounded-lg border border-gray-200">
+                <table class="min-w-full divide-y divide-gray-200 text-sm">
+                    <thead class="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        <tr>
+                            <th class="px-3 py-2">Imagem</th>
+                            <th class="px-3 py-2">Cod</th>
+                            <th class="px-3 py-2">Codbarras</th>
+                            <th class="px-3 py-2">Nome</th>
+                            <th class="px-3 py-2 text-right">Preço Venda</th>
+                            <th class="px-3 py-2 text-right">Estoque</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pdv-product-search-results-body" class="divide-y divide-gray-100"></tbody>
+                </table>
+                <div id="pdv-product-search-results-empty" class="px-3 py-6 text-center text-sm text-gray-500">
+                    Digite para pesquisar produtos.
                 </div>
             </div>
         </div>

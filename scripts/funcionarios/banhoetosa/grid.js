@@ -14,6 +14,13 @@ const OBJECT_ID_REGEX = /^[0-9a-fA-F]{24}$/;
 const DEFAULT_BUSINESS_START = 8;
 const DEFAULT_BUSINESS_END = 19;
 const WEEKDAY_KEYS = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
+const agendaCustomerTooltipState = {
+  element: null,
+  activeTarget: null,
+  requestId: 0,
+  cache: new Map(),
+  pending: new Map(),
+};
 
 function applyAgendaTextClamp(element, lines = 2) {
   if (!element) return;
@@ -145,6 +152,192 @@ function coerceToDate(value) {
     }
   }
   return null;
+}
+
+function ensureAgendaCustomerTooltip() {
+  if (agendaCustomerTooltipState.element && document.body.contains(agendaCustomerTooltipState.element)) {
+    return agendaCustomerTooltipState.element;
+  }
+  const tooltip = document.createElement('div');
+  tooltip.className = 'pointer-events-none fixed z-[120] hidden max-w-[320px] rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700 shadow-xl';
+  tooltip.style.left = '-9999px';
+  tooltip.style.top = '-9999px';
+  document.body.appendChild(tooltip);
+  agendaCustomerTooltipState.element = tooltip;
+  return tooltip;
+}
+
+function hideAgendaCustomerTooltip() {
+  agendaCustomerTooltipState.activeTarget = null;
+  agendaCustomerTooltipState.requestId += 1;
+  const tooltip = ensureAgendaCustomerTooltip();
+  tooltip.classList.add('hidden');
+  tooltip.innerHTML = '';
+  tooltip.style.left = '-9999px';
+  tooltip.style.top = '-9999px';
+}
+
+function positionAgendaCustomerTooltip(event) {
+  const tooltip = ensureAgendaCustomerTooltip();
+  if (tooltip.classList.contains('hidden')) return;
+  const margin = 14;
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  const rect = tooltip.getBoundingClientRect();
+  let left = (event?.clientX || 0) + 16;
+  let top = (event?.clientY || 0) + 16;
+  if (left + rect.width + margin > viewportWidth) {
+    left = Math.max(margin, viewportWidth - rect.width - margin);
+  }
+  if (top + rect.height + margin > viewportHeight) {
+    top = Math.max(margin, (event?.clientY || 0) - rect.height - 16);
+  }
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${top}px`;
+}
+
+function buildAgendaCustomerTooltipLines(appointment, details = null) {
+  const candidateObjects = [];
+  if (details && typeof details === 'object') candidateObjects.push(details);
+  if (appointment?.cliente && typeof appointment.cliente === 'object') candidateObjects.push(appointment.cliente);
+  if (appointment?.tutor && typeof appointment.tutor === 'object') candidateObjects.push(appointment.tutor);
+  if (appointment?.responsavel && typeof appointment.responsavel === 'object') candidateObjects.push(appointment.responsavel);
+  const source = candidateObjects[0] || {};
+  const pushLine = (lines, label, value) => {
+    const normalized = String(value || '').trim();
+    if (!normalized) return;
+    lines.push({ label, value: normalized });
+  };
+  const lines = [];
+  const nome = pickFirst(
+    source.nomeCompleto,
+    source.nomeContato,
+    source.razaoSocial,
+    source.nome,
+    appointment?.clienteNome,
+    appointment?.tutorNome,
+    typeof appointment?.tutor === 'string' ? appointment.tutor : '',
+    typeof appointment?.cliente === 'string' ? appointment.cliente : ''
+  );
+  const cpf = pickFirst(
+    source.cpf,
+    source.documento,
+    source.document,
+    source.doc,
+    appointment?.clienteCpf,
+    appointment?.clienteDocumento,
+    appointment?.documento
+  );
+  const celular = pickFirst(
+    source.celular,
+    source.cel,
+    source.whatsapp,
+    source.whatsApp,
+    appointment?.clienteCelular,
+    appointment?.celular
+  );
+  const telefone = pickFirst(
+    source.telefone,
+    source.telefone1,
+    source.fone,
+    source.phone,
+    appointment?.clienteTelefone,
+    appointment?.telefone
+  );
+  const celular2 = pickFirst(
+    source.celular2,
+    source.celularSecundario,
+    source.contato?.celular2
+  );
+  const telefone2 = pickFirst(
+    source.telefone2,
+    source.telefoneSecundario,
+    source.contato?.telefone2
+  );
+  pushLine(lines, 'Nome', nome);
+  pushLine(lines, 'CPF', cpf);
+  pushLine(lines, 'Celular', celular);
+  if (telefone && telefone !== celular) pushLine(lines, 'Telefone', telefone);
+  if (celular2 && celular2 !== celular && celular2 !== telefone) pushLine(lines, 'Celular2', celular2);
+  if (telefone2 && ![celular, telefone, celular2].includes(telefone2)) pushLine(lines, 'Telefone2', telefone2);
+  return lines;
+}
+
+async function fetchAgendaCustomerDetails(customerId) {
+  const normalizedId = normalizeId(customerId);
+  if (!normalizedId) return null;
+  if (agendaCustomerTooltipState.cache.has(normalizedId)) {
+    return agendaCustomerTooltipState.cache.get(normalizedId) || null;
+  }
+  if (agendaCustomerTooltipState.pending.has(normalizedId)) {
+    return agendaCustomerTooltipState.pending.get(normalizedId);
+  }
+  const request = (async () => {
+    try {
+      const resp = await api(`/func/clientes/${normalizedId}`);
+      if (!resp.ok) return null;
+      const payload = await resp.json().catch(() => null);
+      agendaCustomerTooltipState.cache.set(normalizedId, payload || null);
+      return payload || null;
+    } catch (error) {
+      console.error('fetchAgendaCustomerDetails', error);
+      return null;
+    } finally {
+      agendaCustomerTooltipState.pending.delete(normalizedId);
+    }
+  })();
+  agendaCustomerTooltipState.pending.set(normalizedId, request);
+  return request;
+}
+
+function showAgendaCustomerTooltip(target, lines, event) {
+  if (!target || !Array.isArray(lines) || !lines.length) {
+    hideAgendaCustomerTooltip();
+    return;
+  }
+  const tooltip = ensureAgendaCustomerTooltip();
+  agendaCustomerTooltipState.activeTarget = target;
+  tooltip.innerHTML = lines
+    .map((line) => `<p class="leading-5"><span class="font-semibold text-gray-800">${line.label}:</span> ${line.value}</p>`)
+    .join('');
+  tooltip.classList.remove('hidden');
+  positionAgendaCustomerTooltip(event);
+}
+
+function bindAgendaCustomerTooltip(target, appointment) {
+  if (!target || !appointment) return;
+  target.addEventListener('mouseenter', async (event) => {
+    const requestId = ++agendaCustomerTooltipState.requestId;
+    const customerId = normalizeId(
+      appointment.clienteId ||
+      appointment.clientId ||
+      appointment.customerId ||
+      appointment.tutorId ||
+      appointment?.cliente?._id ||
+      appointment?.cliente?.id
+    );
+    const initialLines = buildAgendaCustomerTooltipLines(appointment, null);
+    if (initialLines.length) {
+      showAgendaCustomerTooltip(target, initialLines, event);
+    }
+    if (!customerId) return;
+    const details = await fetchAgendaCustomerDetails(customerId);
+    if (requestId !== agendaCustomerTooltipState.requestId) return;
+    if (agendaCustomerTooltipState.activeTarget !== target && agendaCustomerTooltipState.activeTarget !== null) return;
+    const lines = buildAgendaCustomerTooltipLines(appointment, details);
+    if (lines.length) {
+      showAgendaCustomerTooltip(target, lines, event);
+    }
+  });
+  target.addEventListener('mousemove', (event) => {
+    if (agendaCustomerTooltipState.activeTarget !== target) return;
+    positionAgendaCustomerTooltip(event);
+  });
+  target.addEventListener('mouseleave', () => {
+    if (agendaCustomerTooltipState.activeTarget === target) {
+      hideAgendaCustomerTooltip();
+    }
+  });
 }
 
 function parseTimeToMinutes(value) {
@@ -1000,8 +1193,8 @@ export function renderGrid() {
     const headLabel  = tutorShort ? `${tutorShort} | ${a.pet || ''}` : (a.pet || '');
     const titleEl = document.createElement('div');
     titleEl.className = 'agenda-card__title font-semibold text-gray-900 truncate';
-    titleEl.title = headLabel;
     titleEl.textContent = headLabel;
+    bindAgendaCustomerTooltip(titleEl, a);
     headerEl.appendChild(titleEl);
     headerEl.appendChild(createStatusBadgeElement(a, { size: 'compact' }));
 
@@ -1145,8 +1338,9 @@ export function renderWeekGrid() {
     const tutorShort = shortTutorName(a.clienteNome || a.tutor || '');
     const headLabel  = tutorShort ? `${tutorShort} | ${a.pet || ''}` : (a.pet || '');
     headerEl.innerHTML = `
-      <div class="agenda-card__title font-medium text-gray-900 truncate" title="${headLabel}">${headLabel}</div>
+      <div class="agenda-card__title font-medium text-gray-900 truncate">${headLabel}</div>
     `;
+    bindAgendaCustomerTooltip(headerEl.querySelector('.agenda-card__title'), a);
 
     const bodyEl = document.createElement('div');
     bodyEl.classList.add('agenda-card__body');
@@ -1278,7 +1472,8 @@ export function renderMonthGrid() {
       const headLabel  = [tutorShort, (a.pet || '')].filter(Boolean).join(' | ');
       const nameEl = document.createElement('div');
       nameEl.className = 'agenda-card__title font-medium text-gray-900 text-center truncate';
-      nameEl.title = headLabel; nameEl.textContent = headLabel;
+      nameEl.textContent = headLabel;
+      bindAgendaCustomerTooltip(nameEl, a);
       const footerEl = document.createElement('div');
       footerEl.className = 'agenda-card__footer flex items-center justify-end';
       const price = document.createElement('div');

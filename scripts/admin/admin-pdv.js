@@ -180,6 +180,12 @@
     printerSettings: { venda: null, orcamento: null, contas: null, caixa: null },
     selectedAction: null,
     searchResults: [],
+    pdvProductSearchModal: {
+      open: false,
+      query: '',
+      results: [],
+      loading: false,
+    },
     selectedProduct: null,
     quantidade: 1,
     itens: [],
@@ -615,6 +621,14 @@
       ''
     );
   };
+  const pickFirstFilledValue = (...values) => {
+    for (const value of values) {
+      if (value == null) continue;
+      const normalized = String(value).trim();
+      if (normalized) return normalized;
+    }
+    return '';
+  };
   const getSaleSequenceStorageKey = (pdvId) =>
     pdvId ? `${SALE_CODE_STORAGE_PREFIX}${pdvId}` : '';
   const readSaleSequenceFromStorage = (pdvId) => {
@@ -798,6 +812,9 @@
   let exchangeHistoryLookupController = null;
   let exchangeSaleLookupTimeout = null;
   let exchangeProductSearchTimeout = null;
+  let pdvProductSearchModalTimeout = null;
+  let activeAppointmentCustomerTooltipTarget = null;
+  let activeAppointmentCustomerTooltipRequestId = 0;
   let exchangeSaveInFlight = false;
   let exchangeFinalizeInFlight = false;
   let customerRegisterPreviousFocus = null;
@@ -4041,6 +4058,15 @@
 
     elements.searchInput = document.getElementById('pdv-product-search');
     elements.searchResults = document.getElementById('pdv-product-results');
+    elements.pdvProductSearchModal = document.getElementById('pdv-product-search-modal');
+    elements.pdvProductSearchModalBackdrop =
+      elements.pdvProductSearchModal?.querySelector('[data-pdv-product-search-dismiss="backdrop"]') || null;
+    elements.pdvProductSearchModalClose = document.getElementById('pdv-product-search-close');
+    elements.pdvProductSearchModalInput = document.getElementById('pdv-product-search-modal-input');
+    elements.pdvProductSearchIncludeInactive = document.getElementById('pdv-product-search-include-inactive');
+    elements.pdvProductSearchButton = document.getElementById('pdv-product-search-button');
+    elements.pdvProductSearchResultsBody = document.getElementById('pdv-product-search-results-body');
+    elements.pdvProductSearchResultsEmpty = document.getElementById('pdv-product-search-results-empty');
 
     elements.sellerInput = document.getElementById('pdv-seller');
     elements.sellerFeedback = document.getElementById('pdv-seller-feedback');
@@ -4327,6 +4353,15 @@
     elements.appointmentList = document.getElementById('pdv-appointment-list');
     elements.appointmentEmpty = document.getElementById('pdv-appointment-empty');
     elements.appointmentLoading = document.getElementById('pdv-appointment-loading');
+    elements.appointmentCustomerTooltip = document.getElementById('pdv-appointment-customer-tooltip');
+    if (!elements.appointmentCustomerTooltip && typeof document !== 'undefined') {
+      const tooltip = document.createElement('div');
+      tooltip.id = 'pdv-appointment-customer-tooltip';
+      tooltip.className =
+        'pointer-events-none fixed z-[120] hidden max-w-[320px] rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700 shadow-xl';
+      document.body.appendChild(tooltip);
+      elements.appointmentCustomerTooltip = tooltip;
+    }
 
     elements.saleCancelModal = document.getElementById('pdv-sale-cancel-modal');
     elements.saleCancelClose = document.getElementById('pdv-sale-cancel-close');
@@ -9596,11 +9631,17 @@
       clearTimeout(searchTimeout);
       searchTimeout = null;
     }
+    if (pdvProductSearchModalTimeout) {
+      clearTimeout(pdvProductSearchModalTimeout);
+      pdvProductSearchModalTimeout = null;
+    }
     if (state.searchController) {
       state.searchController.abort();
       state.searchController = null;
     }
     state.searchResults = [];
+    state.pdvProductSearchModal.results = [];
+    state.pdvProductSearchModal.loading = false;
     if (elements.searchInput) {
       elements.searchInput.value = '';
     }
@@ -9608,6 +9649,11 @@
       elements.searchResults.classList.add('hidden');
       elements.searchResults.innerHTML = '';
     }
+    if (elements.pdvProductSearchModal) {
+      state.pdvProductSearchModal.open = false;
+      elements.pdvProductSearchModal.classList.add('hidden');
+    }
+    releaseBodyScrollIfNoModal();
   };
 
   const clearCustomerSearchArea = () => {
@@ -22087,10 +22133,14 @@
         </div>
         <div class="mt-3 space-y-2">
           <div>
-            <p class="text-sm font-semibold text-gray-800">${escapeHtml(
+            <p class="text-sm font-semibold text-gray-800" data-appointment-customer-hover="${escapeHtml(
+              appointment.id
+            )}">${escapeHtml(
               appointment.customerName || 'Cliente não informado'
             )}</p>
-            <p class="text-xs text-gray-500">${
+            <p class="text-xs text-gray-500" data-appointment-customer-hover="${escapeHtml(
+              appointment.id
+            )}">${
               appointment.petName
                 ? `Pet: ${escapeHtml(appointment.petName)}`
                 : 'Pet não informado'
@@ -22133,6 +22183,7 @@
     if (!elements.appointmentModal) return;
     state.selectedAppointmentImportIds = [];
     elements.appointmentModal.classList.add('hidden');
+    hideAppointmentCustomerTooltip();
   };
   const cloneCustomerDetailsForAppointment = (customer) => {
     if (!customer || typeof customer !== 'object') return null;
@@ -22218,6 +22269,159 @@
     appointmentCustomerRequestCache.set(normalizedId, request);
     const resolved = await request;
     return resolved ? cloneCustomerDetailsForAppointment(resolved) : null;
+  };
+  const buildAppointmentTooltipCustomer = (appointment, details = null) => {
+    if (!appointment) return null;
+    const customer = {
+      nome: appointment.customerName || '',
+      nomeCompleto: appointment.customerName || '',
+      doc: appointment.customerDocument || '',
+      documento: appointment.customerDocument || '',
+      cpf: appointment.customerDocument || '',
+      celular: appointment.customerPhone || '',
+      telefone: appointment.customerPhone || '',
+      celular2: '',
+      telefone2: '',
+    };
+    if (details && typeof details === 'object') {
+      mergeCustomerDetailsIntoSaleCustomer(customer, details);
+      customer.celular2 = pickFirstFilledValue(
+        customer.celular2,
+        details.celular2,
+        details.celularSecundario,
+        details.contato?.celular2
+      );
+      customer.telefone2 = pickFirstFilledValue(
+        customer.telefone2,
+        details.telefone2,
+        details.telefoneSecundario,
+        details.contato?.telefone2
+      );
+    }
+    return customer;
+  };
+  const buildAppointmentCustomerTooltipLines = (appointment, details = null) => {
+    const customer = buildAppointmentTooltipCustomer(appointment, details);
+    if (!customer) return [];
+    const lines = [];
+    const pushLine = (label, value) => {
+      const normalized = String(value || '').trim();
+      if (!normalized) return;
+      lines.push({ label, value: normalized });
+    };
+    const nome = resolveCustomerName(customer);
+    const cpf = resolveCustomerDocument(customer);
+    const celular = pickFirstFilledValue(customer.celular);
+    const telefone = pickFirstFilledValue(customer.telefone);
+    const celular2 = pickFirstFilledValue(customer.celular2);
+    const telefone2 = pickFirstFilledValue(customer.telefone2);
+    pushLine('Nome', nome);
+    pushLine('CPF', cpf);
+    pushLine('Celular', celular);
+    if (telefone && telefone !== celular) {
+      pushLine('Telefone', telefone);
+    }
+    if (celular2 && celular2 !== celular && celular2 !== telefone) {
+      pushLine('Celular2', celular2);
+    }
+    if (telefone2 && ![celular, telefone, celular2].includes(telefone2)) {
+      pushLine('Telefone2', telefone2);
+    }
+    return lines;
+  };
+  const renderAppointmentCustomerTooltipContent = (lines) => {
+    if (!elements.appointmentCustomerTooltip) return;
+    if (!Array.isArray(lines) || !lines.length) {
+      elements.appointmentCustomerTooltip.innerHTML = '';
+      return;
+    }
+    elements.appointmentCustomerTooltip.innerHTML = lines
+      .map(
+        (line) =>
+          `<p class="leading-5"><span class="font-semibold text-gray-800">${escapeHtml(
+            line.label
+          )}:</span> ${escapeHtml(line.value)}</p>`
+      )
+      .join('');
+  };
+  const positionAppointmentCustomerTooltip = (event) => {
+    const tooltip = elements.appointmentCustomerTooltip;
+    if (!tooltip || tooltip.classList.contains('hidden')) return;
+    const margin = 14;
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+    const rect = tooltip.getBoundingClientRect();
+    let left = (event?.clientX || 0) + 16;
+    let top = (event?.clientY || 0) + 16;
+    if (left + rect.width + margin > viewportWidth) {
+      left = Math.max(margin, viewportWidth - rect.width - margin);
+    }
+    if (top + rect.height + margin > viewportHeight) {
+      top = Math.max(margin, (event?.clientY || 0) - rect.height - 16);
+    }
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${top}px`;
+  };
+  const hideAppointmentCustomerTooltip = () => {
+    activeAppointmentCustomerTooltipTarget = null;
+    activeAppointmentCustomerTooltipRequestId += 1;
+    if (!elements.appointmentCustomerTooltip) return;
+    elements.appointmentCustomerTooltip.classList.add('hidden');
+    elements.appointmentCustomerTooltip.innerHTML = '';
+    elements.appointmentCustomerTooltip.style.left = '-9999px';
+    elements.appointmentCustomerTooltip.style.top = '-9999px';
+  };
+  const showAppointmentCustomerTooltip = (target, lines, event) => {
+    if (!target || !Array.isArray(lines) || !lines.length || !elements.appointmentCustomerTooltip) {
+      hideAppointmentCustomerTooltip();
+      return;
+    }
+    activeAppointmentCustomerTooltipTarget = target;
+    renderAppointmentCustomerTooltipContent(lines);
+    elements.appointmentCustomerTooltip.classList.remove('hidden');
+    positionAppointmentCustomerTooltip(event);
+  };
+  const handleAppointmentCustomerTooltipOver = async (event) => {
+    const target = event.target.closest('[data-appointment-customer-hover]');
+    if (!target || !elements.appointmentList?.contains(target)) return;
+    if (activeAppointmentCustomerTooltipTarget === target) {
+      positionAppointmentCustomerTooltip(event);
+      return;
+    }
+    const appointmentId = normalizeId(target.getAttribute('data-appointment-customer-hover'));
+    const appointment = appointmentId ? findAppointmentById(appointmentId) : null;
+    if (!appointment) return;
+    const requestId = ++activeAppointmentCustomerTooltipRequestId;
+    const customerId = normalizeId(appointment.customerId || '');
+    const cachedDetails = customerId ? getCachedCustomerDetailsForAppointment(customerId) : null;
+    const initialLines = buildAppointmentCustomerTooltipLines(appointment, cachedDetails);
+    if (initialLines.length) {
+      showAppointmentCustomerTooltip(target, initialLines, event);
+    } else {
+      hideAppointmentCustomerTooltip();
+    }
+    if (!customerId || cachedDetails) return;
+    const fetchedDetails = await fetchAppointmentCustomerDetails(customerId);
+    if (requestId !== activeAppointmentCustomerTooltipRequestId) return;
+    if (activeAppointmentCustomerTooltipTarget !== target) return;
+    const fetchedLines = buildAppointmentCustomerTooltipLines(appointment, fetchedDetails);
+    if (fetchedLines.length) {
+      showAppointmentCustomerTooltip(target, fetchedLines, event);
+    }
+  };
+  const handleAppointmentCustomerTooltipMove = (event) => {
+    const target = event.target.closest('[data-appointment-customer-hover]');
+    if (!target || target !== activeAppointmentCustomerTooltipTarget) return;
+    positionAppointmentCustomerTooltip(event);
+  };
+  const handleAppointmentCustomerTooltipOut = (event) => {
+    const fromTarget = event.target.closest('[data-appointment-customer-hover]');
+    if (!fromTarget) return;
+    const nextTarget = event.relatedTarget?.closest?.('[data-appointment-customer-hover]') || null;
+    if (nextTarget && nextTarget === fromTarget) return;
+    if (fromTarget === activeAppointmentCustomerTooltipTarget) {
+      hideAppointmentCustomerTooltip();
+    }
   };
   const mergeCustomerDetailsIntoSaleCustomer = (customer, details) => {
     if (!customer || !details) return customer;
@@ -23560,6 +23764,7 @@
       elements.exchangeModal,
       elements.exchangeHistoryModal,
       elements.exchangeSaleModal,
+      elements.pdvProductSearchModal,
       elements.exchangeProductModal,
       elements.deliveryAddressModal,
       elements.crediarioModal,
@@ -24951,6 +25156,218 @@
     }
   };
 
+  const shouldOpenPdvProductSearchModal = (rawValue) => /[a-zA-Z*]/.test(String(rawValue || ''));
+
+  const getPdvProductSearchLookupTerm = (rawTerm) => {
+    const normalized = String(rawTerm || '').trim();
+    const segments = normalized
+      .split('*')
+      .map((segment) => segment.trim())
+      .filter(Boolean)
+      .sort((a, b) => b.length - a.length);
+    return segments[0] || normalized.replace(/\*/g, '').trim();
+  };
+
+  const buildWildcardMatcher = (rawTerm) => {
+    const normalized = String(rawTerm || '').trim();
+    if (!normalized) return null;
+    const escaped = normalized.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+    try {
+      return new RegExp(escaped, 'i');
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const matchesWildcardProductSearch = (product, rawTerm) => {
+    const matcher = buildWildcardMatcher(rawTerm);
+    if (!matcher) return true;
+    const fields = [
+      getProductCode(product),
+      getProductBarcode(product),
+      product?.nome,
+      product?.descricao,
+    ]
+      .map((value) => String(value || '').trim())
+      .filter(Boolean);
+    return fields.some((value) => matcher.test(value));
+  };
+
+  const renderPdvProductSearchModalResults = () => {
+    if (!elements.pdvProductSearchResultsBody || !elements.pdvProductSearchResultsEmpty) return;
+    const { loading, results, query } = state.pdvProductSearchModal;
+    elements.pdvProductSearchResultsBody.innerHTML = '';
+    if (loading) {
+      elements.pdvProductSearchResultsEmpty.textContent = 'Buscando produtos...';
+      elements.pdvProductSearchResultsEmpty.classList.remove('hidden');
+      return;
+    }
+    if (!Array.isArray(results) || !results.length) {
+      elements.pdvProductSearchResultsEmpty.textContent = query
+        ? `Nenhum produto encontrado para "${query}".`
+        : 'Digite para pesquisar produtos.';
+      elements.pdvProductSearchResultsEmpty.classList.remove('hidden');
+      return;
+    }
+    elements.pdvProductSearchResultsEmpty.classList.add('hidden');
+    const fragment = document.createDocumentFragment();
+    results.forEach((product, index) => {
+      const image = getImageUrl(product);
+      const productName = product?.nome || product?.descricao || 'Produto';
+      const row = document.createElement('tr');
+      row.className = 'cursor-pointer text-[12px] text-gray-700 transition hover:bg-primary/5';
+      row.setAttribute('data-pdv-product-search-result', String(index));
+      row.innerHTML = `
+        <td class="px-3 py-2">
+          <div class="flex h-32 w-32 items-center justify-center overflow-hidden rounded border border-gray-200 bg-white">
+            ${image ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(productName)}" class="h-full w-full object-contain">` : '<i class="fas fa-image text-gray-300"></i>'}
+          </div>
+        </td>
+        <td class="px-3 py-2 font-semibold text-gray-700">${escapeHtml(getProductCode(product) || '-')}</td>
+        <td class="px-3 py-2 text-gray-700">${escapeHtml(getProductBarcode(product) || '-')}</td>
+        <td class="px-3 py-2 text-gray-700">${escapeHtml(productName)}</td>
+        <td class="px-3 py-2 text-right text-gray-700">${escapeHtml(formatCurrency(getFinalPrice(product)))}</td>
+        <td class="px-3 py-2 text-right text-gray-600">${escapeHtml(formatDecimalValue(getExchangeProductStock(product), 3))}</td>
+      `;
+      fragment.appendChild(row);
+    });
+    elements.pdvProductSearchResultsBody.appendChild(fragment);
+  };
+
+  const searchPdvProductsInModal = async (rawTerm) => {
+    const term = String(rawTerm || '').trim();
+    state.pdvProductSearchModal.query = term;
+    const lookupTerm = getPdvProductSearchLookupTerm(term);
+    const minLength = /^\d+$/.test(lookupTerm) ? 1 : 2;
+    if (!lookupTerm || lookupTerm.length < minLength) {
+      state.pdvProductSearchModal.loading = false;
+      state.pdvProductSearchModal.results = [];
+      renderPdvProductSearchModalResults();
+      return;
+    }
+    state.pdvProductSearchModal.loading = true;
+    renderPdvProductSearchModalResults();
+    try {
+      const token = getToken();
+      const includeInactive = Boolean(elements.pdvProductSearchIncludeInactive?.checked);
+      const endpoint =
+        `${API_BASE}/products?search=${encodeURIComponent(lookupTerm)}&limit=60&includeHidden=${includeInactive ? 'true' : 'false'}&audience=pdv`;
+      const payload = await fetchWithOptionalAuth(endpoint, {
+        token,
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-store' },
+        errorMessage: 'Não foi possível buscar produtos.',
+      });
+      const products = Array.isArray(payload?.products)
+        ? payload.products
+        : Array.isArray(payload)
+        ? payload
+        : [];
+      const ranked = products
+        .filter((product) => matchesWildcardProductSearch(product, term))
+        .filter((product) => (includeInactive ? true : !isExchangeProductInactive(product)))
+        .sort((a, b) => {
+          const aExact = normalizeBarcodeValue(getProductCode(a)) === normalizeBarcodeValue(lookupTerm)
+            || normalizeBarcodeValue(getProductBarcode(a)) === normalizeBarcodeValue(lookupTerm);
+          const bExact = normalizeBarcodeValue(getProductCode(b)) === normalizeBarcodeValue(lookupTerm)
+            || normalizeBarcodeValue(getProductBarcode(b)) === normalizeBarcodeValue(lookupTerm);
+          if (aExact === bExact) return 0;
+          return aExact ? -1 : 1;
+        });
+      state.pdvProductSearchModal.results = ranked;
+    } catch (error) {
+      console.error('Erro ao pesquisar produtos no modal do PDV:', error);
+      state.pdvProductSearchModal.results = [];
+      notify(error?.message || 'Erro ao pesquisar produtos.', 'error');
+    } finally {
+      state.pdvProductSearchModal.loading = false;
+      renderPdvProductSearchModalResults();
+    }
+  };
+
+  const openPdvProductSearchModal = (initialQuery = '') => {
+    if (!elements.pdvProductSearchModal) return;
+    state.pdvProductSearchModal.open = true;
+    state.pdvProductSearchModal.query = String(initialQuery || '').trim();
+    state.pdvProductSearchModal.results = [];
+    state.pdvProductSearchModal.loading = false;
+    elements.pdvProductSearchModal.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+    if (elements.pdvProductSearchModalInput) {
+      elements.pdvProductSearchModalInput.value = state.pdvProductSearchModal.query;
+    }
+    if (elements.pdvProductSearchIncludeInactive) {
+      elements.pdvProductSearchIncludeInactive.checked = false;
+    }
+    renderPdvProductSearchModalResults();
+    if (state.pdvProductSearchModal.query) {
+      searchPdvProductsInModal(state.pdvProductSearchModal.query);
+    }
+    setTimeout(() => elements.pdvProductSearchModalInput?.focus(), 80);
+  };
+
+  const closePdvProductSearchModal = () => {
+    state.pdvProductSearchModal.open = false;
+    state.pdvProductSearchModal.loading = false;
+    state.pdvProductSearchModal.results = [];
+    if (pdvProductSearchModalTimeout) {
+      clearTimeout(pdvProductSearchModalTimeout);
+      pdvProductSearchModalTimeout = null;
+    }
+    if (elements.pdvProductSearchModal) {
+      elements.pdvProductSearchModal.classList.add('hidden');
+    }
+    releaseBodyScrollIfNoModal();
+  };
+
+  const applyPdvProductSearchModalSelection = (product) => {
+    if (!product) return;
+    state.selectedProduct = product;
+    state.quantidade = 1;
+    if (elements.itemQuantity) {
+      elements.itemQuantity.value = 1;
+    }
+    updateSelectedProductView();
+    if (elements.searchInput) {
+      elements.searchInput.value = product?.nome || getProductCode(product) || '';
+    }
+    closePdvProductSearchModal();
+    elements.itemQuantity?.focus();
+  };
+
+  const handlePdvProductSearchModalInput = (event) => {
+    const value = event?.target?.value || '';
+    state.pdvProductSearchModal.query = value;
+    if (pdvProductSearchModalTimeout) {
+      clearTimeout(pdvProductSearchModalTimeout);
+      pdvProductSearchModalTimeout = null;
+    }
+    pdvProductSearchModalTimeout = setTimeout(() => {
+      searchPdvProductsInModal(value);
+    }, 250);
+  };
+
+  const handlePdvProductSearchModalSubmit = () => {
+    const value = elements.pdvProductSearchModalInput?.value || '';
+    searchPdvProductsInModal(value);
+  };
+
+  const handlePdvProductSearchModalResultsClick = (event) => {
+    const row = event.target.closest('tr[data-pdv-product-search-result]');
+    if (!row) return;
+    const index = Number.parseInt(row.getAttribute('data-pdv-product-search-result') || '-1', 10);
+    if (!Number.isInteger(index) || index < 0) return;
+    const product = state.pdvProductSearchModal.results[index];
+    if (!product) return;
+    applyPdvProductSearchModalSelection(product);
+  };
+
+  const handlePdvProductSearchModalKeydown = (event) => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    closePdvProductSearchModal();
+  };
+
   const findProductByLookupValue = (products, lookupValue) => {
     const normalized = normalizeBarcodeValue(lookupValue);
     if (!normalized) return null;
@@ -25143,6 +25560,12 @@
 
     event.preventDefault();
 
+    if (shouldOpenPdvProductSearchModal(term)) {
+      openPdvProductSearchModal(term);
+      handlePdvProductSearchModalSubmit();
+      return;
+    }
+
     const normalized = normalizeBarcodeValue(term);
     const lowerTerm = term.toLowerCase();
 
@@ -25317,6 +25740,15 @@
 
   const handleSearchInput = (event) => {
     const term = event.target.value || '';
+    if (shouldOpenPdvProductSearchModal(term)) {
+      if (elements.searchResults) {
+        elements.searchResults.classList.add('hidden');
+        elements.searchResults.innerHTML = '';
+      }
+      state.searchResults = [];
+      openPdvProductSearchModal(term);
+      return;
+    }
     if (searchTimeout) {
       clearTimeout(searchTimeout);
     }
@@ -25335,7 +25767,8 @@
     if (!elements.searchResults || !elements.searchInput) return;
     if (
       elements.searchResults.contains(event.target) ||
-      event.target === elements.searchInput
+      event.target === elements.searchInput ||
+      elements.pdvProductSearchModal?.contains(event.target)
     ) {
       return;
     }
@@ -25653,6 +26086,18 @@
     elements.searchInput?.addEventListener('input', handleSearchInput);
     elements.searchInput?.addEventListener('keydown', handleSearchKeydown);
     elements.searchResults?.addEventListener('click', handleSearchResultsClick);
+    elements.pdvProductSearchModalClose?.addEventListener('click', closePdvProductSearchModal);
+    elements.pdvProductSearchModalBackdrop?.addEventListener('click', closePdvProductSearchModal);
+    elements.pdvProductSearchModal?.addEventListener('keydown', handlePdvProductSearchModalKeydown);
+    elements.pdvProductSearchModalInput?.addEventListener('input', handlePdvProductSearchModalInput);
+    elements.pdvProductSearchModalInput?.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      handlePdvProductSearchModalSubmit();
+    });
+    elements.pdvProductSearchButton?.addEventListener('click', handlePdvProductSearchModalSubmit);
+    elements.pdvProductSearchIncludeInactive?.addEventListener('change', handlePdvProductSearchModalSubmit);
+    elements.pdvProductSearchResultsBody?.addEventListener('click', handlePdvProductSearchModalResultsClick);
     elements.sellerInput?.addEventListener('input', handleSellerInputChange);
     elements.sellerInput?.addEventListener('blur', handleSellerInputBlur);
     elements.sellerModalClose?.addEventListener('click', closeSellerSearchModal);
@@ -26039,6 +26484,9 @@
     elements.appointmentStatusFilters?.addEventListener('click', handleAppointmentStatusFilterClick);
     elements.appointmentApply?.addEventListener('click', handleAppointmentApply);
     elements.appointmentList?.addEventListener('click', handleAppointmentListClick);
+    elements.appointmentList?.addEventListener('mouseover', handleAppointmentCustomerTooltipOver);
+    elements.appointmentList?.addEventListener('mousemove', handleAppointmentCustomerTooltipMove);
+    elements.appointmentList?.addEventListener('mouseout', handleAppointmentCustomerTooltipOut);
     elements.appointmentImportSelected?.addEventListener('click', handleAppointmentImportSelected);
     elements.appointmentReload?.addEventListener('click', handleAppointmentRefresh);
     elements.appointmentClose?.addEventListener('click', closeAppointmentModal);
