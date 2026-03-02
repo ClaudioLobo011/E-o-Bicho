@@ -19,6 +19,9 @@ let agendaCustomerPetSpeciesMapPromise = null;
 let agendaCustomerPetBreedOptions = [];
 let agendaCustomerPetBreedFilteredOptions = [];
 let agendaCustomerPetBreedActiveIndex = -1;
+let agendaCustomerCepLookupController = null;
+let agendaCustomerCepLastDigits = '';
+let agendaCustomerCepLastResult = null;
 const customerModalState = {
   clienteId: '',
   petId: '',
@@ -345,6 +348,13 @@ function agendaCustomerDigits(value) {
   return String(value || '').replace(/\D+/g, '');
 }
 
+function agendaCustomerFormatCep(value) {
+  const digits = agendaCustomerDigits(value).slice(0, 8);
+  if (!digits) return '';
+  if (digits.length <= 5) return digits;
+  return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+}
+
 function agendaCustomerSplitPhone(value) {
   const digits = agendaCustomerDigits(value);
   if (digits.length >= 10) return { ddd: digits.slice(0, 2), number: digits.slice(2) };
@@ -479,11 +489,71 @@ function agendaCustomerFillAddress(address) {
   customerModalState.creatingNewAddress = false;
   agendaCustomerSetValue(els.customerAddress, address?.logradouro || address?.endereco || '');
   agendaCustomerSetValue(els.customerNumber, address?.numero || '');
-  agendaCustomerSetValue(els.customerCep, address?.cep || '');
+  agendaCustomerSetValue(els.customerCep, agendaCustomerFormatCep(address?.cep || ''));
   agendaCustomerSetValue(els.customerBairro, address?.bairro || '');
   agendaCustomerSetValue(els.customerCidade, address?.cidade || '');
   agendaCustomerSetValue(els.customerUf, address?.uf || '');
   agendaCustomerSetValue(els.customerComplemento, address?.complemento || '');
+}
+
+function agendaCustomerApplyCepResult(data) {
+  if (!data) return;
+  agendaCustomerSetValue(els.customerCep, agendaCustomerFormatCep(data.cep || ''));
+  agendaCustomerSetValue(els.customerAddress, data.logradouro || '');
+  agendaCustomerSetValue(els.customerBairro, data.bairro || '');
+  agendaCustomerSetValue(els.customerCidade, data.cidade || data.localidade || data.city || '');
+  agendaCustomerSetValue(els.customerUf, String(data.uf || '').toUpperCase());
+  if (data.complemento) {
+    agendaCustomerSetValue(els.customerComplemento, data.complemento || '');
+  }
+}
+
+async function agendaCustomerLookupCep({ force = false } = {}) {
+  if (!els.customerCep) return null;
+  const digits = agendaCustomerDigits(els.customerCep.value).slice(0, 8);
+  els.customerCep.value = agendaCustomerFormatCep(digits);
+  if (digits.length !== 8) return null;
+
+  if (agendaCustomerCepLastDigits === digits && agendaCustomerCepLastResult) {
+    agendaCustomerApplyCepResult(agendaCustomerCepLastResult);
+    if (!force) return agendaCustomerCepLastResult;
+  }
+
+  if (agendaCustomerCepLookupController) {
+    agendaCustomerCepLookupController.abort();
+  }
+
+  const controller = new AbortController();
+  agendaCustomerCepLookupController = controller;
+
+  try {
+    const response = await api(`/shipping/cep?cep=${encodeURIComponent(digits)}`, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(await agendaCustomerReadErr(response, 'Nao foi possivel consultar o CEP informado.'));
+    }
+    const data = await response.json();
+    agendaCustomerCepLastDigits = digits;
+    agendaCustomerCepLastResult = {
+      cep: digits,
+      logradouro: data.logradouro || '',
+      bairro: data.bairro || '',
+      cidade: data.cidade || data.localidade || data.city || '',
+      uf: (data.uf || '').toUpperCase(),
+      complemento: data.complemento || '',
+    };
+    agendaCustomerApplyCepResult(agendaCustomerCepLastResult);
+    return agendaCustomerCepLastResult;
+  } catch (error) {
+    if (error?.name === 'AbortError') return null;
+    agendaCustomerCepLastDigits = '';
+    agendaCustomerCepLastResult = null;
+    notify(error?.message || 'Nao foi possivel consultar o CEP informado.', 'error');
+    return null;
+  } finally {
+    if (agendaCustomerCepLookupController === controller) {
+      agendaCustomerCepLookupController = null;
+    }
+  }
 }
 
 function agendaCustomerStartNewAddress() {
@@ -881,6 +951,8 @@ function agendaCustomerClearContext(options = {}) {
   agendaCustomerSetValue(els.customerPhone1, '');
   agendaCustomerSetValue(els.customerPhone2Ddd, '21');
   agendaCustomerSetValue(els.customerPhone2, '');
+  agendaCustomerCepLastDigits = '';
+  agendaCustomerCepLastResult = null;
   agendaCustomerClearPet();
   agendaCustomerRenderPets();
 }
@@ -2270,6 +2342,16 @@ export function bindModalAndActionsEvents() {
   });
   els.customerDoc?.addEventListener('input', () => {
     void agendaCustomerLookupByDocument(els.customerDoc?.value || '').catch(() => {});
+  });
+  els.customerCep?.addEventListener('input', () => {
+    const digits = agendaCustomerDigits(els.customerCep?.value || '').slice(0, 8);
+    if (els.customerCep) els.customerCep.value = agendaCustomerFormatCep(digits);
+    if (digits.length === 8) {
+      void agendaCustomerLookupCep().catch(() => {});
+    }
+  });
+  els.customerCep?.addEventListener('blur', () => {
+    void agendaCustomerLookupCep({ force: true }).catch(() => {});
   });
   els.customerPhone1Ddd?.addEventListener('blur', () => {
     void agendaCustomerLookupByPhone().catch(() => {});
