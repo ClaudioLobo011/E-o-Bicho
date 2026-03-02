@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const https = require('https');
+const axios = require('axios');
 const Store = require('../models/Store');
 const Vehicle = require('../models/Vehicle');
 const DeliveryZone = require('../models/DeliveryZone');
@@ -129,6 +130,73 @@ async function resolveCoordsAndBairro(cepRaw, bairroFromQuery) {
 }
 
 // ===== Rota principal =====
+async function brasilApiCep(cepDigits) {
+  const url = `https://brasilapi.com.br/api/cep/v1/${encodeURIComponent(cepDigits)}`;
+  const response = await axios.get(url, {
+    timeout: 10000,
+    headers: {
+      Accept: 'application/json',
+      'User-Agent': 'EoBichoShipping/1.0 (frete@eobicho.local)',
+    },
+    validateStatus: () => true,
+  });
+
+  if (response.status >= 200 && response.status < 300 && response.data) {
+    const data = response.data;
+    return {
+      cep: cepDigits,
+      logradouro: data.street || '',
+      bairro: data.neighborhood || '',
+      localidade: data.city || '',
+      uf: data.state || '',
+      complemento: data.service ? `Fonte: ${data.service}` : '',
+    };
+  }
+
+  throw new Error('CEP nao encontrado na BrasilAPI.');
+}
+
+viaCep = async function viaCepWithFallback(cepDigits) {
+  const url = `https://viacep.com.br/ws/${encodeURIComponent(cepDigits)}/json/`;
+  try {
+    const response = await axios.get(url, {
+      timeout: 10000,
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'EoBichoShipping/1.0 (frete@eobicho.local)',
+      },
+      validateStatus: () => true,
+    });
+
+    if (response.status >= 200 && response.status < 300 && response.data && !response.data.erro) {
+      return response.data;
+    }
+  } catch (_) {}
+
+  return brasilApiCep(cepDigits);
+};
+
+router.get('/cep', async (req, res) => {
+  try {
+    const cepDigits = String(req.query.cep || '').replace(/\D/g, '');
+    if (cepDigits.length !== 8) {
+      return res.status(400).json({ message: 'Informe um CEP com 8 dígitos.' });
+    }
+
+    const data = await viaCep(cepDigits);
+    return res.json({
+      cep: cepDigits,
+      logradouro: data.logradouro || '',
+      bairro: data.bairro || '',
+      cidade: data.localidade || '',
+      uf: String(data.uf || '').toUpperCase(),
+      complemento: data.complemento || '',
+    });
+  } catch (err) {
+    return res.status(400).json({ message: err?.message || 'Não foi possível consultar o CEP informado.' });
+  }
+});
+
 router.get('/quote', async (req, res) => {
   try {
     const cepRaw = (req.query.cep || '').trim();

@@ -11,12 +11,30 @@ let __pendingCheckinTimer = null;
 let __pendingCheckinPromise = null;
 
 const SALE_VIA_PDV_MESSAGE = 'Finalize a venda pelo PDV para gerar o código automaticamente.';
-const CUSTOMER_REGISTRATION_RELATIVE_URL = './clientes.html';
-
 let customerRegisterPreviousFocus = null;
-let customerRegisterFrameUrl = '';
-let customerRegisterFrameWindow = null;
-let customerRegisterMessageHandlerBound = false;
+let customerSearchPreviousFocus = null;
+let customerModalSearchTimer = null;
+let agendaCustomerPetSpeciesMap = null;
+let agendaCustomerPetSpeciesMapPromise = null;
+let agendaCustomerPetBreedOptions = [];
+let agendaCustomerPetBreedFilteredOptions = [];
+let agendaCustomerPetBreedActiveIndex = -1;
+const customerModalState = {
+  clienteId: '',
+  petId: '',
+  selectedCliente: null,
+  selectedPet: null,
+  selectedAddress: null,
+  creatingNewAddress: false,
+  creatingNewPet: false,
+  addresses: [],
+  pets: [],
+  searchResults: [],
+  searchLoading: false,
+  searchAbort: null,
+  lastDocLookup: '',
+  lastPhoneLookup: '',
+};
 
 function clearPendingCheckinQueue() {
   if (__pendingCheckinTimer) {
@@ -241,33 +259,6 @@ export function closeModal() {
   [els.cliInput, els.servInput, els.valorInput, els.petSelect].forEach(el => { if (el) el.disabled = false; });
 }
 
-const buildCustomerRegistrationUrl = () => {
-  const url = new URL(CUSTOMER_REGISTRATION_RELATIVE_URL, window.location.href);
-  url.searchParams.set('from', 'agenda');
-  const storeId = state.selectedStoreId || els.addStoreSelect?.value || '';
-  if (storeId) {
-    url.searchParams.set('storeId', storeId);
-  }
-  return url.toString();
-};
-
-const setCustomerRegistrationLoading = (loading) => {
-  if (els.customerRegisterLoading) {
-    els.customerRegisterLoading.classList.toggle('hidden', !loading);
-  }
-  if (els.customerRegisterFrame) {
-    els.customerRegisterFrame.classList.toggle('hidden', loading);
-  }
-};
-
-const applyCustomerRegistrationFrameHeight = (height) => {
-  if (!els.customerRegisterFrame) return;
-  const numericHeight = Number(height);
-  if (!Number.isFinite(numericHeight) || numericHeight <= 0) return;
-  const viewportLimit = Math.max(window.innerHeight - 160, 360);
-  const clamped = Math.max(360, Math.min(numericHeight, viewportLimit));
-  els.customerRegisterFrame.style.height = `${clamped}px`;
-};
 
 const openCustomerRegisterModal = () => {
   const url = buildCustomerRegistrationUrl();
@@ -344,6 +335,1269 @@ export function toDateInputValueFromISO(isoStr) {
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}`;
+}
+
+function agendaCustomerNormalizeId(value) {
+  return String(value || '').trim();
+}
+
+function agendaCustomerDigits(value) {
+  return String(value || '').replace(/\D+/g, '');
+}
+
+function agendaCustomerSplitPhone(value) {
+  const digits = agendaCustomerDigits(value);
+  if (digits.length >= 10) return { ddd: digits.slice(0, 2), number: digits.slice(2) };
+  return { ddd: '', number: digits };
+}
+
+function agendaCustomerJoinPhone(dddValue, phoneValue) {
+  const ddd = agendaCustomerDigits(dddValue).slice(-2);
+  const phoneDigits = agendaCustomerDigits(phoneValue);
+  if (!phoneDigits) return '';
+  if (phoneDigits.length >= 10) return phoneDigits.slice(-11);
+  if ((phoneDigits.length === 8 || phoneDigits.length === 9) && ddd) return `${ddd}${phoneDigits}`;
+  return phoneDigits;
+}
+
+function agendaCustomerPhoneLocalDigits(value) {
+  const digits = agendaCustomerDigits(value);
+  if (digits.length >= 10) return digits.slice(2);
+  return digits;
+}
+
+function agendaCustomerPhoneKind(value) {
+  const localDigits = agendaCustomerPhoneLocalDigits(value);
+  if (localDigits.length === 9) return 'celular';
+  if (localDigits.length === 8) return 'telefone';
+  return '';
+}
+
+function agendaCustomerCollectFormPhones() {
+  const values = [
+    agendaCustomerJoinPhone(els.customerPhone1Ddd?.value, els.customerPhone1?.value),
+    agendaCustomerJoinPhone(els.customerPhone2Ddd?.value, els.customerPhone2?.value),
+  ].map((value) => agendaCustomerDigits(value)).filter(Boolean);
+
+  const result = {
+    celular: '',
+    celular2: '',
+    telefone: '',
+    telefone2: '',
+  };
+
+  values.forEach((value) => {
+    const kind = agendaCustomerPhoneKind(value);
+    if (!kind) return;
+    if (kind === 'celular') {
+      if (!result.celular) result.celular = value;
+      else if (!result.celular2 && value !== result.celular) result.celular2 = value;
+      return;
+    }
+    if (!result.telefone) result.telefone = value;
+    else if (!result.telefone2 && value !== result.telefone) result.telefone2 = value;
+  });
+
+  return result;
+}
+
+function agendaCustomerCollectCustomerPhones(customer) {
+  if (!customer || typeof customer !== 'object') return [];
+  const values = [
+    customer.celular,
+    customer.telefone,
+    customer.celular2,
+    customer.celular_2,
+    customer.celularSecundario,
+    customer.telefone2,
+    customer.telefoneSecundario,
+    customer.telefone1,
+    customer.telefoneFixo,
+    customer.telefone_fixo,
+  ];
+  const result = [];
+  values.forEach((value) => {
+    const digits = agendaCustomerDigits(value);
+    if (!digits) return;
+    if (!result.includes(digits)) result.push(digits);
+  });
+  return result.slice(0, 2);
+}
+
+function agendaCustomerSetValue(element, value) {
+  if (element) element.value = value == null ? '' : String(value);
+}
+
+function agendaCustomerSetChecked(element, value) {
+  if (element) element.checked = !!value;
+}
+
+function agendaCustomerReadErr(response, fallback) {
+  return response.json().then((payload) => payload?.message || fallback).catch(() => fallback);
+}
+
+function agendaCustomerName(customer) {
+  if (!customer || typeof customer !== 'object') return '';
+  return customer.nome || customer.nomeCompleto || customer.razaoSocial || customer.nomeContato || customer.nomeFantasia || '';
+}
+
+function agendaCustomerDoc(customer) {
+  if (!customer || typeof customer !== 'object') return '';
+  return customer.cpf || customer.cnpj || '';
+}
+
+function normalizeAgendaCustomerSexo(value) {
+  const normalized = normalizeAgendaCustomerPetText(value);
+  if (!normalized) return '';
+  if (normalized === 'm' || normalized === 'masculino' || normalized === 'macho' || normalized === 'male') return 'M';
+  if (normalized === 'f' || normalized === 'feminino' || normalized === 'femea' || normalized === 'female') return 'F';
+  return String(value || '').trim();
+}
+
+function agendaCustomerGender(customer) {
+  return normalizeAgendaCustomerSexo(customer?.sexo || customer?.genero || '');
+}
+
+function agendaCustomerBirth(customer) {
+  const raw = customer?.dataNascimento || customer?.nascimento || '';
+  return raw ? toDateInputValueFromISO(raw) : '';
+}
+
+function agendaCustomerResetSearch(message = 'Digite para pesquisar clientes.') {
+  customerModalState.searchResults = [];
+  if (els.customerSearchModalResults) els.customerSearchModalResults.innerHTML = '';
+  if (els.customerSearchModalTable) els.customerSearchModalTable.classList.add('hidden');
+  if (els.customerSearchModalLoading) els.customerSearchModalLoading.classList.add('hidden');
+  if (els.customerSearchModalEmpty) {
+    els.customerSearchModalEmpty.textContent = message || '';
+    els.customerSearchModalEmpty.classList.toggle('hidden', !message);
+  }
+}
+
+function agendaCustomerFillAddress(address) {
+  customerModalState.selectedAddress = address || null;
+  customerModalState.creatingNewAddress = false;
+  agendaCustomerSetValue(els.customerAddress, address?.logradouro || address?.endereco || '');
+  agendaCustomerSetValue(els.customerNumber, address?.numero || '');
+  agendaCustomerSetValue(els.customerCep, address?.cep || '');
+  agendaCustomerSetValue(els.customerBairro, address?.bairro || '');
+  agendaCustomerSetValue(els.customerCidade, address?.cidade || '');
+  agendaCustomerSetValue(els.customerUf, address?.uf || '');
+  agendaCustomerSetValue(els.customerComplemento, address?.complemento || '');
+}
+
+function agendaCustomerStartNewAddress() {
+  if (!customerModalState.clienteId) {
+    notify('Selecione um cliente antes de adicionar um novo endereco.', 'warning');
+    return;
+  }
+  customerModalState.selectedAddress = null;
+  customerModalState.creatingNewAddress = true;
+  agendaCustomerSetValue(els.customerAddress, '');
+  agendaCustomerSetValue(els.customerNumber, '');
+  agendaCustomerSetValue(els.customerCep, '');
+  agendaCustomerSetValue(els.customerBairro, '');
+  agendaCustomerSetValue(els.customerCidade, '');
+  agendaCustomerSetValue(els.customerUf, '');
+  agendaCustomerSetValue(els.customerComplemento, '');
+  agendaCustomerRenderAddressCards(customerModalState.addresses);
+  els.customerAddress?.focus();
+}
+
+function agendaCustomerRenderAddressCards(addresses) {
+  if (!els.customerAddressCards || !els.customerAddressCardsStatus) return;
+  const list = Array.isArray(addresses) ? addresses : [];
+  els.customerAddressCardsStatus.textContent = list.length ? `${list.length} endereço(s)` : '';
+  const cards = list.map((address) => {
+    const selected = agendaCustomerNormalizeId(address?._id) === agendaCustomerNormalizeId(customerModalState.selectedAddress?._id);
+    const line1 = [address?.logradouro, address?.numero].filter(Boolean).join(', ');
+    const line2 = [address?.bairro, [address?.cidade, address?.uf].filter(Boolean).join(' - '), address?.cep].filter(Boolean).join(' | ');
+    return `
+      <button type="button" data-agenda-customer-address="${escapeHtml(address?._id || '')}"
+        class="w-full rounded-lg border p-3 text-left transition ${selected ? 'border-primary bg-primary/5 text-primary' : 'border-gray-200 bg-white text-gray-700 hover:border-primary hover:bg-primary/5'}">
+        <div class="flex items-center justify-between gap-2">
+          <span class="font-semibold">${escapeHtml(address?.apelido || 'Endereço')}</span>
+          ${address?.isDefault ? '<span class="rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Padrão</span>' : ''}
+        </div>
+        <div class="mt-1 text-xs">${escapeHtml(line1 || '-')}</div>
+        <div class="text-xs">${escapeHtml(line2 || '-')}</div>
+      </button>
+    `;
+  });
+  if (customerModalState.clienteId && els.customerSaveToggle?.checked) {
+    cards.push(`
+      <button type="button" data-agenda-customer-address-new="true"
+        class="min-h-[110px] rounded-lg border border-dashed bg-white p-3 text-center transition flex flex-col items-center justify-center gap-1 ${customerModalState.creatingNewAddress ? 'border-primary text-primary ring-1 ring-primary/30' : 'border-gray-300 text-gray-400 hover:border-primary hover:text-primary'}">
+        <span class="text-2xl font-semibold leading-none">+</span>
+        <span class="text-[11px] font-semibold">Novo endereco</span>
+      </button>
+    `);
+  }
+  if (!cards.length) {
+    els.customerAddressCards.innerHTML = '<div class="rounded-lg border border-dashed border-gray-300 bg-white px-4 py-3 text-sm text-gray-500">Nenhum endereço cadastrado.</div>';
+    return;
+  }
+  els.customerAddressCards.innerHTML = cards.join('');
+}
+
+function agendaCustomerRenderPets() {
+  if (!els.customerPets || !els.customerPetsEmpty || !els.customerPetsLoading) return;
+  els.customerPetsLoading.classList.add('hidden');
+  els.customerPets.innerHTML = '';
+  if (!customerModalState.clienteId) {
+    els.customerPetsEmpty.textContent = 'Selecione um cliente para visualizar os pets.';
+    els.customerPetsEmpty.classList.remove('hidden');
+    return;
+  }
+  if (!Array.isArray(customerModalState.pets) || !customerModalState.pets.length) {
+    els.customerPetsEmpty.textContent = 'Nenhum pet cadastrado para este cliente.';
+    els.customerPetsEmpty.classList.remove('hidden');
+  } else {
+    els.customerPetsEmpty.classList.add('hidden');
+  }
+  const cards = (Array.isArray(customerModalState.pets) ? customerModalState.pets : []).map((pet) => {
+    const petId = agendaCustomerNormalizeId(pet?._id);
+    const selected = petId && petId === customerModalState.petId;
+    const details = [pet?.tipo, pet?.raca, pet?.sexo].filter(Boolean).join(' • ');
+    return `
+      <button type="button" data-agenda-customer-pet="${escapeHtml(petId)}"
+        class="w-full rounded-lg border px-4 py-3 text-left transition flex flex-col gap-1 ${selected ? 'border-primary bg-primary/5 text-primary' : 'border-gray-200 bg-white text-gray-700 hover:border-primary hover:bg-primary/5'}">
+        <span class="text-sm font-semibold">${escapeHtml(pet?.nome || 'Pet sem nome')}</span>
+        <span class="text-xs">${escapeHtml(details || 'Detalhes nao informados')}</span>
+      </button>
+    `;
+  });
+  if (customerModalState.clienteId && els.customerSaveToggle?.checked) {
+    cards.push(`
+      <button type="button" data-agenda-customer-pet-new="true"
+        class="min-h-[92px] rounded-lg border border-dashed bg-white p-3 text-center transition flex flex-col items-center justify-center gap-1 ${customerModalState.creatingNewPet ? 'border-primary text-primary ring-1 ring-primary/30' : 'border-gray-300 text-gray-400 hover:border-primary hover:text-primary'}">
+        <span class="text-2xl leading-none">+</span>
+        <span class="text-[11px] font-semibold">Novo pet</span>
+      </button>
+    `);
+  }
+  els.customerPets.innerHTML = cards.join('');
+}
+
+function agendaCustomerFillPet(pet) {
+  customerModalState.selectedPet = pet || null;
+  customerModalState.petId = agendaCustomerNormalizeId(pet?._id);
+  customerModalState.creatingNewPet = false;
+  agendaCustomerSetValue(els.customerPetCode, pet?.codigo || pet?.codigoPet || '');
+  agendaCustomerSetValue(els.customerPetName, pet?.nome || '');
+  agendaCustomerSetValue(els.customerPetTipo, pet?.tipo || '');
+  agendaCustomerSetValue(els.customerPetSexo, normalizeAgendaCustomerPetSexo(pet?.sexo || ''));
+  agendaCustomerSetValue(els.customerPetPorte, pet?.porte || '');
+  agendaCustomerSetValue(els.customerPetRaca, pet?.raca || '');
+  agendaCustomerSetValue(els.customerPetBirth, pet?.dataNascimento ? toDateInputValueFromISO(pet.dataNascimento) : (pet?.nascimento || ''));
+  agendaCustomerSetValue(els.customerPetCor, pet?.pelagemCor || pet?.pelagem || pet?.cor || '');
+  agendaCustomerSetValue(els.customerPetCodAnt, pet?.codAntigoPet || pet?.codigoAntigoPet || '');
+  agendaCustomerSetValue(els.customerPetMicrochip, pet?.microchip || '');
+  agendaCustomerSetValue(els.customerPetRga, pet?.rga || '');
+  agendaCustomerSetValue(els.customerPetPeso, pet?.peso || '');
+  agendaCustomerSetChecked(els.customerPetCastrado, pet?.castrado);
+  agendaCustomerSetChecked(els.customerPetObito, pet?.obito);
+  agendaCustomerRenderPets();
+  void syncAgendaCustomerPetBreedTypePorte('raca');
+}
+
+function agendaCustomerClearPet() {
+  customerModalState.selectedPet = null;
+  customerModalState.petId = '';
+  customerModalState.creatingNewPet = false;
+  agendaCustomerSetValue(els.customerPetCode, '');
+  agendaCustomerSetValue(els.customerPetName, '');
+  agendaCustomerSetValue(els.customerPetTipo, '');
+  agendaCustomerSetValue(els.customerPetSexo, '');
+  agendaCustomerSetValue(els.customerPetPorte, '');
+  agendaCustomerSetValue(els.customerPetRaca, '');
+  agendaCustomerSetValue(els.customerPetBirth, '');
+  agendaCustomerSetValue(els.customerPetCor, '');
+  agendaCustomerSetValue(els.customerPetCodAnt, '');
+  agendaCustomerSetValue(els.customerPetMicrochip, '');
+  agendaCustomerSetValue(els.customerPetRga, '');
+  agendaCustomerSetValue(els.customerPetPeso, '');
+  agendaCustomerSetChecked(els.customerPetCastrado, false);
+  agendaCustomerSetChecked(els.customerPetObito, false);
+  agendaCustomerRenderPets();
+}
+
+function agendaCustomerStartNewPet() {
+  if (!customerModalState.clienteId) {
+    notify('Selecione um cliente antes de adicionar um novo pet.', 'warning');
+    return;
+  }
+  agendaCustomerClearPet();
+  customerModalState.creatingNewPet = true;
+  els.customerPetName?.focus();
+}
+
+function normalizeAgendaCustomerPetText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function normalizeAgendaCustomerPetPorte(value) {
+  const normalized = normalizeAgendaCustomerPetText(value);
+  if (!normalized) return '';
+  if (normalized === 'medio') return 'medio';
+  return ['mini', 'pequeno', 'grande', 'gigante'].includes(normalized) ? normalized : normalized;
+}
+
+function normalizeAgendaCustomerPetSexo(value) {
+  const normalized = normalizeAgendaCustomerPetText(value);
+  if (!normalized) return '';
+  if (normalized === 'm' || normalized === 'macho' || normalized === 'male') return 'M';
+  if (normalized === 'f' || normalized === 'femea' || normalized === 'female') return 'F';
+  return String(value || '').trim();
+}
+
+async function loadAgendaCustomerPetSpeciesMap() {
+  if (agendaCustomerPetSpeciesMap) return agendaCustomerPetSpeciesMap;
+  if (agendaCustomerPetSpeciesMapPromise) return agendaCustomerPetSpeciesMapPromise;
+
+  const buildMap = (payload) => {
+    const species = {};
+    const dogMap = payload?.cachorro?.portes || {};
+    const sourceMap = payload?.cachorro?.mapeamento || {};
+    const dogLookup = {};
+    const dogAll = Array.from(
+      new Set([
+        ...(Array.isArray(dogMap?.mini) ? dogMap.mini : []),
+        ...(Array.isArray(dogMap?.pequeno) ? dogMap.pequeno : []),
+        ...(Array.isArray(dogMap?.medio) ? dogMap.medio : []),
+        ...(Array.isArray(dogMap?.grande) ? dogMap.grande : []),
+        ...(Array.isArray(dogMap?.gigante) ? dogMap.gigante : []),
+      ])
+    );
+
+    dogAll.forEach((breed) => {
+      const key = normalizeAgendaCustomerPetText(breed);
+      const porte =
+        sourceMap[key] ||
+        sourceMap[breed] ||
+        (Array.isArray(dogMap?.mini) && dogMap.mini.includes(breed)
+          ? 'mini'
+          : Array.isArray(dogMap?.pequeno) && dogMap.pequeno.includes(breed)
+          ? 'pequeno'
+          : Array.isArray(dogMap?.medio) && dogMap.medio.includes(breed)
+          ? 'medio'
+          : Array.isArray(dogMap?.grande) && dogMap.grande.includes(breed)
+          ? 'grande'
+          : 'gigante');
+      dogLookup[key] = normalizeAgendaCustomerPetPorte(porte);
+    });
+
+    species.cachorro = { all: dogAll, map: dogLookup };
+    ['gato', 'passaro', 'peixe', 'roedor', 'lagarto', 'tartaruga'].forEach((tipo) => {
+      species[tipo] = Array.from(new Set(Array.isArray(payload?.[tipo]) ? payload[tipo] : []));
+    });
+    return species;
+  };
+
+  agendaCustomerPetSpeciesMapPromise = (async () => {
+    try {
+      const response = await fetch('/data/racas.json', { headers: { Accept: 'application/json' } });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      agendaCustomerPetSpeciesMap = buildMap(await response.json());
+      return agendaCustomerPetSpeciesMap;
+    } catch (error) {
+      console.warn('Nao foi possivel carregar data/racas.json para o modal da agenda.', error);
+      agendaCustomerPetSpeciesMap = null;
+      return null;
+    } finally {
+      agendaCustomerPetSpeciesMapPromise = null;
+    }
+  })();
+
+  return agendaCustomerPetSpeciesMapPromise;
+}
+
+function inferAgendaCustomerPetTypeFromBreed(breedValue) {
+  const speciesMap = agendaCustomerPetSpeciesMap;
+  const breedKey = normalizeAgendaCustomerPetText(breedValue);
+  if (!speciesMap || !breedKey) return '';
+  if ((speciesMap?.cachorro?.all || []).some((item) => normalizeAgendaCustomerPetText(item) === breedKey)) return 'cachorro';
+  for (const tipo of ['gato', 'passaro', 'peixe', 'roedor', 'lagarto', 'tartaruga']) {
+    if ((speciesMap?.[tipo] || []).some((item) => normalizeAgendaCustomerPetText(item) === breedKey)) return tipo;
+  }
+  return '';
+}
+
+function setAgendaCustomerPetPorteFromBreedIfDog() {
+  if (!els.customerPetTipo || !els.customerPetRaca || !els.customerPetPorte) return;
+  if (normalizeAgendaCustomerPetText(els.customerPetTipo.value) !== 'cachorro') return;
+  const lookup = agendaCustomerPetSpeciesMap?.cachorro?.map || null;
+  if (!lookup) return;
+  const porte = lookup[normalizeAgendaCustomerPetText(els.customerPetRaca.value)] || '';
+  if (!porte) return;
+  els.customerPetPorte.value = normalizeAgendaCustomerPetPorte(porte);
+}
+
+async function syncAgendaCustomerPetBreedTypePorte(source = '') {
+  await loadAgendaCustomerPetSpeciesMap().catch(() => {});
+  const tipoInput = els.customerPetTipo;
+  const racaInput = els.customerPetRaca;
+  if (!tipoInput || !racaInput) return;
+  const breed = String(racaInput.value || '').trim();
+  if (breed) {
+    const inferredType = inferAgendaCustomerPetTypeFromBreed(breed);
+    if (inferredType && normalizeAgendaCustomerPetText(tipoInput.value) !== inferredType) {
+      tipoInput.value = inferredType;
+    }
+  }
+  if (source !== 'tipo') {
+    setAgendaCustomerPetPorteFromBreedIfDog();
+  }
+}
+
+function closeAgendaCustomerPetBreedSuggestions() {
+  if (!els.customerPetRacaSuggest) return;
+  els.customerPetRacaSuggest.classList.add('hidden');
+  els.customerPetRacaSuggest.innerHTML = '';
+  agendaCustomerPetBreedFilteredOptions = [];
+  agendaCustomerPetBreedActiveIndex = -1;
+}
+
+async function refreshAgendaCustomerPetBreedOptions() {
+  await loadAgendaCustomerPetSpeciesMap().catch(() => {});
+  const speciesMap = agendaCustomerPetSpeciesMap;
+  if (!speciesMap) {
+    agendaCustomerPetBreedOptions = [];
+    closeAgendaCustomerPetBreedSuggestions();
+    return;
+  }
+  const tipo = normalizeAgendaCustomerPetText(els.customerPetTipo?.value || '');
+  let breeds = [];
+  if (tipo === 'cachorro') breeds = (speciesMap?.cachorro?.all || []).slice();
+  else if (tipo && Array.isArray(speciesMap?.[tipo])) breeds = (speciesMap?.[tipo] || []).slice();
+  else {
+    breeds = Array.from(
+      new Set([
+        ...(speciesMap?.cachorro?.all || []),
+        ...(speciesMap?.gato || []),
+        ...(speciesMap?.passaro || []),
+        ...(speciesMap?.peixe || []),
+        ...(speciesMap?.roedor || []),
+        ...(speciesMap?.lagarto || []),
+        ...(speciesMap?.tartaruga || []),
+      ])
+    );
+  }
+  agendaCustomerPetBreedOptions = breeds.sort((a, b) => String(a).localeCompare(String(b), 'pt-BR'));
+}
+
+async function renderAgendaCustomerPetBreedSuggestions() {
+  const input = els.customerPetRaca;
+  const container = els.customerPetRacaSuggest;
+  if (!input || !container) return;
+  await refreshAgendaCustomerPetBreedOptions();
+  const term = normalizeAgendaCustomerPetText(input.value);
+  agendaCustomerPetBreedFilteredOptions = (agendaCustomerPetBreedOptions || [])
+    .filter((item) => !term || normalizeAgendaCustomerPetText(item).includes(term))
+    .slice(0, 80);
+  if (!agendaCustomerPetBreedFilteredOptions.length) {
+    closeAgendaCustomerPetBreedSuggestions();
+    return;
+  }
+  const normalizedValue = normalizeAgendaCustomerPetText(input.value);
+  const exactIndex = agendaCustomerPetBreedFilteredOptions.findIndex(
+    (item) => normalizeAgendaCustomerPetText(item) === normalizedValue
+  );
+  if (exactIndex >= 0) agendaCustomerPetBreedActiveIndex = exactIndex;
+  else if (agendaCustomerPetBreedActiveIndex >= agendaCustomerPetBreedFilteredOptions.length) agendaCustomerPetBreedActiveIndex = 0;
+  else if (agendaCustomerPetBreedActiveIndex < 0) agendaCustomerPetBreedActiveIndex = 0;
+  container.innerHTML = agendaCustomerPetBreedFilteredOptions
+    .map(
+      (breed, index) =>
+        `<button type="button" class="block w-full border-b border-gray-100 px-3 py-2 text-left text-[12px] ${index === agendaCustomerPetBreedActiveIndex ? 'bg-primary/10 text-primary' : 'text-gray-700 hover:bg-primary/5'} last:border-b-0" data-agenda-customer-pet-breed-option="${escapeHtml(String(breed))}" data-agenda-customer-pet-breed-index="${index}">${escapeHtml(String(breed))}</button>`
+    )
+    .join('');
+  container.classList.remove('hidden');
+  const activeButton = container.querySelector(`[data-agenda-customer-pet-breed-index="${agendaCustomerPetBreedActiveIndex}"]`);
+  if (activeButton && typeof activeButton.scrollIntoView === 'function') {
+    activeButton.scrollIntoView({ block: 'nearest' });
+  }
+}
+
+function selectAgendaCustomerPetBreedOption(value) {
+  if (!els.customerPetRaca) return;
+  els.customerPetRaca.value = String(value || '');
+  closeAgendaCustomerPetBreedSuggestions();
+  void syncAgendaCustomerPetBreedTypePorte('raca');
+}
+
+function agendaCustomerFillForm(customer) {
+  customerModalState.selectedCliente = customer || null;
+  customerModalState.clienteId = agendaCustomerNormalizeId(customer?._id);
+  agendaCustomerSetValue(els.customerCode, customer?.codigo || '');
+  agendaCustomerSetValue(els.customerName, agendaCustomerName(customer));
+  agendaCustomerSetValue(els.customerDoc, agendaCustomerDoc(customer));
+  agendaCustomerSetValue(els.customerSexo, agendaCustomerGender(customer));
+  agendaCustomerSetValue(els.customerBirth, agendaCustomerBirth(customer));
+  agendaCustomerSetValue(els.customerEmail, customer?.email || '');
+  agendaCustomerSetValue(els.customerObservacao, customer?.observacao || '');
+  const [phone1Value = '', phone2Value = ''] = agendaCustomerCollectCustomerPhones(customer);
+  const primaryPhone = agendaCustomerSplitPhone(phone1Value);
+  const secondaryPhone = agendaCustomerSplitPhone(phone2Value);
+  agendaCustomerSetValue(els.customerPhone1Ddd, primaryPhone.ddd);
+  agendaCustomerSetValue(els.customerPhone1, primaryPhone.number);
+  agendaCustomerSetValue(els.customerPhone2Ddd, secondaryPhone.ddd);
+  agendaCustomerSetValue(els.customerPhone2, secondaryPhone.number);
+}
+
+function agendaCustomerClearContext(options = {}) {
+  const { keepSearch = false } = options;
+  customerModalState.clienteId = '';
+  customerModalState.petId = '';
+  customerModalState.selectedCliente = null;
+  customerModalState.selectedPet = null;
+  customerModalState.selectedAddress = null;
+  customerModalState.creatingNewAddress = false;
+  customerModalState.creatingNewPet = false;
+  customerModalState.addresses = [];
+  customerModalState.pets = [];
+  customerModalState.lastDocLookup = '';
+  customerModalState.lastPhoneLookup = '';
+  agendaCustomerRenderAddressCards([]);
+  agendaCustomerSetValue(els.customerCode, '');
+  if (!keepSearch) agendaCustomerSetValue(els.customerName, '');
+  agendaCustomerSetValue(els.customerDoc, '');
+  agendaCustomerSetValue(els.customerSexo, '');
+  agendaCustomerSetValue(els.customerBirth, '');
+  agendaCustomerSetValue(els.customerEmail, '');
+  agendaCustomerSetValue(els.customerAddress, '');
+  agendaCustomerSetValue(els.customerNumber, '');
+  agendaCustomerSetValue(els.customerCep, '');
+  agendaCustomerSetValue(els.customerBairro, '');
+  agendaCustomerSetValue(els.customerCidade, '');
+  agendaCustomerSetValue(els.customerUf, '');
+  agendaCustomerSetValue(els.customerObservacao, '');
+  agendaCustomerSetValue(els.customerComplemento, '');
+  agendaCustomerSetValue(els.customerPhone1Ddd, '21');
+  agendaCustomerSetValue(els.customerPhone1, '');
+  agendaCustomerSetValue(els.customerPhone2Ddd, '21');
+  agendaCustomerSetValue(els.customerPhone2, '');
+  agendaCustomerClearPet();
+  agendaCustomerRenderPets();
+}
+
+function agendaCustomerSetTab(tab) {
+  state.customerModalTab = tab === 'pet' ? 'pet' : 'cliente';
+  const isPet = state.customerModalTab === 'pet';
+  els.customerTabCliente?.classList.toggle('hidden', isPet);
+  els.customerTabPet?.classList.toggle('hidden', !isPet);
+  els.customerTabBtnCliente?.classList.toggle('bg-primary', !isPet);
+  els.customerTabBtnCliente?.classList.toggle('text-white', !isPet);
+  els.customerTabBtnCliente?.classList.toggle('text-gray-500', isPet);
+  els.customerTabBtnPet?.classList.toggle('bg-primary', isPet);
+  els.customerTabBtnPet?.classList.toggle('text-white', isPet);
+  els.customerTabBtnPet?.classList.toggle('text-gray-500', !isPet);
+}
+
+async function agendaCustomerLoad(customerId, options = {}) {
+  const normalizedId = agendaCustomerNormalizeId(customerId);
+  if (!normalizedId) {
+    agendaCustomerClearContext();
+    agendaCustomerResetSearch();
+    return;
+  }
+  const { preservePetSelection = true } = options;
+  const currentPetId = preservePetSelection ? customerModalState.petId : '';
+  if (els.customerPetsLoading) els.customerPetsLoading.classList.remove('hidden');
+  if (els.customerPetsEmpty) els.customerPetsEmpty.classList.add('hidden');
+  const [customerResp, addressResp, petsResp] = await Promise.all([
+    api(`/func/clientes/${normalizedId}`),
+    api(`/func/clientes/${normalizedId}/enderecos`).catch(() => null),
+    api(`/func/clientes/${normalizedId}/pets`).catch(() => null),
+  ]);
+  if (!customerResp.ok) throw new Error(await agendaCustomerReadErr(customerResp, 'Nao foi possivel carregar o cliente.'));
+  const customer = await customerResp.json();
+  const addresses = addressResp?.ok ? await addressResp.json().catch(() => []) : [];
+  const pets = petsResp?.ok ? await petsResp.json().catch(() => []) : [];
+  agendaCustomerFillForm(customer);
+  customerModalState.addresses = Array.isArray(addresses) ? addresses : [];
+  const defaultAddress = Array.isArray(addresses) ? addresses.find((entry) => entry?.isDefault) || addresses[0] || null : null;
+  agendaCustomerFillAddress(defaultAddress);
+  agendaCustomerRenderAddressCards(customerModalState.addresses);
+  customerModalState.pets = Array.isArray(pets) ? pets : [];
+  const matchedPet =
+    customerModalState.pets.find((pet) => agendaCustomerNormalizeId(pet?._id) === agendaCustomerNormalizeId(currentPetId)) ||
+    customerModalState.pets[0] ||
+    null;
+  if (matchedPet) agendaCustomerFillPet(matchedPet);
+  else agendaCustomerClearPet();
+  if (els.customerPetsLoading) els.customerPetsLoading.classList.add('hidden');
+}
+
+async function agendaCustomerSearch(term) {
+  const query = String(term || '').trim();
+  if (query.length < 2) {
+    agendaCustomerResetSearch();
+    return;
+  }
+  if (customerModalState.searchAbort) {
+    customerModalState.searchAbort.abort();
+    customerModalState.searchAbort = null;
+  }
+  if (els.customerSearchModalLoading) els.customerSearchModalLoading.classList.remove('hidden');
+  if (els.customerSearchModalEmpty) els.customerSearchModalEmpty.classList.add('hidden');
+  if (els.customerSearchModalTable) els.customerSearchModalTable.classList.add('hidden');
+  const controller = new AbortController();
+  customerModalState.searchAbort = controller;
+  try {
+    const response = await api(`/func/clientes/buscar?q=${encodeURIComponent(query)}&limit=20`, { signal: controller.signal });
+    if (!response.ok) throw new Error(await agendaCustomerReadErr(response, 'Nao foi possivel buscar clientes.'));
+    const payload = await response.json().catch(() => []);
+    const list = Array.isArray(payload) ? payload : [];
+    customerModalState.searchResults = list;
+    if (!list.length) {
+      agendaCustomerResetSearch('Nenhum cliente encontrado.');
+      return;
+    }
+    if (els.customerSearchModalResults) {
+      els.customerSearchModalResults.innerHTML = list.map((customer, index) => `
+        <tr data-agenda-customer-search-result="${index}" class="cursor-pointer hover:bg-primary/5">
+          <td class="px-3 py-2 font-semibold text-gray-700">${escapeHtml(customer?.codigo || '-')}</td>
+          <td class="px-3 py-2 text-gray-700">${escapeHtml(agendaCustomerName(customer) || 'Cliente sem nome')}</td>
+          <td class="px-3 py-2 text-gray-700">${escapeHtml(agendaCustomerDoc(customer) || '-')}</td>
+          <td class="px-3 py-2 text-gray-600">${escapeHtml(customer?.celular || customer?.celular2 || customer?.celularSecundario || '-')}</td>
+          <td class="px-3 py-2 text-gray-600">${escapeHtml(customer?.telefone || customer?.telefone2 || customer?.telefoneSecundario || '-')}</td>
+        </tr>
+      `).join('');
+    }
+    if (els.customerSearchModalLoading) els.customerSearchModalLoading.classList.add('hidden');
+    if (els.customerSearchModalEmpty) els.customerSearchModalEmpty.classList.add('hidden');
+    if (els.customerSearchModalTable) els.customerSearchModalTable.classList.remove('hidden');
+  } catch (error) {
+    if (error?.name === 'AbortError') return;
+    agendaCustomerResetSearch(error?.message || 'Nao foi possivel buscar clientes.');
+  } finally {
+    if (customerModalState.searchAbort === controller) customerModalState.searchAbort = null;
+    if (els.customerSearchModalLoading) els.customerSearchModalLoading.classList.add('hidden');
+  }
+}
+
+function agendaCustomerScheduleSearch(term) {
+  if (customerModalSearchTimer) clearTimeout(customerModalSearchTimer);
+  customerModalSearchTimer = setTimeout(() => {
+    customerModalSearchTimer = null;
+    void agendaCustomerSearch(term);
+  }, 220);
+}
+
+function agendaCustomerSearchHasLetters(value) {
+  return /[A-Za-zÀ-ÖØ-öø-ÿ]/.test(String(value || ''));
+}
+
+function agendaCustomerOpenSearchModal(initialTerm = '') {
+  if (!els.customerSearchModal) return;
+  customerSearchPreviousFocus =
+    document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  els.customerSearchModal.classList.remove('hidden');
+  const term = String(initialTerm || '').trim();
+  agendaCustomerSetValue(els.customerSearchModalInput, term);
+  if (term.length >= 2) {
+    agendaCustomerScheduleSearch(term);
+  } else {
+    agendaCustomerResetSearch();
+  }
+  window.setTimeout(() => {
+    els.customerSearchModalInput?.focus();
+    if (typeof els.customerSearchModalInput?.select === 'function') {
+      els.customerSearchModalInput.select();
+    }
+  }, 80);
+}
+
+function agendaCustomerCloseSearchModal({ restoreFocus = true } = {}) {
+  if (!els.customerSearchModal) return;
+  els.customerSearchModal.classList.add('hidden');
+  if (customerModalState.searchAbort) {
+    customerModalState.searchAbort.abort();
+    customerModalState.searchAbort = null;
+  }
+  if (customerModalSearchTimer) {
+    clearTimeout(customerModalSearchTimer);
+    customerModalSearchTimer = null;
+  }
+  if (restoreFocus && customerSearchPreviousFocus && typeof customerSearchPreviousFocus.focus === 'function') {
+    try { customerSearchPreviousFocus.focus(); } catch {}
+  }
+  customerSearchPreviousFocus = null;
+}
+
+function agendaCustomerHandleSearchModalKeydown(event) {
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    agendaCustomerCloseSearchModal();
+    return;
+  }
+  if (event.key === 'Enter' && event.target === els.customerSearchModalInput) {
+    event.preventDefault();
+    agendaCustomerScheduleSearch(els.customerSearchModalInput?.value || '');
+  }
+}
+
+async function agendaCustomerSelectSearchResult(index) {
+  const customer = Array.isArray(customerModalState.searchResults) ? customerModalState.searchResults[index] : null;
+  if (!customer?._id) return;
+  await agendaCustomerLoad(customer._id, { preservePetSelection: false });
+  agendaCustomerCloseSearchModal({ restoreFocus: false });
+  window.setTimeout(() => {
+    els.customerCode?.focus();
+  }, 40);
+}
+
+function agendaCustomerNormalizePhone(value) {
+  const digits = agendaCustomerDigits(value);
+  if (!digits) return '';
+  if (digits.length > 11 && digits.startsWith('55')) return digits.slice(2);
+  return digits;
+}
+
+function agendaCustomerBuildPhoneVariants(value) {
+  const normalized = agendaCustomerNormalizePhone(value);
+  const variants = new Set();
+  if (!normalized) return variants;
+  variants.add(normalized);
+  if (normalized.length >= 11) variants.add(normalized.slice(-11));
+  if (normalized.length >= 10) variants.add(normalized.slice(-10));
+  if (normalized.length >= 9) variants.add(normalized.slice(-9));
+  if (normalized.length >= 8) variants.add(normalized.slice(-8));
+  if (normalized.length === 11 && normalized[2] === '9') {
+    variants.add(`${normalized.slice(0, 2)}${normalized.slice(3)}`);
+    variants.add(normalized.slice(3));
+  }
+  return variants;
+}
+
+function agendaCustomerPhoneCandidates(customer) {
+  if (!customer || typeof customer !== 'object') return [];
+  const candidates = [];
+  const add = (value) => {
+    const digits = agendaCustomerNormalizePhone(value);
+    if (!digits) return;
+    if (!candidates.includes(digits)) candidates.push(digits);
+  };
+  add(customer.telefone);
+  add(customer.celular);
+  add(customer.celular2);
+  add(customer.celular_2);
+  add(customer.celularSecundario);
+  add(customer.telefone2);
+  add(customer.telefoneSecundario);
+  add(customer.telefoneFixo);
+  add(customer.telefone_fixo);
+  add(customer.fone);
+  add(customer.fone2);
+  add(customer.whatsapp);
+  add(customer.telefone1);
+  if (customer.contato && typeof customer.contato === 'object') {
+    add(customer.contato.telefone);
+    add(customer.contato.telefone2);
+    add(customer.contato.telefone_2);
+    add(customer.contato.celular);
+    add(customer.contato.celular2);
+    add(customer.contato.celular_2);
+    add(customer.contato.whatsapp);
+  }
+  if (Array.isArray(customer.telefones)) {
+    customer.telefones.forEach((entry) => {
+      if (!entry) return;
+      if (typeof entry === 'string') {
+        add(entry);
+        return;
+      }
+      if (typeof entry === 'object') {
+        add(entry.telefone || entry.celular || entry.whatsapp || entry.numero || entry.number);
+      }
+    });
+  }
+  return candidates;
+}
+
+function agendaCustomerListHasPhoneMatch(list, targetDigits) {
+  const targetVariants = agendaCustomerBuildPhoneVariants(targetDigits);
+  if (!Array.isArray(list) || !list.length || !targetVariants.size) return null;
+  return list.find((entry) => {
+    const phones = agendaCustomerPhoneCandidates(entry);
+    return phones.some((candidate) => {
+      const candidateVariants = agendaCustomerBuildPhoneVariants(candidate);
+      for (const cv of candidateVariants) {
+        if (targetVariants.has(cv)) return true;
+        for (const tv of targetVariants) {
+          if (cv.endsWith(tv) || tv.endsWith(cv)) return true;
+        }
+      }
+      return false;
+    });
+  }) || null;
+}
+
+function agendaCustomerFormatLocalPhoneDigits(value) {
+  const digits = agendaCustomerDigits(value);
+  if (digits.length === 8) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+  if (digits.length === 9) return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+  return digits;
+}
+
+function agendaCustomerBuildPhoneSearchQueries(targetDigits) {
+  const targetNormalized = agendaCustomerNormalizePhone(targetDigits);
+  const local9 = targetNormalized.slice(-9);
+  const local8 = targetNormalized.slice(-8);
+  const dddValue = targetNormalized.length >= 10 ? targetNormalized.slice(0, 2) : '';
+  const localValue = dddValue ? targetNormalized.slice(2) : targetNormalized;
+  const localFormatted = agendaCustomerFormatLocalPhoneDigits(localValue);
+  const formattedQueries = (() => {
+    const variants = new Set();
+    if (localValue) {
+      variants.add(localValue);
+      variants.add(localFormatted);
+    }
+    if (dddValue && localValue) {
+      variants.add(`${dddValue}${localValue}`);
+      variants.add(`${dddValue} ${localValue}`);
+      variants.add(`${dddValue}-${localValue}`);
+      variants.add(`(${dddValue})${localValue}`);
+      variants.add(`(${dddValue}) ${localValue}`);
+      variants.add(`(${dddValue}) ${localFormatted}`);
+      variants.add(`${dddValue} ${localFormatted}`);
+    }
+    return Array.from(variants).filter(Boolean);
+  })();
+  return Array.from(
+    new Set(
+      [targetDigits, targetNormalized, local9, local8, ...formattedQueries].filter(
+        (value) => value && String(value).trim().length >= 8
+      )
+    )
+  );
+}
+
+async function agendaCustomerLookupByCode(rawValue) {
+  if (agendaCustomerSearchHasLetters(rawValue)) {
+    agendaCustomerOpenSearchModal(rawValue);
+    return false;
+  }
+  const code = agendaCustomerDigits(rawValue);
+  if (!code) {
+    agendaCustomerClearContext();
+    agendaCustomerResetSearch();
+    return false;
+  }
+  const response = await api(`/func/clientes/buscar?q=${encodeURIComponent(code)}&limit=10`);
+  if (!response.ok) {
+    agendaCustomerClearContext();
+    agendaCustomerResetSearch();
+    return false;
+  }
+  const payload = await response.json().catch(() => []);
+  const list = Array.isArray(payload) ? payload : [];
+  const exact = list.find((customer) => {
+    const itemCode = agendaCustomerDigits(customer?.codigo || '');
+    return itemCode && Number.parseInt(itemCode, 10) === Number.parseInt(code, 10);
+  });
+  if (!exact?._id) {
+    agendaCustomerClearContext({ keepSearch: true });
+    agendaCustomerSetValue(els.customerCode, rawValue);
+    agendaCustomerResetSearch();
+    return false;
+  }
+  await agendaCustomerLoad(exact._id, { preservePetSelection: false });
+  agendaCustomerResetSearch();
+  return true;
+}
+
+async function agendaCustomerLookupByDocument(rawValue) {
+  const docDigits = agendaCustomerDigits(rawValue);
+  if (docDigits.length !== 11 && docDigits.length !== 14) {
+    customerModalState.lastDocLookup = '';
+    return false;
+  }
+  if (customerModalState.lastDocLookup === docDigits) return false;
+  customerModalState.lastDocLookup = docDigits;
+  try {
+    const response = await api(`/func/clientes/buscar?q=${encodeURIComponent(docDigits)}&limit=12`);
+    if (!response.ok) return false;
+    const payload = await response.json().catch(() => []);
+    const list = Array.isArray(payload) ? payload : [];
+    const exact = list.find((customer) => {
+      const cpf = agendaCustomerDigits(customer?.cpf || '');
+      const cnpj = agendaCustomerDigits(customer?.cnpj || '');
+      return cpf === docDigits || cnpj === docDigits;
+    });
+    if (!exact?._id) {
+      customerModalState.lastDocLookup = '';
+      return false;
+    }
+    await agendaCustomerLoad(exact._id, { preservePetSelection: false });
+    return true;
+  } catch {
+    customerModalState.lastDocLookup = '';
+    return false;
+  }
+}
+
+async function agendaCustomerLookupByPhone() {
+  const primaryPhone = agendaCustomerJoinPhone(els.customerPhone1Ddd?.value, els.customerPhone1?.value);
+  const secondaryPhone = agendaCustomerJoinPhone(els.customerPhone2Ddd?.value, els.customerPhone2?.value);
+  const phoneDigits = agendaCustomerNormalizePhone(primaryPhone || secondaryPhone);
+  if (phoneDigits.length !== 10 && phoneDigits.length !== 11) {
+    customerModalState.lastPhoneLookup = '';
+    return false;
+  }
+  if (customerModalState.lastPhoneLookup === phoneDigits) return false;
+  customerModalState.lastPhoneLookup = phoneDigits;
+  try {
+    const queries = agendaCustomerBuildPhoneSearchQueries(phoneDigits);
+    let matched = null;
+
+    for (const query of queries) {
+      const response = await api(`/func/clientes/buscar?q=${encodeURIComponent(query)}&limit=12`);
+      if (!response.ok) continue;
+      const list = await response.json().catch(() => []);
+      matched = agendaCustomerListHasPhoneMatch(list, phoneDigits) || (Array.isArray(list) && list.length === 1 ? list[0] : null);
+      if (matched?._id) break;
+    }
+
+    if (!matched?._id) {
+      for (const query of queries) {
+        for (const page of [1, 2, 3]) {
+          const response = await api(`/func/clientes?page=${page}&limit=50&search=${encodeURIComponent(query)}`);
+          if (!response.ok) continue;
+          const payload = await response.json().catch(() => ({}));
+          const items = Array.isArray(payload?.items) ? payload.items : [];
+          matched = agendaCustomerListHasPhoneMatch(items, phoneDigits);
+          if (matched?._id) break;
+          if (!items.length) break;
+        }
+        if (matched?._id) break;
+      }
+    }
+
+    if (!matched?._id) {
+      for (const query of queries) {
+        const response = await api(`/func/clientes/buscar?q=${encodeURIComponent(query)}&limit=6`);
+        if (!response.ok) continue;
+        const list = await response.json().catch(() => []);
+        if (!Array.isArray(list) || !list.length) continue;
+        for (const item of list) {
+          const id = agendaCustomerNormalizeId(item?._id);
+          if (!id) continue;
+          const detailResponse = await api(`/func/clientes/${id}`);
+          if (!detailResponse.ok) continue;
+          const detail = await detailResponse.json().catch(() => null);
+          if (!detail) continue;
+          if (agendaCustomerListHasPhoneMatch([detail], phoneDigits)) {
+            matched = detail;
+            break;
+          }
+        }
+        if (matched?._id) break;
+      }
+    }
+
+    if (!matched?._id) {
+      customerModalState.lastPhoneLookup = '';
+      return false;
+    }
+
+    await agendaCustomerLoad(matched._id, { preservePetSelection: false });
+    return true;
+  } catch {
+    customerModalState.lastPhoneLookup = '';
+    return false;
+  }
+}
+
+function agendaCustomerBuildPayload() {
+  const nome = String(els.customerName?.value || '').trim();
+  const docDigits = agendaCustomerDigits(els.customerDoc?.value || '');
+  const phones = agendaCustomerCollectFormPhones();
+  const payload = {
+    email: String(els.customerEmail?.value || '').trim(),
+    celular: phones.celular,
+    celular2: phones.celular2,
+    celularSecundario: phones.celular2,
+    telefone: phones.telefone,
+    telefone2: phones.telefone2,
+    telefoneSecundario: phones.telefone2,
+    sexo: String(els.customerSexo?.value || '').trim(),
+    nascimento: String(els.customerBirth?.value || '').trim(),
+    apelido: nome,
+  };
+  if (docDigits.length === 14) {
+    payload.tipoConta = 'pessoa_juridica';
+    payload.razaoSocial = nome;
+    payload.cnpj = docDigits;
+  } else {
+    payload.tipoConta = 'pessoa_fisica';
+    payload.nome = nome;
+    if (docDigits.length === 11) payload.cpf = docDigits;
+  }
+  return payload;
+}
+
+function agendaCustomerBuildAddressPayload() {
+  return {
+    apelido: 'Principal',
+    cep: String(els.customerCep?.value || '').trim(),
+    logradouro: String(els.customerAddress?.value || '').trim(),
+    numero: String(els.customerNumber?.value || '').trim(),
+    complemento: String(els.customerComplemento?.value || '').trim(),
+    bairro: String(els.customerBairro?.value || '').trim(),
+    cidade: String(els.customerCidade?.value || '').trim(),
+    uf: String(els.customerUf?.value || '').trim().toUpperCase(),
+  };
+}
+
+function agendaCustomerBuildPetPayload() {
+  return {
+    nome: String(els.customerPetName?.value || '').trim(),
+    tipo: String(els.customerPetTipo?.value || '').trim(),
+    sexo: String(els.customerPetSexo?.value || '').trim(),
+    porte: String(els.customerPetPorte?.value || '').trim(),
+    raca: String(els.customerPetRaca?.value || '').trim(),
+    nascimento: String(els.customerPetBirth?.value || '').trim(),
+    peso: String(els.customerPetPeso?.value || '').trim(),
+    cor: String(els.customerPetCor?.value || '').trim(),
+    codAntigoPet: String(els.customerPetCodAnt?.value || '').trim(),
+    microchip: String(els.customerPetMicrochip?.value || '').trim(),
+    rga: String(els.customerPetRga?.value || '').trim(),
+    castrado: !!els.customerPetCastrado?.checked,
+    obito: !!els.customerPetObito?.checked,
+  };
+}
+
+function agendaCustomerHasData() {
+  return Boolean(
+    String(els.customerName?.value || '').trim() ||
+    String(els.customerDoc?.value || '').trim() ||
+    String(els.customerPhone1?.value || '').trim() ||
+    String(els.customerEmail?.value || '').trim()
+  );
+}
+
+function agendaCustomerHasAddressData() {
+  return Boolean(
+    String(els.customerAddress?.value || '').trim() ||
+    String(els.customerNumber?.value || '').trim() ||
+    String(els.customerCep?.value || '').trim() ||
+    String(els.customerBairro?.value || '').trim() ||
+    String(els.customerCidade?.value || '').trim() ||
+    String(els.customerComplemento?.value || '').trim()
+  );
+}
+
+function agendaCustomerHasPetData() {
+  return Boolean(
+    String(els.customerPetName?.value || '').trim() ||
+    String(els.customerPetTipo?.value || '').trim() ||
+    String(els.customerPetSexo?.value || '').trim() ||
+    String(els.customerPetRaca?.value || '').trim() ||
+    String(els.customerPetBirth?.value || '').trim() ||
+    String(els.customerPetPeso?.value || '').trim() ||
+    !!els.customerPetCastrado?.checked ||
+    !!els.customerPetObito?.checked
+  );
+}
+
+function agendaCustomerSyncRequiredIndicators() {
+  const active = !!els.customerSaveToggle?.checked;
+  els.customerRequiredName?.classList.toggle('hidden', !active);
+  els.customerRequiredDoc?.classList.toggle('hidden', !active);
+  els.customerRequiredSexo?.classList.toggle('hidden', !active);
+  els.customerRequiredCep?.classList.toggle('hidden', !active);
+  els.customerRequiredPhone1?.classList.toggle('hidden', !active);
+  agendaCustomerRenderAddressCards(customerModalState.addresses);
+  agendaCustomerRenderPets();
+}
+
+async function agendaCustomerSave(options = {}) {
+  const { silent = false } = options;
+  const existingCustomerId = agendaCustomerNormalizeId(customerModalState.clienteId);
+  const payload = agendaCustomerBuildPayload();
+  const docDigits = agendaCustomerDigits(els.customerDoc?.value || '');
+  const cepDigits = agendaCustomerDigits(els.customerCep?.value || '');
+  const hasPrimaryPhone = Boolean(
+    agendaCustomerDigits(agendaCustomerJoinPhone(els.customerPhone1Ddd?.value, els.customerPhone1?.value))
+  );
+  if (!String(payload.nome || payload.razaoSocial || '').trim()) throw new Error('Informe o nome do cliente.');
+  if (docDigits.length !== 11 && docDigits.length !== 14) throw new Error('Informe um CPF/CNPJ válido.');
+  if (!String(payload.sexo || '').trim()) throw new Error('Informe o sexo do cliente.');
+  if (!hasPrimaryPhone) throw new Error('Informe o telefone principal do cliente.');
+  if (cepDigits.length !== 8) throw new Error('Informe um CEP válido com 8 dígitos.');
+  const path = existingCustomerId ? `/func/clientes/${existingCustomerId}` : '/func/clientes';
+  const method = existingCustomerId ? 'PUT' : 'POST';
+  const response = await api(path, { method, body: JSON.stringify(payload) });
+  if (!response.ok) throw new Error(await agendaCustomerReadErr(response, 'Nao foi possivel salvar o cliente.'));
+  const savedCustomer = await response.json().catch(() => ({}));
+  const resolvedCustomerId = agendaCustomerNormalizeId(savedCustomer?._id || savedCustomer?.id || existingCustomerId);
+  if (!resolvedCustomerId) throw new Error('Nao foi possivel identificar o cliente salvo.');
+  customerModalState.clienteId = resolvedCustomerId;
+  if (agendaCustomerHasAddressData() && customerModalState.clienteId) {
+    const addressPayload = agendaCustomerBuildAddressPayload();
+    const addressPath = customerModalState.selectedAddress?._id
+      ? `/func/clientes/${customerModalState.clienteId}/enderecos/${customerModalState.selectedAddress._id}`
+      : `/func/clientes/${customerModalState.clienteId}/enderecos`;
+    const addressMethod = customerModalState.selectedAddress?._id ? 'PUT' : 'POST';
+    const addressResponse = await api(addressPath, { method: addressMethod, body: JSON.stringify(addressPayload) });
+    if (!addressResponse.ok) throw new Error(await agendaCustomerReadErr(addressResponse, 'Nao foi possivel salvar o endereco.'));
+  }
+  await agendaCustomerLoad(customerModalState.clienteId, { preservePetSelection: true });
+  if (!silent) notify('Cliente salvo com sucesso.', 'success');
+}
+
+async function agendaCustomerSavePet(options = {}) {
+  const { silent = false } = options;
+  if (!customerModalState.clienteId) throw new Error('Selecione ou cadastre um cliente antes de gravar o pet.');
+  const existingPetId = agendaCustomerNormalizeId(customerModalState.petId);
+  const payload = agendaCustomerBuildPetPayload();
+  if (!payload.nome) throw new Error('Informe o nome do pet.');
+  if (!payload.tipo) throw new Error('Informe o tipo do pet.');
+  if (!payload.sexo) throw new Error('Informe o sexo do pet.');
+  const path = existingPetId
+    ? `/func/clientes/${customerModalState.clienteId}/pets/${existingPetId}`
+    : `/func/clientes/${customerModalState.clienteId}/pets`;
+  const method = existingPetId ? 'PUT' : 'POST';
+  const response = await api(path, { method, body: JSON.stringify(payload) });
+  if (!response.ok) throw new Error(await agendaCustomerReadErr(response, 'Nao foi possivel salvar o pet.'));
+  const savedPet = await response.json().catch(() => ({}));
+  const resolvedPetId = agendaCustomerNormalizeId(savedPet?._id || savedPet?.id || existingPetId);
+  if (!resolvedPetId) throw new Error('Nao foi possivel identificar o pet salvo.');
+  customerModalState.petId = resolvedPetId;
+  await agendaCustomerLoad(customerModalState.clienteId, { preservePetSelection: true });
+  if (!silent) notify('Pet salvo com sucesso.', 'success');
+}
+
+async function agendaCustomerApplySelection() {
+  if (!customerModalState.clienteId || !customerModalState.selectedCliente) {
+    throw new Error('Selecione um cliente para continuar.');
+  }
+  const pets = Array.isArray(customerModalState.pets) ? customerModalState.pets : [];
+  const resolvedPetId = customerModalState.petId || (pets.length === 1 ? String(pets[0]?._id || '') : '');
+  if (!resolvedPetId) {
+    throw new Error('Selecione um pet para continuar.');
+  }
+  state.selectedCliente = {
+    _id: customerModalState.clienteId,
+    nome: agendaCustomerName(customerModalState.selectedCliente),
+  };
+  if (els.cliInput) els.cliInput.value = state.selectedCliente.nome;
+  if (els.cliSug) {
+    els.cliSug.innerHTML = '';
+    els.cliSug.classList.add('hidden');
+  }
+  if (els.petSelect) {
+    els.petSelect.innerHTML = pets.map((pet) => `<option value="${pet._id}">${escapeHtml(pet.nome || 'Pet')}</option>`).join('');
+    els.petSelect.value = resolvedPetId;
+  }
+  customerModalState.petId = resolvedPetId;
+  agendaCustomerCloseModal();
+}
+
+async function agendaCustomerConfirm() {
+  try {
+    const shouldSave = !!els.customerSaveToggle?.checked;
+    const isExistingCustomer = !!(customerModalState.clienteId && customerModalState.selectedCliente);
+    if (!shouldSave) {
+      if (!isExistingCustomer) {
+        throw new Error('Selecione um cliente existente para continuar.');
+      }
+      if (!customerModalState.petId) {
+        throw new Error('Selecione um pet existente para continuar.');
+      }
+      await agendaCustomerApplySelection();
+      return;
+    }
+
+    if (!isExistingCustomer) {
+      if (!agendaCustomerHasData()) throw new Error('Selecione ou informe um cliente.');
+      await agendaCustomerSave({ silent: true });
+    } else {
+      await agendaCustomerSave({ silent: true });
+    }
+
+    if (agendaCustomerHasPetData() || !customerModalState.petId) {
+      await agendaCustomerSavePet({ silent: true });
+    }
+
+    await agendaCustomerApplySelection();
+  } catch (error) {
+    notify(error?.message || 'Nao foi possivel confirmar o cliente.', 'error');
+  }
+}
+
+async function agendaCustomerOpenModal() {
+  if (!els.customerRegisterModal) return;
+  customerRegisterPreviousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  els.customerRegisterModal.classList.remove('hidden');
+  document.body?.classList.add('overflow-hidden');
+  agendaCustomerCloseSearchModal({ restoreFocus: false });
+  agendaCustomerSyncRequiredIndicators();
+  agendaCustomerSetTab('cliente');
+  agendaCustomerResetSearch();
+  const selectedCustomerId =
+    state.selectedCliente?._id ||
+    state.editing?.clienteId ||
+    state.editing?.cliente?._id ||
+    state.editing?.cliente?.id ||
+    '';
+  const selectedPetId =
+    els.petSelect?.value ||
+    state.editing?.petId ||
+    state.editing?.pet?._id ||
+    state.editing?.pet?.id ||
+    '';
+  if (selectedCustomerId) {
+    try {
+      customerModalState.petId = agendaCustomerNormalizeId(selectedPetId);
+      await agendaCustomerLoad(selectedCustomerId, { preservePetSelection: true });
+    } catch (error) {
+      notify(error?.message || 'Nao foi possivel carregar o cliente selecionado.', 'error');
+      agendaCustomerClearContext();
+    }
+  } else {
+    agendaCustomerClearContext();
+  }
+  setTimeout(() => {
+    els.customerName?.focus();
+  }, 80);
+}
+
+function agendaCustomerCloseModal() {
+  if (!els.customerRegisterModal) return;
+  agendaCustomerCloseSearchModal({ restoreFocus: false });
+  els.customerRegisterModal.classList.add('hidden');
+  document.body?.classList.remove('overflow-hidden');
+  if (customerModalState.searchAbort) {
+    customerModalState.searchAbort.abort();
+    customerModalState.searchAbort = null;
+  }
+  if (customerModalSearchTimer) {
+    clearTimeout(customerModalSearchTimer);
+    customerModalSearchTimer = null;
+  }
+  if (customerRegisterPreviousFocus && typeof customerRegisterPreviousFocus.focus === 'function') {
+    try { customerRegisterPreviousFocus.focus(); } catch {}
+  }
+  customerRegisterPreviousFocus = null;
+}
+
+function agendaCustomerHandleKeydown(event) {
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    agendaCustomerCloseModal();
+    return;
+  }
+  if (event.key === 'F5') {
+    event.preventDefault();
+    void agendaCustomerConfirm();
+  }
 }
 
 export function openEditModal(a) {
@@ -969,16 +2223,173 @@ export async function confirmAsync(title, message, opts = {}) {
 export function bindModalAndActionsEvents() {
   els.customerRegisterButton?.addEventListener('click', (event) => {
     event.preventDefault();
-    openCustomerRegisterModal();
+    void agendaCustomerOpenModal();
   });
-  els.customerRegisterClose?.addEventListener('click', closeCustomerRegisterModal);
-  els.customerRegisterBackdrop?.addEventListener('click', closeCustomerRegisterModal);
-  els.customerRegisterModal?.addEventListener('keydown', handleCustomerRegisterModalKeydown);
-  els.customerRegisterFrame?.addEventListener('load', handleCustomerRegisterFrameLoad);
-  if (!customerRegisterMessageHandlerBound && typeof window !== 'undefined') {
-    window.addEventListener('message', handleCustomerRegisterIframeMessage);
-    customerRegisterMessageHandlerBound = true;
-  }
+  els.customerRegisterClose?.addEventListener('click', agendaCustomerCloseModal);
+  els.customerRegisterBackdrop?.addEventListener('click', agendaCustomerCloseModal);
+  els.customerRegisterModal?.addEventListener('keydown', agendaCustomerHandleKeydown);
+  els.customerSearchModalClose?.addEventListener('click', () => agendaCustomerCloseSearchModal());
+  els.customerSearchModalBackdrop?.addEventListener('click', () => agendaCustomerCloseSearchModal());
+  els.customerSearchModal?.addEventListener('keydown', agendaCustomerHandleSearchModalKeydown);
+  els.customerSearchModalButton?.addEventListener('click', () => {
+    agendaCustomerScheduleSearch(els.customerSearchModalInput?.value || '');
+  });
+  els.customerSearchModalInput?.addEventListener('input', () => {
+    agendaCustomerScheduleSearch(els.customerSearchModalInput?.value || '');
+  });
+  els.customerSearchModalResults?.addEventListener('click', (event) => {
+    const row = event.target.closest('tr[data-agenda-customer-search-result]');
+    if (!row) return;
+    const index = Number.parseInt(row.getAttribute('data-agenda-customer-search-result') || '-1', 10);
+    if (!Number.isInteger(index) || index < 0) return;
+    void agendaCustomerSelectSearchResult(index).catch((error) => {
+      notify(error?.message || 'Nao foi possivel carregar o cliente.', 'error');
+    });
+  });
+  els.customerCancelButton?.addEventListener('click', agendaCustomerCloseModal);
+  els.customerClearButton?.addEventListener('click', () => {
+    agendaCustomerClearContext();
+    agendaCustomerResetSearch();
+    agendaCustomerSyncRequiredIndicators();
+    agendaCustomerSetTab('cliente');
+  });
+  els.customerClearSelectionButton?.addEventListener('click', () => {
+    agendaCustomerClearContext();
+    agendaCustomerResetSearch();
+  });
+  els.customerSaveToggle?.addEventListener('change', agendaCustomerSyncRequiredIndicators);
+  els.customerTabBtnCliente?.addEventListener('click', () => agendaCustomerSetTab('cliente'));
+  els.customerTabBtnPet?.addEventListener('click', () => agendaCustomerSetTab('pet'));
+  els.customerCode?.addEventListener('input', () => {
+    const code = String(els.customerCode?.value || '').trim();
+    if (code.length >= 1) {
+      void agendaCustomerLookupByCode(code).catch(() => {});
+    } else {
+      agendaCustomerCloseSearchModal({ restoreFocus: false });
+    }
+  });
+  els.customerDoc?.addEventListener('input', () => {
+    void agendaCustomerLookupByDocument(els.customerDoc?.value || '').catch(() => {});
+  });
+  els.customerPhone1Ddd?.addEventListener('blur', () => {
+    void agendaCustomerLookupByPhone().catch(() => {});
+  });
+  els.customerPhone1?.addEventListener('input', () => {
+    void agendaCustomerLookupByPhone().catch(() => {});
+  });
+  els.customerPhone1?.addEventListener('blur', () => {
+    void agendaCustomerLookupByPhone().catch(() => {});
+  });
+  els.customerPhone2Ddd?.addEventListener('blur', () => {
+    void agendaCustomerLookupByPhone().catch(() => {});
+  });
+  els.customerPhone2?.addEventListener('input', () => {
+    void agendaCustomerLookupByPhone().catch(() => {});
+  });
+  els.customerPhone2?.addEventListener('blur', () => {
+    void agendaCustomerLookupByPhone().catch(() => {});
+  });
+  els.customerPetTipo?.addEventListener('input', () => {
+    void syncAgendaCustomerPetBreedTypePorte('tipo');
+    void renderAgendaCustomerPetBreedSuggestions();
+  });
+  els.customerPetTipo?.addEventListener('change', () => {
+    void syncAgendaCustomerPetBreedTypePorte('tipo');
+    void renderAgendaCustomerPetBreedSuggestions();
+  });
+  els.customerPetRacaSuggest?.addEventListener('mousedown', (event) => {
+    const button = event.target.closest('[data-agenda-customer-pet-breed-option]');
+    if (!button || !els.customerPetRaca) return;
+    event.preventDefault();
+    selectAgendaCustomerPetBreedOption(button.getAttribute('data-agenda-customer-pet-breed-option') || '');
+  });
+  els.customerPetRaca?.addEventListener('focus', () => {
+    void renderAgendaCustomerPetBreedSuggestions();
+  });
+  els.customerPetRaca?.addEventListener('input', () => {
+    void renderAgendaCustomerPetBreedSuggestions();
+    void syncAgendaCustomerPetBreedTypePorte('raca');
+  });
+  els.customerPetRaca?.addEventListener('change', () => {
+    void renderAgendaCustomerPetBreedSuggestions();
+    void syncAgendaCustomerPetBreedTypePorte('raca');
+  });
+  els.customerPetRaca?.addEventListener('blur', () => {
+    setTimeout(() => closeAgendaCustomerPetBreedSuggestions(), 120);
+    void syncAgendaCustomerPetBreedTypePorte('raca');
+  });
+  els.customerPetRaca?.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      closeAgendaCustomerPetBreedSuggestions();
+      return;
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      if (!agendaCustomerPetBreedFilteredOptions.length) {
+        void renderAgendaCustomerPetBreedSuggestions();
+        return;
+      }
+      agendaCustomerPetBreedActiveIndex =
+        agendaCustomerPetBreedActiveIndex >= agendaCustomerPetBreedFilteredOptions.length - 1
+          ? 0
+          : agendaCustomerPetBreedActiveIndex + 1;
+      void renderAgendaCustomerPetBreedSuggestions();
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (!agendaCustomerPetBreedFilteredOptions.length) {
+        void renderAgendaCustomerPetBreedSuggestions();
+        return;
+      }
+      agendaCustomerPetBreedActiveIndex =
+        agendaCustomerPetBreedActiveIndex <= 0
+          ? agendaCustomerPetBreedFilteredOptions.length - 1
+          : agendaCustomerPetBreedActiveIndex - 1;
+      void renderAgendaCustomerPetBreedSuggestions();
+      return;
+    }
+    if (event.key === 'Enter' && agendaCustomerPetBreedFilteredOptions.length) {
+      event.preventDefault();
+      const breed =
+        agendaCustomerPetBreedFilteredOptions[
+          agendaCustomerPetBreedActiveIndex >= 0 ? agendaCustomerPetBreedActiveIndex : 0
+        ];
+      if (breed) selectAgendaCustomerPetBreedOption(breed);
+    }
+  });
+  els.customerConfirmButton?.addEventListener('click', () => {
+    void agendaCustomerConfirm();
+  });
+  els.customerPets?.addEventListener('click', (event) => {
+    const addButton = event.target.closest('[data-agenda-customer-pet-new="true"]');
+    if (addButton) {
+      agendaCustomerSetTab('pet');
+      agendaCustomerStartNewPet();
+      return;
+    }
+    const button = event.target.closest('[data-agenda-customer-pet]');
+    if (!button) return;
+    const petId = agendaCustomerNormalizeId(button.getAttribute('data-agenda-customer-pet'));
+    const pet = customerModalState.pets.find((item) => agendaCustomerNormalizeId(item?._id) === petId);
+    if (pet) agendaCustomerFillPet(pet);
+  });
+  els.customerAddressCards?.addEventListener('click', (event) => {
+    const newCard = event.target.closest('[data-agenda-customer-address-new="true"]');
+    if (newCard) {
+      agendaCustomerStartNewAddress();
+      return;
+    }
+    const button = event.target.closest('[data-agenda-customer-address]');
+    if (!button) return;
+    const addressId = agendaCustomerNormalizeId(button.getAttribute('data-agenda-customer-address'));
+    const list = Array.isArray(customerModalState.addresses) ? customerModalState.addresses : [];
+    const address =
+      list.find((item) => agendaCustomerNormalizeId(item?._id) === addressId) ||
+      customerModalState.selectedAddress;
+    agendaCustomerFillAddress(address);
+    agendaCustomerRenderAddressCards(list);
+  });
   // Atualiza preÃ§os da lista e do item selecionado ao mudar empresa/pet
   els.addStoreSelect?.addEventListener('change', () => { updateVisibleServicePrices(); updateSelectedServicePrice(); });
   els.petSelect?.addEventListener('change', () => { updateVisibleServicePrices(); updateSelectedServicePrice(); });

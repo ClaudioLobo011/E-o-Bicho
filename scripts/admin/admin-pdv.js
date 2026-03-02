@@ -963,19 +963,21 @@
     if (!cepDigits || cepDigits.length !== 8) {
       throw new Error('Informe um CEP com 8 dígitos.');
     }
-    const response = await fetch(`https://viacep.com.br/ws/${cepDigits}/json/`, { signal });
+    const response = await fetch(`${API_BASE}/shipping/cep?cep=${encodeURIComponent(cepDigits)}`, { signal });
     if (!response.ok) {
-      throw new Error('Não foi possível consultar o CEP informado.');
+      let message = 'Não foi possível consultar o CEP informado.';
+      try {
+        const payload = await response.json();
+        if (payload?.message) message = payload.message;
+      } catch {}
+      throw new Error(message);
     }
     const data = await response.json();
-    if (data?.erro) {
-      throw new Error('CEP não encontrado.');
-    }
     return {
       cep: formatCep(cepDigits),
       logradouro: data.logradouro || '',
       bairro: data.bairro || '',
-      cidade: data.localidade || '',
+      cidade: data.cidade || data.localidade || data.city || '',
       uf: (data.uf || '').toUpperCase(),
       complemento: data.complemento || '',
     };
