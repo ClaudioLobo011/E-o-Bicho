@@ -977,7 +977,7 @@ async function agendaCustomerLoad(customerId, options = {}) {
     agendaCustomerResetSearch();
     return;
   }
-  const { preservePetSelection = true } = options;
+  const { preservePetSelection = true, autoSelectFirstPet = true } = options;
   const currentPetId = preservePetSelection ? customerModalState.petId : '';
   if (els.customerPetsLoading) els.customerPetsLoading.classList.remove('hidden');
   if (els.customerPetsEmpty) els.customerPetsEmpty.classList.add('hidden');
@@ -998,7 +998,7 @@ async function agendaCustomerLoad(customerId, options = {}) {
   customerModalState.pets = Array.isArray(pets) ? pets : [];
   const matchedPet =
     customerModalState.pets.find((pet) => agendaCustomerNormalizeId(pet?._id) === agendaCustomerNormalizeId(currentPetId)) ||
-    customerModalState.pets[0] ||
+    (autoSelectFirstPet ? customerModalState.pets[0] : null) ||
     null;
   if (matchedPet) agendaCustomerFillPet(matchedPet);
   else agendaCustomerClearPet();
@@ -1445,6 +1445,29 @@ function agendaCustomerBuildPetPayload() {
   };
 }
 
+function agendaCustomerApplyPetDraft(petDraft) {
+  if (!petDraft || typeof petDraft !== 'object') return;
+  customerModalState.selectedPet = null;
+  customerModalState.petId = '';
+  customerModalState.creatingNewPet = true;
+  agendaCustomerSetValue(els.customerPetCode, '');
+  agendaCustomerSetValue(els.customerPetName, petDraft.nome || '');
+  agendaCustomerSetValue(els.customerPetTipo, petDraft.tipo || '');
+  agendaCustomerSetValue(els.customerPetSexo, petDraft.sexo || '');
+  agendaCustomerSetValue(els.customerPetPorte, petDraft.porte || '');
+  agendaCustomerSetValue(els.customerPetRaca, petDraft.raca || '');
+  agendaCustomerSetValue(els.customerPetBirth, petDraft.nascimento || '');
+  agendaCustomerSetValue(els.customerPetPeso, petDraft.peso || '');
+  agendaCustomerSetValue(els.customerPetCor, petDraft.cor || '');
+  agendaCustomerSetValue(els.customerPetCodAnt, petDraft.codAntigoPet || '');
+  agendaCustomerSetValue(els.customerPetMicrochip, petDraft.microchip || '');
+  agendaCustomerSetValue(els.customerPetRga, petDraft.rga || '');
+  agendaCustomerSetChecked(els.customerPetCastrado, !!petDraft.castrado);
+  agendaCustomerSetChecked(els.customerPetObito, !!petDraft.obito);
+  agendaCustomerRenderPets();
+  void syncAgendaCustomerPetBreedTypePorte('raca');
+}
+
 function agendaCustomerHasData() {
   return Boolean(
     String(els.customerName?.value || '').trim() ||
@@ -1492,6 +1515,8 @@ function agendaCustomerSyncRequiredIndicators() {
 async function agendaCustomerSave(options = {}) {
   const { silent = false } = options;
   const existingCustomerId = agendaCustomerNormalizeId(customerModalState.clienteId);
+  const pendingPetDraft =
+    !customerModalState.petId && agendaCustomerHasPetData() ? agendaCustomerBuildPetPayload() : null;
   const payload = agendaCustomerBuildPayload();
   const docDigits = agendaCustomerDigits(els.customerDoc?.value || '');
   const cepDigits = agendaCustomerDigits(els.customerCep?.value || '');
@@ -1520,7 +1545,13 @@ async function agendaCustomerSave(options = {}) {
     const addressResponse = await api(addressPath, { method: addressMethod, body: JSON.stringify(addressPayload) });
     if (!addressResponse.ok) throw new Error(await agendaCustomerReadErr(addressResponse, 'Nao foi possivel salvar o endereco.'));
   }
-  await agendaCustomerLoad(customerModalState.clienteId, { preservePetSelection: true });
+  await agendaCustomerLoad(customerModalState.clienteId, {
+    preservePetSelection: true,
+    autoSelectFirstPet: !pendingPetDraft,
+  });
+  if (pendingPetDraft) {
+    agendaCustomerApplyPetDraft(pendingPetDraft);
+  }
   if (!silent) notify('Cliente salvo com sucesso.', 'success');
 }
 
