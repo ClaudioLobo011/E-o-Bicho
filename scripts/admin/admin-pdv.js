@@ -2381,6 +2381,8 @@
     const saleCode = options.saleCode || state.currentSaleCode || '';
     const storeLabel = options.storeLabel || getStoreLabel();
     const pdvLabel = options.pdvLabel || getPdvLabel();
+    const appointmentId = normalizeId(options.appointmentId || '');
+    const appointmentIds = normalizeAppointmentIdList(options.appointmentIds);
     const discountSource =
       options.desconto ?? options.discount ?? state.vendaDesconto;
     const additionSource =
@@ -2586,9 +2588,11 @@
           store: storeLabel,
           pdv: pdvLabel,
           data: nowLabel,
-        operador: operatorName,
-        saleCode,
-      },
+          operador: operatorName,
+          saleCode,
+          appointmentId,
+          appointmentIds,
+        },
       cliente,
       delivery: deliveryAddress,
       itens,
@@ -14633,13 +14637,16 @@
         items: itensSnapshot,
         saleDate,
       });
+    const appointmentIdsForSale = normalizeAppointmentIdList(state.activeAppointmentIds);
+    const primaryAppointmentIdForSale = appointmentIdsForSale[0] || state.activeAppointmentId || '';
       const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda, {
         saleCode,
+        appointmentId: primaryAppointmentIdForSale,
+        appointmentIds: appointmentIdsForSale,
       });
     const cashContributions = normalizeCashContributions(
       registerSaleOnCaixa(pagamentosVenda, total, saleCode)
     );
-    const appointmentIdsForSale = normalizeAppointmentIdList(state.activeAppointmentIds);
     const saleRecord = registerCompletedSaleRecord({
       type: 'venda',
       saleCode,
@@ -14652,7 +14659,7 @@
       createdAt: saleReceivables.saleDate,
       receivables: saleReceivables.entries,
       cashContributions,
-      appointmentId: appointmentIdsForSale[0] || state.activeAppointmentId || '',
+      appointmentId: primaryAppointmentIdForSale,
       appointmentIds: appointmentIdsForSale,
       seller: state.selectedSeller,
     });
@@ -23000,6 +23007,8 @@
     if (!sale || typeof sale !== 'object') return [];
     const ids = normalizeAppointmentIdList(sale.appointmentIds);
     if (ids.length) return ids;
+    const snapshotIds = normalizeAppointmentIdList(sale.receiptSnapshot?.meta?.appointmentIds);
+    if (snapshotIds.length) return snapshotIds;
     const fallbackId = normalizeId(sale.appointmentId || sale.receiptSnapshot?.meta?.appointmentId || '');
     return fallbackId ? [fallbackId] : [];
   };

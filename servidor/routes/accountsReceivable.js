@@ -180,10 +180,25 @@ function canonicalStatus(value) {
 async function generateSequentialCode() {
   const now = new Date();
   const year = now.getUTCFullYear();
-  const yearStart = new Date(Date.UTC(year, 0, 1));
-  const count = await AccountReceivable.countDocuments({ createdAt: { $gte: yearStart } });
-  const sequential = String(count + 1).padStart(5, '0');
+  const prefix = `CR-${year}-`;
+  const latest = await AccountReceivable.findOne({
+    code: { $regex: `^${prefix}` },
+  })
+    .sort({ code: -1 })
+    .select('code')
+    .lean();
+  const latestCode = typeof latest?.code === 'string' ? latest.code.trim() : '';
+  const match = latestCode.match(new RegExp(`^${prefix}(\\d+)$`));
+  const latestNumber = match ? Number.parseInt(match[1], 10) : 0;
+  const sequential = String((Number.isFinite(latestNumber) ? latestNumber : 0) + 1).padStart(5, '0');
   return `CR-${year}-${sequential}`;
+}
+
+function isDuplicateReceivableCodeError(error) {
+  return (
+    error?.code === 11000 ||
+    (typeof error?.message === 'string' && error.message.toLowerCase().includes('duplicate key'))
+  );
 }
 
 function buildDisplayName(user) {
@@ -1238,8 +1253,27 @@ router.post(
   authorizeRoles(...AUTH_ROLES),
   async (req, res) => {
     try {
-      const payload = await assembleReceivablePayload(req.body);
-      const created = await AccountReceivable.create(payload);
+      const explicitCode = normalizeString(req.body?.code);
+      let created = null;
+      let lastError = null;
+
+      for (let attempt = 0; attempt < (explicitCode ? 1 : 5); attempt += 1) {
+        try {
+          const payload = await assembleReceivablePayload(req.body);
+          created = await AccountReceivable.create(payload);
+          lastError = null;
+          break;
+        } catch (error) {
+          lastError = error;
+          if (!isDuplicateReceivableCodeError(error) || explicitCode) {
+            throw error;
+          }
+        }
+      }
+
+      if (!created && lastError) {
+        throw lastError;
+      }
       await created.populate(RECEIVABLE_POPULATE);
       res.status(201).json(buildPublicReceivable(created));
     } catch (error) {

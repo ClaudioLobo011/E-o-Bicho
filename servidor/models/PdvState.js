@@ -114,6 +114,8 @@ const receivableSchema = new mongoose.Schema(
     inventoryProcessed: { type: Boolean, default: false },
     inventoryProcessedAt: { type: Date, default: null },
     cashContributions: { type: [cashContributionSchema], default: [] },
+    appointmentId: { type: String, trim: true, default: '' },
+    appointmentIds: { type: [String], default: [] },
   },
   { _id: false }
 );
