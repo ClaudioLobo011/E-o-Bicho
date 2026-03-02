@@ -15,7 +15,7 @@ namespace PdvLocalAgent
 {
     public class Program
     {
-        private static readonly string Version = "1.1.3";
+        private static readonly string Version = "1.1.4";
         private static readonly JavaScriptSerializer Serializer = new JavaScriptSerializer();
         private static AgentConfig Config;
         private static Logger Log;
@@ -781,6 +781,10 @@ try {
         public string quantity { get; set; }
         public string unitPrice { get; set; }
         public string total { get; set; }
+        public string discount { get; set; }
+        public double discountValue { get; set; }
+        public string addition { get; set; }
+        public double additionValue { get; set; }
     }
 
     public class ReceiptTotals
@@ -1491,6 +1495,21 @@ try {
                     }
                 }
             }
+
+            if (item.discountValue > 0 || !string.IsNullOrWhiteSpace(item.discount))
+            {
+                string discountLine = !string.IsNullOrWhiteSpace(item.discount)
+                    ? item.discount.Trim()
+                    : FormatCurrency(item.discountValue);
+                AddLine(new string(' ', Math.Max(0, layout.CodeWidth + 1)) + "Desc. item: - " + discountLine);
+            }
+            if (item.additionValue > 0 || !string.IsNullOrWhiteSpace(item.addition))
+            {
+                string additionLine = !string.IsNullOrWhiteSpace(item.addition)
+                    ? item.addition.Trim()
+                    : FormatCurrency(item.additionValue);
+                AddLine(new string(' ', Math.Max(0, layout.CodeWidth + 1)) + "Acresc. item: + " + additionLine);
+            }
         }
 
         private void RenderSaleBody(ReceiptDocument doc)
@@ -1878,6 +1897,20 @@ try {
             if (!string.IsNullOrWhiteSpace(detail) || !string.IsNullOrWhiteSpace(total))
             {
                 AddLine(FormatColumns(detail, total));
+            }
+            if (item.discountValue > 0 || !string.IsNullOrWhiteSpace(item.discount))
+            {
+                string discountLine = !string.IsNullOrWhiteSpace(item.discount)
+                    ? item.discount.Trim()
+                    : FormatCurrency(item.discountValue);
+                AddLine("Desconto item: - " + discountLine);
+            }
+            if (item.additionValue > 0 || !string.IsNullOrWhiteSpace(item.addition))
+            {
+                string additionLine = !string.IsNullOrWhiteSpace(item.addition)
+                    ? item.addition.Trim()
+                    : FormatCurrency(item.additionValue);
+                AddLine("Acrescimo item: + " + additionLine);
             }
         }
 

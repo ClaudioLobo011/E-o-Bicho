@@ -380,6 +380,12 @@
   const BUDGET_CODE_PADDING = 6;
   const ACTIVE_TAB_STORAGE_KEY = 'adminPdvActiveTab';
   let pendingActiveTabPreference = '';
+  const saleAdjustModalState = {
+    mode: 'desconto',
+    syncing: false,
+    target: 'sale',
+    itemIndex: -1,
+  };
   const loadActiveTabPreference = () => {
     if (typeof window === 'undefined') {
       return '';
@@ -1505,6 +1511,105 @@
     return number.toFixed(decimals).replace('.', ',');
   };
 
+  const formatMaskedDecimalValue = (value, decimals = 2) => {
+    const number = safeNumber(value);
+    return number.toLocaleString('pt-BR', {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    });
+  };
+
+  const extractDigitChars = (value) => String(value ?? '').replace(/\D/g, '');
+
+  const parseMaskedDigitsValue = (value, { max = Number.POSITIVE_INFINITY } = {}) => {
+    const digits = extractDigitChars(value);
+    const centsValue = digits ? Number(digits) / 100 : 0;
+    const normalized = Math.max(0, Math.min(safeNumber(centsValue), max));
+    return {
+      digits,
+      value: normalized,
+      formatted: formatMaskedDecimalValue(normalized, 2),
+    };
+  };
+
+  const getSaleItemQuantityValue = (item) => Math.max(0, safeNumber(item?.quantidade ?? item?.qtd ?? 0));
+
+  const getSaleItemBaseSubtotal = (item) => {
+    if (!item || typeof item !== 'object') return 0;
+    const quantity = getSaleItemQuantityValue(item);
+    const explicitBaseSubtotal = item.subtotalSemAjuste ?? item.baseSubtotal ?? item.originalSubtotal;
+    if (explicitBaseSubtotal != null) {
+      return Math.max(0, safeNumber(explicitBaseSubtotal));
+    }
+    const baseUnit = item.valorSemAjuste ?? item.baseUnitPrice ?? item.valor ?? item.preco ?? 0;
+    return Math.max(0, safeNumber(baseUnit) * quantity);
+  };
+
+  const getSaleItemDiscountValue = (item) =>
+    Math.max(0, safeNumber(item?.itemDiscountValue ?? item?.descontoItemValor ?? 0));
+
+  const getSaleItemAdditionValue = (item) =>
+    Math.max(0, safeNumber(item?.itemAdditionValue ?? item?.acrescimoItemValor ?? 0));
+
+  const getSaleItemsDiscountTotal = (items = state.itens) =>
+    (Array.isArray(items) ? items : []).reduce(
+      (sum, item) => sum + getSaleItemDiscountValue(item),
+      0
+    );
+
+  const getSaleItemsAdditionTotal = (items = state.itens) =>
+    (Array.isArray(items) ? items : []).reduce(
+      (sum, item) => sum + getSaleItemAdditionValue(item),
+      0
+    );
+
+  const applyItemAdjustmentToItem = (item) => {
+    if (!item || typeof item !== 'object') return item;
+    const quantity = Math.max(1, getSaleItemQuantityValue(item) || 1);
+    const baseSubtotal = getSaleItemBaseSubtotal(item);
+    const discountValue = Math.min(getSaleItemDiscountValue(item), baseSubtotal);
+    const additionValue = getSaleItemAdditionValue(item);
+    const finalSubtotal = Math.max(0, baseSubtotal + additionValue - discountValue);
+    item.subtotalSemAjuste = baseSubtotal;
+    item.itemDiscountValue = discountValue;
+    item.itemAdditionValue = additionValue;
+    item.descontoItemValor = discountValue;
+    item.acrescimoItemValor = additionValue;
+    item.itemDiscountLabel = formatCurrency(discountValue);
+    item.itemAdditionLabel = formatCurrency(additionValue);
+    item.subtotal = finalSubtotal;
+    item.valor = finalSubtotal / quantity;
+    return item;
+  };
+
+  const normalizeSaleItemAdjustmentState = (item) => {
+    if (!item || typeof item !== 'object') return item;
+    const quantity = Math.max(1, getSaleItemQuantityValue(item) || 1);
+    if (item.valorSemAjuste == null) {
+      const currentSubtotal = Math.max(0, safeNumber(item.subtotal ?? 0));
+      const discountValue = getSaleItemDiscountValue(item);
+      const additionValue = getSaleItemAdditionValue(item);
+      const inferredBaseSubtotal = Math.max(0, currentSubtotal + discountValue - additionValue);
+      item.subtotalSemAjuste = inferredBaseSubtotal;
+      item.valorSemAjuste = inferredBaseSubtotal / quantity;
+    } else if (item.subtotalSemAjuste == null) {
+      item.subtotalSemAjuste = Math.max(0, safeNumber(item.valorSemAjuste) * quantity);
+    }
+    return applyItemAdjustmentToItem(item);
+  };
+
+  const buildSaleItemAdjustmentDetail = (item) => {
+    const discountValue = getSaleItemDiscountValue(item);
+    if (discountValue > 0) {
+      return { label: 'Desconto item', value: `- ${formatCurrency(discountValue)}` };
+    }
+    const additionValue = getSaleItemAdditionValue(item);
+    if (additionValue > 0) {
+      return { label: 'Acréscimo item', value: `+ ${formatCurrency(additionValue)}` };
+    }
+    return null;
+  };
+
   const safeNumber = (value) => {
     const number = Number(value);
     return Number.isFinite(number) ? number : 0;
@@ -2308,7 +2413,11 @@
     };
 
     const itens = saleItems.map((item, index) => {
+      normalizeSaleItemAdjustmentState(item);
       const code = resolveItemCode(item);
+      const itemDiscountValue = getSaleItemDiscountValue(item);
+      const itemAdditionValue = getSaleItemAdditionValue(item);
+      const baseSubtotal = getSaleItemBaseSubtotal(item);
       return {
         index: String(index + 1).padStart(2, '0'),
         nome: item.nome || 'Item da venda',
@@ -2316,6 +2425,11 @@
         quantidade: normalizeQuantity(item.quantidade || 0),
         unitario: formatCurrency(item.valor || item.preco || 0),
         subtotal: formatCurrency(item.subtotal || 0),
+        subtotalOriginal: formatCurrency(baseSubtotal),
+        descontoItem: itemDiscountValue > 0 ? formatCurrency(itemDiscountValue) : '',
+        descontoItemValor: itemDiscountValue,
+        acrescimoItem: itemAdditionValue > 0 ? formatCurrency(itemAdditionValue) : '',
+        acrescimoItemValor: itemAdditionValue,
       };
     });
 
@@ -4235,6 +4349,29 @@
     elements.receivablesResidualError = document.getElementById('pdv-receivables-residual-error');
     elements.saleAdjust = document.getElementById('pdv-sale-adjust');
     elements.saleItemAdjust = document.getElementById('pdv-sale-item-adjust');
+    elements.saleAdjustModal = document.getElementById('pdv-sale-adjust-modal');
+    elements.saleAdjustBackdrop =
+      elements.saleAdjustModal?.querySelector('[data-pdv-sale-adjust-dismiss]') || null;
+    elements.saleAdjustTitle = document.getElementById('pdv-sale-adjust-modal-title');
+    elements.saleAdjustSubtitle = document.getElementById('pdv-sale-adjust-modal-subtitle');
+    elements.saleAdjustClose = document.getElementById('pdv-sale-adjust-close');
+    elements.saleAdjustModeDiscount = document.getElementById('pdv-sale-adjust-mode-discount');
+    elements.saleAdjustModeAddition = document.getElementById('pdv-sale-adjust-mode-addition');
+    elements.saleAdjustBase = document.getElementById('pdv-sale-adjust-base');
+    elements.saleAdjustFinal = document.getElementById('pdv-sale-adjust-final');
+    elements.saleAdjustValue = document.getElementById('pdv-sale-adjust-value');
+    elements.saleAdjustPercent = document.getElementById('pdv-sale-adjust-percent');
+    elements.saleAdjustHint = document.getElementById('pdv-sale-adjust-hint');
+    elements.saleAdjustClear = document.getElementById('pdv-sale-adjust-clear');
+    elements.saleAdjustCancel = document.getElementById('pdv-sale-adjust-cancel');
+    elements.saleAdjustApply = document.getElementById('pdv-sale-adjust-apply');
+    elements.saleItemAdjustModal = document.getElementById('pdv-sale-item-adjust-modal');
+    elements.saleItemAdjustBackdrop =
+      elements.saleItemAdjustModal?.querySelector('[data-pdv-sale-item-adjust-dismiss]') || null;
+    elements.saleItemAdjustClose = document.getElementById('pdv-sale-item-adjust-close');
+    elements.saleItemAdjustCancel = document.getElementById('pdv-sale-item-adjust-cancel');
+    elements.saleItemAdjustList = document.getElementById('pdv-sale-item-adjust-list');
+    elements.saleItemAdjustEmpty = document.getElementById('pdv-sale-item-adjust-empty');
 
     elements.budgetModal = document.getElementById('pdv-budget-modal');
     elements.budgetModalInput = document.getElementById('pdv-budget-validity');
@@ -10517,12 +10654,15 @@
     }
     const fragment = document.createDocumentFragment();
     state.itens.forEach((item, index) => {
+      normalizeSaleItemAdjustmentState(item);
       const li = document.createElement('li');
       li.dataset.index = String(index);
       li.className = 'flex items-start gap-3 py-3';
       const codigoInterno = item.codigoInterno || item.codigo || '—';
       const codigoBarras = item.codigoBarras || '—';
       const basePrice = safeNumber(item.valorBase ?? item.valor);
+      const baseSubtotal = getSaleItemBaseSubtotal(item);
+      const itemAdjustmentDetail = buildSaleItemAdjustmentDetail(item);
       const promoPrice =
         item.valorPromocional != null ? safeNumber(item.valorPromocional) : basePrice;
       const promotionAvailable = promoPrice < basePrice;
@@ -10541,6 +10681,9 @@
             + `<span class="text-[11px] text-gray-500 line-through">Cheio: ${formatCurrency(basePrice)}</span>`
             + `</p>`
         : `<p class="text-xs text-gray-500">Qtde: ${item.quantidade} • Valor: ${formatCurrency(item.valor)}</p>`;
+      const adjustmentLine = itemAdjustmentDetail
+        ? `<p class="text-[11px] text-amber-700">${itemAdjustmentDetail.label}: ${itemAdjustmentDetail.value} • Base ${formatCurrency(baseSubtotal)}</p>`
+        : '';
       const promotionInfo = promotionAvailable
         ? `<p class="text-[11px] text-gray-500">${
             promotionActive ? 'Usando valor promocional' : 'Usando valor cheio'
@@ -10564,6 +10707,7 @@
             <span>Barras: ${codigoBarras}</span>
           </p>
           ${priceLine}
+          ${adjustmentLine}
           ${generalNotice}
         </div>
         <div class="flex flex-col items-end gap-2 text-right">
@@ -12242,12 +12386,232 @@
     }
   };
 
+  const renderSaleItemAdjustList = () => {
+    if (!elements.saleItemAdjustList || !elements.saleItemAdjustEmpty) return;
+    elements.saleItemAdjustList.innerHTML = '';
+    if (!state.itens.length) {
+      elements.saleItemAdjustList.classList.add('hidden');
+      elements.saleItemAdjustEmpty.classList.remove('hidden');
+      return;
+    }
+    const fragment = document.createDocumentFragment();
+    state.itens.forEach((item, index) => {
+      normalizeSaleItemAdjustmentState(item);
+      const detail = buildSaleItemAdjustmentDetail(item);
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className =
+        'flex w-full items-start justify-between gap-3 rounded-xl border border-gray-200 px-4 py-3 text-left transition hover:border-primary hover:bg-primary/5';
+      button.setAttribute('data-sale-item-adjust-select', String(index));
+      button.innerHTML = `
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-semibold text-gray-800">${escapeHtml(item.nome || `Item ${index + 1}`)}</p>
+          <p class="mt-1 text-xs text-gray-500">Qtde: ${escapeHtml(String(item.quantidade || 0))} • Base ${escapeHtml(formatCurrency(getSaleItemBaseSubtotal(item)))}</p>
+          ${
+            detail
+              ? `<p class="mt-1 text-[11px] text-amber-700">${escapeHtml(detail.label)}: ${escapeHtml(detail.value)}</p>`
+              : '<p class="mt-1 text-[11px] text-gray-400">Sem ajuste individual.</p>'
+          }
+        </div>
+        <div class="text-right">
+          <p class="text-xs text-gray-500">Total atual</p>
+          <p class="text-sm font-semibold text-gray-800">${escapeHtml(formatCurrency(safeNumber(item.subtotal)))}</p>
+        </div>
+      `;
+      fragment.appendChild(button);
+    });
+    elements.saleItemAdjustList.appendChild(fragment);
+    elements.saleItemAdjustList.classList.remove('hidden');
+    elements.saleItemAdjustEmpty.classList.add('hidden');
+  };
+
+  const openSaleItemAdjustModal = () => {
+    if (!elements.saleItemAdjustModal) return;
+    renderSaleItemAdjustList();
+    elements.saleItemAdjustModal.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+  };
+
+  const closeSaleItemAdjustModal = () => {
+    if (!elements.saleItemAdjustModal) return;
+    elements.saleItemAdjustModal.classList.add('hidden');
+    releaseBodyScrollIfNoModal();
+  };
+
+  const getSaleAdjustTargetItem = () => {
+    const index = Number(saleAdjustModalState.itemIndex);
+    if (!Number.isInteger(index) || index < 0 || index >= state.itens.length) {
+      return null;
+    }
+    return state.itens[index] || null;
+  };
+
+  const getSaleAdjustBaseTotal = () => {
+    if (saleAdjustModalState.target === 'item') {
+      return Math.max(0, getSaleItemBaseSubtotal(getSaleAdjustTargetItem()));
+    }
+    return Math.max(0, getSaleTotalBruto());
+  };
+
+  const getSaleAdjustMode = () => {
+    if (saleAdjustModalState.target === 'item') {
+      const item = getSaleAdjustTargetItem();
+      if (getSaleItemAdditionValue(item) > 0 && getSaleItemDiscountValue(item) <= 0) {
+        return 'acrescimo';
+      }
+      return 'desconto';
+    }
+    if (state.vendaAcrescimo > 0 && state.vendaDesconto <= 0) {
+      return 'acrescimo';
+    }
+    return 'desconto';
+  };
+
+  const clampSaleAdjustmentValue = (value, mode, baseTotal = getSaleAdjustBaseTotal()) => {
+    const normalized =
+      typeof value === 'number'
+        ? Math.max(0, safeNumber(value))
+        : Math.max(0, parseDecimalInput(value));
+    if (mode === 'desconto') {
+      return Math.min(normalized, Math.max(0, baseTotal));
+    }
+    return normalized;
+  };
+
+  const getSaleAdjustmentFinalValue = (baseTotal, adjustmentValue, mode) =>
+    mode === 'acrescimo'
+      ? baseTotal + adjustmentValue
+      : Math.max(0, baseTotal - adjustmentValue);
+
+  const syncSaleAdjustModalFields = ({ source = 'value' } = {}) => {
+    if (
+      !elements.saleAdjustValue ||
+      !elements.saleAdjustPercent ||
+      !elements.saleAdjustBase ||
+      !elements.saleAdjustFinal
+    ) {
+      return;
+    }
+    const baseTotal = getSaleAdjustBaseTotal();
+    const mode = saleAdjustModalState.mode || 'desconto';
+    const currentValue = parseMaskedDigitsValue(elements.saleAdjustValue.value || '0').value;
+    const maxPercent = mode === 'desconto' ? 100 : Number.POSITIVE_INFINITY;
+    const currentPercent = parseMaskedDigitsValue(elements.saleAdjustPercent.value || '0', {
+      max: maxPercent,
+    }).value;
+
+    let adjustmentValue = 0;
+    let adjustmentPercent = 0;
+    if (source === 'percent') {
+      adjustmentPercent = Math.max(0, currentPercent);
+      if (Number.isFinite(maxPercent)) {
+        adjustmentPercent = Math.min(adjustmentPercent, maxPercent);
+      }
+      adjustmentValue = baseTotal > 0 ? (baseTotal * adjustmentPercent) / 100 : 0;
+      adjustmentValue = clampSaleAdjustmentValue(adjustmentValue, mode, baseTotal);
+      adjustmentPercent = baseTotal > 0 ? (adjustmentValue / baseTotal) * 100 : 0;
+    } else {
+      adjustmentValue = clampSaleAdjustmentValue(currentValue, mode, baseTotal);
+      adjustmentPercent = baseTotal > 0 ? (adjustmentValue / baseTotal) * 100 : 0;
+      if (Number.isFinite(maxPercent)) {
+        adjustmentPercent = Math.min(adjustmentPercent, maxPercent);
+      }
+    }
+
+    const finalValue = getSaleAdjustmentFinalValue(baseTotal, adjustmentValue, mode);
+    saleAdjustModalState.syncing = true;
+    elements.saleAdjustBase.value = formatCurrency(baseTotal);
+    elements.saleAdjustFinal.value = formatCurrency(finalValue);
+    elements.saleAdjustValue.value = formatMaskedDecimalValue(adjustmentValue, 2);
+    elements.saleAdjustPercent.value = formatMaskedDecimalValue(adjustmentPercent, 2);
+    if (elements.saleAdjustHint) {
+      elements.saleAdjustHint.textContent =
+        mode === 'acrescimo'
+          ? 'O valor final soma o acréscimo ao total bruto da venda.'
+          : 'O valor final subtrai o desconto do total bruto da venda.';
+    }
+    saleAdjustModalState.syncing = false;
+  };
+
+  const updateSaleAdjustModeButtons = () => {
+    const isDiscount = saleAdjustModalState.mode !== 'acrescimo';
+    if (elements.saleAdjustModeDiscount) {
+      elements.saleAdjustModeDiscount.classList.toggle('bg-white', isDiscount);
+      elements.saleAdjustModeDiscount.classList.toggle('text-primary', isDiscount);
+      elements.saleAdjustModeDiscount.classList.toggle('shadow-sm', isDiscount);
+      elements.saleAdjustModeDiscount.classList.toggle('text-gray-600', !isDiscount);
+    }
+    if (elements.saleAdjustModeAddition) {
+      elements.saleAdjustModeAddition.classList.toggle('bg-white', !isDiscount);
+      elements.saleAdjustModeAddition.classList.toggle('text-primary', !isDiscount);
+      elements.saleAdjustModeAddition.classList.toggle('shadow-sm', !isDiscount);
+      elements.saleAdjustModeAddition.classList.toggle('text-gray-600', isDiscount);
+    }
+  };
+
+  const populateSaleAdjustModal = () => {
+    saleAdjustModalState.mode = getSaleAdjustMode();
+    updateSaleAdjustModeButtons();
+    let initialValue = saleAdjustModalState.mode === 'acrescimo' ? state.vendaAcrescimo : state.vendaDesconto;
+    if (saleAdjustModalState.target === 'item') {
+      const item = getSaleAdjustTargetItem();
+      initialValue =
+        saleAdjustModalState.mode === 'acrescimo'
+          ? getSaleItemAdditionValue(item)
+          : getSaleItemDiscountValue(item);
+    }
+    if (elements.saleAdjustTitle) {
+      elements.saleAdjustTitle.textContent =
+        saleAdjustModalState.target === 'item'
+          ? 'Acréscimo/Desconto do item'
+          : 'Acréscimo/Desconto';
+    }
+    if (elements.saleAdjustSubtitle) {
+      const item = getSaleAdjustTargetItem();
+      elements.saleAdjustSubtitle.textContent =
+        saleAdjustModalState.target === 'item'
+          ? `Ajuste individual aplicado ao item ${item?.nome || 'selecionado'}.`
+          : 'Ajuste geral aplicado ao total da venda.';
+    }
+    if (elements.saleAdjustValue) {
+      elements.saleAdjustValue.value = formatMaskedDecimalValue(initialValue, 2);
+    }
+    if (elements.saleAdjustPercent) {
+      elements.saleAdjustPercent.value = '0,00';
+    }
+    syncSaleAdjustModalFields({ source: 'value' });
+  };
+
+  const openSaleAdjustModal = ({ target = 'sale', itemIndex = -1 } = {}) => {
+    if (!elements.saleAdjustModal) return;
+    saleAdjustModalState.target = target === 'item' ? 'item' : 'sale';
+    saleAdjustModalState.itemIndex =
+      saleAdjustModalState.target === 'item' ? Number(itemIndex) : -1;
+    populateSaleAdjustModal();
+    elements.saleAdjustModal.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+    window.setTimeout(() => {
+      elements.saleAdjustValue?.focus();
+      elements.saleAdjustValue?.select?.();
+    }, 0);
+  };
+
+  const closeSaleAdjustModal = () => {
+    if (!elements.saleAdjustModal) return;
+    elements.saleAdjustModal.classList.add('hidden');
+    saleAdjustModalState.target = 'sale';
+    saleAdjustModalState.itemIndex = -1;
+    releaseBodyScrollIfNoModal();
+  };
+
   const closeFinalizeModal = () => {
     if (!elements.finalizeModal) return;
     const context = state.activeFinalizeContext;
     if (state.finalizeProcessing) {
       setFinalizeProcessing(false);
     }
+    closeSaleItemAdjustModal();
+    closeSaleAdjustModal();
     elements.finalizeModal.classList.add('hidden');
     closePaymentValueModal(true);
     releaseBodyScrollIfNoModal();
@@ -14854,11 +15218,121 @@
   };
 
   const handleSaleAdjust = () => {
-    notify('Funcionalidade de acréscimo/desconto em desenvolvimento.', 'info');
+    if (state.activeFinalizeContext === 'receivables') {
+      return;
+    }
+    if (!state.itens.length) {
+      notify('Adicione itens para aplicar um ajuste na venda.', 'warning');
+      return;
+    }
+    openSaleAdjustModal({ target: 'sale' });
   };
 
   const handleSaleItemAdjust = () => {
-    notify('Funcionalidade de ajuste por item em desenvolvimento.', 'info');
+    if (!state.itens.length) {
+      notify('Adicione itens para aplicar um ajuste individual.', 'warning');
+      return;
+    }
+    openSaleItemAdjustModal();
+  };
+
+  const handleSaleAdjustModeChange = (mode) => {
+    if (mode !== 'acrescimo' && mode !== 'desconto') {
+      return;
+    }
+    saleAdjustModalState.mode = mode;
+    if (elements.saleAdjustValue) {
+      let currentValue = mode === 'acrescimo' ? state.vendaAcrescimo : state.vendaDesconto;
+      if (saleAdjustModalState.target === 'item') {
+        const item = getSaleAdjustTargetItem();
+        currentValue =
+          mode === 'acrescimo' ? getSaleItemAdditionValue(item) : getSaleItemDiscountValue(item);
+      }
+      elements.saleAdjustValue.value = formatMaskedDecimalValue(currentValue, 2);
+    }
+    updateSaleAdjustModeButtons();
+    syncSaleAdjustModalFields({ source: 'value' });
+  };
+
+  const handleSaleAdjustValueInput = () => {
+    if (saleAdjustModalState.syncing) return;
+    if (elements.saleAdjustValue) {
+      elements.saleAdjustValue.value = parseMaskedDigitsValue(elements.saleAdjustValue.value || '0').formatted;
+    }
+    syncSaleAdjustModalFields({ source: 'value' });
+  };
+
+  const handleSaleAdjustPercentInput = () => {
+    if (saleAdjustModalState.syncing) return;
+    if (elements.saleAdjustPercent) {
+      const maxPercent =
+        saleAdjustModalState.mode === 'desconto' ? 100 : Number.POSITIVE_INFINITY;
+      elements.saleAdjustPercent.value = parseMaskedDigitsValue(
+        elements.saleAdjustPercent.value || '0',
+        { max: maxPercent }
+      ).formatted;
+    }
+    syncSaleAdjustModalFields({ source: 'percent' });
+  };
+
+  const handleSaleAdjustClear = () => {
+    if (elements.saleAdjustValue) {
+      elements.saleAdjustValue.value = '0,00';
+    }
+    if (elements.saleAdjustPercent) {
+      elements.saleAdjustPercent.value = '0,00';
+    }
+    syncSaleAdjustModalFields({ source: 'value' });
+  };
+
+  const handleSaleAdjustApply = () => {
+    const baseTotal = getSaleAdjustBaseTotal();
+    const adjustmentValue = clampSaleAdjustmentValue(
+      parseMaskedDigitsValue(elements.saleAdjustValue?.value || '0').value,
+      saleAdjustModalState.mode,
+      baseTotal
+    );
+    if (saleAdjustModalState.target === 'item') {
+      const item = getSaleAdjustTargetItem();
+      if (!item) {
+        closeSaleAdjustModal();
+        return;
+      }
+      if (saleAdjustModalState.mode === 'acrescimo') {
+        item.itemAdditionValue = adjustmentValue;
+        item.itemDiscountValue = 0;
+      } else {
+        item.itemDiscountValue = adjustmentValue;
+        item.itemAdditionValue = 0;
+      }
+      applyItemAdjustmentToItem(item);
+      renderItemsList();
+      updateSaleSummary();
+      scheduleStatePersist();
+      closeSaleAdjustModal();
+      return;
+    }
+    if (saleAdjustModalState.mode === 'acrescimo') {
+      state.vendaAcrescimo = adjustmentValue;
+      state.vendaDesconto = 0;
+    } else {
+      state.vendaDesconto = adjustmentValue;
+      state.vendaAcrescimo = 0;
+    }
+    updateSaleSummary();
+    scheduleStatePersist();
+    closeSaleAdjustModal();
+  };
+
+  const handleSaleItemAdjustListClick = (event) => {
+    const button = event.target.closest('[data-sale-item-adjust-select]');
+    if (!button) return;
+    const index = Number(button.getAttribute('data-sale-item-adjust-select'));
+    if (!Number.isInteger(index) || index < 0 || index >= state.itens.length) {
+      return;
+    }
+    closeSaleItemAdjustModal();
+    openSaleAdjustModal({ target: 'item', itemIndex: index });
   };
 
   const setReceivablesResidualError = (message = '') => {
@@ -14949,7 +15423,8 @@
   const updateSaleSummary = () => {
     const totalLiquido = getSaleTotalLiquido();
     const pago = getSalePagoTotal();
-    const desconto = state.vendaDesconto > 0 ? state.vendaDesconto : 0;
+    const desconto =
+      Math.max(0, state.vendaDesconto) + Math.max(0, getSaleItemsDiscountTotal(state.itens));
     const isBudgetContext = state.activeFinalizeContext === 'orcamento';
     const isReceivablesContext = state.activeFinalizeContext === 'receivables';
     if (elements.saleTotal) {
@@ -17464,11 +17939,17 @@
             const codes = item.codigo
               ? `<span class="nfce-compact__item-code">${escapeHtml(item.codigo)}</span>`
               : '';
+            const itemAdjustment = item.descontoItemValor > 0
+              ? `<span class="nfce-compact__item-code">Desconto item: - ${escapeHtml(item.descontoItem || '')}</span>`
+              : item.acrescimoItemValor > 0
+              ? `<span class="nfce-compact__item-code">Acréscimo item: + ${escapeHtml(item.acrescimoItem || '')}</span>`
+              : '';
             return `
               <tr>
                 <td>
                   <span class="nfce-compact__item-name">${escapeHtml(description)}</span>
                   ${codes}
+                  ${itemAdjustment}
                 </td>
                 <td>${escapeHtml(quantity)}</td>
                 <td>${escapeHtml(item.subtotal || '')}</td>
@@ -17674,6 +18155,13 @@
             <td>
               <strong>${escapeHtml(item.nome)}</strong>
               ${item.codigo ? `<span class="receipt-table__muted">${escapeHtml(item.codigo)}</span>` : ''}
+              ${
+                item.descontoItemValor > 0
+                  ? `<span class="receipt-table__muted">Desconto item: - ${escapeHtml(item.descontoItem || '')}</span>`
+                  : item.acrescimoItemValor > 0
+                  ? `<span class="receipt-table__muted">Acréscimo item: + ${escapeHtml(item.acrescimoItem || '')}</span>`
+                  : ''
+              }
             </td>
             <td>${escapeHtml(item.quantidade)} × ${escapeHtml(item.unitario)}</td>
             <td>${escapeHtml(item.subtotal)}</td>
@@ -17859,6 +18347,10 @@
               quantidade: item.quantidade || '',
               unitario: item.unitario || '',
               total: item.subtotal || '',
+              descontoItem: item.descontoItem || '',
+              descontoItemValor: item.descontoItemValor || 0,
+              acrescimoItem: item.acrescimoItem || '',
+              acrescimoItemValor: item.acrescimoItemValor || 0,
             }))
           : [],
         totais: {
@@ -18042,6 +18534,10 @@
         quantity: item.quantidade || '',
         unitPrice: item.unitario || '',
         total: item.total || '',
+        discount: item.descontoItem || '',
+        discountValue: parseAmount(item.descontoItemValor || item.descontoItem),
+        addition: item.acrescimoItem || '',
+        additionValue: parseAmount(item.acrescimoItemValor || item.acrescimoItem),
       })),
       totals: {
         subtotal: totais.bruto || '',
@@ -18148,6 +18644,10 @@
             quantity: item.quantidade || '',
             unitPrice: item.unitario || '',
             total: item.subtotal || '',
+            discount: item.descontoItem || '',
+            discountValue: safeNumber(item.descontoItemValor),
+            addition: item.acrescimoItem || '',
+            additionValue: safeNumber(item.acrescimoItemValor),
           }))
         : [],
       totals: {
@@ -23030,6 +23530,8 @@
       elements.customerSearchModal,
       elements.customerModal,
       elements.finalizeModal,
+      elements.saleItemAdjustModal,
+      elements.saleAdjustModal,
       elements.paymentValueModal,
       elements.exchangeModal,
       elements.exchangeHistoryModal,
@@ -24543,18 +25045,19 @@
       current.valorBase = currentPricing.valorBase;
       current.valorPromocional = currentPricing.valorPromocional;
       current.usePromotion = currentPricing.hasPromotion ? shouldUsePromotion : false;
-      current.valor = currentPricing.valor;
-      current.subtotal = current.quantidade * current.valor;
+      current.valorSemAjuste = currentPricing.valor;
+      current.subtotalSemAjuste = current.quantidade * currentPricing.valor;
       current.promoType = currentPricing.promoType || null;
       current.codigoInterno = codigoInterno || current.codigoInterno;
       current.codigoBarras = codigoBarras || current.codigoBarras;
       current.generalPromo = generalPromo;
       current.productSnapshot = snapshot;
+      applyItemAdjustmentToItem(current);
     } else {
       const pricingToApply = getItemPricing(product, usePromotion, quantidadeFinal);
       const baseId = product._id || product.id || codigo || String(Date.now());
       const sellerKey = sellerInfo.id || sellerInfo.code;
-      state.itens.push({
+      const saleItem = {
         id: sellerKey ? `${baseId}:${sellerKey}` : baseId,
         codigo,
         codigoInterno,
@@ -24564,8 +25067,12 @@
         valorBase: pricingToApply.valorBase,
         valorPromocional: pricingToApply.valorPromocional,
         usePromotion: pricingToApply.hasPromotion ? usePromotion : false,
+        valorSemAjuste: pricingToApply.valor,
+        subtotalSemAjuste: pricingToApply.valor * quantidadeFinal,
         valor: pricingToApply.valor,
         subtotal: pricingToApply.valor * quantidadeFinal,
+        itemDiscountValue: 0,
+        itemAdditionValue: 0,
         promoType: pricingToApply.promoType || null,
         generalPromo,
         productSnapshot: snapshot,
@@ -24574,7 +25081,9 @@
         sellerName: sellerInfo.name,
         origem_comissao: 'VENDA',
         status_comissao: 'ATIVA',
-      });
+      };
+      applyItemAdjustmentToItem(saleItem);
+      state.itens.push(saleItem);
     }
     renderItemsList();
     notify('Item adicionado à pré-visualização.', 'success');
@@ -24823,14 +25332,15 @@
       const usePromotion = pricing.hasPromotion ? nextUsePromotion : false;
       state.itens[index] = {
         ...item,
-        valor: pricing.valor,
         valorBase: pricing.valorBase,
         valorPromocional: pricing.valorPromocional,
-        subtotal: pricing.valor * item.quantidade,
+        valorSemAjuste: pricing.valor,
+        subtotalSemAjuste: pricing.valor * item.quantidade,
         usePromotion,
         promoType: pricing.promoType || null,
         generalPromo: snapshot ? hasGeneralPromotion(snapshot) : Boolean(item.generalPromo),
       };
+      applyItemAdjustmentToItem(state.itens[index]);
       renderItemsList();
       return;
     }
@@ -25145,6 +25655,19 @@
     elements.salePaymentsList?.addEventListener('click', handleSalePaymentsListClick);
     elements.saleAdjust?.addEventListener('click', handleSaleAdjust);
     elements.saleItemAdjust?.addEventListener('click', handleSaleItemAdjust);
+    elements.saleAdjustClose?.addEventListener('click', closeSaleAdjustModal);
+    elements.saleAdjustCancel?.addEventListener('click', closeSaleAdjustModal);
+    elements.saleAdjustBackdrop?.addEventListener('click', closeSaleAdjustModal);
+    elements.saleItemAdjustClose?.addEventListener('click', closeSaleItemAdjustModal);
+    elements.saleItemAdjustCancel?.addEventListener('click', closeSaleItemAdjustModal);
+    elements.saleItemAdjustBackdrop?.addEventListener('click', closeSaleItemAdjustModal);
+    elements.saleItemAdjustList?.addEventListener('click', handleSaleItemAdjustListClick);
+    elements.saleAdjustModeDiscount?.addEventListener('click', () => handleSaleAdjustModeChange('desconto'));
+    elements.saleAdjustModeAddition?.addEventListener('click', () => handleSaleAdjustModeChange('acrescimo'));
+    elements.saleAdjustValue?.addEventListener('input', handleSaleAdjustValueInput);
+    elements.saleAdjustPercent?.addEventListener('input', handleSaleAdjustPercentInput);
+    elements.saleAdjustClear?.addEventListener('click', handleSaleAdjustClear);
+    elements.saleAdjustApply?.addEventListener('click', handleSaleAdjustApply);
     elements.paymentValueConfirm?.addEventListener('click', handlePaymentValueConfirm);
     elements.paymentValueCancel?.addEventListener('click', handlePaymentValueCancel);
     elements.paymentValueBackdrop?.addEventListener('click', handlePaymentValueCancel);

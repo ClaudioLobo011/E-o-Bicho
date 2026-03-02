@@ -739,8 +739,8 @@ const buildServicosViewPayload = (records = [], opts = {}) => {
     });
 
   const resumo = buildServicosResumo(records);
+  resumo.pagas = closingsKpi?.lastPaid || 0;
   if (closingsKpi && (closingsKpi.aReceber || closingsKpi.pagasTotal || closingsKpi.lastPaid)) {
-    resumo.pagas = closingsKpi.lastPaid || 0;
     resumo.aReceber = Math.max(resumo.aReceber - closingsKpi.pagasTotal, 0) + closingsKpi.aReceber;
     resumo.totalPrevisto = Math.max(resumo.totalPrevisto, closingsKpi.total);
     resumo.totalGerado = Math.max(resumo.totalGerado, closingsKpi.total);
@@ -748,7 +748,11 @@ const buildServicosViewPayload = (records = [], opts = {}) => {
 
   return {
     resumo,
-    proximosPagamentos: buildServicosProximos(records, extraProximos),
+    proximosPagamentos: (Array.isArray(extraProximos) ? extraProximos : [])
+      .slice()
+      .sort((a, b) => (a._sortDate || 0) - (b._sortDate || 0))
+      .slice(0, 5)
+      .map(({ _sortDate, ...rest }) => rest),
     historico,
   };
 };
@@ -814,7 +818,7 @@ const buildResumo = (records = [], opts = {}) => {
   resumo.totalPrevisto = total;
   resumo.totalGerado = total;
   resumo.aReceber = aReceber;
-  resumo.pagas = pagas;
+  resumo.pagas = closingsKpi?.lastPaid || 0;
   resumo.media = entries.length ? total / entries.length : 0;
   resumo.resumoPeriodo.vendasComComissao = entries.length;
   resumo.resumoPeriodo.taxaAprovacao = entries.length
@@ -824,10 +828,9 @@ const buildResumo = (records = [], opts = {}) => {
     diasLiberacaoCount > 0 ? Math.round(diasLiberacaoSoma / diasLiberacaoCount) : null;
   resumo.resumoPeriodo.cancelamentos = cancelamentos;
 
-  if (closingsKpi && (closingsKpi.aReceber || closingsKpi.pagas)) {
+  if (closingsKpi && (closingsKpi.aReceber || closingsKpi.pagasTotal || closingsKpi.lastPaid)) {
     // Ajusta KPIs com base nos fechamentos (repasses)
     resumo.aReceber = Math.max(resumo.aReceber - closingsKpi.pagasTotal, 0) + closingsKpi.aReceber;
-    resumo.pagas = closingsKpi.lastPaid || 0;
     resumo.totalPrevisto = Math.max(resumo.totalPrevisto, closingsKpi.total);
     resumo.totalGerado = Math.max(resumo.totalGerado, closingsKpi.total);
     // totalPrevisto permanece baseado nas comissões, não nos fechamentos

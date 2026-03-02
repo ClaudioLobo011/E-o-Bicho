@@ -1116,6 +1116,89 @@
         </div>
     </div>
 
+    <div id="pdv-sale-adjust-modal" class="fixed inset-0 z-[70] hidden">
+        <div class="absolute inset-0 bg-slate-900/50" data-pdv-sale-adjust-dismiss="backdrop"></div>
+        <div class="relative mx-auto mt-24 w-full max-w-md rounded-2xl bg-white shadow-2xl">
+            <div class="flex items-start justify-between border-b border-gray-200 px-5 py-4">
+                <div>
+                    <h3 id="pdv-sale-adjust-modal-title" class="text-base font-semibold text-gray-800">Acréscimo/Desconto</h3>
+                    <p id="pdv-sale-adjust-modal-subtitle" class="text-xs text-gray-500">Ajuste geral aplicado ao total da venda.</p>
+                </div>
+                <button type="button" id="pdv-sale-adjust-close" class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600" aria-label="Fechar ajuste da venda">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="space-y-4 px-5 py-4">
+                <div class="flex items-center gap-2 rounded-xl bg-gray-100 p-1">
+                    <button type="button" id="pdv-sale-adjust-mode-discount" class="flex-1 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-primary shadow-sm transition">
+                        Desconto
+                    </button>
+                    <button type="button" id="pdv-sale-adjust-mode-addition" class="flex-1 rounded-lg px-3 py-2 text-sm font-semibold text-gray-600 transition">
+                        Acréscimo
+                    </button>
+                </div>
+                <div class="grid gap-3 sm:grid-cols-2">
+                    <label class="block">
+                        <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Valor</span>
+                        <input id="pdv-sale-adjust-base" type="text" class="mt-1 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700" readonly>
+                    </label>
+                    <label class="block">
+                        <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Valor final</span>
+                        <input id="pdv-sale-adjust-final" type="text" class="mt-1 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-800" readonly>
+                    </label>
+                    <label class="block">
+                        <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">R$</span>
+                        <input id="pdv-sale-adjust-value" type="text" inputmode="numeric" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="0,00">
+                    </label>
+                    <label class="block">
+                        <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">%</span>
+                        <input id="pdv-sale-adjust-percent" type="text" inputmode="numeric" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="0,00">
+                    </label>
+                </div>
+                <p id="pdv-sale-adjust-hint" class="text-xs text-gray-500"></p>
+            </div>
+            <div class="flex items-center justify-between gap-3 border-t border-gray-200 px-5 py-4">
+                <button type="button" id="pdv-sale-adjust-clear" class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100">
+                    Limpar
+                </button>
+                <div class="flex items-center gap-2">
+                    <button type="button" id="pdv-sale-adjust-cancel" class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100">
+                        Cancelar
+                    </button>
+                    <button type="button" id="pdv-sale-adjust-apply" class="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-secondary">
+                        Aplicar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="pdv-sale-item-adjust-modal" class="fixed inset-0 z-[65] hidden">
+        <div class="absolute inset-0 bg-slate-900/50" data-pdv-sale-item-adjust-dismiss="backdrop"></div>
+        <div class="relative mx-auto mt-24 w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
+            <div class="flex items-start justify-between border-b border-gray-200 px-5 py-4">
+                <div>
+                    <h3 class="text-base font-semibold text-gray-800">Acréscimo/Desconto Item</h3>
+                    <p class="text-xs text-gray-500">Selecione um produto da venda para aplicar o ajuste individual.</p>
+                </div>
+                <button type="button" id="pdv-sale-item-adjust-close" class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600" aria-label="Fechar ajuste por item">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="px-5 py-4">
+                <div id="pdv-sale-item-adjust-list" class="max-h-[55vh] space-y-2 overflow-y-auto"></div>
+                <p id="pdv-sale-item-adjust-empty" class="hidden rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
+                    Nenhum item disponível para ajuste.
+                </p>
+            </div>
+            <div class="flex items-center justify-end border-t border-gray-200 px-5 py-4">
+                <button type="button" id="pdv-sale-item-adjust-cancel" class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100">
+                    Fechar
+                </button>
+            </div>
+        </div>
+    </div>
+
     <div id="pdv-crediario-modal" class="fixed inset-0 z-[60] hidden">
         <div class="absolute inset-0 bg-slate-900/60" data-crediario-dismiss="backdrop"></div>
         <div class="relative mx-auto mt-10 flex h-[85vh] w-full max-w-[calc(64rem+120px)] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
