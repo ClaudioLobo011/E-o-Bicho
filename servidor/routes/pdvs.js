@@ -330,6 +330,14 @@ const safeDate = (value) => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
+const sameInstant = (left, right) => {
+  const leftDate = safeDate(left);
+  const rightDate = safeDate(right);
+  if (!leftDate && !rightDate) return true;
+  if (!leftDate || !rightDate) return false;
+  return leftDate.getTime() === rightDate.getTime();
+};
+
 const toObjectIdOrNull = (value) => {
   if (!value) return null;
   if (value instanceof mongoose.Types.ObjectId) {
@@ -3061,6 +3069,7 @@ router.put('/:id/state', requireAuth, async (req, res) => {
     const idempotencyKey = normalizeString(
       req.get('x-idempotency-key') || req.body?._meta?.idempotencyKey || ''
     );
+    const expectedUpdatedAt = normalizeString(req.body?._meta?.expectedUpdatedAt || '');
 
     if (!mongoose.Types.ObjectId.isValid(pdvId)) {
       return res.status(400).json({ message: 'Identificador de PDV invÃ¡lido.' });
@@ -3080,6 +3089,17 @@ router.put('/:id/state', requireAuth, async (req, res) => {
         existingState.recentStateMutationKeys.includes(idempotencyKey)
       ) {
         return res.json(serializeStateForResponse(existingState));
+      }
+      if (expectedUpdatedAt) {
+        const currentUpdatedAt = existingState?.updatedAt || null;
+        if (!sameInstant(currentUpdatedAt, expectedUpdatedAt)) {
+          return res.status(409).json({
+            message:
+              'O estado do PDV foi atualizado por outro operador. Recarregue o estado atual antes de persistir novas alteracoes.',
+            conflict: true,
+            state: serializeStateForResponse(existingState),
+          });
+        }
       }
 
       const updatePayload = buildStateUpdatePayload({
