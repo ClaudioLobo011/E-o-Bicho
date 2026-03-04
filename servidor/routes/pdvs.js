@@ -338,6 +338,49 @@ const sameInstant = (left, right) => {
   return leftDate.getTime() === rightDate.getTime();
 };
 
+const resolveCaixaAbertoValue = (body = {}, existingState = {}) => {
+  if (body.caixaAberto !== undefined && body.caixaAberto !== null) {
+    return Boolean(body.caixaAberto);
+  }
+  if (body.caixa?.aberto !== undefined && body.caixa?.aberto !== null) {
+    return Boolean(body.caixa.aberto);
+  }
+  const statusCaixa = normalizeString(body.statusCaixa).toLowerCase();
+  if (statusCaixa === 'aberto') return true;
+  if (statusCaixa === 'fechado') return false;
+  return Boolean(existingState.caixaAberto);
+};
+
+const hasExplicitCaixaClosure = (updatePayload = {}) => {
+  const fechamentoData = safeDate(updatePayload?.caixaInfo?.fechamentoData);
+  if (fechamentoData) return true;
+  const movements = [
+    ...(Array.isArray(updatePayload?.history) ? updatePayload.history : []),
+    updatePayload?.lastMovement,
+  ].filter(Boolean);
+  return movements.some((entry) => {
+    const id = normalizeString(entry?.id).toLowerCase();
+    const label = normalizeString(entry?.label).toLowerCase();
+    return id === 'fechamento' || label.includes('fechamento');
+  });
+};
+
+const hasOwn = (obj, key) => Boolean(obj) && Object.prototype.hasOwnProperty.call(obj, key);
+
+const resolveOptionalDateField = (primarySource = {}, keys = [], fallbackValue = null) => {
+  for (const key of keys) {
+    if (!hasOwn(primarySource, key)) continue;
+    const value = primarySource[key];
+    if (value === null || value === '') {
+      return null;
+    }
+    const parsed = safeDate(value);
+    return parsed || null;
+  }
+  const fallbackDate = safeDate(fallbackValue);
+  return fallbackDate || null;
+};
+
 const toObjectIdOrNull = (value) => {
   if (!value) return null;
   if (value instanceof mongoose.Types.ObjectId) {
@@ -1438,9 +1481,7 @@ const normalizeDeliveryOrderPayload = (order) => {
 };
 
 const buildStateUpdatePayload = ({ body = {}, existingState = {}, empresaId }) => {
-  const caixaAberto = Boolean(
-    body.caixaAberto ?? body.caixa?.aberto ?? body.statusCaixa === 'aberto' ?? existingState.caixaAberto
-  );
+  const caixaAberto = resolveCaixaAbertoValue(body, existingState);
   const summarySource = body.summary || body.caixa?.resumo || {};
   const caixaSource = body.caixaInfo || body.caixa || {};
   const pagamentosSource = Array.isArray(body.pagamentos) ? body.pagamentos : body.caixa?.pagamentos;
@@ -1505,12 +1546,16 @@ const buildStateUpdatePayload = ({ body = {}, existingState = {}, empresaId }) =
       saldo: safeNumber(summarySource.saldo ?? existingState.summary?.saldo ?? 0, 0),
     },
     caixaInfo: {
-      aberturaData:
-        safeDate(caixaSource.aberturaData || caixaSource.dataAbertura || caixaSource.abertura || existingState.caixaInfo?.aberturaData) ||
-        null,
-      fechamentoData:
-        safeDate(caixaSource.fechamentoData || caixaSource.dataFechamento || caixaSource.fechamento || existingState.caixaInfo?.fechamentoData) ||
-        null,
+      aberturaData: resolveOptionalDateField(
+        caixaSource,
+        ['aberturaData', 'dataAbertura', 'abertura'],
+        existingState.caixaInfo?.aberturaData
+      ),
+      fechamentoData: resolveOptionalDateField(
+        caixaSource,
+        ['fechamentoData', 'dataFechamento', 'fechamento'],
+        existingState.caixaInfo?.fechamentoData
+      ),
       fechamentoPrevisto: safeNumber(caixaSource.fechamentoPrevisto ?? caixaSource.valorPrevisto ?? existingState.caixaInfo?.fechamentoPrevisto ?? 0, 0),
       fechamentoApurado: safeNumber(caixaSource.fechamentoApurado ?? caixaSource.valorApurado ?? existingState.caixaInfo?.fechamentoApurado ?? 0, 0),
       previstoPagamentos: (Array.isArray(previstoSource) ? previstoSource : [])
@@ -3110,6 +3155,16 @@ router.put('/:id/state', requireAuth, async (req, res) => {
 
       const isStartingNewCaixaCycle =
         !Boolean(existingState?.caixaAberto) && Boolean(updatePayload.caixaAberto);
+      if (isStartingNewCaixaCycle) {
+        updatePayload.caixaInfo = {
+          ...updatePayload.caixaInfo,
+          fechamentoData: null,
+          fechamentoPrevisto: 0,
+          fechamentoApurado: 0,
+          previstoPagamentos: clonePaymentSnapshots(updatePayload.caixaInfo?.previstoPagamentos || []),
+          apuradoPagamentos: [],
+        };
+      }
 
       updatePayload.completedSales = mergeRecordsByKey(
         existingState?.completedSales || [],
@@ -3141,6 +3196,16 @@ router.put('/:id/state', requireAuth, async (req, res) => {
       updatePayload.lastMovement = Array.isArray(updatePayload.history) && updatePayload.history.length
         ? updatePayload.history[0]
         : null;
+      if (Boolean(existingState?.caixaAberto) && !Boolean(updatePayload.caixaAberto)) {
+        if (!hasExplicitCaixaClosure(updatePayload)) {
+          return res.status(409).json({
+            message:
+              'O fechamento do caixa foi rejeitado porque a requisição nao trouxe os dados explicitos de fechamento. Recarregue o PDV e tente novamente.',
+            conflict: true,
+            state: serializeStateForResponse(existingState),
+          });
+        }
+      }
       updatePayload.accountsReceivable = mergeRecordsByKey(
         existingState?.accountsReceivable || [],
         updatePayload.accountsReceivable || [],

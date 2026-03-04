@@ -444,6 +444,7 @@
   let statePersistPending = false;
   let lastPersistSignature = '';
   let stateHasLocalPendingChanges = false;
+  const paymentInputMasks = new Map();
   let deferredRemotePdvState = null;
   let pdvSocket = null;
   let pdvSocketPromise = null;
@@ -1362,6 +1363,76 @@
     return `R$ ${number.toFixed(2).replace('.', ',')}`;
   };
 
+  const formatMaskedMoneyValue = (value) =>
+    Math.max(0, safeNumber(value)).toLocaleString('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+
+  const parseMaskedMoneyValue = (value) => {
+    if (value === undefined || value === null) return 0;
+    const normalized = String(value).trim();
+    if (!normalized) return 0;
+    const sanitized = normalized.replace(/\./g, '').replace(',', '.');
+    const parsed = Number(sanitized);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+  };
+
+  const destroyPaymentInputMasks = () => {
+    paymentInputMasks.forEach((mask) => {
+      if (mask && typeof mask.destroy === 'function') {
+        mask.destroy();
+      }
+    });
+    paymentInputMasks.clear();
+  };
+
+  const applyPaymentInputMasks = () => {
+    if (!elements.paymentList || typeof IMask === 'undefined') return;
+    const inputs = elements.paymentList.querySelectorAll('input[data-payment-input]');
+    inputs.forEach((input) => {
+      const paymentId = input.getAttribute('data-payment-input');
+      if (!paymentId || paymentInputMasks.has(paymentId)) return;
+      const payment = state.pagamentos.find((item) => item.id === paymentId);
+      const mask = IMask(input, {
+        mask: Number,
+        scale: 2,
+        signed: false,
+        thousandsSeparator: '.',
+        padFractionalZeros: true,
+        normalizeZeros: true,
+        radix: ',',
+        mapToRadix: ['.'],
+        min: 0,
+      });
+      mask.typedValue = Math.max(0, safeNumber(payment?.valor, 0));
+      mask.on('accept', () => {
+        if (state.caixaAberto && !state.allowApuradoEdit) {
+          mask.typedValue = Math.max(0, safeNumber(payment?.valor, 0));
+          return;
+        }
+        const currentPayment = state.pagamentos.find((item) => item.id === paymentId);
+        if (!currentPayment) return;
+        currentPayment.valor = Math.max(0, safeNumber(mask.typedValue, 0));
+        updateSummary();
+        scheduleStatePersist();
+      });
+      input.addEventListener('focus', () => {
+        window.requestAnimationFrame(() => {
+          if (document.activeElement === input) {
+            input.select();
+          }
+        });
+      });
+      input.addEventListener('mouseup', (event) => {
+        if (document.activeElement !== input) return;
+        event.preventDefault();
+        input.select();
+      });
+      paymentInputMasks.set(paymentId, mask);
+    });
+  };
+
   const createPhoneMaskOptions = () => ({
     mask: [{ mask: '0000-0000' }, { mask: '00000-0000' }],
     dispatch: (appended, dynamicMasked) => {
@@ -2156,6 +2227,14 @@
     if (!(openingAmount > 0)) {
       return base;
     }
+    const expectedCaixaTotal =
+      openingAmount +
+      safeNumber(state.summary.recebido) +
+      safeNumber(state.summary.recebimentosCliente);
+    const baseTotal = sumPayments(base);
+    if (Math.abs(baseTotal - expectedCaixaTotal) <= 0.009) {
+      return base;
+    }
     let moneyPayment =
       base.find((item) => String(item.label || '').toLowerCase() === 'dinheiro') ||
       base.find((item) => String(item.type || '').toLowerCase() === 'dinheiro');
@@ -2940,6 +3019,7 @@
       ...method,
       valor: previousValues.has(method.id) ? previousValues.get(method.id) : 0,
     }));
+    destroyPaymentInputMasks();
     renderSalePaymentMethods();
     if (state.pendingPagamentosData) {
       const pending = state.pendingPagamentosData;
@@ -2979,6 +3059,7 @@
     });
     state.pagamentos = updated;
     state.pendingPagamentosData = null;
+    destroyPaymentInputMasks();
     renderPayments();
     updateSummary();
     populatePaymentSelect();
@@ -3670,10 +3751,45 @@
     applyPersistedStateResponse(remote);
   };
 
+  const hasExplicitLocalCaixaClosure = (payload = buildStatePersistPayload()) => {
+    const fechamentoData = parseDateValue(payload?.caixaInfo?.fechamentoData);
+    if (fechamentoData) {
+      return true;
+    }
+    const movements = [
+      ...(Array.isArray(payload?.history) ? payload.history : []),
+      payload?.lastMovement,
+    ].filter(Boolean);
+    return movements.some((entry) => {
+      const id = String(entry?.id || '').trim().toLowerCase();
+      const label = String(entry?.label || '').trim().toLowerCase();
+      return id === 'fechamento' || label.includes('fechamento');
+    });
+  };
+
+  const refreshCurrentPdvStateFromServer = async () => {
+    const pdvId = normalizeId(state.selectedPdv);
+    if (!pdvId) return false;
+    const pdv = await fetchPdvDetails(pdvId);
+    applyPdvData(pdv);
+    return true;
+  };
+
   const flushStatePersist = async () => {
     const pdvId = normalizeId(state.selectedPdv);
     if (!pdvId) return;
     const payload = buildStatePersistPayload();
+    if (payload.caixaAberto === false && !hasExplicitLocalCaixaClosure(payload)) {
+      console.warn('Persistência de fechamento implícito do caixa bloqueada no cliente.', payload);
+      try {
+        await refreshCurrentPdvStateFromServer();
+      } catch (refreshError) {
+        console.error('Não foi possível recarregar o estado atual do PDV após fechamento implícito:', refreshError);
+      }
+      stateHasLocalPendingChanges = false;
+      notify('O PDV tentou fechar o caixa sem dados válidos de fechamento. O estado atual foi recarregado.', 'warning');
+      return;
+    }
     const signature = JSON.stringify(payload);
     if (signature === lastPersistSignature) {
       return;
@@ -3687,6 +3803,18 @@
     } catch (error) {
       if (error?.status === 409 && error?.details?.state) {
         const serverState = error.details.state;
+        const conflictMessage = String(error?.message || '');
+        const isInvalidCloseConflict = conflictMessage
+          .toLowerCase()
+          .includes('dados explicitos de fechamento');
+        if (isInvalidCloseConflict) {
+          applyPersistedStateResponse(serverState);
+          lastPersistSignature = JSON.stringify(buildStatePersistPayload());
+          stateHasLocalPendingChanges = false;
+          processDeferredRemotePdvState();
+          notify('O fechamento automático foi bloqueado e o caixa foi sincronizado com o servidor.', 'warning');
+          return;
+        }
         const latestLocalPayload = buildStatePersistPayload();
         const mergedPayload = {
           ...latestLocalPayload,
@@ -24367,6 +24495,7 @@
 
   const resetPagamentos = () => {
     state.pagamentos = state.pagamentos.map((payment) => ({ ...payment, valor: 0 }));
+    destroyPaymentInputMasks();
     state.summary.abertura = 0;
     state.summary.recebimentosCliente = 0;
     state.allowApuradoEdit = false;
@@ -24381,6 +24510,7 @@
   const resetWorkspace = () => {
     stateHasLocalPendingChanges = false;
     deferredRemotePdvState = null;
+    destroyPaymentInputMasks();
     state.caixaAberto = false;
     state.allowApuradoEdit = false;
     state.selectedAction = null;
@@ -25652,12 +25782,17 @@
     const input = elements.paymentList.querySelector(`input[data-payment-input="${paymentId}"]`);
     if (!input) return;
     const payment = state.pagamentos.find((item) => item.id === paymentId);
-    if (!payment) return;
-    input.value = safeNumber(payment.valor).toFixed(2);
+    const mask = paymentInputMasks.get(paymentId);
+    if (mask) {
+      mask.typedValue = Math.max(0, safeNumber(payment?.valor, 0));
+      return;
+    }
+    input.value = formatMaskedMoneyValue(payment?.valor || 0);
   };
 
   const renderPayments = () => {
     if (!elements.paymentList) return;
+    destroyPaymentInputMasks();
     elements.paymentList.innerHTML = '';
     const inputsLocked = state.caixaAberto && !state.allowApuradoEdit;
     const helperText = state.allowApuradoEdit
@@ -25694,12 +25829,13 @@
           </div>
           <div class="flex items-center gap-2">
             <span class="text-xs text-gray-500">R$</span>
-            <input type="number" min="0" step="0.01" value="${payment.valor.toFixed(2)}" data-payment-input="${payment.id}" class="${inputClasses}" aria-label="Atualizar ${payment.label}" ${disabledAttr}>
+            <input type="text" inputmode="decimal" autocomplete="off" value="${formatMaskedMoneyValue(payment.valor)}" data-payment-input="${payment.id}" class="${inputClasses}" aria-label="Atualizar ${payment.label}" ${disabledAttr}>
           </div>
         `;
         fragment.appendChild(li);
       });
       elements.paymentList.appendChild(fragment);
+      applyPaymentInputMasks();
     }
     if (elements.resetPayments) {
       const disableReset =
@@ -25716,16 +25852,13 @@
     const input = event.target.closest('input[data-payment-input]');
     if (!input) return;
     const id = input.getAttribute('data-payment-input');
-    const value = safeNumber(input.value);
-    const payment = state.pagamentos.find((item) => item.id === id);
-    if (!payment) return;
     if (state.caixaAberto && !state.allowApuradoEdit) {
-      input.value = payment.valor.toFixed(2);
+      updatePaymentRow(id);
       return;
     }
-    payment.valor = value < 0 ? 0 : value;
-    input.value = payment.valor.toFixed(2);
-    updatePaymentRow(id);
+    const payment = state.pagamentos.find((item) => item.id === id);
+    if (!payment) return;
+    payment.valor = parseMaskedMoneyValue(input.value);
     updateSummary();
     scheduleStatePersist();
   };
