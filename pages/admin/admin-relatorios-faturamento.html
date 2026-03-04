@@ -6,17 +6,40 @@
   <title>Admin: Faturamento - E o Bicho</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <link rel="stylesheet" href="../../src/output.css">
+  <style>
+    @media (min-width: 1280px) {
+      #billing-insights-grid {
+        grid-template-columns: minmax(360px, 1.15fr) minmax(360px, 1fr) minmax(360px, 1fr);
+      }
+
+      #billing-overview-grid {
+        grid-template-columns: minmax(420px, 1.3fr) minmax(320px, 1fr) minmax(320px, 1fr);
+      }
+
+      #billing-ranking-grid {
+        grid-template-columns: repeat(2, minmax(420px, 1fr));
+      }
+
+      #billing-payments-grid {
+        grid-template-columns: minmax(0, 2fr) minmax(340px, 1fr);
+      }
+
+      #billing-actions-grid {
+        grid-template-columns: repeat(2, minmax(360px, 1fr));
+      }
+    }
+  </style>
 </head>
 <body class="bg-gray-100">
   <div id="admin-header-placeholder"></div>
 
-  <main class="container mx-auto px-4 pt-1 pb-10 min-h-screen">
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
-      <aside class="md:col-span-4">
+  <main class="w-full max-w-none px-4 pt-1 pb-10 min-h-screen 2xl:px-6">
+    <div class="grid grid-cols-1 gap-8">
+      <aside>
         <div id="admin-sidebar-placeholder"></div>
       </aside>
 
-      <div class="md:col-span-4 space-y-6">
+      <div class="space-y-6">
         <header class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div class="space-y-2">
             <nav aria-label="Breadcrumb" class="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
@@ -53,15 +76,25 @@
               <label for="billing-month-compare" class="text-xs font-semibold uppercase text-gray-500">Periodo de Comparacao</label>
               <input type="month" id="billing-month-compare" class="w-full min-w-[190px] rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
             </div>
-            <div class="space-y-1">
+            <div class="flex flex-col items-start gap-1">
               <label for="billing-company-code" class="text-xs font-semibold uppercase text-gray-500">Empresa</label>
               <input
                 type="text"
                 id="billing-company-code"
                 class="w-full max-w-[110px] rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"
                 placeholder="Codigo"
-                inputmode="numeric"
+                inputmode="text"
               >
+            </div>
+            <div class="flex flex-col items-start gap-1">
+              <label for="billing-pdv-select" class="text-xs font-semibold uppercase text-gray-500">PDV</label>
+              <select
+                id="billing-pdv-select"
+                class="w-full min-w-[210px] rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"
+                disabled
+              >
+                <option value="">Todos os PDVs</option>
+              </select>
             </div>
             <button id="billing-export" type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">
               <i class="fas fa-file-export text-primary"></i>
@@ -70,7 +103,7 @@
           </div>
         </header>
 
-        <section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8 gap-4">
           <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
             <div class="flex items-center justify-between text-sm text-gray-500">
               <span>Faturamento bruto</span>
@@ -89,7 +122,7 @@
               </span>
             </div>
             <p id="metric-net" class="mt-2 text-2xl font-bold text-gray-800">R$ 0,00</p>
-            <p class="text-xs text-gray-500">Liquido apos taxas e descontos</p>
+            <p class="text-xs text-gray-500">Bruto menos custo e taxas</p>
           </article>
           <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
             <div class="flex items-center justify-between text-sm text-gray-500">
@@ -153,7 +186,7 @@
           </article>
         </section>
 
-        <section class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <section id="billing-insights-grid" class="grid grid-cols-1 gap-6">
           <article class="relative overflow-hidden rounded-xl border border-gray-100 bg-gradient-to-br from-emerald-50 via-white to-slate-50 p-6 shadow-sm">
             <div class="absolute -right-10 -top-14 h-40 w-40 rounded-full bg-emerald-100/70 blur-3xl"></div>
             <div class="relative space-y-4">
@@ -226,8 +259,8 @@
           </article>
         </section>
 
-        <section class="grid grid-cols-1 xl:grid-cols-4 gap-6">
-          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 xl:col-span-2 space-y-4">
+        <section id="billing-overview-grid" class="grid grid-cols-1 gap-6">
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
             <div class="flex items-center justify-between">
               <div>
                 <h2 class="text-lg font-semibold text-gray-800">Metas e projecao</h2>
@@ -283,7 +316,7 @@
           </article>
         </section>
 
-        <section class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <section id="billing-ranking-grid" class="grid grid-cols-1 gap-6">
           <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
             <div>
               <h2 class="text-lg font-semibold text-gray-800">Clientes com mais vendas</h2>
@@ -297,7 +330,6 @@
                       <th class="px-3 py-2 font-semibold text-gray-600">Cliente</th>
                       <th class="px-3 py-2 font-semibold text-gray-600 text-right">Pedidos</th>
                       <th class="px-3 py-2 font-semibold text-gray-600 text-right">Total</th>
-                      <th class="px-3 py-2 font-semibold text-gray-600 text-right">Ticket</th>
                       <th class="px-3 py-2 font-semibold text-gray-600">Ultima compra</th>
                       <th class="px-3 py-2 font-semibold text-gray-600">Canal</th>
                     </tr>
@@ -308,6 +340,31 @@
             </div>
           </article>
 
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Pets recorrentes</h2>
+              <p class="text-sm text-gray-600">Pets com maior frequencia de retorno no periodo.</p>
+            </div>
+            <div class="overflow-hidden rounded-xl border border-gray-100">
+              <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-100 text-left text-[11px] text-gray-700">
+                  <thead class="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500">
+                    <tr>
+                      <th class="px-3 py-2 font-semibold text-gray-600">Pet</th>
+                      <th class="px-3 py-2 font-semibold text-gray-600">Tutor</th>
+                      <th class="px-3 py-2 font-semibold text-gray-600 text-right">Pedidos</th>
+                      <th class="px-3 py-2 font-semibold text-gray-600 text-right">Total</th>
+                      <th class="px-3 py-2 font-semibold text-gray-600">Ultima compra</th>
+                    </tr>
+                  </thead>
+                  <tbody id="billing-pets-body" class="divide-y divide-gray-100 bg-white"></tbody>
+                </table>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <section class="grid grid-cols-1 gap-6">
           <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
             <div>
               <h2 class="text-lg font-semibold text-gray-800">Produtos mais vendidos</h2>
@@ -333,8 +390,8 @@
           </article>
         </section>
 
-        <section class="grid grid-cols-1 xl:grid-cols-3 gap-6">
-          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4 xl:col-span-2">
+        <section id="billing-payments-grid" class="grid grid-cols-1 gap-6">
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
             <div class="flex items-center justify-between">
               <div>
                 <h2 class="text-lg font-semibold text-gray-800">Meios de pagamento e taxas</h2>
@@ -387,8 +444,20 @@
             </span>
           </div>
           <div class="overflow-hidden rounded-xl border border-gray-100">
-            <div class="overflow-x-auto">
-              <table class="min-w-full divide-y divide-gray-100 text-left text-[11px] text-gray-700">
+            <div class="overflow-auto" style="max-height: 760px;">
+              <table class="min-w-full table-fixed divide-y divide-gray-100 text-left text-[11px] text-gray-700">
+                <colgroup>
+                  <col style="width: 120px;">
+                  <col style="width: 128px;">
+                  <col style="width: 128px;">
+                  <col style="width: 100px;">
+                  <col style="width: 120px;">
+                  <col style="width: 120px;">
+                  <col style="width: 120px;">
+                  <col style="width: 120px;">
+                  <col style="width: 140px;">
+                  <col style="width: 100px;">
+                </colgroup>
                 <thead class="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500">
                   <tr>
                     <th class="px-3 py-2 font-semibold text-gray-600">Data</th>
@@ -404,22 +473,38 @@
                   </tr>
                 </thead>
                 <tbody id="billing-sales-body" class="divide-y divide-gray-100 bg-white"></tbody>
-                <tfoot class="bg-gray-50 text-[11px] font-semibold text-gray-700">
+              </table>
+            </div>
+            <div class="overflow-x-auto border-t border-gray-100 bg-gray-50">
+              <table class="min-w-full table-fixed text-left text-[11px] font-semibold text-gray-700">
+                <colgroup>
+                  <col style="width: 120px;">
+                  <col style="width: 128px;">
+                  <col style="width: 128px;">
+                  <col style="width: 100px;">
+                  <col style="width: 120px;">
+                  <col style="width: 120px;">
+                  <col style="width: 120px;">
+                  <col style="width: 120px;">
+                  <col style="width: 140px;">
+                  <col style="width: 100px;">
+                </colgroup>
+                <tbody>
                   <tr>
-                    <td class="px-3 py-2" colspan="5">Totais do mes</td>
-                    <td id="billing-sales-total" class="px-3 py-2 text-right">R$ 0,00</td>
-                    <td id="billing-sales-discount" class="px-3 py-2 text-right">R$ 0,00</td>
-                    <td id="billing-sales-fee" class="px-3 py-2 text-right">R$ 0,00</td>
-                    <td id="billing-sales-net" class="px-3 py-2 text-right">R$ 0,00</td>
-                    <td class="px-3 py-2 text-right">-</td>
+                    <td class="px-3 py-3" colspan="5">Totais do mes</td>
+                    <td id="billing-sales-total" class="px-3 py-3 text-right">R$ 0,00</td>
+                    <td id="billing-sales-discount" class="px-3 py-3 text-right">R$ 0,00</td>
+                    <td id="billing-sales-fee" class="px-3 py-3 text-right">R$ 0,00</td>
+                    <td id="billing-sales-net" class="px-3 py-3 text-right">R$ 0,00</td>
+                    <td class="px-3 py-3 text-right">-</td>
                   </tr>
-                </tfoot>
+                </tbody>
               </table>
             </div>
           </div>
         </section>
 
-        <section class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <section id="billing-actions-grid" class="grid grid-cols-1 gap-6">
           <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-3">
             <div>
               <h2 class="text-lg font-semibold text-gray-800">Alertas do mes</h2>
@@ -443,6 +528,33 @@
   <div id="admin-footer-placeholder"></div>
   <div id="modal-placeholder"></div>
   <div id="confirm-modal-placeholder"></div>
+  <div id="billing-company-modal" class="fixed inset-0 z-[70] hidden items-center justify-center bg-slate-950/45 px-4">
+    <div class="w-full max-w-2xl overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl">
+      <div class="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+        <div>
+          <h2 class="text-base font-semibold text-gray-800">Buscar empresa</h2>
+          <p class="text-sm text-gray-500">Pesquise por nome, nome fantasia, codigo ou CNPJ.</p>
+        </div>
+        <button
+          id="billing-company-modal-close"
+          type="button"
+          class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 text-gray-500 hover:bg-gray-50"
+          aria-label="Fechar busca de empresa"
+        >
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="space-y-4 px-5 py-4">
+        <input
+          id="billing-company-modal-search"
+          type="text"
+          class="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"
+          placeholder="Digite nome, fantasia, codigo ou CNPJ"
+        >
+        <div id="billing-company-modal-results" class="max-h-[420px] space-y-2 overflow-y-auto"></div>
+      </div>
+    </div>
+  </div>
 
   <script>var basePath = '../../';</script>
   <script src="../../scripts/core/config.js"></script>

@@ -4,6 +4,8 @@ const PdvState = require('../models/PdvState');
 const Store = require('../models/Store');
 const Pdv = require('../models/Pdv');
 const PaymentMethod = require('../models/PaymentMethod');
+const Product = require('../models/Product');
+const Category = require('../models/Category');
 const User = require('../models/User');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
@@ -185,7 +187,6 @@ const parseNumber = (value) => {
 
 const collectSaleItems = (sale = {}) => {
   const candidates = [
-    sale.items,
     sale.receiptSnapshot?.items,
     sale.receiptSnapshot?.itens,
     sale.receiptSnapshot?.products,
@@ -200,15 +201,42 @@ const collectSaleItems = (sale = {}) => {
     sale.fiscalItemsSnapshot,
     sale.fiscalItemsSnapshot?.items,
     sale.fiscalItemsSnapshot?.itens,
+    sale.items,
   ];
+
+  let bestMatch = [];
+  let bestScore = -1;
 
   for (const entry of candidates) {
     if (!Array.isArray(entry) || !entry.length) continue;
     const filtered = entry.filter((item) => item && typeof item === 'object');
-    if (filtered.length) return filtered;
+    if (!filtered.length) continue;
+
+    const score = filtered.reduce((acc, item) => {
+      let itemScore = 0;
+      if (item.productSnapshot || item.produtoSnapshot) itemScore += 4;
+      if (item.productId || item.produtoId || item.product?._id || item.produto?._id) itemScore += 3;
+      if (item.nome || item.name || item.product || item.descricao) itemScore += 2;
+      if (item.categoria || item.category || item.product?.categoria || item.produto?.categoria) itemScore += 1;
+      if (
+        item.totalPrice !== undefined ||
+        item.subtotal !== undefined ||
+        item.total !== undefined ||
+        item.totalValue !== undefined ||
+        item.valorTotal !== undefined
+      ) {
+        itemScore += 1;
+      }
+      return acc + itemScore;
+    }, 0);
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = filtered;
+    }
   }
 
-  return [];
+  return bestMatch;
 };
 
 const deriveItemQuantity = (item = {}) => {
@@ -230,6 +258,7 @@ const deriveItemQuantity = (item = {}) => {
 const deriveItemUnitPrice = (item = {}) => {
   const candidates = [
     item.unitPrice,
+    item.unitValue,
     item.valorUnitario,
     item.precoUnitario,
     item.valor,
@@ -256,6 +285,7 @@ const deriveItemTotal = (item = {}) => {
     item.subtotal,
     item.total,
     item.totalValue,
+    item.valorLiquido,
     item.valorTotal,
     item.precoTotal,
     item.totalLabel,
@@ -569,13 +599,35 @@ const isCancelledSale = (sale = {}) => {
   return ['cancelled', 'canceled', 'cancelado', 'refunded', 'estornado'].includes(status);
 };
 
-const deriveCustomerName = (sale = {}) => {
+const isUnknownCustomerName = (value) => {
+  const normalized = normalizePaymentKey(value);
+  if (!normalized) return true;
   return (
+    normalized === 'cliente nao informado' ||
+    normalized === 'consumidor final' ||
+    normalized === 'nao informado' ||
+    normalized.startsWith('cliente nao informado ') ||
+    normalized.startsWith('sem cliente')
+  );
+};
+
+const shortenPersonName = (value) => {
+  const normalized = normalizeName(value);
+  if (!normalized) return '';
+  if (isUnknownCustomerName(normalized)) return 'Cliente nao informado';
+
+  const parts = normalized.split(/\s+/).filter(Boolean);
+  if (parts.length <= 2) return normalized;
+  return `${parts[0]} ${parts[1]}`;
+};
+
+const deriveCustomerName = (sale = {}) => {
+  return shortenPersonName(
     normalizeName(sale.customerName) ||
-    normalizeName(sale?.receiptSnapshot?.customer?.name) ||
-    normalizeName(sale?.receiptSnapshot?.cliente?.nome) ||
-    normalizeName(sale?.receiptSnapshot?.cliente?.name) ||
-    'Cliente nao informado'
+      normalizeName(sale?.receiptSnapshot?.customer?.name) ||
+      normalizeName(sale?.receiptSnapshot?.cliente?.nome) ||
+      normalizeName(sale?.receiptSnapshot?.cliente?.name) ||
+      'Cliente nao informado'
   );
 };
 
@@ -1096,6 +1148,8 @@ const buildTopCustomers = (sales = []) => {
   sales.forEach((sale) => {
     const key = deriveCustomerKey(sale);
     const name = deriveCustomerName(sale);
+    if (!name || isUnknownCustomerName(name)) return;
+    if (!key || isUnknownCustomerName(key)) return;
     const total = deriveSaleNet(sale);
     const entry = customerMap.get(key) || {
       name,
@@ -1127,15 +1181,130 @@ const buildTopCustomers = (sales = []) => {
     }));
 };
 
+const derivePetSnapshot = (sale = {}) => {
+  const candidates = [
+    sale.vendaPet,
+    sale.pet,
+    sale.petSnapshot,
+    sale.receiptSnapshot?.vendaPet,
+    sale.receiptSnapshot?.pet,
+    sale.receiptSnapshot?.cliente?.petData,
+    sale.receiptSnapshot?.customer?.petData,
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate && typeof candidate === 'object') return candidate;
+  }
+
+  return null;
+};
+
+const derivePetName = (sale = {}) => {
+  const petSnapshot = derivePetSnapshot(sale);
+  return (
+    normalizeName(petSnapshot?.nome) ||
+    normalizeName(petSnapshot?.name) ||
+    normalizeName(sale.petName) ||
+    normalizeName(sale.receiptSnapshot?.petName) ||
+    normalizeName(sale.receiptSnapshot?.cliente?.pet) ||
+    normalizeName(sale.receiptSnapshot?.customer?.pet) ||
+    ''
+  );
+};
+
+const derivePetKey = (sale = {}) => {
+  const petSnapshot = derivePetSnapshot(sale);
+  const candidates = [
+    petSnapshot?._id,
+    petSnapshot?.id,
+    sale.petId,
+    sale.receiptSnapshot?.petId,
+    sale.receiptSnapshot?.cliente?.petId,
+    sale.receiptSnapshot?.customer?.petId,
+  ];
+
+  for (const candidate of candidates) {
+    const value = String(candidate || '').trim();
+    if (value) return value;
+  }
+
+  const petName = derivePetName(sale);
+  const customerKey = deriveCustomerKey(sale);
+  return petName ? `${customerKey}__${petName}` : '';
+};
+
+const derivePetProfile = (sale = {}) => {
+  const petSnapshot = derivePetSnapshot(sale);
+  return (
+    [normalizeName(petSnapshot?.tipo), normalizeName(petSnapshot?.raca)]
+      .filter(Boolean)
+      .join(' / ') ||
+    normalizeName(sale.receiptSnapshot?.cliente?.petTipo) ||
+    '-'
+  );
+};
+
+const buildTopPets = (sales = []) => {
+  const petMap = new Map();
+
+  sales.forEach((sale) => {
+    const petName = derivePetName(sale);
+    const petKey = derivePetKey(sale);
+    if (!petName || !petKey) return;
+
+    const total = deriveSaleNet(sale);
+    const createdAt = sale.createdAt ? new Date(sale.createdAt) : null;
+    const entry = petMap.get(petKey) || {
+      name: petName,
+      customer: deriveCustomerName(sale),
+      profile: derivePetProfile(sale),
+      orders: 0,
+      total: 0,
+      last: null,
+    };
+
+    entry.orders += 1;
+    entry.total += Number.isFinite(total) ? total : 0;
+
+    if (createdAt && (!entry.last || createdAt > entry.last)) {
+      entry.last = createdAt;
+      entry.customer = deriveCustomerName(sale) || entry.customer;
+      entry.profile = derivePetProfile(sale) || entry.profile;
+    }
+
+    petMap.set(petKey, entry);
+  });
+
+  return Array.from(petMap.values())
+    .sort((a, b) => {
+      if (b.orders !== a.orders) return b.orders - a.orders;
+      return b.total - a.total;
+    })
+    .slice(0, 8)
+    .map((entry) => ({
+      name: entry.name,
+      customer: entry.customer,
+      profile: entry.profile,
+      orders: entry.orders,
+      total: entry.total,
+      last: entry.last ? entry.last.toISOString() : null,
+    }));
+};
+
 const deriveItemName = (item = {}) => {
   return (
+    normalizeName(item.product) ||
     normalizeName(item.name) ||
     normalizeName(item.nome) ||
     normalizeName(item.descricao) ||
     normalizeName(item.product?.name) ||
+    normalizeName(item.product?.nome) ||
     normalizeName(item.produto?.nome) ||
+    normalizeName(item.productSnapshot?.nome) ||
     normalizeName(item.productSnapshot?.name) ||
+    normalizeName(item.productSnapshot?.descricao) ||
     normalizeName(item.produtoSnapshot?.nome) ||
+    normalizeName(item.produtoSnapshot?.descricao) ||
     'Produto'
   );
 };
@@ -1145,18 +1314,129 @@ const deriveItemCategory = (item = {}) => {
     normalizeName(item.category) ||
     normalizeName(item.categoria) ||
     normalizeName(item.product?.categoria) ||
+    normalizeName(item.product?.category) ||
     normalizeName(item.produto?.categoria) ||
     normalizeName(item.productSnapshot?.categoria) ||
+    normalizeName(item.productSnapshot?.category) ||
     normalizeName(item.produtoSnapshot?.categoria) ||
     'Geral'
   );
 };
 
-const buildTopProducts = (sales = []) => {
-  const productMap = new Map();
+const extractItemProductObjectId = (item = {}) => {
+  const candidates = [
+    item.productId,
+    item.product_id,
+    item.produtoId,
+    item.produto_id,
+    item.codigoInterno,
+    item.codInterno,
+    item.codigo,
+    item.id,
+    item._id,
+    item.product?._id,
+    item.produto?._id,
+    item.productSnapshot?._id,
+    item.produtoSnapshot?._id,
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const raw = typeof candidate === 'object' && candidate._id ? candidate._id : candidate;
+    const value = String(raw || '').trim();
+    if (mongoose.Types.ObjectId.isValid(value)) return value;
+  }
+
+  return '';
+};
+
+const isProductSaleItem = (item = {}, productsIndex = new Map()) => {
+  const productId = extractItemProductObjectId(item);
+  const hasLoadedProduct = productId ? productsIndex.has(productId) : false;
+  const hasProductHint = Boolean(
+    hasLoadedProduct ||
+      item.productSnapshot ||
+      item.produtoSnapshot ||
+      (productId && hasLoadedProduct) ||
+      String(item.tipoItem || item.itemType || item.kind || '').toLowerCase() === 'produto' ||
+      String(item.type || '').toLowerCase() === 'product'
+  );
+  const hasServiceHint = Boolean(
+    item.servico ||
+      item.service ||
+      item.serviceId ||
+      item.service_id ||
+      item.servicoId ||
+      item.servico_id ||
+      String(item.tipoItem || item.itemType || item.kind || '').toLowerCase() === 'servico' ||
+      String(item.type || '').toLowerCase() === 'service'
+  );
+
+  if (hasServiceHint && !hasProductHint) return false;
+  return hasProductHint;
+};
+
+const resolveProductCategoryLabel = (product = {}, categoryMap = new Map()) => {
+  const directCategory =
+    normalizeName(product?.categoria) ||
+    normalizeName(product?.category) ||
+    normalizeName(product?.categoriaPrincipal);
+  if (directCategory) return directCategory;
+
+  const categoryIds = Array.isArray(product?.categorias) ? product.categorias : [];
+  for (const entry of categoryIds) {
+    const categoryId = typeof entry === 'object' && entry?._id ? String(entry._id) : String(entry || '');
+    if (!categoryId) continue;
+    const label = categoryMap.get(categoryId);
+    if (label) return label;
+  }
+
+  return '';
+};
+
+const loadProductsIndex = async (sales = []) => {
+  const productIds = new Set();
 
   sales.forEach((sale) => {
-    const items = collectSaleItems(sale);
+    collectSaleItems(sale).forEach((item) => {
+      const productId = extractItemProductObjectId(item);
+      if (productId) productIds.add(productId);
+    });
+  });
+
+  if (!productIds.size) {
+    return { productMap: new Map(), categoryMap: new Map() };
+  }
+
+  const products = await Product.find({ _id: { $in: Array.from(productIds) } })
+    .select('nome descricao categoria category categoriaPrincipal categorias')
+    .lean();
+
+  const categoryIds = new Set();
+  products.forEach((product) => {
+    const categories = Array.isArray(product?.categorias) ? product.categorias : [];
+    categories.forEach((entry) => {
+      const categoryId = typeof entry === 'object' && entry?._id ? String(entry._id) : String(entry || '');
+      if (categoryId && mongoose.Types.ObjectId.isValid(categoryId)) categoryIds.add(categoryId);
+    });
+  });
+
+  const categories = categoryIds.size
+    ? await Category.find({ _id: { $in: Array.from(categoryIds) } }).select('nome').lean()
+    : [];
+
+  const categoryMap = new Map(categories.map((category) => [String(category._id), normalizeName(category.nome)]));
+  const productMap = new Map(products.map((product) => [String(product._id), product]));
+
+  return { productMap, categoryMap };
+};
+
+const buildTopProducts = async (sales = []) => {
+  const { productMap: productsIndex, categoryMap } = await loadProductsIndex(sales);
+  const rankingMap = new Map();
+
+  sales.forEach((sale) => {
+    const items = collectSaleItems(sale).filter((item) => isProductSaleItem(item, productsIndex));
     if (!items.length) return;
 
     const saleGross = items.reduce((acc, item) => acc + deriveItemTotal(item), 0);
@@ -1164,15 +1444,18 @@ const buildTopProducts = (sales = []) => {
     const discountRate = saleGross > 0 ? Math.min(saleDiscount / saleGross, 1) : 0;
 
     items.forEach((item) => {
-      const name = deriveItemName(item);
-      const category = deriveItemCategory(item);
+      const productId = extractItemProductObjectId(item);
+      const productRecord = productId ? productsIndex.get(productId) : null;
+      const name = normalizeName(productRecord?.nome) || deriveItemName(item);
+      const category = resolveProductCategoryLabel(productRecord, categoryMap) || deriveItemCategory(item);
       const qty = deriveItemQuantity(item) || 0;
       const gross = deriveItemTotal(item) || 0;
       const discount = gross * discountRate;
       const net = gross - discount;
 
-      const key = `${name}__${category}`;
-      const entry = productMap.get(key) || {
+      const key = productId || `${name}__${category}`;
+      const entry = rankingMap.get(key) || {
+        productId: productId || '',
         name,
         category,
         qty: 0,
@@ -1185,11 +1468,11 @@ const buildTopProducts = (sales = []) => {
       entry.gross += gross;
       entry.discount += discount;
       entry.net += net;
-      productMap.set(key, entry);
+      rankingMap.set(key, entry);
     });
   });
 
-  return Array.from(productMap.values())
+  return Array.from(rankingMap.values())
     .sort((a, b) => b.net - a.net)
     .slice(0, 8);
 };
@@ -1255,12 +1538,20 @@ const buildPaymentMethods = (sales = []) => {
   return Array.from(methodMap.values()).sort((a, b) => b.gross - a.gross);
 };
 
+const deriveSaleNetAfterFees = (sale = {}) => {
+  const net = deriveSaleNet(sale);
+  const fee = deriveSaleFee(sale);
+  const safeNet = Number.isFinite(net) ? net : 0;
+  const safeFee = Number.isFinite(fee) ? fee : 0;
+  return Math.max(0, safeNet - safeFee);
+};
+
 const buildSalesTable = (sales = []) => {
   return sales
     .map((sale) => {
       const normalized = normalizeSaleRecord(sale);
-      const gross = deriveSaleGross(normalized);
-      const net = deriveSaleNet(normalized);
+      const saleValue = deriveSaleNet(normalized);
+      const net = deriveSaleNetAfterFees(normalized);
       const discount = deriveSaleDiscount(normalized);
       const fee = deriveSaleFee(normalized);
       return {
@@ -1269,7 +1560,7 @@ const buildSalesTable = (sales = []) => {
         customer: deriveCustomerName(normalized),
         channel: normalizeName(normalized.typeLabel) || normalizeName(normalized.type) || 'Venda',
         payment: resolvePrimaryPaymentLabel(normalized),
-        gross: Number.isFinite(gross) ? gross : 0,
+        gross: Number.isFinite(saleValue) ? saleValue : 0,
         discount: Number.isFinite(discount) ? discount : 0,
         fee: Number.isFinite(fee) ? fee : 0,
         net: Number.isFinite(net) ? net : 0,
@@ -1522,7 +1813,7 @@ router.get(
   authorizeRoles('admin', 'admin_master', 'funcionario'),
   async (req, res) => {
     try {
-      const { viewMonth, viewStart, viewEnd, compareMonth, compareStart, compareEnd, storeId, companyCode } = req.query;
+      const { viewMonth, viewStart, viewEnd, compareMonth, compareStart, compareEnd, storeId, companyCode, pdvId } = req.query;
 
       const viewPeriod = resolvePeriod(
         { month: viewMonth, start: viewStart, end: viewEnd },
@@ -1544,6 +1835,7 @@ router.get(
         : allowedStoreIds.map((id) => new mongoose.Types.ObjectId(id));
 
       let storeObjectId = toObjectId(storeId);
+      const pdvObjectId = toObjectId(pdvId);
 
       if (!storeObjectId && companyCode) {
         const store = await resolveStoreByCompanyCode(companyCode);
@@ -1589,6 +1881,7 @@ router.get(
             channels: [],
             health: [],
             topCustomers: [],
+            topPets: [],
             topProducts: [],
             paymentMethods: [],
             taxes: [],
@@ -1599,6 +1892,10 @@ router.get(
           });
         }
         baseMatch.empresa = { $in: allowedStoreObjectIds };
+      }
+
+      if (pdvObjectId) {
+        baseMatch.pdv = pdvObjectId;
       }
 
       const saleMatch = {};
@@ -1626,12 +1923,14 @@ router.get(
       const { summary: viewSummary, completedSales: viewCompletedSales } = collectSalesSummary(viewSales);
       const { summary: compareSummary, completedSales: compareCompletedSales } = collectSalesSummary(compareSales);
 
+      const billingNet = viewSummary.gross - viewSummary.costs - viewSummary.fees;
+      const compareBillingNet = compareSummary.gross - compareSummary.costs - compareSummary.fees;
       const profit = viewSummary.net - viewSummary.costs;
       const compareProfit = compareSummary.net - compareSummary.costs;
 
       const trends = {
         gross: calculateTrend(viewSummary.gross, compareSummary.gross),
-        net: calculateTrend(viewSummary.net, compareSummary.net),
+        net: calculateTrend(billingNet, compareBillingNet),
         discounts: calculateTrend(viewSummary.discounts, compareSummary.discounts),
         fees: calculateTrend(viewSummary.fees, compareSummary.fees),
         refunds: calculateTrend(viewSummary.refunds, compareSummary.refunds),
@@ -1651,7 +1950,8 @@ router.get(
 
       const channels = buildChannelBreakdown(viewCompletedSales, viewSummary.gross);
       const topCustomers = buildTopCustomers(viewCompletedSales);
-      const topProducts = buildTopProducts(viewCompletedSales);
+      const topPets = buildTopPets(viewCompletedSales);
+      const topProducts = await buildTopProducts(viewCompletedSales);
       const paymentMethods = buildPaymentMethods(viewCompletedSales);
       const salesTable = buildSalesTable(viewSales);
 
@@ -1704,6 +2004,7 @@ router.get(
       const taxes = [
         { label: 'Descontos concedidos', value: viewSummary.discounts, note: 'Politica comercial' },
         { label: 'Taxas de pagamento', value: viewSummary.fees, note: 'Meios de pagamento' },
+        { label: 'Custo de produtos', value: viewSummary.costs, note: 'Custo dos itens vendidos' },
         { label: 'Estornos e cancelamentos', value: viewSummary.refunds, note: 'Ajustes do periodo' },
       ].filter((entry) => Number.isFinite(entry.value) && entry.value > 0);
 
@@ -1751,9 +2052,21 @@ router.get(
           view: viewPeriod,
           compare: comparePeriod,
         },
+        comparison: {
+          gross: compareSummary.gross,
+          billingNet: compareBillingNet,
+          avgTicket: compareSummary.avgTicket,
+          orders: compareSummary.orders,
+          discounts: compareSummary.discounts,
+          fees: compareSummary.fees,
+          refunds: compareSummary.refunds,
+          profit: compareProfit,
+        },
         summary: {
           gross: viewSummary.gross,
           net: viewSummary.net,
+          billingNet,
+          profit,
           discounts: viewSummary.discounts,
           additions: viewSummary.additions,
           fees: viewSummary.fees,
@@ -1778,6 +2091,7 @@ router.get(
         channels,
         health,
         topCustomers,
+        topPets,
         topProducts,
         paymentMethods,
         taxes,

@@ -1,0 +1,18 @@
+{
+    "sourceFile": "servidor/docs/pdv-concorrencia-checklist.md",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1772576178577,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1772576178577,
+            "name": "Commit-0",
+            "content": "# Checklist de Homologacao - PDV em Concorrencia (2 Operadores)\n\n## Objetivo\nValidar o uso simultaneo do mesmo PDV/caixa em dois computadores sem:\n- duplicar codigo de venda;\n- duplicar codigo de orcamento;\n- duplicar codigo de cliente por reenvio;\n- perder atualizacao por sobrescrita silenciosa;\n- precisar de F5 para ver mudancas no outro terminal.\n\n## Pre-requisitos\n1. Dois navegadores/logins ativos (Operador A e Operador B).\n2. Mesmo `Empresa` e mesmo `PDV` selecionados.\n3. Caixa aberto.\n4. API e Socket.IO em execucao.\n\n## Cenarios\n\n### 1. Sincronizacao em tempo real\n1. No Operador A, registrar uma `entrada` no caixa.\n2. Confirmar que no Operador B a alteracao aparece sem F5.\n3. Repetir com `saida`.\n4. Repetir com inclusao e remocao de item em venda.\n\nResultado esperado:\n- Dados refletem no outro operador em poucos segundos.\n- Sem reload manual.\n\n### 2. Venda simultanea e sequencia de codigo\n1. Operador A monta venda e finaliza.\n2. Operador B, quase ao mesmo tempo, finaliza outra venda.\n3. Conferir lista de vendas no PDV.\n\nResultado esperado:\n- Nenhum codigo de venda duplicado.\n- Sequencia de codigo monotonicamente crescente no PDV.\n- Nenhuma venda perdida apos sincronizacao.\n\n### 3. Orcamento simultaneo\n1. Operador A salva orcamento.\n2. Operador B salva outro orcamento no mesmo intervalo.\n3. Conferir lista de orcamentos.\n\nResultado esperado:\n- Nenhum codigo de orcamento duplicado.\n- Ambos os orcamentos persistidos.\n\n### 4. Conflito otimista (expectedUpdatedAt)\n1. Deixar Operador B parado em estado antigo.\n2. Operador A faz alteracoes e persiste.\n3. Operador B tenta persistir estado antigo.\n\nResultado esperado:\n- Backend retorna conflito (409) para estado defasado.\n- Front do Operador B sincroniza com estado atual e notifica.\n- Sem sobrescrever silenciosamente as alteracoes do Operador A.\n\n### 5. Idempotencia no estado do PDV\n1. Forcar acao que dispare duas persistencias iguais (rede lenta/retry).\n2. Conferir historico/vendas/orcamentos apos processar.\n\nResultado esperado:\n- Requisicoes repetidas com a mesma chave idempotente nao duplicam efeito.\n\n### 6. Cadastro de cliente com idempotencia\n1. Disparar `POST /api/func/clientes` duas vezes com mesma `X-Idempotency-Key`.\n2. Conferir retorno e base.\n\nResultado esperado:\n- Mesma resposta para reenvio.\n- Apenas um cliente criado.\n- Sem codigoCliente duplicado.\n\n### 7. Fechamento de caixa\n1. Operador A fecha caixa.\n2. Operador B tenta operar venda sem atualizar manualmente.\n\nResultado esperado:\n- Estado de caixa fechado sincroniza sem F5.\n- Operacoes bloqueadas/validadas conforme regra de caixa fechado.\n\n## Evidencias a coletar\n1. Capturas da lista de vendas com codigos distintos.\n2. Capturas da lista de orcamentos com codigos distintos.\n3. Log/rede mostrando conflito 409 e sincronizacao.\n4. Log/rede mostrando replay idempotente do cadastro de cliente.\n\n## Criterios de aprovacao\n1. Nenhum codigo duplicado em vendas e orcamentos.\n2. Nenhuma perda de registro por concorrencia.\n3. Sincronizacao entre operadores sem F5.\n4. Reenvio de request nao gera duplicidade.\n"
+        }
+    ]
+}

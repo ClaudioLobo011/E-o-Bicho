@@ -72,6 +72,30 @@ let allowedStoresCache = [];
 let allowedStoresFetchedAt = 0;
 let allowedStoresPromise = null;
 const ADMIN_TABLE_ENHANCED_ATTR = 'data-admin-table-enhanced';
+const ADMIN_TABLE_SCROLL_ATTR = 'data-admin-table-scroll';
+let adminTableStylesInjected = false;
+
+function ensureAdminTableStyles() {
+  if (adminTableStylesInjected || typeof document === 'undefined') return;
+  const style = document.createElement('style');
+  style.setAttribute('data-admin-table-styles', 'true');
+  style.textContent = `
+    [${ADMIN_TABLE_SCROLL_ATTR}="true"] {
+      overflow: auto;
+      max-height: min(65vh, 720px);
+    }
+
+    [${ADMIN_TABLE_SCROLL_ATTR}="true"] thead th {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: #f9fafb;
+      box-shadow: inset 0 -1px 0 rgba(229, 231, 235, 1);
+    }
+  `;
+  document.head.appendChild(style);
+  adminTableStylesInjected = true;
+}
 
 function normalizeAdminTableText(value) {
   return String(value || '')
@@ -128,8 +152,17 @@ function shouldEnhanceAdminTable(table) {
   return true;
 }
 
+function ensureAdminTableScrollContainer(table) {
+  if (!table) return;
+  const parent = table.parentElement;
+  if (!parent) return;
+  parent.setAttribute(ADMIN_TABLE_SCROLL_ATTR, 'true');
+}
+
 function enhanceAdminTable(table) {
   if (!shouldEnhanceAdminTable(table)) return;
+  ensureAdminTableStyles();
+  ensureAdminTableScrollContainer(table);
   const thead = table.querySelector('thead');
   const tbody = table.querySelector('tbody');
   const headerRow = thead.querySelector('tr');
@@ -158,8 +191,29 @@ function enhanceAdminTable(table) {
       return cells.length >= headers.length;
     });
 
+  const getCell = (row, index) =>
+    Array.from(row.children).filter((node) => /td/i.test(node.tagName))[index] || null;
+
+  const isBooleanColumn = (index) =>
+    getDataRows().some((row) => {
+      const cell = getCell(row, index);
+      return Boolean(cell?.querySelector('input[type="checkbox"]'));
+    });
+
+  const getCellFilterValue = (row, index) => {
+    const cell = getCell(row, index);
+    if (!cell) return '';
+    const checkbox = cell.querySelector('input[type="checkbox"]');
+    if (checkbox) {
+      return checkbox.checked ? 'ON' : 'OFF';
+    }
+    const input = cell.querySelector('input,select,textarea');
+    if (input && typeof input.value === 'string') return input.value;
+    return cell.textContent || '';
+  };
+
   const getCellText = (row, index) => {
-    const cell = Array.from(row.children).filter((node) => /td/i.test(node.tagName))[index];
+    const cell = getCell(row, index);
     if (!cell) return '';
     const input = cell.querySelector('input,select,textarea');
     if (input && typeof input.value === 'string') return input.value;
@@ -167,9 +221,12 @@ function enhanceAdminTable(table) {
   };
 
   const getUniqueValues = (index) => {
+    if (isBooleanColumn(index)) {
+      return ['ON', 'OFF'];
+    }
     const values = new Set();
     getDataRows().forEach((row) => {
-      const value = String(getCellText(row, index) || '').trim();
+      const value = String(getCellFilterValue(row, index) || '').trim();
       if (value) values.add(value);
     });
     return Array.from(values).sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true, sensitivity: 'base' }));
@@ -195,11 +252,12 @@ function enhanceAdminTable(table) {
     const filteredRows = rows.filter((row) =>
       headers.every((_, index) => {
         const filterRegex = buildAdminTableFilterRegex(state.filters[index] || '');
-        const cellText = normalizeAdminTableText(getCellText(row, index));
+        const cellFilterValue = getCellFilterValue(row, index);
+        const cellText = normalizeAdminTableText(cellFilterValue);
         if (filterRegex && !filterRegex.test(cellText)) return false;
         const selected = state.selections[index];
         if (selected && selected.size > 0) {
-          const rawCell = String(getCellText(row, index) || '').trim();
+          const rawCell = String(cellFilterValue || '').trim();
           if (!selected.has(rawCell)) return false;
         }
         return true;
@@ -229,7 +287,7 @@ function enhanceAdminTable(table) {
     const hasSelection = currentSelection.size > 0;
     const dropdown = document.createElement('div');
     dropdown.className =
-      'absolute left-0 top-full z-50 mt-1 w-60 rounded-lg border border-gray-200 bg-white shadow-xl p-2 text-xs text-gray-600';
+      'fixed z-[100000] w-60 rounded-lg border border-gray-200 bg-white shadow-xl p-2 text-xs text-gray-600';
     dropdown.innerHTML = `
       <div class="flex items-center justify-between px-2 py-1 text-[11px] font-semibold text-gray-500 uppercase">
         <span>Opcoes</span>
@@ -290,7 +348,23 @@ function enhanceAdminTable(table) {
         applyFiltersAndSort();
       }
     });
-    anchor.appendChild(dropdown);
+    document.body.appendChild(dropdown);
+    const rect = anchor.getBoundingClientRect();
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+    const dropdownWidth = 240;
+    const estimatedHeight = 220;
+    const margin = 8;
+    let left = rect.left;
+    let top = rect.bottom + 4;
+    if (left + dropdownWidth > viewportWidth - margin) {
+      left = Math.max(margin, viewportWidth - dropdownWidth - margin);
+    }
+    if (top + estimatedHeight > viewportHeight - margin) {
+      top = Math.max(margin, rect.top - estimatedHeight - 4);
+    }
+    dropdown.style.left = `${Math.max(margin, left)}px`;
+    dropdown.style.top = `${Math.max(margin, top)}px`;
     return dropdown;
   };
 

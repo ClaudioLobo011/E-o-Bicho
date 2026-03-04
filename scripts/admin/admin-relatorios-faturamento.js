@@ -5,6 +5,11 @@
     monthView: document.getElementById('billing-month-view'),
     monthCompare: document.getElementById('billing-month-compare'),
     companyCode: document.getElementById('billing-company-code'),
+    pdvSelect: document.getElementById('billing-pdv-select'),
+    companyModal: document.getElementById('billing-company-modal'),
+    companyModalClose: document.getElementById('billing-company-modal-close'),
+    companyModalSearch: document.getElementById('billing-company-modal-search'),
+    companyModalResults: document.getElementById('billing-company-modal-results'),
     periodLabel: document.getElementById('billing-period-label'),
     compare: document.getElementById('billing-compare'),
     updated: document.getElementById('billing-updated'),
@@ -49,6 +54,7 @@
     channelList: document.getElementById('billing-channel-list'),
     healthList: document.getElementById('billing-health-list'),
     customersBody: document.getElementById('billing-customers-body'),
+    petsBody: document.getElementById('billing-pets-body'),
     productsBody: document.getElementById('billing-products-body'),
     paymentsBody: document.getElementById('billing-payments-body'),
     taxesList: document.getElementById('billing-taxes-list'),
@@ -61,6 +67,13 @@
     salesNet: document.getElementById('billing-sales-net'),
     alertsList: document.getElementById('billing-alerts-list'),
     nextSteps: document.getElementById('billing-next-steps'),
+  };
+
+  const state = {
+    companies: [],
+    companiesLoaded: false,
+    selectedCompany: null,
+    pdvs: [],
   };
 
   const getToken = () => {
@@ -94,6 +107,217 @@
     return date.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
   };
 
+  const normalizeText = (value) =>
+    String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+
+  const digitsOnly = (value) => String(value || '').replace(/\D/g, '');
+
+  const getCompanyLabel = (company) =>
+    company?.nomeFantasia || company?.nome || company?.razaoSocial || 'Empresa sem nome';
+
+  const getPdvLabel = (pdv) => pdv?.apelido || pdv?.nome || pdv?.codigo || 'PDV sem nome';
+
+  const getDefaultPdv = () => {
+    if (!Array.isArray(state.pdvs) || !state.pdvs.length) return null;
+    return (
+      state.pdvs.find((pdv) => String(pdv?.ambientePadrao || '').toLowerCase() === 'producao') ||
+      state.pdvs[0] ||
+      null
+    );
+  };
+
+  const buildCompanySearchText = (company) =>
+    normalizeText(
+      [
+        company?.codigo,
+        company?.nomeFantasia,
+        company?.nome,
+        company?.razaoSocial,
+        company?.cnpj,
+      ]
+        .filter(Boolean)
+        .join(' ')
+    );
+
+  const setSelectedCompany = (company, { syncInput = true } = {}) => {
+    state.selectedCompany = company || null;
+    if (syncInput && elements.companyCode) {
+      if (company) {
+        const code = company?.codigo ? String(company.codigo) : '';
+        const label = getCompanyLabel(company);
+        elements.companyCode.value = code ? `${code} - ${label}` : label;
+      } else {
+        elements.companyCode.value = '';
+      }
+    }
+  };
+
+  const renderPdvOptions = () => {
+    if (!elements.pdvSelect) return;
+    const options = ['<option value="">Todos os PDVs</option>'];
+    state.pdvs.forEach((pdv) => {
+      const id = String(pdv?._id || '');
+      const label = getPdvLabel(pdv);
+      options.push(`<option value="${id}">${label}</option>`);
+    });
+    elements.pdvSelect.innerHTML = options.join('');
+    elements.pdvSelect.disabled = !state.selectedCompany;
+  };
+
+  const clearPdvs = () => {
+    state.pdvs = [];
+    if (elements.pdvSelect) {
+      elements.pdvSelect.value = '';
+    }
+    renderPdvOptions();
+  };
+
+  const findCompanyByCode = (rawValue) => {
+    const digits = digitsOnly(rawValue);
+    if (!digits) return null;
+    return (
+      state.companies.find((company) => digitsOnly(company?.codigo) === digits) ||
+      state.companies.find((company) => digitsOnly(company?.cnpj) === digits) ||
+      null
+    );
+  };
+
+  const getDefaultCompany = () => {
+    if (!Array.isArray(state.companies) || !state.companies.length) return null;
+    return [...state.companies].sort((left, right) => {
+      const leftCode = Number(digitsOnly(left?.codigo));
+      const rightCode = Number(digitsOnly(right?.codigo));
+      const leftHasCode = Number.isFinite(leftCode) && leftCode > 0;
+      const rightHasCode = Number.isFinite(rightCode) && rightCode > 0;
+
+      if (leftHasCode && rightHasCode && leftCode !== rightCode) {
+        return leftCode - rightCode;
+      }
+      if (leftHasCode !== rightHasCode) {
+        return leftHasCode ? -1 : 1;
+      }
+
+      return getCompanyLabel(left).localeCompare(getCompanyLabel(right), 'pt-BR');
+    })[0];
+  };
+
+  const filterCompanies = (query) => {
+    const normalized = normalizeText(query);
+    const digits = digitsOnly(query);
+    return state.companies.filter((company) => {
+      if (!normalized) return true;
+      if (digits) {
+        const codeDigits = digitsOnly(company?.codigo);
+        const cnpjDigits = digitsOnly(company?.cnpj);
+        if (codeDigits.includes(digits) || cnpjDigits.includes(digits)) return true;
+      }
+      return buildCompanySearchText(company).includes(normalized);
+    });
+  };
+
+  const renderCompanyResults = (query = '') => {
+    if (!elements.companyModalResults) return;
+    const list = filterCompanies(query);
+    if (!list.length) {
+      elements.companyModalResults.innerHTML =
+        '<div class="rounded-xl border border-dashed border-gray-200 px-4 py-6 text-center text-sm text-gray-500">Nenhuma empresa encontrada.</div>';
+      return;
+    }
+    elements.companyModalResults.innerHTML = list
+      .map((company) => {
+        const label = getCompanyLabel(company);
+        const secondary = [company?.nome, company?.razaoSocial].filter(Boolean).join(' • ');
+        return `
+          <button
+            type="button"
+            class="flex w-full items-start justify-between rounded-xl border border-gray-200 px-4 py-3 text-left transition hover:border-primary/30 hover:bg-primary/5"
+            data-billing-company-id="${company._id || ''}"
+          >
+            <div>
+              <p class="text-sm font-semibold text-gray-800">${label}</p>
+              <p class="mt-1 text-xs text-gray-500">${secondary || 'Sem descricao adicional'}</p>
+            </div>
+            <div class="text-right">
+              <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">Codigo ${company?.codigo || '-'}</p>
+              <p class="mt-1 text-xs text-gray-500">${company?.cnpj || '-'}</p>
+            </div>
+          </button>
+        `;
+      })
+      .join('');
+  };
+
+  const openCompanyModal = (query = '') => {
+    if (!elements.companyModal) return;
+    renderCompanyResults(query);
+    elements.companyModal.classList.remove('hidden');
+    elements.companyModal.classList.add('flex');
+    if (elements.companyModalSearch) {
+      elements.companyModalSearch.value = query;
+      requestAnimationFrame(() => elements.companyModalSearch.focus());
+    }
+  };
+
+  const closeCompanyModal = () => {
+    if (!elements.companyModal) return;
+    elements.companyModal.classList.add('hidden');
+    elements.companyModal.classList.remove('flex');
+  };
+
+  const loadAllowedCompanies = async () => {
+    if (state.companiesLoaded) return state.companies;
+    const token = getToken();
+    const response = await fetch(`${API_BASE}/stores/allowed`, {
+      headers: { Authorization: token ? `Bearer ${token}` : '' },
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload?.message || 'Erro ao carregar empresas permitidas.');
+    }
+    state.companies = Array.isArray(payload?.stores) ? payload.stores : [];
+    state.companiesLoaded = true;
+    return state.companies;
+  };
+
+  const loadPdvsForSelectedCompany = async () => {
+    const companyId = String(state.selectedCompany?._id || '').trim();
+    if (!companyId) {
+      clearPdvs();
+      return [];
+    }
+
+    if (elements.pdvSelect) {
+      elements.pdvSelect.disabled = true;
+      elements.pdvSelect.innerHTML = '<option value="">Carregando PDVs...</option>';
+    }
+
+    try {
+      const token = getToken();
+      const response = await fetch(`${API_BASE}/pdvs?empresa=${encodeURIComponent(companyId)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.message || 'Erro ao carregar PDVs.');
+      }
+      state.pdvs = Array.isArray(payload?.pdvs) ? payload.pdvs : [];
+      renderPdvOptions();
+      const defaultPdv = getDefaultPdv();
+      if (elements.pdvSelect) {
+        elements.pdvSelect.value = defaultPdv?._id ? String(defaultPdv._id) : '';
+      }
+      return state.pdvs;
+    } catch (error) {
+      state.pdvs = [];
+      renderPdvOptions();
+      throw error;
+    }
+  };
+
   const setTrend = (el, value) => {
     if (!el) return;
     const safe = Number.isFinite(value) ? value : 0;
@@ -116,6 +340,59 @@
 
     el.classList.add('bg-gray-100', 'text-gray-700');
     el.innerHTML = `<i class="fas fa-minus"></i>${formatPercent(Math.abs(safe))}`;
+  };
+
+  const setCurrencyReference = (el, currentValue, referenceValue, options = {}) => {
+    if (!el) return;
+    const current = Number.isFinite(currentValue) ? currentValue : 0;
+    const reference = Number.isFinite(referenceValue) ? referenceValue : 0;
+    const invert = Boolean(options.invert);
+    const isIncrease = current > reference + 0.001;
+    const isDecrease = current < reference - 0.001;
+    const positive = invert ? isDecrease : isIncrease;
+    const negative = invert ? isIncrease : isDecrease;
+
+    el.className = 'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold';
+
+    if (positive) {
+      el.classList.add('bg-emerald-50', 'text-emerald-700');
+      el.innerHTML = `<i class="fas fa-arrow-up"></i>${formatCurrency(reference)}`;
+      return;
+    }
+
+    if (negative) {
+      el.classList.add('bg-rose-50', 'text-rose-700');
+      el.innerHTML = `<i class="fas fa-arrow-down"></i>${formatCurrency(reference)}`;
+      return;
+    }
+
+    el.classList.add('bg-gray-100', 'text-gray-700');
+    el.innerHTML = `<i class="fas fa-minus"></i>${formatCurrency(reference)}`;
+  };
+
+  const setCountReference = (el, currentValue, referenceValue) => {
+    if (!el) return;
+    const current = Number.isFinite(currentValue) ? currentValue : 0;
+    const reference = Number.isFinite(referenceValue) ? referenceValue : 0;
+    const isIncrease = current > reference;
+    const isDecrease = current < reference;
+
+    el.className = 'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold';
+
+    if (isIncrease) {
+      el.classList.add('bg-emerald-50', 'text-emerald-700');
+      el.innerHTML = `<i class="fas fa-arrow-up"></i>${formatNumber(reference)}`;
+      return;
+    }
+
+    if (isDecrease) {
+      el.classList.add('bg-rose-50', 'text-rose-700');
+      el.innerHTML = `<i class="fas fa-arrow-down"></i>${formatNumber(reference)}`;
+      return;
+    }
+
+    el.classList.add('bg-gray-100', 'text-gray-700');
+    el.innerHTML = `<i class="fas fa-minus"></i>${formatNumber(reference)}`;
   };
 
   const toDateValue = (value) => {
@@ -252,23 +529,88 @@
     if (!elements.dailyChart) return;
     const gross = Array.isArray(series?.gross) ? series.gross : [];
     const net = Array.isArray(series?.net) ? series.net : [];
+    const labels = Array.isArray(series?.labels) ? series.labels : [];
     const hasData = gross.some((value) => value > 0) || net.some((value) => value > 0);
     if (!gross.length || !hasData) {
       elements.dailyChart.innerHTML =
         '<div class="h-full w-full rounded-lg border border-dashed border-gray-200 bg-white/60 flex items-center justify-center text-xs text-gray-400">Sem dados no periodo.</div>';
       return;
     }
-    const width = 320;
-    const height = 140;
-    const padding = 12;
+    const width = 720;
+    const height = 220;
+    const paddingTop = 28;
+    const paddingRight = 18;
+    const paddingBottom = 34;
+    const paddingLeft = 18;
     const maxValue = Math.max(...gross, ...net, 1);
-    const pointsGross = buildLinePoints(gross, { width, height, padding, min: 0, max: maxValue });
-    const pointsNet = buildLinePoints(net, { width, height, padding, min: 0, max: maxValue });
+    const pointsGross = buildLinePoints(gross, {
+      width,
+      height,
+      padding: 0,
+      min: 0,
+      max: maxValue,
+    }).map((point) => ({
+      ...point,
+      x:
+        paddingLeft +
+        ((width - paddingLeft - paddingRight) * (point.x / Math.max(width, 1))),
+      y:
+        paddingTop +
+        ((height - paddingTop - paddingBottom) * ((point.y - 0) / Math.max(height, 1))),
+    }));
+    const pointsNet = buildLinePoints(net, {
+      width,
+      height,
+      padding: 0,
+      min: 0,
+      max: maxValue,
+    }).map((point) => ({
+      ...point,
+      x:
+        paddingLeft +
+        ((width - paddingLeft - paddingRight) * (point.x / Math.max(width, 1))),
+      y:
+        paddingTop +
+        ((height - paddingTop - paddingBottom) * ((point.y - 0) / Math.max(height, 1))),
+    }));
     const pathGross = buildLinePath(pointsGross);
     const pathNet = buildLinePath(pointsNet);
-    const areaGross = buildAreaPath(pointsGross, { height, padding });
+    const areaGross = buildAreaPath(pointsGross, {
+      height: height - paddingBottom,
+      padding: 0,
+    });
     const gradientId = `daily-${Math.random().toString(36).slice(2, 8)}`;
     const lastPoint = pointsGross[pointsGross.length - 1];
+    const topLabels = pointsGross
+      .map((point, index) => {
+        const label = labels[index] || '';
+        if (!label) return '';
+        const y = Math.max(16, Math.min(point.y - 8, paddingTop + 8));
+        return `
+          <g transform="translate(${point.x},${y}) rotate(-32)">
+            <text
+              text-anchor="middle"
+              fill="#475569"
+              font-size="9"
+              font-weight="600"
+              font-family="sans-serif"
+            >${label}</text>
+          </g>
+        `;
+      })
+      .join('');
+    const pointMarkers = pointsGross
+      .map((point, index) => {
+        if (!(gross[index] > 0)) return '';
+        return `<circle cx="${point.x}" cy="${point.y}" r="3" fill="#0f766e"></circle>`;
+      })
+      .join('');
+    const horizontalGuides = [0.25, 0.5, 0.75]
+      .map((ratio) => {
+        const y = paddingTop + (height - paddingTop - paddingBottom) * (1 - ratio);
+        return `<line x1="${paddingLeft}" y1="${y}" x2="${width - paddingRight}" y2="${y}" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="4 4" opacity="0.6"></line>`;
+      })
+      .join('');
 
     elements.dailyChart.innerHTML = `
       <svg viewBox="0 0 ${width} ${height}" class="h-full w-full" preserveAspectRatio="none">
@@ -278,10 +620,14 @@
             <stop offset="100%" stop-color="#10b981" stop-opacity="0.02"></stop>
           </linearGradient>
         </defs>
+        ${horizontalGuides}
+        <line x1="${paddingLeft}" y1="${height - paddingBottom}" x2="${width - paddingRight}" y2="${height - paddingBottom}" stroke="#cbd5e1" stroke-width="1"></line>
         <path d="${areaGross}" fill="url(#${gradientId})"></path>
-        <path d="${pathGross}" fill="none" stroke="#0f766e" stroke-width="2.5" stroke-linecap="round"></path>
-        <path d="${pathNet}" fill="none" stroke="#1d4ed8" stroke-width="2" stroke-linecap="round" stroke-dasharray="4 4"></path>
-        ${lastPoint ? `<circle cx="${lastPoint.x}" cy="${lastPoint.y}" r="3.5" fill="#0f766e"></circle>` : ''}
+        <path d="${pathGross}" fill="none" stroke="#0f766e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+        <path d="${pathNet}" fill="none" stroke="#2563eb" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5 4" opacity="0.9"></path>
+        ${pointMarkers}
+        ${topLabels}
+        ${lastPoint ? `<circle cx="${lastPoint.x}" cy="${lastPoint.y}" r="3.2" fill="#0f766e"></circle>` : ''}
       </svg>
     `;
   };
@@ -475,7 +821,11 @@
     elements.healthList.innerHTML = list
       .map((item) => {
         const value = Number.isFinite(item.value) ? item.value : 0;
-        const display = item.display || `${value}${item.suffix || ''}`;
+        const display =
+          item.display ||
+          (item.suffix === '%'
+            ? `${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`
+            : `${value}${item.suffix || ''}`);
         return `
           <div class="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 p-3">
             <div>
@@ -494,7 +844,7 @@
     const list = Array.isArray(customers) ? customers : [];
     if (!list.length) {
       elements.customersBody.innerHTML =
-        '<tr><td colspan="6" class="px-3 py-4 text-center text-xs text-gray-500">Sem clientes no periodo.</td></tr>';
+        '<tr><td colspan="5" class="px-3 py-4 text-center text-xs text-gray-500">Sem clientes no periodo.</td></tr>';
       return;
     }
     elements.customersBody.innerHTML = list
@@ -504,7 +854,6 @@
           <td class="px-3 py-2 font-semibold text-gray-800">${customer.name}</td>
           <td class="px-3 py-2 text-right">${formatNumber(customer.orders)}</td>
           <td class="px-3 py-2 text-right">${formatCurrency(customer.total)}</td>
-          <td class="px-3 py-2 text-right">${formatCurrency(customer.ticket)}</td>
           <td class="px-3 py-2">${formatDateTime(customer.last)}</td>
           <td class="px-3 py-2">${customer.channel || '-'}</td>
         </tr>
@@ -531,6 +880,29 @@
           <td class="px-3 py-2 text-right">${formatCurrency(product.gross)}</td>
           <td class="px-3 py-2 text-right">${formatCurrency(product.discount)}</td>
           <td class="px-3 py-2 text-right">${formatCurrency(product.net)}</td>
+        </tr>
+      `
+      )
+      .join('');
+  };
+
+  const renderPets = (pets) => {
+    if (!elements.petsBody) return;
+    const list = Array.isArray(pets) ? pets : [];
+    if (!list.length) {
+      elements.petsBody.innerHTML =
+        '<tr><td colspan="5" class="px-3 py-4 text-center text-xs text-gray-500">Sem pets recorrentes no periodo.</td></tr>';
+      return;
+    }
+    elements.petsBody.innerHTML = list
+      .map(
+        (pet) => `
+        <tr class="hover:bg-gray-50">
+          <td class="px-3 py-2 font-semibold text-gray-800">${pet.name}</td>
+          <td class="px-3 py-2">${pet.customer || '-'}</td>
+          <td class="px-3 py-2 text-right">${formatNumber(pet.orders)}</td>
+          <td class="px-3 py-2 text-right">${formatCurrency(pet.total)}</td>
+          <td class="px-3 py-2">${formatDateTime(pet.last)}</td>
         </tr>
       `
       )
@@ -691,6 +1063,7 @@
     const period = payload?.period || {};
     const goal = payload?.goal || {};
     const customers = payload?.customers || {};
+    const comparison = payload?.comparison || {};
 
     if (elements.periodLabel) {
       elements.periodLabel.innerHTML = `<i class="fas fa-calendar"></i>Periodo de Visualizacao: ${period?.view?.label || '-'}`;
@@ -703,25 +1076,37 @@
     }
 
     if (elements.metricGross) elements.metricGross.textContent = formatCurrency(summary.gross);
-    if (elements.metricNet) elements.metricNet.textContent = formatCurrency(summary.net);
+    if (elements.metricNet) {
+      elements.metricNet.textContent = formatCurrency(
+        Number.isFinite(summary.billingNet) ? summary.billingNet : summary.net
+      );
+    }
     if (elements.metricTicket) elements.metricTicket.textContent = formatCurrency(summary.avgTicket);
     if (elements.metricOrders) elements.metricOrders.textContent = formatNumber(summary.orders);
     if (elements.metricDiscounts) elements.metricDiscounts.textContent = formatCurrency(summary.discounts);
     if (elements.metricFees) elements.metricFees.textContent = formatCurrency(summary.fees);
     if (elements.metricRefunds) elements.metricRefunds.textContent = formatCurrency(summary.refunds);
     if (elements.metricProfit) {
-      const profit = (summary.net || 0) - (summary.costs || 0);
+      const profit = Number.isFinite(summary.profit) ? summary.profit : (summary.net || 0) - (summary.costs || 0);
       elements.metricProfit.textContent = formatCurrency(profit);
     }
 
-    setTrend(elements.trendGross, trends.gross);
-    setTrend(elements.trendNet, trends.net);
-    setTrend(elements.trendTicket, trends.ticket);
-    setTrend(elements.trendOrders, trends.orders);
-    setTrend(elements.trendDiscounts, trends.discounts);
-    setTrend(elements.trendFees, trends.fees);
-    setTrend(elements.trendRefunds, trends.refunds);
-    setTrend(elements.trendProfit, trends.profit);
+    setCurrencyReference(elements.trendGross, summary.gross, comparison.gross);
+    setCurrencyReference(
+      elements.trendNet,
+      Number.isFinite(summary.billingNet) ? summary.billingNet : summary.net,
+      comparison.billingNet
+    );
+    setCurrencyReference(elements.trendTicket, summary.avgTicket, comparison.avgTicket);
+    setCountReference(elements.trendOrders, summary.orders, comparison.orders);
+    setCurrencyReference(elements.trendDiscounts, summary.discounts, comparison.discounts, { invert: true });
+    setCurrencyReference(elements.trendFees, summary.fees, comparison.fees, { invert: true });
+    setCurrencyReference(elements.trendRefunds, summary.refunds, comparison.refunds, { invert: true });
+    setCurrencyReference(
+      elements.trendProfit,
+      Number.isFinite(summary.profit) ? summary.profit : (summary.net || 0) - (summary.costs || 0),
+      comparison.profit
+    );
 
     const target = Number.isFinite(goal.target) ? goal.target : 0;
     const achieved = Number.isFinite(summary.gross) ? summary.gross : 0;
@@ -742,6 +1127,7 @@
     renderChannels(payload?.channels);
     renderHealth(payload?.health);
     renderCustomers(payload?.topCustomers);
+    renderPets(payload?.topPets);
     renderProducts(payload?.topProducts);
     renderPayments(payload?.paymentMethods);
     renderTaxes(payload?.taxes);
@@ -757,10 +1143,14 @@
     const viewValue = elements.monthView?.value || '';
     const compareValue = elements.monthCompare?.value || '';
     const companyCode = (elements.companyCode?.value || '').trim();
+    const selectedCompanyId = state.selectedCompany?._id ? String(state.selectedCompany._id) : '';
+    const selectedPdvId = (elements.pdvSelect?.value || '').trim();
 
     if (viewValue) params.set('viewMonth', viewValue);
     if (compareValue) params.set('compareMonth', compareValue);
-    if (companyCode) params.set('companyCode', companyCode);
+    if (selectedCompanyId) params.set('storeId', selectedCompanyId);
+    else if (companyCode) params.set('companyCode', companyCode);
+    if (selectedPdvId) params.set('pdvId', selectedPdvId);
 
     const token = getToken();
 
@@ -794,17 +1184,123 @@
         console.error('billing:fetch', error);
       });
     };
+
+    const handleCompanyInput = async () => {
+      const rawValue = (elements.companyCode?.value || '').trim();
+      if (!rawValue) {
+        setSelectedCompany(null, { syncInput: false });
+        clearPdvs();
+        safeFetch();
+        return;
+      }
+
+      await loadAllowedCompanies();
+
+      if (/[A-Za-z]/.test(rawValue)) {
+        openCompanyModal(rawValue);
+        return;
+      }
+
+      const match = findCompanyByCode(rawValue);
+      if (match) {
+        setSelectedCompany(match);
+        await loadPdvsForSelectedCompany();
+        safeFetch();
+        return;
+      }
+
+      setSelectedCompany(null, { syncInput: false });
+      clearPdvs();
+    };
+
     elements.monthView?.addEventListener('change', safeFetch);
     elements.monthCompare?.addEventListener('change', safeFetch);
-    elements.companyCode?.addEventListener('change', safeFetch);
+    elements.pdvSelect?.addEventListener('change', safeFetch);
+    elements.companyCode?.addEventListener('change', () => {
+      handleCompanyInput().catch((error) => {
+        console.error('billing:company-change', error);
+      });
+    });
+    elements.companyCode?.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      handleCompanyInput().catch((error) => {
+        console.error('billing:company-enter', error);
+      });
+    });
+    elements.companyCode?.addEventListener('input', () => {
+      const rawValue = (elements.companyCode?.value || '').trim();
+      if (!rawValue) {
+        setSelectedCompany(null, { syncInput: false });
+        clearPdvs();
+        return;
+      }
+      if (/[A-Za-z]/.test(rawValue)) {
+        loadAllowedCompanies()
+          .then(() => openCompanyModal(rawValue))
+          .catch((error) => console.error('billing:company-search', error));
+      }
+    });
+
+    elements.companyModalClose?.addEventListener('click', closeCompanyModal);
+    elements.companyModal?.addEventListener('click', (event) => {
+      if (event.target === elements.companyModal) {
+        closeCompanyModal();
+      }
+    });
+    elements.companyModalSearch?.addEventListener('input', (event) => {
+      renderCompanyResults(event.currentTarget?.value || '');
+    });
+    elements.companyModalSearch?.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        closeCompanyModal();
+      }
+    });
+    elements.companyModalResults?.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-billing-company-id]');
+      if (!button) return;
+      const companyId = button.getAttribute('data-billing-company-id');
+      const company = state.companies.find((entry) => String(entry?._id || '') === String(companyId || ''));
+      if (!company) return;
+      setSelectedCompany(company);
+      closeCompanyModal();
+      loadPdvsForSelectedCompany()
+        .then(() => safeFetch())
+        .catch((error) => {
+          console.error('billing:pdvs', error);
+          safeFetch();
+        });
+    });
   };
 
   const init = () => {
     setDefaultMonths();
     bindEvents();
-    fetchBilling().catch((error) => {
-      console.error('billing:fetch', error);
-    });
+    loadAllowedCompanies()
+      .then(() => {
+        const rawValue = (elements.companyCode?.value || '').trim();
+        if (rawValue) {
+          const match = findCompanyByCode(rawValue);
+          if (match) {
+            setSelectedCompany(match);
+            return loadPdvsForSelectedCompany();
+          }
+        }
+
+        const defaultCompany = getDefaultCompany();
+        if (defaultCompany) {
+          setSelectedCompany(defaultCompany);
+          return loadPdvsForSelectedCompany();
+        }
+      })
+      .catch((error) => {
+        console.error('billing:companies', error);
+      })
+      .finally(() => {
+        fetchBilling().catch((error) => {
+          console.error('billing:fetch', error);
+        });
+      });
   };
 
   document.addEventListener('DOMContentLoaded', init);
