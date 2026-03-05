@@ -5599,7 +5599,8 @@
           return true;
         };
 
-        const ensureProductSupplierLink = (product, item, nfeData) => {
+        const ensureProductSupplierLink = (product, item, nfeData, options = {}) => {
+          const forcePersist = Boolean(options?.forcePersist);
           const productId = product?._id || product?.id;
           const normalizedCode = canonicalSupplierProductCode(item?.supplierCode);
           if (!productId || !normalizedCode) {
@@ -5621,7 +5622,7 @@
             cacheKeySegments.splice(1, 0, `NAME:${normalizedSupplierName}`);
           }
           const cacheKey = cacheKeySegments.join('::');
-          if (productSupplierLinkCache.has(cacheKey)) {
+          if (!forcePersist && productSupplierLinkCache.has(cacheKey)) {
             return null;
           }
           if (productSupplierLinkPromises.has(cacheKey)) {
@@ -5640,7 +5641,7 @@
             }
             return entrySupplierName === normalizedSupplierName;
           });
-          if (alreadyLinked) {
+          if (!forcePersist && alreadyLinked) {
             productSupplierLinkCache.add(cacheKey);
             return null;
           }
@@ -5998,8 +5999,8 @@
         const productMatchesBarcode = (product, barcodeDigits) => {
           const normalized = normalizeBarcodeForComparison(barcodeDigits);
           if (!normalized) return false;
-          const barcodes = getProductBarcodesFromRecord(product);
-          return barcodes.includes(normalized);
+          const productBarcode = normalizeBarcodeForComparison(product?.codbarras);
+          return Boolean(productBarcode) && productBarcode === normalized;
         };
 
         const getOptionDocument = (option) => {
@@ -8803,7 +8804,9 @@
           setProductLinkInteractivity(false);
 
           try {
-            const linkPromise = ensureProductSupplierLink(product, productLinkActiveItem, lastNfeData);
+            const linkPromise = ensureProductSupplierLink(product, productLinkActiveItem, lastNfeData, {
+              forcePersist: true,
+            });
             if (linkPromise && typeof linkPromise.then === 'function') {
               await linkPromise;
             }
@@ -10396,7 +10399,7 @@
           }
           const promise = (async () => {
             const response = await fetch(
-              `${apiBaseUrl}/products?search=${encodeURIComponent(normalized)}&limit=8`,
+              `${apiBaseUrl}/products?search=${encodeURIComponent(normalized)}&limit=8&includeHidden=true`,
               { headers: buildAuthHeaders() }
             );
             const payload = await response.json().catch(() => ({}));
@@ -13224,7 +13227,7 @@
             const cest = getText(prod, 'CEST');
             const ean = getText(prod, 'cEAN');
             const eanTrib = getText(prod, 'cEANTrib');
-            const barcodeCandidates = Array.from(new Set([normalizeGtin(ean), normalizeGtin(eanTrib)].filter(Boolean)));
+            const barcodeCandidates = Array.from(new Set([normalizeGtin(eanTrib), normalizeGtin(ean)].filter(Boolean)));
             const barcodeDisplay = formatGtinDisplay(ean || eanTrib);
             const barcodeTribDisplay = formatGtinDisplay(eanTrib);
             const qTribRaw = parseNumber(getText(prod, 'qTrib'));

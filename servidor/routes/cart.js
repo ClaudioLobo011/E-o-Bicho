@@ -8,17 +8,29 @@ const { applyProductImageUrls } = require('../utils/productImageUrl');
 // Função auxiliar para calcular o carrinho com a hierarquia de promoções
 async function getCalculatedCart(userId) {
     const user = await User.findById(userId).populate('cart.product');
-    if (!user) return []; // Retorna um carrinho vazio se o utilizador não for encontrado
+    if (!user) return [];
 
-    const cartWithEffectivePrices = user.cart.map(item => {
-        const product = item.product;
+    const conditionalGroupQuantities = new Map();
+    (user.cart || []).forEach((item) => {
+        const product = item?.product;
+        const promo = product?.promocaoCondicional;
+        if (!product || !promo?.ativa || !promo?.produtosDiferentes) return;
+        const groupCode = String(promo?.codigoGrupo || '').trim();
+        if (!groupCode) return;
+        const qty = Math.max(0, Math.trunc(Number(item?.quantity) || 0));
+        if (!qty) return;
+        const key = `${String(promo?.tipo || '')}|${groupCode}`;
+        conditionalGroupQuantities.set(key, (conditionalGroupQuantities.get(key) || 0) + qty);
+    });
+
+    const cartWithEffectivePrices = (user.cart || []).map((item) => {
+        const product = item?.product;
         if (!product) return null;
         applyProductImageUrls(product);
 
         let bestPrice = product.venda;
         let appliedPromoText = null;
 
-        // 1. Promoção Individual
         if (product.promocao && product.promocao.ativa && product.promocao.porcentagem > 0) {
             const promoPrice = product.venda * (1 - product.promocao.porcentagem / 100);
             if (promoPrice < bestPrice) {
@@ -27,9 +39,13 @@ async function getCalculatedCart(userId) {
             }
         }
 
-        // 2. Promoção Condicional (Acima de X unidades)
         if (product.promocaoCondicional && product.promocaoCondicional.ativa && product.promocaoCondicional.tipo === 'acima_de') {
-            if (item.quantity >= product.promocaoCondicional.quantidadeMinima) {
+            const promo = product.promocaoCondicional;
+            const isGrouped = Boolean(promo?.produtosDiferentes && String(promo?.codigoGrupo || '').trim());
+            const qtyForRule = isGrouped
+                ? (conditionalGroupQuantities.get(`acima_de|${String(promo?.codigoGrupo || '').trim()}`) || 0)
+                : Number(item?.quantity || 0);
+            if (qtyForRule >= Number(promo.quantidadeMinima || 0)) {
                 const conditionalPrice = product.venda * (1 - product.promocaoCondicional.descontoPorcentagem / 100);
                 if (conditionalPrice < bestPrice) {
                     bestPrice = conditionalPrice;
@@ -38,16 +54,19 @@ async function getCalculatedCart(userId) {
             }
         }
 
-        // 3. Promoção Condicional (Leve X, Pague Y)
         if (product.promocaoCondicional && product.promocaoCondicional.ativa && product.promocaoCondicional.tipo === 'leve_pague') {
             const { leve, pague } = product.promocaoCondicional;
-            if (leve > 0 && item.quantity >= leve) {
-                const promoPacks = Math.floor(item.quantity / leve);
+            const isGrouped = Boolean(product.promocaoCondicional?.produtosDiferentes && String(product.promocaoCondicional?.codigoGrupo || '').trim());
+            const qtyForRule = isGrouped
+                ? (conditionalGroupQuantities.get(`leve_pague|${String(product.promocaoCondicional?.codigoGrupo || '').trim()}`) || 0)
+                : Number(item?.quantity || 0);
+            if (Number(leve || 0) > 0 && qtyForRule >= Number(leve || 0)) {
+                const promoPacks = Math.floor(qtyForRule / leve);
                 const paidItems = promoPacks * pague;
-                const remainingItems = item.quantity % leve;
+                const remainingItems = qtyForRule % leve;
 
                 const totalLevePaguePrice = (paidItems + remainingItems) * product.venda;
-                const effectiveLevePaguePrice = totalLevePaguePrice / item.quantity;
+                const effectiveLevePaguePrice = totalLevePaguePrice / qtyForRule;
 
                 if (effectiveLevePaguePrice < bestPrice) {
                     bestPrice = effectiveLevePaguePrice;
@@ -56,7 +75,6 @@ async function getCalculatedCart(userId) {
             }
         }
 
-        // 4. Preço Club
         if (item.isSubscribed && product.precoClube && product.precoClube > 0) {
             if (product.precoClube < bestPrice) {
                 bestPrice = product.precoClube;
@@ -76,7 +94,6 @@ async function getCalculatedCart(userId) {
 
     return cartWithEffectivePrices;
 }
-
 // Middleware para validar se é o dono do carrinho ou admin_master
 function authorizeCartAccess(req, res, next) {
     if (req.user.id !== req.params.userId && req.user.role !== 'admin_master') {
@@ -180,3 +197,4 @@ router.delete('/:userId/:productId', requireAuth, authorizeCartAccess, async (re
 });
 
 module.exports = router;
+

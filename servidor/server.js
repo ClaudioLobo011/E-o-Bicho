@@ -132,6 +132,23 @@ try {
   console.error('Não foi possível registrar stream do iFood');
 }
 
+app.use((err, req, res, next) => {
+  if (!err) {
+    return next();
+  }
+  const aborted =
+    err?.type === 'request.aborted' ||
+    err?.name === 'BadRequestError' ||
+    /request aborted/i.test(String(err?.message || ''));
+  if (aborted) {
+    if (!res.headersSent) {
+      res.status(499).json({ message: 'Requisição cancelada pelo cliente.' });
+    }
+    return;
+  }
+  return next(err);
+});
+
 // WebSockets
 function sanitizeRoomKey(room) {
   if (typeof room !== 'string') return null;

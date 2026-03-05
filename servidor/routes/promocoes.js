@@ -64,7 +64,16 @@ router.post(
 // GET /api/promocoes/produtos (público)
 router.get('/produtos', async (req, res) => {
     try {
-        const promoProducts = await Product.find({ 'promocao.ativa': true });
+        const includeInactive = String(req.query?.includeInactive || '').toLowerCase() === 'true';
+        const filters = includeInactive
+            ? {
+                $or: [
+                    { 'promocao.ativa': true },
+                    { 'promocao.porcentagem': { $gt: 0 } },
+                ],
+            }
+            : { 'promocao.ativa': true };
+        const promoProducts = await Product.find(filters);
         res.json(promoProducts);
     } catch (error) {
         console.error("Erro ao buscar produtos em promoção:", error);
@@ -79,12 +88,39 @@ router.post(
     authorizeRoles('admin', 'admin_master'),
     async (req, res) => {
         const { id } = req.params;
-        const { porcentagem } = req.body;
+        const { porcentagem, codigoGrupo, descricaoGrupo, periodoInicio, periodoFim, semValidade } = req.body;
+        const updateData = {
+            'promocao.ativa': true,
+            'promocao.porcentagem': porcentagem,
+        };
+        if (codigoGrupo !== undefined) {
+            updateData['promocao.codigoGrupo'] = String(codigoGrupo || '').trim();
+        }
+        if (descricaoGrupo !== undefined) {
+            updateData['promocao.descricaoGrupo'] = String(descricaoGrupo || '').trim();
+        }
+        if (semValidade !== undefined) {
+            updateData['promocao.semValidade'] = Boolean(semValidade);
+        }
+        if (periodoInicio !== undefined) {
+            updateData['promocao.periodoInicio'] = String(periodoInicio || '').trim();
+        }
+        if (periodoFim !== undefined) {
+            updateData['promocao.periodoFim'] = String(periodoFim || '').trim();
+        }
+        if (Boolean(semValidade)) {
+            updateData['promocao.periodoInicio'] = '';
+            updateData['promocao.periodoFim'] = '';
+        }
 
         try {
             const updatedProduct = await Product.findByIdAndUpdate(
                 id,
-                { $set: { 'promocao.ativa': true, 'promocao.porcentagem': porcentagem } },
+                {
+                    $set: {
+                        ...updateData,
+                    },
+                },
                 { new: true }
             );
             if (!updatedProduct) return res.status(404).json({ message: 'Produto não encontrado.' });
@@ -106,7 +142,17 @@ router.delete(
         try {
             const updatedProduct = await Product.findByIdAndUpdate(
                 id,
-                { $set: { 'promocao.ativa': false, 'promocao.porcentagem': 0 } },
+                {
+                    $set: {
+                        'promocao.ativa': false,
+                        'promocao.porcentagem': 0,
+                        'promocao.codigoGrupo': '',
+                        'promocao.descricaoGrupo': '',
+                        'promocao.periodoInicio': '',
+                        'promocao.periodoFim': '',
+                        'promocao.semValidade': false,
+                    },
+                },
                 { new: true }
             );
             if (!updatedProduct) return res.status(404).json({ message: 'Produto não encontrado.' });
@@ -121,7 +167,16 @@ router.delete(
 // GET /api/promocoes/condicional (público)
 router.get('/condicional', async (req, res) => {
     try {
-        const products = await Product.find({ 'promocaoCondicional.ativa': true });
+        const includeInactive = String(req.query?.includeInactive || '').toLowerCase() === 'true';
+        const filters = includeInactive
+            ? {
+                $or: [
+                    { 'promocaoCondicional.ativa': true },
+                    { 'promocaoCondicional.tipo': { $in: ['leve_pague', 'acima_de'] } },
+                ],
+            }
+            : { 'promocaoCondicional.ativa': true };
+        const products = await Product.find(filters);
         res.json(products);
     } catch (error) {
         console.error("Erro ao buscar promoções condicionais:", error);
@@ -136,7 +191,19 @@ router.post(
     authorizeRoles('admin', 'admin_master'),
     async (req, res) => {
         const { id } = req.params;
-        const { tipo, leve, pague, quantidadeMinima, descontoPorcentagem } = req.body;
+        const {
+            tipo,
+            leve,
+            pague,
+            quantidadeMinima,
+            descontoPorcentagem,
+            produtosDiferentes,
+            codigoGrupo,
+            descricaoGrupo,
+            periodoInicio,
+            periodoFim,
+            semValidade,
+        } = req.body;
 
         const updateData = {
             'promocaoCondicional.ativa': true,
@@ -145,7 +212,27 @@ router.post(
             'promocaoCondicional.pague': pague,
             'promocaoCondicional.quantidadeMinima': quantidadeMinima,
             'promocaoCondicional.descontoPorcentagem': descontoPorcentagem,
+            'promocaoCondicional.produtosDiferentes': Boolean(produtosDiferentes),
         };
+        if (codigoGrupo !== undefined) {
+            updateData['promocaoCondicional.codigoGrupo'] = String(codigoGrupo || '').trim();
+        }
+        if (descricaoGrupo !== undefined) {
+            updateData['promocaoCondicional.descricaoGrupo'] = String(descricaoGrupo || '').trim();
+        }
+        if (semValidade !== undefined) {
+            updateData['promocaoCondicional.semValidade'] = Boolean(semValidade);
+        }
+        if (periodoInicio !== undefined) {
+            updateData['promocaoCondicional.periodoInicio'] = String(periodoInicio || '').trim();
+        }
+        if (periodoFim !== undefined) {
+            updateData['promocaoCondicional.periodoFim'] = String(periodoFim || '').trim();
+        }
+        if (Boolean(semValidade)) {
+            updateData['promocaoCondicional.periodoInicio'] = '';
+            updateData['promocaoCondicional.periodoFim'] = '';
+        }
 
         try {
             const updatedProduct = await Product.findByIdAndUpdate(id, { $set: updateData }, { new: true });
@@ -166,11 +253,48 @@ router.delete(
     async (req, res) => {
         const { id } = req.params;
         try {
-            await Product.findByIdAndUpdate(id, { $set: { 'promocaoCondicional.ativa': false } });
+            await Product.findByIdAndUpdate(id, {
+                $set: {
+                    'promocaoCondicional.ativa': false,
+                    'promocaoCondicional.tipo': null,
+                    'promocaoCondicional.leve': 0,
+                    'promocaoCondicional.pague': 0,
+                    'promocaoCondicional.quantidadeMinima': 0,
+                    'promocaoCondicional.descontoPorcentagem': 0,
+                    'promocaoCondicional.produtosDiferentes': false,
+                    'promocaoCondicional.codigoGrupo': '',
+                    'promocaoCondicional.descricaoGrupo': '',
+                    'promocaoCondicional.periodoInicio': '',
+                    'promocaoCondicional.periodoFim': '',
+                    'promocaoCondicional.semValidade': false,
+                },
+            });
             res.json({ message: 'Promoção condicional removida.' });
         } catch (error) {
             console.error("Erro ao remover promoção condicional:", error);
             res.status(500).json({ message: 'Erro ao remover promoção condicional.' });
+        }
+    }
+);
+
+// POST /api/promocoes/produtos/:id/inativar (restrito)
+router.post(
+    '/produtos/:id/inativar',
+    requireAuth,
+    authorizeRoles('admin', 'admin_master'),
+    async (req, res) => {
+        const { id } = req.params;
+        try {
+            const updatedProduct = await Product.findByIdAndUpdate(
+                id,
+                { $set: { 'promocao.ativa': false } },
+                { new: true }
+            );
+            if (!updatedProduct) return res.status(404).json({ message: 'Produto nÃ£o encontrado.' });
+            res.json({ message: 'PromoÃ§Ã£o inativada temporariamente com sucesso.' });
+        } catch (error) {
+            console.error("Erro ao inativar promoÃ§Ã£o:", error);
+            res.status(500).json({ message: 'Erro ao inativar a promoÃ§Ã£o do produto.' });
         }
     }
 );

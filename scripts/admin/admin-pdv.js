@@ -308,6 +308,7 @@
     activePdvStoreId: '',
     fullscreenActive: false,
     selectionSectionForcedVisible: false,
+    caixaPagamentosAntesFechamento: null,
     exchangeModal: {
       open: false,
       saleId: '',
@@ -444,6 +445,7 @@
   let statePersistPending = false;
   let lastPersistSignature = '';
   let stateHasLocalPendingChanges = false;
+  let caixaActionInFlight = false;
   const paymentInputMasks = new Map();
   let deferredRemotePdvState = null;
   let pdvSocket = null;
@@ -1359,12 +1361,12 @@
   };
 
   const formatCurrency = (value) => {
-    const number = Number(value || 0);
+    const number = normalizeCurrencyAmount(value);
     return `R$ ${number.toFixed(2).replace('.', ',')}`;
   };
 
   const formatMaskedMoneyValue = (value) =>
-    Math.max(0, safeNumber(value)).toLocaleString('pt-BR', {
+    Math.max(0, normalizeCurrencyAmount(value)).toLocaleString('pt-BR', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
@@ -1375,7 +1377,7 @@
     if (!normalized) return 0;
     const sanitized = normalized.replace(/\./g, '').replace(',', '.');
     const parsed = Number(sanitized);
-    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+    return Number.isFinite(parsed) && parsed >= 0 ? normalizeCurrencyAmount(parsed) : 0;
   };
 
   const destroyPaymentInputMasks = () => {
@@ -1405,15 +1407,15 @@
         mapToRadix: ['.'],
         min: 0,
       });
-      mask.typedValue = Math.max(0, safeNumber(payment?.valor, 0));
+      mask.typedValue = Math.max(0, normalizeCurrencyAmount(payment?.valor, 0));
       mask.on('accept', () => {
         if (state.caixaAberto && !state.allowApuradoEdit) {
-          mask.typedValue = Math.max(0, safeNumber(payment?.valor, 0));
+          mask.typedValue = Math.max(0, normalizeCurrencyAmount(payment?.valor, 0));
           return;
         }
         const currentPayment = state.pagamentos.find((item) => item.id === paymentId);
         if (!currentPayment) return;
-        currentPayment.valor = Math.max(0, safeNumber(mask.typedValue, 0));
+        currentPayment.valor = Math.max(0, normalizeCurrencyAmount(mask.typedValue, 0));
         updateSummary();
         scheduleStatePersist();
       });
@@ -1705,6 +1707,8 @@
     const number = Number(value);
     return Number.isFinite(number) ? number : 0;
   };
+
+  const normalizeCurrencyAmount = (value) => Math.round(safeNumber(value) * 100) / 100;
 
   const parsePrazoDays = (value) => {
     if (value == null) {
@@ -2215,41 +2219,248 @@
 
   const sumPayments = (payments) =>
     Array.isArray(payments)
-      ? payments.reduce((total, payment) => total + safeNumber(payment?.valor), 0)
+      ? normalizeCurrencyAmount(
+          payments.reduce((total, payment) => total + normalizeCurrencyAmount(payment?.valor), 0)
+        )
       : 0;
 
-  const getDisplayedCaixaPayments = (payments = state.pagamentos, { includeOpening = true } = {}) => {
+  const mergePaymentSnapshots = (...paymentGroups) => {
+    const merged = new Map();
+    const paymentCatalog = [
+      ...(Array.isArray(state.paymentMethods) ? state.paymentMethods : []),
+      ...(Array.isArray(state.pagamentos) ? state.pagamentos : []),
+    ];
+
+    const resolveSnapshotKey = (payment) => {
+      const id = String(payment?.id || '').trim();
+      if (id) return `id:${id}`;
+      const label = String(payment?.label || '').trim().toLowerCase();
+      if (label) return `label:${label}`;
+      const type = String(payment?.type || '').trim().toLowerCase();
+      if (type) return `type:${type}`;
+      return '';
+    };
+
+    const resolveBasePayment = (payment) => {
+      const id = String(payment?.id || '').trim();
+      const label = String(payment?.label || '').trim().toLowerCase();
+      const type = String(payment?.type || '').trim().toLowerCase();
+      return (
+        paymentCatalog.find((item) => item?.id && String(item.id) === id) ||
+        paymentCatalog.find((item) => String(item?.label || '').trim().toLowerCase() === label) ||
+        paymentCatalog.find((item) => {
+          const itemType = String(item?.type || item?.raw?.tipo || item?.raw?.type || '')
+            .trim()
+            .toLowerCase();
+          return itemType && itemType === type;
+        }) ||
+        null
+      );
+    };
+
+    paymentGroups.forEach((payments) => {
+      (Array.isArray(payments) ? payments : []).forEach((payment) => {
+        const value = normalizeCurrencyAmount(payment?.valor);
+        if (Math.abs(value) <= 0.009) return;
+        const key = resolveSnapshotKey(payment);
+        if (!key) return;
+        if (!merged.has(key)) {
+          const basePayment = resolveBasePayment(payment);
+          merged.set(key, {
+            ...(basePayment ? { ...basePayment } : {}),
+            id: String(payment?.id || basePayment?.id || '').trim(),
+            label: payment?.label || basePayment?.label || 'Pagamento',
+            type: payment?.type || basePayment?.type || 'avista',
+            aliases: Array.isArray(basePayment?.aliases) ? [...basePayment.aliases] : [],
+            valor: 0,
+          });
+        }
+        const target = merged.get(key);
+        target.valor = normalizeCurrencyAmount(target.valor + value);
+      });
+    });
+
+    return Array.from(merged.values());
+  };
+
+  const buildOpeningPaymentsByMethod = () => {
+    const openingEntry = (Array.isArray(state.history) ? state.history : []).find(
+      (entry) => String(entry?.id || '').toLowerCase().trim() === 'abertura'
+    );
+    const rawLabel = String(openingEntry?.paymentLabel || '').trim();
+    if (!rawLabel) {
+      return [];
+    }
+
+    const paymentCatalog = [
+      ...(Array.isArray(state.paymentMethods) ? state.paymentMethods : []),
+      ...(Array.isArray(state.pagamentos) ? state.pagamentos : []),
+    ];
+
+    return rawLabel
+      .split('|')
+      .map((chunk) => String(chunk || '').trim())
+      .map((chunk) => {
+        const match = chunk.match(/^(.*?)\s+R\$\s*([\d.,]+)$/i);
+        if (!match) return null;
+        const label = String(match[1] || '').trim();
+        const valor = normalizeCurrencyAmount(match[2].replace(/\./g, '').replace(',', '.'));
+        if (!label || !(valor > 0)) return null;
+        const normalizedLabel = label.toLowerCase();
+        const basePayment =
+          paymentCatalog.find((item) => String(item?.label || '').trim().toLowerCase() === normalizedLabel) ||
+          paymentCatalog.find((item) =>
+            Array.isArray(item?.aliases)
+              ? item.aliases.some((alias) => String(alias || '').trim().toLowerCase() === normalizedLabel)
+              : false
+          ) ||
+          null;
+        return {
+          ...(basePayment ? { ...basePayment } : {}),
+          id: String(basePayment?.id || label).trim(),
+          label: basePayment?.label || label,
+          type: basePayment?.type || 'avista',
+          aliases: Array.isArray(basePayment?.aliases) ? [...basePayment.aliases] : [],
+          valor,
+        };
+      })
+      .filter(Boolean);
+  };
+
+  const resolvePaymentSnapshotAmount = (payment, snapshots = []) => {
+    const paymentId = String(payment?.id || '').trim();
+    const paymentLabel = String(payment?.label || '').trim().toLowerCase();
+    const paymentType = String(payment?.type || '').trim().toLowerCase();
+    const aliases = Array.isArray(payment?.aliases)
+      ? payment.aliases.map((alias) => String(alias || '').trim().toLowerCase()).filter(Boolean)
+      : [];
+    const match = (Array.isArray(snapshots) ? snapshots : []).find((entry) => {
+      const entryId = String(entry?.id || '').trim();
+      if (paymentId && entryId && paymentId === entryId) {
+        return true;
+      }
+      const entryLabel = String(entry?.label || '').trim().toLowerCase();
+      if (paymentLabel && entryLabel && paymentLabel === entryLabel) {
+        return true;
+      }
+      if (entryLabel && aliases.includes(entryLabel)) {
+        return true;
+      }
+      const entryType = String(entry?.type || '').trim().toLowerCase();
+      if (!paymentType || !entryType || paymentType !== entryType) {
+        return false;
+      }
+      return !['avista', ''].includes(paymentType);
+    });
+    return normalizeCurrencyAmount(match?.valor);
+  };
+
+  const getDisplayedPaymentRows = () => {
+    const basePayments = Array.isArray(state.pagamentos) ? state.pagamentos : [];
+    if (state.caixaAberto && state.allowApuradoEdit) {
+      return clonePayments(basePayments);
+    }
+    if (!(state.caixaAberto && !state.allowApuradoEdit)) {
+      return clonePayments(basePayments);
+    }
+    const recebimentosPorMeio = buildSalesPaymentsByMethod();
+    return basePayments.map((payment) => ({
+      ...payment,
+      valor: resolvePaymentSnapshotAmount(payment, recebimentosPorMeio),
+    }));
+  };
+
+  const buildCaixaMovementPaymentsByMethod = () => {
+    const paymentCatalog = [
+      ...(Array.isArray(state.paymentMethods) ? state.paymentMethods : []),
+      ...(Array.isArray(state.pagamentos) ? state.pagamentos : []),
+    ];
+    const openingIndex = (Array.isArray(state.history) ? state.history : []).findIndex(
+      (entry) => String(entry?.id || '').toLowerCase().trim() === 'abertura'
+    );
+    const currentCycleHistory =
+      openingIndex >= 0 ? state.history.slice(0, openingIndex) : Array.isArray(state.history) ? state.history : [];
+    const movementSnapshots = [];
+
+    const resolveBasePayment = (label = '') => {
+      const normalizedLabel = String(label || '').trim().toLowerCase();
+      if (!normalizedLabel) return null;
+      return (
+        paymentCatalog.find((item) => String(item?.label || '').trim().toLowerCase() === normalizedLabel) ||
+        paymentCatalog.find((item) =>
+          Array.isArray(item?.aliases)
+            ? item.aliases.some((alias) => String(alias || '').trim().toLowerCase() === normalizedLabel)
+            : false
+        ) ||
+        null
+      );
+    };
+
+    currentCycleHistory.forEach((entry) => {
+      if (!entry || typeof entry !== 'object') return;
+      const id = String(entry.id || '').toLowerCase().trim();
+      if (!['entrada', 'saida', 'envio'].includes(id)) return;
+      const amount = Math.abs(normalizeCurrencyAmount(entry.amount ?? entry.delta ?? 0));
+      if (!(amount > 0)) return;
+      const signal = id === 'entrada' ? 1 : -1;
+      const label = String(entry.paymentLabel || '').trim();
+      if (!label) return;
+      const basePayment = resolveBasePayment(label);
+      movementSnapshots.push({
+        ...(basePayment ? { ...basePayment } : {}),
+        id: String(basePayment?.id || label).trim(),
+        label: basePayment?.label || label,
+        type: basePayment?.type || 'avista',
+        aliases: Array.isArray(basePayment?.aliases) ? [...basePayment.aliases] : [],
+        valor: normalizeCurrencyAmount(signal * amount),
+      });
+    });
+
+    return mergePaymentSnapshots(movementSnapshots);
+  };
+
+  const buildFechamentoPrevistoPaymentsByMethod = () => {
+    const basePayments = Array.isArray(state.paymentMethods) ? state.paymentMethods : [];
+    const fechamentoPrevisto = mergePaymentSnapshots(
+      buildOpeningPaymentsByMethod(),
+      buildSalesPaymentsByMethod(),
+      buildCaixaMovementPaymentsByMethod()
+    );
+    return basePayments.map((payment) => ({
+      ...payment,
+      valor: resolvePaymentSnapshotAmount(payment, fechamentoPrevisto),
+    }));
+  };
+
+  const getDisplayedCaixaPayments = (payments = state.pagamentos, { openingMode = 'include' } = {}) => {
     const base = clonePayments(Array.isArray(payments) ? payments : []);
-    if (!includeOpening) {
+    if (openingMode === 'keep') {
       return base;
     }
-    const openingAmount = safeNumber(state.summary.abertura);
+    const openingPayments = buildOpeningPaymentsByMethod();
+    const openingAmount = sumPayments(openingPayments);
     if (!(openingAmount > 0)) {
       return base;
     }
+    const salesAmount =
+      safeNumber(state.summary.recebido) + safeNumber(state.summary.recebimentosCliente);
     const expectedCaixaTotal =
-      openingAmount +
-      safeNumber(state.summary.recebido) +
-      safeNumber(state.summary.recebimentosCliente);
+      openingAmount + salesAmount;
     const baseTotal = sumPayments(base);
-    if (Math.abs(baseTotal - expectedCaixaTotal) <= 0.009) {
+    const includesOpening = Math.abs(baseTotal - expectedCaixaTotal) <= 0.009;
+    if (openingMode === 'exclude') {
+      if (!includesOpening) {
+        return base;
+      }
+      return mergePaymentSnapshots(
+        base.map((item) => ({ ...item })),
+        openingPayments.map((item) => ({ ...item, valor: -safeNumber(item.valor) }))
+      ).filter((item) => safeNumber(item?.valor) > 0.009);
+    }
+    if (includesOpening) {
       return base;
     }
-    let moneyPayment =
-      base.find((item) => String(item.label || '').toLowerCase() === 'dinheiro') ||
-      base.find((item) => String(item.type || '').toLowerCase() === 'dinheiro');
-    if (!moneyPayment) {
-      moneyPayment = {
-        id: 'Dinheiro',
-        label: 'Dinheiro',
-        type: 'dinheiro',
-        aliases: [],
-        valor: 0,
-      };
-      base.unshift(moneyPayment);
-    }
-    moneyPayment.valor = safeNumber(moneyPayment.valor) + openingAmount;
-    return base;
+    return mergePaymentSnapshots(base, openingPayments);
   };
 
   const getCaixaMovementTotals = (history = state.history) => {
@@ -2328,7 +2539,7 @@
         payment?.name ||
         payment?.descricao ||
         'Meio de pagamento';
-      const value = safeNumber(payment?.valor);
+      const value = normalizeCurrencyAmount(payment?.valor);
       return {
         label,
         value,
@@ -2375,6 +2586,101 @@
     return base;
   };
 
+  const buildSalesPaymentsByMethod = () => {
+    const cycleStart = state.caixaInfo?.aberturaData ? new Date(state.caixaInfo.aberturaData) : null;
+    const hasCycleStart = cycleStart && !Number.isNaN(cycleStart.getTime());
+    const paymentCatalog = [
+      ...(Array.isArray(state.paymentMethods) ? state.paymentMethods : []),
+      ...(Array.isArray(state.pagamentos) ? state.pagamentos : []),
+    ];
+    const totals = new Map();
+
+    const resolveBasePayment = (entry) => {
+      const paymentId = String(entry?.paymentId || '').trim();
+      const paymentLabel = String(entry?.paymentLabel || '').trim();
+      const normalizedLabel = paymentLabel.toLowerCase();
+      const normalizedType = String(entry?.paymentType || '').trim().toLowerCase();
+      return (
+        paymentCatalog.find((item) => item?.id && String(item.id) === paymentId) ||
+        paymentCatalog.find((item) => {
+          const itemLabel = String(item?.label || '').trim().toLowerCase();
+          return itemLabel && itemLabel === normalizedLabel;
+        }) ||
+        paymentCatalog.find((item) => {
+          const itemType = String(item?.type || item?.raw?.tipo || item?.raw?.type || '')
+            .trim()
+            .toLowerCase();
+          return itemType && itemType === normalizedType;
+        }) ||
+        null
+      );
+    };
+
+    (Array.isArray(state.completedSales) ? state.completedSales : []).forEach((sale) => {
+      if (!sale || sale.status === 'cancelled') return;
+      if (hasCycleStart) {
+        const saleCreatedAt = sale.createdAt ? new Date(sale.createdAt) : null;
+        if (!saleCreatedAt || Number.isNaN(saleCreatedAt.getTime())) return;
+        if (saleCreatedAt.getTime() < cycleStart.getTime()) return;
+      }
+      normalizeCashContributions(sale.cashContributions || []).forEach((entry) => {
+        const amount = normalizeCurrencyAmount(entry.amount);
+        if (!(amount > 0)) return;
+        const basePayment = resolveBasePayment(entry);
+        const key =
+          String(entry.paymentId || '').trim() ||
+          String(basePayment?.id || '').trim() ||
+          String(entry.paymentLabel || '').trim().toLowerCase() ||
+          String(entry.paymentType || '').trim().toLowerCase();
+        if (!key) return;
+        if (!totals.has(key)) {
+          totals.set(key, {
+            ...(basePayment ? { ...basePayment } : {}),
+            id: String(entry.paymentId || basePayment?.id || key).trim(),
+            label: entry.paymentLabel || basePayment?.label || 'Pagamento',
+            type: entry.paymentType || basePayment?.type || 'avista',
+            aliases: Array.isArray(basePayment?.aliases) ? [...basePayment.aliases] : [],
+            valor: 0,
+          });
+        }
+        const target = totals.get(key);
+        target.valor = normalizeCurrencyAmount(target.valor + amount);
+      });
+    });
+
+    return Array.from(totals.values());
+  };
+
+  const buildPaymentRowsWithZeroFallback = (payments = []) => {
+    const normalizedPayments = clonePayments(Array.isArray(payments) ? payments : []);
+    const paymentCatalog = [
+      ...(Array.isArray(state.paymentMethods) ? state.paymentMethods : []),
+      ...(Array.isArray(state.pagamentos) ? state.pagamentos : []),
+    ];
+    const rows = [];
+    const seenKeys = new Set();
+
+    const pushRow = (payment) => {
+      const normalized = normalizePaymentSnapshotForPersist(payment);
+      if (!normalized) return;
+      const key =
+        String(normalized.id || '').trim() ||
+        String(normalized.label || '').trim().toLowerCase();
+      if (!key || seenKeys.has(key)) return;
+      seenKeys.add(key);
+      rows.push(normalized);
+    };
+
+    normalizedPayments.forEach((payment) => pushRow(payment));
+    paymentCatalog.forEach((payment) => {
+      const normalized = normalizePaymentSnapshotForPersist(payment);
+      if (!normalized) return;
+      pushRow({ ...normalized, valor: 0 });
+    });
+
+    return rows;
+  };
+
   const getFechamentoSnapshot = () => {
     if (!state.selectedStore || !state.selectedPdv) {
       return null;
@@ -2385,32 +2691,34 @@
 
     const aberturaValor = safeNumber(state.summary.abertura);
     const recebidoValor = safeNumber(state.summary.recebido);
-    const saldoValor = safeNumber(state.summary.saldo);
     const recebimentosClienteValor = safeNumber(state.summary.recebimentosCliente);
+    const saldoValor = recebidoValor + recebimentosClienteValor;
 
-    const caixaAbertoComSaldoPrevistoAtual = state.caixaAberto && !state.allowApuradoEdit;
     const previstoSemCanceladas = Array.isArray(state.caixaInfo.previstoPagamentos)
       ? buildCaixaPrevistoPagamentosWithoutCancelledSales(state.caixaInfo.previstoPagamentos)
       : [];
-    const recebimentosFonteBase = caixaAbertoComSaldoPrevistoAtual
-      ? state.pagamentos
-      : previstoSemCanceladas;
-    const recebimentosFonte = getDisplayedCaixaPayments(recebimentosFonteBase, {
-      includeOpening: true,
-    });
-    const recebimentosItems = createPaymentItems(recebimentosFonte);
-    const recebimentosTotal = sumPayments(recebimentosFonte);
-
+    const salesPaymentsByMethod = buildSalesPaymentsByMethod();
     const hasPrevistoPagamentos = Array.isArray(state.caixaInfo.previstoPagamentos)
       ? state.caixaInfo.previstoPagamentos.length > 0
       : false;
-    const previstoFonteBase = caixaAbertoComSaldoPrevistoAtual
-      ? state.pagamentos
+    const recebimentosFonteBase = salesPaymentsByMethod;
+    const recebimentosFonte = getDisplayedCaixaPayments(recebimentosFonteBase, {
+      openingMode: 'exclude',
+    });
+    const recebimentosItems = createPaymentItems(buildPaymentRowsWithZeroFallback(recebimentosFonte), {
+      hideZero: false,
+    });
+    const recebimentosTotal = sumPayments(recebimentosFonte);
+
+    const previstoFonteBase = state.caixaAberto
+      ? buildFechamentoPrevistoPaymentsByMethod()
       : hasPrevistoPagamentos
       ? previstoSemCanceladas
+      : salesPaymentsByMethod.length
+      ? salesPaymentsByMethod
       : state.pagamentos;
     const previstoFonte = getDisplayedCaixaPayments(previstoFonteBase, {
-      includeOpening: true,
+      openingMode: 'keep',
     });
     const previstoItems = createPaymentItems(previstoFonte);
     const previstoTotal = sumPayments(previstoFonte);
@@ -3452,7 +3760,7 @@
     };
   };
 
-  const buildStatePersistPayload = () => {
+  const buildStatePersistPayload = ({ includeCollections = true } = {}) => {
     const pagamentos = (Array.isArray(state.pagamentos) ? state.pagamentos : [])
       .map((payment) => normalizePaymentSnapshotForPersist(payment))
       .filter(Boolean);
@@ -3469,22 +3777,28 @@
     const history = (Array.isArray(state.history) ? state.history : [])
       .map((entry) => normalizeHistoryEntryForPersist(entry))
       .filter(Boolean);
-    const completedSales = (Array.isArray(state.completedSales) ? state.completedSales : [])
-      .map((sale) => normalizeSaleRecordForPersist(sale))
-      .filter(Boolean);
-    const budgets = (Array.isArray(state.budgets) ? state.budgets : [])
-      .map((budget) => normalizeBudgetRecordForPersist(budget))
-      .filter(Boolean);
-    const deliveryOrders = (Array.isArray(state.deliveryOrders) ? state.deliveryOrders : [])
-      .map((order) => normalizeDeliveryOrderForPersist(order))
-      .filter(Boolean);
-    const accountsReceivable = (Array.isArray(state.accountsReceivable)
-      ? state.accountsReceivable
-      : [])
-      .map((entry) => normalizeReceivableForPersist(entry))
-      .filter(Boolean);
+    const completedSales = includeCollections
+      ? (Array.isArray(state.completedSales) ? state.completedSales : [])
+          .map((sale) => normalizeSaleRecordForPersist(sale))
+          .filter(Boolean)
+      : undefined;
+    const budgets = includeCollections
+      ? (Array.isArray(state.budgets) ? state.budgets : [])
+          .map((budget) => normalizeBudgetRecordForPersist(budget))
+          .filter(Boolean)
+      : undefined;
+    const deliveryOrders = includeCollections
+      ? (Array.isArray(state.deliveryOrders) ? state.deliveryOrders : [])
+          .map((order) => normalizeDeliveryOrderForPersist(order))
+          .filter(Boolean)
+      : undefined;
+    const accountsReceivable = includeCollections
+      ? (Array.isArray(state.accountsReceivable) ? state.accountsReceivable : [])
+          .map((entry) => normalizeReceivableForPersist(entry))
+          .filter(Boolean)
+      : undefined;
 
-    return {
+    const payload = {
       caixaAberto: Boolean(state.caixaAberto),
       summary: {
         abertura: safeNumber(state.summary.abertura),
@@ -3502,9 +3816,6 @@
       },
       pagamentos,
       history,
-      completedSales,
-      budgets,
-      deliveryOrders,
       lastMovement: state.lastMovement ? normalizeHistoryEntryForPersist(state.lastMovement) : null,
       saleCodeIdentifier: state.saleCodeIdentifier || '',
       saleCodeSequence: Math.max(1, Number.parseInt(state.saleCodeSequence, 10) || 1),
@@ -3513,8 +3824,14 @@
         state.printPreferences && typeof state.printPreferences === 'object'
           ? { ...state.printPreferences }
           : { fechamento: 'PM', venda: 'PM' },
-      accountsReceivable,
     };
+    if (includeCollections) {
+      payload.completedSales = completedSales;
+      payload.budgets = budgets;
+      payload.deliveryOrders = deliveryOrders;
+      payload.accountsReceivable = accountsReceivable;
+    }
+    return payload;
   };
 
   const mergeRecordsByKey = (serverRecords, localRecords, kind = 'generic') => {
@@ -3593,6 +3910,7 @@
     if (!pdvId) return;
     const expectedUpdatedAtOverride =
       options && typeof options === 'object' ? options.expectedUpdatedAt : '';
+    const lightweight = Boolean(options && typeof options === 'object' && options.lightweight);
     const signature = JSON.stringify(payload || {});
     const hash = (() => {
       let result = 0;
@@ -3615,6 +3933,7 @@
         _meta: {
           idempotencyKey,
           expectedUpdatedAt: expectedUpdatedAtOverride || state.remoteUpdatedAt || '',
+          lightweight,
           clientTime: new Date().toISOString(),
         },
       }),
@@ -3625,11 +3944,18 @@
   const applyPersistedStateResponse = (persisted) => {
     if (!persisted || typeof persisted !== 'object') return;
 
-    if (persisted.caixa && typeof persisted.caixa === 'object') {
-      if (typeof persisted.caixa.aberto === 'boolean') {
-        state.caixaAberto = persisted.caixa.aberto;
-      }
-    }
+    const persistedCaixaInfoSource =
+      persisted.caixaInfo && typeof persisted.caixaInfo === 'object' ? persisted.caixaInfo : {};
+    const persistedHistorySource = Array.isArray(persisted.history) ? persisted.history : [];
+    const persistedCaixaAberto =
+      persisted.caixa && typeof persisted.caixa === 'object' && typeof persisted.caixa.aberto === 'boolean'
+        ? persisted.caixa.aberto
+        : undefined;
+    state.caixaAberto = inferCaixaOpenState({
+      caixaAberto: persistedCaixaAberto,
+      caixaInfo: persistedCaixaInfoSource,
+      history: persistedHistorySource,
+    });
 
     if (persisted.summary && typeof persisted.summary === 'object') {
       state.summary.abertura = safeNumber(persisted.summary.abertura);
@@ -3767,6 +4093,34 @@
     });
   };
 
+  const serverStateMatchesLightweightPersist = (serverState, payload) => {
+    if (!serverState || typeof serverState !== 'object' || !payload || typeof payload !== 'object') {
+      return false;
+    }
+    const serverCaixaAberto =
+      serverState.caixa && typeof serverState.caixa === 'object'
+        ? Boolean(serverState.caixa.aberto)
+        : Boolean(serverState.caixaAberto);
+    const desiredCaixaAberto = Boolean(payload.caixaAberto);
+    if (serverCaixaAberto !== desiredCaixaAberto) {
+      return false;
+    }
+
+    const desiredAberturaData = parseDateValue(payload?.caixaInfo?.aberturaData);
+    const desiredFechamentoData = parseDateValue(payload?.caixaInfo?.fechamentoData);
+    const serverAberturaData = parseDateValue(serverState?.caixaInfo?.aberturaData);
+    const serverFechamentoData = parseDateValue(serverState?.caixaInfo?.fechamentoData);
+
+    if (desiredCaixaAberto) {
+      return Boolean(serverAberturaData && desiredAberturaData && serverAberturaData === desiredAberturaData);
+    }
+
+    if (!desiredFechamentoData || !serverFechamentoData) {
+      return false;
+    }
+    return serverFechamentoData === desiredFechamentoData;
+  };
+
   const refreshCurrentPdvStateFromServer = async () => {
     const pdvId = normalizeId(state.selectedPdv);
     if (!pdvId) return false;
@@ -3775,10 +4129,39 @@
     return true;
   };
 
-  const flushStatePersist = async () => {
+  const mergeServerStateIntoLocalPayload = (serverState, localPayload) => ({
+    ...localPayload,
+    completedSales: mergeRecordsByKey(
+      serverState?.completedSales || [],
+      localPayload?.completedSales || [],
+      'sale'
+    ),
+    budgets: mergeRecordsByKey(
+      serverState?.budgets || [],
+      localPayload?.budgets || [],
+      'budget'
+    ),
+    deliveryOrders: mergeRecordsByKey(
+      serverState?.deliveryOrders || [],
+      localPayload?.deliveryOrders || [],
+      'delivery'
+    ),
+    history: mergeRecordsByKey(
+      serverState?.history || [],
+      localPayload?.history || [],
+      'history'
+    ),
+    accountsReceivable: mergeRecordsByKey(
+      serverState?.accountsReceivable || [],
+      localPayload?.accountsReceivable || [],
+      'receivable'
+    ),
+  });
+
+  const flushStatePersist = async (options = {}) => {
     const pdvId = normalizeId(state.selectedPdv);
     if (!pdvId) return;
-    const payload = buildStatePersistPayload();
+    let payload = buildStatePersistPayload(options);
     if (payload.caixaAberto === false && !hasExplicitLocalCaixaClosure(payload)) {
       console.warn('Persistência de fechamento implícito do caixa bloqueada no cliente.', payload);
       try {
@@ -3790,16 +4173,33 @@
       notify('O PDV tentou fechar o caixa sem dados válidos de fechamento. O estado atual foi recarregado.', 'warning');
       return;
     }
+    let expectedUpdatedAt = String(
+      (options && typeof options === 'object' && options.expectedUpdatedAt) || state.remoteUpdatedAt || ''
+    );
+    const deferredRemoteUpdatedAt = String(deferredRemotePdvState?.updatedAt || '');
+    if (
+      !Boolean(options && typeof options === 'object' && options.lightweight) &&
+      deferredRemotePdvState &&
+      deferredRemoteUpdatedAt &&
+      (!expectedUpdatedAt || deferredRemoteUpdatedAt > expectedUpdatedAt)
+    ) {
+      payload = mergeServerStateIntoLocalPayload(deferredRemotePdvState, payload);
+      expectedUpdatedAt = deferredRemoteUpdatedAt;
+    }
     const signature = JSON.stringify(payload);
     if (signature === lastPersistSignature) {
       return;
     }
     try {
-      const persisted = await sendStatePersistRequest(payload);
+      const persisted = await sendStatePersistRequest(payload, {
+        ...(options && typeof options === 'object' ? options : {}),
+        expectedUpdatedAt,
+      });
       applyPersistedStateResponse(persisted);
       lastPersistSignature = signature;
       stateHasLocalPendingChanges = false;
       processDeferredRemotePdvState();
+      return true;
     } catch (error) {
       if (error?.status === 409 && error?.details?.state) {
         const serverState = error.details.state;
@@ -3807,43 +4207,26 @@
         const isInvalidCloseConflict = conflictMessage
           .toLowerCase()
           .includes('dados explicitos de fechamento');
+        const isLightweightConflictSatisfied =
+          Boolean(options && typeof options === 'object' && options.lightweight) &&
+          serverStateMatchesLightweightPersist(serverState, payload);
         if (isInvalidCloseConflict) {
           applyPersistedStateResponse(serverState);
           lastPersistSignature = JSON.stringify(buildStatePersistPayload());
           stateHasLocalPendingChanges = false;
           processDeferredRemotePdvState();
           notify('O fechamento automático foi bloqueado e o caixa foi sincronizado com o servidor.', 'warning');
-          return;
+          return false;
+        }
+        if (isLightweightConflictSatisfied) {
+          applyPersistedStateResponse(serverState);
+          lastPersistSignature = JSON.stringify(buildStatePersistPayload(options));
+          stateHasLocalPendingChanges = false;
+          processDeferredRemotePdvState();
+          return true;
         }
         const latestLocalPayload = buildStatePersistPayload();
-        const mergedPayload = {
-          ...latestLocalPayload,
-          completedSales: mergeRecordsByKey(
-            serverState.completedSales || [],
-            latestLocalPayload.completedSales || [],
-            'sale'
-          ),
-          budgets: mergeRecordsByKey(
-            serverState.budgets || [],
-            latestLocalPayload.budgets || [],
-            'budget'
-          ),
-          deliveryOrders: mergeRecordsByKey(
-            serverState.deliveryOrders || [],
-            latestLocalPayload.deliveryOrders || [],
-            'delivery'
-          ),
-          history: mergeRecordsByKey(
-            serverState.history || [],
-            latestLocalPayload.history || [],
-            'history'
-          ),
-          accountsReceivable: mergeRecordsByKey(
-            serverState.accountsReceivable || [],
-            latestLocalPayload.accountsReceivable || [],
-            'receivable'
-          ),
-        };
+        const mergedPayload = mergeServerStateIntoLocalPayload(serverState, latestLocalPayload);
         const retried = await sendStatePersistRequest(mergedPayload, {
           expectedUpdatedAt: serverState.updatedAt || '',
         });
@@ -3852,9 +4235,10 @@
         stateHasLocalPendingChanges = false;
         processDeferredRemotePdvState();
         notify('PDV sincronizado e venda reaplicada com sucesso.', 'success');
-        return;
+        return true;
       }
       console.error('Erro ao salvar estado do PDV:', error);
+      return false;
     }
   };
 
@@ -3884,6 +4268,18 @@
         }
       }
     }, delay);
+  };
+
+  const waitForStatePersistenceIdle = async () => {
+    if (typeof window === 'undefined') return;
+    if (statePersistTimeout) {
+      window.clearTimeout(statePersistTimeout);
+      statePersistTimeout = null;
+    }
+    statePersistPending = false;
+    while (statePersistInFlight) {
+      await new Promise((resolve) => window.setTimeout(resolve, 50));
+    }
   };
 
   const getSocketServerBaseUrl = () => {
@@ -4053,34 +4449,80 @@
     return clubPrice > 0 && clubPrice < base;
   };
 
-  const getConditionalPromotionPrice = (product, quantity, basePrice) => {
+  const isWithinPromotionPeriod = (promotion) => {
+    if (!promotion || typeof promotion !== 'object') return true;
+    if (promotion.semValidade === true) return true;
+    const start = String(promotion.periodoInicio || '').trim();
+    const end = String(promotion.periodoFim || '').trim();
+    if (!start && !end) return true;
+    const today = getTodayIsoDate();
+    if (start && /^\d{4}-\d{2}-\d{2}$/.test(start) && today < start) return false;
+    if (end && /^\d{4}-\d{2}-\d{2}$/.test(end) && today > end) return false;
+    return true;
+  };
+
+  const getConditionalGroupKey = (conditionalPromo) => {
+    const code = String(conditionalPromo?.codigoGrupo || '').trim();
+    const type = String(conditionalPromo?.tipo || '').trim();
+    const allowMixed = Boolean(conditionalPromo?.produtosDiferentes);
+    if (!allowMixed || !code || !type) return '';
+    return `${type}|${code}`;
+  };
+
+  const getConditionalGroupQuantityForSale = (product, normalizedQuantity, options = {}) => {
+    if (!options?.useSaleGroup) return normalizedQuantity;
+    const conditional = product?.promocaoCondicional;
+    const groupKey = getConditionalGroupKey(conditional);
+    if (!groupKey) return normalizedQuantity;
+
+    let total = 0;
+    (state.itens || []).forEach((item) => {
+      const snapshot = item?.productSnapshot || item;
+      const promo = snapshot?.promocaoCondicional;
+      if (!promo?.ativa || !isWithinPromotionPeriod(promo)) return;
+      if (getConditionalGroupKey(promo) !== groupKey) return;
+      if (options.currentItemId && String(item?.id || '') === String(options.currentItemId)) return;
+      total += Math.max(0, Math.trunc(Number(item?.quantidade) || 0));
+    });
+
+    if (options.currentItemId || options.includePendingQuantity) {
+      total += normalizedQuantity;
+    } else if (total <= 0) {
+      total = normalizedQuantity;
+    }
+    return Math.max(1, total);
+  };
+
+  const getConditionalPromotionPrice = (product, quantity, basePrice, options = {}) => {
     if (!product?.promocaoCondicional || !product.promocaoCondicional.ativa) return null;
+    if (!isWithinPromotionPeriod(product.promocaoCondicional)) return null;
     const effectiveBase = safeNumber(basePrice);
     if (!effectiveBase || effectiveBase <= 0) return null;
     const normalizedQuantity = Math.max(1, Math.trunc(Number(quantity) || 1));
     const conditional = product.promocaoCondicional;
+    const quantityForRule = getConditionalGroupQuantityForSale(product, normalizedQuantity, options);
     if (conditional.tipo === 'acima_de') {
       const min = Math.max(1, Math.trunc(Number(conditional.quantidadeMinima) || 0));
       const desconto = safeNumber(conditional.descontoPorcentagem);
-      if (!min || normalizedQuantity < min || desconto <= 0) return null;
+      if (!min || quantityForRule < min || desconto <= 0) return null;
       const discounted = Math.max(effectiveBase - effectiveBase * (desconto / 100), 0);
       return discounted > 0 && discounted < effectiveBase ? discounted : null;
     }
     if (conditional.tipo === 'leve_pague') {
       const leve = Math.max(1, Math.trunc(Number(conditional.leve) || 0));
       const pague = Math.max(0, Math.trunc(Number(conditional.pague) || 0));
-      if (!leve || normalizedQuantity < leve || pague <= 0 || pague > leve) return null;
-      const promoPacks = Math.floor(normalizedQuantity / leve);
+      if (!leve || quantityForRule < leve || pague <= 0 || pague > leve) return null;
+      const promoPacks = Math.floor(quantityForRule / leve);
       const paidItems = promoPacks * pague;
-      const remainingItems = normalizedQuantity % leve;
+      const remainingItems = quantityForRule % leve;
       const totalPrice = (paidItems + remainingItems) * effectiveBase;
-      const effectivePrice = totalPrice / normalizedQuantity;
+      const effectivePrice = totalPrice / quantityForRule;
       return effectivePrice > 0 && effectivePrice < effectiveBase ? effectivePrice : null;
     }
     return null;
   };
 
-  const getPromotionPricing = (product, quantity = 1) => {
+  const getPromotionPricing = (product, quantity = 1, options = {}) => {
     const basePrice = getBasePrice(product);
     if (!product) {
       return {
@@ -4094,11 +4536,12 @@
 
     const generalActive = hasGeneralPromotion(product);
     const canApplyGeneral = generalActive && canApplyGeneralPromotion();
+    const generalPeriodActive = isWithinPromotionPeriod(product?.promocao);
     const generalPrice = generalActive
       ? Math.max(basePrice - basePrice * (safeNumber(product.promocao.porcentagem) / 100), 0)
       : null;
 
-    const conditionalPrice = getConditionalPromotionPrice(product, quantity, basePrice);
+    const conditionalPrice = getConditionalPromotionPrice(product, quantity, basePrice, options);
     const conditionalActive = conditionalPrice != null;
 
     const clubActive = hasClubPromotion(product);
@@ -4108,28 +4551,25 @@
     let promoPrice = basePrice;
     let canApply = false;
 
-    if (clubActive) {
+    if (conditionalActive) {
+      // Regra do PDV: promoção condicional tem prioridade sobre clube.
+      promoType = 'conditional';
+      promoPrice = conditionalPrice;
+      canApply = true;
+    } else if (clubActive) {
       promoType = 'club';
       promoPrice = clubPrice;
       canApply = true;
     }
 
-    if (conditionalActive) {
-      if (!promoType || conditionalPrice < promoPrice) {
-        promoType = 'conditional';
-        promoPrice = conditionalPrice;
-        canApply = true;
-      }
-    }
-
     if (generalActive) {
-      if (canApplyGeneral) {
+      if (generalPeriodActive && canApplyGeneral && !conditionalActive) {
         if (!promoType || generalPrice < promoPrice) {
           promoType = 'general';
           promoPrice = generalPrice;
           canApply = true;
         }
-      } else if (!promoType) {
+      } else if (generalPeriodActive && !promoType && !conditionalActive) {
         promoType = 'general';
         promoPrice = generalPrice;
         canApply = false;
@@ -4140,15 +4580,15 @@
     return { basePrice, promoPrice, hasPromotion, canApply, promoType };
   };
 
-  const getFinalPrice = (product, usePromotion = true, quantity = 1) => {
-    const pricing = getPromotionPricing(product, quantity);
+  const getFinalPrice = (product, usePromotion = true, quantity = 1, options = {}) => {
+    const pricing = getPromotionPricing(product, quantity, options);
     if (!usePromotion || !pricing.hasPromotion) return pricing.basePrice;
     if (!pricing.canApply) return pricing.basePrice;
     return pricing.promoPrice;
   };
 
-  const getItemPricing = (product, usePromotion = true, quantity = 1) => {
-    const pricing = getPromotionPricing(product, quantity);
+  const getItemPricing = (product, usePromotion = true, quantity = 1, options = {}) => {
+    const pricing = getPromotionPricing(product, quantity, options);
     const promotionRequested = Boolean(usePromotion && pricing.hasPromotion);
     const promotionActive = promotionRequested && pricing.canApply;
     const valor = promotionActive ? pricing.promoPrice : pricing.basePrice;
@@ -5179,7 +5619,10 @@
       }
       const snapshot = item.productSnapshot;
       const wantsPromotion = item.usePromotion !== false;
-      const pricing = getItemPricing(snapshot, wantsPromotion, item.quantidade);
+      const pricing = getItemPricing(snapshot, wantsPromotion, item.quantidade, {
+        useSaleGroup: true,
+        currentItemId: item.id,
+      });
       const usePromotion = pricing.hasPromotion ? wantsPromotion : false;
       return {
         ...item,
@@ -5201,6 +5644,33 @@
       };
     });
     renderItemsList();
+  };
+
+  const recalculateSaleItemsPromotionPricing = () => {
+    if (!Array.isArray(state.itens) || !state.itens.length) return;
+    state.itens = state.itens.map((item) => {
+      if (!item?.productSnapshot) return item;
+      const snapshot = item.productSnapshot;
+      const wantsPromotion = item.usePromotion !== false;
+      const pricing = getItemPricing(snapshot, wantsPromotion, item.quantidade, {
+        useSaleGroup: true,
+        currentItemId: item.id,
+      });
+      const usePromotion = pricing.hasPromotion ? wantsPromotion : false;
+      const nextItem = {
+        ...item,
+        valor: pricing.valor,
+        valorBase: pricing.valorBase,
+        valorPromocional: pricing.valorPromocional,
+        valorSemAjuste: pricing.valor,
+        subtotalSemAjuste: pricing.valor * item.quantidade,
+        usePromotion,
+        promoType: pricing.promoType || null,
+        generalPromo: hasGeneralPromotion(snapshot),
+      };
+      applyItemAdjustmentToItem(nextItem);
+      return nextItem;
+    });
   };
 
   const setSaleCustomer = (cliente, pet = null, options = {}) => {
@@ -10361,6 +10831,26 @@
       castrado,
       obito,
     };
+  };
+
+  const inferCaixaOpenState = ({ caixaAberto, caixaInfo = {}, history = [] } = {}) => {
+    if (typeof caixaAberto === 'boolean') {
+      return caixaAberto;
+    }
+    const aberturaData = parseDateValue(caixaInfo?.aberturaData);
+    const fechamentoData = parseDateValue(caixaInfo?.fechamentoData);
+    if (aberturaData && !fechamentoData) {
+      return true;
+    }
+    const latestHistory = Array.isArray(history) ? history[0] : null;
+    const latestId = String(latestHistory?.id || '').trim().toLowerCase();
+    if (latestId === 'abertura') {
+      return true;
+    }
+    if (latestId === 'fechamento') {
+      return false;
+    }
+    return false;
   };
 
   const validateCustomerModalPetDraft = () => {
@@ -15796,7 +16286,7 @@
       });
       lines.push(formatPrintLine('Total recebido', snapshot.recebimentos.formattedTotal));
     } else {
-      lines.push('Nenhum meio de pagamento configurado.');
+      lines.push('Nenhum recebimento registrado no ciclo.');
     }
     lines.push('');
     lines.push('Fechamento previsto');
@@ -17187,7 +17677,7 @@
     const recebimentosList = renderRows(snapshot.recebimentos.items, {
       totalLabel: 'Total recebido',
       totalValue: snapshot.recebimentos.formattedTotal,
-      emptyLabel: 'Nenhum meio de pagamento configurado.',
+      emptyLabel: 'Nenhum recebimento registrado no ciclo.',
     });
     const previstoList = renderRows(snapshot.previsto.items, {
       totalLabel: 'Total previsto',
@@ -24467,7 +24957,45 @@
     }
   };
 
-  const addHistoryEntry = (action, amount, motivo, paymentLabel, deltaOverride) => {
+  const setCaixaActionLoading = (loading, actionId = '') => {
+    if (elements.caixaActions) {
+      elements.caixaActions
+        .querySelectorAll('button[data-action]')
+        .forEach((button) => {
+          button.disabled = loading;
+          button.classList.toggle('opacity-60', loading);
+          button.classList.toggle('cursor-not-allowed', loading);
+        });
+    }
+    if (elements.actionConfirm) {
+      elements.actionConfirm.disabled = loading;
+      elements.actionConfirm.classList.toggle('opacity-60', loading);
+      elements.actionConfirm.classList.toggle('cursor-not-allowed', loading);
+      const labelSpan = elements.actionConfirm.querySelector('span');
+      if (labelSpan) {
+        if (loading && actionId === 'abertura') {
+          labelSpan.textContent = 'Abrindo caixa...';
+        } else if (loading && actionId === 'fechamento') {
+          labelSpan.textContent = 'Fechando caixa...';
+        }
+      }
+    }
+    if (loading && elements.actionHint) {
+      elements.actionHint.textContent =
+        actionId === 'abertura' || actionId === 'fechamento'
+          ? 'Aguarde a confirmação do servidor.'
+          : elements.actionHint.textContent;
+    }
+  };
+
+  const addHistoryEntry = (
+    action,
+    amount,
+    motivo,
+    paymentLabel,
+    deltaOverride,
+    { skipPersist = false } = {}
+  ) => {
     const delta = typeof deltaOverride === 'number'
       ? deltaOverride
       : action.id === 'saida' || action.id === 'envio' || action.id === 'fechamento'
@@ -24490,7 +25018,9 @@
     state.history.unshift(entry);
     renderHistory();
     setLastMovement(entry);
-    scheduleStatePersist();
+    if (!skipPersist) {
+      scheduleStatePersist();
+    }
   };
 
   const resetPagamentos = () => {
@@ -24821,6 +25351,7 @@
     const token = getToken();
     const payload = await fetchWithOptionalAuth(`${API_BASE}/pdvs${query}`, {
       token,
+      cache: 'no-store',
       errorMessage: 'Não foi possível carregar os PDVs da empresa.',
     });
     state.pdvs = Array.isArray(payload?.pdvs)
@@ -24836,6 +25367,7 @@
     const token = getToken();
     const payload = await fetchWithOptionalAuth(`${API_BASE}/pdvs/${pdvId}`, {
       token,
+      cache: 'no-store',
       errorMessage: 'Não foi possível carregar os dados do PDV selecionado.',
     });
     return normalizePdvRecord(payload);
@@ -24857,14 +25389,36 @@
       persistedState?.caixaInfo && typeof persistedState.caixaInfo === 'object'
         ? persistedState.caixaInfo
         : {};
-    const caixaAberto = Boolean(
-      persistedState?.caixaAberto ||
-        persistedState?.caixa?.aberto ||
-        pdv?.caixa?.aberto ||
-        pdv?.caixaAberto ||
-        pdv?.statusCaixa === 'aberto' ||
-        pdv?.status === 'aberto'
-    );
+    const historySource = Array.isArray(persistedState?.history)
+      ? persistedState.history
+      : Array.isArray(pdv?.history)
+      ? pdv.history
+      : Array.isArray(pdv?.caixa?.historico)
+      ? pdv.caixa.historico
+      : [];
+    const caixaAbertoRaw =
+      typeof persistedState?.caixaAberto === 'boolean'
+        ? persistedState.caixaAberto
+        : typeof persistedState?.caixa?.aberto === 'boolean'
+        ? persistedState.caixa.aberto
+        : typeof pdv?.caixa?.aberto === 'boolean'
+        ? pdv.caixa.aberto
+        : typeof pdv?.caixaAberto === 'boolean'
+        ? pdv.caixaAberto
+        : pdv?.statusCaixa === 'aberto'
+        ? true
+        : pdv?.statusCaixa === 'fechado'
+        ? false
+        : pdv?.status === 'aberto'
+        ? true
+        : pdv?.status === 'fechado'
+        ? false
+        : undefined;
+    const caixaAberto = inferCaixaOpenState({
+      caixaAberto: caixaAbertoRaw,
+      caixaInfo: persistedCaixaInfo,
+      history: historySource,
+    });
     state.caixaAberto = caixaAberto;
     renderReceivablesSelectionSummary();
     const summarySource =
@@ -25018,13 +25572,7 @@
         index === 0 ? { ...payment, valor: state.summary.abertura } : payment
       );
     }
-    const historicoFonte = Array.isArray(persistedState?.history)
-      ? persistedState.history
-      : Array.isArray(pdv?.history)
-      ? pdv.history
-      : Array.isArray(pdv?.caixa?.historico)
-      ? pdv.caixa.historico
-      : [];
+    const historicoFonte = historySource;
     state.history = historicoFonte
       .map((entry) => normalizeHistoryEntryForPersist(entry))
       .filter(Boolean);
@@ -25382,19 +25930,38 @@
     try {
       const token = getToken();
       const includeInactive = Boolean(elements.pdvProductSearchIncludeInactive?.checked);
-      const endpoint =
-        `${API_BASE}/products?search=${encodeURIComponent(lookupTerm)}&limit=60&includeHidden=${includeInactive ? 'true' : 'false'}&audience=pdv`;
-      const payload = await fetchWithOptionalAuth(endpoint, {
-        token,
-        cache: 'no-store',
-        headers: { 'Cache-Control': 'no-store' },
-        errorMessage: 'Não foi possível buscar produtos.',
-      });
-      const products = Array.isArray(payload?.products)
-        ? payload.products
-        : Array.isArray(payload)
-        ? payload
-        : [];
+      const products = [];
+      const pageSize = 500;
+      let page = 1;
+      let totalPages = 1;
+      let guard = 0;
+      do {
+        const endpoint =
+          `${API_BASE}/products?search=${encodeURIComponent(lookupTerm)}&page=${page}&limit=${pageSize}&includeHidden=${includeInactive ? 'true' : 'false'}&audience=pdv`;
+        const payload = await fetchWithOptionalAuth(endpoint, {
+          token,
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-store' },
+          errorMessage: 'Não foi possível buscar produtos.',
+        });
+        const pageProducts = Array.isArray(payload?.products)
+          ? payload.products
+          : Array.isArray(payload)
+          ? payload
+          : [];
+        products.push(...pageProducts);
+        const parsedPages = Number(payload?.pages);
+        if (Number.isFinite(parsedPages) && parsedPages > 0) {
+          totalPages = parsedPages;
+        } else if (pageProducts.length < pageSize) {
+          totalPages = page;
+        } else {
+          totalPages = page + 1;
+        }
+        page += 1;
+        guard += 1;
+      } while (page <= totalPages && guard < 100);
+
       const ranked = products
         .filter((product) => matchesWildcardProductSearch(product, term))
         .filter((product) => (includeInactive ? true : !isExchangeProductInactive(product)))
@@ -25591,7 +26158,10 @@
     if (!product) return false;
     const quantidadeFinal = Math.max(1, Math.trunc(Number(quantidade) || 1));
     const usePromotion = false;
-    const pricing = getItemPricing(product, usePromotion, quantidadeFinal);
+      const pricing = getItemPricing(product, usePromotion, quantidadeFinal, {
+        useSaleGroup: true,
+        includePendingQuantity: true,
+      });
     const codigo = getProductCode(product);
     const codigoInterno = product?.codigoInterno || product?.codInterno || codigo;
     const codigoBarras = getProductBarcode(product);
@@ -25614,7 +26184,10 @@
       const shouldUsePromotion =
         current.usePromotion !== undefined ? current.usePromotion : false;
       current.quantidade += quantidadeFinal;
-      const currentPricing = getItemPricing(product, shouldUsePromotion, current.quantidade);
+      const currentPricing = getItemPricing(product, shouldUsePromotion, current.quantidade, {
+        useSaleGroup: true,
+        currentItemId: current.id,
+      });
       current.valorBase = currentPricing.valorBase;
       current.valorPromocional = currentPricing.valorPromocional;
       current.usePromotion = currentPricing.hasPromotion ? shouldUsePromotion : false;
@@ -25626,8 +26199,12 @@
       current.generalPromo = generalPromo;
       current.productSnapshot = snapshot;
       applyItemAdjustmentToItem(current);
+      recalculateSaleItemsPromotionPricing();
     } else {
-      const pricingToApply = getItemPricing(product, usePromotion, quantidadeFinal);
+      const pricingToApply = getItemPricing(product, usePromotion, quantidadeFinal, {
+        useSaleGroup: true,
+        includePendingQuantity: true,
+      });
       const baseId = product._id || product.id || codigo || String(Date.now());
       const sellerKey = sellerInfo.id || sellerInfo.code;
       const saleItem = {
@@ -25657,6 +26234,7 @@
       };
       applyItemAdjustmentToItem(saleItem);
       state.itens.push(saleItem);
+      recalculateSaleItemsPromotionPricing();
     }
     renderItemsList();
     notify('Item adicionado à pré-visualização.', 'success');
@@ -25781,7 +26359,8 @@
     if (!elements.paymentList) return;
     const input = elements.paymentList.querySelector(`input[data-payment-input="${paymentId}"]`);
     if (!input) return;
-    const payment = state.pagamentos.find((item) => item.id === paymentId);
+    const renderedPayments = getDisplayedPaymentRows();
+    const payment = renderedPayments.find((item) => item.id === paymentId);
     const mask = paymentInputMasks.get(paymentId);
     if (mask) {
       mask.typedValue = Math.max(0, safeNumber(payment?.valor, 0));
@@ -25790,27 +26369,46 @@
     input.value = formatMaskedMoneyValue(payment?.valor || 0);
   };
 
+  const syncRenderedPaymentInputsToState = () => {
+    if (!elements.paymentList || !Array.isArray(state.pagamentos) || !state.pagamentos.length) {
+      return;
+    }
+    const inputs = elements.paymentList.querySelectorAll('input[data-payment-input]');
+    inputs.forEach((input) => {
+      const paymentId = input.getAttribute('data-payment-input');
+      if (!paymentId) return;
+      const payment = state.pagamentos.find((item) => item.id === paymentId);
+      if (!payment) return;
+      const mask = paymentInputMasks.get(paymentId);
+      const nextValue = mask
+        ? Math.max(0, normalizeCurrencyAmount(mask.typedValue))
+        : parseMaskedMoneyValue(input.value);
+      payment.valor = nextValue;
+    });
+  };
+
   const renderPayments = () => {
     if (!elements.paymentList) return;
     destroyPaymentInputMasks();
     elements.paymentList.innerHTML = '';
     const inputsLocked = state.caixaAberto && !state.allowApuradoEdit;
+    const displayPayments = getDisplayedPaymentRows();
     const helperText = state.allowApuradoEdit
       ? 'Informe o valor apurado'
       : state.caixaAberto
-      ? 'Saldo previsto'
+      ? 'Recebimentos por meio'
       : 'Valor inicial / apurado';
     if (state.paymentMethodsLoading) {
       elements.paymentList.innerHTML =
         '<li class="rounded-lg border border-dashed border-gray-300 bg-white px-4 py-3 text-sm text-gray-500">Carregando meios de pagamento...</li>';
-    } else if (!state.pagamentos.length) {
+    } else if (!displayPayments.length) {
       const message = state.selectedStore
         ? 'Nenhum meio de pagamento cadastrado para esta empresa.'
         : 'Selecione uma empresa para visualizar os meios de pagamento disponíveis.';
       elements.paymentList.innerHTML = `<li class="rounded-lg border border-dashed border-gray-300 bg-white px-4 py-3 text-sm text-gray-500">${message}</li>`;
     } else {
       const fragment = document.createDocumentFragment();
-      state.pagamentos.forEach((payment) => {
+      displayPayments.forEach((payment) => {
         const li = document.createElement('li');
         li.className =
           'flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3';
@@ -25920,7 +26518,10 @@
       const snapshot = item.productSnapshot || null;
       const target = snapshot || item;
       const nextUsePromotion = !(item.usePromotion !== false);
-      const pricing = getItemPricing(target, nextUsePromotion, item.quantidade);
+      const pricing = getItemPricing(target, nextUsePromotion, item.quantidade, {
+        useSaleGroup: true,
+        currentItemId: item.id,
+      });
       const usePromotion = pricing.hasPromotion ? nextUsePromotion : false;
       state.itens[index] = {
         ...item,
@@ -25933,6 +26534,7 @@
         generalPromo: snapshot ? hasGeneralPromotion(snapshot) : Boolean(item.generalPromo),
       };
       applyItemAdjustmentToItem(state.itens[index]);
+      recalculateSaleItemsPromotionPricing();
       renderItemsList();
       return;
     }
@@ -25941,6 +26543,7 @@
     const index = Number(button.getAttribute('data-remove-index'));
     if (!Number.isInteger(index) || index < 0 || index >= state.itens.length) return;
     state.itens.splice(index, 1);
+    recalculateSaleItemsPromotionPricing();
     renderItemsList();
     if (!state.itens.length) {
       state.vendaPagamentos = [];
@@ -25979,13 +26582,36 @@
     const button = event.target.closest('button[data-action]');
     if (!button) return;
     const actionId = button.getAttribute('data-action');
+    const isSameAction = state.selectedAction === actionId;
     if (state.allowApuradoEdit && actionId !== 'fechamento' && state.caixaAberto) {
-      state.pagamentos = clonePayments(state.caixaInfo.previstoPagamentos || state.pagamentos);
+      state.pagamentos = clonePayments(
+        state.caixaPagamentosAntesFechamento || state.caixaInfo.previstoPagamentos || state.pagamentos
+      );
+      state.caixaPagamentosAntesFechamento = null;
       state.allowApuradoEdit = false;
+    }
+    if (isSameAction) {
+      if (actionId === 'fechamento' && state.caixaAberto) {
+        state.pagamentos = clonePayments(
+          state.caixaPagamentosAntesFechamento || state.caixaInfo.previstoPagamentos || state.pagamentos
+        );
+        state.caixaPagamentosAntesFechamento = null;
+      }
+      state.selectedAction = null;
+      state.allowApuradoEdit = false;
+      renderCaixaActions();
+      renderPayments();
+      updateActionDetails();
+      return;
     }
     state.selectedAction = actionId;
     if (actionId === 'fechamento' && state.caixaAberto) {
-      state.caixaInfo.previstoPagamentos = clonePayments(state.pagamentos);
+      if (!state.allowApuradoEdit) {
+        state.caixaPagamentosAntesFechamento = clonePayments(state.pagamentos);
+      }
+      const fechamentoPrevistoPagamentos = buildFechamentoPrevistoPaymentsByMethod();
+      state.pagamentos = clonePayments(fechamentoPrevistoPagamentos);
+      state.caixaInfo.previstoPagamentos = clonePayments(fechamentoPrevistoPagamentos);
       state.caixaInfo.fechamentoPrevisto = sumPayments(state.caixaInfo.previstoPagamentos);
       state.allowApuradoEdit = true;
     } else if (actionId !== 'fechamento') {
@@ -25996,12 +26622,23 @@
     updateActionDetails();
   };
 
-  const handleActionConfirm = () => {
+  const handleActionConfirm = async () => {
+    if (caixaActionInFlight) {
+      return;
+    }
     const action = caixaActions.find((item) => item.id === state.selectedAction);
     if (!action) {
       notify('Selecione uma operação para o caixa.', 'warning');
       return;
     }
+    caixaActionInFlight = true;
+    setCaixaActionLoading(true, action.id);
+    try {
+    if (action.id === 'abertura' || action.id === 'fechamento') {
+      await waitForStatePersistenceIdle();
+    }
+    const expectedCaixaAbertoAfterAction =
+      action.id === 'abertura' ? true : action.id === 'fechamento' ? false : null;
     const amountValue = safeNumber(elements.actionAmount?.value || 0);
     const paymentId = elements.paymentSelect?.value || (state.pagamentos[0]?.id ?? '');
     const payment = state.pagamentos.find((item) => item.id === paymentId) || state.pagamentos[0];
@@ -26023,6 +26660,7 @@
         notify('O caixa já está aberto.', 'warning');
         return;
       }
+      syncRenderedPaymentInputsToState();
       const aberturaTotal = sumPayments(state.pagamentos);
       state.caixaAberto = true;
       state.allowApuradoEdit = false;
@@ -26042,9 +26680,9 @@
       }));
       state.caixaInfo.apuradoPagamentos = [];
       state.caixaInfo.fechamentoPrevisto = 0;
-      addHistoryEntry(action, aberturaTotal, motivo, describePaymentValues(state.pagamentos));
-      notify(action.successMessage, 'success');
-      setActiveTab('pdv-tab');
+      addHistoryEntry(action, aberturaTotal, motivo, describePaymentValues(state.pagamentos), undefined, {
+        skipPersist: true,
+      });
     } else if (action.id === 'fechamento') {
       if (!state.caixaAberto) {
         notify('Abra o caixa antes de realizar o fechamento.', 'warning');
@@ -26062,7 +26700,8 @@
         apuradoTotal,
         motivo,
         describePaymentValues(apuradoPagamentos),
-        -Math.abs(apuradoTotal)
+        -Math.abs(apuradoTotal),
+        { skipPersist: true }
       );
       state.caixaInfo.fechamentoData = new Date().toISOString();
       state.caixaInfo.previstoPagamentos = clonePayments(previstoPagamentos);
@@ -26071,10 +26710,6 @@
       state.caixaInfo.fechamentoApurado = apuradoTotal;
       state.caixaAberto = false;
       state.allowApuradoEdit = false;
-      notify(action.successMessage, 'success');
-      updateTabAvailability();
-      setActiveTab('caixa-tab');
-      handleConfiguredPrint('fechamento');
     } else {
       if (!state.caixaAberto) {
         notify('Abra o caixa antes de registrar movimentações.', 'warning');
@@ -26099,6 +26734,41 @@
       notify(action.successMessage, 'success');
     }
 
+    if (action.id === 'fechamento' || action.id === 'abertura') {
+      const persisted = await flushStatePersist({ includeCollections: false });
+      state.selectedAction = null;
+      state.allowApuradoEdit = false;
+      state.caixaPagamentosAntesFechamento = null;
+      elements.actionAmount && (elements.actionAmount.value = '');
+      elements.motivoInput && (elements.motivoInput.value = '');
+      renderPayments();
+      updateSummary();
+      updateStatusBadge();
+      updateTabAvailability();
+      renderReceivablesSelectionSummary();
+      renderCaixaActions();
+      updateActionDetails();
+      if (
+        persisted &&
+        expectedCaixaAbertoAfterAction !== null &&
+        state.caixaAberto === expectedCaixaAbertoAfterAction
+      ) {
+        updateTabAvailability();
+        setActiveTab(action.id === 'abertura' ? 'pdv-tab' : 'caixa-tab');
+        if (action.id === 'fechamento') {
+          handleConfiguredPrint('fechamento');
+        }
+        notify(action.successMessage, 'success');
+        window.setTimeout(() => {
+          void refreshCurrentPdvStateFromServer().catch((error) => {
+            console.error(`Falha ao sincronizar estado após ${action.id} do caixa:`, error);
+          });
+        }, 0);
+      } else {
+        notify('Não foi possível salvar o estado do caixa.', 'error');
+      }
+      return;
+    }
     renderPayments();
     updateSummary();
     updateStatusBadge();
@@ -26110,7 +26780,13 @@
     updateActionDetails();
     elements.actionAmount && (elements.actionAmount.value = '');
     elements.motivoInput && (elements.motivoInput.value = '');
-    scheduleStatePersist({ immediate: action.id === 'fechamento' });
+    scheduleStatePersist();
+    } finally {
+      setCaixaActionLoading(false);
+      renderCaixaActions();
+      updateActionDetails();
+      caixaActionInFlight = false;
+    }
   };
 
   const handleCompanyChange = async () => {

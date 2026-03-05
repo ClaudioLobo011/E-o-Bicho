@@ -62,7 +62,7 @@ function resolveAddressSnapshot(address) {
   };
 }
 
-function resolveBestPrice(product, quantity, isSubscribed) {
+function resolveBestPrice(product, quantity, isSubscribed, groupQuantities = null) {
   const basePrice = Number(product?.venda || 0);
   let bestPrice = basePrice;
 
@@ -72,7 +72,12 @@ function resolveBestPrice(product, quantity, isSubscribed) {
   }
 
   if (product?.promocaoCondicional?.ativa && product?.promocaoCondicional?.tipo === 'acima_de') {
-    if (quantity >= product.promocaoCondicional.quantidadeMinima) {
+    const promo = product.promocaoCondicional;
+    const isGrouped = Boolean(promo?.produtosDiferentes && String(promo?.codigoGrupo || '').trim());
+    const qtyForRule = isGrouped && groupQuantities
+      ? Number(groupQuantities.get(`acima_de|${String(promo?.codigoGrupo || '').trim()}`) || 0)
+      : quantity;
+    if (qtyForRule >= promo.quantidadeMinima) {
       const conditionalPrice = basePrice * (1 - product.promocaoCondicional.descontoPorcentagem / 100);
       if (conditionalPrice < bestPrice) bestPrice = conditionalPrice;
     }
@@ -80,12 +85,16 @@ function resolveBestPrice(product, quantity, isSubscribed) {
 
   if (product?.promocaoCondicional?.ativa && product?.promocaoCondicional?.tipo === 'leve_pague') {
     const { leve, pague } = product.promocaoCondicional;
-    if (leve > 0 && quantity >= leve) {
-      const promoPacks = Math.floor(quantity / leve);
+    const isGrouped = Boolean(product.promocaoCondicional?.produtosDiferentes && String(product.promocaoCondicional?.codigoGrupo || '').trim());
+    const qtyForRule = isGrouped && groupQuantities
+      ? Number(groupQuantities.get(`leve_pague|${String(product.promocaoCondicional?.codigoGrupo || '').trim()}`) || 0)
+      : quantity;
+    if (leve > 0 && qtyForRule >= leve) {
+      const promoPacks = Math.floor(qtyForRule / leve);
       const paidItems = promoPacks * pague;
-      const remainingItems = quantity % leve;
+      const remainingItems = qtyForRule % leve;
       const totalPrice = (paidItems + remainingItems) * basePrice;
-      const effective = totalPrice / quantity;
+      const effective = totalPrice / qtyForRule;
       if (effective < bestPrice) bestPrice = effective;
     }
   }
@@ -99,6 +108,19 @@ function resolveBestPrice(product, quantity, isSubscribed) {
 
 function buildCartSnapshot(cartItems) {
   const rows = Array.isArray(cartItems) ? cartItems : [];
+  const conditionalGroupQuantities = new Map();
+  rows.forEach((item) => {
+    const product = item?.product;
+    const promo = product?.promocaoCondicional;
+    if (!product || !promo?.ativa || !promo?.produtosDiferentes) return;
+    const groupCode = String(promo?.codigoGrupo || '').trim();
+    if (!groupCode) return;
+    const qty = Math.max(0, Math.trunc(Number(item?.quantity || 0)));
+    if (!qty) return;
+    const key = `${String(promo?.tipo || '')}|${groupCode}`;
+    conditionalGroupQuantities.set(key, (conditionalGroupQuantities.get(key) || 0) + qty);
+  });
+
   const items = [];
   let subtotal = 0;
   let total = 0;
@@ -110,7 +132,7 @@ function buildCartSnapshot(cartItems) {
     const quantity = Number(item?.quantity || 0);
     if (quantity <= 0) return;
     const unitBase = Number(product?.venda || 0);
-    const unitPrice = resolveBestPrice(product, quantity, Boolean(item?.isSubscribed));
+    const unitPrice = resolveBestPrice(product, quantity, Boolean(item?.isSubscribed), conditionalGroupQuantities);
     const discount = Math.max(0, unitBase - unitPrice);
     const lineTotal = unitPrice * quantity;
     subtotal += unitBase * quantity;

@@ -4,6 +4,7 @@
   const state = {
     stores: [],
     items: [],
+    registeredPromotions: [],
     importResults: [],
     importSelectedIds: new Set(),
     importSearchTimer: null,
@@ -20,6 +21,7 @@
     companiesToggle: document.getElementById('promotion-v2-companies-toggle'),
     companyHelper: document.getElementById('promotion-v2-company-helper'),
     headerCode: document.getElementById('promotion-v2-header-code'),
+    headerDescription: document.getElementById('promotion-v2-header-description'),
     headerDiscount: document.getElementById('promotion-v2-header-discount'),
     headerOriginalPrice: document.getElementById('promotion-v2-header-original-price'),
     headerPrice: document.getElementById('promotion-v2-header-price'),
@@ -29,6 +31,12 @@
     conditionalLevePague: document.getElementById('promotion-v2-conditional-leve-pague'),
     conditionalPanel: document.getElementById('promotion-v2-conditional-panel'),
     fieldCode: document.getElementById('promotion-v2-field-code'),
+    fieldDescription: document.getElementById('promotion-v2-field-description'),
+    differentProductsWrap: document.getElementById('promotion-v2-different-products-wrap'),
+    differentProductsCheckbox: document.getElementById('promotion-v2-different-products'),
+    noExpiryWrap: document.getElementById('promotion-v2-no-expiry-wrap'),
+    noExpiryCheckbox: document.getElementById('promotion-v2-no-expiry'),
+    fieldGlobalDiscount: document.getElementById('promotion-v2-field-global-discount'),
     fieldsPanel: document.getElementById('promotion-v2-fields-panel'),
     fieldOriginalPrice: document.getElementById('promotion-v2-field-original-price'),
     fieldPeriod: document.getElementById('promotion-v2-field-period'),
@@ -57,6 +65,7 @@
     importResultsEmpty: document.getElementById('promotion-v2-import-results-empty'),
     importSearchButton: document.getElementById('promotion-v2-import-search-button'),
     importSelectedCount: document.getElementById('promotion-v2-import-selected-count'),
+    registeredBody: document.getElementById('promotion-v2-registered-body'),
   };
 
   const SAVE_BUTTON_DEFAULT_TEXT = elements.saveButton?.textContent?.trim() || 'Gravar';
@@ -97,6 +106,7 @@
       productId: '',
       codigo: '',
       produto: '',
+      preco: '',
       desconto: '',
       precoPromocao: '',
       periodoInicio: '',
@@ -105,9 +115,23 @@
     };
   }
 
+  function hasItemContent(item) {
+    if (!item || typeof item !== 'object') return false;
+    return Boolean(
+      String(item.productId || '').trim()
+      || String(item.codigo || '').trim()
+      || String(item.produto || '').trim()
+      || String(item.preco ?? '').trim()
+      || String(item.desconto ?? '').trim()
+      || String(item.precoPromocao ?? '').trim()
+      || String(item.periodoInicio || '').trim()
+      || String(item.periodoFim || '').trim()
+    );
+  }
+
   function normalizeItems(items) {
     if (!Array.isArray(items) || items.length === 0) {
-      return [createEmptyItem()];
+      return [];
     }
 
     return items.map((item) => createEmptyItem({
@@ -115,11 +139,12 @@
       productId: item?.productId || '',
       codigo: item?.codigo || '',
       produto: item?.produto || '',
+      preco: item?.preco ?? '',
       desconto: item?.desconto ?? '',
       precoPromocao: item?.precoPromocao ?? '',
       periodoInicio: item?.periodoInicio || '',
       periodoFim: item?.periodoFim || '',
-    }));
+    })).filter(hasItemContent);
   }
 
   function getSelectedWeekdays() {
@@ -162,6 +187,31 @@
     }
   }
 
+  function syncNoExpiryPeriodState() {
+    const noExpiry = Boolean(elements.noExpiryCheckbox?.checked);
+    if (elements.headerPeriodStart) {
+      elements.headerPeriodStart.disabled = noExpiry;
+    }
+    if (elements.headerPeriodEnd) {
+      elements.headerPeriodEnd.disabled = noExpiry;
+    }
+    if (noExpiry) {
+      if (elements.headerPeriodStart) {
+        elements.headerPeriodStart.value = '';
+      }
+      if (elements.headerPeriodEnd) {
+        elements.headerPeriodEnd.value = '';
+      }
+    } else {
+      if (elements.headerPeriodStart && !elements.headerPeriodStart.value) {
+        elements.headerPeriodStart.value = getTodayIsoDate();
+      }
+      if (elements.headerPeriodEnd && !elements.headerPeriodEnd.value) {
+        elements.headerPeriodEnd.value = elements.headerPeriodStart?.value || getTodayIsoDate();
+      }
+    }
+  }
+
   function parseDecimalInput(value) {
     if (value === null || value === undefined) return null;
     const normalized = String(value).trim().replace(',', '.');
@@ -174,6 +224,55 @@
     const parsed = Number(value);
     if (!Number.isFinite(parsed)) return '';
     return String(Math.round(parsed * 100) / 100);
+  }
+
+  function formatTwoDecimals(value) {
+    const parsed = parseDecimalInput(value);
+    if (!Number.isFinite(parsed)) return '';
+    return parsed.toFixed(2);
+  }
+
+  async function resolveNextPromotionGroupCode() {
+    const endpoint = state.mode === 'condicional'
+      ? `${API_CONFIG.BASE_URL}/promocoes/condicional?includeInactive=true`
+      : `${API_CONFIG.BASE_URL}/promocoes/produtos?includeInactive=true`;
+    const response = await fetch(endpoint, {
+      headers: getAuthHeaders(),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload?.message || 'Nao foi possivel gerar o proximo codigo da promocao.');
+    }
+
+    const items = Array.isArray(payload) ? payload : [];
+    let maxCode = 0;
+    items.forEach((product) => {
+      const rawCode = state.mode === 'condicional'
+        ? product?.promocaoCondicional?.codigoGrupo
+        : product?.promocao?.codigoGrupo;
+      const parsed = Number.parseInt(String(rawCode || '').trim(), 10);
+      if (Number.isFinite(parsed) && parsed > maxCode) {
+        maxCode = parsed;
+      }
+    });
+    return String(maxCode + 1);
+  }
+
+  async function ensurePromotionGroupCode() {
+    const current = String(elements.headerCode?.value || '').trim();
+    if (/^\d+$/.test(current)) {
+      return current;
+    }
+
+    const generated = await resolveNextPromotionGroupCode();
+    if (elements.headerCode) {
+      elements.headerCode.value = generated;
+    }
+    return generated;
+  }
+
+  function getPromotionGroupDescription() {
+    return String(elements.headerDescription?.value || '').trim();
   }
 
   function syncPromotionFromDiscount() {
@@ -212,6 +311,12 @@
 
   function fillHeaderProduct(product) {
     if (!product) return;
+    if (elements.headerDescription) {
+      elements.headerDescription.value = product.descricao || product.nome || '';
+    }
+    if (elements.headerCode) {
+      elements.headerCode.value = product.cod || '';
+    }
     if (elements.headerProduct) {
       elements.headerProduct.value = product.nome || '';
     }
@@ -300,12 +405,30 @@
       elements.conditionalPanel.classList.toggle('hidden', !isConditional);
     }
 
+    if (elements.differentProductsWrap) {
+      elements.differentProductsWrap.classList.toggle('hidden', !isConditional);
+      elements.differentProductsWrap.style.display = isConditional ? 'inline-flex' : 'none';
+    }
+
+    if (elements.noExpiryWrap) {
+      elements.noExpiryWrap.classList.toggle('hidden', isGlobal);
+      elements.noExpiryWrap.style.display = isGlobal ? 'none' : 'inline-flex';
+    }
+
     if (elements.fieldProduct) {
       elements.fieldProduct.classList.toggle('hidden', isGlobal);
     }
 
     if (elements.fieldCode) {
       elements.fieldCode.classList.toggle('hidden', isGlobal);
+    }
+
+    if (elements.fieldDescription) {
+      elements.fieldDescription.classList.toggle('hidden', isGlobal);
+    }
+
+    if (elements.fieldGlobalDiscount) {
+      elements.fieldGlobalDiscount.classList.toggle('hidden', !isGlobal);
     }
 
     if (elements.fieldOriginalPrice) {
@@ -320,9 +443,18 @@
       elements.fieldPeriod.classList.toggle('hidden', isGlobal);
     }
 
+    const itemsSection = document.getElementById('promotion-v2-items-section');
+    if (itemsSection) {
+      itemsSection.classList.toggle('hidden', isGlobal);
+    }
+
+    const registeredSection = document.getElementById('promotion-v2-registered-section');
+    if (registeredSection) {
+      registeredSection.classList.toggle('hidden', isGlobal);
+    }
+
     if (elements.rowCodeProduct) {
-      elements.rowCodeProduct.classList.toggle('sm:grid-cols-2', !isGlobal);
-      elements.rowCodeProduct.classList.toggle('sm:grid-cols-1', isGlobal);
+      elements.rowCodeProduct.classList.toggle('promotion-v2-single-column', isGlobal);
     }
 
     if (elements.rowPriceDiscount) {
@@ -350,6 +482,7 @@
         productId: item.productId || '',
         codigo: item.codigo || '',
         produto: item.produto || '',
+        preco: item.preco,
         desconto: item.desconto,
         precoPromocao: item.precoPromocao,
         periodoInicio: item.periodoInicio || '',
@@ -371,7 +504,7 @@
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) {
-        state.items = [createEmptyItem()];
+        state.items = [];
         return { companyIds: [], weekdays: [] };
       }
 
@@ -386,7 +519,7 @@
         weekdays: Array.isArray(payload?.weekdays) ? payload.weekdays : [],
       };
     } catch (error) {
-      state.items = [createEmptyItem()];
+      state.items = [];
       return { companyIds: [], weekdays: [] };
     }
   }
@@ -459,11 +592,303 @@
     elements.summaryCount.textContent = String(filledItems.length);
   }
 
+  function renderRegisteredPromotions() {
+    if (!elements.registeredBody) return;
+
+    if (!state.registeredPromotions.length) {
+      elements.registeredBody.innerHTML = `
+        <tr>
+          <td colspan="4" class="px-4 py-6 text-center text-sm text-gray-500">Nenhuma promocao cadastrada.</td>
+        </tr>
+      `;
+      return;
+    }
+
+    const shouldRenderConditional = state.mode === 'condicional';
+
+    if (shouldRenderConditional) {
+      const groupedConditional = new Map();
+      state.registeredPromotions.forEach((product) => {
+        const promo = product?.promocaoCondicional || {};
+        const code = String(promo?.codigoGrupo || '').trim();
+        const key = code || `product:${String(product?._id || '')}`;
+        if (!groupedConditional.has(key)) {
+          groupedConditional.set(key, {
+            key,
+            code,
+            description: String(promo?.descricaoGrupo || '').trim() || String(product?.nome || '').trim(),
+            promo,
+            products: [],
+          });
+        }
+        groupedConditional.get(key).products.push(product);
+      });
+
+      elements.registeredBody.innerHTML = Array.from(groupedConditional.values()).map((group) => {
+        const promo = group.promo || {};
+        const codigoGrupo = String(group.code || '').trim();
+        const descricaoGrupo = String(group.description || '').trim();
+        let conditionalLabel = 'Condicional';
+        if (promo?.tipo === 'leve_pague') {
+          conditionalLabel = `Leve ${promo?.leve || 0}, Pague ${promo?.pague || 0}`;
+        } else if (promo?.tipo === 'acima_de') {
+          conditionalLabel = `Acima de ${promo?.quantidadeMinima || 0}, ${formatTwoDecimals(promo?.descontoPorcentagem || 0)}% OFF`;
+        }
+
+        return `
+          <tr data-registered-group-key="${escapeHtml(String(group.key || ''))}">
+            <td class="px-3 py-3 text-sm font-semibold text-gray-700">${escapeHtml(codigoGrupo || '-')}</td>
+            <td class="px-3 py-3 text-sm text-gray-700">
+              <span class="block font-medium text-gray-800">${escapeHtml(descricaoGrupo || 'Promocao condicional')}</span>
+              <span class="block text-xs text-blue-600">${escapeHtml(conditionalLabel)}</span>
+              <span class="block text-xs font-semibold text-emerald-600">Ativa</span>
+            </td>
+            <td class="px-3 py-3 text-sm text-gray-700">${escapeHtml(String(group.products.length))}</td>
+            <td class="px-3 py-3 text-right">
+              <button
+                type="button"
+                data-registered-action="delete-conditional"
+                data-group-code="${escapeHtml(codigoGrupo)}"
+                data-group-key="${escapeHtml(String(group.key || ''))}"
+                class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 text-red-600 transition hover:bg-red-50"
+                aria-label="Remover promocao condicional do grupo ${escapeHtml(descricaoGrupo || codigoGrupo)}"
+                title="Remover promocao condicional do grupo"
+              >
+                <i class="fas fa-trash"></i>
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+      return;
+    }
+
+  elements.registeredBody.innerHTML = state.registeredPromotions.map((product) => {
+      const percentual = parseDecimalInput(product?.promocao?.porcentagem);
+      const percentualLabel = Number.isFinite(percentual)
+        ? `${formatDecimalInput(percentual)}% OFF`
+        : 'Desconto nao informado';
+      const codigoGrupo = String(product?.promocao?.codigoGrupo || '').trim();
+      const descricaoGrupo = String(product?.promocao?.descricaoGrupo || '').trim();
+      const isActive = Boolean(product?.promocao?.ativa);
+      const statusLabel = isActive ? 'Ativa' : 'Inativa';
+      const statusClass = isActive ? 'text-emerald-600' : 'text-amber-600';
+      return `
+        <tr data-registered-product-id="${escapeHtml(String(product?._id || ''))}">
+          <td class="px-3 py-3 text-sm font-semibold text-gray-700">${escapeHtml(codigoGrupo || product?.cod || '-')}</td>
+          <td class="px-3 py-3 text-sm text-gray-700">
+            <span class="block font-medium text-gray-800">${escapeHtml(descricaoGrupo || product?.nome || 'Produto sem nome')}</span>
+            <span class="block text-xs text-gray-500">${escapeHtml(percentualLabel)}</span>
+            <span class="block text-xs font-semibold ${statusClass}">${statusLabel}</span>
+          </td>
+          <td class="px-3 py-3 text-sm text-gray-700">1</td>
+          <td class="px-3 py-3 text-right">
+            <div class="inline-flex items-center gap-2">
+              <button
+                type="button"
+                data-registered-action="edit"
+                data-product-id="${escapeHtml(String(product?._id || ''))}"
+                class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 transition hover:bg-gray-50 hover:text-primary"
+                aria-label="Editar promocao do produto ${escapeHtml(product?.nome || '')}"
+                title="Editar promocao"
+              >
+                <i class="fas fa-pen"></i>
+              </button>
+              <button
+                type="button"
+                data-registered-action="deactivate"
+                data-product-id="${escapeHtml(String(product?._id || ''))}"
+                data-product-active="${isActive ? 'true' : 'false'}"
+                class="inline-flex h-8 w-8 items-center justify-center rounded-lg border ${isActive ? 'border-amber-200 text-amber-600 hover:bg-amber-50' : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'} transition"
+                aria-label="${isActive ? 'Inativar' : 'Ativar'} promocao do produto ${escapeHtml(product?.nome || '')}"
+                title="${isActive ? 'Inativar promocao' : 'Ativar promocao'}"
+              >
+                <i class="fas ${isActive ? 'fa-toggle-off' : 'fa-toggle-on'}"></i>
+              </button>
+              <button
+                type="button"
+                data-registered-action="delete"
+                data-product-id="${escapeHtml(String(product?._id || ''))}"
+                class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 text-red-600 transition hover:bg-red-50"
+                aria-label="Remover promocao do produto ${escapeHtml(product?.nome || '')}"
+                title="Remover promocao"
+              >
+                <i class="fas fa-trash"></i>
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  async function loadRegisteredProductPromotions() {
+    try {
+      if (state.mode === 'condicional') {
+        const response = await fetch(`${API_CONFIG.BASE_URL}/promocoes/condicional?includeInactive=true`, {
+          headers: getAuthHeaders(),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload?.message || 'Falha ao carregar promocoes condicionais.');
+        }
+        state.registeredPromotions = Array.isArray(payload) ? payload : [];
+      } else {
+        const response = await fetch(`${API_CONFIG.BASE_URL}/promocoes/produtos?includeInactive=true`, {
+          headers: getAuthHeaders(),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload?.message || 'Falha ao carregar promocoes cadastradas.');
+        }
+        state.registeredPromotions = Array.isArray(payload) ? payload : [];
+      }
+    } catch (error) {
+      console.error('Erro ao carregar promocoes cadastradas da promocao V2:', error);
+      state.registeredPromotions = [];
+    } finally {
+      renderRegisteredPromotions();
+    }
+  }
+
+  async function fetchRegisteredPromotionsForCurrentMode() {
+    const endpoint = state.mode === 'condicional'
+      ? `${API_CONFIG.BASE_URL}/promocoes/condicional?includeInactive=true`
+      : `${API_CONFIG.BASE_URL}/promocoes/produtos?includeInactive=true`;
+
+    const response = await fetch(endpoint, {
+      headers: getAuthHeaders(),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload?.message || 'Falha ao buscar promocoes cadastradas.');
+    }
+    return Array.isArray(payload) ? payload : [];
+  }
+
+  function buildItemsFromPromotionGroup(products) {
+    return products.map((product) => {
+      const salePrice = parseDecimalInput(product?.venda);
+      if (state.mode === 'condicional') {
+        const promo = product?.promocaoCondicional || {};
+        const desconto = parseDecimalInput(promo?.descontoPorcentagem);
+        const precoPromo = Number.isFinite(salePrice) && Number.isFinite(desconto)
+          ? salePrice * (1 - Math.min(Math.max(desconto, 0), 100) / 100)
+          : salePrice;
+        return createEmptyItem({
+          productId: String(product?._id || ''),
+          codigo: product?.cod || '',
+          produto: product?.nome || '',
+          preco: Number.isFinite(salePrice) ? formatTwoDecimals(salePrice) : '',
+          desconto: Number.isFinite(desconto) ? formatTwoDecimals(desconto) : '',
+          precoPromocao: Number.isFinite(precoPromo) ? formatTwoDecimals(precoPromo) : '',
+        });
+      }
+
+      const percentage = parseDecimalInput(product?.promocao?.porcentagem);
+      const promoPrice = Number.isFinite(salePrice) && Number.isFinite(percentage)
+        ? salePrice * (1 - Math.min(Math.max(percentage, 0), 100) / 100)
+        : salePrice;
+
+      return createEmptyItem({
+        productId: String(product?._id || ''),
+        codigo: product?.cod || '',
+        produto: product?.nome || '',
+        preco: Number.isFinite(salePrice) ? formatTwoDecimals(salePrice) : '',
+        desconto: Number.isFinite(percentage) ? formatTwoDecimals(percentage) : '',
+        precoPromocao: Number.isFinite(promoPrice) ? formatTwoDecimals(promoPrice) : '',
+      });
+    });
+  }
+
+  async function tryLoadPromotionGroupByCode() {
+    if (state.mode === 'global') return;
+    const code = String(elements.headerCode?.value || '').trim();
+    if (!code) return;
+
+    try {
+      const allPromotions = await fetchRegisteredPromotionsForCurrentMode();
+      const matches = allPromotions.filter((product) => {
+        const groupCode = state.mode === 'condicional'
+          ? String(product?.promocaoCondicional?.codigoGrupo || '').trim()
+          : String(product?.promocao?.codigoGrupo || '').trim();
+        return groupCode === code;
+      });
+
+      if (!matches.length) {
+        window.showToast?.('Nao existe promocao cadastrada com esse codigo.', 'warning');
+        if (elements.headerCode) {
+          elements.headerCode.value = '';
+          elements.headerCode.focus();
+        }
+        return;
+      }
+
+      const first = matches[0];
+      const descricao = state.mode === 'condicional'
+        ? String(first?.promocaoCondicional?.descricaoGrupo || '').trim()
+        : String(first?.promocao?.descricaoGrupo || '').trim();
+      const periodoInicio = state.mode === 'condicional'
+        ? String(first?.promocaoCondicional?.periodoInicio || '').trim()
+        : String(first?.promocao?.periodoInicio || '').trim();
+      const periodoFim = state.mode === 'condicional'
+        ? String(first?.promocaoCondicional?.periodoFim || '').trim()
+        : String(first?.promocao?.periodoFim || '').trim();
+      const semValidade = state.mode === 'condicional'
+        ? Boolean(first?.promocaoCondicional?.semValidade)
+        : Boolean(first?.promocao?.semValidade);
+      if (elements.headerDescription) {
+        elements.headerDescription.value = descricao;
+      }
+      if (elements.noExpiryCheckbox) {
+        elements.noExpiryCheckbox.checked = semValidade || (!periodoInicio && !periodoFim);
+      }
+      if (elements.headerPeriodStart) {
+        elements.headerPeriodStart.value = periodoInicio || getTodayIsoDate();
+      }
+      if (elements.headerPeriodEnd) {
+        elements.headerPeriodEnd.value = periodoFim || elements.headerPeriodStart?.value || getTodayIsoDate();
+      }
+      syncNoExpiryPeriodState();
+
+      if (state.mode === 'condicional') {
+        const promo = first?.promocaoCondicional || {};
+        state.conditionalMode = promo?.tipo === 'leve_pague' ? 'leve_pague' : 'acima_de';
+        updateModeLayout();
+        if (elements.differentProductsCheckbox) {
+          elements.differentProductsCheckbox.checked = Boolean(promo?.produtosDiferentes);
+        }
+        const acimaDeInput = document.getElementById('promotion-v2-header-acima-de');
+        const leveInput = document.getElementById('promotion-v2-header-leve');
+        const pagueInput = document.getElementById('promotion-v2-header-pague');
+        if (acimaDeInput) acimaDeInput.value = String(Math.max(0, Math.trunc(parseDecimalInput(promo?.quantidadeMinima) || 0)));
+        if (leveInput) leveInput.value = String(Math.max(0, Math.trunc(parseDecimalInput(promo?.leve) || 0)));
+        if (pagueInput) pagueInput.value = String(Math.max(0, Math.trunc(parseDecimalInput(promo?.pague) || 0)));
+      } else if (elements.differentProductsCheckbox) {
+        elements.differentProductsCheckbox.checked = false;
+      }
+
+      state.items = buildItemsFromPromotionGroup(matches);
+      renderItems();
+      persistDraft();
+      document.getElementById('promotion-v2-items-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      window.showToast?.('Promocao carregada para edicao.', 'success');
+    } catch (error) {
+      window.showToast?.(error?.message || 'Nao foi possivel buscar a promocao por codigo.', 'error');
+    }
+  }
+
   function renderItems() {
     if (!elements.itemsBody) return;
 
     if (!state.items.length) {
-      state.items = [createEmptyItem()];
+      elements.itemsBody.innerHTML = `
+        <tr>
+          <td colspan="6" class="px-4 py-6 text-center text-sm text-gray-500">Nenhum item adicionado.</td>
+        </tr>
+      `;
+      updateSummary();
+      return;
     }
 
     elements.itemsBody.innerHTML = state.items.map((item, index) => `
@@ -487,17 +912,17 @@
           >
         </td>
         <td class="px-3 py-3">
-          <div class="relative w-28">
+          <div class="relative w-32">
+            <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-xs text-gray-400">R$</span>
             <input
               type="number"
-              data-field="desconto"
+              data-field="preco"
               min="0"
               step="0.01"
-              class="w-full rounded-lg border border-gray-200 px-3 py-2 pr-8 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"
-              value="${escapeHtml(item.desconto)}"
+              class="w-full rounded-lg border border-gray-200 py-2 pl-9 pr-3 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"
+              value="${escapeHtml(formatTwoDecimals(item.preco))}"
               placeholder="0,00"
             >
-            <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-gray-400">%</span>
           </div>
         </td>
         <td class="px-3 py-3">
@@ -509,32 +934,27 @@
               min="0"
               step="0.01"
               class="w-full rounded-lg border border-gray-200 py-2 pl-9 pr-3 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"
-              value="${escapeHtml(item.precoPromocao)}"
+              value="${escapeHtml(formatTwoDecimals(item.precoPromocao))}"
               placeholder="0,00"
             >
           </div>
         </td>
         <td class="px-3 py-3">
-          <div class="grid gap-2 md:grid-cols-2">
+          <div class="relative w-28">
             <input
-              type="date"
-              data-field="periodoInicio"
-              class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"
-              value="${escapeHtml(item.periodoInicio)}"
+              type="number"
+              data-field="desconto"
+              min="0"
+              step="0.01"
+              class="w-full rounded-lg border border-gray-200 px-3 py-2 pr-8 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"
+              value="${escapeHtml(formatTwoDecimals(item.desconto))}"
+              placeholder="0,00"
             >
-            <input
-              type="date"
-              data-field="periodoFim"
-              class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"
-              value="${escapeHtml(item.periodoFim)}"
-            >
+            <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-gray-400">%</span>
           </div>
         </td>
         <td class="px-3 py-3 text-right">
           <div class="flex justify-end gap-2">
-            <button type="button" data-action="duplicate" class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-600 transition hover:bg-gray-50" aria-label="Duplicar linha ${index + 1}">
-              <i class="fas fa-copy"></i>
-            </button>
             <button type="button" data-action="remove" class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-200 text-red-600 transition hover:bg-red-50" aria-label="Remover linha ${index + 1}">
               <i class="fas fa-trash"></i>
             </button>
@@ -561,11 +981,7 @@
   }
 
   function removeItem(itemId) {
-    if (state.items.length === 1) {
-      state.items = [createEmptyItem()];
-    } else {
-      state.items = state.items.filter((item) => item.id !== itemId);
-    }
+    state.items = state.items.filter((item) => item.id !== itemId);
     renderItems();
     persistDraft();
   }
@@ -577,6 +993,7 @@
       productId: item.productId,
       codigo: item.codigo,
       produto: item.produto,
+      preco: item.preco,
       desconto: item.desconto,
       precoPromocao: item.precoPromocao,
       periodoInicio: item.periodoInicio,
@@ -677,23 +1094,50 @@
     try {
       state.importSearching = true;
       renderImportResults();
+      const results = [];
+      const pageSize = 500;
+      let page = 1;
+      let totalPages = 1;
+      let guard = 0;
 
-      const params = new URLSearchParams({
-        search: normalized,
-        limit: '18',
-        includeHidden: 'true',
-      });
+      do {
+        const params = new URLSearchParams({
+          search: normalized,
+          page: String(page),
+          limit: String(pageSize),
+          includeHidden: 'true',
+        });
 
-      const response = await fetch(`${API_CONFIG.BASE_URL}/products?${params.toString()}`, {
-        headers: getAuthHeaders(),
-      });
+        const response = await fetch(`${API_CONFIG.BASE_URL}/products?${params.toString()}`, {
+          headers: getAuthHeaders(),
+        });
 
-      if (!response.ok) {
-        throw new Error('Falha ao buscar produtos.');
-      }
+        if (!response.ok) {
+          throw new Error('Falha ao buscar produtos.');
+        }
 
-      const payload = await response.json();
-      state.importResults = Array.isArray(payload?.products) ? payload.products : [];
+        const payload = await response.json();
+        const pageProducts = Array.isArray(payload?.products)
+          ? payload.products
+          : Array.isArray(payload)
+            ? payload
+            : [];
+        results.push(...pageProducts);
+
+        const parsedPages = Number(payload?.pages);
+        if (Number.isFinite(parsedPages) && parsedPages > 0) {
+          totalPages = parsedPages;
+        } else if (pageProducts.length < pageSize) {
+          totalPages = page;
+        } else {
+          totalPages = page + 1;
+        }
+
+        page += 1;
+        guard += 1;
+      } while (page <= totalPages && guard < 100);
+
+      state.importResults = results;
     } catch (error) {
       console.error('Erro ao buscar produtos da promocao V2:', error);
       state.importResults = [];
@@ -735,7 +1179,8 @@
         productId,
         codigo: product.cod || '',
         produto: product.nome || '',
-        precoPromocao: Number.isFinite(Number(product.venda)) ? String(product.venda) : '',
+        preco: Number.isFinite(Number(product.venda)) ? formatTwoDecimals(product.venda) : '',
+        precoPromocao: Number.isFinite(Number(product.venda)) ? formatTwoDecimals(product.venda) : '',
       };
 
       if (existing) {
@@ -744,16 +1189,6 @@
         state.items.push(createEmptyItem(nextData));
       }
     });
-
-    if (state.items.length > 1) {
-      state.items = state.items.filter((item, index) => {
-        if (index !== 0) return true;
-        return item.codigo || item.produto || item.desconto || item.precoPromocao || item.periodoInicio || item.periodoFim;
-      });
-      if (!state.items.length) {
-        state.items = [createEmptyItem()];
-      }
-    }
 
     renderItems();
     persistDraft();
@@ -800,9 +1235,49 @@
     }
   }
 
+  async function resolveProductForItem(item) {
+    if (item?.productId) {
+      return { _id: String(item.productId) };
+    }
+
+    const exactCode = String(item?.codigo || '').trim();
+    const exactName = String(item?.produto || '').trim();
+    const searchTerm = exactCode || exactName;
+    if (!searchTerm) return null;
+
+    const params = new URLSearchParams({
+      search: searchTerm,
+      limit: '25',
+      includeHidden: 'true',
+    });
+
+    const response = await fetch(`${API_CONFIG.BASE_URL}/products?${params.toString()}`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) {
+      throw new Error('Falha ao localizar produto para gravar promocao.');
+    }
+
+    const payload = await response.json();
+    const products = Array.isArray(payload?.products) ? payload.products : [];
+    if (!products.length) return null;
+
+    const lowerName = exactName.toLowerCase();
+    const byCode = products.find((product) => String(product?.cod || '').trim() === exactCode
+      || String(product?.codbarras || '').trim() === exactCode);
+    if (byCode) return byCode;
+
+    const byName = products.find((product) => String(product?.nome || '').trim().toLowerCase() === lowerName);
+    return byName || null;
+  }
+
   function validateBeforeSave() {
     if (!getSelectedCompanies().length) {
       return 'Selecione ao menos uma empresa para gravar a promocao.';
+    }
+
+    if (!getPromotionGroupDescription()) {
+      return 'Informe a Descricao do grupo da promocao.';
     }
 
     const validItems = state.items.filter((item) => item.codigo || item.produto);
@@ -813,12 +1288,6 @@
     for (const item of validItems) {
       if (!item.codigo || !item.produto) {
         return 'Preencha Codigo e Produto em todas as linhas utilizadas.';
-      }
-      if (!item.periodoInicio || !item.periodoFim) {
-        return 'Informe o Periodo inicial e final para todos os itens preenchidos.';
-      }
-      if (item.periodoFim < item.periodoInicio) {
-        return 'O Periodo final nao pode ser menor que o inicial.';
       }
     }
 
@@ -831,6 +1300,26 @@
       return 'Por favor, insira um numero entre 0 e 100.';
     }
 
+    return '';
+  }
+
+  function validateConditionalConfig() {
+    if (state.conditionalMode === 'leve_pague') {
+      const leve = Math.max(0, Math.trunc(parseDecimalInput(document.getElementById('promotion-v2-header-leve')?.value) || 0));
+      const pague = Math.max(0, Math.trunc(parseDecimalInput(document.getElementById('promotion-v2-header-pague')?.value) || 0));
+      if (leve <= 0 || pague <= 0) {
+        return 'Informe valores validos para Leve e Pague.';
+      }
+      if (pague > leve) {
+        return 'No modo Leve Pague, o valor de Pague nao pode ser maior que Leve.';
+      }
+      return '';
+    }
+
+    const quantidadeMinima = Math.max(0, Math.trunc(parseDecimalInput(document.getElementById('promotion-v2-header-acima-de')?.value) || 0));
+    if (quantidadeMinima <= 0) {
+      return 'Informe uma quantidade valida no campo Acima de.';
+    }
     return '';
   }
 
@@ -916,12 +1405,7 @@
     await saveGlobalDiscount();
   }
 
-  async function handleSave() {
-    if (state.mode === 'global') {
-      await handleGlobalSave();
-      return;
-    }
-
+  async function handleProductSave() {
     const validationError = validateBeforeSave();
     if (validationError) {
       if (typeof window.showModal === 'function') {
@@ -934,14 +1418,381 @@
       return;
     }
 
-    persistDraft();
-    if (typeof window.showModal === 'function') {
-      await window.showModal({
-        title: 'Rascunho gravado',
-        message: 'Os dados da tela Cadastro de Promocao V2 foram gravados localmente neste navegador.',
-        confirmText: 'OK',
-      });
+    const validItems = state.items.filter((item) => item.codigo || item.produto);
+    const codigoGrupo = await ensurePromotionGroupCode();
+    const descricaoGrupo = getPromotionGroupDescription();
+    const semValidade = Boolean(elements.noExpiryCheckbox?.checked);
+    const periodoInicio = semValidade ? '' : (String(elements.headerPeriodStart?.value || '').trim() || getTodayIsoDate());
+    const periodoFim = semValidade ? '' : (String(elements.headerPeriodEnd?.value || '').trim() || periodoInicio);
+    if (elements.saveButton) {
+      elements.saveButton.disabled = true;
+      elements.saveButton.textContent = 'A gravar...';
     }
+
+    try {
+      for (let index = 0; index < validItems.length; index += 1) {
+        const item = validItems[index];
+        const product = await resolveProductForItem(item);
+        if (!product?._id) {
+          throw new Error(`Produto da linha ${index + 1} nao foi encontrado. Use a importacao de produtos para selecionar itens validos.`);
+        }
+
+        item.productId = String(product._id);
+        const percentage = parseDecimalInput(item.desconto);
+        const itemPrice = parseDecimalInput(item.preco);
+        const promoPrice = parseDecimalInput(item.precoPromocao);
+        const derivedPercentage = Number.isFinite(itemPrice) && itemPrice > 0 && Number.isFinite(promoPrice)
+          ? ((itemPrice - promoPrice) / itemPrice) * 100
+          : null;
+        const porcentagem = Number.isFinite(percentage)
+          ? percentage
+          : Number.isFinite(derivedPercentage)
+            ? Math.min(Math.max(derivedPercentage, 0), 100)
+            : 0;
+
+        const response = await fetch(`${API_CONFIG.BASE_URL}/promocoes/produtos/${item.productId}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders(),
+          },
+          body: JSON.stringify({ porcentagem, codigoGrupo, descricaoGrupo, periodoInicio, periodoFim, semValidade }),
+        });
+
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result?.message || `Falha ao gravar promocao da linha ${index + 1}.`);
+        }
+      }
+
+      persistDraft();
+      await loadRegisteredProductPromotions();
+
+      if (typeof window.showModal === 'function') {
+        await window.showModal({
+          title: 'Sucesso',
+          message: 'Promocoes de produto gravadas com sucesso.',
+          confirmText: 'OK',
+        });
+      }
+    } catch (error) {
+      if (typeof window.showModal === 'function') {
+        await window.showModal({
+          title: 'Erro',
+          message: error?.message || 'Nao foi possivel gravar as promocoes de produto.',
+          confirmText: 'OK',
+        });
+      }
+    } finally {
+      if (elements.saveButton) {
+        elements.saveButton.disabled = false;
+        elements.saveButton.textContent = SAVE_BUTTON_DEFAULT_TEXT;
+      }
+    }
+  }
+
+  function editRegisteredPromotion(productId) {
+    const selected = state.registeredPromotions.find((product) => String(product?._id || '') === String(productId || ''));
+    if (!selected) return;
+
+    state.mode = 'produto';
+    updateModeButtons();
+    updateModeLayout();
+
+    const percentage = parseDecimalInput(selected?.promocao?.porcentagem);
+    const salePrice = parseDecimalInput(selected?.venda);
+    const promoPrice = Number.isFinite(salePrice) && Number.isFinite(percentage)
+      ? salePrice * (1 - Math.min(Math.max(percentage, 0), 100) / 100)
+      : null;
+    const periodStart = String(selected?.promocao?.periodoInicio || '').trim() || elements.headerPeriodStart?.value || getTodayIsoDate();
+    const periodEnd = String(selected?.promocao?.periodoFim || '').trim() || elements.headerPeriodEnd?.value || periodStart;
+    const semValidade = Boolean(selected?.promocao?.semValidade);
+    if (elements.noExpiryCheckbox) {
+      elements.noExpiryCheckbox.checked = semValidade || (!String(selected?.promocao?.periodoInicio || '').trim() && !String(selected?.promocao?.periodoFim || '').trim());
+    }
+    if (elements.headerPeriodStart) {
+      elements.headerPeriodStart.value = periodStart;
+    }
+    if (elements.headerPeriodEnd) {
+      elements.headerPeriodEnd.value = periodEnd;
+    }
+    syncNoExpiryPeriodState();
+
+    state.items = [createEmptyItem({
+      productId: String(selected?._id || ''),
+      codigo: selected?.cod || '',
+      produto: selected?.nome || '',
+      preco: Number.isFinite(salePrice) ? formatTwoDecimals(salePrice) : '',
+      desconto: Number.isFinite(percentage) ? formatTwoDecimals(percentage) : '',
+      precoPromocao: Number.isFinite(promoPrice) ? formatTwoDecimals(promoPrice) : '',
+      periodoInicio: periodStart,
+      periodoFim: periodEnd,
+    })];
+
+    renderItems();
+    persistDraft();
+    document.getElementById('promotion-v2-items-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  async function deactivateRegisteredPromotion(productId) {
+    const response = await fetch(`${API_CONFIG.BASE_URL}/promocoes/produtos/${productId}/inativar`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result?.message || 'Nao foi possivel inativar a promocao.');
+    }
+    await loadRegisteredProductPromotions();
+  }
+
+  async function activateRegisteredPromotion(productId, porcentagem) {
+    const response = await fetch(`${API_CONFIG.BASE_URL}/promocoes/produtos/${productId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({ porcentagem }),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result?.message || 'Nao foi possivel ativar a promocao.');
+    }
+    await loadRegisteredProductPromotions();
+  }
+
+  async function deleteRegisteredPromotion(productId) {
+    const response = await fetch(`${API_CONFIG.BASE_URL}/promocoes/produtos/${productId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result?.message || 'Nao foi possivel remover a promocao.');
+    }
+    await loadRegisteredProductPromotions();
+  }
+
+  async function deleteRegisteredConditionalPromotion(productId) {
+    const response = await fetch(`${API_CONFIG.BASE_URL}/promocoes/condicional/${productId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result?.message || 'Nao foi possivel remover a promocao condicional.');
+    }
+    await loadRegisteredProductPromotions();
+  }
+
+  async function deleteRegisteredConditionalPromotionGroup(groupCode, groupKey = '') {
+    const normalizedCode = String(groupCode || '').trim();
+    let targets = [];
+    if (normalizedCode) {
+      targets = state.registeredPromotions.filter((product) => {
+        const code = String(product?.promocaoCondicional?.codigoGrupo || '').trim();
+        return code === normalizedCode;
+      });
+    } else {
+      const fallbackProductId = String(groupKey || '').startsWith('product:')
+        ? String(groupKey).slice('product:'.length)
+        : '';
+      if (fallbackProductId) {
+        targets = state.registeredPromotions.filter((product) => String(product?._id || '') === fallbackProductId);
+      }
+    }
+
+    const ids = Array.from(new Set(targets.map((product) => String(product?._id || '')).filter(Boolean)));
+    if (!ids.length) {
+      throw new Error('Nenhum produto encontrado para remover este grupo condicional.');
+    }
+
+    for (const id of ids) {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/promocoes/condicional/${id}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result?.message || 'Nao foi possivel remover a promocao condicional.');
+      }
+    }
+
+    await loadRegisteredProductPromotions();
+  }
+
+  async function handleSave() {
+    if (state.mode === 'global') {
+      await handleGlobalSave();
+      return;
+    }
+
+    if (state.mode === 'produto') {
+      await handleProductSave();
+      return;
+    }
+
+    await handleConditionalSave();
+  }
+
+  function getConditionalPayloadForItem(item) {
+    const tipo = state.conditionalMode === 'leve_pague' ? 'leve_pague' : 'acima_de';
+    const descontoFromItem = parseDecimalInput(item?.desconto);
+    const preco = parseDecimalInput(item?.preco);
+    const precoPromo = parseDecimalInput(item?.precoPromocao);
+    const descontoDerivado = Number.isFinite(preco) && preco > 0 && Number.isFinite(precoPromo)
+      ? ((preco - precoPromo) / preco) * 100
+      : null;
+    const descontoPorcentagem = Number.isFinite(descontoFromItem)
+      ? Math.min(Math.max(descontoFromItem, 0), 100)
+      : Number.isFinite(descontoDerivado)
+        ? Math.min(Math.max(descontoDerivado, 0), 100)
+        : 0;
+
+    if (tipo === 'leve_pague') {
+      const leve = Math.max(0, Math.trunc(parseDecimalInput(document.getElementById('promotion-v2-header-leve')?.value) || 0));
+      const pague = Math.max(0, Math.trunc(parseDecimalInput(document.getElementById('promotion-v2-header-pague')?.value) || 0));
+      return { tipo, leve, pague, quantidadeMinima: 0, descontoPorcentagem };
+    }
+
+    const quantidadeMinima = Math.max(0, Math.trunc(parseDecimalInput(document.getElementById('promotion-v2-header-acima-de')?.value) || 0));
+    return { tipo, leve: 0, pague: 0, quantidadeMinima, descontoPorcentagem };
+  }
+
+  async function handleConditionalSave() {
+    const validationError = validateBeforeSave();
+    if (validationError) {
+      if (typeof window.showModal === 'function') {
+        await window.showModal({
+          title: 'Cadastro de Promocao V2',
+          message: validationError,
+          confirmText: 'OK',
+        });
+      }
+      return;
+    }
+
+    const conditionalConfigError = validateConditionalConfig();
+    if (conditionalConfigError) {
+      if (typeof window.showModal === 'function') {
+        await window.showModal({
+          title: 'Cadastro de Promocao V2',
+          message: conditionalConfigError,
+          confirmText: 'OK',
+        });
+      }
+      return;
+    }
+
+    const validItems = state.items.filter((item) => item.codigo || item.produto);
+    const codigoGrupo = await ensurePromotionGroupCode();
+    const descricaoGrupo = getPromotionGroupDescription();
+    const semValidade = Boolean(elements.noExpiryCheckbox?.checked);
+    const periodoInicio = semValidade ? '' : (String(elements.headerPeriodStart?.value || '').trim() || getTodayIsoDate());
+    const periodoFim = semValidade ? '' : (String(elements.headerPeriodEnd?.value || '').trim() || periodoInicio);
+    const produtosDiferentes = Boolean(elements.differentProductsCheckbox?.checked);
+
+    if (elements.saveButton) {
+      elements.saveButton.disabled = true;
+      elements.saveButton.textContent = 'A gravar...';
+    }
+
+    try {
+      for (let index = 0; index < validItems.length; index += 1) {
+        const item = validItems[index];
+        const product = await resolveProductForItem(item);
+        if (!product?._id) {
+          throw new Error(`Produto da linha ${index + 1} nao foi encontrado. Use a importacao de produtos para selecionar itens validos.`);
+        }
+
+        item.productId = String(product._id);
+        const payload = getConditionalPayloadForItem(item);
+
+        const response = await fetch(`${API_CONFIG.BASE_URL}/promocoes/condicional/${item.productId}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders(),
+          },
+          body: JSON.stringify({
+            ...payload,
+            produtosDiferentes,
+            codigoGrupo,
+            descricaoGrupo,
+            periodoInicio,
+            periodoFim,
+            semValidade,
+          }),
+        });
+
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result?.message || `Falha ao gravar promocao condicional da linha ${index + 1}.`);
+        }
+      }
+
+      persistDraft();
+      await loadRegisteredProductPromotions();
+
+      if (typeof window.showModal === 'function') {
+        await window.showModal({
+          title: 'Sucesso',
+          message: 'Promocoes condicionais gravadas com sucesso.',
+          confirmText: 'OK',
+        });
+      }
+    } catch (error) {
+      if (typeof window.showModal === 'function') {
+        await window.showModal({
+          title: 'Erro',
+          message: error?.message || 'Nao foi possivel gravar as promocoes condicionais.',
+          confirmText: 'OK',
+        });
+      }
+    } finally {
+      if (elements.saveButton) {
+        elements.saveButton.disabled = false;
+        elements.saveButton.textContent = SAVE_BUTTON_DEFAULT_TEXT;
+      }
+    }
+  }
+
+  function clearPromotionForm() {
+    if (elements.headerCode) {
+      elements.headerCode.value = '';
+    }
+    if (elements.headerDescription) {
+      elements.headerDescription.value = '';
+    }
+    if (elements.headerDiscount) {
+      elements.headerDiscount.value = '';
+    }
+    if (elements.headerPeriodStart) {
+      elements.headerPeriodStart.value = getTodayIsoDate();
+    }
+    if (elements.headerPeriodEnd) {
+      elements.headerPeriodEnd.value = elements.headerPeriodStart?.value || getTodayIsoDate();
+    }
+    if (elements.noExpiryCheckbox) {
+      elements.noExpiryCheckbox.checked = false;
+    }
+
+    const acimaDeInput = document.getElementById('promotion-v2-header-acima-de');
+    const leveInput = document.getElementById('promotion-v2-header-leve');
+    const pagueInput = document.getElementById('promotion-v2-header-pague');
+    if (acimaDeInput) acimaDeInput.value = '';
+    if (leveInput) leveInput.value = '';
+    if (pagueInput) pagueInput.value = '';
+    if (elements.differentProductsCheckbox) {
+      elements.differentProductsCheckbox.checked = false;
+    }
+    syncNoExpiryPeriodState();
+
+    state.items = [];
+    renderItems();
+    persistDraft();
+    window.showToast?.('Campos limpos para nova promocao.', 'success');
   }
 
   function bindEvents() {
@@ -960,6 +1811,7 @@
         state.mode = button.dataset.promotionV2Mode || 'produto';
         updateModeButtons();
         updateModeLayout();
+        void loadRegisteredProductPromotions();
         if (state.mode === 'global') {
           void loadGlobalDiscount();
         }
@@ -993,9 +1845,9 @@
       persistDraft();
     });
 
-    elements.addRowButton?.addEventListener('click', () => addItem());
+    elements.addRowButton?.addEventListener('click', () => openImportModal({ context: 'grid' }));
     elements.saveButton?.addEventListener('click', handleSave);
-    elements.importButton?.addEventListener('click', () => openImportModal({ context: 'grid' }));
+    elements.importButton?.addEventListener('click', clearPromotionForm);
     elements.importClose?.addEventListener('click', closeImportModal);
     elements.importBackdrop?.addEventListener('click', closeImportModal);
     elements.importCancel?.addEventListener('click', closeImportModal);
@@ -1003,43 +1855,18 @@
     elements.importSearchButton?.addEventListener('click', () => {
       searchProducts(elements.importSearch?.value || '');
     });
-
-    elements.headerProduct?.addEventListener('input', (event) => {
-      const value = String(event.target.value || '').trim();
-      clearTimeout(state.headerProductSearchTimer);
-
-      if (!value) {
-        return;
-      }
-
-      if (/^\d+$/.test(value)) {
-        state.headerProductSearchTimer = window.setTimeout(() => {
-          searchExactHeaderProduct(value);
-        }, 250);
-        return;
-      }
-
-      if (/[A-Za-zÀ-ÿ]/.test(value) && value.length >= 2 && elements.importModal?.classList.contains('hidden')) {
-        state.importSelectedIds.clear();
-        updateImportSelectedCount();
-        openImportModal({ context: 'header', searchTerm: value });
-      }
+    elements.noExpiryCheckbox?.addEventListener('change', () => {
+      syncNoExpiryPeriodState();
     });
 
-    elements.headerDiscount?.addEventListener('input', () => {
-      syncPromotionFromDiscount();
+    elements.headerCode?.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      void tryLoadPromotionGroupByCode();
     });
 
-    elements.headerPrice?.addEventListener('input', () => {
-      syncDiscountFromPromotion();
-    });
-
-    elements.headerOriginalPrice?.addEventListener('input', () => {
-      if (elements.headerDiscount?.value) {
-        syncPromotionFromDiscount();
-      } else if (elements.headerPrice?.value) {
-        syncDiscountFromPromotion();
-      }
+    elements.headerCode?.addEventListener('blur', () => {
+      void tryLoadPromotionGroupByCode();
     });
 
     elements.itemsBody?.addEventListener('input', (event) => {
@@ -1051,6 +1878,68 @@
       updateItem(row.dataset.itemId || '', field, target.value);
     });
 
+    elements.itemsBody?.addEventListener('change', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement)) return;
+      const row = target.closest('tr[data-item-id]');
+      const field = target.dataset.field;
+      if (!row || !field) return;
+      if (field !== 'preco' && field !== 'precoPromocao' && field !== 'desconto') return;
+      const itemId = row.dataset.itemId || '';
+      const precoInput = row.querySelector('input[data-field="preco"]');
+      const promoInput = row.querySelector('input[data-field="precoPromocao"]');
+      const descontoInput = row.querySelector('input[data-field="desconto"]');
+
+      if (
+        !(precoInput instanceof HTMLInputElement)
+        || !(promoInput instanceof HTMLInputElement)
+        || !(descontoInput instanceof HTMLInputElement)
+      ) {
+        const formatted = formatTwoDecimals(target.value);
+        target.value = formatted;
+        updateItem(itemId, field, formatted);
+        return;
+      }
+
+      const preco = parseDecimalInput(precoInput.value);
+      if (!Number.isFinite(preco) || preco <= 0) {
+        const formatted = formatTwoDecimals(target.value);
+        target.value = formatted;
+        updateItem(itemId, field, formatted);
+        return;
+      }
+
+      if (field === 'desconto') {
+        const descontoValue = parseDecimalInput(descontoInput.value);
+        const clampedDesconto = Number.isFinite(descontoValue)
+          ? Math.min(Math.max(descontoValue, 0), 100)
+          : 0;
+        const promoValue = preco * (1 - (clampedDesconto / 100));
+        descontoInput.value = formatTwoDecimals(clampedDesconto);
+        promoInput.value = formatTwoDecimals(promoValue);
+        updateItem(itemId, 'desconto', descontoInput.value);
+        updateItem(itemId, 'precoPromocao', promoInput.value);
+        return;
+      }
+
+      if (field === 'precoPromocao') {
+        const promoValue = parseDecimalInput(promoInput.value);
+        const clampedPromo = Number.isFinite(promoValue)
+          ? Math.min(Math.max(promoValue, 0), preco)
+          : 0;
+        const descontoValue = ((preco - clampedPromo) / preco) * 100;
+        promoInput.value = formatTwoDecimals(clampedPromo);
+        descontoInput.value = formatTwoDecimals(descontoValue);
+        updateItem(itemId, 'precoPromocao', promoInput.value);
+        updateItem(itemId, 'desconto', descontoInput.value);
+        return;
+      }
+
+      const formatted = formatTwoDecimals(precoInput.value);
+      precoInput.value = formatted;
+      updateItem(itemId, 'preco', formatted);
+    });
+
     elements.itemsBody?.addEventListener('click', (event) => {
       const button = event.target.closest('button[data-action]');
       if (!(button instanceof HTMLButtonElement)) return;
@@ -1060,8 +1949,142 @@
       const action = button.dataset.action;
       if (action === 'remove') {
         removeItem(itemId);
-      } else if (action === 'duplicate') {
-        duplicateItem(itemId);
+      }
+    });
+
+    elements.registeredBody?.addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-registered-action]');
+      if (!(button instanceof HTMLButtonElement)) return;
+      const action = button.dataset.registeredAction || '';
+      const productId = button.dataset.productId || '';
+      const groupCode = button.dataset.groupCode || '';
+      const groupKey = button.dataset.groupKey || '';
+
+      if (action !== 'delete-conditional' && !productId) return;
+
+      if (action === 'edit') {
+        editRegisteredPromotion(productId);
+        return;
+      }
+
+      if (action === 'deactivate') {
+        const isActive = String(button.dataset.productActive || '') === 'true';
+        const selected = state.registeredPromotions.find((product) => String(product?._id || '') === productId);
+        const percentage = parseDecimalInput(selected?.promocao?.porcentagem);
+        const porcentagem = Number.isFinite(percentage) ? percentage : 0;
+
+        if (typeof window.showModal === 'function') {
+          if (isActive) {
+            window.showModal({
+              title: 'Inativar promocao',
+              message: 'Deseja inativar temporariamente esta promocao?',
+              confirmText: 'Inativar',
+              cancelText: 'Cancelar',
+              onConfirm: async () => {
+                try {
+                  await deactivateRegisteredPromotion(productId);
+                  window.showToast?.('Promocao inativada temporariamente.', 'success');
+                } catch (error) {
+                  await window.showModal({
+                    title: 'Erro',
+                    message: error?.message || 'Nao foi possivel inativar a promocao.',
+                    confirmText: 'OK',
+                  });
+                }
+                return true;
+              },
+            });
+          } else {
+            window.showModal({
+              title: 'Ativar promocao',
+              message: 'Esta promocao esta inativa. Deseja ativar novamente a promocao?',
+              confirmText: 'Ativar',
+              cancelText: 'Cancelar',
+              onConfirm: async () => {
+                try {
+                  await activateRegisteredPromotion(productId, porcentagem);
+                  window.showToast?.('Promocao ativada novamente com sucesso.', 'success');
+                } catch (error) {
+                  await window.showModal({
+                    title: 'Erro',
+                    message: error?.message || 'Nao foi possivel ativar a promocao.',
+                    confirmText: 'OK',
+                  });
+                }
+                return true;
+              },
+            });
+          }
+        }
+        return;
+      }
+
+      if (action === 'delete') {
+        if (typeof window.showModal === 'function') {
+          window.showModal({
+            title: 'Remover promocao',
+            message: 'Deseja remover esta promocao definitivamente?',
+            confirmText: 'Remover',
+            cancelText: 'Cancelar',
+            onConfirm: async () => {
+              try {
+                await deleteRegisteredPromotion(productId);
+                window.showToast?.('Promocao removida com sucesso.', 'success');
+              } catch (error) {
+                await window.showModal({
+                  title: 'Erro',
+                  message: error?.message || 'Nao foi possivel remover a promocao.',
+                  confirmText: 'OK',
+                });
+              }
+              return true;
+            },
+          });
+        } else if (window.confirm('Deseja remover esta promocao definitivamente?')) {
+          (async () => {
+            try {
+              await deleteRegisteredPromotion(productId);
+              window.showToast?.('Promocao removida com sucesso.', 'success');
+            } catch (error) {
+              window.alert(error?.message || 'Nao foi possivel remover a promocao.');
+            }
+          })();
+        }
+        return;
+      }
+
+      if (action === 'delete-conditional') {
+        if (typeof window.showModal === 'function') {
+          window.showModal({
+            title: 'Remover promocao condicional',
+            message: 'Deseja remover esta promocao condicional?',
+            confirmText: 'Remover',
+            cancelText: 'Cancelar',
+            onConfirm: async () => {
+              try {
+                await deleteRegisteredConditionalPromotionGroup(groupCode, groupKey);
+                window.showToast?.('Promocao condicional removida com sucesso.', 'success');
+              } catch (error) {
+                await window.showModal({
+                  title: 'Erro',
+                  message: error?.message || 'Nao foi possivel remover a promocao condicional.',
+                  confirmText: 'OK',
+                });
+              }
+              return true;
+            },
+          });
+        } else if (window.confirm('Deseja remover esta promocao condicional?')) {
+          (async () => {
+            try {
+              await deleteRegisteredConditionalPromotionGroup(groupCode, groupKey);
+              window.showToast?.('Promocao condicional removida com sucesso.', 'success');
+            } catch (error) {
+              window.alert(error?.message || 'Nao foi possivel remover a promocao condicional.');
+            }
+          })();
+        }
+        return;
       }
     });
 
@@ -1092,7 +2115,7 @@
       if (!productId) return;
       if (state.importContext === 'header' && target.checked) {
         state.importSelectedIds.clear();
-        elements.importResults.querySelectorAll('input[data-import-select]').forEach((input) => {
+        elements.importResultsBody?.querySelectorAll('input[data-import-select]').forEach((input) => {
           if (input instanceof HTMLInputElement) {
             input.checked = input === target;
           }
@@ -1112,9 +2135,16 @@
       return;
     }
 
+    if (elements.headerCode) {
+      elements.headerCode.readOnly = false;
+      elements.headerCode.classList.remove('bg-gray-100');
+      elements.headerCode.placeholder = 'Codigo';
+    }
+
     const draft = loadDraft();
     renderItems();
     setDefaultHeaderDates();
+    syncNoExpiryPeriodState();
     updateModeButtons();
     updateModeLayout();
 
@@ -1129,8 +2159,10 @@
 
     bindEvents();
     await fetchStores(draft.companyIds);
+    await loadRegisteredProductPromotions();
     persistDraft();
   }
 
   document.addEventListener('DOMContentLoaded', init);
 })();
+

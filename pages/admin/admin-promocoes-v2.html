@@ -39,6 +39,29 @@
     body.promotion-v2-modal-open #promotion-v2-registered-section {
       visibility: hidden;
     }
+
+    #promotion-v2-items-table-wrap[data-admin-table-scroll="true"],
+    #promotion-v2-registered-table-wrap[data-admin-table-scroll="true"] {
+      height: 40rem;
+      min-height: 40rem;
+      max-height: 40rem !important;
+      overflow: auto;
+    }
+
+    #promotion-v2-import-table-wrap[data-admin-table-scroll="true"] {
+      height: 100%;
+      min-height: 0;
+      max-height: none !important;
+      overflow: auto;
+    }
+
+    #promotion-v2-row-code-product {
+      grid-template-columns: 90px minmax(0, 1fr);
+    }
+
+    #promotion-v2-row-code-product.promotion-v2-single-column {
+      grid-template-columns: minmax(0, 1fr);
+    }
   </style>
 </head>
 <body class="bg-gray-100">
@@ -113,36 +136,35 @@
                     <div id="promotion-v2-fields-panel" class="flex h-full flex-col rounded-lg border border-gray-200 bg-white p-4">
                       <div class="mb-3 flex items-center justify-between gap-3">
                         <h3 class="text-sm font-semibold text-gray-700">Campos da promocao</h3>
-                        <label class="inline-flex items-center gap-2 text-sm text-gray-700">
-                          <input id="promotion-v2-different-products" type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary">
-                          Produtos diferentes
-                        </label>
+                        <div class="flex items-center gap-4">
+                          <label id="promotion-v2-no-expiry-wrap" class="inline-flex items-center gap-2 text-sm text-gray-700">
+                            <input id="promotion-v2-no-expiry" type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary">
+                            Sem Validade
+                          </label>
+                          <label id="promotion-v2-different-products-wrap" class="hidden inline-flex items-center gap-2 text-sm text-gray-700">
+                            <input id="promotion-v2-different-products" type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary">
+                            Produtos diferentes
+                          </label>
+                        </div>
                       </div>
 
                       <div class="grid gap-3">
-                        <div id="promotion-v2-row-code-product" class="grid gap-3 sm:grid-cols-2">
+                        <div id="promotion-v2-row-code-product" class="grid gap-3">
                           <div id="promotion-v2-field-code">
                             <label for="promotion-v2-header-code" class="mb-1 block text-sm font-medium text-gray-700">Codigo</label>
                             <input id="promotion-v2-header-code" type="text" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40" placeholder="Codigo">
                           </div>
-                          <div id="promotion-v2-field-product">
-                            <label for="promotion-v2-header-product" class="mb-1 block text-sm font-medium text-gray-700">Produto</label>
-                            <input id="promotion-v2-header-product" type="text" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40" placeholder="Produto">
+                          <div id="promotion-v2-field-description">
+                            <label for="promotion-v2-header-description" class="mb-1 block text-sm font-medium text-gray-700">Descricao</label>
+                            <input id="promotion-v2-header-description" type="text" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40" placeholder="Descricao">
                           </div>
                         </div>
 
-                        <div id="promotion-v2-row-price-discount" class="grid gap-3 sm:grid-cols-3">
-                          <div id="promotion-v2-field-original-price">
-                            <label for="promotion-v2-header-original-price" class="mb-1 block text-sm font-medium text-gray-700">Preco</label>
-                            <input id="promotion-v2-header-original-price" type="number" min="0" step="0.01" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40" placeholder="0,00">
-                          </div>
-                          <div>
-                            <label for="promotion-v2-header-discount" class="mb-1 block text-sm font-medium text-gray-700">Desconto %</label>
-                            <input id="promotion-v2-header-discount" type="number" min="0" step="0.01" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40" placeholder="0,00">
-                          </div>
-                          <div id="promotion-v2-field-promo-price">
-                            <label for="promotion-v2-header-price" class="mb-1 block text-sm font-medium text-gray-700">Preco Promocao</label>
-                            <input id="promotion-v2-header-price" type="number" min="0" step="0.01" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40" placeholder="0,00">
+                        <div id="promotion-v2-field-global-discount" class="hidden">
+                          <label for="promotion-v2-header-discount" class="mb-1 block text-sm font-medium text-gray-700">Desconto Global (%)</label>
+                          <div class="relative max-w-[220px]">
+                            <input id="promotion-v2-header-discount" type="number" min="0" max="100" step="0.01" class="w-full rounded-lg border border-gray-300 px-3 py-2 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40" placeholder="0,00">
+                            <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-gray-400">%</span>
                           </div>
                         </div>
 
@@ -188,24 +210,24 @@
                 <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h2 class="text-lg font-semibold text-gray-800">Itens da promocao</h2>
-                    <p class="text-sm text-gray-500">Preencha os campos Codigo, Produto, Desconto, Preco Promocao e Periodo.</p>
+                    <p class="text-sm text-gray-500">Lista de produtos da promocao com preco original, preco promocional e desconto.</p>
                   </div>
                   <button type="button" id="promotion-v2-add-row" class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50">
                     <i class="fas fa-plus-circle"></i>
-                    Adicionar linha
+                    Adicionar produto
                   </button>
                 </div>
 
                 <div class="overflow-hidden rounded-xl border border-gray-200">
-                  <div class="max-h-[32rem] overflow-auto">
-                    <table data-admin-table-enhanced="true" class="min-w-full text-sm">
+                  <div id="promotion-v2-items-table-wrap" class="overflow-auto">
+                    <table class="min-w-full text-sm">
                       <thead class="sticky top-0 z-10 bg-gray-50 text-xs uppercase tracking-wide text-gray-600">
                         <tr>
                           <th class="px-3 py-3 text-left font-semibold">Codigo</th>
                           <th class="px-3 py-3 text-left font-semibold">Produto</th>
-                          <th class="px-3 py-3 text-left font-semibold">Desconto</th>
-                          <th class="px-3 py-3 text-left font-semibold">Preco Promocao</th>
-                          <th class="px-3 py-3 text-left font-semibold">Periodo</th>
+                          <th class="px-3 py-3 text-left font-semibold">Preco</th>
+                          <th class="px-3 py-3 text-left font-semibold">Preco Promo</th>
+                          <th class="px-3 py-3 text-left font-semibold">Desconto %</th>
                           <th class="px-3 py-3 text-right font-semibold">Acoes</th>
                         </tr>
                       </thead>
@@ -222,18 +244,19 @@
                 </div>
 
                 <div class="overflow-hidden rounded-xl border border-gray-200 bg-white">
-                  <div class="overflow-auto">
-                    <table data-admin-table-enhanced="true" class="min-w-full text-sm">
+                  <div id="promotion-v2-registered-table-wrap" class="overflow-auto">
+                    <table class="min-w-full text-sm">
                       <thead class="bg-gray-50 text-xs uppercase tracking-wide text-gray-600">
                         <tr>
                           <th class="px-3 py-3 text-left font-semibold">Codigo</th>
                           <th class="px-3 py-3 text-left font-semibold">Descricao</th>
                           <th class="px-3 py-3 text-left font-semibold">Itens</th>
+                          <th class="px-3 py-3 text-right font-semibold">Acoes</th>
                         </tr>
                       </thead>
                       <tbody id="promotion-v2-registered-body" class="divide-y divide-gray-100 bg-white">
                         <tr>
-                          <td colspan="3" class="px-4 py-6 text-center text-sm text-gray-500">Nenhuma promocao cadastrada.</td>
+                          <td colspan="4" class="px-4 py-6 text-center text-sm text-gray-500">Nenhuma promocao cadastrada.</td>
                         </tr>
                       </tbody>
                     </table>
@@ -255,8 +278,8 @@
       </div>
       <div class="flex flex-col-reverse gap-2 sm:flex-row">
         <button type="button" id="promotion-v2-import-products" class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50">
-          <i class="fas fa-file-import"></i>
-          Importar Produtos
+          <i class="fas fa-eraser"></i>
+          Limpar
         </button>
         <button type="button" id="promotion-v2-save" class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90">
           <i class="fas fa-save"></i>
@@ -290,8 +313,8 @@
         <div class="flex items-center justify-between text-sm text-gray-500">
           <span><span id="promotion-v2-import-selected-count" class="font-semibold text-gray-800">0</span> selecionado(s)</span>
         </div>
-        <div class="min-h-0 flex-1 rounded-lg border border-gray-200">
-          <table class="min-w-full text-sm">
+        <div id="promotion-v2-import-table-wrap" class="min-h-0 flex-1 rounded-lg border border-gray-200">
+          <table class="min-w-full text-sm" data-admin-table-enhanced="false">
             <thead class="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
               <tr>
                 <th class="px-3 py-2">Sel.</th>

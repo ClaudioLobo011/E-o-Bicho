@@ -1,6 +1,12 @@
 ﻿const express = require('express');
 const mongoose = require('mongoose');
 const router = express.Router();
+router.use((req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  next();
+});
 const Pdv = require('../models/Pdv');
 const Store = require('../models/Store');
 const Deposit = require('../models/Deposit');
@@ -1850,6 +1856,24 @@ const enqueuePdvStateWrite = async (pdvId, task) => {
   return current;
 };
 
+const LIGHTWEIGHT_STATE_PROJECTION = [
+  '_id',
+  'pdv',
+  'empresa',
+  'caixaAberto',
+  'summary',
+  'caixaInfo',
+  'pagamentos',
+  'history',
+  'lastMovement',
+  'saleCodeIdentifier',
+  'saleCodeSequence',
+  'budgetSequence',
+  'printPreferences',
+  'recentStateMutationKeys',
+  'updatedAt',
+].join(' ');
+
 const buildSaleCodeValue = (identifier, sequence) =>
   `${normalizeCodeToken(identifier)}-${String(Math.max(1, Number.parseInt(sequence, 10) || 1)).padStart(
     SALE_CODE_PADDING,
@@ -3115,6 +3139,7 @@ router.put('/:id/state', requireAuth, async (req, res) => {
       req.get('x-idempotency-key') || req.body?._meta?.idempotencyKey || ''
     );
     const expectedUpdatedAt = normalizeString(req.body?._meta?.expectedUpdatedAt || '');
+    const isLightweightUpdate = Boolean(req.body?._meta?.lightweight);
 
     if (!mongoose.Types.ObjectId.isValid(pdvId)) {
       return res.status(400).json({ message: 'Identificador de PDV invÃ¡lido.' });
@@ -3127,7 +3152,9 @@ router.put('/:id/state', requireAuth, async (req, res) => {
     }
 
     return enqueuePdvStateWrite(pdvId, async () => {
-      const existingState = await PdvState.findOne({ pdv: pdvId });
+      const existingState = isLightweightUpdate
+        ? await PdvState.findOne({ pdv: pdvId }).select(LIGHTWEIGHT_STATE_PROJECTION).lean()
+        : await PdvState.findOne({ pdv: pdvId });
       if (
         idempotencyKey &&
         Array.isArray(existingState?.recentStateMutationKeys) &&
@@ -3166,22 +3193,6 @@ router.put('/:id/state', requireAuth, async (req, res) => {
         };
       }
 
-      updatePayload.completedSales = mergeRecordsByKey(
-        existingState?.completedSales || [],
-        updatePayload.completedSales || [],
-        'sale'
-      );
-      updatePayload.completedSales = dedupeSalesById(updatePayload.completedSales);
-      updatePayload.budgets = mergeRecordsByKey(
-        existingState?.budgets || [],
-        updatePayload.budgets || [],
-        'budget'
-      );
-      updatePayload.deliveryOrders = mergeRecordsByKey(
-        existingState?.deliveryOrders || [],
-        updatePayload.deliveryOrders || [],
-        'delivery'
-      );
       updatePayload.history = isStartingNewCaixaCycle
         ? (Array.isArray(updatePayload.history) ? updatePayload.history : [])
         : mergeRecordsByKey(
@@ -3206,74 +3217,97 @@ router.put('/:id/state', requireAuth, async (req, res) => {
           });
         }
       }
-      updatePayload.accountsReceivable = mergeRecordsByKey(
-        existingState?.accountsReceivable || [],
-        updatePayload.accountsReceivable || [],
-        'receivable'
-      );
 
-      const ensuredCodes = await ensureUniquePdvCodes({
-        pdvId,
-        pdvDoc: pdv,
-        sales: updatePayload.completedSales,
-        budgets: updatePayload.budgets,
-        existingSales: existingState?.completedSales || [],
-        existingBudgets: existingState?.budgets || [],
-      });
-      updatePayload.completedSales = ensuredCodes.sales;
-      updatePayload.budgets = ensuredCodes.budgets;
-      updatePayload.saleCodeSequence = ensuredCodes.nextSaleSequence;
-      updatePayload.budgetSequence = ensuredCodes.nextBudgetSequence;
-
-      const productIds = collectProductIdsFromSales(updatePayload.completedSales);
-      if (productIds.length) {
-        const products = await Product.find({ _id: { $in: productIds } })
-          .select('custo custoMedio custoCalculado precoCusto precoCustoUnitario')
-          .lean();
-        const productMap = new Map(products.map((product) => [product._id.toString(), product]));
-        ensureSalesHaveCostData(updatePayload.completedSales, productMap);
-      }
-
-      updatePayload.completedSales = mergeInventoryProcessingStatus(
-        updatePayload.completedSales || [],
-        existingState?.completedSales || []
-      );
-
-      const depositConfig = pdv?.configuracoesEstoque?.depositoPadrao || null;
-      const existingInventoryMovements = Array.isArray(existingState?.inventoryMovements)
-        ? existingState.inventoryMovements.map((movement) =>
-            movement && typeof movement.toObject === 'function' ? movement.toObject() : movement
-          )
-        : [];
-
-      if (depositConfig) {
-        const inventoryResult = await applyInventoryMovementsToSales({
+      if (isLightweightUpdate) {
+        delete updatePayload.completedSales;
+        delete updatePayload.budgets;
+        delete updatePayload.deliveryOrders;
+        delete updatePayload.accountsReceivable;
+      } else {
+        updatePayload.completedSales = mergeRecordsByKey(
+          existingState?.completedSales || [],
+          updatePayload.completedSales || [],
+          'sale'
+        );
+        updatePayload.completedSales = dedupeSalesById(updatePayload.completedSales);
+        updatePayload.budgets = mergeRecordsByKey(
+          existingState?.budgets || [],
+          updatePayload.budgets || [],
+          'budget'
+        );
+        updatePayload.deliveryOrders = mergeRecordsByKey(
+          existingState?.deliveryOrders || [],
+          updatePayload.deliveryOrders || [],
+          'delivery'
+        );
+        updatePayload.accountsReceivable = mergeRecordsByKey(
+          existingState?.accountsReceivable || [],
+          updatePayload.accountsReceivable || [],
+          'receivable'
+        );
+        const ensuredCodes = await ensureUniquePdvCodes({
+          pdvId,
+          pdvDoc: pdv,
           sales: updatePayload.completedSales,
-          depositId: depositConfig,
-          existingMovements: existingInventoryMovements,
+          budgets: updatePayload.budgets,
+          existingSales: existingState?.completedSales || [],
+          existingBudgets: existingState?.budgets || [],
         });
-        updatePayload.completedSales = inventoryResult.sales;
-        const newInventoryMovements = inventoryResult.movements || [];
-        const revertedSales = new Set(inventoryResult.revertedSales || []);
-        let combinedMovements = existingInventoryMovements;
-        if (revertedSales.size) {
-          combinedMovements = combinedMovements.filter(
-            (movement) => movement && !revertedSales.has(movement.saleId)
-          );
-        }
-        if (newInventoryMovements.length) {
-          combinedMovements = [...combinedMovements, ...newInventoryMovements];
-        }
-        if (revertedSales.size || newInventoryMovements.length) {
-          updatePayload.inventoryMovements = combinedMovements;
-        }
-      }
+        updatePayload.completedSales = ensuredCodes.sales;
+        updatePayload.budgets = ensuredCodes.budgets;
+        updatePayload.saleCodeSequence = ensuredCodes.nextSaleSequence;
+        updatePayload.budgetSequence = ensuredCodes.nextBudgetSequence;
 
-      reconcileCashStateFromSales({ existingState, updatePayload });
+        const productIds = collectProductIdsFromSales(updatePayload.completedSales);
+        if (productIds.length) {
+          const products = await Product.find({ _id: { $in: productIds } })
+            .select('custo custoMedio custoCalculado precoCusto precoCustoUnitario')
+            .lean();
+          const productMap = new Map(products.map((product) => [product._id.toString(), product]));
+          ensureSalesHaveCostData(updatePayload.completedSales, productMap);
+        }
+
+        updatePayload.completedSales = mergeInventoryProcessingStatus(
+          updatePayload.completedSales || [],
+          existingState?.completedSales || []
+        );
+
+        const depositConfig = pdv?.configuracoesEstoque?.depositoPadrao || null;
+        const existingInventoryMovements = Array.isArray(existingState?.inventoryMovements)
+          ? existingState.inventoryMovements.map((movement) =>
+              movement && typeof movement.toObject === 'function' ? movement.toObject() : movement
+            )
+          : [];
+
+        if (depositConfig) {
+          const inventoryResult = await applyInventoryMovementsToSales({
+            sales: updatePayload.completedSales,
+            depositId: depositConfig,
+            existingMovements: existingInventoryMovements,
+          });
+          updatePayload.completedSales = inventoryResult.sales;
+          const newInventoryMovements = inventoryResult.movements || [];
+          const revertedSales = new Set(inventoryResult.revertedSales || []);
+          let combinedMovements = existingInventoryMovements;
+          if (revertedSales.size) {
+            combinedMovements = combinedMovements.filter(
+              (movement) => movement && !revertedSales.has(movement.saleId)
+            );
+          }
+          if (newInventoryMovements.length) {
+            combinedMovements = [...combinedMovements, ...newInventoryMovements];
+          }
+          if (revertedSales.size || newInventoryMovements.length) {
+            updatePayload.inventoryMovements = combinedMovements;
+          }
+        }
+
+        reconcileCashStateFromSales({ existingState, updatePayload });
+      }
 
       let updatedState;
       try {
-        updatedState = await PdvState.findOneAndUpdate(
+        let updateQuery = PdvState.findOneAndUpdate(
           { pdv: pdvId },
           {
             ...updatePayload,
@@ -3282,6 +3316,10 @@ router.put('/:id/state', requireAuth, async (req, res) => {
           },
           { new: true, upsert: true, setDefaultsOnInsert: true }
         );
+        if (isLightweightUpdate) {
+          updateQuery = updateQuery.select(LIGHTWEIGHT_STATE_PROJECTION);
+        }
+        updatedState = await updateQuery;
       } catch (updateError) {
         if (updateError?.code === 11000 && updateError?.keyPattern?.pdv) {
           const currentState = await PdvState.findOne({ pdv: pdvId });
@@ -3295,57 +3333,68 @@ router.put('/:id/state', requireAuth, async (req, res) => {
         throw updateError;
       }
 
-      if (idempotencyKey && updatedState) {
-        await PdvState.updateOne(
-          { _id: updatedState._id },
-          [
-            {
-              $set: {
-                recentStateMutationKeys: {
-                  $slice: [
-                    {
-                      $setUnion: [
-                        { $ifNull: ['$recentStateMutationKeys', []] },
-                        [idempotencyKey],
+      const serialized = serializeStateForResponse(updatedState);
+      res.json(serialized);
+
+      setImmediate(async () => {
+        if (idempotencyKey && updatedState?._id) {
+          try {
+            await PdvState.updateOne(
+              { _id: updatedState._id },
+              [
+                {
+                  $set: {
+                    recentStateMutationKeys: {
+                      $slice: [
+                        {
+                          $setUnion: [
+                            { $ifNull: ['$recentStateMutationKeys', []] },
+                            [idempotencyKey],
+                          ],
+                        },
+                        -100,
                       ],
                     },
-                    -100,
-                  ],
+                  },
                 },
-              },
-            },
-          ]
-        );
-      }
-
-      try {
-        await syncPdvCaixaSessionHistory({
-          pdvDoc: pdv,
-          existingState,
-          updatedState,
-        });
-      } catch (historyError) {
-        console.error('Erro ao sincronizar histÃ³rico de caixas do PDV:', historyError);
-      }
-
-      const serialized = serializeStateForResponse(updatedState);
-      try {
-        const emitPdvStateUpdate =
-          req.app && typeof req.app.get === 'function' ? req.app.get('emitPdvStateUpdate') : null;
-        if (typeof emitPdvStateUpdate === 'function') {
-          emitPdvStateUpdate({
-            pdvId,
-            payload: {
-              updatedAt: serialized.updatedAt || new Date().toISOString(),
-              state: serialized,
-            },
-          });
+              ]
+            );
+          } catch (mutationKeyError) {
+            console.error('Erro ao registrar chave idempotente do estado do PDV:', mutationKeyError);
+          }
         }
-      } catch (emitError) {
-        console.error('Erro ao emitir atualizaÃ§Ã£o em tempo real do PDV:', emitError);
-      }
 
-      return res.json(serialized);
+        try {
+          const sessionState = isLightweightUpdate
+            ? await PdvState.findById(updatedState?._id)
+            : updatedState;
+          await syncPdvCaixaSessionHistory({
+            pdvDoc: pdv,
+            existingState,
+            updatedState: sessionState,
+          });
+        } catch (historyError) {
+          console.error('Erro ao sincronizar histÃ³rico de caixas do PDV:', historyError);
+        }
+
+        try {
+          const emitPdvStateUpdate =
+            req.app && typeof req.app.get === 'function' ? req.app.get('emitPdvStateUpdate') : null;
+          if (typeof emitPdvStateUpdate === 'function') {
+            emitPdvStateUpdate({
+              pdvId,
+              payload: {
+                updatedAt: serialized.updatedAt || new Date().toISOString(),
+                state: serialized,
+              },
+            });
+          }
+        } catch (emitError) {
+          console.error('Erro ao emitir atualizaÃ§Ã£o em tempo real do PDV:', emitError);
+        }
+      });
+
+      return;
     });
   } catch (error) {
     console.error('Erro ao salvar estado do PDV:', error);

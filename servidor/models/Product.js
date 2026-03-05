@@ -144,7 +144,12 @@ const productSchema = new mongoose.Schema({
     },
     promocao: {
         ativa: { type: Boolean, default: false },
-        porcentagem: { type: Number, default: 0 }
+        porcentagem: { type: Number, default: 0 },
+        codigoGrupo: { type: String, default: '' },
+        descricaoGrupo: { type: String, default: '' },
+        periodoInicio: { type: String, default: '' },
+        periodoFim: { type: String, default: '' },
+        semValidade: { type: Boolean, default: false },
     },
     promocaoCondicional: {
         ativa: { type: Boolean, default: false },
@@ -156,7 +161,13 @@ const productSchema = new mongoose.Schema({
 
         // Campos para a promoção 'Acima de'
         quantidadeMinima: { type: Number, default: 0 },
-        descontoPorcentagem: { type: Number, default: 0 }
+        descontoPorcentagem: { type: Number, default: 0 },
+        produtosDiferentes: { type: Boolean, default: false },
+        codigoGrupo: { type: String, default: '' },
+        descricaoGrupo: { type: String, default: '' },
+        periodoInicio: { type: String, default: '' },
+        periodoFim: { type: String, default: '' },
+        semValidade: { type: Boolean, default: false },
     },
     naoMostrarNoSite: {
         type: Boolean,
