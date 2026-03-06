@@ -3140,7 +3140,7 @@
     const transportUf = xmlGetText(transp, 'transporta UF');
     const modFrete = xmlGetText(transp, 'modFrete');
 
-    const productsRows = dets
+    const productRowsList = dets
       .map((det, index) => {
         const prod = det.querySelector('prod');
         const imposto = det.querySelector('imposto');
@@ -3172,8 +3172,8 @@
             <td class="num">${formatNumber(pIPI, 2)}</td>
           </tr>
         `;
-      })
-      .join('');
+      });
+    const productsRows = productRowsList.join('');
 
     const dupCards = dupList.map(
       (dup) => `
@@ -3260,6 +3260,166 @@
           <td colspan="8" class="value">Sem volumes informados.</td>
         </tr>
       `;
+    const additionalDataHtml = `
+      <table class="block" style="page-break-inside: avoid; break-inside: avoid-page;">
+        <colgroup>
+          <col style="width:75%">
+          <col style="width:25%">
+        </colgroup>
+        <tr>
+          <td class="section-title">Dados Adicionais</td>
+          <td class="section-title">Reservado ao Fisco</td>
+        </tr>
+        <tr>
+          <td>${adicionais || 'Sem informacoes adicionais.'}</td>
+          <td></td>
+        </tr>
+      </table>
+    `;
+    const FULL_FIRST_PAGE_ITEM_LIMIT = 11;
+    const FULL_NEXT_PAGE_ITEM_LIMIT = 24;
+
+    const buildFullItemsTable = (rowsHtml) => `
+      <table class="items">
+        <colgroup>
+          <col style="width:4%">
+          <col style="width:6%">
+          <col style="width:22%">
+          <col style="width:6%">
+          <col style="width:5%">
+          <col style="width:5%">
+          <col style="width:4%">
+          <col style="width:6%">
+          <col style="width:7%">
+          <col style="width:7%">
+          <col style="width:7%">
+          <col style="width:6%">
+          <col style="width:5%">
+          <col style="width:5%">
+          <col style="width:5%">
+        </colgroup>
+        <thead>
+          <tr>
+            <th class="center">Item</th>
+            <th class="center">Cod</th>
+            <th>Descricao</th>
+            <th class="center ncm">NCM</th>
+            <th class="center">CST</th>
+            <th class="center">CFOP</th>
+            <th class="center">UN</th>
+            <th class="center">QTD</th>
+            <th class="center">V. Unit</th>
+            <th class="center">V. Total</th>
+            <th class="center">BC ICMS</th>
+            <th class="center">V. ICMS</th>
+            <th class="center">V. IPI</th>
+            <th class="center">Aliq ICMS</th>
+            <th class="center">Aliq IPI</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml || '<tr><td colspan="15" class="center">Nenhum item informado.</td></tr>'}
+        </tbody>
+      </table>
+    `;
+
+    const hasOverflowItems = productRowsList.length > FULL_FIRST_PAGE_ITEM_LIMIT;
+    const firstPageItems = hasOverflowItems
+      ? productRowsList.slice(0, FULL_FIRST_PAGE_ITEM_LIMIT)
+      : productRowsList;
+    const overflowItems = hasOverflowItems ? productRowsList.slice(FULL_FIRST_PAGE_ITEM_LIMIT) : [];
+    const firstPageItemsHtml = buildFullItemsTable(firstPageItems.join(''));
+
+    const continuationChunks = overflowItems.length
+      ? overflowItems.reduce((pages, _, index) => {
+          if (index % FULL_NEXT_PAGE_ITEM_LIMIT === 0) {
+            pages.push(overflowItems.slice(index, index + FULL_NEXT_PAGE_ITEM_LIMIT));
+          }
+          return pages;
+        }, [])
+      : [];
+    const totalPages = 1 + continuationChunks.length;
+
+    const buildDanfeTopHeaderHtml = (pageNumber) => `
+      <table class="block">
+        <colgroup>
+          <col style="width:46%">
+          <col style="width:24%">
+          <col style="width:30%">
+        </colgroup>
+        <tr>
+          <td>
+            <div class="section-title" style="font-style:italic;">Identificacao do Emitente</div>
+            <div class="value">${xmlGetText(emit, 'xNome')}</div>
+            ${emitFantHtml}
+            <div>${emitAddressLine}</div>
+            <div class="muted">CEP ${emitCep}</div>
+            <div class="muted">CNPJ ${xmlGetText(emit, 'CNPJ')}</div>
+            <div class="muted">IE ${xmlGetText(emit, 'IE')}</div>
+          </td>
+          <td class="center">
+            <div class="danfe-box">
+              <div class="danfe-title">DANFE</div>
+              <div class="danfe-subtitle">Documento Auxiliar da Nota Fiscal Eletronica</div>
+              <div class="danfe-entry-row">
+                <div class="danfe-entry-text">
+                  0 - ENTRADA<br>
+                  1 - SAIDA
+                </div>
+                <div class="danfe-entry-box">${tpNF || ''}</div>
+              </div>
+              <div class="danfe-meta">N&#186; ${numero}</div>
+              <div class="danfe-meta">Serie ${serie}</div>
+              <div class="danfe-folha">Folha ${pageNumber}/${totalPages}</div>
+            </div>
+          </td>
+          <td>
+            <table style="width:100%; border-collapse:collapse;">
+              <tr>
+                <td style="border:1px solid #000; padding:2px 3px;">
+                  <div class="barcode-box">
+                    <svg data-danfe-barcode></svg>
+                    <div class="barcode-fallback" data-barcode-fallback>${chave}</div>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td style="border:1px solid #000; padding:2px 3px;">
+                  <div class="label center">Chave de Acesso</div>
+                  <div class="value center">${chaveFormatada}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="border:1px solid #000; padding:2px 3px;">
+                  <div class="muted center">
+                    Consulta de autenticidade no portal nacional da NF-e
+                    www.nfe.fazenda.gov.br/portal
+                    ou no site da SEFAZ Autorizadora
+                  </div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    `;
+    const danfeTopHeaderFirstPageHtml = buildDanfeTopHeaderHtml(1);
+
+    const continuationPagesHtml = continuationChunks.length
+      ? continuationChunks
+          .map((pageRows, pageIndex) => `
+            <div class="danfe danfe-page danfe-page-continuation">
+              ${buildDanfeTopHeaderHtml(pageIndex + 2)}
+              <table class="block">
+                <tr>
+                  <td class="section-title">Itens da NF-e - Continuacao ${pageIndex + 1}</td>
+                </tr>
+              </table>
+              ${buildFullItemsTable(pageRows.join(''))}
+            </div>
+          `)
+          .join('')
+      : '';
     if (modeKey === 'simple') {
       return `<!doctype html>
 <html lang="pt-BR">
@@ -3310,7 +3470,7 @@
       <td class="center">
         <div class="label">Chave de Acesso</div>
         <div class="value">${chaveFormatada}</div>
-        <svg id="danfe-barcode"></svg>
+        <svg data-danfe-barcode></svg>
         <div class="barcode-fallback" data-barcode-fallback>${chave}</div>
       </td>
     </tr>
@@ -3431,10 +3591,15 @@
     .dup-card td { border: none; padding: 0 1px; line-height: 1.1; text-align: left; }
     .dup-card .label { font-size: 5.2pt; }
     .dup-card .value { font-size: 6pt; font-weight: 700; }
+    .danfe-page { page-break-after: always; break-after: page; }
+    .danfe-page:last-of-type { page-break-after: auto; break-after: auto; }
+    .danfe-page-first { min-height: 0; }
+    .danfe-page-continuation { min-height: calc(297mm - 12mm); }
+    .items td:nth-child(3) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   </style>
 </head>
 <body>
-  <div class="danfe">
+  <div class="danfe danfe-page danfe-page-first">
     <table class="block">
       <colgroup>
         <col style="width:82%">
@@ -3448,7 +3613,7 @@
         </td>
         <td class="center" rowspan="2">
           <div class="section-title">NF-e</div>
-          <div class="value">Nº ${numero}</div>
+          <div class="value">N&#186; ${numero}</div>
           <div class="value">Serie ${serie}</div>
         </td>
       </tr>
@@ -3472,67 +3637,7 @@
       </tr>
     </table>
 
-    <table class="block">
-      <colgroup>
-        <col style="width:46%">
-        <col style="width:24%">
-        <col style="width:30%">
-      </colgroup>
-      <tr>
-        <td>
-          <div class="section-title" style="font-style:italic;">Identificacao do Emitente</div>
-          <div class="value">${xmlGetText(emit, 'xNome')}</div>
-          ${emitFantHtml}
-          <div>${emitAddressLine}</div>
-          <div class="muted">CEP ${emitCep}</div>
-          <div class="muted">CNPJ ${xmlGetText(emit, 'CNPJ')}</div>
-          <div class="muted">IE ${xmlGetText(emit, 'IE')}</div>
-        </td>
-        <td class="center">
-          <div class="danfe-box">
-            <div class="danfe-title">DANFE</div>
-            <div class="danfe-subtitle">Documento Auxiliar da Nota Fiscal Eletronica</div>
-            <div class="danfe-entry-row">
-              <div class="danfe-entry-text">
-                0 - ENTRADA<br>
-                1 - SAIDA
-              </div>
-              <div class="danfe-entry-box">${tpNF || ''}</div>
-            </div>
-            <div class="danfe-meta">Nº ${numero}</div>
-            <div class="danfe-meta">Serie ${serie}</div>
-            <div class="danfe-folha">Folha 1/1</div>
-          </div>
-        </td>
-        <td>
-          <table style="width:100%; border-collapse:collapse;">
-            <tr>
-              <td style="border:1px solid #000; padding:2px 3px;">
-                <div class="barcode-box">
-                  <svg id="danfe-barcode"></svg>
-                  <div class="barcode-fallback" data-barcode-fallback>${chave}</div>
-                </div>
-              </td>
-            </tr>
-            <tr>
-              <td style="border:1px solid #000; padding:2px 3px;">
-                <div class="label center">Chave de Acesso</div>
-                <div class="value center">${chaveFormatada}</div>
-              </td>
-            </tr>
-            <tr>
-              <td style="border:1px solid #000; padding:2px 3px;">
-                <div class="muted center">
-                  Consulta de autenticidade no portal nacional da NF-e
-                  www.nfe.fazenda.gov.br/portal
-                  ou no site da SEFAZ Autorizadora
-                </div>
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
+    ${danfeTopHeaderFirstPageHtml}
 
     <table class="block">
       <colgroup>
@@ -3711,63 +3816,10 @@
       ${volumesHtml}
     </table>
 
-    <table class="items">
-      <colgroup>
-        <col style="width:4%">
-        <col style="width:6%">
-        <col style="width:22%">
-        <col style="width:6%">
-        <col style="width:5%">
-        <col style="width:5%">
-        <col style="width:4%">
-        <col style="width:6%">
-        <col style="width:7%">
-        <col style="width:7%">
-        <col style="width:7%">
-        <col style="width:6%">
-        <col style="width:5%">
-        <col style="width:5%">
-        <col style="width:5%">
-      </colgroup>
-      <thead>
-        <tr>
-          <th class="center">Item</th>
-          <th class="center">Cod</th>
-          <th>Descricao</th>
-          <th class="center ncm">NCM</th>
-          <th class="center">CST</th>
-          <th class="center">CFOP</th>
-          <th class="center">UN</th>
-          <th class="center">QTD</th>
-          <th class="center">V. Unit</th>
-          <th class="center">V. Total</th>
-          <th class="center">BC ICMS</th>
-          <th class="center">V. ICMS</th>
-          <th class="center">V. IPI</th>
-          <th class="center">Aliq ICMS</th>
-          <th class="center">Aliq IPI</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${productsRows || '<tr><td colspan="15" class="center">Nenhum item informado.</td></tr>'}
-      </tbody>
-    </table>
-
-    <table class="block">
-      <colgroup>
-        <col style="width:75%">
-        <col style="width:25%">
-      </colgroup>
-      <tr>
-        <td class="section-title">Dados Adicionais</td>
-        <td class="section-title">Reservado ao Fisco</td>
-      </tr>
-      <tr>
-        <td>${adicionais || 'Sem informacoes adicionais.'}</td>
-        <td></td>
-      </tr>
-    </table>
+    ${firstPageItemsHtml}
+    ${additionalDataHtml}
   </div>
+  ${continuationPagesHtml}
 </body>
 </html>`;
   }
@@ -3785,17 +3837,21 @@
       script.src = 'https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js';
       script.onload = () => {
         try {
-          const svg = printWindow.document.getElementById('danfe-barcode');
-          if (svg && typeof printWindow.JsBarcode === 'function') {
-            printWindow.JsBarcode(svg, chave, {
-              format: 'CODE128',
-              displayValue: false,
-              height: 48,
-              margin: 0,
-              width: 1.2,
+          const barcodes = Array.from(printWindow.document.querySelectorAll('[data-danfe-barcode]'));
+          if (barcodes.length && typeof printWindow.JsBarcode === 'function') {
+            barcodes.forEach((svg) => {
+              printWindow.JsBarcode(svg, chave, {
+                format: 'CODE128',
+                displayValue: false,
+                height: 48,
+                margin: 0,
+                width: 1.2,
+              });
             });
-            const fallback = printWindow.document.querySelector('[data-barcode-fallback]');
-            if (fallback) fallback.style.display = 'none';
+            const fallbacks = Array.from(printWindow.document.querySelectorAll('[data-barcode-fallback]'));
+            fallbacks.forEach((fallback) => {
+              fallback.style.display = 'none';
+            });
           }
         } catch (_) {
           // ignore
@@ -7253,6 +7309,17 @@
     applyItemFiltersAndSort();
   }
 
+  function handleItemDoubleClick(event) {
+    const row = event.target.closest('tr[data-item-row]');
+    if (!row) return;
+    row.remove();
+    if (!itemsBody?.querySelector('tr[data-item-row]') && itemsEmpty) {
+      itemsBody.appendChild(itemsEmpty);
+    }
+    updateTotals();
+    applyItemFiltersAndSort();
+  }
+
   function openQuickClientModal() {
     if (typeof showModal !== 'function') return;
     const wrapper = document.createElement('div');
@@ -7481,6 +7548,7 @@
 
       itemsBody?.addEventListener('input', handleItemInput);
       itemsBody?.addEventListener('click', handleItemClick);
+      itemsBody?.addEventListener('dblclick', handleItemDoubleClick);
 
       emitenteSelectButton?.addEventListener('click', () => {
         openEmitenteSearchModal('');
@@ -7916,3 +7984,5 @@
 
   init();
 })();
+
+

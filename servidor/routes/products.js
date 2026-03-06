@@ -1576,6 +1576,21 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
             updatePayload.fiscal = sanitizeFiscalData(payload.fiscal, existingProduct?.fiscal || {}, req.user?.id || '');
         }
 
+        if (payload.fiscalPorEmpresa !== undefined) {
+            const fiscalPorEmpresaPayload = {};
+            if (payload.fiscalPorEmpresa && typeof payload.fiscalPorEmpresa === 'object') {
+                Object.entries(payload.fiscalPorEmpresa).forEach(([companyId, fiscalData]) => {
+                    if (!companyId) return;
+                    fiscalPorEmpresaPayload[companyId] = sanitizeFiscalData(
+                        fiscalData,
+                        existingProduct?.fiscalPorEmpresa?.[companyId] || {},
+                        req.user?.id || ''
+                    );
+                });
+            }
+            updatePayload.fiscalPorEmpresa = fiscalPorEmpresaPayload;
+        }
+
         const normalizePriceValue = (value) => {
             const parsed = parseNumber(value);
             return Number.isFinite(parsed) ? parsed : null;

@@ -1,2384 +1,4 @@
-Ôªø<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin: Entrada de NF-e - E o Bicho</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-  <link rel="stylesheet" href="../../src/output.css">
-</head>
-<body class="bg-gray-100">
-  <div id="admin-header-placeholder"></div>
 
-  <main id="nfe-main-content" class="container mx-auto px-4 pt-1 pb-8 min-h-screen">
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
-      <aside class="md:col-span-4">
-        <div id="admin-sidebar-placeholder"></div>
-      </aside>
-
-      <div class="md:col-span-4 space-y-6">
-        <header class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div class="space-y-2">
-            <div class="flex items-center gap-2 text-sm text-gray-600">
-              <span class="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-primary">
-                <i class="fas fa-shopping-basket"></i>
-                Compras
-              </span>
-              <i class="fas fa-angle-right text-xs"></i>
-              <span class="font-medium text-gray-600">Fornecedores</span>
-              <i class="fas fa-angle-right text-xs"></i>
-              <span class="font-semibold text-gray-800">Entrada de NF-e</span>
-            </div>
-            <div>
-              <h1 class="text-2xl font-bold text-gray-800">Entrada de NF-e</h1>
-              <p class="text-sm text-gray-600">Cadastre entradas modelo 55 com dados exigidos pelo Manual de Orienta√ß√£o do Contribuinte 4.0 e notas t√©cnicas vigentes para NFC-e, NF-e e NFSe.</p>
-            </div>
-          </div>
-        </header>
-
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
-          <div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-            <div>
-              <h2 class="text-lg font-semibold text-gray-800">Cabe√ßalho da Nota</h2>
-              <p class="text-sm text-gray-600">Preencha o identificador da nota, dados do fornecedor e refer√™ncia num√©rica conforme layout nacional da NF-e/NFC-e.</p>
-            </div>
-            <div class="rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-2 text-right">
-              <span class="text-xs font-medium text-emerald-700 block">Total da Nota</span>
-              <span class="text-xl font-bold text-emerald-900" data-nfe-total>R$ 0,00</span>
-              <p class="text-[11px] text-emerald-700">Somat√≥rio autom√°tico dos itens</p>
-            </div>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-[160px_150px_150px_120px_minmax(0,1fr)] gap-4">
-            <div>
-              <label for="nfe-code" class="block text-sm font-medium text-gray-700 mb-1">C√≥digo</label>
-              <input
-                type="text"
-                id="nfe-code"
-                class="w-full max-w-[160px] rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500 cursor-pointer"
-                readonly
-              >
-              <div class="mt-2 flex items-center gap-2">
-                <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-600">Status</span>
-                <span
-                  data-nfe-status-badge
-                  class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600"
-                >
-                  Cadastrada
-                </span>
-              </div>
-            </div>
-            <div>
-              <label for="nfe-number" class="block text-sm font-medium text-gray-700 mb-1">NF* (n√∫mero da nota)</label>
-              <input type="text" id="nfe-number" class="w-full max-w-[150px] rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="10245" maxlength="8" required>
-            </div>
-            <div>
-              <label for="nfe-type" class="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-              <select id="nfe-type" class="w-full max-w-[150px] rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                <option value="NF" selected>NF</option>
-                <option value="RECIBO">Recibo</option>
-              </select>
-            </div>
-            <div>
-              <label for="nfe-series" class="block text-sm font-medium text-gray-700 mb-1">S√©rie</label>
-              <input type="text" id="nfe-series" class="w-full max-w-[120px] rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="1">
-            </div>
-            <div>
-              <label for="nfe-supplier" class="block text-sm font-medium text-gray-700 mb-1">Fornecedor*</label>
-              <select id="nfe-supplier" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
-                <option value="">Selecione o fornecedor</option>
-                <option value="30090856000160">30290856000160 - Distribuidora Nacional de Produtos Veterin√°rios Ltda</option>
-                <option value="06117473000150">06117473000150 - MSD Sa√∫de Animal Com√©rcio de Produtos Veterin√°rios Ltda</option>
-                <option value="07404231000110">07404231000110 - Ourofino Sa√∫de Animal Ltda</option>
-              </select>
-            </div>
-          </div>
-        </section>
-
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100">
-          <nav class="flex flex-wrap gap-2 border-b border-gray-100 px-6 pt-6">
-            <button type="button" class="tab-button active" data-tab="dados">Dados da Nota</button>
-            <button type="button" class="tab-button" data-tab="totais">Totais da Nota</button>
-            <button type="button" class="tab-button" data-tab="observacoes">Obs / Outras Informa√ß√µes</button>
-            <button type="button" class="tab-button" data-tab="produtos">Produtos</button>
-            <button type="button" class="tab-button" data-tab="transportadora">Transportadora</button>
-            <button type="button" class="tab-button" data-tab="duplicatas">Duplicatas</button>
-            <button type="button" class="tab-button" data-tab="documentos">Documentos Vinculados</button>
-          </nav>
-
-          <div class="p-6 space-y-6">
-            <div class="tab-panel" data-tab-panel="dados">
-              <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-                <div>
-                  <h3 class="text-sm font-semibold text-gray-700">A√ß√µes principais</h3>
-                  <p class="text-xs text-gray-600">Gerencie a nota importando XML, visualizando lotes ou ajustando pre√ßos e pedidos.</p>
-                </div>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
-                  <button type="button" data-open-import-modal class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
-                    <i class="fas fa-file-import"></i>
-                    Importar XML
-                  </button>
-                  <button type="button" class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
-                    <i class="fas fa-eye"></i>
-                    Visualizar Lotes
-                  </button>
-                  <button
-                    type="button"
-                    data-open-price-modal
-                    class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-400 transition opacity-60 cursor-not-allowed"
-                    disabled
-                  >
-                    <i class="fas fa-tags"></i>
-                    Alterar Pre√ßos
-                  </button>
-                  <button type="button" class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
-                    <i class="fas fa-clipboard-list"></i>
-                    Pedidos
-                  </button>
-                </div>
-              </div>
-
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label for="issue-date" class="block text-sm font-medium text-gray-700 mb-1">Data Emiss√£o*</label>
-                  <input type="date" id="issue-date" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
-                </div>
-                <div>
-                  <label for="company" class="block text-sm font-medium text-gray-700 mb-1">Empresa*</label>
-                  <select id="company" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required disabled>
-                    <option value="">Carregando empresas...</option>
-                  </select>
-                </div>
-                <div>
-                  <label for="nfe-model" class="block text-sm font-medium text-gray-700 mb-1">Modelo da Nota Fiscal*</label>
-                  <select id="nfe-model" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
-                    <option value="55" selected>55 - Nota Fiscal Eletr√¥nica (NF-e)</option>
-                    <option value="65">65 - Nota Fiscal de Consumidor Eletr√¥nica (NFC-e)</option>
-                    <option value="57">57 - Conhecimento de Transporte Eletr√¥nico (CT-e)</option>
-                    <option value="nfs-e">NFS-e - Nota Fiscal de Servi√ßos Eletr√¥nica</option>
-                  </select>
-                </div>
-                <div>
-                  <label for="access-key" class="block text-sm font-medium text-gray-700 mb-1">Chave da NFe (44 d√≠gitos)</label>
-                  <input type="text" id="access-key" maxlength="44" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="35240730290856000160550010000100011999999999">
-                  <p class="mt-1 text-xs text-gray-600">Composi√ß√£o: cUF + AAMM + CNPJ + modelo + s√©rie + n√∫mero + tpEmis + cNF + DV.</p>
-                </div>
-                <div>
-                  <label for="entry-date" class="block text-sm font-medium text-gray-700 mb-1">Data Entrada*</label>
-                  <input type="date" id="entry-date" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
-                </div>
-                <div>
-                  <label for="deposit" class="block text-sm font-medium text-gray-700 mb-1">Dep√≥sito*</label>
-                  <select id="deposit" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required disabled>
-                    <option value="">Selecione uma empresa para listar os dep√≥sitos</option>
-                  </select>
-                </div>
-                <div>
-                  <label for="entry-type" class="block text-sm font-medium text-gray-700 mb-1">Tipo de Entrada*</label>
-                  <select id="entry-type" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
-                    <option value="">Selecione</option>
-                    <option value="revenda">Compra para Revenda</option>
-                    <option value="industrializacao">Industrializa√ß√£o</option>
-                    <option value="consumo">Uso e Consumo</option>
-                    <option value="imobilizado">Ativo Imobilizado</option>
-                  </select>
-                </div>
-              </div>
-
-              <div class="mt-6 border-t border-gray-100 pt-6">
-                <h3 class="text-sm font-semibold text-gray-700 mb-4">Dados do Fornecedor</h3>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div>
-                    <label for="supplier-cnpj" class="block text-sm font-medium text-gray-700 mb-1">CNPJ / CPF</label>
-                    <input type="text" id="supplier-cnpj" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="30.290.856/0001-60">
-                  </div>
-                  <div>
-                    <label for="supplier-ie" class="block text-sm font-medium text-gray-700 mb-1">Inscri√ß√£o Estadual</label>
-                    <input type="text" id="supplier-ie" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="244/0178792">
-                  </div>
-                  <div>
-                    <label for="supplier-uf" class="block text-sm font-medium text-gray-700 mb-1">UF</label>
-                    <select id="supplier-uf" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                      <option value="">Selecione</option>
-                      <option value="SP">SP - S√£o Paulo</option>
-                      <option value="RJ">RJ - Rio de Janeiro</option>
-                      <option value="MG">MG - Minas Gerais</option>
-                      <option value="RS">RS - Rio Grande do Sul</option>
-                      <option value="PR">PR - Paran√°</option>
-                      <option value="SC">SC - Santa Catarina</option>
-                      <option value="BA">BA - Bahia</option>
-                      <option value="PE">PE - Pernambuco</option>
-                      <option value="CE">CE - Cear√°</option>
-                      <option value="DF">DF - Distrito Federal</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label for="supplier-email" class="block text-sm font-medium text-gray-700 mb-1">E-mail fiscal</label>
-                    <input type="email" id="supplier-email" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="nfe@distribuidora.com.br">
-                  </div>
-                  <div class="md:col-span-2 lg:col-span-4">
-                    <label for="supplier-address" class="block text-sm font-medium text-gray-700 mb-1">Endere√ßo completo</label>
-                    <input type="text" id="supplier-address" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Av. Paulista, 1800 - Bela Vista, S√£o Paulo - SP, 01310-200">
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="tab-panel hidden" data-tab-panel="totais">
-              <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div class="space-y-4">
-                  <div>
-                    <label for="valor-produtos" class="block text-sm font-medium text-gray-700 mb-1">Valor Produtos (R$)</label>
-                    <input type="number" step="0.01" id="valor-produtos" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="14000.00">
-                  </div>
-                  <div>
-                    <label for="valor-bonificacao" class="block text-sm font-medium text-gray-700 mb-1">Valor Bonifica√ß√£o (R$)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      id="valor-bonificacao"
-                      class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"
-                      placeholder="0.00"
-                      readonly
-                    >
-                  </div>
-                  <div>
-                    <label for="base-icms" class="block text-sm font-medium text-gray-700 mb-1">Base ICMS (R$)</label>
-                    <input type="number" step="0.01" id="base-icms" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                  </div>
-                  <div>
-                    <label for="valor-icms" class="block text-sm font-medium text-gray-700 mb-1">Valor ICMS (R$)</label>
-                    <input type="number" step="0.01" id="valor-icms" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                  </div>
-                  <div>
-                    <label for="icms-st" class="block text-sm font-medium text-gray-700 mb-1">ICMS Subst. (R$)</label>
-                    <input type="number" step="0.01" id="icms-st" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                  </div>
-                  <div>
-                    <label for="valor-fcp-st" class="block text-sm font-medium text-gray-700 mb-1">Valor FCP ST (R$)</label>
-                    <input type="number" step="0.01" id="valor-fcp-st" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                  </div>
-                </div>
-
-                <div class="space-y-4">
-                  <div>
-                    <label for="desconto" class="block text-sm font-medium text-gray-700 mb-1">Desconto (R$)</label>
-                    <input type="number" step="0.01" id="desconto" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                  </div>
-                  <div>
-                    <label for="outras-despesas" class="block text-sm font-medium text-gray-700 mb-1">Outras Despesas (R$)</label>
-                    <input type="number" step="0.01" id="outras-despesas" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                  </div>
-                  <div>
-                    <label for="valor-frete" class="block text-sm font-medium text-gray-700 mb-1">Valor Frete (R$)</label>
-                    <input type="number" step="0.01" id="valor-frete" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                  </div>
-                  <div>
-                    <label for="valor-ipi" class="block text-sm font-medium text-gray-700 mb-1">Valor IPI (R$)</label>
-                    <input type="number" step="0.01" id="valor-ipi" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                  </div>
-                  <div>
-                    <label for="desconto-unitario" class="block text-sm font-medium text-gray-700 mb-1">Desconto Unit√°rio (R$)</label>
-                    <input type="number" step="0.01" id="desconto-unitario" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                  </div>
-                  <div>
-                    <label for="valor-seguro" class="block text-sm font-medium text-gray-700 mb-1">Valor Seguro (R$)</label>
-                    <input type="number" step="0.01" id="valor-seguro" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                  </div>
-                  <div>
-                    <label for="valor-dolar" class="block text-sm font-medium text-gray-700 mb-1">Valor da NF em D√≥lar</label>
-                    <input type="number" step="0.01" id="valor-dolar" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="2974.55">
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="tab-panel hidden" data-tab-panel="observacoes">
-              <div class="space-y-4">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
-                    <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/30">
-                    Pagar Frete
-                  </label>
-                  <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
-                    <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/30">
-                    N√£o Alterar Estoque
-                  </label>
-                  <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
-                    <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/30">
-                    Valor Seguro
-                  </label>
-                  <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
-                    <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/30">
-                    N√£o escriturar o valor de ICMS
-                  </label>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label for="condicao-pagamento" class="block text-sm font-medium text-gray-700 mb-1">Condi√ß√£o de Pagamento</label>
-                    <input type="text" id="condicao-pagamento" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="30/60/90 dias">
-                  </div>
-                  <div>
-                    <label for="cliente-retorno" class="block text-sm font-medium text-gray-700 mb-1">Cliente para retorno parcial (F2)</label>
-                    <input type="text" id="cliente-retorno" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Pesquisar cliente">
-                  </div>
-                  <div>
-                    <label for="centro-custo" class="block text-sm font-medium text-gray-700 mb-1">Centro de Custo (F2)</label>
-                    <input type="text" id="centro-custo" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="01.02.03 - Comercial">
-                  </div>
-                  <div>
-                    <label for="forma-pagamento" class="block text-sm font-medium text-gray-700 mb-1">Forma de Pagamento</label>
-                    <input type="text" id="forma-pagamento" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="√Ä Vista">
-                  </div>
-                </div>
-
-                <div>
-                  <label for="observacao" class="block text-sm font-medium text-gray-700 mb-1">Observa√ß√£o</label>
-                  <textarea id="observacao" rows="4" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Informa√ß√µes complementares sobre a opera√ß√£o."></textarea>
-                </div>
-                <div>
-                  <label for="informacoes-complementares" class="block text-sm font-medium text-gray-700 mb-1">Informa√ß√µes Complementares ao Fisco/Contribuinte</label>
-                  <textarea id="informacoes-complementares" rows="3" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Refer√™ncia √† legisla√ß√£o municipal ou mensagens obrigat√≥rias da SEFAZ."></textarea>
-                </div>
-              </div>
-            </div>
-
-            <div class="tab-panel hidden" data-tab-panel="produtos">
-              <div class="flex flex-wrap items-center justify-between gap-3">
-                <h3 class="text-sm font-semibold text-gray-700">Itens da nota</h3>
-                <div class="flex flex-wrap gap-2">
-                  <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
-                    <i class="fas fa-plus-circle"></i>
-                    Adicionar Produto
-                  </button>
-                  <button
-                    type="button"
-                    class="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
-                    data-open-import-modal
-                    data-import-context="bonus"
-                  >
-                    <i class="fas fa-gift"></i>
-                    Adicionar Bonifica√ß√£o
-                  </button>
-                  <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
-                    <i class="fas fa-exchange-alt"></i>
-                    Alterar Fornecedor por Produto
-                  </button>
-                </div>
-              </div>
-
-              <div class="mt-4 overflow-x-auto rounded-lg border border-gray-200">
-                <table class="min-w-full divide-y divide-gray-200 text-sm">
-                  <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-600">
-                    <tr class="text-[11px] font-semibold uppercase tracking-wide text-gray-600">
-                      <th scope="col" class="px-4 py-3 text-left align-top">
-                        <div class="flex flex-col gap-1">
-                          <div class="flex items-center justify-between gap-1">
-                            <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Item</span>
-                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
-                              <button
-                                type="button"
-                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                                data-main-products-sort="item"
-                                data-sort-direction="asc"
-                                aria-label="Ordenar crescente pela coluna Item"
-                              >
-                                <i class="fas fa-sort-up text-[9px]"></i>
-                              </button>
-                              <button
-                                type="button"
-                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                                data-main-products-sort="item"
-                                data-sort-direction="desc"
-                                aria-label="Ordenar decrescente pela coluna Item"
-                              >
-                                <i class="fas fa-sort-down text-[9px]"></i>
-                              </button>
-                            </div>
-                          </div>
-                          <input
-                            type="text"
-                            placeholder="Filtrar"
-                            class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                            data-main-products-filter="item"
-                          />
-                        </div>
-                      </th>
-                      <th scope="col" class="px-4 py-3 text-left align-top">
-                        <div class="flex flex-col gap-1">
-                          <div class="flex items-center justify-between gap-1">
-                            <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">C√≥digo</span>
-                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
-                              <button
-                                type="button"
-                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                                data-main-products-sort="code"
-                                data-sort-direction="asc"
-                                aria-label="Ordenar crescente pela coluna C√≥digo"
-                              >
-                                <i class="fas fa-sort-up text-[9px]"></i>
-                              </button>
-                              <button
-                                type="button"
-                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                                data-main-products-sort="code"
-                                data-sort-direction="desc"
-                                aria-label="Ordenar decrescente pela coluna C√≥digo"
-                              >
-                                <i class="fas fa-sort-down text-[9px]"></i>
-                              </button>
-                            </div>
-                          </div>
-                          <input
-                            type="text"
-                            placeholder="Filtrar"
-                            class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                            data-main-products-filter="code"
-                          />
-                        </div>
-                      </th>
-                      <th scope="col" class="px-4 py-3 text-left align-top">
-                        <div class="flex flex-col gap-1">
-                          <div class="flex items-center justify-between gap-1">
-                            <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Descri√ß√£o</span>
-                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
-                              <button
-                                type="button"
-                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                                data-main-products-sort="description"
-                                data-sort-direction="asc"
-                                aria-label="Ordenar crescente pela coluna Descri√ß√£o"
-                              >
-                                <i class="fas fa-sort-up text-[9px]"></i>
-                              </button>
-                              <button
-                                type="button"
-                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                                data-main-products-sort="description"
-                                data-sort-direction="desc"
-                                aria-label="Ordenar decrescente pela coluna Descri√ß√£o"
-                              >
-                                <i class="fas fa-sort-down text-[9px]"></i>
-                              </button>
-                            </div>
-                          </div>
-                          <input
-                            type="text"
-                            placeholder="Filtrar"
-                            class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                            data-main-products-filter="description"
-                          />
-                        </div>
-                      </th>
-                      <th scope="col" class="px-4 py-3 text-left align-top">
-                        <div class="flex flex-col gap-1">
-                          <div class="flex items-center justify-between gap-1">
-                            <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">UN</span>
-                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
-                              <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-main-products-sort="unitNfe" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna UN"><i class="fas fa-sort-up text-[9px]"></i></button>
-                              <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-main-products-sort="unitNfe" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna UN"><i class="fas fa-sort-down text-[9px]"></i></button>
-                            </div>
-                          </div>
-                          <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-main-products-filter="unitNfe" />
-                        </div>
-                      </th>
-                      <th scope="col" class="px-4 py-3 text-left align-top">
-                        <div class="flex flex-col gap-1">
-                          <div class="flex items-center justify-between gap-1">
-                            <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">NCM</span>
-                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
-                              <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-main-products-sort="ncm" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna NCM"><i class="fas fa-sort-up text-[9px]"></i></button>
-                              <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-main-products-sort="ncm" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna NCM"><i class="fas fa-sort-down text-[9px]"></i></button>
-                            </div>
-                          </div>
-                          <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-main-products-filter="ncm" />
-                        </div>
-                      </th>
-                      <th scope="col" class="px-4 py-3 text-left align-top">
-                        <div class="flex flex-col gap-1">
-                          <div class="flex items-center justify-between gap-1">
-                            <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">CEST</span>
-                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
-                              <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-main-products-sort="cest" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna CEST"><i class="fas fa-sort-up text-[9px]"></i></button>
-                              <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-main-products-sort="cest" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna CEST"><i class="fas fa-sort-down text-[9px]"></i></button>
-                            </div>
-                          </div>
-                          <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-main-products-filter="cest" />
-                        </div>
-                      </th>
-                      <th scope="col" class="px-4 py-3 text-left align-top">
-                        <div class="flex flex-col gap-1">
-                          <div class="flex items-center justify-between gap-1">
-                            <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">CFOP</span>
-                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
-                              <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-main-products-sort="cfop" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna CFOP"><i class="fas fa-sort-up text-[9px]"></i></button>
-                              <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-main-products-sort="cfop" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna CFOP"><i class="fas fa-sort-down text-[9px]"></i></button>
-                            </div>
-                          </div>
-                          <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-main-products-filter="cfop" />
-                        </div>
-                      </th>
-                      <th scope="col" class="px-4 py-3 text-left align-top">
-                        <div class="flex flex-col gap-1">
-                          <div class="flex items-center justify-between gap-1">
-                            <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">CST</span>
-                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
-                              <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-main-products-sort="cst" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna CST"><i class="fas fa-sort-up text-[9px]"></i></button>
-                              <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-main-products-sort="cst" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna CST"><i class="fas fa-sort-down text-[9px]"></i></button>
-                            </div>
-                          </div>
-                          <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-main-products-filter="cst" />
-                        </div>
-                      </th>
-                      <th scope="col" class="px-4 py-3 text-right align-top">
-                        <div class="flex flex-col items-end gap-1">
-                          <div class="flex w-full items-center justify-end gap-1">
-                            <span class="text-right text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">ICMS (%)</span>
-                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
-                              <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-main-products-sort="icmsRate" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna ICMS (%)"><i class="fas fa-sort-up text-[9px]"></i></button>
-                              <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-main-products-sort="icmsRate" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna ICMS (%)"><i class="fas fa-sort-down text-[9px]"></i></button>
-                            </div>
-                          </div>
-                          <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-right text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-main-products-filter="icmsRate" />
-                        </div>
-                      </th>
-                      <th scope="col" class="px-4 py-3 text-right align-top">
-                        <div class="flex flex-col items-end gap-1">
-                          <div class="flex w-full items-center justify-end gap-1">
-                            <span class="text-right text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">ICMS ST (%)</span>
-                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
-                              <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-main-products-sort="icmsStRate" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna ICMS ST (%)"><i class="fas fa-sort-up text-[9px]"></i></button>
-                              <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-main-products-sort="icmsStRate" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna ICMS ST (%)"><i class="fas fa-sort-down text-[9px]"></i></button>
-                            </div>
-                          </div>
-                          <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-right text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-main-products-filter="icmsStRate" />
-                        </div>
-                      </th>
-                      <th scope="col" class="px-4 py-3 text-right align-top">
-                        <div class="flex flex-col items-end gap-1">
-                          <div class="flex w-full items-center justify-end gap-1">
-                            <span class="text-right text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">IPI (%)</span>
-                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
-                              <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-main-products-sort="ipiRate" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna IPI (%)"><i class="fas fa-sort-up text-[9px]"></i></button>
-                              <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-main-products-sort="ipiRate" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna IPI (%)"><i class="fas fa-sort-down text-[9px]"></i></button>
-                            </div>
-                          </div>
-                          <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-right text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-main-products-filter="ipiRate" />
-                        </div>
-                      </th>
-                      <th scope="col" class="px-4 py-3 text-right align-top">
-                        <div class="flex flex-col items-end gap-1">
-                          <div class="flex w-full items-center justify-end gap-1">
-                            <span class="text-right text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">PIS (%)</span>
-                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
-                              <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-main-products-sort="pisRate" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna PIS (%)"><i class="fas fa-sort-up text-[9px]"></i></button>
-                              <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-main-products-sort="pisRate" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna PIS (%)"><i class="fas fa-sort-down text-[9px]"></i></button>
-                            </div>
-                          </div>
-                          <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-right text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-main-products-filter="pisRate" />
-                        </div>
-                      </th>
-                      <th scope="col" class="px-4 py-3 text-right align-top">
-                        <div class="flex flex-col items-end gap-1">
-                          <div class="flex w-full items-center justify-end gap-1">
-                            <span class="text-right text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">COFINS (%)</span>
-                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
-                              <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-main-products-sort="cofinsRate" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna COFINS (%)"><i class="fas fa-sort-up text-[9px]"></i></button>
-                              <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-main-products-sort="cofinsRate" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna COFINS (%)"><i class="fas fa-sort-down text-[9px]"></i></button>
-                            </div>
-                          </div>
-                          <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-right text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-main-products-filter="cofinsRate" />
-                        </div>
-                      </th>
-                      <th scope="col" class="px-4 py-3 text-left align-top">
-                        <div class="flex flex-col gap-1">
-                          <div class="flex items-center justify-between gap-1">
-                            <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">GTIN</span>
-                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
-                              <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-main-products-sort="barcode" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna GTIN"><i class="fas fa-sort-up text-[9px]"></i></button>
-                              <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-main-products-sort="barcode" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna GTIN"><i class="fas fa-sort-down text-[9px]"></i></button>
-                            </div>
-                          </div>
-                          <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-main-products-filter="barcode" />
-                        </div>
-                      </th>
-                      <th scope="col" class="px-4 py-3 text-left align-top">
-                        <div class="flex flex-col gap-1">
-                          <div class="flex items-center justify-between gap-1">
-                            <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Descri√ß√£o NF</span>
-                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
-                              <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-main-products-sort="supplierDescription" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna Descri√ß√£o NF"><i class="fas fa-sort-up text-[9px]"></i></button>
-                              <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-main-products-sort="supplierDescription" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna Descri√ß√£o NF"><i class="fas fa-sort-down text-[9px]"></i></button>
-                            </div>
-                          </div>
-                          <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-main-products-filter="supplierDescription" />
-                        </div>
-                      </th>
-                      <th scope="col" class="px-4 py-3 text-right align-top">
-                        <div class="flex flex-col items-end gap-1">
-                          <div class="flex w-full items-center justify-end gap-1">
-                            <span class="text-right text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Qtde.</span>
-                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
-                              <button
-                                type="button"
-                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                                data-main-products-sort="quantity"
-                                data-sort-direction="asc"
-                                aria-label="Ordenar crescente pela coluna Qtde."
-                              >
-                                <i class="fas fa-sort-up text-[9px]"></i>
-                              </button>
-                              <button
-                                type="button"
-                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                                data-main-products-sort="quantity"
-                                data-sort-direction="desc"
-                                aria-label="Ordenar decrescente pela coluna Qtde."
-                              >
-                                <i class="fas fa-sort-down text-[9px]"></i>
-                              </button>
-                            </div>
-                          </div>
-                          <input
-                            type="text"
-                            placeholder="Filtrar"
-                            class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-right text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                            data-main-products-filter="quantity"
-                          />
-                        </div>
-                      </th>
-                      <th scope="col" class="px-4 py-3 text-right align-top">
-                        <div class="flex flex-col items-end gap-1">
-                          <div class="flex w-full items-center justify-end gap-1">
-                            <span class="text-right text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Multiplicador/Divisor</span>
-                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
-                              <button
-                                type="button"
-                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                                data-main-products-sort="conversion"
-                                data-sort-direction="asc"
-                                aria-label="Ordenar crescente pela coluna Multiplicador/Divisor"
-                              >
-                                <i class="fas fa-sort-up text-[9px]"></i>
-                              </button>
-                              <button
-                                type="button"
-                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                                data-main-products-sort="conversion"
-                                data-sort-direction="desc"
-                                aria-label="Ordenar decrescente pela coluna Multiplicador/Divisor"
-                              >
-                                <i class="fas fa-sort-down text-[9px]"></i>
-                              </button>
-                            </div>
-                          </div>
-                          <input
-                            type="text"
-                            placeholder="Filtrar"
-                            class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-right text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                            data-main-products-filter="conversion"
-                          />
-                        </div>
-                      </th>
-                      <th scope="col" class="px-4 py-3 text-left align-top">
-                        <div class="flex flex-col gap-1">
-                          <div class="flex items-center justify-between gap-1">
-                            <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Unidade</span>
-                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
-                              <button
-                                type="button"
-                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                                data-main-products-sort="unit"
-                                data-sort-direction="asc"
-                                aria-label="Ordenar crescente pela coluna Unidade"
-                              >
-                                <i class="fas fa-sort-up text-[9px]"></i>
-                              </button>
-                              <button
-                                type="button"
-                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                                data-main-products-sort="unit"
-                                data-sort-direction="desc"
-                                aria-label="Ordenar decrescente pela coluna Unidade"
-                              >
-                                <i class="fas fa-sort-down text-[9px]"></i>
-                              </button>
-                            </div>
-                          </div>
-                          <input
-                            type="text"
-                            placeholder="Filtrar"
-                            class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                            data-main-products-filter="unit"
-                          />
-                        </div>
-                      </th>
-                      <th scope="col" class="px-4 py-3 text-right align-top">
-                        <div class="flex flex-col items-end gap-1">
-                          <div class="flex w-full items-center justify-end gap-1">
-                            <span class="text-right text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Estoque de entrada</span>
-                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
-                              <button
-                                type="button"
-                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                                data-main-products-sort="entryStock"
-                                data-sort-direction="asc"
-                                aria-label="Ordenar crescente pela coluna Estoque de entrada"
-                              >
-                                <i class="fas fa-sort-up text-[9px]"></i>
-                              </button>
-                              <button
-                                type="button"
-                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                                data-main-products-sort="entryStock"
-                                data-sort-direction="desc"
-                                aria-label="Ordenar decrescente pela coluna Estoque de entrada"
-                              >
-                                <i class="fas fa-sort-down text-[9px]"></i>
-                              </button>
-                            </div>
-                          </div>
-                          <input
-                            type="text"
-                            placeholder="Filtrar"
-                            class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-right text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                            data-main-products-filter="entryStock"
-                          />
-                        </div>
-                      </th>
-                      <th scope="col" class="px-4 py-3 text-right align-top">
-                        <div class="flex flex-col items-end gap-1">
-                          <div class="flex w-full items-center justify-end gap-1">
-                            <span class="text-right text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Custo calculado (R$)</span>
-                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
-                              <button
-                                type="button"
-                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                                data-main-products-sort="cost"
-                                data-sort-direction="asc"
-                                aria-label="Ordenar crescente pela coluna Custo calculado (R$)"
-                              >
-                                <i class="fas fa-sort-up text-[9px]"></i>
-                              </button>
-                              <button
-                                type="button"
-                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                                data-main-products-sort="cost"
-                                data-sort-direction="desc"
-                                aria-label="Ordenar decrescente pela coluna Custo calculado (R$)"
-                              >
-                                <i class="fas fa-sort-down text-[9px]"></i>
-                              </button>
-                            </div>
-                          </div>
-                          <input
-                            type="text"
-                            placeholder="Filtrar"
-                            class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-right text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                            data-main-products-filter="cost"
-                          />
-                        </div>
-                      </th>
-                      <th scope="col" class="px-4 py-3 text-right align-top">
-                        <div class="flex flex-col items-end gap-1">
-                          <div class="flex w-full items-center justify-end gap-1">
-                            <span class="text-right text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Unit√°rio (R$)</span>
-                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
-                              <button
-                                type="button"
-                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                                data-main-products-sort="unitPrice"
-                                data-sort-direction="asc"
-                                aria-label="Ordenar crescente pela coluna Unit√°rio (R$)"
-                              >
-                                <i class="fas fa-sort-up text-[9px]"></i>
-                              </button>
-                              <button
-                                type="button"
-                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                                data-main-products-sort="unitPrice"
-                                data-sort-direction="desc"
-                                aria-label="Ordenar decrescente pela coluna Unit√°rio (R$)"
-                              >
-                                <i class="fas fa-sort-down text-[9px]"></i>
-                              </button>
-                            </div>
-                          </div>
-                          <input
-                            type="text"
-                            placeholder="Filtrar"
-                            class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-right text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                            data-main-products-filter="unitPrice"
-                          />
-                        </div>
-                      </th>
-                      <th scope="col" class="px-4 py-3 text-right align-top">
-                        <div class="flex flex-col items-end gap-1">
-                          <div class="flex w-full items-center justify-end gap-1">
-                            <span class="text-right text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Desc (%)</span>
-                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
-                              <button
-                                type="button"
-                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                                data-main-products-sort="discount"
-                                data-sort-direction="asc"
-                                aria-label="Ordenar crescente pela coluna Desc (%)"
-                              >
-                                <i class="fas fa-sort-up text-[9px]"></i>
-                              </button>
-                              <button
-                                type="button"
-                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                                data-main-products-sort="discount"
-                                data-sort-direction="desc"
-                                aria-label="Ordenar decrescente pela coluna Desc (%)"
-                              >
-                                <i class="fas fa-sort-down text-[9px]"></i>
-                              </button>
-                            </div>
-                          </div>
-                          <input
-                            type="text"
-                            placeholder="Filtrar"
-                            class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-right text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                            data-main-products-filter="discount"
-                          />
-                        </div>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-gray-100 bg-white" data-nfe-products-body>
-                    <tr class="hidden" data-nfe-products-empty>
-                      <td class="px-4 py-3 text-center text-gray-500" colspan="22">
-                        Nenhum produto importado do XML.
-                      </td>
-                    </tr>
-                    <tr class="hidden" data-nfe-products-filtered-empty>
-                      <td class="px-4 py-3 text-center text-gray-500" colspan="22">
-                        Nenhum produto encontrado com os filtros aplicados.
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div class="tab-panel hidden" data-tab-panel="transportadora">
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label for="transportadora-cnpj" class="block text-sm font-medium text-gray-700 mb-1">CNPJ</label>
-                  <input type="text" id="transportadora-cnpj" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="12.345.678/0001-99">
-                </div>
-                <div>
-                  <label for="transportadora-ie" class="block text-sm font-medium text-gray-700 mb-1">IE - Transportadora</label>
-                  <input type="text" id="transportadora-ie" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="111.222.333.444">
-                </div>
-                <div>
-                  <label for="transportadora-uf" class="block text-sm font-medium text-gray-700 mb-1">UF - Transportadora</label>
-                  <select id="transportadora-uf" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                    <option value="">Selecione</option>
-                    <option value="AC">AC - Acre</option>
-                    <option value="AL">AL - Alagoas</option>
-                    <option value="AP">AP - Amap√°</option>
-                    <option value="AM">AM - Amazonas</option>
-                    <option value="BA">BA - Bahia</option>
-                    <option value="CE">CE - Cear√°</option>
-                    <option value="DF">DF - Distrito Federal</option>
-                    <option value="ES">ES - Esp√≠rito Santo</option>
-                    <option value="GO">GO - Goi√°s</option>
-                    <option value="MA">MA - Maranh√£o</option>
-                    <option value="MT">MT - Mato Grosso</option>
-                    <option value="MS">MS - Mato Grosso do Sul</option>
-                    <option value="MG">MG - Minas Gerais</option>
-                    <option value="PA">PA - Par√°</option>
-                    <option value="PB">PB - Para√≠ba</option>
-                    <option value="PR">PR - Paran√°</option>
-                    <option value="PE">PE - Pernambuco</option>
-                    <option value="PI">PI - Piau√≠</option>
-                    <option value="RJ">RJ - Rio de Janeiro</option>
-                    <option value="RN">RN - Rio Grande do Norte</option>
-                    <option value="RS">RS - Rio Grande do Sul</option>
-                    <option value="RO">RO - Rond√¥nia</option>
-                    <option value="RR">RR - Roraima</option>
-                    <option value="SC">SC - Santa Catarina</option>
-                    <option value="SP">SP - S√£o Paulo</option>
-                    <option value="SE">SE - Sergipe</option>
-                    <option value="TO">TO - Tocantins</option>
-                  </select>
-                </div>
-                <div>
-                  <label for="transportadora-placa" class="block text-sm font-medium text-gray-700 mb-1">Placa - Transportadora</label>
-                  <input type="text" id="transportadora-placa" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="RIO1A23">
-                </div>
-                <div>
-                  <label for="transportadora-uf-placa" class="block text-sm font-medium text-gray-700 mb-1">UF Placa - Transportadora</label>
-                  <select id="transportadora-uf-placa" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                    <option value="">Selecione</option>
-                    <option value="AC">AC</option>
-                    <option value="AL">AL</option>
-                    <option value="AP">AP</option>
-                    <option value="AM">AM</option>
-                    <option value="BA">BA</option>
-                    <option value="CE">CE</option>
-                    <option value="DF">DF</option>
-                    <option value="ES">ES</option>
-                    <option value="GO">GO</option>
-                    <option value="MA">MA</option>
-                    <option value="MT">MT</option>
-                    <option value="MS">MS</option>
-                    <option value="MG">MG</option>
-                    <option value="PA">PA</option>
-                    <option value="PB">PB</option>
-                    <option value="PR">PR</option>
-                    <option value="PE">PE</option>
-                    <option value="PI">PI</option>
-                    <option value="RJ">RJ</option>
-                    <option value="RN">RN</option>
-                    <option value="RS">RS</option>
-                    <option value="RO">RO</option>
-                    <option value="RR">RR</option>
-                    <option value="SC">SC</option>
-                    <option value="SP">SP</option>
-                    <option value="SE">SE</option>
-                    <option value="TO">TO</option>
-                  </select>
-                </div>
-                <div>
-                  <label for="peso-bruto" class="block text-sm font-medium text-gray-700 mb-1">Peso Bruto</label>
-                  <input type="number" step="0.001" id="peso-bruto" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="185.750">
-                </div>
-                <div>
-                  <label for="peso-liquido" class="block text-sm font-medium text-gray-700 mb-1">Peso L√≠quido</label>
-                  <input type="number" step="0.001" id="peso-liquido" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="172.300">
-                </div>
-                <div>
-                  <label for="modalidade-frete" class="block text-sm font-medium text-gray-700 mb-1">Modalidade do Frete (modFrete)</label>
-                  <select id="modalidade-frete" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                    <option value="0" selected>0 - Por conta do emitente</option>
-                    <option value="1">1 - Por conta do destinat√°rio/remetente</option>
-                    <option value="2">2 - Por conta de terceiros</option>
-                    <option value="3">3 - Transporte pr√≥prio por conta do remetente</option>
-                    <option value="4">4 - Transporte pr√≥prio por conta do destinat√°rio</option>
-                    <option value="9">9 - Sem frete</option>
-                  </select>
-                </div>
-                <div class="md:col-span-2">
-                  <label for="transportadora-razao" class="block text-sm font-medium text-gray-700 mb-1">Raz√£o Social / Nome</label>
-                  <input type="text" id="transportadora-razao" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Transportes RodoVia Ltda">
-                </div>
-              </div>
-            </div>
-
-            <div class="tab-panel hidden" data-tab-panel="duplicatas">
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label for="conta-contabil" class="block text-sm font-medium text-gray-700 mb-1">Conta Cont√°bil (F2)*</label>
-                  <input type="text" id="conta-contabil" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="1.1.3.01 - Fornecedores Nacionais" required>
-                </div>
-                <div>
-                  <label for="forma-pagamento-duplicata" class="block text-sm font-medium text-gray-700 mb-1">Forma de Pagamento</label>
-                  <select id="forma-pagamento-duplicata" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                    <option value="boleto">Boleto</option>
-                    <option value="transferencia">Transfer√™ncia</option>
-                    <option value="pix">PIX</option>
-                    <option value="dinheiro">Dinheiro</option>
-                  </select>
-                </div>
-                <div>
-                  <label for="conta-corrente" class="block text-sm font-medium text-gray-700 mb-1">Conta Corrente* </label>
-                  <select id="conta-corrente" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
-                    <option value="">Selecione</option>
-                    <option value="001-12345-6">Banco do Brasil 001 - Ag. 1234 - C/C 56789-0</option>
-                    <option value="104-98765-4">Caixa 104 - Ag. 2222 - C/C 33333-3</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 mt-7">
-                    <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/30">
-                    Considerar Inativos
-                  </label>
-                </div>
-                <div>
-                  <label for="duplicata-data-emissao" class="block text-sm font-medium text-gray-700 mb-1">Data Emiss√£o</label>
-                  <input type="date" id="duplicata-data-emissao" class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500" value="2024-07-05" readonly>
-                </div>
-                <div>
-                  <label for="numero-doc-bancario" class="block text-sm font-medium text-gray-700 mb-1">N¬∫ Doc. Banc√°rio</label>
-                  <input type="text" id="numero-doc-bancario" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="0001234567">
-                </div>
-                <div>
-                  <label for="parcelas" class="block text-sm font-medium text-gray-700 mb-1">Parcelas*</label>
-                  <input type="number" id="parcelas" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" min="1" value="3" required>
-                </div>
-                <div>
-                  <label for="dias-vencimento" class="block text-sm font-medium text-gray-700 mb-1">Dias Vencimento Inicial</label>
-                  <input type="number" id="dias-vencimento" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="30">
-                </div>
-                <div>
-                  <label for="vencimento-inicial" class="block text-sm font-medium text-gray-700 mb-1">Vencimento Inicial</label>
-                  <input type="date" id="vencimento-inicial" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                </div>
-                <div>
-                  <label for="tipo-dias" class="block text-sm font-medium text-gray-700 mb-1">Tipo dias</label>
-                  <select id="tipo-dias" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                    <option value="dias" selected>N¬∫ de dias</option>
-                    <option value="data">Data fixa</option>
-                  </select>
-                </div>
-                <div>
-                  <label for="dias" class="block text-sm font-medium text-gray-700 mb-1">Dias</label>
-                  <input type="number" id="dias" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="30">
-                </div>
-                <div>
-                  <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 mt-7">
-                    <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/30">
-                    Previs√£o
-                  </label>
-                </div>
-              </div>
-
-              <div class="mt-6 flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition"
-                  data-nfe-duplicatas-generate
-                >
-                  <i class="fas fa-calculator"></i>
-                  Gerar
-                </button>
-              </div>
-
-              <div class="mt-4 overflow-x-auto rounded-lg border border-gray-200">
-                <table class="min-w-full divide-y divide-gray-200 text-sm">
-                  <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-600">
-                    <tr>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Parcela</th>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Dias</th>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Vencimento Inicial</th>
-                      <th class="px-4 py-3 text-right font-semibold text-gray-700">Valor (R$)</th>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Observa√ß√£o</th>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Conta Cont√°bil</th>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-700">C√≥digo Conta Cont√°bil</th>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Conta Corrente</th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-gray-100 bg-white" data-nfe-duplicatas-body>
-                    <tr class="hidden" data-nfe-duplicatas-empty>
-                      <td class="px-4 py-3 text-center text-gray-500" colspan="8">
-                        Nenhuma duplicata foi informada no XML.
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div class="tab-panel hidden" data-tab-panel="documentos">
-              <div class="flex flex-wrap items-center justify-between gap-3">
-                <h3 class="text-sm font-semibold text-gray-700">Documentos vinculados</h3>
-                <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-primary/90 transition">
-                  <i class="fas fa-link"></i>
-                  Adicionar NF
-                </button>
-              </div>
-
-              <div class="mt-4 overflow-x-auto rounded-lg border border-gray-200">
-                <table class="min-w-full divide-y divide-gray-200 text-sm">
-                  <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-600">
-                    <tr>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Tipo</th>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Modelo</th>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-700">N√∫mero da Nota</th>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Chave de Acesso</th>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Data Emiss√£o</th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-gray-100 bg-white" data-nfe-documents-body>
-                    <tr class="hidden" data-nfe-documents-empty>
-                      <td class="px-4 py-3 text-center text-gray-500" colspan="5">
-                        Nenhum documento vinculado pelo XML.
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              <div class="mt-4 flex flex-wrap gap-2 text-xs text-gray-600">
-                <button type="button" class="inline-flex items-center gap-1 rounded border border-gray-200 px-2.5 py-1 font-medium hover:bg-gray-50">
-                  <i class="fas fa-file-excel"></i>
-                  Excel
-                </button>
-                <button type="button" class="inline-flex items-center gap-1 rounded border border-gray-200 px-2.5 py-1 font-medium hover:bg-gray-50">
-                  <i class="fas fa-file-pdf"></i>
-                  PDF
-                </button>
-                <button type="button" class="inline-flex items-center gap-1 rounded border border-gray-200 px-2.5 py-1 font-medium hover:bg-gray-50">
-                  <i class="fas fa-table"></i>
-                  Layout
-                </button>
-                <button type="button" class="inline-flex items-center gap-1 rounded border border-gray-200 px-2.5 py-1 font-medium hover:bg-gray-50">
-                  <i class="fas fa-expand"></i>
-                  Tela Cheia
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
-
-      </div>
-    </div>
-  </main>
-
-  <div id="nfe-fixed-actions-bar" class="z-40 border-t border-gray-200 bg-white/95 backdrop-blur-sm" style="position: fixed; left: 0; right: 0; bottom: 0;">
-    <div class="container mx-auto px-4 py-3">
-      <div class="flex flex-col-reverse gap-3 md:flex-row md:items-center md:justify-between">
-        <button
-          type="button"
-          data-delete-entry
-          class="inline-flex items-center gap-2 self-start rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 hidden"
-        >
-          <i class="fas fa-trash" data-delete-entry-icon></i>
-          <span data-delete-entry-text>Excluir nota</span>
-        </button>
-
-        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-end">
-          <button type="button" data-save-draft class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
-            <i class="fas fa-file-archive"></i>
-            Salvar rascunho
-          </button>
-          <button type="button" data-clear-import class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
-            <i class="fas fa-eraser"></i>
-            Limpar
-          </button>
-          <button
-            type="button"
-            data-register-entry
-            class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90"
-          >
-            <i class="fas fa-save" data-register-entry-icon></i>
-            <span data-register-entry-text>Gravar</span>
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div id="nfe-code-lookup-modal" class="fixed inset-0 z-[999] hidden">
-    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-code-modal></div>
-    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
-      <div
-        data-code-modal-card
-        class="relative flex w-full max-w-[1280px] transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl opacity-0 transition-all duration-200 ease-out scale-95 max-h-[90vh]"
-      >
-        <header class="flex flex-col gap-2.5 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
-          <div class="space-y-1.5">
-            <span class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
-              <i class="fas fa-file-circle-check"></i>
-              Notas cadastradas
-            </span>
-            <h2 class="text-lg font-semibold text-gray-900">Selecionar nota existente</h2>
-            <p class="text-[11px] text-gray-600">
-              Escolha a empresa e localize notas cadastradas ou aprovadas para reutilizar os dados no preenchimento atual.
-            </p>
-          </div>
-          <button
-            type="button"
-            class="inline-flex items-center justify-center rounded-full border border-gray-200 p-1.5 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700"
-            data-close-code-modal
-          >
-            <span class="sr-only">Fechar modal</span>
-            <i class="fas fa-times"></i>
-          </button>
-        </header>
-
-        <div class="flex flex-col gap-3 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <div class="flex flex-col gap-1">
-            <label for="nfe-code-company-filter" class="text-xs font-semibold uppercase tracking-wide text-gray-600">Empresa</label>
-            <select
-              id="nfe-code-company-filter"
-              data-code-company
-              class="w-full min-w-[220px] rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:border-primary focus:ring-2 focus:ring-primary/20"
-            >
-              <option value="">Selecione uma empresa</option>
-            </select>
-          </div>
-          <p class="text-[11px] text-gray-600">
-            Os filtros por coluna podem ser combinados. Clique no cabe√ßalho para ordenar.
-          </p>
-        </div>
-
-        <div class="flex-1 overflow-y-auto px-4 py-4">
-          <div class="overflow-x-auto rounded-lg border border-gray-200">
-            <table class="min-w-full divide-y divide-gray-200 text-sm">
-              <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-600">
-                <tr class="text-[11px] font-semibold uppercase tracking-wide text-gray-600">
-                  <th scope="col" class="px-4 py-3 text-left align-top" data-code-sort-header="code">
-                    <div class="flex flex-col gap-1">
-                      <div class="flex items-center justify-between gap-1">
-                        <span class="whitespace-nowrap">C√≥digo</span>
-                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
-                          <button
-                            type="button"
-                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                            data-code-lookup-sort="code"
-                            data-sort-direction="asc"
-                            aria-label="Ordenar crescente pela coluna C√≥digo"
-                          >
-                            <i class="fas fa-sort-up text-[9px]"></i>
-                          </button>
-                          <button
-                            type="button"
-                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                            data-code-lookup-sort="code"
-                            data-sort-direction="desc"
-                            aria-label="Ordenar decrescente pela coluna C√≥digo"
-                          >
-                            <i class="fas fa-sort-down text-[9px]"></i>
-                          </button>
-                        </div>
-                      </div>
-                      <input
-                        type="text"
-                        placeholder="Filtrar"
-                        class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                        data-code-lookup-filter="code"
-                      >
-                    </div>
-                  </th>
-                  <th scope="col" class="px-4 py-3 text-left align-top" data-code-sort-header="accessKey">
-                    <div class="flex flex-col gap-1">
-                      <div class="flex items-center justify-between gap-1">
-                        <span class="whitespace-nowrap">Chave de Acesso</span>
-                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
-                          <button
-                            type="button"
-                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                            data-code-lookup-sort="accessKey"
-                            data-sort-direction="asc"
-                            aria-label="Ordenar crescente pela coluna Chave de Acesso"
-                          >
-                            <i class="fas fa-sort-up text-[9px]"></i>
-                          </button>
-                          <button
-                            type="button"
-                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                            data-code-lookup-sort="accessKey"
-                            data-sort-direction="desc"
-                            aria-label="Ordenar decrescente pela coluna Chave de Acesso"
-                          >
-                            <i class="fas fa-sort-down text-[9px]"></i>
-                          </button>
-                        </div>
-                      </div>
-                      <input
-                        type="text"
-                        placeholder="Filtrar"
-                        class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                        data-code-lookup-filter="accessKey"
-                      >
-                    </div>
-                  </th>
-                  <th scope="col" class="px-4 py-3 text-left align-top" data-code-sort-header="number">
-                    <div class="flex flex-col gap-1">
-                      <div class="flex items-center justify-between gap-1">
-                        <span class="whitespace-nowrap">NF</span>
-                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
-                          <button
-                            type="button"
-                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                            data-code-lookup-sort="number"
-                            data-sort-direction="asc"
-                            aria-label="Ordenar crescente pela coluna NF"
-                          >
-                            <i class="fas fa-sort-up text-[9px]"></i>
-                          </button>
-                          <button
-                            type="button"
-                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                            data-code-lookup-sort="number"
-                            data-sort-direction="desc"
-                            aria-label="Ordenar decrescente pela coluna NF"
-                          >
-                            <i class="fas fa-sort-down text-[9px]"></i>
-                          </button>
-                        </div>
-                      </div>
-                      <input
-                        type="text"
-                        placeholder="Filtrar"
-                        class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                        data-code-lookup-filter="number"
-                      >
-                    </div>
-                  </th>
-                  <th scope="col" class="px-4 py-3 text-left align-top" data-code-sort-header="supplier">
-                    <div class="flex flex-col gap-1">
-                      <div class="flex items-center justify-between gap-1">
-                        <span class="whitespace-nowrap">Fornecedor</span>
-                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
-                          <button
-                            type="button"
-                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                            data-code-lookup-sort="supplier"
-                            data-sort-direction="asc"
-                            aria-label="Ordenar crescente pela coluna Fornecedor"
-                          >
-                            <i class="fas fa-sort-up text-[9px]"></i>
-                          </button>
-                          <button
-                            type="button"
-                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                            data-code-lookup-sort="supplier"
-                            data-sort-direction="desc"
-                            aria-label="Ordenar decrescente pela coluna Fornecedor"
-                          >
-                            <i class="fas fa-sort-down text-[9px]"></i>
-                          </button>
-                        </div>
-                      </div>
-                      <input
-                        type="text"
-                        placeholder="Filtrar"
-                        class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                        data-code-lookup-filter="supplier"
-                      >
-                    </div>
-                  </th>
-                  <th scope="col" class="px-4 py-3 text-right align-top" data-code-sort-header="total">
-                    <div class="flex flex-col items-end gap-1">
-                      <div class="flex w-full items-center justify-end gap-1">
-                        <span class="whitespace-nowrap">Valor da Nota (R$)</span>
-                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
-                          <button
-                            type="button"
-                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                            data-code-lookup-sort="total"
-                            data-sort-direction="asc"
-                            aria-label="Ordenar crescente pelo valor da nota"
-                          >
-                            <i class="fas fa-sort-up text-[9px]"></i>
-                          </button>
-                          <button
-                            type="button"
-                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                            data-code-lookup-sort="total"
-                            data-sort-direction="desc"
-                            aria-label="Ordenar decrescente pelo valor da nota"
-                          >
-                            <i class="fas fa-sort-down text-[9px]"></i>
-                          </button>
-                        </div>
-                      </div>
-                      <input
-                        type="text"
-                        placeholder="Filtrar"
-                        class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-right text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                        data-code-lookup-filter="total"
-                      >
-                    </div>
-                  </th>
-                  <th scope="col" class="px-4 py-3 text-left align-top" data-code-sort-header="issueDate">
-                    <div class="flex flex-col gap-1">
-                      <div class="flex items-center justify-between gap-1">
-                        <span class="whitespace-nowrap">Data Emiss√£o</span>
-                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
-                          <button
-                            type="button"
-                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                            data-code-lookup-sort="issueDate"
-                            data-sort-direction="asc"
-                            aria-label="Ordenar crescente pela data de emiss√£o"
-                          >
-                            <i class="fas fa-sort-up text-[9px]"></i>
-                          </button>
-                          <button
-                            type="button"
-                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                            data-code-lookup-sort="issueDate"
-                            data-sort-direction="desc"
-                            aria-label="Ordenar decrescente pela data de emiss√£o"
-                          >
-                            <i class="fas fa-sort-down text-[9px]"></i>
-                          </button>
-                        </div>
-                      </div>
-                      <input
-                        type="text"
-                        placeholder="Filtrar"
-                        class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                        data-code-lookup-filter="issueDate"
-                      >
-                    </div>
-                  </th>
-                  <th scope="col" class="px-4 py-3 text-left align-top" data-code-sort-header="entryDate">
-                    <div class="flex flex-col gap-1">
-                      <div class="flex items-center justify-between gap-1">
-                        <span class="whitespace-nowrap">Data Entrada</span>
-                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
-                          <button
-                            type="button"
-                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                            data-code-lookup-sort="entryDate"
-                            data-sort-direction="asc"
-                            aria-label="Ordenar crescente pela data de entrada"
-                          >
-                            <i class="fas fa-sort-up text-[9px]"></i>
-                          </button>
-                          <button
-                            type="button"
-                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                            data-code-lookup-sort="entryDate"
-                            data-sort-direction="desc"
-                            aria-label="Ordenar decrescente pela data de entrada"
-                          >
-                            <i class="fas fa-sort-down text-[9px]"></i>
-                          </button>
-                        </div>
-                      </div>
-                      <input
-                        type="text"
-                        placeholder="Filtrar"
-                        class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                        data-code-lookup-filter="entryDate"
-                      >
-                    </div>
-                  </th>
-                  <th scope="col" class="px-4 py-3 text-left align-top" data-code-sort-header="status">
-                    <div class="flex flex-col gap-1">
-                      <div class="flex items-center justify-between gap-1">
-                        <span class="whitespace-nowrap">Situa√ß√£o</span>
-                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
-                          <button
-                            type="button"
-                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                            data-code-lookup-sort="status"
-                            data-sort-direction="asc"
-                            aria-label="Ordenar crescente pela situa√ß√£o"
-                          >
-                            <i class="fas fa-sort-up text-[9px]"></i>
-                          </button>
-                          <button
-                            type="button"
-                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                            data-code-lookup-sort="status"
-                            data-sort-direction="desc"
-                            aria-label="Ordenar decrescente pela situa√ß√£o"
-                          >
-                            <i class="fas fa-sort-down text-[9px]"></i>
-                          </button>
-                        </div>
-                      </div>
-                      <input
-                        type="text"
-                        placeholder="Filtrar"
-                        class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                        data-code-lookup-filter="status"
-                      >
-                    </div>
-                  </th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-100 bg-white" data-code-table-body>
-                <tr class="hidden" data-code-loading>
-                  <td class="px-4 py-6 text-center text-gray-500" colspan="8">
-                    <i class="fas fa-spinner-third fa-spin mr-2"></i>
-                    Carregando notas cadastradas...
-                  </td>
-                </tr>
-                <tr class="hidden" data-code-error>
-                  <td class="px-4 py-6 text-center text-rose-600" colspan="8">
-                    N√£o foi poss√≠vel carregar as notas cadastradas para a empresa selecionada.
-                  </td>
-                </tr>
-                <tr class="hidden" data-code-empty>
-                  <td class="px-4 py-6 text-center text-gray-500" colspan="8">
-                    Nenhuma nota encontrada para a empresa selecionada.
-                  </td>
-                </tr>
-                <tr class="hidden" data-code-filtered-empty>
-                  <td class="px-4 py-6 text-center text-gray-500" colspan="8">
-                    Nenhuma nota corresponde aos filtros informados.
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <footer class="flex flex-col gap-2 border-t border-gray-100 px-4 py-3 text-[11px] text-gray-500 sm:flex-row sm:items-center sm:justify-between">
-          <p>
-            Clique em uma linha para carregar a nota. Notas em rascunho aparecem como <span class="font-semibold text-amber-600">Cadastrada</span> e notas aprovadas como <span class="font-semibold text-emerald-600">Aprovada</span>.
-          </p>
-          <button
-            type="button"
-            class="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 font-semibold text-gray-600 transition hover:bg-gray-50"
-            data-close-code-modal
-          >
-            Fechar
-          </button>
-        </footer>
-      </div>
-    </div>
-  </div>
-
-  <div
-    id="price-adjust-modal"
-    class="fixed inset-0 z-[1000] hidden"
-    aria-hidden="true"
-  >
-    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-price-modal></div>
-    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
-      <div
-        data-price-modal-card
-        class="relative flex w-full max-w-[1352px] transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl opacity-0 transition-all duration-200 ease-out scale-95 max-h-[90vh] min-h-0 text-[12px] leading-[1.35]"
-      >
-        <header class="flex flex-col gap-3 border-b border-gray-100 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
-          <div class="space-y-1.5">
-            <span class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
-              <i class="fas fa-tags"></i>
-              Ajuste de pre√ßos
-            </span>
-            <h2 class="text-lg font-semibold text-gray-900">Atualizar pre√ßos dos produtos da NF-e</h2>
-            <p class="text-[10px] text-gray-600">
-              Revise os custos calculados, defina markup ou mantenha o pre√ßo de venda atual antes de aplicar as altera√ß√µes aos produtos selecionados.
-            </p>
-          </div>
-          <div class="flex items-center gap-2">
-            <button
-              type="button"
-              data-price-use-markup
-              class="inline-flex items-center gap-1.5 rounded-full border border-gray-200 px-3 py-1 text-[10px] font-semibold text-gray-600 transition hover:bg-gray-50"
-              aria-pressed="false"
-            >
-              <i class="fas fa-percentage"></i>
-              Usar markup
-            </button>
-            <label class="inline-flex items-center gap-2 rounded-full border border-gray-200 px-3 py-1 text-[10px] font-semibold text-gray-600">
-              <input type="checkbox" class="h-3.5 w-3.5 rounded border-gray-300 text-primary focus:ring-primary" data-price-maintain-markup>
-              Manter markup
-            </label>
-            <button
-              type="button"
-              class="inline-flex items-center justify-center rounded-full border border-gray-200 p-2 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700"
-              data-close-price-modal
-              aria-label="Fechar ajuste de pre√ßos"
-            >
-              <i class="fas fa-times"></i>
-            </button>
-          </div>
-        </header>
-
-        <div class="flex flex-col gap-4 px-5 pt-4">
-          <div class="flex flex-col gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3 sm:flex-row sm:items-end sm:justify-between">
-            <div class="flex flex-wrap items-end gap-3">
-              <div class="flex flex-col">
-                <label for="price-adjust-cost-percent" class="text-[10px] font-semibold uppercase tracking-wide text-gray-600">Alterar custo %</label>
-                <input
-                  id="price-adjust-cost-percent"
-                  data-price-cost-percent
-                  type="text"
-                  inputmode="decimal"
-                  class="w-24 rounded border border-gray-200 bg-white px-2 py-1 text-right text-[11px] font-semibold text-gray-700 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30"
-                  placeholder="0,00"
-                />
-              </div>
-              <div class="flex items-center gap-2" role="group" aria-label="Modo de ajuste">
-                <button
-                  type="button"
-                  class="inline-flex items-center gap-1 rounded border border-gray-200 bg-white px-3 py-1 text-[10px] font-semibold text-gray-600 transition hover:bg-gray-100"
-                  data-price-cost-mode="add"
-                  aria-pressed="true"
-                >
-                  Somar
-                </button>
-                <button
-                  type="button"
-                  class="inline-flex items-center gap-1 rounded border border-gray-200 bg-white px-3 py-1 text-[10px] font-semibold text-gray-600 transition hover:bg-gray-100"
-                  data-price-cost-mode="subtract"
-                  aria-pressed="false"
-                >
-                  Subtrair
-                </button>
-              </div>
-              <button
-                type="button"
-                data-price-generate
-                class="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-[10px] font-semibold text-white shadow-sm transition hover:bg-primary/90"
-              >
-                <i class="fas fa-calculator"></i>
-                Gerar
-              </button>
-              <div class="flex flex-col gap-1" data-price-rounding>
-                <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-600">Arredondamento</span>
-                <div class="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    class="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-3 py-1 text-[10px] font-semibold text-gray-600 transition hover:bg-gray-100"
-                    data-price-round="up"
-                    aria-pressed="false"
-                  >
-                    Para cima
-                  </button>
-                  <button
-                    type="button"
-                    class="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-3 py-1 text-[10px] font-semibold text-gray-600 transition hover:bg-gray-100"
-                    data-price-round="down"
-                    aria-pressed="false"
-                  >
-                    Para baixo
-                  </button>
-                  <div class="flex items-center gap-2" data-price-round-custom-wrapper>
-                    <button
-                      type="button"
-                      class="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-3 py-1 text-[10px] font-semibold text-gray-600 transition hover:bg-gray-100"
-                      data-price-round="custom"
-                      aria-pressed="false"
-                    >
-                      Personalizado
-                    </button>
-                    <input
-                      type="text"
-                      inputmode="decimal"
-                      placeholder="0,80"
-                      class="h-7 w-16 rounded border border-gray-200 bg-white px-2 text-[10px] font-semibold text-gray-600 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30"
-                      data-price-round-custom-input
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    class="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-3 py-1 text-[10px] font-semibold text-gray-400 transition hover:bg-gray-100"
-                    data-price-round="advanced"
-                    aria-pressed="false"
-                  >
-                    Avan√ßado
-                  </button>
-                </div>
-              </div>
-            </div>
-            <p class="text-[10px] text-gray-600">
-              Informe o percentual para atualizar o custo novo dos produtos selecionados. Percentual 0 restaura o valor calculado originalmente.
-            </p>
-          </div>
-        </div>
-
-        <div class="flex flex-1 flex-col overflow-hidden px-5 pb-4 min-h-0">
-          <div class="flex flex-1 flex-col overflow-hidden rounded-xl border border-gray-100 min-h-0">
-            <div class="flex-1 overflow-auto overflow-x-auto overscroll-contain rounded-lg border border-gray-200">
-              <table class="min-w-full divide-y divide-gray-200 text-[11px]" data-price-table>
-                <thead class="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-600">
-                  <tr class="text-left">
-                    <th class="px-3 py-2 text-center">
-                      <input type="checkbox" class="h-3.5 w-3.5 rounded border-gray-300 text-primary focus:ring-primary" data-price-select-all />
-                    </th>
-                    <th class="px-3 py-2">C√≥digo</th>
-                    <th class="px-3 py-2">Descri√ß√£o</th>
-                    <th class="px-3 py-2 text-right">Custo anterior</th>
-                    <th class="px-3 py-2 text-right">Custo novo</th>
-                    <th class="px-3 py-2 text-right">Markup (%)</th>
-                    <th class="px-3 py-2 text-right">Venda novo</th>
-                    <th class="px-3 py-2 text-right">Venda anterior</th>
-                    <th class="px-3 py-2 text-right">Estoque entrada</th>
-                    <th class="px-3 py-2 text-right">Estoque atual</th>
-                    <th class="px-3 py-2 text-right">Estoque anterior</th>
-                    <th class="px-3 py-2 text-center">Regra de imposto</th>
-                  </tr>
-                  <tr class="bg-white text-[10px] text-gray-600">
-                    <th class="px-3 py-2"></th>
-                    <th class="px-3 py-2">
-                      <input type="text" data-price-filter="code" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] text-gray-600 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20" />
-                    </th>
-                    <th class="px-3 py-2">
-                      <input type="text" data-price-filter="description" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] text-gray-600 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20" />
-                    </th>
-                    <th class="px-3 py-2">
-                      <input type="text" data-price-filter="costPrevious" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] text-gray-600 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20" />
-                    </th>
-                    <th class="px-3 py-2">
-                      <input type="text" data-price-filter="costNew" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] text-gray-600 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20" />
-                    </th>
-                    <th class="px-3 py-2">
-                      <input type="text" data-price-filter="markup" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] text-gray-600 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20" />
-                    </th>
-                    <th class="px-3 py-2">
-                      <input type="text" data-price-filter="saleNew" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] text-gray-600 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20" />
-                    </th>
-                    <th class="px-3 py-2">
-                      <input type="text" data-price-filter="salePrevious" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] text-gray-600 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20" />
-                    </th>
-                    <th class="px-3 py-2">
-                      <input type="text" data-price-filter="entryStock" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] text-gray-600 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20" />
-                    </th>
-                    <th class="px-3 py-2">
-                      <input type="text" data-price-filter="currentStock" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] text-gray-600 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20" />
-                    </th>
-                    <th class="px-3 py-2">
-                      <input type="text" data-price-filter="previousStock" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] text-gray-600 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20" />
-                    </th>
-                    <th class="px-3 py-2"></th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-100 bg-white" data-price-table-body>
-                  <tr data-price-empty>
-                    <td colspan="12" class="px-4 py-4 text-center text-[11px] text-gray-600">
-                      Nenhum produto dispon√≠vel para ajuste de pre√ßo.
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <footer class="flex flex-col gap-3 border-t border-gray-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div class="flex items-center gap-3 text-[11px]">
-            <button type="button" data-price-export-excel class="inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-3 py-1 font-semibold text-emerald-700 transition hover:bg-emerald-100">
-              <i class="fas fa-file-excel"></i>
-              Excel
-            </button>
-            <button type="button" data-price-mark-all class="inline-flex items-center gap-1 rounded border border-gray-200 px-3 py-1 font-semibold text-gray-600 transition hover:bg-gray-50">
-              Marcar todos
-            </button>
-            <button type="button" data-price-unmark-all class="inline-flex items-center gap-1 rounded border border-gray-200 px-3 py-1 font-semibold text-gray-600 transition hover:bg-gray-50">
-              Desmarcar todos
-            </button>
-          </div>
-          <div class="flex items-center gap-2">
-            <button
-              type="button"
-              data-price-cancel
-              class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-[11px] font-semibold text-gray-600 transition hover:bg-gray-50"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              data-price-update
-              class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-[11px] font-semibold text-white shadow-sm transition hover:bg-primary/90"
-            >
-              <i class="fas fa-rotate" data-price-update-icon></i>
-              <span data-price-update-text>Atualizar</span>
-            </button>
-          </div>
-        </footer>
-      </div>
-    </div>
-  </div>
-
-  <div id="import-xml-modal" class="fixed inset-0 z-[999] hidden">
-    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-import-modal></div>
-    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
-      <div data-import-modal-card class="relative flex w-full max-w-[1352px] transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl opacity-0 transition-all duration-200 ease-out scale-95 max-h-[90vh] min-h-0 text-[12px] leading-[1.35]">
-        <header class="flex flex-col gap-2.5 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <span class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
-              <i class="fas fa-file-import"></i>
-              Importa√ß√£o de NF-e
-            </span>
-            <h2 class="mt-1.5 text-lg font-semibold text-gray-900">Importar XML autorizado na SEFAZ</h2>
-            <p class="mt-1 max-w-3xl text-[11px] text-gray-600">Utilize um XML emitido conforme o Manual de Orienta√ß√£o do Contribuinte 4.0 ou informe a chave de acesso v√°lida (44 d√≠gitos) para recuperar automaticamente dados oficiais da NF-e, NFC-e ou NFS-e.</p>
-          </div>
-          <button type="button" data-close-import-modal class="inline-flex items-center justify-center rounded-full border border-gray-200 p-1.5 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700">
-            <span class="sr-only">Fechar modal</span>
-            <i class="fas fa-times"></i>
-          </button>
-        </header>
-
-        <nav class="flex flex-wrap gap-2 border-b border-gray-100 px-4 pt-2.5">
-          <button type="button" data-import-tab="pending" class="import-tab-button active">Notas Pendentes</button>
-          <button type="button" data-import-tab="xml" class="import-tab-button">Importar XML</button>
-        </nav>
-
-        <div class="flex-1 overflow-y-auto px-4 py-4">
-          <div data-import-tab-panel="pending" class="space-y-3.5">
-            <section class="rounded-xl border border-gray-200 bg-white shadow-sm">
-              <header class="flex flex-col gap-1.5 border-b border-gray-100 bg-gray-50 px-4 py-3">
-                <h3 class="text-[12px] font-semibold text-gray-900">Consultar notas autorizadas</h3>
-                <p class="text-[11px] text-gray-600">
-                  Escolha a empresa e o per√≠odo para gerar um DFe com as notas autorizadas na SEFAZ.
-                </p>
-              </header>
-              <form class="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-end md:gap-4" data-pending-filters>
-                <div class="md:flex-1">
-                  <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-500" for="pending-company-select">
-                    Empresa
-                  </label>
-                  <select
-                    id="pending-company-select"
-                    class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[11px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    data-pending-company
-                  >
-                    <option value="">Carregando empresas...</option>
-                  </select>
-                </div>
-                <div class="flex flex-col gap-3 sm:flex-row sm:items-end md:w-auto md:flex-1 md:justify-end">
-                  <div class="sm:w-44 md:w-48">
-                    <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-500" for="pending-period-start">
-                      Per√≠odo inicial
-                    </label>
-                    <input
-                      type="date"
-                      id="pending-period-start"
-                      class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[11px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                      data-pending-period-start
-                    >
-                  </div>
-                  <div class="sm:w-44 md:w-48">
-                    <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-500" for="pending-period-end">
-                      Per√≠odo final
-                    </label>
-                    <input
-                      type="date"
-                      id="pending-period-end"
-                      class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[11px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                      data-pending-period-end
-                    >
-                  </div>
-                  <div class="sm:self-end">
-                    <button
-                      type="button"
-                      class="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/30"
-                      data-pending-generate
-                    >
-                      <i class="fas fa-sync"></i>
-                      Gerar
-                    </button>
-                  </div>
-                </div>
-              </form>
-            </section>
-
-            <section class="rounded-xl border border-gray-200 bg-white shadow-sm">
-              <header class="flex flex-col gap-1 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h4 class="text-[12px] font-semibold text-gray-900">Notas pendentes de tratamento</h4>
-                  <p class="text-[11px] text-gray-600">
-                    Utilize as a√ß√µes para imprimir o DANFE ou enviar o XML direto para a aba de importa√ß√£o.
-                  </p>
-                </div>
-                <div class="text-[10px] text-gray-600">
-                  Situa√ß√µes poss√≠veis: <span class="font-semibold text-amber-600">Pendente</span>,
-                  <span class="font-semibold text-sky-700">Cadastrada</span> e
-                  <span class="font-semibold text-emerald-600">Aprovada</span>.
-                </div>
-              </header>
-              <div class="overflow-x-auto rounded-lg border border-gray-200">
-                <table class="min-w-full divide-y divide-gray-200 text-left text-[11px] text-gray-700" data-pending-table>
-                  <thead class="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-600">
-                    <tr>
-                      <th scope="col" class="whitespace-nowrap px-4 py-2 font-semibold">Danfe</th>
-                      <th scope="col" class="whitespace-nowrap px-4 py-2 font-semibold">Entrada</th>
-                      <th scope="col" class="whitespace-nowrap px-4 py-2 font-semibold">CNPJ Forn</th>
-                      <th scope="col" class="whitespace-nowrap px-4 py-2 font-semibold">Nome Fornecedor</th>
-                      <th scope="col" class="whitespace-nowrap px-4 py-2 font-semibold">Data Emiss√£o</th>
-                      <th scope="col" class="whitespace-nowrap px-4 py-2 font-semibold">S√©rie</th>
-                      <th scope="col" class="whitespace-nowrap px-4 py-2 font-semibold">N¬∞ NF</th>
-                      <th scope="col" class="whitespace-nowrap px-4 py-2 font-semibold">Valor (R$)</th>
-                      <th scope="col" class="whitespace-nowrap px-4 py-2 font-semibold">Chave de Acesso</th>
-                      <th scope="col" class="whitespace-nowrap px-4 py-2 font-semibold">Situa√ß√£o SEFAZ</th>
-                      <th scope="col" class="whitespace-nowrap px-4 py-2 font-semibold">Situa√ß√£o</th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-gray-100 bg-white" data-pending-table-body>
-                    <tr data-pending-loading class="hidden">
-                      <td colspan="11" class="px-4 py-6 text-center text-gray-600">
-                        <i class="fas fa-circle-notch fa-spin mr-2"></i>
-                        Consultando notas autorizadas...
-                      </td>
-                    </tr>
-                    <tr data-pending-error class="hidden">
-                      <td colspan="11" class="px-4 py-6 text-center text-rose-600">
-                        <span data-pending-error-message>N√£o foi poss√≠vel carregar as notas autorizadas para o per√≠odo informado.</span>
-                      </td>
-                    </tr>
-                    <tr data-pending-empty>
-                      <td colspan="11" class="px-4 py-6 text-center text-gray-600">
-                        Informe os filtros acima e clique em <span class="font-semibold">Gerar</span> para listar as notas.
-                      </td>
-                    </tr>
-                    <tr data-pending-row-template class="hidden">
-                      <td class="whitespace-nowrap px-4 py-3 align-top">
-                        <button
-                          type="button"
-                          class="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[10px] font-semibold text-gray-700 transition hover:bg-gray-50"
-                          data-pending-danfe
-                        >
-                          <i class="fas fa-print"></i>
-                          Imprimir
-                        </button>
-                      </td>
-                      <td class="whitespace-nowrap px-4 py-3 align-top">
-                        <button
-                          type="button"
-                          class="inline-flex items-center gap-1.5 rounded-lg bg-primary/10 px-2.5 py-1.5 text-[10px] font-semibold text-primary transition hover:bg-primary/20"
-                          data-pending-import
-                        >
-                          <i class="fas fa-file-import"></i>
-                          Enviar XML
-                        </button>
-                      </td>
-                      <td class="whitespace-nowrap px-4 py-3 align-top font-mono text-[11px] text-gray-600" data-pending-supplier-document>
-                        00.000.000/0000-00
-                      </td>
-                      <td class="px-4 py-3 align-top">
-                        <div class="flex flex-col gap-1 text-[11px]">
-                          <span class="font-semibold text-gray-800" data-pending-supplier-name>Fornecedor</span>
-                          <button
-                            type="button"
-                            class="inline-flex items-center gap-1.5 self-start rounded-lg border border-dashed border-gray-300 px-2 py-1 text-[10px] font-medium text-gray-600 transition hover:border-primary/50 hover:text-primary"
-                            data-pending-register-supplier
-                          >
-                            <i class="fas fa-user-plus"></i>
-                            Cadastrar fornecedor
-                          </button>
-                        </div>
-                      </td>
-                      <td class="whitespace-nowrap px-4 py-3 align-top" data-pending-issue-date>00/00/0000</td>
-                      <td class="whitespace-nowrap px-4 py-3 align-top" data-pending-series>0</td>
-                      <td class="whitespace-nowrap px-4 py-3 align-top" data-pending-number>0</td>
-                      <td class="whitespace-nowrap px-4 py-3 align-top" data-pending-total>0,00</td>
-                      <td class="px-4 py-3 align-top font-mono text-[11px] text-gray-600 break-all" data-pending-access-key>
-                        00000000000000000000000000000000000000000000
-                      </td>
-                      <td class="whitespace-nowrap px-4 py-3 align-top" data-pending-sefaz-status>
-                        <span class="inline-flex items-center rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-700">
-                          Cadastrada
-                        </span>
-                      </td>
-                      <td class="whitespace-nowrap px-4 py-3 align-top" data-pending-status>
-                        <span class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
-                          Pendente
-                        </span>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          </div>
-
-          <div data-import-tab-panel="xml" class="hidden space-y-3.5">
-            <section class="rounded-xl border border-gray-200">
-              <header class="flex flex-col gap-2.5 border-b border-gray-100 bg-gray-50 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-                <div class="space-y-0.5">
-                  <h3 class="text-[12px] font-semibold text-gray-900">Selecione como deseja importar</h3>
-                  <p class="text-[11px] text-gray-600">Utilize uma chave de acesso autorizada, ou fa√ßa upload de um XML oficial baixado no Portal Nacional.</p>
-                </div>
-                <div class="flex flex-col gap-0.5 text-[10px] text-gray-600 sm:flex-row sm:items-center">
-                  <span class="inline-flex items-center gap-1 text-primary">
-                    <i class="fas fa-shield-check text-[11px]"></i>
-                    Valida√ß√£o XSD oficial
-                  </span>
-                  <span class="inline-flex items-center gap-1 text-emerald-600">
-                    <i class="fas fa-file-code text-[11px]"></i>
-                    NF-e 4.0 ¬∑ NFC-e 4.0 ¬∑ NFS-e ABRASF
-                  </span>
-                </div>
-              </header>
-              <div class="grid grid-cols-1 gap-2.5 p-3.5 lg:grid-cols-3">
-                <div class="space-y-1.5">
-                  <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-600">Tipo de importa√ß√£o</label>
-                  <div class="grid grid-cols-2 gap-1.5 text-[10px] font-medium text-gray-600">
-                    <label class="inline-flex items-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1.5">
-                      <input type="radio" name="import-mode" value="access-key" class="h-3 w-3 text-primary focus:ring-primary/40" checked>
-                      Chave de acesso
-                    </label>
-                    <label class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-1.5 transition hover:border-primary/40 hover:text-primary">
-                      <input type="radio" name="import-mode" value="file" class="h-3 w-3 text-primary focus:ring-primary/40">
-                      Arquivo XML
-                    </label>
-                  </div>
-                </div>
-                <div class="space-y-1.5" data-import-mode-panel="access-key">
-                  <label for="import-access-key" class="text-[10px] font-semibold uppercase tracking-wide text-gray-600">Informe a chave</label>
-                  <div class="flex gap-1.5">
-                    <input type="text" id="import-access-key" maxlength="44" class="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="35240730290856000160550010000100011999999999">
-                    <button type="button" class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-primary/90">
-                      <i class="fas fa-search"></i>
-                      Consultar portal
-                    </button>
-                  </div>
-                  <p class="text-[9px] text-gray-600">Consulta autom√°tica ao Portal Nacional da NF-e/NFC-e ou NFSe Nacional.</p>
-                </div>
-                <div class="space-y-1.5 hidden" data-import-mode-panel="file">
-                  <label for="import-file-input" class="text-[10px] font-semibold uppercase tracking-wide text-gray-600">Envie o XML</label>
-                  <label for="import-file-input" class="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 px-3 py-5 text-center text-[10px] text-gray-500 transition hover:border-primary hover:text-primary">
-                    <i class="fas fa-cloud-upload-alt text-lg"></i>
-                    <span>Selecione ou arraste o arquivo XML autorizado</span>
-                    <input id="import-file-input" type="file" accept=".xml" class="hidden">
-                  </label>
-                  <p class="text-[9px] text-gray-600">Valida√ß√£o com esquemas oficiais (XSD) e regras de neg√≥cio SEFAZ.</p>
-                </div>
-                <div class="space-y-1.5">
-                  <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-600">A√ß√µes r√°pidas</label>
-                  <div class="grid grid-cols-1 gap-1.5 text-[10px] font-medium text-gray-600 sm:grid-cols-2">
-                    <label class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-1.5 transition hover:border-primary/40 hover:text-primary">
-                      <input type="checkbox" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/40" checked>
-                      Importar automaticamente produtos novos
-                    </label>
-                    <label class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-1.5 transition hover:border-primary/40 hover:text-primary">
-                      <input type="checkbox" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/40" checked>
-                      Atualizar pre√ßos de compra existentes
-                    </label>
-                  </div>
-                </div>
-                <div class="lg:col-span-3 grid grid-cols-1 gap-1.5 pt-1 md:grid-cols-2 xl:grid-cols-3" data-import-supplier-insights>
-                  <div data-file-feedback class="hidden h-full rounded-lg border px-3 py-2 text-[10px] font-medium leading-snug"></div>
-                  <div data-import-supplier-status class="hidden h-full rounded-lg border px-3 py-2 text-[10px] text-gray-600 space-y-1.5 sm:space-y-0">
-                    <div class="flex items-start gap-1.5">
-                      <i data-supplier-status-icon class="fas fa-circle-info mt-0.5 text-[12px]"></i>
-                      <div class="space-y-0.5">
-                        <p data-supplier-message class="text-[11px] font-semibold text-gray-700 leading-snug"></p>
-                        <p data-supplier-description class="text-[10px] text-gray-600 leading-snug"></p>
-                      </div>
-                    </div>
-                    <div data-supplier-actions class="flex flex-wrap gap-1.5 sm:mt-0"></div>
-                  </div>
-                  <div data-import-supplier-summary class="hidden h-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[10px] text-gray-600 space-y-1.5">
-                    <p data-supplier-summary-name class="text-[11px] font-semibold text-gray-700 leading-snug"></p>
-                    <dl class="grid grid-cols-1 gap-1 sm:grid-cols-2 sm:gap-y-1.5">
-                      <div>
-                        <dt class="text-[9px] font-semibold uppercase tracking-wide text-gray-600">Documento</dt>
-                        <dd data-supplier-summary-document class="text-gray-700 leading-snug"></dd>
-                      </div>
-                      <div>
-                        <dt class="text-[9px] font-semibold uppercase tracking-wide text-gray-600">Inscri√ß√£o Estadual</dt>
-                        <dd data-supplier-summary-ie class="text-gray-700 leading-snug"></dd>
-                      </div>
-                      <div class="sm:col-span-2">
-                        <dt class="text-[9px] font-semibold uppercase tracking-wide text-gray-600">Endere√ßo</dt>
-                        <dd data-supplier-summary-address class="text-gray-700 leading-snug"></dd>
-                      </div>
-                      <div class="sm:col-span-2">
-                        <dt class="text-[9px] font-semibold uppercase tracking-wide text-gray-600">Contato</dt>
-                        <dd data-supplier-summary-contact class="text-gray-700 leading-snug"></dd>
-                      </div>
-                    </dl>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section class="rounded-xl border border-gray-200">
-              <header class="flex flex-col gap-2.5 border-b border-gray-100 bg-gray-50 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-                <div class="space-y-0.5">
-                  <h3 class="text-[12px] font-semibold text-gray-900">Dados da nota fiscal</h3>
-                  <p class="text-[11px] text-gray-600">Resumo preenchido automaticamente conforme leiaute nacional 4.0 da NF-e.</p>
-                </div>
-                <div class="text-right text-[10px] text-gray-600">
-                  <span class="block font-semibold text-gray-700">MOC 4.0</span>
-                  <span>NT 2023.003 ¬∑ NT 2023.004</span>
-                </div>
-              </header>
-              <div class="grid grid-cols-1 gap-2.5 p-3.5 text-[10px] text-gray-600 lg:grid-cols-4">
-                <div class="lg:col-span-2">
-                  <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-600">Emitente</label>
-                  <div class="mt-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5">
-                    <p class="font-semibold text-gray-700" data-import-emitente-nome>Informe a chave ou importe o XML</p>
-                    <p data-import-emitente-document>Documento n√£o identificado</p>
-                  </div>
-                </div>
-                <div>
-                  <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-600">Chave de acesso</label>
-                  <div class="mt-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5">
-                    <p class="font-mono text-[12px] text-gray-700" data-import-access-key>------------------------------</p>
-                    <p data-import-access-key-details>DV -- ¬∑ Ambiente n√£o identificado</p>
-                  </div>
-                </div>
-                <div>
-                  <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-600">Protocolo</label>
-                  <div class="mt-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5">
-                    <p data-import-protocol>Protocolo n√£o informado</p>
-                    <p data-import-protocol-received>Recebimento n√£o dispon√≠vel</p>
-                  </div>
-                </div>
-                <div class="lg:col-span-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
-                  <label class="space-y-1">
-                    <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-600">NF</span>
-                    <input type="text" data-import-summary-field="nf-number" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="" readonly>
-                  </label>
-                  <label class="space-y-1">
-                    <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-600">S√©rie</span>
-                    <input type="text" data-import-summary-field="nf-serie" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="" readonly>
-                  </label>
-                  <label class="space-y-1">
-                    <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-600">Emiss√£o</span>
-                    <input type="text" data-import-summary-field="nf-emissao" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="" readonly>
-                  </label>
-                  <label class="space-y-1">
-                    <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-600">Entrada</span>
-                    <input type="text" data-import-summary-field="nf-entrada" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="" readonly>
-                  </label>
-                </div>
-                <div class="lg:col-span-2">
-                  <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-600">Fornecedor</label>
-                  <div class="mt-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5">
-                    <p class="font-semibold text-gray-700" data-import-supplier-name>Fornecedor n√£o localizado</p>
-                    <p data-import-supplier-document>Documento n√£o dispon√≠vel</p>
-                  </div>
-                </div>
-                <div>
-                  <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-600">Valor total</label>
-                  <div class="mt-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-right text-gray-700">
-                    <p class="text-sm font-semibold" data-import-total>R$ 0,00</p>
-                    <p class="text-[10px] text-emerald-600" data-import-total-status>Aguardando importa√ß√£o do XML</p>
-                  </div>
-                </div>
-                <div>
-                  <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-600">Destinat√°rio</label>
-                  <div class="mt-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5">
-                    <p class="font-semibold text-gray-700" data-import-destinatario-nome>Destinat√°rio n√£o identificado</p>
-                    <p data-import-destinatario-document>Documento n√£o dispon√≠vel</p>
-                  </div>
-                </div>
-                <div class="lg:col-span-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
-                  <label class="space-y-1">
-                    <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-600">CFOP predominante</span>
-                    <input type="text" data-import-summary-field="cfop" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="" readonly>
-                  </label>
-                  <label class="space-y-1">
-                    <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-600">Natureza da opera√ß√£o</span>
-                    <input type="text" data-import-summary-field="natureza" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="" readonly>
-                  </label>
-                  <label class="space-y-1">
-                    <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-600">Modalidade frete</span>
-                    <input type="text" data-import-summary-field="modalidade-frete" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="" readonly>
-                  </label>
-                  <label class="space-y-1">
-                    <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-600">Indicador IE destinat√°rio</span>
-                    <input type="text" data-import-summary-field="indicador-ie" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="" readonly>
-                  </label>
-                </div>
-              </div>
-            </section>
-
-            <section class="rounded-xl border border-gray-200">
-              <header class="flex flex-col gap-2.5 border-b border-gray-100 bg-gray-50 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-                <div class="space-y-0.5">
-                  <h3 class="text-[12px] font-semibold text-gray-900">Produtos importados</h3>
-                  <p class="text-[11px] text-gray-600">Itens conforme o XML, com tributos ICMS, ST, IPI, PIS e COFINS.</p>
-                </div>
-                <div class="flex flex-wrap items-center gap-1.5 text-[10px] text-gray-600">
-                  <span class="inline-flex items-center gap-1 rounded-full border border-gray-200 px-2 py-0.5" data-import-xml-label>
-                    <i class="fas fa-layer-group text-[11px]"></i>
-                    <span data-import-xml-number>XML n√£o importado</span>
-                  </span>
-                  <button
-                    type="button"
-                    class="inline-flex items-center gap-1 rounded-full border border-primary px-2 py-0.5 text-[10px] font-semibold text-primary transition hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
-                    data-refresh-import-products
-                  >
-                    <i class="fas fa-rotate-right text-[11px]" data-refresh-import-products-icon></i>
-                    Atualizar lista
-                  </button>
-                  <span class="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-sky-700" data-import-xml-validation>
-                    <i class="fas fa-circle-info text-[11px]" data-import-xml-validation-icon></i>
-                    <span data-import-xml-validation-text>Aguardando valida√ß√£o fiscal</span>
-                  </span>
-                </div>
-              </header>
-              <div class="overflow-x-auto rounded-lg border border-gray-200">
-                <table class="min-w-full table-auto divide-y divide-gray-200 text-[10px]" data-import-products-table>
-                  <thead class="bg-gray-50 text-[9px] uppercase tracking-wide text-gray-600" data-import-products-head></thead>
-                  <tbody class="divide-y divide-gray-200 bg-white" data-import-products-body></tbody>
-                </table>
-              </div>
-            </section>
-          </div>
-          <footer class="flex flex-col gap-3 border-t border-gray-100 bg-gray-50 px-5 py-3 sm:flex-row sm:items-center sm:justify-end">
-            <div class="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row sm:items-center">
-              <button type="button" data-close-import-modal class="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100">Cancelar</button>
-              <button
-                type="button"
-                class="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90"
-                data-confirm-import
-              >
-                <i class="fas fa-file-import" data-confirm-import-icon></i>
-                <span data-confirm-import-text>Importar</span>
-              </button>
-            </div>
-          </footer>
-      </div>
-    </div>
-  </div>
-
-  <div
-    id="product-link-modal"
-    class="fixed inset-0 z-[1050] hidden"
-    aria-hidden="true"
-  >
-    <div
-      class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm"
-      data-close-product-link-modal
-      aria-label="Fechar sele√ß√£o de produto"
-    ></div>
-    <div class="relative mx-auto flex min-h-full w-full items-center justify-center px-3 py-6">
-      <div
-        class="relative w-full max-w-xl transform-gpu overflow-hidden rounded-2xl bg-white shadow-xl transition-all duration-200 ease-out"
-        data-product-link-card
-      >
-        <header class="flex items-start justify-between gap-3 border-b border-gray-100 px-5 py-4">
-          <div class="space-y-1">
-            <h3 class="text-lg font-semibold text-gray-900">Selecionar produto cadastrado</h3>
-            <p class="text-[11px] text-gray-600">
-              Escolha um produto existente para vincular ao item informado pelo fornecedor.
-            </p>
-          </div>
-          <button
-            type="button"
-            class="inline-flex items-center justify-center rounded-full border border-gray-200 p-2 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700"
-            data-close-product-link-modal
-            aria-label="Fechar sele√ß√£o de produto"
-          >
-            <i class="fas fa-times"></i>
-          </button>
-        </header>
-        <div class="space-y-4 px-5 py-4">
-          <div class="space-y-2 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
-            <div class="space-y-1">
-              <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-600">Produto do fornecedor</span>
-              <p class="text-[12px] font-semibold text-gray-800" data-product-link-item>‚Äî</p>
-            </div>
-            <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <div>
-                <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-600">C√≥digo no fornecedor</span>
-                <p class="text-[11px] text-gray-700" data-product-link-code>‚Äî</p>
-              </div>
-              <div>
-                <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-600">Fornecedor ativo</span>
-                <p class="text-[11px] text-gray-700" data-product-link-supplier>‚Äî</p>
-              </div>
-            </div>
-          </div>
-          <form class="flex flex-col gap-2 sm:flex-row sm:items-end" data-product-link-form>
-            <div class="flex-1">
-              <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-gray-600" for="product-link-search">
-                Buscar produto cadastrado
-              </label>
-              <input
-                id="product-link-search"
-                type="search"
-                placeholder="Digite c√≥digo interno, nome ou GTIN"
-                class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                data-product-link-search
-                autocomplete="off"
-              />
-            </div>
-            <button
-              type="submit"
-              class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/30"
-            >
-              <i class="fas fa-search"></i>
-              Buscar
-            </button>
-          </form>
-          <div class="space-y-2" data-product-link-results-wrapper>
-            <div
-              class="flex items-center gap-2 rounded-lg border border-sky-100 bg-sky-50 px-3 py-2 text-[11px] text-sky-700 hidden"
-              data-product-link-loading
-            >
-              <i class="fas fa-circle-notch fa-spin text-sky-600"></i>
-              <span data-product-link-loading-text>Buscando produtos cadastrados...</span>
-            </div>
-            <p class="hidden text-[11px] font-medium text-rose-600" data-product-link-error>
-              N√£o foi poss√≠vel buscar os produtos cadastrados. Tente novamente.
-            </p>
-            <p class="hidden text-[11px] text-gray-600" data-product-link-empty>
-              Informe ao menos tr√™s caracteres para localizar um produto cadastrado.
-            </p>
-            <ul
-              class="max-h-64 space-y-2 overflow-y-auto pr-1 text-sm"
-              data-product-link-results
-            ></ul>
-          </div>
-        </div>
-        <footer class="flex justify-end gap-2 border-t border-gray-100 bg-gray-50 px-5 py-3">
-          <button
-            type="button"
-            class="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100"
-            data-close-product-link-modal
-          >
-            Cancelar
-          </button>
-        </footer>
-      </div>
-    </div>
-  </div>
-
-  <div
-    id="product-registration-iframe-modal"
-    class="fixed inset-0 z-[1000] hidden"
-    aria-hidden="true"
-  >
-    <div
-      class="absolute inset-0 bg-gray-900/70 backdrop-blur-sm"
-      data-close-product-modal
-      aria-label="Fechar cadastro de produto"
-    ></div>
-    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
-      <div
-        class="relative flex w-full max-w-[1352px] transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl transition-all duration-200 ease-out max-h-[90vh] min-h-0 text-[12px] leading-[1.35]"
-        data-product-frame-shell
-      >
-        <header class="flex flex-col gap-2 border-b border-gray-100 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
-          <div class="space-y-1">
-            <span
-              data-product-modal-subtitle
-              class="hidden text-[11px] font-semibold uppercase tracking-wide text-primary"
-            ></span>
-            <h3
-              data-product-modal-title
-              class="text-lg font-semibold text-gray-900"
-            >
-              Cadastro de produto
-            </h3>
-            <p
-              data-product-modal-helper
-              class="text-[11px] text-gray-600"
-            >
-              Os dados do XML autorizado foram enviados automaticamente. Revise e complete as informa√ß√µes antes de salvar.
-            </p>
-          </div>
-          <button
-            type="button"
-            class="inline-flex items-center justify-center rounded-full border border-gray-200 p-2 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700"
-            data-close-product-modal
-            aria-label="Fechar cadastro de produto"
-          >
-            <i class="fas fa-times"></i>
-          </button>
-        </header>
-        <div class="flex-1 overflow-hidden">
-          <div
-            data-product-frame-loading
-            class="flex h-full flex-col items-center justify-center gap-3 bg-gray-50 text-center text-[12px] text-gray-600"
-          >
-            <i class="fas fa-circle-notch fa-spin text-lg text-primary"></i>
-            <p>
-              Carregando cadastro de produto...
-              <span class="block text-[11px] text-gray-600">Isso pode levar alguns instantes.</span>
-            </p>
-          </div>
-          <iframe
-            data-product-frame
-            title="Cadastro de produto"
-            class="hidden h-full w-full border-0"
-            allow="clipboard-write"
-          ></iframe>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div id="admin-footer-placeholder"></div>
-
-  <script>var basePath = '../../';</script>
-  <script src="../../scripts/core/config.js"></script>
-  <script src="../../scripts/core/ui.js"></script>
-  <script src="../../scripts/core/main.js"></script>
-  <script src="../../scripts/admin/admin.js"></script>
-  <script src="/scripts/common/modal-bridge.js"></script>
-  <script>
     document.addEventListener('DOMContentLoaded', function () {
       const tabButtons = document.querySelectorAll('.tab-button');
       const tabPanels = document.querySelectorAll('.tab-panel');
@@ -2742,7 +362,7 @@
         };
 
         const handleAuthError = () => {
-          notify('Sess√£o expirada. Fa√ßa login novamente para continuar.', 'error');
+          notify('Sess„o expirada. FaÁa login novamente para continuar.', 'error');
         };
 
         const getToken = () => {
@@ -2752,7 +372,7 @@
             const parsed = JSON.parse(raw);
             return parsed?.token || '';
           } catch (error) {
-            console.warn('N√£o foi poss√≠vel recuperar o token de autentica√ß√£o.', error);
+            console.warn('N„o foi possÌvel recuperar o token de autenticaÁ„o.', error);
             return '';
           }
         };
@@ -2964,7 +584,7 @@
             notify(successMessage, 'success');
           } catch (error) {
             console.error('Erro ao atualizar a lista de produtos importados:', error);
-            notify('N√£o foi poss√≠vel atualizar a lista de produtos importados. Tente novamente.', 'error');
+            notify('N„o foi possÌvel atualizar a lista de produtos importados. Tente novamente.', 'error');
           } finally {
             setRefreshImportedProductsButtonState(false);
             isRefreshingImportedProducts = false;
@@ -3437,7 +1057,7 @@
             Math.abs(totalsNormalized.totalValue - totalsNormalized.products) > 0.0005
           ) {
             console.warn(
-              '[NF-e] Valor total informado (vNF) difere do somat√≥rio dos produtos (vProd) sem custos adicionais declarados.',
+              '[NF-e] Valor total informado (vNF) difere do somatÛrio dos produtos (vProd) sem custos adicionais declarados.',
               {
                 totalValue: totalsNormalized.totalValue,
                 productsTotal: totalsNormalized.products,
@@ -3931,7 +1551,7 @@
           if (unknownCfops.size) {
             const codesList = Array.from(unknownCfops).sort().join(', ');
             notify(
-              `CFOP(s) sem classifica√ß√£o no mapa de bonifica√ß√£o: ${codesList}. Esses itens foram tratados como indefinidos.`,
+              `CFOP(s) sem classificaÁ„o no mapa de bonificaÁ„o: ${codesList}. Esses itens foram tratados como indefinidos.`,
               'warning'
             );
           }
@@ -3969,7 +1589,7 @@
           const emissionInfo = normalizeDate(ide.emissionDate);
 
           const reference = {
-            type: 'NF-e de bonifica√ß√£o',
+            type: 'NF-e de bonificaÁ„o',
             model: ide.model || '55',
             number: ide.number || '',
             series: ide.serie || '',
@@ -4234,17 +1854,17 @@
           if (bankCode) bankParts.push(`Banco ${bankCode}`);
           if (bankName) bankParts.push(bankName);
           if (bankParts.length) {
-            parts.push(bankParts.join(' ¬∑ '));
+            parts.push(bankParts.join(' ∑ '));
           }
 
           const accountParts = [];
           if (agency) accountParts.push(`Ag. ${agency}`);
           if (numberDisplay) accountParts.push(`C/C ${numberDisplay}`);
           if (accountParts.length) {
-            parts.push(accountParts.join(' ¬∑ '));
+            parts.push(accountParts.join(' ∑ '));
           }
 
-          return parts.join(' ¬∑ ') || bankName || bankCode || alias || 'Conta corrente';
+          return parts.join(' ∑ ') || bankName || bankCode || alias || 'Conta corrente';
         };
 
         const setBankAccountOptions = (accounts = [], { placeholder = null } = {}) => {
@@ -4430,7 +2050,7 @@
               if (!response.ok) {
                 const message =
                   (payload && (payload.message || payload.error)) ||
-                  'N√£o foi poss√≠vel carregar as contas correntes.';
+                  'N„o foi possÌvel carregar as contas correntes.';
                 const error = new Error(message);
                 error.status = response.status;
                 throw error;
@@ -4525,7 +2145,7 @@
           } catch (error) {
             console.error('Erro ao carregar contas correntes:', error);
             notify(
-              error?.message || 'N√£o foi poss√≠vel carregar as contas correntes da empresa selecionada.',
+              error?.message || 'N„o foi possÌvel carregar as contas correntes da empresa selecionada.',
               'error'
             );
             setBankAccountPlaceholder('Erro ao carregar contas correntes');
@@ -4585,7 +2205,7 @@
             '';
           const formattedDocument = formatCompanyDocument(documentValue);
           if (name && formattedDocument) {
-            return `${name} ¬∑ ${formattedDocument}`;
+            return `${name} ∑ ${formattedDocument}`;
           }
           if (name) return name;
           if (formattedDocument) return formattedDocument;
@@ -4929,7 +2549,7 @@
             return {
               valid: false,
               message:
-                'N√£o foi poss√≠vel localizar a empresa selecionada. Atualize a lista de empresas e tente novamente.',
+                'N„o foi possÌvel localizar a empresa selecionada. Atualize a lista de empresas e tente novamente.',
             };
           }
 
@@ -4942,7 +2562,7 @@
           if (!hasCertificate) {
             return {
               valid: false,
-              message: 'A empresa selecionada n√£o possui certificado digital cadastrado.',
+              message: 'A empresa selecionada n„o possui certificado digital cadastrado.',
             };
           }
 
@@ -4954,7 +2574,7 @@
               return {
                 valid: false,
                 message:
-                  'O certificado digital da empresa est√° vencido. Atualize o certificado para consultar a SEFAZ.',
+                  'O certificado digital da empresa est· vencido. Atualize o certificado para consultar a SEFAZ.',
               };
             }
           }
@@ -5019,14 +2639,14 @@
           clearPendingRows();
           if (!Array.isArray(documents) || !documents.length) {
             const emptyMessage = pendingHasPerformedSearch
-              ? 'Nenhuma nota autorizada foi encontrada para o per√≠odo informado.'
+              ? 'Nenhuma nota autorizada foi encontrada para o perÌodo informado.'
               : defaultPendingEmptyContent;
             showPendingEmpty(emptyMessage);
             return;
           }
 
           if (!pendingRowTemplate || !pendingTableBody) {
-            showPendingError('Estrutura da tabela de notas pendentes n√£o foi encontrada.');
+            showPendingError('Estrutura da tabela de notas pendentes n„o foi encontrada.');
             return;
           }
 
@@ -5064,29 +2684,29 @@
             const supplierDocumentCell = row.querySelector('[data-pending-supplier-document]');
             if (supplierDocumentCell) {
               supplierDocumentCell.textContent =
-                formatSupplierDocumentValue(document.supplierDocument) || '‚Äî';
+                formatSupplierDocumentValue(document.supplierDocument) || 'ó';
             }
 
             const supplierNameElement = row.querySelector('[data-pending-supplier-name]');
             if (supplierNameElement) {
               supplierNameElement.textContent =
-                document.supplierName || 'Fornecedor n√£o informado';
+                document.supplierName || 'Fornecedor n„o informado';
             }
 
             const issueDateCell = row.querySelector('[data-pending-issue-date]');
             if (issueDateCell) {
               issueDateCell.textContent =
-                formatDateForDisplay(document.issueDate || document.createdAt) || '‚Äî';
+                formatDateForDisplay(document.issueDate || document.createdAt) || 'ó';
             }
 
             const serieCell = row.querySelector('[data-pending-series]');
             if (serieCell) {
-              serieCell.textContent = document.serie || '‚Äî';
+              serieCell.textContent = document.serie || 'ó';
             }
 
             const numberCell = row.querySelector('[data-pending-number]');
             if (numberCell) {
-              numberCell.textContent = document.number || '‚Äî';
+              numberCell.textContent = document.number || 'ó';
             }
 
             const totalCell = row.querySelector('[data-pending-total]');
@@ -5099,7 +2719,7 @@
 
             const accessKeyCell = row.querySelector('[data-pending-access-key]');
             if (accessKeyCell) {
-              accessKeyCell.textContent = document.accessKey || '‚Äî';
+              accessKeyCell.textContent = document.accessKey || 'ó';
             }
 
             const sefazStatusCell = row.querySelector('[data-pending-sefaz-status]');
@@ -5122,7 +2742,7 @@
 
         const requestPendingDocuments = async () => {
           if (!pendingCompanySelect) {
-            notify('N√£o foi poss√≠vel localizar o seletor de empresas.', 'error');
+            notify('N„o foi possÌvel localizar o seletor de empresas.', 'error');
             return;
           }
 
@@ -5140,7 +2760,7 @@
           const endDate = parseDateFromInputValue(endRaw);
 
           if (startDate && endDate && endDate < startDate) {
-            const message = 'O per√≠odo informado √© inv√°lido. Ajuste as datas e tente novamente.';
+            const message = 'O perÌodo informado È inv·lido. Ajuste as datas e tente novamente.';
             showPendingError(message);
             notify(message, 'warning');
             return;
@@ -5176,7 +2796,7 @@
             if (!response.ok) {
               const message =
                 (payload && (payload.message || payload.error)) ||
-                'N√£o foi poss√≠vel consultar as notas autorizadas. Tente novamente em instantes.';
+                'N„o foi possÌvel consultar as notas autorizadas. Tente novamente em instantes.';
               showPendingError(message);
               notify(message, response.status >= 500 ? 'error' : 'warning');
               return;
@@ -5187,16 +2807,16 @@
             renderPendingDocuments(documents);
 
             if (documents.length) {
-              notify('Consulta conclu√≠da com sucesso.', 'success');
+              notify('Consulta concluÌda com sucesso.', 'success');
             } else {
-              notify('Nenhuma nota autorizada foi encontrada para o per√≠odo informado.', 'info');
+              notify('Nenhuma nota autorizada foi encontrada para o perÌodo informado.', 'info');
             }
           } catch (error) {
             if (error?.name === 'AbortError') return;
             console.error('Erro ao consultar notas autorizadas na SEFAZ:', error);
             const message =
               error?.message ||
-              'N√£o foi poss√≠vel consultar as notas autorizadas. Verifique a conex√£o e tente novamente.';
+              'N„o foi possÌvel consultar as notas autorizadas. Verifique a conex„o e tente novamente.';
             showPendingError(message);
             notify(message, 'error');
           } finally {
@@ -5290,7 +2910,7 @@
               if (!response.ok) {
                 const message =
                   (payload && (payload.message || payload.error)) ||
-                  'N√£o foi poss√≠vel carregar as empresas.';
+                  'N„o foi possÌvel carregar as empresas.';
                 const error = new Error(message);
                 error.status = response.status;
                 throw error;
@@ -5380,10 +3000,10 @@
               companySelect.value = '';
               if (!companies.length) {
                 setBankAccountPlaceholder('Cadastre uma empresa para listar as contas correntes');
-                setDepositPlaceholder('Cadastre uma empresa para listar os dep√≥sitos');
+                setDepositPlaceholder('Cadastre uma empresa para listar os depÛsitos');
               } else {
                 setBankAccountPlaceholder('Selecione uma empresa para listar as contas correntes');
-                setDepositPlaceholder('Selecione uma empresa para listar os dep√≥sitos');
+                setDepositPlaceholder('Selecione uma empresa para listar os depÛsitos');
               }
               return { value: '', changed: previousValue !== companySelect.value };
             }
@@ -5402,7 +3022,7 @@
             console.error('Erro ao carregar empresas:', error);
             notify(
               error?.message ||
-                'N√£o foi poss√≠vel carregar as empresas cadastradas. Tente novamente em instantes.',
+                'N„o foi possÌvel carregar as empresas cadastradas. Tente novamente em instantes.',
               'error'
             );
             setCompanyPlaceholder('Erro ao carregar empresas', { disabled: true });
@@ -5423,7 +3043,7 @@
         };
 
         const buildDepositLabel = (deposit) => {
-          if (!deposit || typeof deposit !== 'object') return 'Dep√≥sito';
+          if (!deposit || typeof deposit !== 'object') return 'DepÛsito';
           const normalize = (value) => (typeof value === 'string' ? value.trim() : '');
           const name = normalize(deposit.nome);
           const code = normalize(deposit.codigo);
@@ -5438,9 +3058,9 @@
           }
           const parts = [];
           if (name) parts.push(name);
-          if (code) parts.push(`C√≥d. ${code}`);
+          if (code) parts.push(`CÛd. ${code}`);
           if (companyName) parts.push(companyName);
-          return parts.join(' ¬∑ ') || 'Dep√≥sito';
+          return parts.join(' ∑ ') || 'DepÛsito';
         };
 
         const setDepositOptions = (deposits = [], { placeholder = null } = {}) => {
@@ -5452,8 +3072,8 @@
           defaultOption.textContent =
             placeholder ||
             (Array.isArray(deposits) && deposits.length
-              ? 'Selecione o dep√≥sito'
-              : 'Nenhum dep√≥sito cadastrado para esta empresa');
+              ? 'Selecione o depÛsito'
+              : 'Nenhum depÛsito cadastrado para esta empresa');
           depositSelect.appendChild(defaultOption);
 
           if (Array.isArray(deposits)) {
@@ -5500,7 +3120,7 @@
             try {
               await depositRegistry.loading.get(cacheKey);
             } catch (error) {
-              console.error('Falha anterior ao carregar dep√≥sitos:', error);
+              console.error('Falha anterior ao carregar depÛsitos:', error);
             }
             const cached = depositRegistry.cache.get(cacheKey) || [];
             registerDeposits(cached);
@@ -5529,7 +3149,7 @@
               if (!response.ok) {
                 const message =
                   (payload && (payload.message || payload.error)) ||
-                  'N√£o foi poss√≠vel carregar os dep√≥sitos.';
+                  'N„o foi possÌvel carregar os depÛsitos.';
                 const error = new Error(message);
                 error.status = response.status;
                 throw error;
@@ -5563,14 +3183,14 @@
 
           if (!normalizedCompanyId) {
             pendingDepositId = '';
-            setDepositPlaceholder('Selecione uma empresa para listar os dep√≥sitos');
+            setDepositPlaceholder('Selecione uma empresa para listar os depÛsitos');
             if (lastNfeData) {
               lastNfeData.selectedDepositId = '';
             }
             return;
           }
 
-          setDepositPlaceholder('Carregando dep√≥sitos...', { disabled: true });
+          setDepositPlaceholder('Carregando depÛsitos...', { disabled: true });
 
           try {
             const deposits = await loadDepositsForCompany(normalizedCompanyId);
@@ -5591,8 +3211,8 @@
 
             setDepositOptions(availableDeposits, {
               placeholder: availableDeposits.length
-                ? 'Selecione o dep√≥sito'
-                : 'Nenhum dep√≥sito cadastrado para esta empresa',
+                ? 'Selecione o depÛsito'
+                : 'Nenhum depÛsito cadastrado para esta empresa',
             });
 
             let desiredValue = '';
@@ -5631,13 +3251,13 @@
 
             depositSelect.disabled = !availableDeposits.length;
           } catch (error) {
-            console.error('Erro ao carregar dep√≥sitos:', error);
+            console.error('Erro ao carregar depÛsitos:', error);
             notify(
               error?.message ||
-                'N√£o foi poss√≠vel carregar os dep√≥sitos da empresa selecionada. Tente novamente em instantes.',
+                'N„o foi possÌvel carregar os depÛsitos da empresa selecionada. Tente novamente em instantes.',
               'error'
             );
-            setDepositPlaceholder('N√£o foi poss√≠vel carregar os dep√≥sitos.', { disabled: true });
+            setDepositPlaceholder('N„o foi possÌvel carregar os depÛsitos.', { disabled: true });
           }
         };
 
@@ -6241,11 +3861,11 @@
           const codeValue = supplier?.code ?? supplier?.codeNumber;
           let codeText = '';
           if (typeof codeValue === 'number' && Number.isFinite(codeValue)) {
-            codeText = `C√≥digo ${String(codeValue).padStart(4, '0')}`;
+            codeText = `CÛdigo ${String(codeValue).padStart(4, '0')}`;
           } else if (typeof codeValue === 'string' && codeValue.trim()) {
-            codeText = `C√≥digo ${codeValue.trim()}`;
+            codeText = `CÛdigo ${codeValue.trim()}`;
           }
-          return [formattedDocument, name, codeText].filter(Boolean).join(' ¬∑ ');
+          return [formattedDocument, name, codeText].filter(Boolean).join(' ∑ ');
         };
 
         const findSupplierOptionByDocument = (documentDigits) => {
@@ -6379,7 +3999,7 @@
             try {
               await supplierRegistry.loadingPromise;
             } catch (_) {
-              // Ignorar erros anteriores, o estado j√° foi atualizado
+              // Ignorar erros anteriores, o estado j· foi atualizado
             }
             applyPendingSupplierSelection();
             return supplierRegistry.byDocument;
@@ -6415,7 +4035,7 @@
           try {
             await supplierRegistry.loadingPromise;
           } catch (_) {
-            // Erro j√° tratado no bloco acima
+            // Erro j· tratado no bloco acima
           }
           applyPendingSupplierSelection();
           return supplierRegistry.byDocument;
@@ -6451,7 +4071,7 @@
         const composeDocumentLine = (documentValue, stateRegistration) => {
           const documentText = formatDocument(documentValue);
           if (documentText && stateRegistration) {
-            return `${documentText} ¬∑ IE ${stateRegistration}`;
+            return `${documentText} ∑ IE ${stateRegistration}`;
           }
           if (documentText) return documentText;
           if (stateRegistration) return `IE ${stateRegistration}`;
@@ -6509,7 +4129,7 @@
           try {
             return JSON.parse(JSON.stringify(value));
           } catch (error) {
-            console.warn('N√£o foi poss√≠vel clonar os dados informados para o rascunho.', error);
+            console.warn('N„o foi possÌvel clonar os dados informados para o rascunho.', error);
             return null;
           }
         };
@@ -6948,18 +4568,18 @@
         const PAYMENT_METHOD_DESCRIPTIONS = {
           '01': 'Dinheiro',
           '02': 'Cheque',
-          '03': 'Cart√£o de Cr√©dito',
-          '04': 'Cart√£o de D√©bito',
-          '05': 'Cr√©dito Loja',
-          '10': 'Vale Alimenta√ß√£o',
-          '11': 'Vale Refei√ß√£o',
+          '03': 'Cart„o de CrÈdito',
+          '04': 'Cart„o de DÈbito',
+          '05': 'CrÈdito Loja',
+          '10': 'Vale AlimentaÁ„o',
+          '11': 'Vale RefeiÁ„o',
           '12': 'Vale Presente',
-          '13': 'Vale Combust√≠vel',
+          '13': 'Vale CombustÌvel',
           '14': 'Duplicata Mercantil',
-          '15': 'Boleto Banc√°rio',
-          '16': 'Dep√≥sito Banc√°rio',
-          '17': 'Pagamento Instant√¢neo (PIX)',
-          '18': 'Transfer√™ncia banc√°ria',
+          '15': 'Boleto Banc·rio',
+          '16': 'DepÛsito Banc·rio',
+          '17': 'Pagamento Instant‚neo (PIX)',
+          '18': 'TransferÍncia banc·ria',
           '19': 'Programa de Fidelidade',
           '90': 'Sem pagamento',
           '99': 'Outros',
@@ -6992,7 +4612,7 @@
           const cep = formatCep(address.cep);
           if (cep) parts.push(`CEP ${cep}`);
           if (address.country) parts.push(address.country);
-          return parts.join(' ¬∑ ');
+          return parts.join(' ∑ ');
         };
 
         const buildContactLine = (entity = {}) => {
@@ -7002,22 +4622,22 @@
           if (phone) parts.push(phone);
           const mobile = formatPhone(entity.mobile);
           if (mobile && mobile !== phone) parts.push(mobile);
-          return parts.length ? parts.join(' ¬∑ ') : '';
+          return parts.length ? parts.join(' ∑ ') : '';
         };
 
         const mapEnvironment = (value) => {
-          if (value === '1') return 'Ambiente produ√ß√£o';
-          if (value === '2') return 'Ambiente homologa√ß√£o';
-          return 'Ambiente n√£o identificado';
+          if (value === '1') return 'Ambiente produÁ„o';
+          if (value === '2') return 'Ambiente homologaÁ„o';
+          return 'Ambiente n„o identificado';
         };
 
         const mapFrete = (value) => {
           const map = {
-            '0': '0 - Contrata√ß√£o do frete por conta do remetente (CIF)',
-            '1': '1 - Contrata√ß√£o do frete por conta do destinat√°rio/remetente (FOB)',
-            '2': '2 - Contrata√ß√£o do frete por conta de terceiros',
-            '3': '3 - Transporte pr√≥prio por conta do remetente',
-            '4': '4 - Transporte pr√≥prio por conta do destinat√°rio',
+            '0': '0 - ContrataÁ„o do frete por conta do remetente (CIF)',
+            '1': '1 - ContrataÁ„o do frete por conta do destinat·rio/remetente (FOB)',
+            '2': '2 - ContrataÁ„o do frete por conta de terceiros',
+            '3': '3 - Transporte prÛprio por conta do remetente',
+            '4': '4 - Transporte prÛprio por conta do destinat·rio',
             '9': '9 - Sem frete',
           };
           return map[value] || value || '';
@@ -7027,7 +4647,7 @@
           const map = {
             '1': '1 - Contribuinte ICMS',
             '2': '2 - Contribuinte isento',
-            '9': '9 - N√£o contribuinte ICMS',
+            '9': '9 - N„o contribuinte ICMS',
           };
           return map[value] || value || '';
         };
@@ -7236,20 +4856,20 @@
           }
           importSupplierSummary.classList.remove('hidden');
           if (importSupplierSummaryName) {
-            importSupplierSummaryName.textContent = supplier.name || 'Emitente n√£o identificado';
+            importSupplierSummaryName.textContent = supplier.name || 'Emitente n„o identificado';
           }
           if (importSupplierSummaryDocument) {
-            importSupplierSummaryDocument.textContent = formatDocument(supplier.document) || 'Documento n√£o informado';
+            importSupplierSummaryDocument.textContent = formatDocument(supplier.document) || 'Documento n„o informado';
           }
           if (importSupplierSummaryIe) {
-            importSupplierSummaryIe.textContent = supplier.stateRegistration || 'IE n√£o informada';
+            importSupplierSummaryIe.textContent = supplier.stateRegistration || 'IE n„o informada';
           }
           if (importSupplierSummaryAddress) {
             importSupplierSummaryAddress.textContent =
-              formatAddressLine(supplier.address) || 'Endere√ßo n√£o informado';
+              formatAddressLine(supplier.address) || 'EndereÁo n„o informado';
           }
           if (importSupplierSummaryContact) {
-            importSupplierSummaryContact.textContent = buildContactLine(supplier) || 'Contato n√£o informado';
+            importSupplierSummaryContact.textContent = buildContactLine(supplier) || 'Contato n„o informado';
           }
         };
 
@@ -7408,7 +5028,7 @@
             };
             sessionStorage.setItem(PRODUCT_DRAFT_STORAGE_KEY, JSON.stringify(payload));
           } catch (error) {
-            console.warn('N√£o foi poss√≠vel preparar o rascunho de cadastro do produto importado.', error);
+            console.warn('N„o foi possÌvel preparar o rascunho de cadastro do produto importado.', error);
           }
         };
 
@@ -7458,7 +5078,7 @@
           if (productIframeSubtitle) {
             const parts = [];
             if (nfeData?.ide?.number) parts.push(`NF-e ${nfeData.ide.number}`);
-            if (nfeData?.ide?.serie) parts.push(`S√©rie ${nfeData.ide.serie}`);
+            if (nfeData?.ide?.serie) parts.push(`SÈrie ${nfeData.ide.serie}`);
             const supplierName =
               lastSupplierData?.fantasyName ||
               lastSupplierData?.name ||
@@ -7467,14 +5087,14 @@
               nfeData?.emit?.name ||
               '';
             if (supplierName) parts.push(supplierName);
-            const subtitle = parts.join(' ¬∑ ');
+            const subtitle = parts.join(' ∑ ');
             productIframeSubtitle.textContent = subtitle;
             productIframeSubtitle.classList.toggle('hidden', subtitle.length === 0);
           }
 
           if (productIframeHelper) {
             const baseMessage =
-              'Os dados do XML autorizado foram enviados automaticamente. Revise e complete as informa√ß√µes antes de salvar.';
+              'Os dados do XML autorizado foram enviados automaticamente. Revise e complete as informaÁıes antes de salvar.';
             const accessKeyNote = nfeData?.accessKey ? ` Chave de acesso ${nfeData.accessKey}.` : '';
             productIframeHelper.textContent = `${baseMessage}${accessKeyNote}`;
           }
@@ -7550,7 +5170,7 @@
             try {
               productModalHeightObserver.disconnect();
             } catch (observerError) {
-              console.debug('N√£o foi poss√≠vel desconectar o observador de altura do modal.', observerError);
+              console.debug('N„o foi possÌvel desconectar o observador de altura do modal.', observerError);
             }
             productModalHeightObserver = null;
           }
@@ -7566,7 +5186,7 @@
             try {
               productIframe.src = 'about:blank';
             } catch (iframeResetError) {
-              console.debug('N√£o foi poss√≠vel redefinir o iframe do produto.', iframeResetError);
+              console.debug('N„o foi possÌvel redefinir o iframe do produto.', iframeResetError);
             }
           }
           clearProductModalHeight();
@@ -7585,7 +5205,7 @@
             try {
               productModalPreviousFocus.focus();
             } catch (focusError) {
-              console.debug('N√£o foi poss√≠vel restaurar o foco ap√≥s fechar o cadastro de produto.', focusError);
+              console.debug('N„o foi possÌvel restaurar o foco apÛs fechar o cadastro de produto.', focusError);
             }
           }
           productModalPreviousFocus = null;
@@ -7633,12 +5253,12 @@
 
         const openExistingProduct = (item) => {
           if (!item || !item.matchedProduct) {
-            notify('Produto n√£o dispon√≠vel para edi√ß√£o no momento.', 'warning');
+            notify('Produto n„o disponÌvel para ediÁ„o no momento.', 'warning');
             return;
           }
           const url = buildExistingProductEditUrl(item, lastNfeData);
           if (!url) {
-            notify('N√£o foi poss√≠vel identificar o produto cadastrado para abrir no modal.', 'error');
+            notify('N„o foi possÌvel identificar o produto cadastrado para abrir no modal.', 'error');
             return;
           }
           openProductIframeModal(url, item, lastNfeData);
@@ -7790,7 +5410,7 @@
             const description =
               getProductNameFromRecord(item.matchedProduct) ||
               (typeof item.description === 'string' ? item.description : '') ||
-              'Produto sem descri√ß√£o';
+              'Produto sem descriÁ„o';
 
             normalizeProductPricing(item.matchedProduct);
 
@@ -7856,16 +5476,16 @@
           const formatCurrencyDisplay = (value) =>
             Number.isFinite(value) ? formatMoneyValue(value) : '';
           const formatQuantityDisplay = (value) =>
-            Number.isFinite(value) ? formatQuantity(value) : '‚Äî';
+            Number.isFinite(value) ? formatQuantity(value) : 'ó';
           const formatMarkupDisplay = (value) =>
             Number.isFinite(value) ? formatPercentValue(value) : '';
 
           entry.displays = {
-            costPrevious: Number.isFinite(entry.costPrevious) ? formatMoneyValue(entry.costPrevious) : '‚Äî',
+            costPrevious: Number.isFinite(entry.costPrevious) ? formatMoneyValue(entry.costPrevious) : 'ó',
             costNew: formatCurrencyDisplay(entry.costNew),
             markup: formatMarkupDisplay(entry.markupCurrent),
             saleNew: formatCurrencyDisplay(entry.saleNew),
-            salePrevious: Number.isFinite(entry.salePrevious) ? formatMoneyValue(entry.salePrevious) : '‚Äî',
+            salePrevious: Number.isFinite(entry.salePrevious) ? formatMoneyValue(entry.salePrevious) : 'ó',
             entryStock: formatQuantityDisplay(entry.entryStock),
             currentStock: formatQuantityDisplay(entry.currentStock),
             previousStock: formatQuantityDisplay(entry.previousStock),
@@ -8024,11 +5644,11 @@
 
           const codeCell = document.createElement('td');
           codeCell.className = 'px-3 py-2 align-top text-gray-700 whitespace-nowrap';
-          codeCell.textContent = entry.code || '‚Äî';
+          codeCell.textContent = entry.code || 'ó';
 
           const descriptionCell = document.createElement('td');
           descriptionCell.className = 'px-3 py-2 align-top text-gray-600';
-          descriptionCell.textContent = entry.description || '‚Äî';
+          descriptionCell.textContent = entry.description || 'ó';
 
           const costPreviousCell = document.createElement('td');
           costPreviousCell.className = 'px-3 py-2 align-top text-right text-gray-500 whitespace-nowrap';
@@ -8197,7 +5817,7 @@
           const items = Array.isArray(priceAdjustmentState.items) ? priceAdjustmentState.items : [];
           const filteredItems = filterPriceItems(items);
           if (!filteredItems.length) {
-            notify('N√£o h√° itens na tabela para exportar.', 'warning');
+            notify('N„o h· itens na tabela para exportar.', 'warning');
             return;
           }
 
@@ -8209,8 +5829,8 @@
               .replace(/"/g, '&quot;');
 
           const headers = [
-            'C√≥digo',
-            'Descri√ß√£o',
+            'CÛdigo',
+            'DescriÁ„o',
             'Custo anterior',
             'Custo novo',
             'Markup (%)',
@@ -8222,30 +5842,50 @@
             'Regra de imposto',
           ];
 
-          const toCsvField = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
-          const rows = [headers];
-          filteredItems.forEach((entry) => {
-            rows.push([
-              entry.code || '‚Äî',
-              entry.description || '‚Äî',
-              entry.displays?.costPrevious || '‚Äî',
-              entry.displays?.costNew || '',
-              entry.displays?.markup || '',
-              entry.displays?.saleNew || '',
-              entry.displays?.salePrevious || '‚Äî',
-              entry.displays?.entryStock || '‚Äî',
-              entry.displays?.currentStock || '‚Äî',
-              entry.displays?.previousStock || '‚Äî',
-              entry.nfeItem?.taxRuleName || '‚Äî',
-            ]);
+          const bodyRows = filteredItems
+            .map((entry) => {
+              const columns = [
+                entry.code || 'ó',
+                entry.description || 'ó',
+                entry.displays?.costPrevious || 'ó',
+                entry.displays?.costNew || '',
+                entry.displays?.markup || '',
+                entry.displays?.saleNew || '',
+                entry.displays?.salePrevious || 'ó',
+                entry.displays?.entryStock || 'ó',
+                entry.displays?.currentStock || 'ó',
+                entry.displays?.previousStock || 'ó',
+                entry.nfeItem?.taxRuleName || 'ó',
+              ];
+              return `<tr>${columns.map((value) => `<td>${escapeCell(value)}</td>`).join('')}</tr>`;
+            })
+            .join('');
+
+          const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+</head>
+<body>
+  <table border="1">
+    <thead>
+      <tr>${headers.map((header) => `<th>${escapeCell(header)}</th>`).join('')}</tr>
+    </thead>
+    <tbody>
+      ${bodyRows}
+    </tbody>
+  </table>
+</body>
+</html>`;
+
+          const blob = new Blob(['\ufeff', html], {
+            type: 'application/vnd.ms-excel;charset=utf-8;',
           });
-          const csv = rows.map((row) => row.map((cell) => toCsvField(cell)).join(';')).join('\r\n');
-          const blob = new Blob(['\ufeff', csv], { type: 'text/csv;charset=utf-8;' });
           const url = window.URL.createObjectURL(blob);
           const link = document.createElement('a');
           const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
           link.href = url;
-          link.download = `atualizacao-precos-nfe-${timestamp}.csv`;
+          link.download = `atualizacao-precos-nfe-${timestamp}.xls`;
           document.body.appendChild(link);
           link.click();
           link.remove();
@@ -8355,7 +5995,7 @@
               ? priceAdjustmentState.roundingCustomSuffix
               : null;
             if (suffix === null) {
-              notify('Informe uma decimal v√°lida para aplicar o arredondamento personalizado.', 'warning');
+              notify('Informe uma decimal v·lida para aplicar o arredondamento personalizado.', 'warning');
               if (priceRoundingCustomInput instanceof HTMLInputElement) {
                 priceRoundingCustomInput.focus();
               }
@@ -8363,16 +6003,16 @@
             }
           }
           if (!Array.isArray(priceAdjustmentState.items) || !priceAdjustmentState.items.length) {
-            notify('Nenhum produto dispon√≠vel para ajuste.', 'warning');
+            notify('Nenhum produto disponÌvel para ajuste.', 'warning');
             return;
           }
           if (priceAdjustmentState.maintainMarkup) {
-            notify('Desative a op√ß√£o Manter markup para arredondar os pre√ßos de venda.', 'warning');
+            notify('Desative a opÁ„o Manter markup para arredondar os preÁos de venda.', 'warning');
             return;
           }
           const selectedItems = priceAdjustmentState.items.filter((entry) => entry.selected);
           if (!selectedItems.length) {
-            notify('Selecione ao menos um produto para arredondar os pre√ßos.', 'warning');
+            notify('Selecione ao menos um produto para arredondar os preÁos.', 'warning');
             return;
           }
           selectedItems.forEach((entry) => {
@@ -8387,7 +6027,7 @@
 
         const applyCostPercentToSelection = () => {
           if (!Array.isArray(priceAdjustmentState.items) || !priceAdjustmentState.items.length) {
-            notify('Nenhum produto dispon√≠vel para ajuste.', 'warning');
+            notify('Nenhum produto disponÌvel para ajuste.', 'warning');
             return;
           }
           const selectedItems = priceAdjustmentState.items.filter((entry) => entry.selected);
@@ -8501,7 +6141,7 @@
 
         const handlePriceUpdate = async () => {
           if (!Array.isArray(priceAdjustmentState.items) || !priceAdjustmentState.items.length) {
-            notify('Nenhum produto dispon√≠vel para atualiza√ß√£o.', 'warning');
+            notify('Nenhum produto disponÌvel para atualizaÁ„o.', 'warning');
             return;
           }
           const selectedItems = priceAdjustmentState.items.filter((entry) => entry.selected);
@@ -8523,7 +6163,7 @@
               const saleValue = sanitizeCurrencyValue(entry.saleNew);
 
               if (!productId || !Number.isFinite(costValue) || !Number.isFinite(saleValue)) {
-                failures.push({ entry, error: new Error('Valores inv√°lidos para atualiza√ß√£o.') });
+                failures.push({ entry, error: new Error('Valores inv·lidos para atualizaÁ„o.') });
                 continue;
               }
 
@@ -8579,8 +6219,8 @@
             notify(`${successCount} produto${successCount > 1 ? 's' : ''} atualizado${successCount > 1 ? 's' : ''} com sucesso.`, 'success');
           }
           if (failures.length) {
-            console.error('Falhas ao atualizar pre√ßos:', failures.map((failure) => failure.error));
-            notify(`${failures.length} produto${failures.length > 1 ? 's' : ''} n√£o p√¥de ser atualizado. Verifique os dados e tente novamente.`, 'error');
+            console.error('Falhas ao atualizar preÁos:', failures.map((failure) => failure.error));
+            notify(`${failures.length} produto${failures.length > 1 ? 's' : ''} n„o pÙde ser atualizado. Verifique os dados e tente novamente.`, 'error');
           }
         };
 
@@ -8708,7 +6348,7 @@
             event.preventDefault();
             const mode = button.dataset.priceRound;
             if (mode === 'advanced') {
-              notify('O modo avan√ßado de arredondamento ainda est√° em desenvolvimento.', 'info');
+              notify('O modo avanÁado de arredondamento ainda est· em desenvolvimento.', 'info');
               return;
             }
             if (mode === 'custom') {
@@ -8716,7 +6356,7 @@
                 priceRoundingCustomInput ? priceRoundingCustomInput.value : priceAdjustmentState.roundingCustomSuffix
               );
               if (!Number.isFinite(suffix)) {
-                notify('Informe uma decimal v√°lida (ex.: 0,80) para arredondamento personalizado.', 'warning');
+                notify('Informe uma decimal v·lida (ex.: 0,80) para arredondamento personalizado.', 'warning');
                 if (priceRoundingCustomInput instanceof HTMLInputElement) {
                   priceRoundingCustomInput.focus();
                 }
@@ -8802,7 +6442,7 @@
             productLinkResults.innerHTML = '';
           }
           hideProductLinkMessages();
-          showProductLinkEmpty('Informe ao menos tr√™s caracteres para localizar um produto cadastrado.');
+          showProductLinkEmpty('Informe ao menos trÍs caracteres para localizar um produto cadastrado.');
           setProductLinkLoading(false);
           setProductLinkInteractivity(true);
         };
@@ -8819,7 +6459,7 @@
             try {
               productLinkPreviousFocus.focus();
             } catch (focusError) {
-              console.debug('N√£o foi poss√≠vel restaurar o foco ap√≥s fechar a sele√ß√£o de produto.', focusError);
+              console.debug('N„o foi possÌvel restaurar o foco apÛs fechar a seleÁ„o de produto.', focusError);
             }
           }
           productLinkPreviousFocus = null;
@@ -8852,9 +6492,9 @@
 
             const details = document.createElement('p');
             details.className = 'text-[11px] text-gray-600';
-            const sku = normalizeInternalCode(getProductCodeFromRecord(product)) || '‚Äî';
+            const sku = normalizeInternalCode(getProductCodeFromRecord(product)) || 'ó';
             const barcode = formatGtinDisplay(getProductBarcodeFromRecord(product));
-            details.textContent = `SKU: ${sku} ¬∑ GTIN: ${barcode}`;
+            details.textContent = `SKU: ${sku} ∑ GTIN: ${barcode}`;
             infoWrapper.appendChild(details);
 
             header.appendChild(infoWrapper);
@@ -8872,7 +6512,7 @@
             footer.className = 'mt-1 text-[10px] text-gray-500';
             const salePrice = resolveProductSaleValue(product);
             const price = Number.isFinite(salePrice) ? formatMoneyValue(salePrice) : '';
-            footer.textContent = price ? `Pre√ßo de venda: R$ ${price}` : 'Sem pre√ßo informado';
+            footer.textContent = price ? `PreÁo de venda: R$ ${price}` : 'Sem preÁo informado';
             item.appendChild(footer);
 
             fragment.appendChild(item);
@@ -8907,11 +6547,11 @@
 
         const openProductLinkModal = (item) => {
           if (!productLinkModal) {
-            notify('Sele√ß√£o de produto indispon√≠vel no momento.', 'error');
+            notify('SeleÁ„o de produto indisponÌvel no momento.', 'error');
             return;
           }
           if (!item) {
-            notify('Item da nota fiscal n√£o encontrado para vincula√ß√£o.', 'error');
+            notify('Item da nota fiscal n„o encontrado para vinculaÁ„o.', 'error');
             return;
           }
 
@@ -8923,7 +6563,7 @@
 
           const supplierCode = canonicalSupplierProductCode(item?.supplierCode);
           if (!supplierCode) {
-            notify('O item do fornecedor n√£o possui c√≥digo para realizar o v√≠nculo.', 'error');
+            notify('O item do fornecedor n„o possui cÛdigo para realizar o vÌnculo.', 'error');
             return;
           }
 
@@ -8932,13 +6572,13 @@
           productLinkActiveItem = item;
 
           if (productLinkItemLabel) {
-            productLinkItemLabel.textContent = item?.description || item?.matchedProduct?.nome || 'Item sem descri√ß√£o';
+            productLinkItemLabel.textContent = item?.description || item?.matchedProduct?.nome || 'Item sem descriÁ„o';
           }
           if (productLinkCodeLabel) {
-            productLinkCodeLabel.textContent = item?.supplierCode || '‚Äî';
+            productLinkCodeLabel.textContent = item?.supplierCode || 'ó';
           }
           if (productLinkSupplierLabel) {
-            productLinkSupplierLabel.textContent = supplierInfo.name || '‚Äî';
+            productLinkSupplierLabel.textContent = supplierInfo.name || 'ó';
           }
 
           if (productLinkSearchInput) {
@@ -8950,7 +6590,7 @@
           productLinkModal.setAttribute('data-modal-open', 'true');
           document.body.classList.add('overflow-hidden');
 
-          showProductLinkEmpty('Informe ao menos tr√™s caracteres para localizar um produto cadastrado.');
+          showProductLinkEmpty('Informe ao menos trÍs caracteres para localizar um produto cadastrado.');
           setProductLinkLoading(false);
           setProductLinkInteractivity(true);
 
@@ -8971,7 +6611,7 @@
             if (productLinkResults) {
               productLinkResults.innerHTML = '';
             }
-            showProductLinkEmpty('Informe ao menos tr√™s caracteres para localizar um produto cadastrado.');
+            showProductLinkEmpty('Informe ao menos trÍs caracteres para localizar um produto cadastrado.');
             return;
           }
 
@@ -9023,8 +6663,8 @@
             if (error?.name === 'AbortError') {
               return;
             }
-            console.error('Erro ao buscar produtos cadastrados para v√≠nculo manual:', error);
-            showProductLinkError('N√£o foi poss√≠vel buscar os produtos cadastrados. Tente novamente.');
+            console.error('Erro ao buscar produtos cadastrados para vÌnculo manual:', error);
+            showProductLinkError('N„o foi possÌvel buscar os produtos cadastrados. Tente novamente.');
           } finally {
             if (productLinkSearchAbortController === abortController) {
               productLinkSearchAbortController = null;
@@ -9036,11 +6676,11 @@
 
         const handleProductLinkSelection = async (product) => {
           if (!productLinkActiveItem) {
-            notify('Nenhum item selecionado para vincula√ß√£o.', 'error');
+            notify('Nenhum item selecionado para vinculaÁ„o.', 'error');
             return;
           }
           if (!product) {
-            notify('Produto selecionado inv√°lido.', 'error');
+            notify('Produto selecionado inv·lido.', 'error');
             return;
           }
 
@@ -9052,13 +6692,13 @@
 
           const supplierCode = canonicalSupplierProductCode(productLinkActiveItem?.supplierCode);
           if (!supplierCode) {
-            notify('O item do fornecedor n√£o possui c√≥digo para realizar o v√≠nculo.', 'error');
+            notify('O item do fornecedor n„o possui cÛdigo para realizar o vÌnculo.', 'error');
             return;
           }
 
           const productId = getProductIdFromRecord(product);
           if (!productId) {
-            notify('Produto selecionado n√£o possui identificador v√°lido para v√≠nculo.', 'error');
+            notify('Produto selecionado n„o possui identificador v·lido para vÌnculo.', 'error');
             return;
           }
 
@@ -9094,7 +6734,7 @@
           } catch (error) {
             console.error('Erro ao vincular produto selecionado ao fornecedor:', error);
             notify(
-              error?.message || 'N√£o foi poss√≠vel vincular o produto selecionado ao fornecedor.',
+              error?.message || 'N„o foi possÌvel vincular o produto selecionado ao fornecedor.',
               'error'
             );
             setProductLinkInteractivity(true);
@@ -9300,10 +6940,10 @@
             tooltipLines.push(`Qtd bonificada: ${formatQuantity(info.bonusQuantity)}`);
           }
           if (Number.isFinite(info.regularQuantity)) {
-            tooltipLines.push(`Qtd n√£o bonificada: ${formatQuantity(info.regularQuantity)}`);
+            tooltipLines.push(`Qtd n„o bonificada: ${formatQuantity(info.regularQuantity)}`);
           }
           if (Array.isArray(info.bonusCfops) && info.bonusCfops.length) {
-            tooltipLines.push(`CFOP bonifica√ß√£o: ${info.bonusCfops.join(', ')}`);
+            tooltipLines.push(`CFOP bonificaÁ„o: ${info.bonusCfops.join(', ')}`);
           }
           if (Array.isArray(info.regularCfops) && info.regularCfops.length) {
             tooltipLines.push(`CFOP venda: ${info.regularCfops.join(', ')}`);
@@ -9313,7 +6953,7 @@
             ? tooltipLines.join('\n')
             : 'Item com quantidades bonificadas agregadas.';
           indicator.title = tooltipText;
-          indicator.setAttribute('aria-label', tooltipLines.length ? tooltipLines.join(' ¬∑ ') : tooltipText);
+          indicator.setAttribute('aria-label', tooltipLines.length ? tooltipLines.join(' ∑ ') : tooltipText);
 
           return indicator;
         };
@@ -9325,7 +6965,7 @@
           const wrapper = document.createElement('div');
           wrapper.className = 'inline-flex items-center gap-1';
 
-          const codeValue = normalizeInternalCode(item?.internalCode) || '‚Äî';
+          const codeValue = normalizeInternalCode(item?.internalCode) || 'ó';
           const codeSpan = document.createElement('span');
           codeSpan.textContent = codeValue;
           wrapper.appendChild(codeSpan);
@@ -9526,7 +7166,7 @@
                 const appliedType = item.supplierAppliedConversion.type;
                 const appliedValue = item.supplierAppliedConversion.value;
                 if (appliedType && Number.isFinite(appliedValue)) {
-                  const symbol = appliedType === 'divide' ? '√∑' : 'x';
+                  const symbol = appliedType === 'divide' ? '˜' : 'x';
                   const formattedAppliedValue = formatConversionInputValue(appliedValue) || appliedValue;
                   suffix = ` (Fornecedor ${symbol} ${formattedAppliedValue})`;
                 }
@@ -9536,7 +7176,7 @@
                 maximumFractionDigits: 3,
               })}${suffix}`;
             } else {
-              factorText.textContent = 'Fator: ‚Äî';
+              factorText.textContent = 'Fator: ó';
             }
           };
 
@@ -9746,17 +7386,17 @@
           if (Number.isFinite(supplierFactor)) {
             const supplierValueLabel = formatConversionInputValue(supplierCalcValue) || supplierCalcValue;
             const supplierTitle = supplierCalcType === 'divide'
-              ? `Aplicar c√°lculo do fornecedor (√∑ ${supplierValueLabel})`
-              : `Aplicar c√°lculo do fornecedor (x ${supplierValueLabel})`;
+              ? `Aplicar c·lculo do fornecedor (˜ ${supplierValueLabel})`
+              : `Aplicar c·lculo do fornecedor (x ${supplierValueLabel})`;
             quickActions.push({
               label: 'Fornecedor',
               value: Number.parseFloat(supplierFactor.toFixed(3)),
               title: supplierTitle,
             });
           }
-          quickActions.push({ label: '0', value: 0, title: 'Definir como divis√£o (0)' });
+          quickActions.push({ label: '0', value: 0, title: 'Definir como divis„o (0)' });
           quickActions.push({ label: formatDecimal(0.5, { minimumFractionDigits: 1, maximumFractionDigits: 1 }), value: 0.5 });
-          quickActions.push({ label: '1', value: 1, title: 'Fator 1 (sem convers√£o)' });
+          quickActions.push({ label: '1', value: 1, title: 'Fator 1 (sem convers„o)' });
           quickActions.push({ label: '2', value: 2 });
           quickActions.push({ label: '3', value: 3 });
 
@@ -9786,7 +7426,7 @@
           checkbox.type = 'checkbox';
           checkbox.className = 'h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/40';
           const text = document.createElement('span');
-          text.textContent = 'Unit√°rio';
+          text.textContent = 'Unit·rio';
           label.append(checkbox, text);
           cell.appendChild(label);
           return cell;
@@ -9812,7 +7452,7 @@
             button.classList.add('opacity-50', 'cursor-not-allowed');
             button.setAttribute('aria-disabled', 'true');
             button.title =
-              'Dispon√≠vel ap√≥s localizar o produto cadastrado pelo XML importado';
+              'DisponÌvel apÛs localizar o produto cadastrado pelo XML importado';
           }
 
           cell.appendChild(button);
@@ -9844,7 +7484,7 @@
             label: 'Unitarizar',
             headerClass: 'px-2 py-1.5 text-left',
             renderCell: () => buildUnitarizeCell(),
-            getDisplayText: () => 'Unit√°rio',
+            getDisplayText: () => 'Unit·rio',
           },
           {
             key: 'select',
@@ -9858,20 +7498,20 @@
             label: 'Cod. Interno (SKU)',
             headerClass: 'px-2 py-1.5 text-left',
             renderCell: (item) => buildInternalCodeCell(item),
-            getDisplayText: (item) => normalizeInternalCode(item?.internalCode) || '‚Äî',
+            getDisplayText: (item) => normalizeInternalCode(item?.internalCode) || 'ó',
           },
           {
             key: 'systemName',
             label: 'Nome',
             headerClass: 'px-2 py-1.5 text-left',
             cellClass: 'px-2 py-1.5 text-gray-700 whitespace-nowrap',
-            getDisplayText: (item) => item?.matchedProduct?.nome || item?.description || '‚Äî',
+            getDisplayText: (item) => item?.matchedProduct?.nome || item?.description || 'ó',
           },
           {
             key: 'supplierCode',
             label: 'Cod_Fornecedor',
             headerClass: 'px-2 py-1.5 text-left',
-            getDisplayText: (item) => item?.supplierCode || '‚Äî',
+            getDisplayText: (item) => item?.supplierCode || 'ó',
           },
           {
             key: 'barcode',
@@ -9889,11 +7529,11 @@
             key: 'supplierName',
             label: 'Nome no Fornecedor',
             headerClass: 'px-2 py-1.5 text-left',
-            getDisplayText: (item) => item?.description || '‚Äî',
+            getDisplayText: (item) => item?.description || 'ó',
           },
           {
             key: 'conversion',
-            label: 'Multiplicador/Divis√£o',
+            label: 'Multiplicador/Divis„o',
             headerClass: 'px-2 py-1.5 text-left',
             isNumeric: true,
             sortType: 'numeric',
@@ -9912,7 +7552,7 @@
             key: 'unit',
             label: 'Unidade',
             headerClass: 'px-2 py-1.5 text-left',
-            getDisplayText: (item) => item?.unit || '‚Äî',
+            getDisplayText: (item) => item?.unit || 'ó',
           },
           {
             key: 'quantity',
@@ -9927,7 +7567,7 @@
           },
           {
             key: 'unitPrice',
-            label: 'Unit√°rio (R$)',
+            label: 'Unit·rio (R$)',
             headerClass: 'px-2 py-1.5 text-right',
             cellClass: 'px-2 py-1.5 text-right text-gray-700 whitespace-nowrap',
             isNumeric: true,
@@ -9963,19 +7603,19 @@
             key: 'ncm',
             label: 'NCM',
             headerClass: 'px-2 py-1.5 text-left',
-            getDisplayText: (item) => item?.ncm || '‚Äî',
+            getDisplayText: (item) => item?.ncm || 'ó',
           },
           {
             key: 'cfop',
             label: 'CFOP',
             headerClass: 'px-2 py-1.5 text-left',
-            getDisplayText: (item) => item?.cfop || '‚Äî',
+            getDisplayText: (item) => item?.cfop || 'ó',
           },
           {
             key: 'cst',
             label: 'CST',
             headerClass: 'px-2 py-1.5 text-left',
-            getDisplayText: (item) => item?.cst || '‚Äî',
+            getDisplayText: (item) => item?.cst || 'ó',
           },
           {
             key: 'icmsRate',
@@ -10082,11 +7722,11 @@
             key: 'ipiCst',
             label: 'ST IPI',
             headerClass: 'px-2 py-1.5 text-left',
-            getDisplayText: (item) => item?.ipiCst || '‚Äî',
+            getDisplayText: (item) => item?.ipiCst || 'ó',
           },
           {
             key: 'pisRate',
-            label: 'Al√≠quota PIS (%)',
+            label: 'AlÌquota PIS (%)',
             headerClass: 'px-2 py-1.5 text-right',
             cellClass: 'px-2 py-1.5 text-right text-gray-600 whitespace-nowrap',
             isNumeric: true,
@@ -10224,7 +7864,7 @@
           if (!cell.classList.contains('whitespace-nowrap')) {
             cell.classList.add('whitespace-nowrap');
           }
-          cell.textContent = value && value !== '' ? value : '‚Äî';
+          cell.textContent = value && value !== '' ? value : 'ó';
           return cell;
         };
 
@@ -10511,7 +8151,7 @@
                 cell = column.renderCell(item);
               } else {
                 const value =
-                  typeof column.getDisplayText === 'function' ? column.getDisplayText(item) : item?.[column.key] || '‚Äî';
+                  typeof column.getDisplayText === 'function' ? column.getDisplayText(item) : item?.[column.key] || 'ó';
                 const className = column.cellClass || 'px-2 py-1.5 text-gray-600 whitespace-nowrap';
                 cell = createTextCell(value, className);
               }
@@ -10544,7 +8184,7 @@
           }
           const isPending = items.some((item) => item.validationStatus === 'pending' || item.validationStatus === 'checking');
           if (isPending) {
-            importXmlValidationText.textContent = 'Validando produtos pelo fornecedor e c√≥digo de barras...';
+            importXmlValidationText.textContent = 'Validando produtos pelo fornecedor e cÛdigo de barras...';
             applyValidationStyles('info');
             return;
           }
@@ -10558,13 +8198,13 @@
           }
           if (notFoundCount > 0) {
             const suffix = notFoundCount === 1 ? '' : 's';
-            importXmlValidationText.textContent = `${notFoundCount} produto${suffix} sem cadastro pelo c√≥digo de barras.`;
+            importXmlValidationText.textContent = `${notFoundCount} produto${suffix} sem cadastro pelo cÛdigo de barras.`;
             applyValidationStyles('warning');
             return;
           }
           if (withoutBarcodeCount > 0) {
             const suffix = withoutBarcodeCount === 1 ? '' : 's';
-            importXmlValidationText.textContent = `${withoutBarcodeCount} item${suffix} sem GTIN precisa${suffix ? 'm' : ''} de revis√£o.`;
+            importXmlValidationText.textContent = `${withoutBarcodeCount} item${suffix} sem GTIN precisa${suffix ? 'm' : ''} de revis„o.`;
             applyValidationStyles('warning');
             return;
           }
@@ -10789,7 +8429,7 @@
                 }
                 matched = Boolean(matchedProduct);
               } catch (error) {
-                console.error('Erro ao validar produto pelo c√≥digo de barras:', error);
+                console.error('Erro ao validar produto pelo cÛdigo de barras:', error);
                 item.validationStatus = 'error';
                 hadError = true;
                 continue;
@@ -10808,7 +8448,7 @@
                     console.error('Erro ao vincular produto ao fornecedor automaticamente:', error);
                     if (!supplierLinkErrorNotified) {
                       notify(
-                        'N√£o foi poss√≠vel vincular alguns produtos ao fornecedor automaticamente. Verifique os cadastros.',
+                        'N„o foi possÌvel vincular alguns produtos ao fornecedor automaticamente. Verifique os cadastros.',
                         'warning'
                       );
                       supplierLinkErrorNotified = true;
@@ -10838,7 +8478,7 @@
 
           if (hadError) {
             notify(
-              'Alguns produtos n√£o puderam ser validados automaticamente. Tente novamente em instantes.',
+              'Alguns produtos n„o puderam ser validados automaticamente. Tente novamente em instantes.',
               'error'
             );
           }
@@ -10847,25 +8487,25 @@
         const updateSummaryFromData = (data) => {
           if (!data) {
             setText(importSummaryEmitenteName, 'Informe a chave ou importe o XML');
-            setText(importSummaryEmitenteDocument, 'Documento n√£o identificado');
+            setText(importSummaryEmitenteDocument, 'Documento n„o identificado');
             setText(importSummaryAccessKey, '------------------------------');
-            setText(importSummaryAccessKeyDetails, 'DV -- ¬∑ Ambiente n√£o identificado');
-            setText(importSummaryProtocol, 'Protocolo n√£o informado');
-            setText(importSummaryProtocolReceived, 'Recebimento n√£o dispon√≠vel');
-            setText(importSummarySupplierName, 'Fornecedor n√£o localizado');
-            setText(importSummarySupplierDocument, 'Documento n√£o dispon√≠vel');
+            setText(importSummaryAccessKeyDetails, 'DV -- ∑ Ambiente n„o identificado');
+            setText(importSummaryProtocol, 'Protocolo n„o informado');
+            setText(importSummaryProtocolReceived, 'Recebimento n„o disponÌvel');
+            setText(importSummarySupplierName, 'Fornecedor n„o localizado');
+            setText(importSummarySupplierDocument, 'Documento n„o disponÌvel');
             setText(importSummaryTotal, 'R$ 0,00');
-            setText(importSummaryTotalStatus, 'Aguardando importa√ß√£o do XML');
-            setText(importSummaryDestName, 'Destinat√°rio n√£o identificado');
-            setText(importSummaryDestDocument, 'Documento n√£o dispon√≠vel');
+            setText(importSummaryTotalStatus, 'Aguardando importaÁ„o do XML');
+            setText(importSummaryDestName, 'Destinat·rio n„o identificado');
+            setText(importSummaryDestDocument, 'Documento n„o disponÌvel');
             ['nf-number', 'nf-serie', 'nf-emissao', 'nf-entrada', 'cfop', 'natureza', 'modalidade-frete', 'indicador-ie'].forEach(
               (key) => setSummaryInput(key, '')
             );
             if (importXmlNumber) {
-              importXmlNumber.textContent = 'XML n√£o importado';
+              importXmlNumber.textContent = 'XML n„o importado';
             }
             if (importXmlValidationText) {
-              importXmlValidationText.textContent = 'Aguardando valida√ß√£o fiscal';
+              importXmlValidationText.textContent = 'Aguardando validaÁ„o fiscal';
             }
             applyValidationStyles('info');
             productValidationSequence += 1;
@@ -10876,18 +8516,18 @@
           const supplierDoc = composeDocumentLine(data.emit?.document, data.emit?.stateRegistration);
           const destDoc = composeDocumentLine(data.dest?.document, data.dest?.stateRegistration);
 
-          setText(importSummaryEmitenteName, data.emit?.name || 'Emitente n√£o identificado');
-          setText(importSummaryEmitenteDocument, supplierDoc || 'Documento n√£o identificado');
+          setText(importSummaryEmitenteName, data.emit?.name || 'Emitente n„o identificado');
+          setText(importSummaryEmitenteDocument, supplierDoc || 'Documento n„o identificado');
 
           if (data.accessKey) {
             setText(importSummaryAccessKey, data.accessKey);
-            setText(importSummaryAccessKeyDetails, `DV ${data.accessKey.slice(-1)} ¬∑ ${mapEnvironment(data.ambient)}`);
+            setText(importSummaryAccessKeyDetails, `DV ${data.accessKey.slice(-1)} ∑ ${mapEnvironment(data.ambient)}`);
             if (importXmlNumber) {
-              importXmlNumber.textContent = `XML n¬∫ ${data.accessKey}`;
+              importXmlNumber.textContent = `XML n∫ ${data.accessKey}`;
             }
           } else {
             setText(importSummaryAccessKey, '------------------------------');
-            setText(importSummaryAccessKeyDetails, 'DV -- ¬∑ Ambiente n√£o identificado');
+            setText(importSummaryAccessKeyDetails, 'DV -- ∑ Ambiente n„o identificado');
             if (importXmlNumber) {
               importXmlNumber.textContent = 'XML importado';
             }
@@ -10907,23 +8547,23 @@
             }
             applyValidationStyles('success');
           } else {
-            setText(importSummaryProtocol, 'Protocolo n√£o informado');
-            setText(importSummaryProtocolReceived, 'Recebimento n√£o dispon√≠vel');
+            setText(importSummaryProtocol, 'Protocolo n„o informado');
+            setText(importSummaryProtocolReceived, 'Recebimento n„o disponÌvel');
             if (importXmlValidationText) {
               importXmlValidationText.textContent = 'XML importado (aguardando protocolo)';
             }
             applyValidationStyles('warning');
           }
 
-          setText(importSummarySupplierName, data.emit?.name || 'Fornecedor n√£o localizado');
-          setText(importSummarySupplierDocument, supplierDoc || 'Documento n√£o dispon√≠vel');
+          setText(importSummarySupplierName, data.emit?.name || 'Fornecedor n„o localizado');
+          setText(importSummarySupplierDocument, supplierDoc || 'Documento n„o disponÌvel');
 
           const totalFormatted = formatCurrencyBRL(data.totals?.totalValue);
           setText(importSummaryTotal, totalFormatted);
           setText(importSummaryTotalStatus, 'Valor informado pelo XML autorizado');
 
-          setText(importSummaryDestName, data.dest?.name || 'Destinat√°rio n√£o identificado');
-          setText(importSummaryDestDocument, destDoc || 'Documento n√£o dispon√≠vel');
+          setText(importSummaryDestName, data.dest?.name || 'Destinat·rio n„o identificado');
+          setText(importSummaryDestDocument, destDoc || 'Documento n„o disponÌvel');
 
           const emission = normalizeDate(data.ide?.emissionDate);
           const entry = normalizeDate(data.ide?.entryDate);
@@ -10959,7 +8599,7 @@
 
           if (confirmImportText) {
             confirmImportText.textContent =
-              normalized === IMPORT_CONTEXT_BONUS ? 'Aplicar bonifica√ß√£o' : defaultConfirmText || 'Importar';
+              normalized === IMPORT_CONTEXT_BONUS ? 'Aplicar bonificaÁ„o' : defaultConfirmText || 'Importar';
           }
 
           if (refreshImportedProductsButton) {
@@ -10973,10 +8613,10 @@
             } else {
               updateSummaryFromData(null);
               if (importXmlNumber) {
-                importXmlNumber.textContent = 'XML de bonifica√ß√£o n√£o importado';
+                importXmlNumber.textContent = 'XML de bonificaÁ„o n„o importado';
               }
               if (importXmlValidationText) {
-                importXmlValidationText.textContent = 'Aguardando importa√ß√£o das bonifica√ß√µes';
+                importXmlValidationText.textContent = 'Aguardando importaÁ„o das bonificaÁıes';
                 applyValidationStyles('info');
               }
             }
@@ -11308,7 +8948,7 @@
               const details = [];
               if (reference.issuerUf) details.push(`UF ${reference.issuerUf}`);
               if (reference.document) details.push(formatDocument(reference.document));
-              extra.textContent = details.join(' ¬∑ ');
+              extra.textContent = details.join(' ∑ ');
               if (extra.textContent) {
                 typeCell.appendChild(extra);
               }
@@ -11316,24 +8956,24 @@
 
             const modelCell = document.createElement('td');
             modelCell.className = 'px-4 py-3 text-gray-600';
-            modelCell.textContent = reference?.model || '‚Äî';
+            modelCell.textContent = reference?.model || 'ó';
 
             const numberCell = document.createElement('td');
             numberCell.className = 'px-4 py-3 text-gray-600';
             const numberParts = [];
             if (reference?.number) numberParts.push(reference.number);
-            if (reference?.series) numberParts.push(`S√©rie ${reference.series}`);
-            if (!numberParts.length) numberParts.push('‚Äî');
-            numberCell.textContent = numberParts.join(' ¬∑ ');
+            if (reference?.series) numberParts.push(`SÈrie ${reference.series}`);
+            if (!numberParts.length) numberParts.push('ó');
+            numberCell.textContent = numberParts.join(' ∑ ');
 
             const keyCell = document.createElement('td');
             keyCell.className = 'px-4 py-3 text-gray-600 font-mono text-xs';
-            keyCell.textContent = reference?.accessKey || '‚Äî';
+            keyCell.textContent = reference?.accessKey || 'ó';
 
             const emissionCell = document.createElement('td');
             emissionCell.className = 'px-4 py-3 text-gray-600';
             const emission = normalizeDate(reference?.emissionDate);
-            emissionCell.textContent = emission.display || emission.dateInput || '‚Äî';
+            emissionCell.textContent = emission.display || emission.dateInput || 'ó';
 
             row.append(typeCell, modelCell, numberCell, keyCell, emissionCell);
             fragment.appendChild(row);
@@ -11377,7 +9017,7 @@
             daysCell.dataset.duplicateTerm = String(index);
             const manualDueInfo = normalizeDate(dup?.manualDueDate);
             const dueInfo = manualDueInfo.dateInput ? manualDueInfo : normalizeDate(dup?.dueDate);
-            let diffText = '‚Äî';
+            let diffText = 'ó';
             if (Number.isFinite(dup?.termDays)) {
               diffText = String(dup.termDays);
             } else if (baseDateInput) {
@@ -11449,24 +9089,24 @@
             }
             const paymentTypeRaw = dup?.paymentType;
             let paymentTypeLabel = '';
-            if (paymentTypeRaw === '0') paymentTypeLabel = '√Ä vista';
+            if (paymentTypeRaw === '0') paymentTypeLabel = '¿ vista';
             else if (paymentTypeRaw === '1') paymentTypeLabel = 'A prazo';
             else if (paymentTypeRaw === '2') paymentTypeLabel = 'Outros';
             if (paymentTypeLabel) {
               observationParts.push(paymentTypeLabel);
             }
-            observationCell.textContent = observationParts.join(' ¬∑ ') || '‚Äî';
+            observationCell.textContent = observationParts.join(' ∑ ') || 'ó';
 
             const duplicateAccount = extractAccountingAccountFromDuplicate(dup);
             const resolvedAccount = duplicateAccount || supplierAccount || null;
 
             const accountCell = document.createElement('td');
             accountCell.className = 'px-4 py-3 text-gray-600';
-            accountCell.textContent = resolvedAccount?.name || '‚Äî';
+            accountCell.textContent = resolvedAccount?.name || 'ó';
 
             const accountCodeCell = document.createElement('td');
             accountCodeCell.className = 'px-4 py-3 text-gray-600';
-            accountCodeCell.textContent = resolvedAccount?.code || '‚Äî';
+            accountCodeCell.textContent = resolvedAccount?.code || 'ó';
 
             const bankCell = document.createElement('td');
             bankCell.className = 'px-4 py-3';
@@ -11577,14 +9217,14 @@
 
           const parcelsRaw = duplicataCountInput.value ? Number.parseInt(duplicataCountInput.value, 10) : NaN;
           if (!Number.isFinite(parcelsRaw) || parcelsRaw <= 0) {
-            notify('Informe uma quantidade de parcelas v√°lida para gerar as duplicatas.', 'warning');
+            notify('Informe uma quantidade de parcelas v·lida para gerar as duplicatas.', 'warning');
             duplicataCountInput.focus();
             return;
           }
 
           const totalAmount = resolveDuplicataManualTotalAmount();
           if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
-            notify('N√£o foi poss√≠vel determinar o valor total da nota para gerar as duplicatas.', 'warning');
+            notify('N„o foi possÌvel determinar o valor total da nota para gerar as duplicatas.', 'warning');
             return;
           }
 
@@ -11623,7 +9263,7 @@
           }
 
           if (!firstDueDate) {
-            notify('Informe um vencimento inicial ou os dias necess√°rios para calcular as duplicatas.', 'warning');
+            notify('Informe um vencimento inicial ou os dias necess·rios para calcular as duplicatas.', 'warning');
             duplicataFirstDueInput?.focus();
             return;
           }
@@ -11774,7 +9414,7 @@
             }
           }
 
-          notify('Pr√©-visualiza√ß√£o das duplicatas atualizada.', 'success');
+          notify('PrÈ-visualizaÁ„o das duplicatas atualizada.', 'success');
         };
 
         const refreshAccountingAccountBindings = () => {
@@ -11844,7 +9484,7 @@
             ? getProductNameFromRecord(item.matchedProduct)
             : '';
           const supplierDescription = typeof item?.description === 'string' ? item.description : '';
-          const descriptionDisplay = systemProductName || supplierDescription || 'Item sem descri√ß√£o';
+          const descriptionDisplay = systemProductName || supplierDescription || 'Item sem descriÁ„o';
           const systemBarcodeDigits = item?.matchedProduct
             ? getProductBarcodeFromRecord(item.matchedProduct)
             : '';
@@ -11869,22 +9509,22 @@
           const quantityDisplay = formatQuantity(item?.quantity);
           const conversionDisplay = Number.isFinite(conversionFactor)
             ? formatQuantity(conversionFactor)
-            : '‚Äî';
+            : 'ó';
           const entryStockDisplay = Number.isFinite(entryStockValue)
             ? formatQuantity(entryStockValue)
-            : '‚Äî';
-          const unitDisplay = item?.unit || item?.unitTrib || '‚Äî';
+            : 'ó';
+          const unitDisplay = item?.unit || item?.unitTrib || 'ó';
           const costDisplay = Number.isFinite(unitCostWithTaxesValue)
             ? formatMoneyValue(unitCostWithTaxesValue)
-            : '‚Äî';
+            : 'ó';
           const unitPriceDisplay = formatMoneyValue(item?.unitPrice);
           const discountDisplay = formatPercentValue(item?.discountPercent);
           const supplierDescriptionDisplay =
             (supplierDescription && supplierDescription.trim()) || descriptionDisplay || '-';
-          const ncmDisplay = item?.ncm || '‚Äî';
-          const cestDisplay = item?.cest || '‚Äî';
-          const cfopDisplay = item?.cfop || '‚Äî';
-          const cstDisplay = item?.cst || '‚Äî';
+          const ncmDisplay = item?.ncm || 'ó';
+          const cestDisplay = item?.cest || 'ó';
+          const cfopDisplay = item?.cfop || 'ó';
+          const cstDisplay = item?.cst || 'ó';
           const icmsRateDisplay = formatPercentValue(item?.icmsRate);
           const icmsStRateDisplay = formatPercentValue(item?.icmsStRate);
           const ipiRateDisplay = formatPercentValue(item?.ipiRate);
@@ -11924,7 +9564,7 @@
             item,
             index,
             displays: {
-              code: matchedCode || supplierCode || '‚Äî',
+              code: matchedCode || supplierCode || 'ó',
               description: descriptionDisplay,
               quantity: quantityDisplay,
               conversion: conversionDisplay,
@@ -11964,12 +9604,12 @@
               supplierDescription: supplierDescriptionDisplay,
               quantity: buildNumericFilterValue(quantityDisplay, item?.quantity),
               conversion: buildNumericFilterValue(
-                conversionDisplay !== '‚Äî' ? conversionDisplay : '',
+                conversionDisplay !== 'ó' ? conversionDisplay : '',
                 conversionFactor
               ),
               unit: [item?.unit, item?.unitTrib].filter(Boolean).join(' '),
               entryStock: buildNumericFilterValue(
-                entryStockDisplay !== '‚Äî' ? entryStockDisplay : '',
+                entryStockDisplay !== 'ó' ? entryStockDisplay : '',
                 entryStockValue
               ),
               cost: buildNumericFilterValue(costDisplay, unitCostWithTaxesValue),
@@ -12150,7 +9790,7 @@
 
             const descriptionCell = document.createElement('td');
             descriptionCell.className = 'px-4 py-3 text-gray-700';
-            descriptionCell.textContent = displays.description || 'Item sem descri√ß√£o';
+            descriptionCell.textContent = displays.description || 'Item sem descriÁ„o';
             const unitNfeCell = document.createElement('td');
             unitNfeCell.className = 'px-4 py-3 text-left text-gray-600';
             unitNfeCell.textContent = displays.unitNfe || displays.unit;
@@ -12337,7 +9977,7 @@
         updateStatusBadgeDisplay = (status) => {
           if (!statusBadge) return;
           const label = mapDraftStatusLabel(status);
-          statusBadge.textContent = label || '‚Äî';
+          statusBadge.textContent = label || 'ó';
           statusBadge.classList.remove(...ALL_CODE_STATUS_CLASSES);
           const classes = mapDraftStatusClasses(label);
           classes.forEach((className) => statusBadge.classList.add(className));
@@ -12389,7 +10029,7 @@
           const accessKey = item?.accessKey || item?.xml?.accessKey || '';
           const nfNumber = item?.number || item?.header?.number || '';
           const serie = item?.serie || item?.header?.serie || '';
-          const nfDisplay = [nfNumber, serie ? `S√©rie ${serie}` : ''].filter(Boolean).join(' ¬∑ ');
+          const nfDisplay = [nfNumber, serie ? `SÈrie ${serie}` : ''].filter(Boolean).join(' ∑ ');
           const supplierName = item?.supplierName || '';
           const supplierDocument = item?.supplierDocument || '';
           const totalNumeric = Number.isFinite(item?.totalValue) ? Number(item.totalValue) : toNumeric(item?.totalValue);
@@ -12405,14 +10045,14 @@
             item,
             index,
             displays: {
-              code: displayCode || '‚Äî',
-              accessKey: accessKey || '‚Äî',
-              nf: nfDisplay || nfNumber || '‚Äî',
-              supplier: supplierName || '‚Äî',
+              code: displayCode || 'ó',
+              accessKey: accessKey || 'ó',
+              nf: nfDisplay || nfNumber || 'ó',
+              supplier: supplierName || 'ó',
               supplierDocument,
               total: totalDisplay,
-              issueDate: issueInfo.display || issueInfo.dateInput || '‚Äî',
-              entryDate: entryInfo.display || entryInfo.dateInput || '‚Äî',
+              issueDate: issueInfo.display || issueInfo.dateInput || 'ó',
+              entryDate: entryInfo.display || entryInfo.dateInput || 'ó',
               status: statusLabel,
             },
             sortValues: {
@@ -12599,7 +10239,7 @@
 
             const accessKeyCell = document.createElement('td');
             accessKeyCell.className = 'px-4 py-3 font-mono text-xs text-gray-600';
-            accessKeyCell.textContent = displays.accessKey || '‚Äî';
+            accessKeyCell.textContent = displays.accessKey || 'ó';
 
             const nfCell = document.createElement('td');
             nfCell.className = 'px-4 py-3 text-gray-600';
@@ -12820,7 +10460,7 @@
           } catch (error) {
             console.error('Erro ao carregar notas cadastradas:', error);
             codeLookupLastError =
-              error?.message || 'N√£o foi poss√≠vel carregar as notas cadastradas para a empresa selecionada.';
+              error?.message || 'N„o foi possÌvel carregar as notas cadastradas para a empresa selecionada.';
             codeLookupIsLoading = false;
             codeLookupTableState.items = [];
             updateCodeLookupTableDisplay();
@@ -12928,16 +10568,16 @@
 
             const draft = await fetchDraftById(draftId);
             if (!draft) {
-              throw new Error('N√£o foi poss√≠vel carregar a entrada j√° cadastrada para esta NF-e.');
+              throw new Error('N„o foi possÌvel carregar a entrada j· cadastrada para esta NF-e.');
             }
 
             applyDraftDataToForm(draft);
 
             const formattedCode = currentDraftCode ? formatDraftCode(currentDraftCode) : '';
             const statusLabel = mapDraftStatusLabel(existingDraft.status);
-            const messageParts = ['Esta NF-e j√° possui uma entrada cadastrada.'];
+            const messageParts = ['Esta NF-e j· possui uma entrada cadastrada.'];
             if (formattedCode) {
-              messageParts.push(`C√≥digo ${formattedCode}.`);
+              messageParts.push(`CÛdigo ${formattedCode}.`);
             }
             if (statusLabel) {
               messageParts.push(`Status ${statusLabel}.`);
@@ -12956,9 +10596,9 @@
             closeImportModal();
             return true;
           } catch (error) {
-            console.error('Erro ao verificar exist√™ncia da NF-e importada:', error);
+            console.error('Erro ao verificar existÍncia da NF-e importada:', error);
             const message =
-              error?.message || 'N√£o foi poss√≠vel verificar se esta NF-e j√° est√° cadastrada.';
+              error?.message || 'N„o foi possÌvel verificar se esta NF-e j· est· cadastrada.';
             throw new Error(message);
           }
         };
@@ -13036,7 +10676,7 @@
         const applyDraftDataToForm = (draft) => {
           const noteData = buildNoteDataFromDraft(draft);
           if (!noteData) {
-            throw new Error('Os dados retornados do rascunho est√£o incompletos.');
+            throw new Error('Os dados retornados do rascunho est„o incompletos.');
           }
           resetImportedNfeState();
           lastNfeData = noteData;
@@ -13147,7 +10787,7 @@
             notify('Carregando nota selecionada...', 'info');
             const draft = await fetchDraftById(normalizedId);
             if (!draft) {
-              throw new Error('N√£o foi poss√≠vel localizar a nota selecionada.');
+              throw new Error('N„o foi possÌvel localizar a nota selecionada.');
             }
             applyDraftDataToForm(draft);
             const formattedCode = currentDraftCode ? formatDraftCode(currentDraftCode) : '';
@@ -13158,7 +10798,7 @@
             }
           } catch (error) {
             console.error('Erro ao carregar nota selecionada:', error);
-            notify(error?.message || 'N√£o foi poss√≠vel carregar a nota selecionada.', 'error');
+            notify(error?.message || 'N„o foi possÌvel carregar a nota selecionada.', 'error');
           } finally {
             isLoadingDraftDetails = false;
           }
@@ -13308,7 +10948,7 @@
           try {
             sessionStorage.removeItem(PRODUCT_DRAFT_STORAGE_KEY);
           } catch (error) {
-            console.warn('N√£o foi poss√≠vel limpar o rascunho de produtos da importa√ß√£o.', error);
+            console.warn('N„o foi possÌvel limpar o rascunho de produtos da importaÁ„o.', error);
           }
 
           const inputsToReset = [
@@ -13378,7 +11018,7 @@
           pendingSupplierDocument = '';
           setBankAccountPlaceholder('Selecione uma empresa para listar as contas correntes');
           pendingDepositId = '';
-          setDepositPlaceholder('Selecione uma empresa para listar os dep√≥sitos');
+          setDepositPlaceholder('Selecione uma empresa para listar os depÛsitos');
 
           if (totalAmountDisplay) {
             totalAmountDisplay.textContent = 'R$ 0,00';
@@ -13398,7 +11038,7 @@
           if (!supplier || !supplier.document) {
             updateSupplierStatusCard(
               'warning',
-              'Documento do emitente n√£o encontrado no XML.',
+              'Documento do emitente n„o encontrado no XML.',
               'Revise o arquivo para garantir que os dados do fornecedor estejam completos.'
             );
             syncAccountingAccountWithDuplicates();
@@ -13408,7 +11048,7 @@
           if (!documentDigits) {
             updateSupplierStatusCard(
               'warning',
-              'Documento do emitente n√£o encontrado no XML.',
+              'Documento do emitente n„o encontrado no XML.',
               'Revise o arquivo para garantir que os dados do fornecedor estejam completos.'
             );
             syncAccountingAccountWithDuplicates();
@@ -13466,10 +11106,10 @@
           updateSupplierStatusCard(
             'warning',
             supplierRegistry.error
-              ? `N√£o foi poss√≠vel confirmar o cadastro do fornecedor (${formattedDocument}).`
-              : `Fornecedor n√£o cadastrado (${formattedDocument})`,
+              ? `N„o foi possÌvel confirmar o cadastro do fornecedor (${formattedDocument}).`
+              : `Fornecedor n„o cadastrado (${formattedDocument})`,
             supplierRegistry.error
-              ? 'Tente novamente em instantes ou atualize a p√°gina para sincronizar a base de fornecedores.'
+              ? 'Tente novamente em instantes ou atualize a p·gina para sincronizar a base de fornecedores.'
               : 'Abriremos o cadastro de fornecedores em nova aba com os dados importados do XML.',
             [
               {
@@ -13503,11 +11143,11 @@
           const parser = new DOMParser();
           const xml = parser.parseFromString(xmlText, 'application/xml');
           if (xml.querySelector('parsererror')) {
-            throw new Error('O arquivo XML est√° inv√°lido ou corrompido.');
+            throw new Error('O arquivo XML est· inv·lido ou corrompido.');
           }
           const infNFe = xml.getElementsByTagName('infNFe')[0];
           if (!infNFe) {
-            throw new Error('N√£o foi poss√≠vel localizar os dados principais da NF-e (infNFe).');
+            throw new Error('N„o foi possÌvel localizar os dados principais da NF-e (infNFe).');
           }
           const getText = (context, tagName) => {
             if (!context) return '';
@@ -14068,7 +11708,7 @@
           supplierLinkErrorNotified = false;
           const extension = file.name.split('.').pop()?.toLowerCase();
           if (extension !== 'xml') {
-            showFileFeedback('Selecione um arquivo XML autorizado pela SEFAZ (extens√£o .xml).', 'error');
+            showFileFeedback('Selecione um arquivo XML autorizado pela SEFAZ (extens„o .xml).', 'error');
             return;
           }
           showFileFeedback(`Lendo o arquivo ${file.name}...`, 'info');
@@ -14082,7 +11722,7 @@
                   ? new TextDecoder('utf-8').decode(reader.result)
                   : '';
               if (!result) {
-                throw new Error('N√£o foi poss√≠vel interpretar o conte√∫do do XML informado.');
+                throw new Error('N„o foi possÌvel interpretar o conte˙do do XML informado.');
               }
               const parsed = parseNfeXml(result);
               if (parsed && typeof parsed === 'object') {
@@ -14101,10 +11741,10 @@
                     return;
                   }
                 } catch (duplicateError) {
-                  console.error('Erro ao evitar importa√ß√£o duplicada da NF-e:', duplicateError);
+                  console.error('Erro ao evitar importaÁ„o duplicada da NF-e:', duplicateError);
                   showFileFeedback(
                     duplicateError?.message ||
-                      'N√£o foi poss√≠vel verificar se o XML j√° foi importado anteriormente.',
+                      'N„o foi possÌvel verificar se o XML j· foi importado anteriormente.',
                     'error'
                   );
                   return;
@@ -14118,18 +11758,18 @@
               }
               updateSummaryFromData(parsed);
               if (isBonusContext) {
-                showFileFeedback('Validando itens de bonifica√ß√£o...', 'info');
+                showFileFeedback('Validando itens de bonificaÁ„o...', 'info');
               } else {
                 showFileFeedback('Validando fornecedor importado...', 'info');
                 await handleSupplierSelection(parsed.emit);
-                showFileFeedback('Validando produtos pelo fornecedor e c√≥digo de barras...', 'info');
+                showFileFeedback('Validando produtos pelo fornecedor e cÛdigo de barras...', 'info');
               }
               await validateImportedProducts(parsed);
 
               const nfNumberText = parsed.ide?.number ? `NF ${parsed.ide.number}` : 'NF-e';
-              const emitterText = parsed.emit?.name || 'Emitente n√£o identificado';
+              const emitterText = parsed.emit?.name || 'Emitente n„o identificado';
               const baseMessage = isBonusContext
-                ? `XML de bonifica√ß√£o importado com sucesso. ${nfNumberText} - ${emitterText}.`
+                ? `XML de bonificaÁ„o importado com sucesso. ${nfNumberText} - ${emitterText}.`
                 : `XML importado com sucesso. ${nfNumberText} - ${emitterText}.`;
               const items = Array.isArray(parsed.items) ? parsed.items : [];
               const errorCount = items.filter((item) => item.validationStatus === 'error').length;
@@ -14138,13 +11778,13 @@
               if (errorCount > 0) {
                 const suffix = errorCount === 1 ? '' : 's';
                 showFileFeedback(
-                  `${baseMessage} N√£o foi poss√≠vel validar ${errorCount} item${suffix} devido a uma falha na consulta.`,
+                  `${baseMessage} N„o foi possÌvel validar ${errorCount} item${suffix} devido a uma falha na consulta.`,
                   'warning'
                 );
               } else if (unmatchedCount > 0) {
                 const suffix = unmatchedCount === 1 ? '' : 's';
                 showFileFeedback(
-                  `${baseMessage} ${unmatchedCount} produto${suffix} precisa${suffix ? 'm' : ''} ser cadastrado pelo c√≥digo de barras.`,
+                  `${baseMessage} ${unmatchedCount} produto${suffix} precisa${suffix ? 'm' : ''} ser cadastrado pelo cÛdigo de barras.`,
                   'warning'
                 );
               } else {
@@ -14152,12 +11792,12 @@
               }
             } catch (error) {
               console.error('Erro ao processar XML da NF-e:', error);
-              showFileFeedback(error.message || 'N√£o foi poss√≠vel processar o XML informado.', 'error');
+              showFileFeedback(error.message || 'N„o foi possÌvel processar o XML informado.', 'error');
             }
           };
           reader.onerror = () => {
             console.error('Erro ao ler o arquivo XML selecionado.', reader.error);
-            showFileFeedback('N√£o foi poss√≠vel ler o arquivo XML selecionado.', 'error');
+            showFileFeedback('N„o foi possÌvel ler o arquivo XML selecionado.', 'error');
           };
           reader.readAsText(file);
         };
@@ -14436,8 +12076,8 @@
             try {
               generateDuplicatasPreviewFromInputs();
             } catch (error) {
-              console.error('Erro ao gerar a pr√©-visualiza√ß√£o das duplicatas:', error);
-              notify('N√£o foi poss√≠vel gerar a pr√©-visualiza√ß√£o das duplicatas. Verifique os campos e tente novamente.', 'error');
+              console.error('Erro ao gerar a prÈ-visualizaÁ„o das duplicatas:', error);
+              notify('N„o foi possÌvel gerar a prÈ-visualizaÁ„o das duplicatas. Verifique os campos e tente novamente.', 'error');
             }
           });
         }
@@ -14498,7 +12138,7 @@
                 } else {
                   target.value = '';
                 }
-                notify('Informe um valor v√°lido para a parcela selecionada.', 'warning');
+                notify('Informe um valor v·lido para a parcela selecionada.', 'warning');
                 return;
               }
 
@@ -14549,7 +12189,7 @@
                   ? String(duplicate.termDays)
                   : Number.isFinite(fallbackDiff)
                   ? String(fallbackDiff)
-                  : '‚Äî';
+                  : 'ó';
               }
             }
 
@@ -14561,20 +12201,20 @@
           registerEntryButton.addEventListener('click', async (event) => {
             event.preventDefault();
             if (isFormLocked) {
-              notify('Esta NF-e j√° est√° aprovada e n√£o pode ser alterada.', 'info');
+              notify('Esta NF-e j· est· aprovada e n„o pode ser alterada.', 'info');
               return;
             }
             if (isApprovingDraft) return;
 
             if (!companySelect || !companySelect.value) {
-              notify('Selecione a empresa respons√°vel antes de aprovar a nota.', 'warning');
+              notify('Selecione a empresa respons·vel antes de aprovar a nota.', 'warning');
               activateTab('dados');
               companySelect?.focus();
               return;
             }
 
             if (!depositSelect || !depositSelect.value) {
-              notify('Selecione o dep√≥sito para lan√ßar o estoque de entrada.', 'warning');
+              notify('Selecione o depÛsito para lanÁar o estoque de entrada.', 'warning');
               activateTab('dados');
               depositSelect?.focus();
               return;
@@ -14605,7 +12245,7 @@
               (item) => !item || item.validationStatus !== 'matched' || !item.matchedProduct
             );
             if (pendingItems.length) {
-              notify('Existem produtos sem vincula√ß√£o ao cadastro. Resolva todos os itens antes de aprovar.', 'warning');
+              notify('Existem produtos sem vinculaÁ„o ao cadastro. Resolva todos os itens antes de aprovar.', 'warning');
               activateTab('produtos');
               return;
             }
@@ -14628,7 +12268,7 @@
 
             const supplierAccount = resolveSupplierAccountingAccount();
             if (!supplierAccount || !supplierAccount.id) {
-              notify('Defina a conta cont√°bil vinculada ao fornecedor antes de aprovar.', 'warning');
+              notify('Defina a conta cont·bil vinculada ao fornecedor antes de aprovar.', 'warning');
               activateTab('duplicatas');
               accountingAccountInput?.focus();
               return;
@@ -14648,7 +12288,7 @@
 
               const valueNumeric = toNumeric(duplicate?.value);
               if (!Number.isFinite(valueNumeric) || valueNumeric <= 0) {
-                notify(`Informe um valor v√°lido para a parcela ${duplicate?.number || index + 1}.`, 'warning');
+                notify(`Informe um valor v·lido para a parcela ${duplicate?.number || index + 1}.`, 'warning');
                 activateTab('duplicatas');
                 focusDuplicateField(index, 'value');
                 return;
@@ -14684,12 +12324,12 @@
                   const message =
                     createPayload?.message ||
                     createPayload?.error ||
-                    `N√£o foi poss√≠vel salvar o rascunho antes da aprova√ß√£o (status ${createResponse.status}).`;
+                    `N„o foi possÌvel salvar o rascunho antes da aprovaÁ„o (status ${createResponse.status}).`;
                   throw new Error(message);
                 }
                 const createdDraft = createPayload?.draft || null;
                 if (!createdDraft) {
-                  throw new Error('Resposta inesperada ao salvar o rascunho antes da aprova√ß√£o.');
+                  throw new Error('Resposta inesperada ao salvar o rascunho antes da aprovaÁ„o.');
                 }
                 applyDraftResponseToState(createdDraft);
                 payload = buildDraftPayloadFromForm();
@@ -14713,7 +12353,7 @@
                 const message =
                   approvalData?.message ||
                   approvalData?.error ||
-                  `N√£o foi poss√≠vel aprovar a entrada da NF-e (status ${approvalResponse.status}).`;
+                  `N„o foi possÌvel aprovar a entrada da NF-e (status ${approvalResponse.status}).`;
                 if (approvalData?.details?.focusTab) {
                   activateTab(approvalData.details.focusTab);
                   if (
@@ -14744,7 +12384,7 @@
               notify('Entrada da NF-e aprovada com sucesso.', 'success');
             } catch (error) {
               console.error('Erro ao aprovar a entrada da NF-e:', error);
-              notify(error?.message || 'N√£o foi poss√≠vel aprovar a entrada da NF-e.', 'error');
+              notify(error?.message || 'N„o foi possÌvel aprovar a entrada da NF-e.', 'error');
               setFormLockState(determineDraftStatusKey(currentDraftStatus) === 'approved');
             } finally {
               isApprovingDraft = false;
@@ -14759,14 +12399,14 @@
             if (isDeletingDraft) return;
 
             if (!currentDraftId) {
-              notify('Nenhuma nota carregada para exclus√£o.', 'warning');
+              notify('Nenhuma nota carregada para exclus„o.', 'warning');
               return;
             }
 
             const statusKey = determineDraftStatusKey(currentDraftStatus);
             const confirmationMessage =
               statusKey === 'approved'
-                ? 'Tem certeza que deseja excluir esta entrada de NF-e aprovada? As contas a pagar ser√£o removidas e o estoque ser√° estornado.'
+                ? 'Tem certeza que deseja excluir esta entrada de NF-e aprovada? As contas a pagar ser„o removidas e o estoque ser· estornado.'
                 : 'Tem certeza que deseja excluir esta nota?';
             const confirmed = typeof window !== 'undefined' && typeof window.confirm === 'function'
               ? window.confirm(confirmationMessage)
@@ -14798,8 +12438,8 @@
 
               const successMessage =
                 statusKey === 'approved'
-                  ? 'Entrada da NF-e aprovada exclu√≠da com sucesso.'
-                  : 'Nota exclu√≠da com sucesso.';
+                  ? 'Entrada da NF-e aprovada excluÌda com sucesso.'
+                  : 'Nota excluÌda com sucesso.';
               notify(successMessage, 'success');
 
               const activeCompanyId = companySelect?.value || '';
@@ -14810,7 +12450,7 @@
               }
             } catch (error) {
               console.error('Erro ao excluir a entrada da NF-e:', error);
-              notify(error?.message || 'N√£o foi poss√≠vel excluir a entrada da NF-e.', 'error');
+              notify(error?.message || 'N„o foi possÌvel excluir a entrada da NF-e.', 'error');
             } finally {
               isDeletingDraft = false;
               setDeleteButtonState(false);
@@ -14825,7 +12465,7 @@
             if (isSavingDraft) return;
 
             if (!companySelect || !companySelect.value) {
-              notify('Selecione a empresa respons√°vel antes de salvar o rascunho.', 'warning');
+              notify('Selecione a empresa respons·vel antes de salvar o rascunho.', 'warning');
               companySelect?.focus();
               return;
             }
@@ -14868,14 +12508,14 @@
               }
               const formattedCode = currentDraftCode ? formatDraftCode(currentDraftCode) : '';
               const successMessage = formattedCode
-                ? `Rascunho salvo como c√≥digo ${formattedCode}.`
+                ? `Rascunho salvo como cÛdigo ${formattedCode}.`
                 : 'Rascunho da nota salvo com sucesso.';
               notify(successMessage, 'success');
             } catch (error) {
               console.error('Erro ao salvar rascunho da NF-e:', error);
               notify(
                 error?.message ||
-                  'N√£o foi poss√≠vel salvar o rascunho da nota. Verifique os dados e tente novamente.',
+                  'N„o foi possÌvel salvar o rascunho da nota. Verifique os dados e tente novamente.',
                 'error'
               );
             } finally {
@@ -14889,10 +12529,10 @@
             event.preventDefault();
             try {
               resetImportedNfeState();
-              notify('Campos limpos. Pronto para uma nova importa√ß√£o.', 'info');
+              notify('Campos limpos. Pronto para uma nova importaÁ„o.', 'info');
             } catch (error) {
               console.error('Erro ao limpar os dados importados da nota:', error);
-              notify('N√£o foi poss√≠vel limpar os dados importados. Atualize a p√°gina e tente novamente.', 'error');
+              notify('N„o foi possÌvel limpar os dados importados. Atualize a p·gina e tente novamente.', 'error');
             }
           });
         }
@@ -14984,7 +12624,7 @@
             if (importModalContext === IMPORT_CONTEXT_BONUS) {
               const bonusItems = Array.isArray(pendingBonusData?.items) ? pendingBonusData.items : [];
               if (!bonusItems.length) {
-                notify('Importe um XML de bonifica√ß√£o v√°lido antes de aplicar os itens.', 'warning');
+                notify('Importe um XML de bonificaÁ„o v·lido antes de aplicar os itens.', 'warning');
                 return;
               }
 
@@ -14993,15 +12633,15 @@
               try {
                 const merged = mergeBonusItemsIntoCurrentNote(pendingBonusData);
                 if (!merged) {
-                  notify('O XML de bonifica√ß√£o n√£o possui itens aplic√°veis.', 'warning');
+                  notify('O XML de bonificaÁ„o n„o possui itens aplic·veis.', 'warning');
                   return;
                 }
                 pendingBonusData = null;
-                notify('Itens de bonifica√ß√£o adicionados √† nota.', 'success');
+                notify('Itens de bonificaÁ„o adicionados ‡ nota.', 'success');
                 closeImportModal();
               } catch (error) {
-                console.error('Erro ao aplicar bonifica√ß√£o na nota:', error);
-                notify('N√£o foi poss√≠vel aplicar os itens de bonifica√ß√£o. Tente novamente.', 'error');
+                console.error('Erro ao aplicar bonificaÁ„o na nota:', error);
+                notify('N„o foi possÌvel aplicar os itens de bonificaÁ„o. Tente novamente.', 'error');
               } finally {
                 restoreConfirmButton();
               }
@@ -15015,7 +12655,7 @@
 
             const items = Array.isArray(lastNfeData.items) ? lastNfeData.items : [];
             if (!items.length) {
-              notify('O XML informado n√£o possui itens para importar.', 'warning');
+              notify('O XML informado n„o possui itens para importar.', 'warning');
               return;
             }
 
@@ -15038,7 +12678,7 @@
               console.error('Erro ao atualizar fator dos produtos cadastrados:', error);
               notify(
                 error?.message ||
-                  'N√£o foi poss√≠vel atualizar o fator dos produtos no cadastro. Tente novamente.',
+                  'N„o foi possÌvel atualizar o fator dos produtos no cadastro. Tente novamente.',
                 'error'
               );
               restoreConfirmButton();
@@ -15047,11 +12687,11 @@
 
             try {
               applyImportedDataToMainForm(lastNfeData);
-              notify('Dados do XML aplicados √† entrada da nota.', 'success');
+              notify('Dados do XML aplicados ‡ entrada da nota.', 'success');
               closeImportModal();
             } catch (error) {
               console.error('Erro ao aplicar dados importados na nota:', error);
-              notify('N√£o foi poss√≠vel aplicar os dados do XML na nota. Tente novamente.', 'error');
+              notify('N„o foi possÌvel aplicar os dados do XML na nota. Tente novamente.', 'error');
             } finally {
               restoreConfirmButton();
             }
@@ -15090,12 +12730,4 @@
         updateImportMode();
       }
     });
-  </script>
-</body>
-</html>
-
-
-
-
-
-
+  
