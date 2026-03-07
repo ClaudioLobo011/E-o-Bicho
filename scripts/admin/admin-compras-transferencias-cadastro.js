@@ -1104,7 +1104,7 @@
       );
     });
 
-    return exact || products[0] || null;
+    return exact || null;
   }
 
   function setCollectorModalOpen(open) {

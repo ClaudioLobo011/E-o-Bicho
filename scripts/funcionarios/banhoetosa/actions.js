@@ -1,4 +1,4 @@
-import { state, isPrivilegedRole, notify, statusMeta } from './core.js';
+import { state, notify, statusMeta } from './core.js';
 
 const ACTION_CLICK_GUARD = Symbol('agendaActionClickHandled');
 const ACTION_BOUND_FLAG = '__banhoAgendaActionsBound';
@@ -35,7 +35,6 @@ function onActionClick(ev) {
     }
 
     if (btn.classList.contains('edit')) {
-      if ((item.pago || item.codigoVenda) && !isPrivilegedRole()) { notify('Este agendamento já foi faturado. Apenas Admin/Admin Master podem editar.', 'warning'); return; }
       if (window.__openEditFromUI) window.__openEditFromUI(item);
       return;
     }

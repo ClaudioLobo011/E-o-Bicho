@@ -914,11 +914,29 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
 
     const hasStatusField = Object.prototype.hasOwnProperty.call(req.body || {}, 'status');
     const hasProfessionalField = Object.prototype.hasOwnProperty.call(req.body || {}, 'profissionalId');
+    const hasStoreField = Object.prototype.hasOwnProperty.call(req.body || {}, 'storeId');
+    const hasClienteField = Object.prototype.hasOwnProperty.call(req.body || {}, 'clienteId');
+    const hasPetField = Object.prototype.hasOwnProperty.call(req.body || {}, 'petId');
     let normalizedStatus = null;
     if (hasStatusField) {
       normalizedStatus = normalizeServiceStatus(status, null);
       if (!normalizedStatus) {
         return res.status(400).json({ message: 'Status inválido.' });
+      }
+    }
+
+    if (hasStoreField && storeId && mongoose.Types.ObjectId.isValid(storeId)) {
+      const role = req.user?.role || 'cliente';
+      const privileged = (role === 'admin' || role === 'admin_master');
+      if (!privileged) {
+        const actor = await User.findById(req.user?.id).select('empresas empresaPrincipal').lean();
+        const allowedStoreIds = new Set([
+          ...(Array.isArray(actor?.empresas) ? actor.empresas.map(value => String(value || '')) : []),
+          actor?.empresaPrincipal ? String(actor.empresaPrincipal) : '',
+        ].filter(Boolean));
+        if (!allowedStoreIds.has(String(storeId))) {
+          return res.status(403).json({ message: 'Você não tem permissão para editar agendamentos desta empresa.' });
+        }
       }
     }
 
@@ -1117,7 +1135,7 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
       }
     }
 
-    // Se já faturado e não é admin/admin_master, bloquear mudanças em serviços e data/hora
+    // Se já faturado e não é admin/admin_master, bloquear mudanças em cliente/pet/serviços.
     try {
       const current = await Appointment.findById(id).select('codigoVenda pago').lean();
       const locked = !!(current?.codigoVenda || current?.pago);
@@ -1126,10 +1144,10 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
 
       // Intenções do request
       const wantsServiceChange = Array.isArray(servicos) || typeof valor !== 'undefined' || !!servicoId;
-      const wantsScheduleChange = !!scheduledAt;
+      const wantsCustomerOrPetChange = hasClienteField || hasPetField;
 
-      if (locked && !privileged && (wantsServiceChange || wantsScheduleChange)) {
-        return res.status(403).json({ message: 'Agendamento já faturado. Apenas Admin/Admin Master podem alterar serviços ou data/hora.' });
+      if (locked && !privileged && (wantsServiceChange || wantsCustomerOrPetChange)) {
+        return res.status(403).json({ message: 'Agendamento já faturado. Para este perfil, apenas empresa, profissional e horário podem ser alterados.' });
       }
     } catch (_) {}
 

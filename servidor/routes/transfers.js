@@ -515,6 +515,37 @@ router.get('/search-products', requireAuth, authorizeRoles(...allowedRoles), asy
 
         const regex = new RegExp(escapeRegExp(term), 'i');
         const numericTerm = term.replace(/\D/g, '');
+        const exactRegex = new RegExp(`^${escapeRegExp(term)}$`, 'i');
+        const exactNumericRegex = numericTerm ? new RegExp(`^${escapeRegExp(numericTerm)}$`, 'i') : null;
+        const projection = {
+            cod: 1,
+            codbarras: 1,
+            nome: 1,
+            unidade: 1,
+            peso: 1,
+            custo: 1,
+            venda: 1,
+        };
+
+        // Prioriza correspondencia exata por codigo interno ou codigo de barras.
+        const exactOr = [
+            { cod: exactRegex },
+            { codbarras: exactRegex },
+        ];
+        if (exactNumericRegex) {
+            exactOr.push({ cod: exactNumericRegex });
+            exactOr.push({ codbarras: exactNumericRegex });
+        }
+
+        const exactProducts = await Product.find({ $or: exactOr }, projection)
+            .limit(20)
+            .sort({ nome: 1 })
+            .lean();
+
+        if (exactProducts.length) {
+            return res.json({ products: exactProducts });
+        }
+
         const query = {
             $or: [
                 { cod: regex },
@@ -527,15 +558,7 @@ router.get('/search-products', requireAuth, authorizeRoles(...allowedRoles), asy
             query.$or.push({ codbarras: new RegExp(escapeRegExp(numericTerm), 'i') });
         }
 
-        const products = await Product.find(query, {
-            cod: 1,
-            codbarras: 1,
-            nome: 1,
-            unidade: 1,
-            peso: 1,
-            custo: 1,
-            venda: 1,
-        })
+        const products = await Product.find(query, projection)
             .limit(20)
             .sort({ nome: 1 })
             .lean();

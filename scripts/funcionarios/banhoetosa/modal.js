@@ -1,4 +1,4 @@
-import { api, els, state, money, debounce, todayStr, pad, buildLocalDateTime, isPrivilegedRole, confirmWithModal, notify, statusMeta, isNoPreferenceProfessionalId, AGENDA_NO_PREFERENCE_PROF_ID } from './core.js';
+import { api, els, state, money, debounce, todayStr, pad, buildLocalDateTime, confirmWithModal, notify, statusMeta, isNoPreferenceProfessionalId, AGENDA_NO_PREFERENCE_PROF_ID } from './core.js';
 import { populateModalProfissionais, updateModalProfissionalLabel, getModalProfissionalTipo, getModalProfissionaisList } from './profissionais.js';
 import { loadAgendamentos } from './agendamentos.js';
 import { renderKpis, renderFilters } from './filters.js';
@@ -219,6 +219,9 @@ export function openAddModal(preselectProfId) {
   if (els.valorInput) { els.valorInput.value = ''; }
   if (els.petSelect) { els.petSelect.innerHTML = ''; }
   if (els.obsInput) { els.obsInput.value = ''; }
+  if (els.obsInput) { els.obsInput.disabled = false; }
+  if (els.statusSelect) { els.statusSelect.disabled = false; }
+  if (els.petSelect) { els.petSelect.disabled = false; }
   if (els.addStoreSelect) {
     if (els.storeSelect && els.storeSelect.options.length) {
       els.addStoreSelect.innerHTML = els.storeSelect.innerHTML;
@@ -260,6 +263,8 @@ export function closeModal() {
   els.modal.classList.remove('flex');
   state.editing = null;
   [els.cliInput, els.servInput, els.valorInput, els.petSelect].forEach(el => { if (el) el.disabled = false; });
+  if (els.obsInput) els.obsInput.disabled = false;
+  if (els.statusSelect) els.statusSelect.disabled = false;
 }
 
 
@@ -1706,6 +1711,7 @@ function agendaCustomerHandleKeydown(event) {
 export function openEditModal(a) {
   state.editing = a || null;
   if (!els.modal || !state.editing) return;
+  const lockPaidEdit = isPaidOrBilledAppointment(a);
   state.tempServicos = Array.isArray(a.servicos)
     ? a.servicos.map(x => {
         const obsRaw = x.observacao ?? x.observacoes ?? '';
@@ -1734,10 +1740,13 @@ export function openEditModal(a) {
       }] : []);
   renderServicosLista();
   state.selectedServico = null;
-  if (els.servInput) { els.servInput.value = ''; els.servInput.disabled = false; }
+  if (els.servInput) { els.servInput.value = ''; els.servInput.disabled = lockPaidEdit; }
   if (els.servSug)   { els.servSug.innerHTML = ''; els.servSug.classList.add('hidden'); }
-  if (els.valorInput){ els.valorInput.value = ''; els.valorInput.disabled = false; }
-  if (els.addServAddBtn) els.addServAddBtn.classList.remove('hidden');
+  if (els.valorInput){ els.valorInput.value = ''; els.valorInput.disabled = lockPaidEdit; }
+  if (els.addServAddBtn) {
+    if (lockPaidEdit) els.addServAddBtn.classList.add('hidden');
+    else els.addServAddBtn.classList.remove('hidden');
+  }
   if (els.addStoreSelect) {
     if (els.storeSelect && els.storeSelect.options.length) {
       els.addStoreSelect.innerHTML = els.storeSelect.innerHTML;
@@ -1783,11 +1792,16 @@ export function openEditModal(a) {
       .trim().toLowerCase().replace(/[-\s]+/g, '_');
     const allowed = ['agendado', 'em_espera', 'em_atendimento', 'finalizado'];
     els.statusSelect.value = allowed.includes(keyRaw) ? keyRaw : 'agendado';
+    els.statusSelect.disabled = lockPaidEdit;
   }
-  if (els.obsInput) { els.obsInput.value = (a.observacoes || '').trim(); }
+  if (els.obsInput) {
+    els.obsInput.value = (a.observacoes || '').trim();
+    els.obsInput.disabled = lockPaidEdit;
+  }
   if (els.cliInput) { els.cliInput.value = (a.clienteNome || ''); els.cliInput.disabled = true; }
   if (els.petSelect) {
     els.petSelect.innerHTML = '';
+    els.petSelect.disabled = true;
     try {
       const clienteId = a.clienteId || (a.cliente && a.cliente._id) || null;
       if (clienteId) {
@@ -1800,9 +1814,12 @@ export function openEditModal(a) {
       }
     } catch {}
   }
-  if (els.servInput) { els.servInput.value = ''; els.servInput.disabled = false; }
-  if (els.valorInput) { els.valorInput.value = ''; els.valorInput.disabled = false; }
-  if (els.modalDelete) els.modalDelete.classList.remove('hidden');
+  if (els.servInput) { els.servInput.value = ''; els.servInput.disabled = lockPaidEdit; }
+  if (els.valorInput) { els.valorInput.value = ''; els.valorInput.disabled = lockPaidEdit; }
+  if (els.modalDelete) {
+    if (lockPaidEdit) els.modalDelete.classList.add('hidden');
+    else els.modalDelete.classList.remove('hidden');
+  }
   els.modal.classList.remove('hidden');
   els.modal.classList.add('flex');
 }
@@ -2015,6 +2032,14 @@ function normalizeStatusValue(raw) {
   return statusMeta(raw).key;
 }
 
+function isPaidOrBilledAppointment(appointment) {
+  return !!(appointment && (appointment.pago || appointment.codigoVenda));
+}
+
+function isLockedPaidEditing() {
+  return isPaidOrBilledAppointment(state.editing);
+}
+
 function buildStatusOptions(selectedKey) {
   const normalized = normalizeStatusValue(selectedKey);
   return STATUS_OPTIONS.map((value) => {
@@ -2027,6 +2052,7 @@ function buildStatusOptions(selectedKey) {
 export function renderServicosLista() {
   if (!els.servListUL || !els.servTotalEl) return;
   const items = state.tempServicos || [];
+  const lockPaidEdit = isLockedPaidEditing();
   const profs = getModalProfissionaisList();
   const buildOptions = (selectedId, fallbackName = '') => {
     const opts = ['<option value="">Selecione</option>'];
@@ -2053,6 +2079,11 @@ export function renderServicosLista() {
     const horaValue = normalizeHourValue(it.hora || it.horario || it.h || '');
     const observacaoValue = escapeHtml(it.observacao || it.observacoes || '');
     const statusKey = normalizeStatusValue(it.status || it.situacao || 'agendado');
+    const horaDisabledAttr = lockPaidEdit ? ' disabled' : '';
+    const profissionalDisabledAttr = lockPaidEdit ? ' disabled' : '';
+    const observacaoDisabledAttr = lockPaidEdit ? ' disabled' : '';
+    const statusDisabledAttr = lockPaidEdit ? ' disabled' : '';
+    const removeDisabledAttr = lockPaidEdit ? ' disabled' : '';
     return `
       <tr>
         <td class="px-3 py-2 align-top">
@@ -2060,23 +2091,23 @@ export function renderServicosLista() {
         </td>
         <td class="px-3 py-2 align-top text-right tabular-nums text-gray-700">${valorFmt}</td>
         <td class="px-3 py-2 align-top">
-          <input type="time" value="${horaValue}" data-idx="${idx}" class="input-serv-hora w-28 rounded-md border-gray-300 focus:border-primary focus:ring-primary" />
+          <input type="time" value="${horaValue}" data-idx="${idx}" class="input-serv-hora w-28 rounded-md border-gray-300 focus:border-primary focus:ring-primary"${horaDisabledAttr} />
         </td>
         <td class="px-3 py-2 align-top">
-          <select data-idx="${idx}" class="select-serv-prof w-full rounded-md border-gray-300 focus:ring-primary focus:border-primary text-sm">
+          <select data-idx="${idx}" class="select-serv-prof w-full rounded-md border-gray-300 focus:ring-primary focus:border-primary text-sm"${profissionalDisabledAttr}>
             ${options}
           </select>
         </td>
         <td class="px-3 py-2 align-top">
-          <input type="text" value="${observacaoValue}" data-idx="${idx}" placeholder="Observação" class="input-serv-observacao w-full rounded-md border-gray-300 focus:border-primary focus:ring-primary" />
+          <input type="text" value="${observacaoValue}" data-idx="${idx}" placeholder="Observação" class="input-serv-observacao w-full rounded-md border-gray-300 focus:border-primary focus:ring-primary"${observacaoDisabledAttr} />
         </td>
         <td class="px-3 py-2 align-top">
-          <select data-idx="${idx}" class="select-serv-status w-full rounded-md border-gray-300 focus:ring-primary focus:border-primary text-sm">
+          <select data-idx="${idx}" class="select-serv-status w-full rounded-md border-gray-300 focus:ring-primary focus:border-primary text-sm"${statusDisabledAttr}>
             ${buildStatusOptions(statusKey)}
           </select>
         </td>
         <td class="px-3 py-2 align-top text-center">
-          <button type="button" data-idx="${idx}" class="remove-serv inline-flex items-center justify-center rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50">Remover</button>
+          <button type="button" data-idx="${idx}" class="remove-serv inline-flex items-center justify-center rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50"${removeDisabledAttr}>Remover</button>
         </td>
       </tr>
     `;
@@ -2165,30 +2196,42 @@ export async function saveAgendamento() {
 
     if (state.editing && state.editing._id) {
       const id = state.editing._id;
+      const lockPaidEdit = isPaidOrBilledAppointment(state.editing);
       if (!normalizedServices.length) { try { els.servInput.classList.add('border-red-500'); const p=document.createElement('p'); p.className='form-err text-xs text-red-600 mt-1'; p.textContent='Adicione pelo menos 1 serviço.'; els.servInput.parentElement.appendChild(p);} catch{}; return; }
-      const body = {
-        storeId: storeIdSelected,
-        ...(primaryProfissionalId ? { profissionalId: primaryProfissionalId } : {}),
-        scheduledAt,
-        status,
-        observacoes: (els.obsInput?.value || '').trim(),
-        servicos: normalizedServices.map(x => {
-          const payload = {
-            servicoId: x._id,
-            valor: Number(x.valor || 0),
-            status: normalizeStatusValue(x.status || status),
-            ...(x.profissionalId ? { profissionalId: x.profissionalId } : {}),
-            ...(x.itemId ? { itemId: x.itemId } : {}),
+      const body = lockPaidEdit
+        ? {
+            storeId: storeIdSelected,
+            profissionalId: primaryProfissionalId || null,
+            scheduledAt,
+            serviceHour: baseHora,
+            serviceScheduledAt: scheduledAt,
+            serviceItemIds: normalizedServices
+              .map((svc) => (svc?.itemId ? String(svc.itemId).trim() : ''))
+              .filter(Boolean),
+          }
+        : {
+            storeId: storeIdSelected,
+            ...(primaryProfissionalId ? { profissionalId: primaryProfissionalId } : {}),
+            scheduledAt,
+            status,
+            observacoes: (els.obsInput?.value || '').trim(),
+            servicos: normalizedServices.map(x => {
+              const payload = {
+                servicoId: x._id,
+                valor: Number(x.valor || 0),
+                status: normalizeStatusValue(x.status || status),
+                ...(x.profissionalId ? { profissionalId: x.profissionalId } : {}),
+                ...(x.itemId ? { itemId: x.itemId } : {}),
+              };
+              if (x.hora) payload.hora = x.hora;
+              const obs = typeof x.observacao === 'string' ? x.observacao.trim() : '';
+              if (obs) payload.observacao = obs;
+              return payload;
+            }),
+            ...(state.editing.clienteId ? { clienteId: state.editing.clienteId } : {}),
+            ...(els.petSelect?.value ? { petId: els.petSelect.value } : (state.editing.petId ? { petId: state.editing.petId } : {})),
+            ...(typeof state.editing.pago !== 'undefined' ? { pago: state.editing.pago } : {})
           };
-          if (x.hora) payload.hora = x.hora;
-          const obs = typeof x.observacao === 'string' ? x.observacao.trim() : '';
-          if (obs) payload.observacao = obs;
-          return payload;
-        }),
-        ...(state.editing.clienteId ? { clienteId: state.editing.clienteId } : {}),
-        ...(els.petSelect?.value ? { petId: els.petSelect.value } : (state.editing.petId ? { petId: state.editing.petId } : {})),
-        ...(typeof state.editing.pago !== 'undefined' ? { pago: state.editing.pago } : {})
-      };
       const resp = await api(`/func/agendamentos/${id}`, { method: 'PUT', body: JSON.stringify(body) });
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
@@ -2579,7 +2622,6 @@ export function bindModalAndActionsEvents() {
     if (btn.classList.contains('edit')) {
       const item = state.agendamentos.find(x => String(x._id) === String(id));
       if (!item) return;
-      if ((item.pago || item.codigoVenda) && !isPrivilegedRole()) { notify('Este agendamento já foi faturado. Apenas Admin/Admin Master podem editar.', 'warning'); return; }
       openEditModal(item);
     } else if (btn.classList.contains('status')) {
       const item = state.agendamentos.find(x => String(x._id) === String(id));

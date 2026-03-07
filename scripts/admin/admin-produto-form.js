@@ -1,6 +1,6 @@
-document.addEventListener('DOMContentLoaded', () => {
+﻿document.addEventListener('DOMContentLoaded', () => {
     
-    // --- REFERÊNCIAS AO DOM ---
+    // --- REFERÃŠNCIAS AO DOM ---
     const form = document.getElementById('edit-product-form');
     const submitButton = form?.querySelector('button[type="submit"]')
         || document.querySelector('button[type="submit"][form="edit-product-form"]');
@@ -138,7 +138,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const parsed = JSON.parse(raw);
             return parsed && typeof parsed === 'object' ? parsed : {};
         } catch (error) {
-            console.warn('Não foi possível carregar o estado persistido da edição do produto.', error);
+            console.warn('NÃ£o foi possÃ­vel carregar o estado persistido da ediÃ§Ã£o do produto.', error);
             return {};
         }
     };
@@ -155,7 +155,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 localStorage.removeItem(PRODUCT_EDIT_STATE_STORAGE_KEY);
             }
         } catch (error) {
-            console.warn('Não foi possível salvar o estado da edição do produto.', error);
+            console.warn('NÃ£o foi possÃ­vel salvar o estado da ediÃ§Ã£o do produto.', error);
         }
     };
     const updatePersistedProductEditState = (updates = {}) => {
@@ -910,8 +910,8 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const getCompanyNameByKey = (key) => {
-        if (key === FISCAL_GENERAL_KEY) return 'Configuração geral do produto';
-        return storeNameMap.get(key) || `Empresa não encontrada (${key})`;
+        if (key === FISCAL_GENERAL_KEY) return 'ConfiguraÃ§Ã£o geral do produto';
+        return storeNameMap.get(key) || `Empresa nÃ£o encontrada (${key})`;
     };
 
     const buildStatusBadge = (label, statusValue) => {
@@ -941,8 +941,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         const note = activeFiscalCompanyKey === FISCAL_GENERAL_KEY
-            ? 'Aplica-se como padrão para empresas sem configuração específica.'
-            : 'Configuração exclusiva para a empresa selecionada.';
+            ? 'Aplica-se como padrÃ£o para empresas sem configuraÃ§Ã£o especÃ­fica.'
+            : 'ConfiguraÃ§Ã£o exclusiva para a empresa selecionada.';
 
         fiscalCompanySummary.innerHTML = `
             <div class="flex flex-col gap-2 text-sm text-gray-600 md:items-end">
@@ -1226,7 +1226,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!fiscalCompanySelect) return;
         const knownStoreIds = new Set(storesList.map((store) => store._id));
         const options = [
-            `<option value="${FISCAL_GENERAL_KEY}">Configuração geral</option>`,
+            `<option value="${FISCAL_GENERAL_KEY}">ConfiguraÃ§Ã£o geral</option>`,
         ];
 
         storesList.forEach((store) => {
@@ -1240,7 +1240,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         extraKeys.forEach((key) => {
             if (!storeNameMap.has(key)) {
-                storeNameMap.set(key, `Empresa não encontrada (${key})`);
+                storeNameMap.set(key, `Empresa nÃ£o encontrada (${key})`);
             }
             options.push(`<option value="${key}">${storeNameMap.get(key)}</option>`);
         });
@@ -1265,7 +1265,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // --- LÓGICA DAS ABAS (Geral / Especificações) ---
+    // --- LÃ“GICA DAS ABAS (Geral / EspecificaÃ§Ãµes) ---
     const normalizeTabId = (tabId) => {
         if (typeof tabId !== 'string') return '';
         return tabId.startsWith('#') ? tabId.slice(1) : tabId;
@@ -1342,14 +1342,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (initialTab) activateProductTab(initialTab);
     }
 
-    // --- ESTADO DA PÁGINA ---
+    // --- ESTADO DA PÃGINA ---
     const urlParams = new URLSearchParams(window.location.search);
     const isFromNfeImport = urlParams.get('from') === 'nfe-import';
     let productId = urlParams.get('id');
     let isEditMode = Boolean(productId);
     let productCategories = []; // Array de IDs das categorias selecionadas
-    let allHierarchicalCategories = []; // Guarda a árvore de categorias
-    let allFlatCategories = []; // Lista plana de categorias para consultas rápidas
+    let allHierarchicalCategories = []; // Guarda a Ã¡rvore de categorias
+    let allFlatCategories = []; // Lista plana de categorias para consultas rÃ¡pidas
     let supplierEntries = [];
     let allDeposits = [];
     const depositStockMap = new Map();
@@ -1383,19 +1383,19 @@ document.addEventListener('DOMContentLoaded', () => {
         timeStyle: 'short',
     });
     const priceHistoryDefaultEmptyMessage = priceHistoryEmptyState?.textContent?.trim()
-        || 'Nenhuma alteração de preço registrada para este produto.';
+        || 'Nenhuma alteraÃ§Ã£o de preÃ§o registrada para este produto.';
     let priceHistoryLoading = false;
     let fractionalChildren = [];
     let fractionalSearchTimeoutId = null;
     let fractionalSearchAbortController = null;
     let currentProductSnapshot = null;
     const PRODUCT_SEARCH_RESULTS_COLUMNS = 5;
-    const PRODUCT_SEARCH_DEFAULT_MESSAGE = 'Digite para buscar produtos pelo código ou descrição.';
+    const PRODUCT_SEARCH_DEFAULT_MESSAGE = 'Digite para buscar produtos pelo cÃ³digo ou descriÃ§Ã£o.';
     let productSearchAbortController = null;
     let productSearchDebounceId = null;
     let lastProductSearchTerm = '';
-    const letterInputPattern = /[A-Za-zÀ-ÖØ-öø-ÿ]/;
-    const letterGlobalPattern = /[A-Za-zÀ-ÖØ-öø-ÿ]+/g;
+    const letterInputPattern = /\p{L}/u;
+    const letterGlobalPattern = /\p{L}+/gu;
     let lastSkuInputValue = skuInput?.value || '';
 
     const storedProductId = isFromNfeImport ? null : getPersistedProductEditStateValue('productId');
@@ -1407,7 +1407,7 @@ document.addEventListener('DOMContentLoaded', () => {
             currentUrl.searchParams.set('id', productId);
             window.history.replaceState({}, '', currentUrl.toString());
         } catch (error) {
-            console.warn('Não foi possível atualizar a URL com o produto persistido.', error);
+            console.warn('NÃ£o foi possÃ­vel atualizar a URL com o produto persistido.', error);
         }
     }
     if (productId) {
@@ -1499,7 +1499,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             return JSON.parse(localStorage.getItem('loggedInUser') || 'null')?.token || null;
         } catch (error) {
-            console.error('Erro ao recuperar o token do usuário logado.', error);
+            console.error('Erro ao recuperar o token do usuÃ¡rio logado.', error);
             return null;
         }
     };
@@ -1611,15 +1611,15 @@ document.addEventListener('DOMContentLoaded', () => {
             fractionalChildren.forEach((child, index) => {
                 const productKey = child?.productId ? String(child.productId) : '';
                 if (!productKey) {
-                    fractionalErrors.push(`Produto filho inválido na posição ${index + 1}.`);
+                    fractionalErrors.push(`Produto filho invÃ¡lido na posiÃ§Ã£o ${index + 1}.`);
                     return;
                 }
                 if (productId && productKey === String(productId)) {
-                    fractionalErrors.push('O produto não pode ser configurado como filho de si mesmo.');
+                    fractionalErrors.push('O produto nÃ£o pode ser configurado como filho de si mesmo.');
                     return;
                 }
                 if (seenChildren.has(productKey)) {
-                    fractionalErrors.push('Existem produtos filhos duplicados na configuração de fracionamento.');
+                    fractionalErrors.push('Existem produtos filhos duplicados na configuraÃ§Ã£o de fracionamento.');
                     return;
                 }
                 const metrics = computeFractionChildMetrics(child);
@@ -1628,7 +1628,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
                 if (!metrics.fractionQuantity || metrics.fractionQuantity <= 0) {
-                    fractionalErrors.push(`Informe a quantidade após fracionamento do produto filho ${child?.nome || productKey}.`);
+                    fractionalErrors.push(`Informe a quantidade apÃ³s fracionamento do produto filho ${child?.nome || productKey}.`);
                     return;
                 }
                 seenChildren.add(productKey);
@@ -1686,7 +1686,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const token = getAuthToken();
         if (!token) {
-            console.warn('Token de autenticação indisponível. Salvamento automático cancelado.');
+            console.warn('Token de autenticaÃ§Ã£o indisponÃ­vel. Salvamento automÃ¡tico cancelado.');
             return;
         }
 
@@ -1702,14 +1702,14 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             if (!response.ok) {
-                const error = new Error('Falha ao salvar automaticamente as alterações do produto.');
+                const error = new Error('Falha ao salvar automaticamente as alteraÃ§Ãµes do produto.');
                 if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
                     window.showToast(error.message, 'error', 4000);
                 }
                 throw error;
             }
         } catch (error) {
-            console.error('Erro durante o salvamento automático do produto.', error);
+            console.error('Erro durante o salvamento automÃ¡tico do produto.', error);
         }
     };
 
@@ -1808,7 +1808,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (message) {
             priceHistoryErrorState.textContent = message;
         } else {
-            priceHistoryErrorState.textContent = 'Não foi possível carregar o histórico de preços. Tente novamente.';
+            priceHistoryErrorState.textContent = 'NÃ£o foi possÃ­vel carregar o histÃ³rico de preÃ§os. Tente novamente.';
         }
         priceHistoryErrorState.classList.toggle('hidden', !show);
     };
@@ -2100,7 +2100,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (priceHistoryEmptyState) {
             priceHistoryEmptyState.textContent = nextProductId
                 ? priceHistoryDefaultEmptyMessage
-                : 'Salve o produto para visualizar o histórico de preços.';
+                : 'Salve o produto para visualizar o histÃ³rico de preÃ§os.';
             priceHistoryEmptyState.classList.add('hidden');
         }
     };
@@ -2258,7 +2258,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 priceHistoryTableBody.innerHTML = '';
             }
             updatePriceHistoryErrorState('', false);
-            updatePriceHistoryEmptyState('Salve o produto para visualizar o histórico de preços.', true);
+            updatePriceHistoryEmptyState('Salve o produto para visualizar o histÃ³rico de preÃ§os.', true);
             return;
         }
 
@@ -2272,7 +2272,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const token = getAuthToken();
         if (!token) {
             setPriceHistoryLoadingState(false);
-            updatePriceHistoryErrorState('Sessão expirada. Faça login novamente para consultar o histórico.', true);
+            updatePriceHistoryErrorState('SessÃ£o expirada. FaÃ§a login novamente para consultar o histÃ³rico.', true);
             updatePriceHistoryEmptyState(priceHistoryDefaultEmptyMessage, false);
             return;
         }
@@ -2285,7 +2285,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             if (!response.ok) {
-                throw new Error('Falha ao carregar o histórico de preços.');
+                throw new Error('Falha ao carregar o histÃ³rico de preÃ§os.');
             }
 
             const payload = await response.json();
@@ -2304,9 +2304,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 updatePriceHistoryEmptyState(priceHistoryDefaultEmptyMessage, true);
             }
         } catch (error) {
-            console.error('Erro ao carregar histórico de preços do produto.', error);
+            console.error('Erro ao carregar histÃ³rico de preÃ§os do produto.', error);
             priceHistoryEntries = [];
-            updatePriceHistoryErrorState(error?.message || 'Não foi possível carregar o histórico de preços. Tente novamente.', true);
+            updatePriceHistoryErrorState(error?.message || 'NÃ£o foi possÃ­vel carregar o histÃ³rico de preÃ§os. Tente novamente.', true);
             updatePriceHistoryEmptyState(priceHistoryDefaultEmptyMessage, false);
         } finally {
             setPriceHistoryLoadingState(false);
@@ -2387,7 +2387,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const formatProductSearchCurrency = (value) => {
         const parsed = parseProductSearchNumber(value);
-        return parsed === null ? '—' : productSearchCurrencyFormatter.format(parsed);
+        return parsed === null ? 'â€”' : productSearchCurrencyFormatter.format(parsed);
     };
 
     const getProductSearchId = (product = {}) => {
@@ -2514,7 +2514,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             return new RegExp(pattern, 'i');
         } catch (error) {
-            console.warn('Filtro inválido ignorado na busca de produtos.', error);
+            console.warn('Filtro invÃ¡lido ignorado na busca de produtos.', error);
             return null;
         }
     };
@@ -2660,7 +2660,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const codeCell = document.createElement('td');
             codeCell.className = 'px-4 py-3 text-xs font-semibold text-gray-700 whitespace-nowrap';
-            codeCell.textContent = getProductSearchCode(product) || '—';
+            codeCell.textContent = getProductSearchCode(product) || 'â€”';
 
             const descriptionCell = document.createElement('td');
             descriptionCell.className = 'px-4 py-3 text-xs text-gray-700';
@@ -2668,21 +2668,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const barcodeCell = document.createElement('td');
             barcodeCell.className = 'px-4 py-3 text-xs text-gray-600 whitespace-nowrap';
-            barcodeCell.textContent = getProductSearchBarcode(product) || '—';
+            barcodeCell.textContent = getProductSearchBarcode(product) || 'â€”';
 
             const costCell = document.createElement('td');
             costCell.className = 'px-4 py-3 text-xs text-right text-gray-700 whitespace-nowrap';
             const costNumber = getProductSearchCostNumber(product);
             costCell.textContent = Number.isFinite(costNumber)
                 ? productSearchCurrencyFormatter.format(costNumber)
-                : '—';
+                : 'â€”';
 
             const saleCell = document.createElement('td');
             saleCell.className = 'px-4 py-3 text-xs text-right font-semibold text-gray-800 whitespace-nowrap';
             const saleNumber = getProductSearchSaleNumber(product);
             saleCell.textContent = Number.isFinite(saleNumber)
                 ? productSearchCurrencyFormatter.format(saleNumber)
-                : '—';
+                : 'â€”';
 
             row.append(codeCell, descriptionCell, barcodeCell, costCell, saleCell);
             fragment.appendChild(row);
@@ -2732,7 +2732,7 @@ document.addEventListener('DOMContentLoaded', () => {
             : '';
         if (!productIdValue) {
             if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
-                window.showToast('Não foi possível identificar o produto selecionado.', 'warning', 3500);
+                window.showToast('NÃ£o foi possÃ­vel identificar o produto selecionado.', 'warning', 3500);
             }
             return;
         }
@@ -2746,13 +2746,13 @@ document.addEventListener('DOMContentLoaded', () => {
             lastSkuInputValue = skuInput?.value || '';
             closeProductSearchModal();
             if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
-                window.showToast('Produto carregado para edição.', 'success', 3200);
+                window.showToast('Produto carregado para ediÃ§Ã£o.', 'success', 3200);
             }
         } catch (error) {
             console.error('Erro ao carregar produto selecionado na busca:', error);
             showModal({
                 title: 'Erro',
-                message: error?.message || 'Não foi possível carregar o produto selecionado.',
+                message: error?.message || 'NÃ£o foi possÃ­vel carregar o produto selecionado.',
                 confirmText: 'Entendi',
             });
             window.setTimeout(() => {
@@ -2839,7 +2839,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (productSearchAbortController) {
             productSearchAbortController.abort();
         }
-        productSearchAbortController = new AbortController();
+        const activeAbortController = new AbortController();
+        productSearchAbortController = activeAbortController;
         showProductSearchFeedback('Buscando produtos...', 'loading');
 
         const token = getAuthToken();
@@ -2849,30 +2850,64 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            const params = new URLSearchParams({
-                search: normalizedTerm,
-                limit: '20',
-                includeHidden: 'true',
-                audience: 'admin',
-            });
-            const response = await fetch(`${API_CONFIG.BASE_URL}/products?${params.toString()}`, {
-                headers,
-                signal: productSearchAbortController.signal,
-            });
+            const pageSize = 500;
+            const products = [];
+            const seenIds = new Set();
 
-            if (!response.ok) {
-                const errorMessage = response.status === 401
-                    ? 'Sessão expirada. Faça login novamente para buscar produtos.'
-                    : 'Não foi possível buscar os produtos informados.';
-                throw new Error(errorMessage);
+            const appendProducts = (payload) => {
+                const pageProducts = Array.isArray(payload?.products)
+                    ? payload.products
+                    : Array.isArray(payload)
+                        ? payload
+                        : [];
+                pageProducts.forEach((product) => {
+                    const id = String(product?._id || product?.id || '').trim();
+                    if (id && seenIds.has(id)) return;
+                    if (id) seenIds.add(id);
+                    products.push(product);
+                });
+            };
+
+            const fetchPage = async (pageNumber) => {
+                const params = new URLSearchParams({
+                    search: normalizedTerm,
+                    page: String(pageNumber),
+                    limit: String(pageSize),
+                    includeHidden: 'true',
+                    audience: 'admin',
+                });
+                const response = await fetch(`${API_CONFIG.BASE_URL}/products?${params.toString()}`, {
+                    headers,
+                    signal: activeAbortController.signal,
+                });
+
+                if (!response.ok) {
+                    const errorMessage = response.status === 401
+                        ? 'SessÃ£o expirada. FaÃ§a login novamente para buscar produtos.'
+                        : 'NÃ£o foi possÃ­vel buscar os produtos informados.';
+                    throw new Error(errorMessage);
+                }
+
+                return response.json();
+            };
+
+            const firstPagePayload = await fetchPage(1);
+            appendProducts(firstPagePayload);
+
+            const parsedPages = Number(firstPagePayload?.pages);
+            const totalPages = Number.isFinite(parsedPages) && parsedPages > 0 ? parsedPages : 1;
+
+            if (totalPages > 1) {
+                const remainingPageNumbers = Array.from({ length: totalPages - 1 }, (_, index) => index + 2);
+                const remainingPayloads = await Promise.all(remainingPageNumbers.map((pageNumber) => fetchPage(pageNumber)));
+                remainingPayloads.forEach((payload) => {
+                    appendProducts(payload);
+                });
             }
 
-            const payload = await response.json();
-            const products = Array.isArray(payload?.products)
-                ? payload.products
-                : Array.isArray(payload)
-                    ? payload
-                    : [];
+            if (activeAbortController.signal.aborted) {
+                return;
+            }
 
             renderProductSearchResults(products);
         } catch (error) {
@@ -2880,14 +2915,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             console.error('Erro ao buscar produtos para o modal de pesquisa:', error);
-            showProductSearchFeedback(error?.message || 'Não foi possível buscar os produtos informados.', 'error');
+            showProductSearchFeedback(error?.message || 'NÃ£o foi possÃ­vel buscar os produtos informados.', 'error');
         } finally {
-            if (productSearchAbortController) {
+            if (productSearchAbortController === activeAbortController) {
                 productSearchAbortController = null;
             }
         }
     };
-
     const requestProductSearchResults = (term) => {
         const normalizedTerm = typeof term === 'string' ? term.trim() : '';
         if (normalizedTerm === lastProductSearchTerm) {
@@ -3081,7 +3115,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!existingImagesGrid) return;
 
         if (!Array.isArray(currentImages) || currentImages.length === 0) {
-            existingImagesGrid.innerHTML = '<p class="text-sm text-gray-500">Nenhuma imagem cadastrada até o momento.</p>';
+            existingImagesGrid.innerHTML = '<p class="text-sm text-gray-500">Nenhuma imagem cadastrada atÃ© o momento.</p>';
             hideImageOrderStatus();
             return;
         }
@@ -3100,10 +3134,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="absolute inset-0 flex flex-col justify-between gap-2 bg-black/50 px-2 py-2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
                             <div class="flex items-center justify-between gap-2">
                                 <button type="button" class="reorder-image-btn move-left inline-flex h-7 w-1/2 items-center justify-center rounded bg-white/90 px-2 text-xs font-semibold text-gray-700 shadow-sm transition hover:bg-white" data-direction="left" data-image-url="${safeUrl}">
-                                    ←
+                                    â†
                                 </button>
                                 <button type="button" class="reorder-image-btn move-right inline-flex h-7 w-1/2 items-center justify-center rounded bg-white/90 px-2 text-xs font-semibold text-gray-700 shadow-sm transition hover:bg-white" data-direction="right" data-image-url="${safeUrl}">
-                                    →
+                                    â†’
                                 </button>
                             </div>
                             <div class="flex justify-end">
@@ -3151,7 +3185,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (!token) {
-            const error = new Error('Sessão expirada. Faça login novamente.');
+            const error = new Error('SessÃ£o expirada. FaÃ§a login novamente.');
             showImageOrderStatus({ message: error.message, tone: 'error' });
             throw error;
         }
@@ -3173,7 +3207,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (!response.ok) {
-            const errorMessage = payload?.message || 'Não foi possível atualizar a ordem das imagens.';
+            const errorMessage = payload?.message || 'NÃ£o foi possÃ­vel atualizar a ordem das imagens.';
             showImageOrderStatus({ message: errorMessage, tone: 'error' });
             const error = new Error(errorMessage);
             error.payload = payload;
@@ -3210,7 +3244,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderExistingImages();
 
         if (!isEditMode || !productId) {
-            showImageOrderStatus({ message: 'A ordem será mantida após salvar o produto.', tone: 'info' });
+            showImageOrderStatus({ message: 'A ordem serÃ¡ mantida apÃ³s salvar o produto.', tone: 'info' });
             return;
         }
 
@@ -3221,7 +3255,7 @@ document.addEventListener('DOMContentLoaded', () => {
             renderExistingImages();
             showModal({
                 title: 'Erro',
-                message: `Não foi possível atualizar a ordem das imagens: ${error.message}`,
+                message: `NÃ£o foi possÃ­vel atualizar a ordem das imagens: ${error.message}`,
                 confirmText: 'OK'
             });
             console.error('Falha ao persistir a nova ordem das imagens:', error);
@@ -3325,7 +3359,7 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 token = JSON.parse(localStorage.getItem('loggedInUser') || 'null')?.token || null;
             } catch (storageError) {
-                console.error('Erro ao recuperar token do usuário logado:', storageError);
+                console.error('Erro ao recuperar token do usuÃ¡rio logado:', storageError);
             }
 
             const headers = token ? { Authorization: `Bearer ${token}` } : {};
@@ -3333,7 +3367,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!response.ok) {
                 const error = new Error(
                     response.status === 401
-                        ? 'Sua sessão expirou. Faça login novamente para carregar os fornecedores.'
+                        ? 'Sua sessÃ£o expirou. FaÃ§a login novamente para carregar os fornecedores.'
                         : `Erro ao carregar fornecedores (${response.status})`,
                 );
                 error.status = response.status;
@@ -3505,7 +3539,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!results.length) {
             const message = term
                 ? `Nenhum fornecedor encontrado para "${escapeHtml(term)}".`
-                : 'Cadastre fornecedores para vinculá-los aos produtos.';
+                : 'Cadastre fornecedores para vinculÃ¡-los aos produtos.';
             showSupplierSuggestionsMessage(message, { tone: 'info' });
             return;
         }
@@ -3538,7 +3572,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     badges.push('<span class="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">ONG</span>');
                 }
                 if (supplier?.flags?.bankSupplier) {
-                    badges.push('<span class="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-700">Fornecedor bancário</span>');
+                    badges.push('<span class="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-700">Fornecedor bancÃ¡rio</span>');
                 }
                 const badgesLine = badges.length ? `<div class="mt-1 flex flex-wrap items-center gap-2">${badges.join('')}</div>` : '';
                 const metadata = [];
@@ -3549,13 +3583,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     metadata.push(`<span class="inline-flex items-center gap-1"><i class="fas fa-hashtag text-[10px]"></i>${escapeHtml(supplierCode)}</span>`);
                 }
                 const metadataLine = metadata.length
-                    ? `<div class="mt-1 flex flex-wrap items-center gap-3 text-xs text-gray-500">${metadata.join('<span class="text-gray-300">•</span>')}</div>`
+                    ? `<div class="mt-1 flex flex-wrap items-center gap-3 text-xs text-gray-500">${metadata.join('<span class="text-gray-300">â€¢</span>')}</div>`
                     : '';
                 const locationLine = locationLabel
                     ? `<div class="mt-1 text-[11px] text-gray-500"><i class="fas fa-location-dot text-[10px] mr-1"></i>${escapeHtml(locationLabel)}</div>`
                     : '';
                 const contactLine = contactBits.length
-                    ? `<div class="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-gray-500">${contactBits.join('<span class="text-gray-300">•</span>')}</div>`
+                    ? `<div class="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-gray-500">${contactBits.join('<span class="text-gray-300">â€¢</span>')}</div>`
                     : '';
                 const initials = getSupplierInitials(supplier);
                 return `
@@ -3598,12 +3632,12 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 await ensureSuppliersLoaded();
             } catch (error) {
-                console.error('Erro ao carregar fornecedores para sugestão:', error);
+                console.error('Erro ao carregar fornecedores para sugestÃ£o:', error);
                 const unauthorized = Number(error?.status) === 401;
                 showSupplierSuggestionsMessage(
                     unauthorized
-                        ? 'Sua sessão expirou. Faça login novamente para buscar fornecedores.'
-                        : 'Não foi possível carregar os fornecedores cadastrados. Tente novamente.',
+                        ? 'Sua sessÃ£o expirou. FaÃ§a login novamente para buscar fornecedores.'
+                        : 'NÃ£o foi possÃ­vel carregar os fornecedores cadastrados. Tente novamente.',
                     {
                         tone: 'error',
                         actionLabel: unauthorized ? 'Ir para login' : 'Tentar novamente',
@@ -3618,7 +3652,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         if (!supplierDirectoryState.items.length) {
-            showSupplierSuggestionsMessage('Cadastre fornecedores para vinculá-los aos produtos.', { tone: 'info' });
+            showSupplierSuggestionsMessage('Cadastre fornecedores para vinculÃ¡-los aos produtos.', { tone: 'info' });
             return;
         }
         const results = filterSupplierDirectory(trimmed, { allowEmpty });
@@ -3626,7 +3660,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (trimmed || !allowEmpty) {
                 showSupplierSuggestionsMessage(`Nenhum fornecedor encontrado para "${escapeHtml(trimmed)}".`, { tone: 'info' });
             } else {
-                showSupplierSuggestionsMessage('Cadastre fornecedores para vinculá-los aos produtos.', { tone: 'info' });
+                showSupplierSuggestionsMessage('Cadastre fornecedores para vinculÃ¡-los aos produtos.', { tone: 'info' });
             }
             return;
         }
@@ -3667,7 +3701,7 @@ document.addEventListener('DOMContentLoaded', () => {
         deleteProductButton.classList.remove('hidden');
     };
 
-    const getSubmitButtonIdleLabel = () => (isEditMode ? 'Salvar Alterações' : 'Cadastrar Produto');
+    const getSubmitButtonIdleLabel = () => (isEditMode ? 'Salvar AlteraÃ§Ãµes' : 'Cadastrar Produto');
 
     const setSubmitButtonIdleText = () => {
         if (!submitButton) return;
@@ -3705,7 +3739,7 @@ document.addEventListener('DOMContentLoaded', () => {
             depositTableBody.innerHTML = `
                 <tr>
                     <td colspan="5" class="px-4 py-6 text-center text-xs text-gray-500">
-                        Nenhum depósito vinculado até o momento.
+                        Nenhum depÃ³sito vinculado atÃ© o momento.
                     </td>
                 </tr>
             `;
@@ -3729,7 +3763,7 @@ document.addEventListener('DOMContentLoaded', () => {
             tr.innerHTML = `
                 <td class="px-4 py-3 text-gray-700">
                     <div class="font-medium text-gray-800">${deposit.nome}</div>
-                    <div class="text-xs text-gray-500">${deposit.codigo}${deposit?.empresa?.nome ? ` • ${deposit.empresa.nome}` : ''}</div>
+                    <div class="text-xs text-gray-500">${deposit.codigo}${deposit?.empresa?.nome ? ` â€¢ ${deposit.empresa.nome}` : ''}</div>
                 </td>
                 <td class="px-4 py-3">
                     <input type="number" step="0.001" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" data-deposit-id="${depositId}" data-deposit-field="quantidade">
@@ -3782,7 +3816,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 qtyInput.classList.toggle('bg-gray-100', fractionalLocked);
                 qtyInput.classList.toggle('cursor-not-allowed', fractionalLocked);
                 if (fractionalLocked) {
-                    qtyInput.setAttribute('title', 'O estoque do produto pai é calculado automaticamente pelos produtos filhos fracionados.');
+                    qtyInput.setAttribute('title', 'O estoque do produto pai Ã© calculado automaticamente pelos produtos filhos fracionados.');
                 } else {
                     qtyInput.removeAttribute('title');
                 }
@@ -3792,7 +3826,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 unitInput.classList.toggle('bg-gray-100', fractionalLocked);
                 unitInput.classList.toggle('cursor-not-allowed', fractionalLocked);
                 if (fractionalLocked) {
-                    unitInput.setAttribute('title', 'O estoque do produto pai é calculado automaticamente pelos produtos filhos fracionados.');
+                    unitInput.setAttribute('title', 'O estoque do produto pai Ã© calculado automaticamente pelos produtos filhos fracionados.');
                 } else {
                     unitInput.removeAttribute('title');
                 }
@@ -3862,23 +3896,23 @@ document.addEventListener('DOMContentLoaded', () => {
             infoContainer.className = 'space-y-1 text-sm text-gray-700';
 
             const supplierLine = document.createElement('p');
-            const supplierName = escapeHtml(entry.fornecedor || '—');
+            const supplierName = escapeHtml(entry.fornecedor || 'â€”');
             const supplierDocument = entry.documentoFornecedor ? formatDocument(entry.documentoFornecedor) : '';
             const supplierDocumentHtml = supplierDocument
                 ? ` <span class="ml-2 inline-flex items-center gap-1 text-xs text-gray-500"><i class="fas fa-id-card text-[10px]"></i>${escapeHtml(supplierDocument)}</span>`
                 : '';
             supplierLine.innerHTML = `<span class="font-semibold">Fornecedor:</span> ${supplierName}${supplierDocumentHtml}`;
             const productNameLine = document.createElement('p');
-            productNameLine.innerHTML = `<span class="font-semibold">Nome do produto no fornecedor:</span> ${escapeHtml(entry.nomeProdutoFornecedor || '—')}`;
+            productNameLine.innerHTML = `<span class="font-semibold">Nome do produto no fornecedor:</span> ${escapeHtml(entry.nomeProdutoFornecedor || 'â€”')}`;
             const codeLine = document.createElement('p');
-            codeLine.innerHTML = `<span class="font-semibold">Código do produto:</span> ${escapeHtml(entry.codigoProduto || '—')}`;
+            codeLine.innerHTML = `<span class="font-semibold">CÃ³digo do produto:</span> ${escapeHtml(entry.codigoProduto || 'â€”')}`;
             const unitLine = document.createElement('p');
-            unitLine.innerHTML = `<span class="font-semibold">Unidade de entrada:</span> ${escapeHtml(entry.unidadeEntrada || '—')}`;
+            unitLine.innerHTML = `<span class="font-semibold">Unidade de entrada:</span> ${escapeHtml(entry.unidadeEntrada || 'â€”')}`;
             const calcLine = document.createElement('p');
-            const valorCalculo = Number.isFinite(entry.valorCalculo) ? entry.valorCalculo : '—';
-            const calcLabel = escapeHtml(entry.tipoCalculo || '—');
-            const calcValueLabel = valorCalculo !== '—' ? ` (${valorCalculo})` : '';
-            calcLine.innerHTML = `<span class="font-semibold">Cálculo:</span> ${calcLabel}${calcValueLabel}`;
+            const valorCalculo = Number.isFinite(entry.valorCalculo) ? entry.valorCalculo : 'â€”';
+            const calcLabel = escapeHtml(entry.tipoCalculo || 'â€”');
+            const calcValueLabel = valorCalculo !== 'â€”' ? ` (${valorCalculo})` : '';
+            calcLine.innerHTML = `<span class="font-semibold">CÃ¡lculo:</span> ${calcLabel}${calcValueLabel}`;
 
             infoContainer.appendChild(supplierLine);
             infoContainer.appendChild(productNameLine);
@@ -3903,7 +3937,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
-    // --- CAMPOS RELACIONADOS A PREÇOS ---
+    // --- CAMPOS RELACIONADOS A PREÃ‡OS ---
     const costInput = document.getElementById('custo');
     const saleInput = document.getElementById('venda');
     const markupInput = document.getElementById('markup');
@@ -4337,7 +4371,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const codeParts = [];
             if (child?.cod) codeParts.push(escapeHtml(child.cod));
             if (child?.unidade) codeParts.push(escapeHtml(child.unidade));
-            const codeLabel = codeParts.length ? codeParts.join(' · ') : '&nbsp;';
+            const codeLabel = codeParts.length ? codeParts.join(' Â· ') : '&nbsp;';
 
             const row = document.createElement('tr');
             row.className = 'bg-white';
@@ -4383,7 +4417,7 @@ document.addEventListener('DOMContentLoaded', () => {
             fractionInput?.addEventListener('change', (event) => {
                 const parsedValue = Number(event.target.value);
                 if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
-                    showToastMessage('Informe a quantidade após fracionamento maior que zero.', 'warning');
+                    showToastMessage('Informe a quantidade apÃ³s fracionamento maior que zero.', 'warning');
                     event.target.value = metrics.fractionQuantity > 0 ? metrics.fractionQuantity : '';
                     return;
                 }
@@ -4405,11 +4439,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const addFractionChild = (product) => {
         if (!product || !product.productId) return;
         if (productId && String(product.productId) === String(productId)) {
-            showToastMessage('Não é possível vincular o próprio produto como filho.', 'warning');
+            showToastMessage('NÃ£o Ã© possÃ­vel vincular o prÃ³prio produto como filho.', 'warning');
             return;
         }
         if (fractionalChildren.some((child) => String(child.productId) === String(product.productId))) {
-            showToastMessage('Este produto já está vinculado como filho.', 'warning');
+            showToastMessage('Este produto jÃ¡ estÃ¡ vinculado como filho.', 'warning');
             return;
         }
         fractionalChildren.push({
@@ -4438,7 +4472,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const description = (fractionChildCreateDescriptionInput?.value || '').trim();
         if (!description) {
-            showToastMessage('Informe a descrição do produto filho.', 'warning');
+            showToastMessage('Informe a descriÃ§Ã£o do produto filho.', 'warning');
             fractionChildCreateDescriptionInput?.focus();
             return;
         }
@@ -4454,7 +4488,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const basePayload = collectBaseProductPayloadForFractionChild();
         if (!basePayload) {
-            showToastMessage('Não foi possível preparar os dados para criar o produto filho.', 'error');
+            showToastMessage('NÃ£o foi possÃ­vel preparar os dados para criar o produto filho.', 'error');
             return;
         }
 
@@ -4471,7 +4505,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const token = getAuthToken();
         if (!token) {
-            showToastMessage('Faça login novamente para criar produtos filhos.', 'warning');
+            showToastMessage('FaÃ§a login novamente para criar produtos filhos.', 'warning');
             return;
         }
 
@@ -4496,14 +4530,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (!response.ok) {
-                const errorMessage = payload?.message || 'Não foi possível criar o produto filho.';
+                const errorMessage = payload?.message || 'NÃ£o foi possÃ­vel criar o produto filho.';
                 throw new Error(errorMessage);
             }
 
             const createdProduct = payload?.product || payload;
             const createdId = createdProduct?._id || createdProduct?.id;
             if (!createdId) {
-                throw new Error('Produto criado, mas não foi possível identificar o identificador retornado.');
+                throw new Error('Produto criado, mas nÃ£o foi possÃ­vel identificar o identificador retornado.');
             }
 
             addFractionChild({
@@ -4525,7 +4559,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (error) {
             console.error('Erro ao criar produto filho automaticamente:', error);
-            showToastMessage(error?.message || 'Não foi possível criar o produto filho.', 'error');
+            showToastMessage(error?.message || 'NÃ£o foi possÃ­vel criar o produto filho.', 'error');
         } finally {
             setFractionChildCreateButtonLoading(false);
         }
@@ -4536,7 +4570,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!items.length) {
             showFractionalSuggestionMessage(term
                 ? `Nenhum produto encontrado para "${escapeHtml(term)}".`
-                : 'Nenhum produto disponível para seleção.');
+                : 'Nenhum produto disponÃ­vel para seleÃ§Ã£o.');
             return;
         }
         const fragment = document.createDocumentFragment();
@@ -4551,7 +4585,7 @@ document.addEventListener('DOMContentLoaded', () => {
             button.innerHTML = `
                 <span class="flex flex-col">
                     <span class="font-semibold text-gray-800">${escapeHtml(item.nome || 'Produto sem nome')}</span>
-                    <span class="text-[11px] text-gray-500">${codeParts.length ? codeParts.join(' · ') : '&nbsp;'}</span>
+                    <span class="text-[11px] text-gray-500">${codeParts.length ? codeParts.join(' Â· ') : '&nbsp;'}</span>
                 </span>
                 <span class="text-[11px] font-semibold text-gray-700">${formatFractionCurrency(Number(item.custo) || 0)}</span>
             `;
@@ -4580,7 +4614,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const token = getAuthToken();
         if (!token) {
-            showFractionalSuggestionMessage('Faça login para buscar produtos.');
+            showFractionalSuggestionMessage('FaÃ§a login para buscar produtos.');
             return;
         }
 
@@ -4601,7 +4635,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 signal: fractionalSearchAbortController.signal,
             });
             if (!response.ok) {
-                throw new Error('Não foi possível buscar os produtos informados.');
+                throw new Error('NÃ£o foi possÃ­vel buscar os produtos informados.');
             }
             const payload = await response.json();
             const products = Array.isArray(payload?.products) ? payload.products : [];
@@ -4622,7 +4656,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             if (error.name === 'AbortError') return;
             console.error('Erro ao buscar produtos fracionados:', error);
-            showFractionalSuggestionMessage(error.message || 'Não foi possível buscar os produtos informados.');
+            showFractionalSuggestionMessage(error.message || 'NÃ£o foi possÃ­vel buscar os produtos informados.');
         } finally {
             fractionalSearchAbortController = null;
         }
@@ -4706,7 +4740,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!parsed || typeof parsed !== 'object') return null;
             return parsed;
         } catch (error) {
-            console.warn('Não foi possível recuperar o rascunho importado da NF-e.', error);
+            console.warn('NÃ£o foi possÃ­vel recuperar o rascunho importado da NF-e.', error);
             return null;
         }
     };
@@ -4731,16 +4765,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (pageDescription) {
             const descriptor = [];
             if (draft.nfe?.number) descriptor.push(`NF-e ${draft.nfe.number}`);
-            if (draft.nfe?.serie) descriptor.push(`Série ${draft.nfe.serie}`);
+            if (draft.nfe?.serie) descriptor.push(`SÃ©rie ${draft.nfe.serie}`);
             if (supplier.name) descriptor.push(supplier.name);
-            const suffix = descriptor.length ? ` (${descriptor.join(' · ')})` : '';
+            const suffix = descriptor.length ? ` (${descriptor.join(' Â· ')})` : '';
             pageDescription.textContent = `Revise os dados preenchidos automaticamente a partir do XML autorizado${suffix}.`;
         }
 
         if (skuInput) {
             skuInput.disabled = true;
             skuInput.classList.add('bg-gray-100', 'cursor-not-allowed');
-            skuInput.placeholder = 'Gerado automaticamente após salvar';
+            skuInput.placeholder = 'Gerado automaticamente apÃ³s salvar';
             skuInput.value = '';
         }
 
@@ -4769,7 +4803,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const fiscalInfo = [];
             if (item.cfop) fiscalInfo.push(`CFOP ${item.cfop}`);
             if (item.ncm) fiscalInfo.push(`NCM ${item.ncm}`);
-            if (fiscalInfo.length) lines.push(fiscalInfo.join(' · '));
+            if (fiscalInfo.length) lines.push(fiscalInfo.join(' Â· '));
             if (draft.accessKey) lines.push(`Origem: XML NF-e ${draft.accessKey}`);
             detailedDescriptionInput.value = lines.join('\n');
         }
@@ -4868,7 +4902,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return true;
     };
 
-    // --- FUNÇÕES DE LÓGICA ---
+    // --- FUNÃ‡Ã•ES DE LÃ“GICA ---
     const renderCategoryTags = (categories) => {
         categoryTagsContainer.innerHTML = '';
         if (categories.length === 0) {
@@ -4969,7 +5003,7 @@ document.addEventListener('DOMContentLoaded', () => {
         currentImages = [];
         hideImageOrderStatus();
         if (existingImagesGrid) {
-            existingImagesGrid.innerHTML = '<p class="text-sm text-gray-500">Nenhuma imagem cadastrada até o momento.</p>';
+            existingImagesGrid.innerHTML = '<p class="text-sm text-gray-500">Nenhuma imagem cadastrada atÃ© o momento.</p>';
         }
 
         if (fractionChildCreateUnitSelect) {
@@ -5012,7 +5046,7 @@ document.addEventListener('DOMContentLoaded', () => {
         params.set(identifierType, identifierValue);
         const response = await fetch(`${API_CONFIG.BASE_URL}/products/check-unique?${params.toString()}`);
         if (!response.ok) {
-            throw new Error('Não foi possível verificar o produto informado.');
+            throw new Error('NÃ£o foi possÃ­vel verificar o produto informado.');
         }
         const payload = await response.json();
         if (!payload?.exists || !payload?.product) {
@@ -5023,11 +5057,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const loadProductForEditing = async (targetProductId) => {
         if (!targetProductId) {
-            throw new Error('Produto não informado.');
+            throw new Error('Produto nÃ£o informado.');
         }
         const productResponse = await fetch(`${API_CONFIG.BASE_URL}/products/${targetProductId}`);
         if (!productResponse.ok) {
-            throw new Error('Não foi possível carregar o produto selecionado.');
+            throw new Error('NÃ£o foi possÃ­vel carregar o produto selecionado.');
         }
         const productPayload = await productResponse.json();
         populateForm(productPayload);
@@ -5048,7 +5082,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!productSummary) {
                 if (identifierType === 'cod') {
                     if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
-                        window.showToast('Produto não foi encontrado.', 'warning', 4000);
+                        window.showToast('Produto nÃ£o foi encontrado.', 'warning', 4000);
                     }
                     if (inputRef) {
                         inputRef.value = '';
@@ -5065,10 +5099,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             await showModal({
-                title: 'Produto já cadastrado',
-                message: `O produto "${productSummary.nome}" já está cadastrado. Deseja visualizá-lo?`,
+                title: 'Produto jÃ¡ cadastrado',
+                message: `O produto "${productSummary.nome}" jÃ¡ estÃ¡ cadastrado. Deseja visualizÃ¡-lo?`,
                 confirmText: 'Sim',
-                cancelText: 'Não',
+                cancelText: 'NÃ£o',
                 onConfirm: async () => {
                     productId = productSummary._id;
                     isEditMode = true;
@@ -5077,7 +5111,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         await loadProductForEditing(productId);
                     } catch (error) {
                         console.error('Falha ao carregar produto existente:', error);
-                        showModal({ title: 'Erro', message: error.message || 'Não foi possível carregar o produto selecionado.', confirmText: 'Entendi' });
+                        showModal({ title: 'Erro', message: error.message || 'NÃ£o foi possÃ­vel carregar o produto selecionado.', confirmText: 'Entendi' });
                     }
                 },
                 onCancel: () => {
@@ -5088,7 +5122,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         } catch (error) {
             console.error('Erro ao verificar duplicidade de produto:', error);
-            showModal({ title: 'Erro', message: error.message || 'Não foi possível verificar o produto informado.', confirmText: 'Entendi' });
+            showModal({ title: 'Erro', message: error.message || 'NÃ£o foi possÃ­vel verificar o produto informado.', confirmText: 'Entendi' });
         } finally {
             duplicateCheckInProgress = false;
         }
@@ -5112,7 +5146,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 currentUrl.searchParams.set('id', productId);
                 window.history.replaceState({}, '', currentUrl.toString());
             } catch (error) {
-                console.warn('Não foi possível registrar o produto atual na URL.', error);
+                console.warn('NÃ£o foi possÃ­vel registrar o produto atual na URL.', error);
             }
         }
         resetPriceHistoryState(productId, { preserveUserState: true });
@@ -5190,7 +5224,7 @@ document.addEventListener('DOMContentLoaded', () => {
             Object.entries(product.fiscalPorEmpresa).forEach(([storeId, fiscalData]) => {
                 fiscalByCompany.set(storeId, cloneFiscalObject(fiscalData || {}));
                 if (!storeNameMap.has(storeId)) {
-                    storeNameMap.set(storeId, `Empresa não encontrada (${storeId})`);
+                    storeNameMap.set(storeId, `Empresa nÃ£o encontrada (${storeId})`);
                 }
             });
         }
@@ -5282,7 +5316,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderDepositStockRows();
         updateFractionalSummary();
 
-        // --- Especificações ---
+        // --- EspecificaÃ§Ãµes ---
         const espec = product.especificacoes || {};
         // Idade
         document.querySelectorAll('input[name="spec-idade"]').forEach(cb => {
@@ -5292,14 +5326,14 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('input[name="spec-pet"]').forEach(cb => {
             cb.checked = Array.isArray(espec.pet) ? espec.pet.includes(cb.value) : false;
         });
-        // Porte Raça
+        // Porte RaÃ§a
         document.querySelectorAll('input[name="spec-porte"]').forEach(cb => {
             cb.checked = Array.isArray(espec.porteRaca) ? espec.porteRaca.includes(cb.value) : false;
         });
-        // Apresentação
+        // ApresentaÃ§Ã£o
         const apInput = document.getElementById('spec-apresentacao');
         if (apInput) apInput.value = espec.apresentacao || '';
-        // Código de barras (somente visual)
+        // CÃ³digo de barras (somente visual)
         const eanInput = document.getElementById('spec-codbarras');
         if (eanInput) eanInput.value = product.codbarras || '';
 
@@ -5354,7 +5388,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const storesRes = responses[index++];
 
             if (isEditMode && productId && productResponse?.status === 404) {
-                console.warn('Produto não encontrado. A página será aberta para cadastro de um novo item.');
+                console.warn('Produto nÃ£o encontrado. A pÃ¡gina serÃ¡ aberta para cadastro de um novo item.');
                 isEditMode = false;
                 productId = null;
                 productResponse = null;
@@ -5368,7 +5402,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 (isEditMode && productId && !productResponse?.ok);
 
             if (hasErrored) {
-                throw new Error('Falha ao carregar os dados iniciais da página.');
+                throw new Error('Falha ao carregar os dados iniciais da pÃ¡gina.');
             }
 
             allHierarchicalCategories = await hierarchicalRes.json();
@@ -5399,7 +5433,7 @@ document.addEventListener('DOMContentLoaded', () => {
             populateCategoryTree(allHierarchicalCategories, productCategories);
 
         } catch (error) {
-            console.error('Erro ao inicializar a página:', error);
+            console.error('Erro ao inicializar a pÃ¡gina:', error);
             showModal({ title: 'Erro', message: error.message, confirmText: 'Voltar', onConfirm: () => window.location.href = 'admin-produtos.html' });
         }
 
@@ -5411,7 +5445,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const selectedKey = fiscalCompanySelect.value || FISCAL_GENERAL_KEY;
         activeFiscalCompanyKey = isKnownCompanyKey(selectedKey) ? selectedKey : FISCAL_GENERAL_KEY;
         if (!storeNameMap.has(activeFiscalCompanyKey) && activeFiscalCompanyKey !== FISCAL_GENERAL_KEY) {
-            storeNameMap.set(activeFiscalCompanyKey, `Empresa não encontrada (${activeFiscalCompanyKey})`);
+            storeNameMap.set(activeFiscalCompanyKey, `Empresa nÃ£o encontrada (${activeFiscalCompanyKey})`);
         }
         const nextFiscalData = fiscalByCompany.get(activeFiscalCompanyKey) || getDefaultFiscalSnapshot();
         populateFiscalFields(nextFiscalData);
@@ -5473,7 +5507,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         if (!tipoCalculo) {
-            alert('Selecione o tipo de cálculo.');
+            alert('Selecione o tipo de cÃ¡lculo.');
             return;
         }
 
@@ -5481,7 +5515,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (valorCalculoRaw) {
             const parsed = Number(valorCalculoRaw);
             if (!Number.isFinite(parsed)) {
-                alert('Informe um valor de cálculo válido.');
+                alert('Informe um valor de cÃ¡lculo vÃ¡lido.');
                 return;
             }
             valorCalculo = parsed;
@@ -5677,7 +5711,7 @@ document.addEventListener('DOMContentLoaded', () => {
             currentUrl.searchParams.delete('id');
             window.history.replaceState({}, '', currentUrl.toString());
         } catch (urlError) {
-            console.warn('Não foi possível atualizar a URL ao limpar o formulário.', urlError);
+            console.warn('NÃ£o foi possÃ­vel atualizar a URL ao limpar o formulÃ¡rio.', urlError);
         }
     });
 
@@ -5716,8 +5750,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const handleDeleteProduct = () => {
         if (!productId) {
             showModal({
-                title: 'Produto não selecionado',
-                message: 'Selecione um produto antes de tentar excluí-lo.',
+                title: 'Produto nÃ£o selecionado',
+                message: 'Selecione um produto antes de tentar excluÃ­-lo.',
                 confirmText: 'Entendi'
             });
             return;
@@ -5725,7 +5759,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         showModal({
             title: 'Excluir produto',
-            message: 'Tem certeza de que deseja excluir este produto? A exclusão é definitiva e só será concluída caso não existam vendas vinculadas.',
+            message: 'Tem certeza de que deseja excluir este produto? A exclusÃ£o Ã© definitiva e sÃ³ serÃ¡ concluÃ­da caso nÃ£o existam vendas vinculadas.',
             confirmText: 'Excluir',
             cancelText: 'Cancelar',
             onConfirm: async () => {
@@ -5736,15 +5770,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     try {
                         loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
                     } catch (storageError) {
-                        console.warn('Não foi possível ler os dados do usuário logado.', storageError);
+                        console.warn('NÃ£o foi possÃ­vel ler os dados do usuÃ¡rio logado.', storageError);
                     }
 
                     const token = loggedInUser?.token;
                     if (!token) {
                         setDeleteButtonIdleState();
                         showModal({
-                            title: 'Sessão expirada',
-                            message: 'Faça login novamente para excluir produtos.',
+                            title: 'SessÃ£o expirada',
+                            message: 'FaÃ§a login novamente para excluir produtos.',
                             confirmText: 'Ir para login',
                             onConfirm: () => {
                                 window.location.href = '/pages/login.html';
@@ -5771,8 +5805,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (response.status === 401 || response.status === 403) {
                         setDeleteButtonIdleState();
                         showModal({
-                            title: 'Sessão expirada',
-                            message: payload?.message || 'Faça login novamente para continuar.',
+                            title: 'SessÃ£o expirada',
+                            message: payload?.message || 'FaÃ§a login novamente para continuar.',
                             confirmText: 'Ir para login',
                             onConfirm: () => {
                                 window.location.href = '/pages/login.html';
@@ -5784,8 +5818,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (response.status === 409) {
                         setDeleteButtonIdleState();
                         showModal({
-                            title: 'Não foi possível excluir',
-                            message: payload?.message || 'Este produto está vinculado a vendas e não pode ser removido.',
+                            title: 'NÃ£o foi possÃ­vel excluir',
+                            message: payload?.message || 'Este produto estÃ¡ vinculado a vendas e nÃ£o pode ser removido.',
                             confirmText: 'Entendi'
                         });
                         return;
@@ -5810,11 +5844,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         currentUrl.searchParams.delete('id');
                         window.history.replaceState({}, '', currentUrl.toString());
                     } catch (urlError) {
-                        console.warn('Não foi possível atualizar a URL após excluir o produto.', urlError);
+                        console.warn('NÃ£o foi possÃ­vel atualizar a URL apÃ³s excluir o produto.', urlError);
                     }
 
                     showModal({
-                        title: 'Produto excluído',
+                        title: 'Produto excluÃ­do',
                         message: successMessage,
                         confirmText: 'OK'
                     });
@@ -5824,8 +5858,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     showModal({
                         title: 'Erro',
                         message: error?.message
-                            ? `Não foi possível excluir o produto: ${error.message}`
-                            : 'Não foi possível excluir o produto.',
+                            ? `NÃ£o foi possÃ­vel excluir o produto: ${error.message}`
+                            : 'NÃ£o foi possÃ­vel excluir o produto.',
                         confirmText: 'Entendi'
                     });
                 } finally {
@@ -5878,7 +5912,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const { productName, updateData, fractionalErrors } = buildProductUpdatePayload();
         if (!productName) {
             showModal({
-                title: 'Dados obrigatórios',
+                title: 'Dados obrigatÃ³rios',
                 message: 'Informe o nome do produto antes de salvar.',
                 confirmText: 'Entendi',
             });
@@ -5899,7 +5933,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!updateData) {
             showModal({
                 title: 'Erro',
-                message: 'Não foi possível coletar os dados do produto para salvar. Tente novamente.',
+                message: 'NÃ£o foi possÃ­vel coletar os dados do produto para salvar. Tente novamente.',
                 confirmText: 'Ok'
             });
             submitButton.disabled = false;
@@ -5961,7 +5995,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const targetProductId = isEditMode ? productId : createdProductId;
             if (files.length > 0) {
                 if (!targetProductId) {
-                    throw new Error('Não foi possível identificar o produto para enviar as imagens.');
+                    throw new Error('NÃ£o foi possÃ­vel identificar o produto para enviar as imagens.');
                 }
                 const imageFormData = new FormData();
                 for (const file of files) {
@@ -5985,7 +6019,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         populateForm(updatedProduct);
                     }
                 } catch (e) {
-                    console.warn('Não foi possível recarregar o produto após salvar.', e);
+                    console.warn('NÃ£o foi possÃ­vel recarregar o produto apÃ³s salvar.', e);
                 }
 
                 showModal({
@@ -6004,7 +6038,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             populateForm(createdProduct);
                         }
                     } catch (e) {
-                        console.warn('Não foi possível carregar o produto recém-criado.', e);
+                        console.warn('NÃ£o foi possÃ­vel carregar o produto recÃ©m-criado.', e);
                     }
 
                     try {
@@ -6012,7 +6046,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         currentUrl.searchParams.set('id', productId);
                         window.history.replaceState({}, '', currentUrl.toString());
                     } catch (urlError) {
-                        console.warn('Não foi possível atualizar a URL após o cadastro do produto.', urlError);
+                        console.warn('NÃ£o foi possÃ­vel atualizar a URL apÃ³s o cadastro do produto.', urlError);
                     }
                 } else {
                     console.warn('Produto criado, mas nenhum identificador foi retornado pela API.');
@@ -6021,7 +6055,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 showModal({
                     title: 'Sucesso!',
                     message: createdProductId
-                        ? 'Produto cadastrado com sucesso. Continue preenchendo as demais informações.'
+                        ? 'Produto cadastrado com sucesso. Continue preenchendo as demais informaÃ§Ãµes.'
                         : 'Produto cadastrado com sucesso.',
                     confirmText: 'OK'
                 });
@@ -6030,13 +6064,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         sessionStorage.removeItem(PRODUCT_DRAFT_STORAGE_KEY);
                     }
                 } catch (storageError) {
-                    console.warn('Não foi possível limpar o rascunho importado da NF-e.', storageError);
+                    console.warn('NÃ£o foi possÃ­vel limpar o rascunho importado da NF-e.', storageError);
                 }
                 pendingImportedProductDraft = null;
             }
 
         } catch (error) {
-            const baseMessage = isEditMode ? 'Não foi possível salvar' : 'Não foi possível cadastrar';
+            const baseMessage = isEditMode ? 'NÃ£o foi possÃ­vel salvar' : 'NÃ£o foi possÃ­vel cadastrar';
             showModal({ title: 'Erro', message: `${baseMessage}: ${error.message}`, confirmText: 'Tentar Novamente' });
         } finally {
             submitButton.disabled = false;
@@ -6053,8 +6087,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const imageUrlToDelete = deleteButton.dataset.imageUrl;
 
                 showModal({
-                    title: 'Confirmar Exclusão',
-                    message: 'Tem certeza de que deseja apagar esta imagem? Esta ação não pode ser desfeita.',
+                    title: 'Confirmar ExclusÃ£o',
+                    message: 'Tem certeza de que deseja apagar esta imagem? Esta aÃ§Ã£o nÃ£o pode ser desfeita.',
                     confirmText: 'Apagar',
                     cancelText: 'Cancelar',
                     onConfirm: async () => {
@@ -6062,7 +6096,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser') || 'null');
                             const token = loggedInUser?.token;
                             if (!token) {
-                                throw new Error('Sessão expirada. Faça login novamente.');
+                                throw new Error('SessÃ£o expirada. FaÃ§a login novamente.');
                             }
 
                             const response = await fetch(`${API_CONFIG.BASE_URL}/products/${productId}/images`, {
@@ -6087,7 +6121,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
                             renderExistingImages();
                         } catch (error) {
-                            showModal({ title: 'Erro', message: `Não foi possível excluir a imagem: ${error.message}`, confirmText: 'OK' });
+                            showModal({ title: 'Erro', message: `NÃ£o foi possÃ­vel excluir a imagem: ${error.message}`, confirmText: 'OK' });
                         }
                     }
                 });
@@ -6114,3 +6148,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
     initializePage();
 });
+

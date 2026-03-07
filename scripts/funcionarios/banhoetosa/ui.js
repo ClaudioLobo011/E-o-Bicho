@@ -1,4 +1,4 @@
-import { els, state, isPrivilegedRole, notify, buildLocalDateTime, todayStr, normalizeDate, pad, api, statusMeta, isNoPreferenceProfessionalId, getVisibleProfissionais } from './core.js';
+import { els, state, notify, buildLocalDateTime, todayStr, normalizeDate, pad, api, statusMeta, isNoPreferenceProfessionalId, getVisibleProfissionais } from './core.js';
 import { loadAgendamentos } from './agendamentos.js';
 import { renderKpis, renderFilters } from './filters.js';
 import { renderGrid } from './grid.js';
@@ -193,11 +193,6 @@ export function decorateCards() {
     `;
     card.appendChild(actions);
     card.classList.add('agenda-card--with-actions');
-    if ((!!item.pago || !!item.codigoVenda) && !isPrivilegedRole()) {
-      card.setAttribute('draggable', 'false');
-      card.classList.remove('cursor-move');
-      card.classList.add('cursor-default');
-    }
 
     // Bind direto no botão de cobrança para garantir prioridade (fase de captura)
     const chargeBtn = actions.querySelector('.agenda-action.cobrar');
@@ -245,10 +240,6 @@ export function decorateCards() {
               }
             } catch (err) { console.error('edit-release-focus', err); }
           };
-          if ((current.pago || current.codigoVenda) && !isPrivilegedRole()) {
-            notify('Este agendamento já foi faturado. Apenas Admin/Admin Master podem editar.', 'warning');
-            return;
-          }
           releaseFocus();
           if (typeof requestAnimationFrame === 'function') {
             requestAnimationFrame(releaseFocus);
@@ -496,14 +487,6 @@ export function enableDragDrop() {
     if (!card || !ev.dataTransfer) return;
     const id = card.getAttribute('data-appointment-id') || '';
     if (!id) return;
-    try {
-      const item = (state.agendamentos || []).find(x => String(x._id) === String(id));
-      if (item && (item.pago || item.codigoVenda) && !isPrivilegedRole()) {
-        ev.preventDefault(); ev.stopPropagation();
-        alert('Agendamento faturado: não é possível mover. (Somente Admin/Admin Master)');
-        return;
-      }
-    } catch {}
     try { ev.dataTransfer.setData('text/plain', id); } catch {}
     const serviceIds = card.dataset.serviceItemIds || '';
     try { ev.dataTransfer.setData('text/x-service-ids', serviceIds); } catch {}
@@ -548,8 +531,19 @@ export function enableDragDrop() {
     if (!item) return;
 
     const orig = new Date(item.h || item.scheduledAt);
-    const day = slot.dataset.day || normalizeDate(els.dateInput?.value || todayStr());
-    const hh = slot.dataset.hh || `${pad(orig.getHours())}:${String(orig.getMinutes()).padStart(2, '0')}`;
+    const targetCardEl = ev.target?.closest?.('div[data-appointment-id]');
+    const targetCardId = targetCardEl?.getAttribute?.('data-appointment-id') || '';
+    const targetItem = targetCardId
+      ? state.agendamentos.find(x => String(x._id) === String(targetCardId))
+      : null;
+    const targetDate = targetItem ? new Date(targetItem.h || targetItem.scheduledAt) : null;
+    const hasTargetDate = targetDate instanceof Date && !Number.isNaN(targetDate.getTime());
+    const day = slot.dataset.day
+      || (hasTargetDate ? getAppointmentDayISO(targetDate) : '')
+      || normalizeDate(els.dateInput?.value || todayStr());
+    const hh = slot.dataset.hh
+      || (hasTargetDate ? `${pad(targetDate.getHours())}:${String(targetDate.getMinutes()).padStart(2, '0')}` : '')
+      || `${pad(orig.getHours())}:${String(orig.getMinutes()).padStart(2, '0')}`;
     const targetDateIso = buildLocalDateTime(day, hh).toISOString();
 
     const allServiceItemIds = collectServiceItemIdsFromAppointment(item);
@@ -572,7 +566,12 @@ export function enableDragDrop() {
       : normalizedServiceIds.slice();
 
     const payload = {};
-    const slotProfId = String(slot.dataset.profissionalId || '').trim();
+    const slotProfId = String(
+      slot.dataset.profissionalId
+      || targetItem?.profissionalId
+      || targetItem?.profissional?._id
+      || ''
+    ).trim();
     if (slotProfId && !isNoPreferenceProfessionalId(slotProfId)) {
       payload.profissionalId = slotProfId;
     } else if (slotProfId && isNoPreferenceProfessionalId(slotProfId)) {
