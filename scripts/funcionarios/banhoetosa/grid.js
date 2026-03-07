@@ -1108,7 +1108,7 @@ export function renderGrid() {
 
   const header = document.createElement('div');
   header.style.display = 'grid';
-  header.style.gridTemplateColumns = `120px repeat(${Math.max(colCount - 1, 0)}, minmax(var(--agenda-col-w, 360px), 1fr))`;
+  header.style.gridTemplateColumns = `120px repeat(${Math.max(colCount - 1, 0)}, minmax(0, 1fr))`;
   header.className = 'agenda-grid-header agenda-grid-header--day';
   const headLabels = ['Hora', ...profs.map(p => p.nome)];
   headLabels.forEach((label, idx) => {
@@ -1167,7 +1167,7 @@ export function renderGrid() {
 
   const body = document.createElement('div');
   body.style.display = 'grid';
-  body.style.gridTemplateColumns = `120px repeat(${Math.max(colCount - 1, 0)}, minmax(var(--agenda-col-w, 360px), 1fr))`;
+  body.style.gridTemplateColumns = `120px repeat(${Math.max(colCount - 1, 0)}, minmax(0, 1fr))`;
   body.className = 'agenda-grid-body agenda-grid-body--day';
   els.agendaList.appendChild(body);
 
@@ -1310,7 +1310,7 @@ export function renderWeekGrid() {
   const hours = buildHoursList(startHour, endHour);
   const header = document.createElement('div');
   header.style.display = 'grid';
-  header.style.gridTemplateColumns = `120px repeat(7, minmax(180px,1fr))`;
+  header.style.gridTemplateColumns = `120px repeat(7, minmax(0,1fr))`;
   header.className = 'agenda-grid-header agenda-grid-header--week';
   header.innerHTML = `
     <div class="px-2 py-2 text-xs text-slate-500">Horário</div>
@@ -1322,7 +1322,7 @@ export function renderWeekGrid() {
   els.agendaList.appendChild(header);
   const body = document.createElement('div');
   body.style.display = 'grid';
-  body.style.gridTemplateColumns = `120px repeat(7, minmax(180px,1fr))`;
+  body.style.gridTemplateColumns = `120px repeat(7, minmax(0,1fr))`;
   body.className = 'agenda-grid-body agenda-grid-body--week';
   els.agendaList.appendChild(body);
 
@@ -1435,7 +1435,7 @@ export function renderMonthGrid() {
   const weekDays = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
   const header = document.createElement('div');
   header.style.display = 'grid';
-  header.style.gridTemplateColumns = `repeat(7, minmax(180px,1fr))`;
+  header.style.gridTemplateColumns = `repeat(7, minmax(0,1fr))`;
   header.className = 'agenda-grid-header agenda-grid-header--month';
   header.innerHTML = weekDays.map(d=>`<div class="px-3 py-2 text-xs font-medium text-slate-700">${d}</div>`).join('');
   els.agendaList.appendChild(header);
@@ -1444,7 +1444,7 @@ export function renderMonthGrid() {
   const days = Array.from({length:42},(_,i)=> addDays(startGrid,i));
   const grid = document.createElement('div');
   grid.style.display = 'grid';
-  grid.style.gridTemplateColumns = `repeat(7, minmax(180px,1fr))`;
+  grid.style.gridTemplateColumns = `repeat(7, minmax(0,1fr))`;
   grid.className = 'agenda-grid-body agenda-grid-body--month';
   els.agendaList.appendChild(grid);
 
