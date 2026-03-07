@@ -11,6 +11,18 @@
             min-height: 100vh;
         }
 
+        button.bg-white,
+        button[class*=" bg-white"],
+        button[class^="bg-white"] {
+            color: #111827 !important;
+        }
+
+        button.bg-white :is(span, i, svg),
+        button[class*=" bg-white"] :is(span, i, svg),
+        button[class^="bg-white"] :is(span, i, svg) {
+            color: #111827 !important;
+        }
+
         main.pdv-page-shell {
             width: 100%;
             max-width: none;
@@ -340,30 +352,30 @@
                                                 </button>
                                             </div>
 
-                                            <div class="flex flex-wrap gap-2">
-                                                <button type="button" class="inline-flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="delivery">
-                                                    <i class="fas fa-truck text-[10px]"></i>
-                                                    <span class="text-xs font-semibold text-gray-700">Delivery</span>
+                                            <div class="grid grid-cols-3 gap-2">
+                                                <button type="button" class="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-[13px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="delivery">
+                                                    <i class="fas fa-truck text-[12px]"></i>
+                                                    <span class="text-[13px] font-semibold text-gray-700">Delivery</span>
                                                 </button>
-                                                <button type="button" class="inline-flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="orcamento">
-                                                    <i class="fas fa-file-lines text-[10px]"></i>
-                                                    <span class="text-xs font-semibold text-gray-700">Orçamento</span>
+                                                <button type="button" class="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-[13px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="orcamento">
+                                                    <i class="fas fa-file-lines text-[12px]"></i>
+                                                    <span class="text-[13px] font-semibold text-gray-700">Orçamento</span>
                                                 </button>
-                                                <button type="button" class="inline-flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="importar-atendimento">
-                                                    <i class="fas fa-paw text-[10px]"></i>
-                                                    <span class="text-xs font-semibold text-gray-700">Importar atendimento</span>
+                                                <button type="button" class="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-[13px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="importar-atendimento">
+                                                    <i class="fas fa-paw text-[12px]"></i>
+                                                    <span class="text-[13px] font-semibold text-gray-700">Importar atendimento</span>
                                                 </button>
-                                                <button type="button" class="inline-flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="troca">
-                                                    <i class="fas fa-right-left text-[10px]"></i>
-                                                    <span class="text-xs font-semibold text-gray-700">Troca</span>
+                                                <button type="button" class="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-[13px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="troca">
+                                                    <i class="fas fa-right-left text-[12px]"></i>
+                                                    <span class="text-[13px] font-semibold text-gray-700">Troca</span>
                                                 </button>
-                                                <button type="button" class="inline-flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="solicitacao-transferencia">
-                                                    <i class="fas fa-exchange-alt text-[10px]"></i>
-                                                    <span class="text-xs font-semibold text-gray-700">Sol. Transferência</span>
+                                                <button type="button" class="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-[13px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="solicitacao-transferencia">
+                                                    <i class="fas fa-exchange-alt text-[12px]"></i>
+                                                    <span class="text-[13px] font-semibold text-gray-700">Sol. Transferência</span>
                                                 </button>
-                                                <button id="pdv-open-customer" type="button" class="inline-flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="customer">
-                                                    <i class="fas fa-user-plus text-[10px]"></i>
-                                                    <span id="pdv-open-customer-label" class="text-xs font-semibold text-gray-700">Adicionar cliente</span>
+                                                <button id="pdv-open-customer" type="button" class="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-[13px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="customer">
+                                                    <i class="fas fa-user-plus text-[12px]"></i>
+                                                    <span id="pdv-open-customer-label" class="text-[13px] font-semibold text-gray-700">Adicionar cliente</span>
                                                 </button>
                                             </div>
                                         </div>
