@@ -33,6 +33,40 @@ function applyAgendaTextClamp(element, lines = 2) {
   element.style.wordBreak = 'break-word';
 }
 
+function applyAgendaSingleLineEllipsis(element) {
+  if (!element) return;
+  element.style.display = 'block';
+  element.style.maxWidth = '100%';
+  element.style.overflow = 'hidden';
+  element.style.whiteSpace = 'nowrap';
+  element.style.textOverflow = 'ellipsis';
+}
+
+function getAgendaObservationPreview(rawText, maxChars = 72) {
+  const full = String(rawText || '').trim();
+  if (!full) return { full: '', preview: '', truncated: false };
+  if (full.length <= maxChars) {
+    return { full, preview: full, truncated: false };
+  }
+  return {
+    full,
+    preview: `${full.slice(0, Math.max(0, maxChars)).trimEnd()}...`,
+    truncated: true,
+  };
+}
+
+function appendAgendaObservationInline(container, rawText, maxChars = 28) {
+  if (!container) return null;
+  const obsInfo = getAgendaObservationPreview(rawText, maxChars);
+  if (!obsInfo.full) return null;
+  const obs = document.createElement('span');
+  obs.className = 'agenda-card__note ml-1 text-gray-700 italic';
+  obs.textContent = `• ${obsInfo.preview}`;
+  bindAgendaTextTooltip(obs, obsInfo.full, 'Observacao');
+  container.appendChild(obs);
+  return obs;
+}
+
 function getAgendaServicesPreview(rawServices, maxVisible = 2) {
   const names = String(rawServices || '')
     .split(',')
@@ -328,6 +362,25 @@ function bindAgendaCustomerTooltip(target, appointment) {
     if (lines.length) {
       showAgendaCustomerTooltip(target, lines, event);
     }
+  });
+  target.addEventListener('mousemove', (event) => {
+    if (agendaCustomerTooltipState.activeTarget !== target) return;
+    positionAgendaCustomerTooltip(event);
+  });
+  target.addEventListener('mouseleave', () => {
+    if (agendaCustomerTooltipState.activeTarget === target) {
+      hideAgendaCustomerTooltip();
+    }
+  });
+}
+
+function bindAgendaTextTooltip(target, text, label = 'Observacao') {
+  if (!target) return;
+  const normalizedText = String(text || '').trim();
+  if (!normalizedText) return;
+  const lines = [{ label, value: normalizedText }];
+  target.addEventListener('mouseenter', (event) => {
+    showAgendaCustomerTooltip(target, lines, event);
   });
   target.addEventListener('mousemove', (event) => {
     if (agendaCustomerTooltipState.activeTarget !== target) return;
@@ -1204,20 +1257,16 @@ export function renderGrid() {
     if (servicesInfo.tooltip) bodyEl.title = servicesInfo.tooltip;
     if (a.observacoes && String(a.observacoes).trim()) {
       const svc = document.createElement('div');
-      svc.className = 'agenda-card__service text-gray-600 clamp-2';
+      svc.className = 'agenda-card__service text-gray-600 truncate';
       svc.textContent = servicesInfo.preview || '';
       if (servicesInfo.tooltip) svc.title = servicesInfo.tooltip;
-      applyAgendaTextClamp(svc, 2);
-      const obs = document.createElement('div');
-      obs.className = 'agenda-card__note mt-1 text-gray-700 italic clamp-2';
-      obs.textContent = String(a.observacoes).trim();
-      applyAgendaTextClamp(obs, 2);
+      applyAgendaSingleLineEllipsis(svc);
+      appendAgendaObservationInline(svc, a.observacoes, 26);
       bodyEl.appendChild(svc);
-      bodyEl.appendChild(obs);
     } else {
-      bodyEl.classList.add('text-gray-600', 'clamp-2');
+      bodyEl.classList.add('text-gray-600');
       bodyEl.textContent = servicesInfo.preview || '';
-      applyAgendaTextClamp(bodyEl, 2);
+      applyAgendaSingleLineEllipsis(bodyEl);
     }
 
     const footerEl = document.createElement('div');
@@ -1350,10 +1399,7 @@ export function renderWeekGrid() {
     if (weekServicesInfo.tooltip) svc.title = weekServicesInfo.tooltip;
     bodyEl.appendChild(svc);
     if (a.observacoes && String(a.observacoes).trim()) {
-      const obs = document.createElement('div');
-      obs.className = 'agenda-card__note text-gray-700 italic truncate';
-      obs.textContent = String(a.observacoes).trim();
-      bodyEl.appendChild(obs);
+      appendAgendaObservationInline(svc, a.observacoes, 20);
     }
 
     const footerEl = document.createElement('div');
