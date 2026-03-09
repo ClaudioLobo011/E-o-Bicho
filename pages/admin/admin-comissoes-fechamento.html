@@ -227,6 +227,20 @@
             </select>
             <p class="text-xs text-gray-500 mt-1">Contas correntes vinculadas à empresa selecionada.</p>
           </label>
+          <div class="rounded-lg border border-gray-200 p-3">
+            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Fontes de cálculo</p>
+            <label class="flex items-center gap-2 text-sm text-gray-700 mb-2">
+              <input id="config-include-services" type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary" checked>
+              <span>Serviços</span>
+            </label>
+            <label class="flex items-center gap-2 text-sm text-gray-700">
+              <input id="config-include-pdv-sales" type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary" checked>
+              <span>Vendas PDV</span>
+            </label>
+            <p class="text-xs text-gray-500 mt-2">
+              Serviços: comissão por realização na agenda. Vendas PDV: comissão de vendas no caixa (serviços/produtos).
+            </p>
+          </div>
         </div>
 
         <footer class="flex flex-col gap-2 border-t border-gray-100 bg-gray-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-end">

@@ -28,4 +28,7 @@ const CommissionClosingSchema = new Schema(
   { timestamps: true },
 );
 
+CommissionClosingSchema.index({ store: 1, periodoInicio: 1, periodoFim: 1, createdAt: -1 });
+CommissionClosingSchema.index({ profissional: 1, store: 1, status: 1, periodoInicio: 1, periodoFim: 1 });
+
 module.exports = mongoose.model('CommissionClosing', CommissionClosingSchema);

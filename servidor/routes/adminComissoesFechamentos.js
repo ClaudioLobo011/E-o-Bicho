@@ -24,6 +24,10 @@ const DEFAULT_WINDOW_DAYS = 90;
 const SERVICE_STATUS_VALUES = new Set(['agendado', 'em_espera', 'em_atendimento', 'finalizado']);
 const DEFAULT_COMISSAO_PERCENT = 1;
 const DEFAULT_COMISSAO_SERVICO_PERCENT = 0.5;
+const DEFAULT_SUMMARY_CONCURRENCY = Math.max(
+  1,
+  Number(process.env.COMMISSIONS_SUMMARY_CONCURRENCY || 2) || 2,
+);
 
 const emptyTotals = () => ({
   totalPeriodo: 0,
@@ -33,6 +37,66 @@ const emptyTotals = () => ({
   pendenteVendas: 0,
   pendenteServicos: 0,
   totalPago: 0,
+});
+
+const runWithConcurrency = async (items = [], task, concurrency = DEFAULT_SUMMARY_CONCURRENCY) => {
+  const safeConcurrency = Math.max(1, Number(concurrency) || 1);
+  const results = new Array(items.length);
+  let currentIndex = 0;
+
+  const worker = async () => {
+    while (currentIndex < items.length) {
+      const index = currentIndex;
+      currentIndex += 1;
+      // eslint-disable-next-line no-await-in-loop
+      results[index] = await task(items[index], index);
+    }
+  };
+
+  await Promise.all(Array.from({ length: Math.min(safeConcurrency, items.length) }, () => worker()));
+  return results;
+};
+
+const toCacheDateKey = (value) => {
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) return '';
+  return value.toISOString();
+};
+
+const addDaysAtStartOfDay = (value, days = 0) => {
+  const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setDate(date.getDate() + Number(days || 0));
+  date.setHours(0, 0, 0, 0);
+  return date;
+};
+
+const buildSummaryCacheKey = ({ storeId = null, startDate = null, endDate = null } = {}) =>
+  `${storeId || 'all'}|${toCacheDateKey(startDate)}|${toCacheDateKey(endDate)}`;
+
+const ensureSummaryRuntimeContext = (runtimeContext = null) => {
+  if (!runtimeContext || typeof runtimeContext !== 'object') return null;
+  if (!runtimeContext.salesPoolByKey) runtimeContext.salesPoolByKey = new Map();
+  if (!runtimeContext.appointmentsPoolByKey) runtimeContext.appointmentsPoolByKey = new Map();
+  if (!runtimeContext.professionalCommissionByUserId) {
+    runtimeContext.professionalCommissionByUserId = new Map();
+  }
+  if (!runtimeContext.serviceMetaById) runtimeContext.serviceMetaById = new Map();
+  if (!runtimeContext.productIds) runtimeContext.productIds = new Set();
+  if (!runtimeContext.unresolvedItemIds) runtimeContext.unresolvedItemIds = new Set();
+  return runtimeContext;
+};
+
+const buildProfessionalStorePairKey = (profissional, store) =>
+  `${normalizeObjectId(profissional)}|${normalizeObjectId(store)}`;
+
+const defaultCommissionCalculationOptions = () => ({
+  includeServices: true,
+  includePdvSales: true,
+});
+
+const normalizeCommissionCalculationOptions = (config = null) => ({
+  includeServices: config?.includeServices !== false,
+  includePdvSales: config?.includePdvSales !== false,
 });
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ''));
@@ -590,6 +654,8 @@ const mapAppointmentToServicoRecord = (
     ? items.every((it) => isServicoFinalizado(it.status))
     : isServicoFinalizado(appointment.status);
   const isPago = !!(appointment.pago || appointment.codigoVenda);
+  // Fechamento de comissao deve considerar apenas servicos concluidos e pagos.
+  if (!isFinalizado || !isPago) return null;
   const aReceber = (isFinalizado && !isPago) || (isPago && !isFinalizado);
 
   return {
@@ -752,7 +818,98 @@ const buildSaleRecord = (
   };
 };
 
-const fetchSalesForUser = async ({ user, startDate = null, endDate = null, storeId = null, debug = false }) => {
+const getSalesPool = async ({ storeId = null, startDate = null, endDate = null, runtimeContext = null }) => {
+  const ctx = ensureSummaryRuntimeContext(runtimeContext);
+  const cacheKey = buildSummaryCacheKey({ storeId, startDate, endDate });
+  if (ctx?.salesPoolByKey?.has(cacheKey)) {
+    return ctx.salesPoolByKey.get(cacheKey);
+  }
+
+  const pipeline = [];
+  if (storeId && isValidObjectId(storeId)) {
+    pipeline.push({ $match: { empresa: new mongoose.Types.ObjectId(String(storeId)) } });
+  }
+
+  pipeline.push(
+    { $match: { 'completedSales.0': { $exists: true } } },
+    { $unwind: '$completedSales' },
+  );
+
+  const createdAtMatch = {};
+  if (startDate) createdAtMatch.$gte = startDate;
+  if (endDate) createdAtMatch.$lte = endDate;
+  if (Object.keys(createdAtMatch).length) {
+    pipeline.push({
+      $match: {
+        $or: [
+          { 'completedSales.createdAt': createdAtMatch },
+          { 'completedSales.createdAt': { $exists: false } },
+          { 'completedSales.createdAt': null },
+        ],
+      },
+    });
+  }
+
+  pipeline.push(
+    {
+      $project: {
+        _pdvStateId: '$_id',
+        _storeId: '$empresa',
+        seller: '$completedSales.seller',
+        sellerId: '$completedSales.sellerId',
+        sellerCode: '$completedSales.sellerCode',
+        sellerName: '$completedSales.sellerName',
+        sellerEmail: '$completedSales.sellerEmail',
+        status: '$completedSales.status',
+        createdAt: '$completedSales.createdAt',
+        createdAtLabel: '$completedSales.createdAtLabel',
+        total: '$completedSales.total',
+        totalAmount: '$completedSales.totalAmount',
+        valorTotal: '$completedSales.valorTotal',
+        totalVenda: '$completedSales.totalVenda',
+        totalGeral: '$completedSales.totalGeral',
+        items: '$completedSales.items',
+        itemsSnapshot: '$completedSales.itemsSnapshot',
+        fiscalItemsSnapshot: '$completedSales.fiscalItemsSnapshot',
+        receiptSnapshot: {
+          meta: '$completedSales.receiptSnapshot.meta',
+          createdAt: '$completedSales.receiptSnapshot.createdAt',
+          createdAtLabel: '$completedSales.receiptSnapshot.createdAtLabel',
+          data: '$completedSales.receiptSnapshot.data',
+          dataVenda: '$completedSales.receiptSnapshot.dataVenda',
+          emitidoEm: '$completedSales.receiptSnapshot.emitidoEm',
+          emittedAt: '$completedSales.receiptSnapshot.emittedAt',
+          totais: '$completedSales.receiptSnapshot.totais',
+          items: '$completedSales.receiptSnapshot.items',
+          itens: '$completedSales.receiptSnapshot.itens',
+          products: '$completedSales.receiptSnapshot.products',
+          produtos: '$completedSales.receiptSnapshot.produtos',
+          cart: {
+            items: '$completedSales.receiptSnapshot.cart.items',
+            itens: '$completedSales.receiptSnapshot.cart.itens',
+            products: '$completedSales.receiptSnapshot.cart.products',
+            produtos: '$completedSales.receiptSnapshot.cart.produtos',
+          },
+        },
+      },
+    },
+  );
+
+  const aggregated = await PdvState.aggregate(pipeline).allowDiskUse(true);
+  const pool = aggregated;
+
+  if (ctx) ctx.salesPoolByKey.set(cacheKey, pool);
+  return pool;
+};
+
+const fetchSalesForUser = async ({
+  user,
+  startDate = null,
+  endDate = null,
+  storeId = null,
+  debug = false,
+  runtimeContext = null,
+}) => {
   const sellerIds = new Set();
   const sellerCodes = new Set();
 
@@ -764,28 +921,12 @@ const fetchSalesForUser = async ({ user, startDate = null, endDate = null, store
   );
   const userEmail = (user?.email || '').toString().toLowerCase().trim();
 
-  const pipeline = [];
-  if (storeId && isValidObjectId(storeId)) {
-    pipeline.push({ $match: { empresa: new mongoose.Types.ObjectId(String(storeId)) } });
-  }
-
-  pipeline.push(
-    { $match: { 'completedSales.0': { $exists: true } } },
-    { $project: { completedSales: 1, empresa: 1 } },
-    { $unwind: '$completedSales' },
-  );
-
-  const aggregated = await PdvState.aggregate(pipeline).allowDiskUse(true);
+  const salesPool = await getSalesPool({ storeId, startDate, endDate, runtimeContext });
 
   const matched = [];
   const unmatched = [];
 
-  aggregated.forEach((entry) => {
-    const sale = {
-      ...(entry.completedSales || {}),
-      _pdvStateId: entry._id,
-      _storeId: entry.empresa,
-    };
+  salesPool.forEach((sale) => {
     const belongs = belongsToSeller(sale, { sellerIds, sellerCodes, operatorName, userEmail });
     if (!belongs) {
       if (debug && unmatched.length < 25) {
@@ -812,7 +953,7 @@ const fetchSalesForUser = async ({ user, startDate = null, endDate = null, store
 
   return {
     sales: matched,
-    aggregatedTotal: aggregated.length,
+    aggregatedTotal: salesPool.length,
     matched: matched.length,
     unmatched,
   };
@@ -825,6 +966,7 @@ const fetchServicoRecords = async ({
   storeId = null,
   defaultPercent = 0,
   professionalCommission = null,
+  runtimeContext = null,
 }) => {
   if (!user?._id) return [];
 
@@ -858,9 +1000,8 @@ const fetchServicoRecords = async ({
   const appointments = profissionalId
     ? await Appointment.find(serviceQuery)
         .select(
-          'scheduledAt createdAt itens valor pago codigoVenda status profissional cliente servico store',
+          'scheduledAt createdAt itens valor pago codigoVenda status profissional servico store',
         )
-        .populate('cliente', 'nomeCompleto nomeContato razaoSocial nomeFantasia email')
         .populate({
           path: 'itens.servico',
           select: 'nome grupo comissaoPercent',
@@ -882,8 +1023,131 @@ const fetchServicoRecords = async ({
   });
 };
 
-const computeCommissionSummaryForUser = async ({ user, startDate = null, endDate = null, storeId = null, debug = false }) => {
+const buildServiceCommissionRows = ({
+  appointments = [],
+  user = null,
+  defaultPercent = 0,
+  professionalCommission = null,
+  periodStart = null,
+  periodEnd = null,
+}) => {
+  const normalizedUserId = normalizeObjectId(user?._id || user);
+  if (!normalizedUserId) return [];
+
+  const rows = [];
+  const fallbackPercent = Number.isFinite(defaultPercent) ? defaultPercent : 0;
+
+  appointments.forEach((appointment) => {
+    const petNome =
+      appointment?.pet?.nome ||
+      appointment?.pet?.name ||
+      appointment?.petNome ||
+      appointment?.nomePet ||
+      'Pet';
+    const baseDateRaw = appointment?.scheduledAt || appointment?.createdAt || null;
+    const baseDate = baseDateRaw ? new Date(baseDateRaw) : null;
+    if (baseDate && !Number.isNaN(baseDate.getTime())) {
+      if (periodStart && baseDate < periodStart) return;
+      if (periodEnd && baseDate > periodEnd) return;
+    }
+    const baseDateLabel =
+      baseDate && !Number.isNaN(baseDate.getTime()) ? baseDate.toLocaleDateString('pt-BR') : '--';
+
+    const { items, matchedByTopLevel } = resolveServicoItemsForUser(appointment, normalizedUserId);
+    const isPago = !!(appointment?.pago || appointment?.codigoVenda);
+    const isFinalizado = items.length
+      ? items.every((it) => isServicoFinalizado(it?.status))
+      : isServicoFinalizado(appointment?.status);
+    if (!isPago || !isFinalizado) return;
+
+    if (items.length) {
+      items.forEach((item) => {
+        const valor = parseNumber(item?.valor) || 0;
+        const percentual = resolveServiceCommissionPercent({
+          professionalCommission,
+          serviceId: item?.servico?._id || item?.servico || appointment?.servico?._id || appointment?.servico,
+          groupId:
+            item?.servico?.grupo?._id ||
+            item?.servico?.grupo ||
+            item?.grupo?._id ||
+            item?.grupo ||
+            appointment?.servico?.grupo?._id ||
+            appointment?.servico?.grupo,
+          servicePercent: item?.servico?.comissaoPercent ?? appointment?.servico?.comissaoPercent,
+          groupPercent:
+            item?.servico?.grupo?.comissaoPercent ??
+            item?.grupo?.comissaoPercent ??
+            appointment?.servico?.grupo?.comissaoPercent,
+          itemPercent: item?.comissaoPercent,
+          fallbackPercent,
+        });
+        const appliedPercent = percentual !== null ? percentual : fallbackPercent;
+        const comissao = valor * (appliedPercent / 100);
+        rows.push({
+          petNome,
+          servicoNome:
+            item?.servico?.nome ||
+            appointment?.servico?.nome ||
+            item?.nome ||
+            appointment?.nome ||
+            'Serviço',
+          data: baseDateLabel,
+          dataRaw: baseDate && !Number.isNaN(baseDate.getTime()) ? baseDate : null,
+          valor,
+          percentual: appliedPercent,
+          comissao,
+        });
+      });
+      return;
+    }
+
+    if (matchedByTopLevel) {
+      const valor = parseNumber(appointment?.valor) || 0;
+      const percentual = resolveServiceCommissionPercent({
+        professionalCommission,
+        serviceId: appointment?.servico?._id || appointment?.servico,
+        groupId: appointment?.servico?.grupo?._id || appointment?.servico?.grupo,
+        servicePercent: appointment?.servico?.comissaoPercent,
+        groupPercent: appointment?.servico?.grupo?.comissaoPercent,
+        itemPercent: null,
+        fallbackPercent,
+      });
+      const appliedPercent = percentual !== null ? percentual : fallbackPercent;
+      rows.push({
+        petNome,
+        servicoNome: appointment?.servico?.nome || 'Serviço',
+        data: baseDateLabel,
+        dataRaw: baseDate && !Number.isNaN(baseDate.getTime()) ? baseDate : null,
+        valor,
+        percentual: appliedPercent,
+        comissao: valor * (appliedPercent / 100),
+      });
+    }
+  });
+
+  rows.sort((a, b) => {
+    const ta = a?.dataRaw instanceof Date ? a.dataRaw.getTime() : 0;
+    const tb = b?.dataRaw instanceof Date ? b.dataRaw.getTime() : 0;
+    return ta - tb;
+  });
+
+  return rows.map(({ dataRaw, ...rest }) => rest);
+};
+
+const computeCommissionSummaryForUser = async ({
+  user,
+  startDate = null,
+  endDate = null,
+  storeId = null,
+  debug = false,
+  runtimeContext = null,
+  calculationOptions = null,
+}) => {
   if (!user) return { totals: emptyTotals(), debug: { sales: 0, services: 0 } };
+  const ctx = ensureSummaryRuntimeContext(runtimeContext);
+  const options = calculationOptions || defaultCommissionCalculationOptions();
+  const includeServices = options.includeServices !== false;
+  const includePdvSales = options.includePdvSales !== false;
 
   let group = null;
   if (user.userGroup && typeof user.userGroup === 'object') {
@@ -896,18 +1160,31 @@ const computeCommissionSummaryForUser = async ({ user, startDate = null, endDate
 
   const comissaoPercent = Number(group?.comissaoPercent ?? DEFAULT_COMISSAO_PERCENT);
   const comissaoServicoPercent = Number(group?.comissaoServicoPercent ?? DEFAULT_COMISSAO_SERVICO_PERCENT);
-  const professionalCommissionConfig = await ProfessionalCommissionConfig.findOne({ user: user._id })
-    .select('groupRules serviceRules')
-    .lean();
+  let professionalCommissionConfig = null;
+  const userIdKey = user?._id ? String(user._id) : '';
+  if (ctx?.professionalCommissionByUserId?.has(userIdKey)) {
+    professionalCommissionConfig = ctx.professionalCommissionByUserId.get(userIdKey);
+  } else {
+    professionalCommissionConfig = await ProfessionalCommissionConfig.findOne({ user: user._id })
+      .select('groupRules serviceRules')
+      .lean();
+    if (ctx && userIdKey) {
+      ctx.professionalCommissionByUserId.set(userIdKey, professionalCommissionConfig || null);
+    }
+  }
   const professionalCommission = buildProfessionalCommissionContext(professionalCommissionConfig);
 
-  const { sales, aggregatedTotal, matched, unmatched } = await fetchSalesForUser({
-    user,
-    startDate,
-    endDate,
-    storeId,
-    debug,
-  });
+  const salesResult = includePdvSales
+    ? await fetchSalesForUser({
+        user,
+        startDate,
+        endDate,
+        storeId,
+        debug,
+        runtimeContext: ctx,
+      })
+    : { sales: [], aggregatedTotal: 0, matched: 0, unmatched: [] };
+  const { sales, aggregatedTotal, matched, unmatched } = salesResult;
 
   const itemIdSet = new Set();
   sales.forEach((sale) => {
@@ -918,29 +1195,88 @@ const computeCommissionSummaryForUser = async ({ user, startDate = null, endDate
   });
 
   const ids = Array.from(itemIdSet);
-  const [services, products] = await Promise.all([
-    ids.length
-      ? Service.find({ _id: { $in: ids } })
+  if (ctx && ids.length) {
+    const missingIds = ids.filter(
+      (id) =>
+        !ctx.serviceMetaById.has(id) &&
+        !ctx.productIds.has(id) &&
+        !ctx.unresolvedItemIds.has(id),
+    );
+    if (missingIds.length) {
+      const [servicesMissing, productsMissing] = await Promise.all([
+        Service.find({ _id: { $in: missingIds } })
           .select('_id grupo comissaoPercent')
           .populate('grupo', 'comissaoPercent')
-          .lean()
-      : [],
-    ids.length ? Product.find({ _id: { $in: ids } }).select('_id').lean() : [],
-  ]);
+          .lean(),
+        Product.find({ _id: { $in: missingIds } }).select('_id').lean(),
+      ]);
 
-  const serviceIdSet = new Set(services.map((svc) => String(svc._id)));
-  const productIdSet = new Set(products.map((prod) => String(prod._id)));
-  const serviceMetaMap = new Map(
-    services.map((service) => [
-      String(service._id),
-      {
-        serviceId: String(service._id),
+      const foundServiceIds = new Set();
+      const foundProductIds = new Set();
+
+      servicesMissing.forEach((service) => {
+        const sid = String(service._id);
+        foundServiceIds.add(sid);
+        ctx.serviceMetaById.set(sid, {
+          serviceId: sid,
+          groupId: normalizeObjectId(service.grupo),
+          servicePercent: parseNumber(service.comissaoPercent),
+          groupPercent: parseNumber(service?.grupo?.comissaoPercent),
+        });
+      });
+
+      productsMissing.forEach((product) => {
+        const pid = String(product._id);
+        foundProductIds.add(pid);
+        ctx.productIds.add(pid);
+      });
+
+      missingIds.forEach((id) => {
+        if (!foundServiceIds.has(id) && !foundProductIds.has(id)) {
+          ctx.unresolvedItemIds.add(id);
+        }
+      });
+    }
+  }
+
+  const serviceIdSet = new Set();
+  const productIdSet = new Set();
+  const serviceMetaMap = new Map();
+
+  ids.forEach((id) => {
+    const meta = ctx?.serviceMetaById?.get(id);
+    if (meta) {
+      serviceIdSet.add(id);
+      serviceMetaMap.set(id, meta);
+      return;
+    }
+    if (ctx?.productIds?.has(id)) {
+      productIdSet.add(id);
+    }
+  });
+
+  if (!ctx && ids.length) {
+    const [services, products] = await Promise.all([
+      Service.find({ _id: { $in: ids } })
+        .select('_id grupo comissaoPercent')
+        .populate('grupo', 'comissaoPercent')
+        .lean(),
+      Product.find({ _id: { $in: ids } }).select('_id').lean(),
+    ]);
+    services.forEach((service) => {
+      const sid = String(service._id);
+      serviceIdSet.add(sid);
+      serviceMetaMap.set(sid, {
+        serviceId: sid,
         groupId: normalizeObjectId(service.grupo),
         servicePercent: parseNumber(service.comissaoPercent),
         groupPercent: parseNumber(service?.grupo?.comissaoPercent),
-      },
-    ]),
-  );
+      });
+    });
+    products.forEach((product) => {
+      productIdSet.add(String(product._id));
+    });
+  }
 
   const saleRecords = sales.map((sale) =>
     buildSaleRecord(sale, {
@@ -955,14 +1291,17 @@ const computeCommissionSummaryForUser = async ({ user, startDate = null, endDate
 
   const saleTotals = summarizeSaleRecords(saleRecords);
 
-  const servicoRecords = await fetchServicoRecords({
-    user,
-    startDate,
-    endDate,
-    storeId,
-    defaultPercent: comissaoServicoPercent,
-    professionalCommission,
-  });
+  const servicoRecords = includeServices
+    ? await fetchServicoRecords({
+        user,
+        startDate,
+        endDate,
+        storeId,
+        defaultPercent: comissaoServicoPercent,
+        professionalCommission,
+        runtimeContext: ctx,
+      })
+    : [];
   const servicoTotals = summarizeServiceRecords(servicoRecords);
 
   const totalVendas = saleTotals.totalVendas;
@@ -983,7 +1322,15 @@ const computeCommissionSummaryForUser = async ({ user, startDate = null, endDate
       pendenteServicos,
       totalPago,
     },
-    debug: { sales: sales.length, services: servicoRecords.length, salesAggregated: aggregatedTotal, salesMatched: matched, salesUnmatched: unmatched },
+    debug: {
+      sales: sales.length,
+      services: servicoRecords.length,
+      salesAggregated: aggregatedTotal,
+      salesMatched: matched,
+      salesUnmatched: unmatched,
+      includeServices,
+      includePdvSales,
+    },
   };
 };
 
@@ -1084,13 +1431,13 @@ router.get(
       ]);
 
       return res.json({
-        config: config
-          ? {
-              accountingAccount: config.accountingAccount ? String(config.accountingAccount) : null,
-              bankAccount: config.bankAccount ? String(config.bankAccount) : null,
-              updatedAt: config.updatedAt || config.createdAt || null,
-            }
-          : null,
+        config: {
+          accountingAccount: config?.accountingAccount ? String(config.accountingAccount) : null,
+          bankAccount: config?.bankAccount ? String(config.bankAccount) : null,
+          includeServices: config?.includeServices !== false,
+          includePdvSales: config?.includePdvSales !== false,
+          updatedAt: config?.updatedAt || config?.createdAt || null,
+        },
         accounts: accounts.map((a) => ({
           _id: a._id,
           name: a.name,
@@ -1119,7 +1466,7 @@ router.post(
   authorizeRoles(...ADMIN_ROLES),
   async (req, res) => {
     try {
-      const { storeId, accountingAccount, bankAccount } = req.body || {};
+      const { storeId, accountingAccount, bankAccount, includeServices, includePdvSales } = req.body || {};
       if (!storeId || !isValidObjectId(storeId)) {
         return res.status(400).json({ message: 'Informe a empresa.' });
       }
@@ -1157,12 +1504,17 @@ router.post(
         bankAccountId = bankAccount;
       }
 
+      const includeServicesNormalized = includeServices !== false;
+      const includePdvSalesNormalized = includePdvSales !== false;
+
       const config = await CommissionConfig.findOneAndUpdate(
         { store: storeId },
         {
           store: storeId,
           accountingAccount: accountingAccountId,
           bankAccount: bankAccountId,
+          includeServices: includeServicesNormalized,
+          includePdvSales: includePdvSalesNormalized,
           updatedBy: req.user?.id || null,
           $setOnInsert: { createdBy: req.user?.id || null },
         },
@@ -1172,6 +1524,8 @@ router.post(
       return res.json({
         accountingAccount: config.accountingAccount ? String(config.accountingAccount) : null,
         bankAccount: config.bankAccount ? String(config.bankAccount) : null,
+        includeServices: config.includeServices !== false,
+        includePdvSales: config.includePdvSales !== false,
         updatedAt: config.updatedAt || config.createdAt || null,
       });
     } catch (error) {
@@ -1226,8 +1580,16 @@ router.get(
         .lean();
 
       const existingKey = new Set(
-        closings.map((closing) => `${String(closing.profissional)}|${String(closing.store || '')}`),
+        closings.map((closing) => buildProfessionalStorePairKey(closing.profissional, closing.store)),
       );
+      const latestClosingEndByPair = new Map();
+      closings.forEach((closing) => {
+        const pairKey = buildProfessionalStorePairKey(closing.profissional, closing.store);
+        const current = latestClosingEndByPair.get(pairKey);
+        const end = closing?.periodoFim ? new Date(closing.periodoFim) : null;
+        if (!end || Number.isNaN(end.getTime())) return;
+        if (!current || end > current) latestClosingEndByPair.set(pairKey, end);
+      });
 
       const payload = closings.map((closing) => {
         const profissionalNome = pickUserName(closing.profissional);
@@ -1292,57 +1654,112 @@ router.get(
           );
         });
       }
-
+      const configDocs = storeList.length
+        ? await CommissionConfig.find({ store: { $in: storeList } })
+            .select('store includeServices includePdvSales')
+            .lean()
+        : [];
+      const calculationOptionsByStore = new Map(
+        configDocs.map((cfg) => [String(cfg.store), normalizeCommissionCalculationOptions(cfg)]),
+      );
       // Reaproveita as chaves já existentes (fechamentos do banco)
       // e também evita adicionar duplicado entre sintéticos.
       const syntheticKeys = new Set(
-        payload.map((c) => `${String(c.profissional)}|${String(c.store || '')}`),
+        payload.map(
+          (c) =>
+            `${String(c.profissional)}|${String(c.store || '')}|${toCacheDateKey(
+              c.periodoInicio ? new Date(c.periodoInicio) : null,
+            )}|${toCacheDateKey(c.periodoFim ? new Date(c.periodoFim) : null)}`,
+        ),
       );
+      const runtimeContext = {};
 
+      const pendingPairs = [];
       for (const profissional of profissionais) {
         for (const storeKey of storeList) {
-          // eslint-disable-next-line no-await-in-loop
-          const summary = await computeCommissionSummaryForUser({
-            user: profissional,
-            startDate: startLocal,
-            endDate: endLocal,
-            storeId: storeKey,
-            debug,
-          });
-          const totals = summary.totals || emptyTotals();
-          // Exibir todos, mesmo com pendente 0 (para aparecer na lista de pendências)
-          const dedupKey = `${String(profissional._id)}|${storeKey || ''}`;
-          if (existingKey.has(dedupKey)) continue;
+          const pairKey = buildProfessionalStorePairKey(profissional._id, storeKey || null);
+          const options =
+            calculationOptionsByStore.get(String(storeKey)) || defaultCommissionCalculationOptions();
+          if (!options.includeServices && !options.includePdvSales) continue;
+          let calcStart = startLocal;
+          const latestClosingEnd = latestClosingEndByPair.get(pairKey);
+          const nextStart = latestClosingEnd ? addDaysAtStartOfDay(latestClosingEnd, 1) : null;
+          if (nextStart && nextStart > calcStart) calcStart = nextStart;
+          if (!calcStart || calcStart > endLocal) continue;
+
+          const calcEnd = endLocal;
+          const dedupKey = `${pairKey}|${toCacheDateKey(calcStart)}|${toCacheDateKey(calcEnd)}`;
           if (syntheticKeys.has(dedupKey)) continue;
-          if (!totals.totalPeriodo && !totals.totalPendente) continue;
-          payload.push({
-            id: `dyn-${profissional._id}-${storeKey || 'all'}`,
-            profissional: profissional._id,
-            profissionalNome: pickUserName(profissional),
-            store: storeKey || null,
-            storeNome: storeNamesById.get(storeKey) || '',
-            periodoInicio: startLocal,
-            periodoFim: endLocal,
-            periodo: formatPeriod(startLocal, endLocal),
-            previsto: totals.totalPeriodo,
-            pago: 0,
-            pendente: totals.totalPendente,
-            totalPeriodo: totals.totalPeriodo,
-            totalPendente: totals.totalPendente,
-            totalVendas: totals.totalVendas,
-            totalServicos: totals.totalServicos,
-            pendenteVendas: totals.pendenteVendas,
-            pendenteServicos: totals.pendenteServicos,
-             status: totals.totalPendente ? 'pendente' : 'pago',
-             previsaoPagamento: null,
-             meioPagamento: '',
-             ultimoPagamento: '--',
-             synthetic: true,
-             debug: debug ? summary.debug : undefined,
+          pendingPairs.push({
+            profissional,
+            storeKey,
+            dedupKey,
+            calcStart,
+            calcEnd,
+            hasPriorClosing: existingKey.has(pairKey),
+            options,
           });
-          syntheticKeys.add(dedupKey);
         }
       }
+
+      const computedPairs = await runWithConcurrency(
+        pendingPairs,
+        async ({ profissional, storeKey, dedupKey, calcStart, calcEnd, hasPriorClosing, options }) => {
+          const summary = await computeCommissionSummaryForUser({
+            user: profissional,
+            startDate: calcStart,
+            endDate: calcEnd,
+            storeId: storeKey,
+            debug,
+            runtimeContext,
+            calculationOptions: options,
+          });
+          return {
+            profissional,
+            storeKey,
+            dedupKey,
+            summary,
+            calcStart,
+            calcEnd,
+            hasPriorClosing,
+            options,
+          };
+        },
+      );
+
+      computedPairs.forEach(
+        ({ profissional, storeKey, dedupKey, summary, calcStart, calcEnd, hasPriorClosing }) => {
+        const totals = summary?.totals || emptyTotals();
+        // Mantém card "zerado" quando já existe fechamento anterior, para facilitar o próximo fechamento.
+        if (!totals.totalPeriodo && !totals.totalPendente && !hasPriorClosing) return;
+        payload.push({
+          id: `dyn-${profissional._id}-${storeKey || 'all'}-${calcStart.getTime()}-${calcEnd.getTime()}`,
+          profissional: profissional._id,
+          profissionalNome: pickUserName(profissional),
+          store: storeKey || null,
+          storeNome: storeNamesById.get(storeKey) || '',
+          periodoInicio: calcStart,
+          periodoFim: calcEnd,
+          periodo: formatPeriod(calcStart, calcEnd),
+          previsto: totals.totalPeriodo,
+          pago: 0,
+          pendente: totals.totalPendente,
+          totalPeriodo: totals.totalPeriodo,
+          totalPendente: totals.totalPendente,
+          totalVendas: totals.totalVendas,
+          totalServicos: totals.totalServicos,
+          pendenteVendas: totals.pendenteVendas,
+          pendenteServicos: totals.pendenteServicos,
+          status: 'em_aberto',
+          previsaoPagamento: null,
+          meioPagamento: '',
+          ultimoPagamento: '--',
+          synthetic: true,
+          debug: debug ? summary?.debug : undefined,
+        });
+        syntheticKeys.add(dedupKey);
+      },
+      );
 
       if (debug) {
         return res.json({
@@ -1364,6 +1781,86 @@ router.get(
     } catch (error) {
       console.error('[adminComissoesFechamentos] list', error);
       return res.status(500).json({ message: 'Nao foi possivel carregar fechamentos.' });
+    }
+  },
+);
+
+router.get(
+  '/admin/comissoes/fechamentos/preview',
+  requireAuth,
+  authorizeRoles(...ADMIN_ROLES),
+  async (req, res) => {
+    try {
+      const profissionalId = req.query?.profissionalId;
+      if (!profissionalId || !isValidObjectId(profissionalId)) {
+        return res.status(400).json({ message: 'Profissional invalido.' });
+      }
+
+      const startDateLocal = toStartOfDay(req.query?.start);
+      const endDateLocal = toEndOfDay(req.query?.end);
+      if (!startDateLocal || !endDateLocal) {
+        return res.status(400).json({ message: 'Periodo invalido.' });
+      }
+
+      const requestedStoreId =
+        req.query?.store && isValidObjectId(req.query.store) ? String(req.query.store) : null;
+      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req.user?.id);
+      const allowedStoreSet = new Set(allowedStoreIds.map(String));
+
+      if (!allowAllStores && !allowedStoreSet.size) {
+        return res.status(403).json({ message: 'Nenhuma empresa permitida para o usuario.' });
+      }
+      if (requestedStoreId && !allowAllStores && !allowedStoreSet.has(requestedStoreId)) {
+        return res.status(403).json({ message: 'Empresa nao permitida para o usuario.' });
+      }
+
+      const safeStoreId =
+        requestedStoreId || (!allowAllStores && allowedStoreIds.length ? allowedStoreIds[0] : null);
+
+      const profissional = await User.findById(profissionalId)
+        .select('nomeCompleto nomeContato razaoSocial nome email userGroup codigoCliente')
+        .populate('userGroup', 'comissaoPercent comissaoServicoPercent')
+        .lean();
+      if (!profissional) {
+        return res.status(404).json({ message: 'Profissional nao encontrado.' });
+      }
+
+      const storeConfig = safeStoreId
+        ? await CommissionConfig.findOne({ store: safeStoreId })
+            .select('includeServices includePdvSales')
+            .lean()
+        : null;
+      const calculationOptions = normalizeCommissionCalculationOptions(storeConfig);
+      if (!calculationOptions.includeServices && !calculationOptions.includePdvSales) {
+        return res.json({
+          profissional: profissional._id,
+          profissionalNome: pickUserName(profissional),
+          store: safeStoreId,
+          periodoInicio: startDateLocal,
+          periodoFim: endDateLocal,
+          totals: emptyTotals(),
+        });
+      }
+
+      const summary = await computeCommissionSummaryForUser({
+        user: profissional,
+        startDate: startDateLocal,
+        endDate: endDateLocal,
+        storeId: safeStoreId,
+        calculationOptions,
+      });
+
+      return res.json({
+        profissional: profissional._id,
+        profissionalNome: pickUserName(profissional),
+        store: safeStoreId,
+        periodoInicio: startDateLocal,
+        periodoFim: endDateLocal,
+        totals: summary?.totals || emptyTotals(),
+      });
+    } catch (error) {
+      console.error('[adminComissoesFechamentos] preview', error);
+      return res.status(500).json({ message: 'Nao foi possivel calcular preview.' });
     }
   },
 );
@@ -1400,37 +1897,66 @@ router.get(
         .select('nomeCompleto nomeContato razaoSocial nome email userGroup codigoCliente')
         .populate('userGroup', 'comissaoPercent comissaoServicoPercent')
         .lean();
+      const runtimeContext = {};
+      const storeConfig = storeId
+        ? await CommissionConfig.findOne({ store: storeId })
+            .select('includeServices includePdvSales')
+            .lean()
+        : null;
+      const calculationOptions = normalizeCommissionCalculationOptions(storeConfig);
+      if (!calculationOptions.includeServices && !calculationOptions.includePdvSales) {
+        return res.json([]);
+      }
+
+      const paidMatch = {
+        status: 'pago',
+        periodoInicio: { $lte: end },
+        periodoFim: { $gte: start },
+      };
+      if (storeId) paidMatch.store = storeId;
+
+      const paidRows = await CommissionClosing.aggregate([
+        { $match: paidMatch },
+        {
+          $group: {
+            _id: '$profissional',
+            paidSum: {
+              $sum: {
+                $cond: [
+                  { $gt: [{ $ifNull: ['$totalPago', 0] }, 0] },
+                  { $ifNull: ['$totalPago', 0] },
+                  { $ifNull: ['$totalPeriodo', 0] },
+                ],
+              },
+            },
+          },
+        },
+      ]);
+      const paidByProfessional = new Map(
+        paidRows.map((row) => [String(row._id), Number(row.paidSum || 0)]),
+      );
+
+      const summaries = await runWithConcurrency(
+        profissionais,
+        async (profissional) => {
+          const summary = await computeCommissionSummaryForUser({
+            user: profissional,
+            startDate: start,
+            endDate: end,
+            storeId,
+            runtimeContext,
+            calculationOptions,
+          });
+          return {
+            profissional,
+            totals: summary?.totals || emptyTotals(),
+          };
+        },
+      );
 
       const result = [];
-      for (const profissional of profissionais) {
-        // eslint-disable-next-line no-await-in-loop
-        const summary = await computeCommissionSummaryForUser({
-          user: profissional,
-          startDate: start,
-          endDate: end,
-          storeId,
-        });
-
-        const totals = summary.totals || emptyTotals();
-        // Desconta fechamentos pagos do perÇðodo/loja
-        const closingFilter = {
-          profissional: profissional._id,
-          status: 'pago',
-        };
-        if (storeId) closingFilter.store = storeId;
-        closingFilter.$and = [
-          { periodoInicio: { $lte: end } },
-          { periodoFim: { $gte: start } },
-        ];
-
-        // eslint-disable-next-line no-await-in-loop
-        const paidClosings = await CommissionClosing.find(closingFilter)
-          .select('totalPago totalPeriodo')
-          .lean();
-        const paidSum = paidClosings.reduce(
-          (acc, c) => acc + (Number(c.totalPago) || Number(c.totalPeriodo) || 0),
-          0,
-        );
+      summaries.forEach(({ profissional, totals }) => {
+        const paidSum = paidByProfessional.get(String(profissional._id)) || 0;
 
         let totalPendente = totals.totalPendente;
         let pendenteVendas = totals.pendenteVendas;
@@ -1450,7 +1976,7 @@ router.get(
           totalPendente = remaining;
         }
 
-        if (!totalPendente) continue;
+        if (!totalPendente) return;
 
         result.push({
           profissional: profissional._id,
@@ -1462,12 +1988,140 @@ router.get(
           totalVendas: totals.totalVendas,
           totalPago: totals.totalPago,
         });
-      }
+      });
 
       return res.json(result);
     } catch (error) {
       console.error('[adminComissoesFechamentos] pendentes', error);
       return res.status(500).json({ message: 'Nao foi possivel calcular pendencias.' });
+    }
+  },
+);
+
+router.get(
+  '/admin/comissoes/fechamentos/:id/resumo-servicos',
+  requireAuth,
+  authorizeRoles(...ADMIN_ROLES),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      if (!isValidObjectId(id)) {
+        return res.status(400).json({ message: 'Fechamento invalido.' });
+      }
+
+      const closing = await CommissionClosing.findById(id)
+        .populate('profissional', 'nomeCompleto nomeContato razaoSocial nome email userGroup codigoCliente')
+        .populate('store', 'nome nomeFantasia razaoSocial _id')
+        .lean();
+      if (!closing) {
+        return res.status(404).json({ message: 'Fechamento nao encontrado.' });
+      }
+      if ((closing.status || '').toString().toLowerCase() !== 'pago') {
+        return res.status(400).json({ message: 'Resumo disponivel apenas para fechamentos pagos.' });
+      }
+
+      const requestedStoreId = normalizeObjectId(closing.store?._id || closing.store);
+      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req.user?.id);
+      const allowedStoreSet = new Set(allowedStoreIds.map(String));
+      if (!allowAllStores && (!requestedStoreId || !allowedStoreSet.has(requestedStoreId))) {
+        return res.status(403).json({ message: 'Empresa nao permitida para o usuario.' });
+      }
+
+      const profissionalId = normalizeObjectId(closing.profissional?._id || closing.profissional);
+      const profissional = await User.findById(profissionalId)
+        .select('nomeCompleto nomeContato razaoSocial nome email userGroup codigoCliente')
+        .populate('userGroup', 'comissaoPercent comissaoServicoPercent')
+        .lean();
+      if (!profissional) {
+        return res.status(404).json({ message: 'Profissional nao encontrado.' });
+      }
+
+      const professionalCommissionConfig = await ProfessionalCommissionConfig.findOne({ user: profissional._id })
+        .select('groupRules serviceRules')
+        .lean();
+      const professionalCommission = buildProfessionalCommissionContext(professionalCommissionConfig);
+      const defaultPercent = Number(
+        profissional?.userGroup?.comissaoServicoPercent ?? DEFAULT_COMISSAO_SERVICO_PERCENT,
+      );
+
+      const periodStart = closing.periodoInicio ? toStartOfDay(closing.periodoInicio) : null;
+      const periodEnd = closing.periodoFim ? toEndOfDay(closing.periodoFim) : null;
+      if (!periodStart || !periodEnd) {
+        return res.status(400).json({ message: 'Periodo do fechamento invalido.' });
+      }
+
+      const serviceQuery = {
+        $or: [
+          { scheduledAt: { $gte: periodStart, $lte: periodEnd } },
+          { createdAt: { $gte: periodStart, $lte: periodEnd } },
+        ],
+        $and: [
+          {
+            $or: [
+              { profissional: new mongoose.Types.ObjectId(profissionalId) },
+              { 'itens.profissional': new mongoose.Types.ObjectId(profissionalId) },
+            ],
+          },
+        ],
+      };
+      if (requestedStoreId && isValidObjectId(requestedStoreId)) {
+        serviceQuery.store = new mongoose.Types.ObjectId(requestedStoreId);
+      }
+
+      const appointments = await Appointment.find(serviceQuery)
+        .select(
+          'scheduledAt createdAt itens valor pago codigoVenda status profissional servico store pet',
+        )
+        .populate('pet', 'nome')
+        .populate({
+          path: 'itens.servico',
+          select: 'nome grupo comissaoPercent',
+          populate: { path: 'grupo', select: 'nome comissaoPercent' },
+        })
+        .populate({
+          path: 'servico',
+          select: 'nome grupo comissaoPercent',
+          populate: { path: 'grupo', select: 'nome comissaoPercent' },
+        })
+        .lean();
+
+      const rows = buildServiceCommissionRows({
+        appointments,
+        user: profissional,
+        defaultPercent,
+        professionalCommission,
+        periodStart,
+        periodEnd,
+      });
+
+      const totals = rows.reduce(
+        (acc, row) => {
+          acc.valor += Number(row.valor || 0);
+          acc.comissao += Number(row.comissao || 0);
+          return acc;
+        },
+        { valor: 0, comissao: 0 },
+      );
+
+      return res.json({
+        fechamentoId: closing._id,
+        profissional: profissional._id,
+        profissionalNome: pickUserName(profissional),
+        store: requestedStoreId || null,
+        storeNome: closing.store?.nome || closing.store?.nomeFantasia || closing.store?.razaoSocial || '',
+        periodoInicio: periodStart,
+        periodoFim: periodEnd,
+        periodo: formatPeriod(periodStart, periodEnd),
+        rows,
+        totals: {
+          itens: rows.length,
+          valor: totals.valor,
+          comissao: totals.comissao,
+        },
+      });
+    } catch (error) {
+      console.error('[adminComissoesFechamentos] resumo-servicos', error);
+      return res.status(500).json({ message: 'Nao foi possivel gerar resumo de servicos.' });
     }
   },
 );
@@ -1494,6 +2148,12 @@ router.post(
       const safeStoreId =
         requestedStoreId ||
         (!allowAllStores && allowedStoreIds.length ? allowedStoreIds[0] : null);
+      const storeConfig = safeStoreId
+        ? await CommissionConfig.findOne({ store: safeStoreId })
+            .select('includeServices includePdvSales')
+            .lean()
+        : null;
+      const calculationOptions = normalizeCommissionCalculationOptions(storeConfig);
       const startDateLocal = toStartOfDay(inicio);
       const endDateLocal = toEndOfDay(fim);
       if (!startDateLocal || !endDateLocal) {
@@ -1533,6 +2193,7 @@ router.post(
           startDate: startDateLocal,
           endDate: endDateLocal,
           storeId: safeStoreId,
+          calculationOptions,
         });
 
         const totals = summary.totals || emptyTotals();
@@ -1742,3 +2403,4 @@ router.delete(
 );
 
 module.exports = router;
+
