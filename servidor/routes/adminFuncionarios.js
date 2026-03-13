@@ -7,6 +7,7 @@ const authMiddleware = require('../middlewares/authMiddleware');
 const mongoose = require('mongoose');
 const Store = require('../models/Store');
 const UserGroup = require('../models/UserGroup');
+const { hasAdminMasterGlobalAccess } = require('../utils/adminMasterMode');
 const {
   ensureScopedSequenceAtLeast,
   nextScopedSequence,
@@ -34,10 +35,13 @@ const normalizeStoreId = (value) => {
   return mongoose.Types.ObjectId.isValid(str) ? str : '';
 };
 
-const resolveUserStoreAccess = async (userId) => {
-  if (!userId) return { allowedStoreIds: [] };
-  const user = await User.findById(userId).select('empresaPrincipal empresas').lean();
-  if (!user) return { allowedStoreIds: [] };
+const resolveUserStoreAccess = async (req, userId) => {
+  if (!userId) return { allowedStoreIds: [], allowAllStores: false };
+  const user = await User.findById(userId).select('empresaPrincipal empresas role').lean();
+  if (!user) return { allowedStoreIds: [], allowAllStores: false };
+  if (hasAdminMasterGlobalAccess(req, user)) {
+    return { allowedStoreIds: [], allowAllStores: true };
+  }
 
   const markedCompanies = Array.isArray(user.empresas)
     ? user.empresas
@@ -46,11 +50,11 @@ const resolveUserStoreAccess = async (userId) => {
     : [];
 
   if (markedCompanies.length > 0) {
-    return { allowedStoreIds: Array.from(new Set(markedCompanies)) };
+    return { allowedStoreIds: Array.from(new Set(markedCompanies)), allowAllStores: false };
   }
 
   const primary = normalizeStoreId(user.empresaPrincipal);
-  return { allowedStoreIds: primary ? [primary] : [] };
+  return { allowedStoreIds: primary ? [primary] : [], allowAllStores: false };
 };
 
 function parseCodigoCliente(raw) {
@@ -442,23 +446,23 @@ function canChangeRole(actorRole, targetRole, desiredRole) {
 router.get('/', authMiddleware, requireAdmin, async (req, res) => {
   try {
     const queryStoreId = normalizeStoreId(req.query.storeId || req.query.companyId || req.query.empresa);
-    const { allowedStoreIds } = await resolveUserStoreAccess(req.user?.id);
+    const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req, req.user?.id);
     let filter = { role: { $in: STAFF_ROLES } };
 
     if (queryStoreId) {
-      if (!allowedStoreIds.length || !allowedStoreIds.includes(queryStoreId)) {
+      if (!allowAllStores && (!allowedStoreIds.length || !allowedStoreIds.includes(queryStoreId))) {
         return res.status(403).json({ message: 'Acesso negado.' });
       }
       filter = {
         ...filter,
         $or: [{ empresas: queryStoreId }, { empresaPrincipal: queryStoreId }],
       };
-    } else if (allowedStoreIds.length > 0) {
+    } else if (!allowAllStores && allowedStoreIds.length > 0) {
       filter = {
         ...filter,
         $or: [{ empresas: { $in: allowedStoreIds } }, { empresaPrincipal: { $in: allowedStoreIds } }],
       };
-    } else {
+    } else if (!allowAllStores) {
       return res.json([]);
     }
 
@@ -558,9 +562,9 @@ router.post('/transformar', authMiddleware, requireAdmin, async (req, res) => {
     const replaceEmpresas = req.body?.replaceEmpresas === true;
 
     if (normalizedEmpresas.length > 0 || replaceEmpresas) {
-      const { allowedStoreIds } = await resolveUserStoreAccess(req.user?.id);
+      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req, req.user?.id);
       const allowedSet = new Set(allowedStoreIds || []);
-      const allowed = normalizedEmpresas.filter((id) => allowedSet.has(id));
+      const allowed = allowAllStores ? normalizedEmpresas : normalizedEmpresas.filter((id) => allowedSet.has(id));
 
       if (allowed.length !== normalizedEmpresas.length) {
         return res.status(403).json({ message: 'Acesso negado para a empresa informada.' });

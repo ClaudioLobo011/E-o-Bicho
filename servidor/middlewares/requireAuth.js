@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { isAdminMasterModeActive, resolveEffectiveRole } = require('../utils/adminMasterMode');
 
 module.exports = async function requireAuth(req, res, next) {
   try {
@@ -16,10 +17,15 @@ module.exports = async function requireAuth(req, res, next) {
     if (!user) return res.status(401).json({ message: 'Usuário não encontrado' });
 
     // Anexa os dados do usuário no request
+    const adminMasterModeActive = isAdminMasterModeActive(req);
+    const effectiveRole = resolveEffectiveRole(req, user.role);
+
     req.user = {
       id: user._id.toString(),
       email: user.email,
-      role: user.role
+      role: effectiveRole,
+      originalRole: user.role,
+      adminMasterModeActive
     };
 
     next();

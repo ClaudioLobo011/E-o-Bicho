@@ -9,6 +9,7 @@ const Category = require('../models/Category');
 const User = require('../models/User');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
+const { hasAdminMasterGlobalAccess } = require('../utils/adminMasterMode');
 
 const router = express.Router();
 
@@ -57,10 +58,13 @@ const normalizeStoreId = (value) => {
   return mongoose.Types.ObjectId.isValid(str) ? str : '';
 };
 
-const resolveUserStoreAccess = async (userId) => {
+const resolveUserStoreAccess = async (req, userId) => {
   if (!userId) return { allowedStoreIds: [], allowAllStores: false };
   const user = await User.findById(userId).select('empresaPrincipal empresas role').lean();
   if (!user) return { allowedStoreIds: [], allowAllStores: false };
+  if (hasAdminMasterGlobalAccess(req, user)) {
+    return { allowedStoreIds: [], allowAllStores: true };
+  }
 
   const markedCompanies = Array.isArray(user.empresas)
     ? user.empresas
@@ -1596,7 +1600,7 @@ router.get(
         if (endDate) saleMatch['completedSales.createdAt'].$lte = endDate;
       }
 
-      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req.user?.id);
+      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req, req.user?.id);
       const allowedStoreObjectIds = allowAllStores
         ? []
         : allowedStoreIds.map((id) => new mongoose.Types.ObjectId(id));
@@ -1829,7 +1833,7 @@ router.get(
         fallbackCompareDate
       );
 
-      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req.user?.id);
+      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req, req.user?.id);
       const allowedStoreObjectIds = allowAllStores
         ? []
         : allowedStoreIds.map((id) => new mongoose.Types.ObjectId(id));

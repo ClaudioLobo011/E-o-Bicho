@@ -17,6 +17,7 @@ const {
   recalculateFractionalStockForProduct,
   refreshParentFractionalStocks,
 } = require('../utils/fractionalInventory');
+const { logInventoryMovement } = require('../utils/inventoryMovementLogger');
 const BankAccount = require('../models/BankAccount');
 const AccountingAccount = require('../models/AccountingAccount');
 const requireAuth = require('../middlewares/requireAuth');
@@ -786,6 +787,7 @@ const updateProductStockForDeposit = async ({
   quantity,
   cascadeFractional = true,
   visited,
+  movementContext,
 }) => {
   const numericQuantity = Number(quantity);
   if (!Number.isFinite(numericQuantity) || numericQuantity === 0) {
@@ -823,6 +825,7 @@ const updateProductStockForDeposit = async ({
     (stockEntry) => stockEntry?.deposito && stockEntry.deposito.toString() === depositKey
   );
 
+  let previousQuantity = 0;
   if (entry) {
     let current = 0;
     if (typeof entry.quantidade === 'string') {
@@ -831,6 +834,7 @@ const updateProductStockForDeposit = async ({
     } else {
       current = safeNumber(entry.quantidade, 0);
     }
+    previousQuantity = current;
     entry.quantidade = current - numericQuantity;
   } else {
     entry = {
@@ -840,6 +844,9 @@ const updateProductStockForDeposit = async ({
     };
     product.estoques.push(entry);
   }
+
+  const currentQuantity = safeNumber(entry.quantidade, 0);
+  const quantityDelta = currentQuantity - previousQuantity;
 
   product.markModified('estoques');
 
@@ -852,6 +859,33 @@ const updateProductStockForDeposit = async ({
     }, error);
     throw error;
   }
+
+  await logInventoryMovement({
+    movementDate: movementContext?.movementDate || new Date(),
+    companyId: movementContext?.companyId,
+    productId: product._id,
+    productCode: product?.cod || '',
+    productName: product?.nome || '',
+    depositId: depositObjectId,
+    fromDepositId: movementContext?.fromDepositId,
+    toDepositId: movementContext?.toDepositId,
+    operation: movementContext?.operation,
+    previousStock: previousQuantity,
+    quantityDelta,
+    currentStock: currentQuantity,
+    unitCost: Number.isFinite(Number(product?.custo)) ? Number(product.custo) : null,
+    totalValueDelta: Number.isFinite(Number(product?.custo)) ? quantityDelta * Number(product.custo) : null,
+    sourceModule: movementContext?.sourceModule || 'pdv',
+    sourceScreen: movementContext?.sourceScreen || 'PDV',
+    sourceAction: movementContext?.sourceAction || '',
+    sourceType: movementContext?.sourceType || '',
+    referenceDocument: movementContext?.referenceDocument || '',
+    notes: movementContext?.notes || '',
+    userId: movementContext?.userId,
+    userName: movementContext?.userName || '',
+    userEmail: movementContext?.userEmail || '',
+    metadata: movementContext?.metadata || null,
+  });
 
   const operations = [{ product: product._id, quantity: numericQuantity }];
 
@@ -880,6 +914,7 @@ const updateProductStockForDeposit = async ({
           quantity: childQuantity,
           cascadeFractional: true,
           visited: visitSet,
+          movementContext,
         });
         if (childResult?.operations?.length) {
           operations.push(...childResult.operations);
@@ -912,7 +947,7 @@ const updateProductStockForDeposit = async ({
   return { updated: true, operations };
 };
 
-const applyInventoryMovementsToSales = async ({ sales, depositId, existingMovements = [] }) => {
+const applyInventoryMovementsToSales = async ({ sales, depositId, existingMovements = [], movementContext = {} }) => {
   const result = {
     sales: Array.isArray(sales) ? sales : [],
     movements: [],
@@ -958,6 +993,21 @@ const applyInventoryMovementsToSales = async ({ sales, depositId, existingMoveme
               depositId: movementDeposit,
               quantity: -quantity,
               cascadeFractional: false,
+              movementContext: {
+                ...movementContext,
+                movementDate: new Date(),
+                operation: 'entrada',
+                fromDepositId: movementDeposit,
+                sourceModule: 'pdv',
+                sourceScreen: 'PDV',
+                sourceAction: 'cancelamento_venda',
+                sourceType: 'pdv_sale_cancellation_reversal',
+                referenceDocument: sale?.saleCode || saleId,
+                metadata: {
+                  ...(movementContext?.metadata || {}),
+                  saleId,
+                },
+              },
             });
           }
         }
@@ -989,6 +1039,21 @@ const applyInventoryMovementsToSales = async ({ sales, depositId, existingMoveme
         depositId: depositObjectId,
         quantity: numericQuantity,
         cascadeFractional: true,
+        movementContext: {
+          ...movementContext,
+          movementDate: new Date(),
+          operation: 'saida',
+          fromDepositId: depositObjectId,
+          sourceModule: 'pdv',
+          sourceScreen: 'PDV',
+          sourceAction: 'finalizar_venda',
+          sourceType: 'pdv_sale',
+          referenceDocument: sale?.saleCode || saleId,
+          metadata: {
+            ...(movementContext?.metadata || {}),
+            saleId,
+          },
+        },
       });
       const appliedOperations = Array.isArray(adjustment?.operations)
         ? adjustment.operations
@@ -3284,6 +3349,12 @@ router.put('/:id/state', requireAuth, async (req, res) => {
             sales: updatePayload.completedSales,
             depositId: depositConfig,
             existingMovements: existingInventoryMovements,
+            movementContext: {
+              companyId: pdv?.empresa || null,
+              userId: req.user?.id,
+              userName: normalizeString(req.user?.nomeCompleto || req.user?.apelido || req.user?.name || ''),
+              userEmail: normalizeString(req.user?.email || ''),
+            },
           });
           updatePayload.completedSales = inventoryResult.sales;
           const newInventoryMovements = inventoryResult.movements || [];

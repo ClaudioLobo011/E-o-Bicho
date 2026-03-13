@@ -1,7 +1,6 @@
 const mongoose = require('mongoose');
 const express = require('express');
 const router = express.Router();
-const path = require('path');
 const Product = require('../models/Product');
 const {
     recalculateFractionalStockForProduct,
@@ -10,7 +9,6 @@ const {
 const ProductPriceHistory = require('../models/ProductPriceHistory');
 const Category = require('../models/Category');
 const multer = require('multer');
-const fs = require('fs');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 const PdvState = require('../models/PdvState');
@@ -28,31 +26,10 @@ const {
     uploadBufferToR2,
 } = require('../utils/cloudflareR2');
 const { applyProductImageUrls } = require('../utils/productImageUrl');
+const { logInventoryMovement } = require('../utils/inventoryMovementLogger');
 
-const tempUploadDir = path.join(__dirname, '..', 'tmp', 'uploads', 'products');
-
-const ensureTempUploadDir = () => {
-    if (!fs.existsSync(tempUploadDir)) {
-        fs.mkdirSync(tempUploadDir, { recursive: true });
-    }
-};
-
-// Configuração do Multer para upload de imagens
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        try {
-            ensureTempUploadDir();
-            cb(null, tempUploadDir);
-        } catch (error) {
-            cb(error);
-        }
-    },
-    filename: function (req, file, cb) {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, `temp-${uniqueSuffix}${path.extname(file.originalname)}`);
-    }
-});
-const upload = multer({ storage: storage });
+// Usa memoria para evitar escrita temporaria em disco durante o upload.
+const upload = multer({ storage: multer.memoryStorage() });
 
 
 const resolveAuthenticatedUser = async (req) => {
@@ -1156,7 +1133,9 @@ router.get(
             });
 
             if (!match) {
-                return res.status(404).json({ message: 'Produto não encontrado para o fornecedor informado.' });
+                // "Nao encontrado" e um resultado esperado no fluxo de importacao,
+                // por isso retornamos 200 para evitar ruido no console de rede do navegador.
+                return res.json({ product: null, found: false });
             }
 
             return res.json({ product: match });
@@ -1526,7 +1505,10 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
             updatePayload.semGtin = Boolean(payload.semGtin);
         }
 
-        updatePayload.fornecedores = fornecedores;
+        const hasSuppliersUpdate = Object.prototype.hasOwnProperty.call(payload, 'fornecedores');
+        if (hasSuppliersUpdate) {
+            updatePayload.fornecedores = fornecedores;
+        }
 
         const existingCostNumber = Number(existingProduct?.custo);
         const requestedCostNumber = Object.prototype.hasOwnProperty.call(payload, 'custo')
@@ -1548,17 +1530,30 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
             ? Boolean(fractionalResult.config.ativo)
             : Boolean(existingProduct?.fracionado?.ativo);
 
+        const hasStockEntriesUpdate = Object.prototype.hasOwnProperty.call(payload, 'estoques');
+        const hasStockTotalUpdate = Object.prototype.hasOwnProperty.call(payload, 'stock');
+        const hasFractionalUpdate = Object.prototype.hasOwnProperty.call(payload, 'fracionado');
+
         if (fractionalWillBeActive) {
-            updatePayload.estoques = [];
-        } else {
+            if (hasFractionalUpdate) {
+                updatePayload.estoques = [];
+            }
+            if (hasStockTotalUpdate) {
+                const parsedStock = parseNumber(payload.stock);
+                updatePayload.stock = parsedStock === null ? 0 : parsedStock;
+            }
+        } else if (hasStockEntriesUpdate) {
             updatePayload.estoques = estoques;
             if (estoques.length > 0) {
                 const totalStock = estoques.reduce((sum, item) => sum + (Number(item.quantidade) || 0), 0);
                 updatePayload.stock = totalStock;
-            } else if (payload.stock !== undefined) {
+            } else if (hasStockTotalUpdate) {
                 const parsedStock = parseNumber(payload.stock);
                 updatePayload.stock = parsedStock === null ? 0 : parsedStock;
             }
+        } else if (hasStockTotalUpdate) {
+            const parsedStock = parseNumber(payload.stock);
+            updatePayload.stock = parsedStock === null ? 0 : parsedStock;
         }
 
         if (payload.fracionado !== undefined) {
@@ -1673,6 +1668,97 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
             updatePayload,
             { new: true, runValidators: true }
         );
+
+        if (updatedProduct?._id) {
+            const oldStockByDeposit = new Map();
+            const newStockByDeposit = new Map();
+
+            if (Array.isArray(existingProduct?.estoques)) {
+                existingProduct.estoques.forEach((entry) => {
+                    const depositId = entry?.deposito ? String(entry.deposito) : '';
+                    if (!depositId) return;
+                    oldStockByDeposit.set(depositId, Number(entry?.quantidade) || 0);
+                });
+            }
+
+            if (Array.isArray(updatedProduct?.estoques)) {
+                updatedProduct.estoques.forEach((entry) => {
+                    const depositId = entry?.deposito ? String(entry.deposito) : '';
+                    if (!depositId) return;
+                    newStockByDeposit.set(depositId, Number(entry?.quantidade) || 0);
+                });
+            }
+
+            const touchedDeposits = new Set([
+                ...oldStockByDeposit.keys(),
+                ...newStockByDeposit.keys(),
+            ]);
+
+            for (const depositId of touchedDeposits) {
+                const previousStock = Number(oldStockByDeposit.get(depositId) || 0);
+                const currentStock = Number(newStockByDeposit.get(depositId) || 0);
+                const quantityDelta = Math.round((currentStock - previousStock) * 1_000_000) / 1_000_000;
+                if (Math.abs(quantityDelta) <= 0.0000005) continue;
+
+                await logInventoryMovement({
+                    movementDate: new Date(),
+                    productId: updatedProduct._id,
+                    productCode: updatedProduct.cod || '',
+                    productName: updatedProduct.nome || '',
+                    depositId,
+                    operation: quantityDelta > 0 ? 'entrada' : 'saida',
+                    previousStock,
+                    quantityDelta,
+                    currentStock,
+                    unitCost: Number.isFinite(Number(updatedProduct?.custo)) ? Number(updatedProduct.custo) : null,
+                    sourceModule: 'compras.estoque',
+                    sourceScreen: 'Cadastro de Produtos',
+                    sourceAction: 'edicao_manual_produto',
+                    sourceType: 'manual_product_stock_edit',
+                    referenceDocument: String(updatedProduct._id),
+                    userId: req.user?.id,
+                    userName: normalizeString(req.user?.nomeCompleto || req.user?.apelido || req.user?.name || ''),
+                    userEmail: normalizeString(req.user?.email || ''),
+                    metadata: {
+                        route: 'PUT /api/products/:id',
+                    },
+                });
+            }
+
+            if (
+                touchedDeposits.size === 0 &&
+                Object.prototype.hasOwnProperty.call(updatePayload, 'stock')
+            ) {
+                const previousStock = Number(existingProduct?.stock) || 0;
+                const currentStock = Number(updatedProduct?.stock) || 0;
+                const quantityDelta = Math.round((currentStock - previousStock) * 1_000_000) / 1_000_000;
+                if (Math.abs(quantityDelta) > 0.0000005) {
+                    await logInventoryMovement({
+                        movementDate: new Date(),
+                        productId: updatedProduct._id,
+                        productCode: updatedProduct.cod || '',
+                        productName: updatedProduct.nome || '',
+                        depositId: null,
+                        operation: quantityDelta > 0 ? 'entrada' : 'saida',
+                        previousStock,
+                        quantityDelta,
+                        currentStock,
+                        unitCost: Number.isFinite(Number(updatedProduct?.custo)) ? Number(updatedProduct.custo) : null,
+                        sourceModule: 'compras.estoque',
+                        sourceScreen: 'Cadastro de Produtos',
+                        sourceAction: 'edicao_manual_produto',
+                        sourceType: 'manual_product_stock_edit_total',
+                        referenceDocument: String(updatedProduct._id),
+                        userId: req.user?.id,
+                        userName: normalizeString(req.user?.nomeCompleto || req.user?.apelido || req.user?.name || ''),
+                        userEmail: normalizeString(req.user?.email || ''),
+                        metadata: {
+                            route: 'PUT /api/products/:id',
+                        },
+                    });
+                }
+            }
+        }
 
         if (priceHistoryChanges.length > 0) {
             try {
@@ -1941,17 +2027,7 @@ router.post('/:id/upload', requireAuth, authorizeRoles('admin', 'admin_master'),
     const tempFiles = Array.isArray(req.files) ? req.files : [];
     const uploadedR2Keys = [];
 
-    const cleanupTempUploads = async () => {
-        await Promise.allSettled(tempFiles.map(async (file) => {
-            try {
-                if (file?.path && fs.existsSync(file.path)) {
-                    await fs.promises.unlink(file.path);
-                }
-            } catch (cleanupError) {
-                console.warn('Falha ao remover arquivo temporário de upload:', cleanupError);
-            }
-        }));
-    };
+    const cleanupTempUploads = async () => {};
 
     try {
         const product = await Product.findById(req.params.id);
@@ -1983,23 +2059,13 @@ router.post('/:id/upload', requireAuth, authorizeRoles('admin', 'admin_master'),
                 originalName: file.originalname,
             });
 
-            let fileBuffer = null;
-
-            try {
-                fileBuffer = await fs.promises.readFile(file.path);
-            } catch (readError) {
+            const fileBuffer = Buffer.isBuffer(file?.buffer) ? file.buffer : null;
+            if (!fileBuffer || !fileBuffer.length) {
                 uploadResults.push({
                     status: 'error',
                     originalName: file?.originalname || '',
-                    message: `Falha ao ler o arquivo temporário: ${readError.message}`,
+                    message: 'Falha ao ler o arquivo enviado em memoria.',
                 });
-                try {
-                    if (file.path && fs.existsSync(file.path)) {
-                        await fs.promises.unlink(file.path);
-                    }
-                } catch (cleanupError) {
-                    console.warn('Falha ao remover arquivo temporário após erro de leitura:', cleanupError);
-                }
                 continue;
             }
 

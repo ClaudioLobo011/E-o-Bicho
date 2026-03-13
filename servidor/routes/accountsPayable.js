@@ -12,6 +12,7 @@ const AccountingAccount = require('../models/AccountingAccount');
 const PaymentMethod = require('../models/PaymentMethod');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
+const { hasAdminMasterGlobalAccess } = require('../utils/adminMasterMode');
 
 const AUTH_ROLES = ['admin', 'admin_master', 'funcionario'];
 
@@ -24,10 +25,13 @@ const normalizeString = (value) => {
 
 const normalizeLower = (value) => normalizeString(value).toLowerCase();
 
-const resolveUserStoreAccess = async (userId) => {
+const resolveUserStoreAccess = async (req, userId) => {
   if (!userId) return { allowedStoreIds: [], allowAllStores: false };
   const user = await User.findById(userId).select('empresaPrincipal empresas role').lean();
   if (!user) return { allowedStoreIds: [], allowAllStores: false };
+  if (hasAdminMasterGlobalAccess(req, user)) {
+    return { allowedStoreIds: [], allowAllStores: true };
+  }
 
   const markedCompanies = Array.isArray(user.empresas)
     ? user.empresas
@@ -580,7 +584,7 @@ router.get(
   async (req, res) => {
     try {
       const { company } = req.query;
-      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req.user?.id);
+      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req, req.user?.id);
       const allowedCompanyIds = allowAllStores
         ? null
         : allowedStoreIds.map((id) => String(id)).filter(Boolean);
@@ -752,7 +756,7 @@ router.get(
       const MS_PER_DAY = 24 * 60 * 60 * 1000;
       const match = {};
       const { company } = req.query;
-      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req.user?.id);
+      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req, req.user?.id);
 
       if (company && mongoose.Types.ObjectId.isValid(company)) {
         const allowed =

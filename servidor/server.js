@@ -73,6 +73,7 @@ const routes = [
   { path: '/api/deposits', file: './routes/deposits' },
   { path: '/api/transfers', file: './routes/transfers' },
   { path: '/api/inventory-adjustments', file: './routes/inventoryAdjustments' },
+  { path: '/api/inventory-movement-logs', file: './routes/inventoryMovementLogs' },
   { path: '/api/exchanges', file: './routes/exchanges' },
   { path: '/api/payment-methods', file: './routes/paymentMethods' },
   { path: '/api/bank-accounts', file: './routes/bankAccounts' },

@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { isAdminMasterModeActive, resolveEffectiveRole } = require('../utils/adminMasterMode');
 
 async function authMiddleware(req, res, next) {
     const authHeader = req.headers['authorization'];
@@ -18,10 +19,14 @@ async function authMiddleware(req, res, next) {
         if (!user) {
             return res.status(401).json({ message: 'Usuario nao encontrado' });
         }
+        const adminMasterModeActive = isAdminMasterModeActive(req);
+        const effectiveRole = resolveEffectiveRole(req, user.role);
         req.user = {
             id: user._id.toString(),
             email: user.email,
-            role: user.role
+            role: effectiveRole,
+            originalRole: user.role,
+            adminMasterModeActive
         };
         next();
     } catch (error) {

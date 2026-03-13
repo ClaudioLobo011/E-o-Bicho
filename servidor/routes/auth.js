@@ -378,7 +378,9 @@ router.get('/check', authMiddleware, (req, res) => {
         success: true,
         id: req.user.id,
         email: req.user.email,
-        role: req.user.role   // <<-- importante!
+        role: req.user.role,
+        originalRole: req.user.originalRole || req.user.role,
+        adminMasterModeActive: req.user.adminMasterModeActive !== false
     });
 });
 

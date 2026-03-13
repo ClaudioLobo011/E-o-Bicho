@@ -6,6 +6,7 @@
         || document.querySelector('button[type="submit"][form="edit-product-form"]');
     const clearFormButton = document.getElementById('clear-form-button');
     const imageUploadInput = document.getElementById('imageUpload');
+    const imageUploadDropzone = document.getElementById('image-upload-dropzone');
     const existingImagesGrid = document.getElementById('existing-images-grid');
     const imageOrderStatus = document.getElementById('image-order-status');
     const pageTitle = document.getElementById('product-page-title');
@@ -14,6 +15,7 @@
     const addCategoryBtn = document.getElementById('add-category-btn');
     const categoryModal = document.getElementById('category-modal');
     const categoryTreeContainer = document.getElementById('category-tree-container');
+    const categorySearchInput = document.getElementById('category-search-input');
     const saveCategoryModalBtn = document.getElementById('save-category-modal-btn');
     const cancelCategoryModalBtn = document.getElementById('cancel-category-modal-btn');
     const closeCategoryModalBtn = document.getElementById('close-category-modal-btn');
@@ -1345,6 +1347,13 @@
     // --- ESTADO DA PÃGINA ---
     const urlParams = new URLSearchParams(window.location.search);
     const isFromNfeImport = urlParams.get('from') === 'nfe-import';
+    const isEmbeddedIframeContext = (() => {
+        try {
+            return window.self !== window.top;
+        } catch (_) {
+            return false;
+        }
+    })();
     let productId = urlParams.get('id');
     let isEditMode = Boolean(productId);
     let productCategories = []; // Array de IDs das categorias selecionadas
@@ -1463,6 +1472,363 @@
             .toLowerCase();
     };
 
+    const parseLocalizedDecimalValue = (value) => {
+        if (value === null || value === undefined) return null;
+        const normalized = String(value).trim().replace(',', '.');
+        if (!normalized) return null;
+        const parsed = Number(normalized);
+        return Number.isFinite(parsed) ? parsed : null;
+    };
+
+    const normalizeWeightToKg = (numericValue, unitRaw) => {
+        if (!Number.isFinite(numericValue) || numericValue <= 0) return null;
+        const unit = String(unitRaw || '').trim().toLowerCase();
+        if (!unit) return null;
+        if (unit.startsWith('kg') || unit === 'k') {
+            return Math.round(numericValue * 1000) / 1000;
+        }
+        if (unit.startsWith('g') || unit.startsWith('gr')) {
+            return Math.round((numericValue / 1000) * 1000) / 1000;
+        }
+        return null;
+    };
+
+    const extractDraftFactorAndWeightKgFromName = (rawName) => {
+        const fallback = { factor: null, weightKg: null };
+        if (typeof rawName !== 'string') return fallback;
+        const source = rawName.trim();
+        if (!source) return fallback;
+
+        const factorAndWeightPattern = /(\d{1,4})\s*[xX×]\s*(\d+(?:[.,]\d+)?)\s*(kg|k|g|gr|grama|gramas)\b/i;
+        const factorMatch = source.match(factorAndWeightPattern);
+        if (factorMatch) {
+            const factor = Number(factorMatch[1]);
+            const weightNumeric = parseLocalizedDecimalValue(factorMatch[2]);
+            const weightKg = normalizeWeightToKg(weightNumeric, factorMatch[3]);
+            return {
+                factor: Number.isFinite(factor) && factor > 0 ? factor : null,
+                weightKg: Number.isFinite(weightKg) && weightKg > 0 ? weightKg : null,
+            };
+        }
+
+        const standaloneWeightPattern = /(\d+(?:[.,]\d+)?)\s*(kg|k|g|gr|grama|gramas)\b/i;
+        const weightMatch = source.match(standaloneWeightPattern);
+        if (!weightMatch) return fallback;
+
+        const weightNumeric = parseLocalizedDecimalValue(weightMatch[1]);
+        const weightKg = normalizeWeightToKg(weightNumeric, weightMatch[2]);
+        return {
+            factor: null,
+            weightKg: Number.isFinite(weightKg) && weightKg > 0 ? weightKg : null,
+        };
+    };
+
+    const normalizeTagMatchText = (value = '') => String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase();
+
+    const applyInferredSpecificationCheckboxesFromName = (rawName) => {
+        const source = normalizeTagMatchText(rawName || '');
+
+        const normalizedText = source.replace(/[^A-Z0-9]+/g, ' ').trim();
+        const tokens = normalizedText ? normalizedText.split(/\s+/) : [];
+        const tokenSet = new Set(tokens);
+
+        const ageSet = new Set();
+        const porteSet = new Set();
+
+        const hasToken = (...aliases) => aliases.some((alias) => tokenSet.has(alias));
+        const hasText = (pattern) => pattern.test(source);
+
+        const hasCatType = hasToken('CAT', 'CATS', 'GATO', 'GATOS');
+        const hasCastrado = tokens.some((token) => {
+            const normalizedToken = normalizeTagMatchText(token || '');
+            return (
+                normalizedToken === 'CAS'
+                || normalizedToken === 'STER'
+                || normalizedToken.startsWith('CAST')
+                || normalizedToken.startsWith('ESTERI')
+                || normalizedToken.startsWith('STERIL')
+            );
+        });
+
+        const hasFilhote = hasToken('FILHOTE', 'FILHOTES', 'FILH', 'JUNIOR', 'JUNI', 'JUNIO', 'JUN', 'JR');
+        const hasAdulto = hasToken('ADULTO', 'ADULTOS', 'ADUL', 'AD');
+        const hasSeniorByAgeRange = /(?:^|[^0-9])([6-9]|[1-9][0-9])\s*\+/.test(source);
+        const hasSenior = hasToken('SENIOR', 'SENIO', 'SENI', 'SEN') || hasSeniorByAgeRange;
+
+        if (hasFilhote) ageSet.add('FILHOTES');
+        if (hasAdulto) ageSet.add('ADULTO');
+        if (hasSenior) ageSet.add('SENIOR');
+
+        const hasMiniPequeno = hasToken('RP', 'PQ', 'MINI', 'PEQUENO', 'PEQUENA', 'PEQUENOS', 'PEQUENAS');
+        const hasMedio = hasToken('RM', 'M', 'MEDIO', 'MEDIA', 'MEDIOS', 'MEDIAS')
+            || hasText(/\bRACAS?\s+MEDI[AO]S?\b/);
+        const hasGrande = hasToken('RG', 'GRANDE', 'GRANDES');
+        const hasGigante = hasToken('RGG', 'G', 'GG', 'GIG', 'GIGANTE', 'GIGANTES');
+
+        if (hasMiniPequeno) {
+            porteSet.add('MINI');
+            porteSet.add('PEQUENO');
+        }
+        if (hasMedio) {
+            porteSet.add('MEDIO');
+        }
+        if (hasGrande && !hasGigante) {
+            porteSet.add('MEDIO');
+            porteSet.add('GRANDE');
+        }
+        if (hasGigante) {
+            porteSet.add('GRANDE');
+            porteSet.add('GIGANTE');
+        }
+
+        const ageInputs = Array.from(document.querySelectorAll('input[name="spec-idade"]'));
+        const porteInputs = Array.from(document.querySelectorAll('input[name="spec-porte"]'));
+        const tipoInputs = Array.from(document.querySelectorAll('input[name="spec-tipo"]'));
+        const castracaoInputs = Array.from(document.querySelectorAll('input[name="spec-castracao"]'));
+
+        const applyCheckboxSelection = (inputs, expectedSet, fallbackAll = false) => {
+            if (!inputs.length) return;
+            const shouldFallbackAll = fallbackAll && (!expectedSet || expectedSet.size === 0);
+            inputs.forEach((input) => {
+                if (!(input instanceof HTMLInputElement)) return;
+                const normalizedValue = normalizeTagMatchText(input.value || '');
+                const isChecked = shouldFallbackAll || expectedSet.has(normalizedValue);
+                input.checked = Boolean(isChecked);
+            });
+        };
+        const applyRadioSelection = (inputs, expectedValue, fallbackValue = '') => {
+            if (!inputs.length) return;
+            const normalizedExpected = normalizeTagMatchText(expectedValue || fallbackValue || '');
+            inputs.forEach((input) => {
+                if (!(input instanceof HTMLInputElement)) return;
+                const normalizedValue = normalizeTagMatchText(input.value || '');
+                input.checked = Boolean(normalizedExpected) && normalizedValue === normalizedExpected;
+            });
+        };
+
+        // Na ausência de indicadores de idade, usa Adulto como padrão.
+        if (ageSet.size === 0) {
+            ageSet.add('ADULTO');
+        }
+        applyCheckboxSelection(ageInputs, ageSet, false);
+        // Tipo: se vier gato/cat marca Gatos; senão marca Cães por padrão.
+        applyRadioSelection(tipoInputs, hasCatType ? 'Gatos' : 'Cães', 'Cães');
+        // Castrado: só marca "Castrado" se explicitamente identificado, senão "Não castrado".
+        applyRadioSelection(castracaoInputs, hasCastrado ? 'Castrado' : 'Não castrado', 'Não castrado');
+        // Para gatos, não usar porte/raça. Para os demais, aplica a lógica padrão de porte.
+        if (hasCatType) {
+            porteInputs.forEach((input) => {
+                if (input instanceof HTMLInputElement) {
+                    input.checked = false;
+                }
+            });
+        } else {
+            // Na ausência de indicador de porte, marca todos os portes.
+            applyCheckboxSelection(porteInputs, porteSet, true);
+        }
+    };
+
+    const normalizeDraftRuleField = (value = '') => {
+        const normalized = normalizeTagMatchText(String(value || '').replace(/_/g, ' ')).trim();
+        if (!normalized) return '';
+        if (normalized === 'MARCA') return 'marca';
+        if (normalized === 'IDADE') return 'idade';
+        if (normalized === 'CASTRADO') return 'castrado';
+        if (normalized === 'TIPO') return 'tipo';
+        if (normalized === 'PORTE') return 'porte';
+        return '';
+    };
+
+    const parseSupplierImportRule = (rule) => {
+        if (!rule) return null;
+        if (typeof rule === 'string') {
+            const parts = rule.split(';').map((part) => String(part || '').trim());
+            if (parts.length < 3) return null;
+            const trigger = parts.shift().replace(/_/g, ' ').trim();
+            const field = normalizeDraftRuleField(parts.shift());
+            const value = parts.join(';').replace(/_/g, ' ').trim();
+            if (!trigger || !field || !value) return null;
+            return { trigger, field, value };
+        }
+        if (typeof rule === 'object') {
+            const trigger = String(rule.trigger || '').replace(/_/g, ' ').trim();
+            const field = normalizeDraftRuleField(rule.field);
+            const value = String(rule.value || '').replace(/_/g, ' ').trim();
+            if (!trigger || !field || !value) return null;
+            return { trigger, field, value };
+        }
+        return null;
+    };
+
+    const applySupplierImportRulesFromDraft = (rawName, draft) => {
+        const rules = Array.isArray(draft?.supplier?.importProductRules)
+            ? draft.supplier.importProductRules
+            : [];
+        if (!rules.length) return;
+
+        const source = normalizeTagMatchText(rawName || '');
+        const normalizedText = source.replace(/[^A-Z0-9]+/g, ' ').trim();
+        const paddedText = ` ${normalizedText} `;
+        const tokenSet = new Set(normalizedText ? normalizedText.split(/\s+/) : []);
+        const matchesTrigger = (trigger) => {
+            const normalizedTrigger = normalizeTagMatchText(trigger || '');
+            if (!normalizedTrigger) return false;
+            if (normalizedTrigger.includes(' ')) {
+                return paddedText.includes(` ${normalizedTrigger} `);
+            }
+            return tokenSet.has(normalizedTrigger) || paddedText.includes(` ${normalizedTrigger} `);
+        };
+
+        const ageSet = new Set();
+        const porteSet = new Set();
+        let ruleTipo = '';
+        let ruleCastracao = '';
+        let ruleMarca = '';
+
+        const resolveAgeValues = (value) => {
+            const normalized = normalizeTagMatchText(value || '');
+            const result = new Set();
+            if (/(^|[^A-Z0-9])(FILHOTES?|FILH|FILHOTE|JUNIOR|JUNI|JUNIO|JUN|JR)([^A-Z0-9]|$)/.test(` ${normalized} `)) result.add('FILHOTES');
+            if (/(^|[^A-Z0-9])(ADULTOS?|ADULTO|ADUL|AD)([^A-Z0-9]|$)/.test(` ${normalized} `)) result.add('ADULTO');
+            if (/(^|[^A-Z0-9])(SENIOR|SENIO|SENI|SEN)([^A-Z0-9]|$)/.test(` ${normalized} `)) result.add('SENIOR');
+            if (/(?:^|[^0-9])([6-9]|[1-9][0-9])\s*\+/.test(normalized)) result.add('SENIOR');
+            return result;
+        };
+        const resolvePorteValues = (value) => {
+            const normalized = normalizeTagMatchText(value || '');
+            const result = new Set();
+            if (/(^|[^A-Z0-9])(RP|PQ|MINI|PEQUEN[OA]S?)([^A-Z0-9]|$)/.test(` ${normalized} `)) {
+                result.add('MINI');
+                result.add('PEQUENO');
+            }
+            if (/(^|[^A-Z0-9])(RM|M|MEDI[AO]S?|RACAS?\s+MEDI[AO]S?)([^A-Z0-9]|$)/.test(` ${normalized} `)) {
+                result.add('MEDIO');
+            }
+            const hasGrande = /(^|[^A-Z0-9])(RG|GRANDE|GRANDES)([^A-Z0-9]|$)/.test(` ${normalized} `);
+            const hasGigante = /(^|[^A-Z0-9])(RGG|G|GG|GIG|GIGANTE|GIGANTES)([^A-Z0-9]|$)/.test(` ${normalized} `);
+            if (hasGrande && !hasGigante) {
+                result.add('MEDIO');
+                result.add('GRANDE');
+            }
+            if (hasGigante) {
+                result.add('GRANDE');
+                result.add('GIGANTE');
+            }
+            return result;
+        };
+        const resolveTipo = (value) => {
+            const normalized = normalizeTagMatchText(value || '');
+            if (/(^|[^A-Z0-9])(CAT|CATS|GATO|GATOS)([^A-Z0-9]|$)/.test(` ${normalized} `)) return 'Gatos';
+            if (/(^|[^A-Z0-9])(CAO|CAES|CACHORRO|CACHORROS|DOG|DOGS)([^A-Z0-9]|$)/.test(` ${normalized} `)) return 'Cães';
+            if (/(^|[^A-Z0-9])(PASSARO|PASSAROS|AVE|AVES|BIRD|BIRDS)([^A-Z0-9]|$)/.test(` ${normalized} `)) return 'Pássaros';
+            if (/(^|[^A-Z0-9])(OUTRO|OUTROS)([^A-Z0-9]|$)/.test(` ${normalized} `)) return 'Outros';
+            return '';
+        };
+        const resolveCastracao = (value) => {
+            const normalized = normalizeTagMatchText(value || '');
+            if (
+                /(^|[^A-Z0-9])(CAST[A-Z0-9]*|CASTRADO[A-Z0-9]*|ESTERI[A-Z0-9]*|STER[A-Z0-9]*|CAS)([^A-Z0-9]|$)/.test(
+                    ` ${normalized} `
+                )
+            ) {
+                return 'Castrado';
+            }
+            return 'Não castrado';
+        };
+
+        rules.forEach((entry) => {
+            const rule = parseSupplierImportRule(entry);
+            if (!rule || !matchesTrigger(rule.trigger)) return;
+            if (rule.field === 'marca') {
+                ruleMarca = rule.value;
+                return;
+            }
+            if (rule.field === 'idade') {
+                resolveAgeValues(rule.value).forEach((item) => ageSet.add(item));
+                return;
+            }
+            if (rule.field === 'porte') {
+                resolvePorteValues(rule.value).forEach((item) => porteSet.add(item));
+                return;
+            }
+            if (rule.field === 'tipo') {
+                const parsedTipo = resolveTipo(rule.value);
+                if (parsedTipo) ruleTipo = parsedTipo;
+                return;
+            }
+            if (rule.field === 'castrado') {
+                ruleCastracao = resolveCastracao(rule.value);
+            }
+        });
+
+        if (ruleMarca) {
+            const brandInput = form?.querySelector('#marca');
+            if (brandInput) {
+                brandInput.value = ruleMarca;
+            }
+        }
+
+        if (ruleTipo) {
+            document.querySelectorAll('input[name="spec-tipo"]').forEach((input) => {
+                if (!(input instanceof HTMLInputElement)) return;
+                input.checked = normalizeTagMatchText(input.value) === normalizeTagMatchText(ruleTipo);
+            });
+        }
+
+        if (ruleCastracao) {
+            document.querySelectorAll('input[name="spec-castracao"]').forEach((input) => {
+                if (!(input instanceof HTMLInputElement)) return;
+                input.checked = normalizeTagMatchText(input.value) === normalizeTagMatchText(ruleCastracao);
+            });
+        }
+
+        if (ageSet.size > 0) {
+            document.querySelectorAll('input[name="spec-idade"]').forEach((input) => {
+                if (!(input instanceof HTMLInputElement)) return;
+                const normalized = normalizeTagMatchText(input.value || '');
+                input.checked = ageSet.has(normalized);
+            });
+        }
+
+        const isCatType = Array.from(document.querySelectorAll('input[name="spec-tipo"]'))
+            .some((input) => input instanceof HTMLInputElement
+                && input.checked
+                && normalizeTagMatchText(input.value || '') === 'GATOS');
+
+        if (isCatType) {
+            document.querySelectorAll('input[name="spec-porte"]').forEach((input) => {
+                if (input instanceof HTMLInputElement) input.checked = false;
+            });
+            return;
+        }
+
+        if (porteSet.size > 0) {
+            document.querySelectorAll('input[name="spec-porte"]').forEach((input) => {
+                if (!(input instanceof HTMLInputElement)) return;
+                const normalized = normalizeTagMatchText(input.value || '');
+                input.checked = porteSet.has(normalized);
+            });
+        }
+    };
+
+    const applyDefaultIatAndProductType = () => {
+        const iatSelect = form?.querySelector('#iat');
+        if (iatSelect && Array.from(iatSelect.options || []).some((option) => option.value === 'Arredondamento')) {
+            iatSelect.value = 'Arredondamento';
+        }
+
+        const tipoProdutoSelect = form?.querySelector('#tipo-produto');
+        if (
+            tipoProdutoSelect
+            && Array.from(tipoProdutoSelect.options || []).some((option) => option.value === 'Revenda')
+        ) {
+            tipoProdutoSelect.value = 'Revenda';
+        }
+    };
+
     const getTodayDateString = () => {
         const today = new Date();
         today.setMinutes(today.getMinutes() - today.getTimezoneOffset());
@@ -1491,9 +1857,12 @@
     };
 
     const AUTO_SAVE_DEBOUNCE_MS = 1500;
+    const IMAGE_INPUT_SUBMIT_GUARD_MS = 1200;
     let autoSaveTimeoutId = null;
     let autoSaveInProgress = false;
     let pendingAutoSave = false;
+    let imageUploadInProgress = false;
+    let imageInputInteractionAt = 0;
 
     const getAuthToken = () => {
         try {
@@ -1560,6 +1929,9 @@
 
         const parsedPeso = pesoValue ? Number(pesoValue) : null;
 
+        const selectedProductType = form.querySelector('input[name="spec-tipo"]:checked')?.value || '';
+        const selectedCastracao = form.querySelector('input[name="spec-castracao"]:checked')?.value || '';
+
         const updateData = {
             nome: productName,
             cod: (formData.get('cod') || '').trim(),
@@ -1583,7 +1955,9 @@
             })),
             especificacoes: {
                 idade: Array.from(form.querySelectorAll('input[name="spec-idade"]:checked')).map(i => i.value),
-                pet: Array.from(form.querySelectorAll('input[name="spec-pet"]:checked')).map(i => i.value),
+                pet: selectedProductType ? [selectedProductType] : [],
+                tipo: selectedProductType,
+                castracao: selectedCastracao,
                 porteRaca: Array.from(form.querySelectorAll('input[name="spec-porte"]:checked')).map(i => i.value),
                 apresentacao: (document.getElementById('spec-apresentacao')?.value || '').trim()
             },
@@ -1764,6 +2138,67 @@
         }
         const normalizedType = type ? String(type).toUpperCase() : 'INFO';
         console.log(`[${normalizedType}] ${message}`);
+    };
+
+    const normalizeFileList = (fileList) => {
+        if (!fileList) return [];
+        const list = Array.from(fileList);
+        return list.filter((file) => file instanceof File);
+    };
+
+    const setImageDropzoneHighlight = (active) => {
+        if (!imageUploadDropzone) return;
+        imageUploadDropzone.classList.toggle('border-primary/70', Boolean(active));
+        imageUploadDropzone.classList.toggle('bg-primary/5', Boolean(active));
+    };
+    const handleImmediateImageUpload = async (fileList) => {
+        imageInputInteractionAt = Date.now();
+        const files = normalizeFileList(fileList);
+        if (!files.length) {
+            if (imageUploadInput) imageUploadInput.value = '';
+            return;
+        }
+
+        if (!isEditMode || !productId) {
+            showToastMessage('Salve o produto primeiro para habilitar o upload de imagens.', 'warning');
+            if (imageUploadInput) imageUploadInput.value = '';
+            return;
+        }
+
+        if (imageUploadInProgress) {
+            showToastMessage('Já existe um upload de imagens em andamento.', 'info');
+            if (imageUploadInput) imageUploadInput.value = '';
+            return;
+        }
+
+        const token = getAuthToken();
+        if (!token) {
+            showToastMessage('Sessão expirada. Faça login novamente para enviar imagens.', 'error');
+            if (imageUploadInput) imageUploadInput.value = '';
+            return;
+        }
+
+        imageUploadInProgress = true;
+        if (imageUploadInput) imageUploadInput.disabled = true;
+        showImageOrderStatus({ message: 'Enviando imagens...', tone: 'saving', persistent: true });
+
+        try {
+            const uploadedPayload = await uploadProductImages(productId, files, token);
+            if (uploadedPayload) {
+                syncCurrentImagesFromProductPayload(uploadedPayload);
+            }
+            showImageOrderStatus({ message: 'Imagens atualizadas com sucesso.', tone: 'success' });
+        } catch (error) {
+            const message = error?.message || 'Não foi possível enviar as imagens.';
+            showImageOrderStatus({ message, tone: 'error' });
+            showToastMessage(message, 'error');
+        } finally {
+            imageUploadInProgress = false;
+            if (imageUploadInput) {
+                imageUploadInput.disabled = false;
+                imageUploadInput.value = '';
+            }
+        }
     };
 
     const formatPriceHistoryCurrency = (value) => {
@@ -3150,6 +3585,83 @@
             .join('');
     };
 
+    const syncCurrentImagesFromProductPayload = (productPayload) => {
+        if (!productPayload || typeof productPayload !== 'object') return;
+        const imagens = Array.isArray(productPayload.imagens)
+            ? productPayload.imagens
+                .map((url) => (typeof url === 'string' ? url.trim() : ''))
+                .filter(Boolean)
+            : null;
+        if (!Array.isArray(imagens)) return;
+        currentImages = imagens;
+        renderExistingImages();
+    };
+
+    const uploadProductImages = async (targetProductId, files, token) => {
+        const normalizedProductId = targetProductId ? String(targetProductId) : '';
+        if (!normalizedProductId) {
+            throw new Error('Não foi possível identificar o produto para enviar as imagens.');
+        }
+        if (!Array.isArray(files) || !files.length) {
+            throw new Error('Nenhuma imagem foi selecionada.');
+        }
+        if (!token) {
+            throw new Error('Sessão expirada. Faça login novamente.');
+        }
+
+        const imageFormData = new FormData();
+        files.forEach((file) => imageFormData.append('imagens', file));
+
+        const uploadResponse = await fetch(`${API_CONFIG.BASE_URL}/products/${normalizedProductId}/upload`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            },
+            body: imageFormData,
+        });
+
+        let uploadPayload = null;
+        try {
+            uploadPayload = await uploadResponse.json();
+        } catch (_) {
+            uploadPayload = null;
+        }
+
+        if (!uploadResponse.ok) {
+            throw new Error(uploadPayload?.message || 'Falha ao enviar as imagens.');
+        }
+
+        return uploadPayload && typeof uploadPayload === 'object' ? uploadPayload : null;
+    };
+
+    const applyEditModeAfterSaveWithoutReset = (resolvedProductId, productPayload = null) => {
+        const normalizedId = resolvedProductId ? String(resolvedProductId) : '';
+        if (normalizedId) {
+            productId = normalizedId;
+            isEditMode = true;
+            updatePersistedProductEditState({ productId: normalizedId });
+            try {
+                const currentUrl = new URL(window.location.href);
+                currentUrl.searchParams.set('id', normalizedId);
+                window.history.replaceState({}, '', currentUrl.toString());
+            } catch (urlError) {
+                console.warn('Não foi possível atualizar a URL após salvar o produto.', urlError);
+            }
+        }
+
+        duplicateCheckInProgress = false;
+        makeFieldEditable(skuInput);
+        makeFieldEditable(nameInput);
+        makeFieldEditable(barcodeInput);
+        showDeleteButton();
+        setSubmitButtonIdleText();
+        syncCurrentImagesFromProductPayload(productPayload);
+
+        if (imageUploadInput) {
+            imageUploadInput.value = '';
+        }
+    };
+
     const toggleImageDragHighlight = (card, active) => {
         if (!card) return;
         card.classList.toggle('ring-2', active);
@@ -3709,6 +4221,42 @@
     };
 
     setSubmitButtonIdleText();
+
+    imageUploadInput?.addEventListener('change', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        imageInputInteractionAt = Date.now();
+        handleImmediateImageUpload(imageUploadInput.files);
+    });
+
+    imageUploadInput?.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter') return;
+        // Evita submit do formulário ao interagir com o input de arquivos.
+        event.preventDefault();
+        event.stopPropagation();
+    });
+
+    if (imageUploadDropzone) {
+        ['dragenter', 'dragover'].forEach((eventName) => {
+            imageUploadDropzone.addEventListener(eventName, (event) => {
+                event.preventDefault();
+                setImageDropzoneHighlight(true);
+            });
+        });
+        ['dragleave', 'dragend', 'drop'].forEach((eventName) => {
+            imageUploadDropzone.addEventListener(eventName, (event) => {
+                event.preventDefault();
+                if (eventName !== 'drop') {
+                    setImageDropzoneHighlight(false);
+                }
+            });
+        });
+        imageUploadDropzone.addEventListener('drop', (event) => {
+            setImageDropzoneHighlight(false);
+            if (!event.dataTransfer) return;
+            handleImmediateImageUpload(event.dataTransfer.files);
+        });
+    }
 
     const ensureDepositEntry = (depositId) => {
         if (!depositStockMap.has(depositId)) {
@@ -4754,6 +5302,7 @@
 
         const item = draft.item || {};
         const supplier = draft.supplier || {};
+        const extractedPackaging = extractDraftFactorAndWeightKgFromName(item.description || '');
 
         if (pageTitle) {
             const itemTitle = typeof item.description === 'string' && item.description.trim()
@@ -4781,6 +5330,8 @@
         if (nameInput) {
             nameInput.value = item.description || '';
         }
+        applyInferredSpecificationCheckboxesFromName(item.description || '');
+        applySupplierImportRulesFromDraft(item.description || '', draft);
 
         const primaryBarcodeCandidate = Array.isArray(item.barcodeCandidates)
             ? item.barcodeCandidates.find((code) => typeof code === 'string' && code.trim())
@@ -4845,8 +5396,23 @@
         if (supplierCalcTypeSelect) supplierCalcTypeSelect.value = '';
         if (supplierCalcValueInput) {
             const conversion = Number(item.conversion);
-            supplierCalcValueInput.value = Number.isFinite(conversion) && conversion > 0 ? conversion : '';
+            const prefilledFactor = Number.isFinite(extractedPackaging.factor) && extractedPackaging.factor > 0
+                ? extractedPackaging.factor
+                : Number.isFinite(conversion) && conversion > 0
+                    ? conversion
+                    : null;
+            supplierCalcValueInput.value = Number.isFinite(prefilledFactor) ? prefilledFactor : '';
         }
+
+        const pesoInput = form.querySelector('#peso');
+        if (pesoInput) {
+            const prefilledWeight = Number.isFinite(extractedPackaging.weightKg) && extractedPackaging.weightKg > 0
+                ? extractedPackaging.weightKg
+                : null;
+            pesoInput.value = Number.isFinite(prefilledWeight) ? prefilledWeight : '';
+        }
+
+        applyDefaultIatAndProductType();
 
         supplierEntries = [];
         if (supplier.name) {
@@ -4858,7 +5424,11 @@
                 codigoProduto: item.supplierCode || '',
                 unidadeEntrada: item.unit || item.unitTrib || '',
                 tipoCalculo: '',
-                valorCalculo: Number.isFinite(item.conversion) && item.conversion > 0 ? item.conversion : null,
+                valorCalculo: Number.isFinite(extractedPackaging.factor) && extractedPackaging.factor > 0
+                    ? extractedPackaging.factor
+                    : Number.isFinite(item.conversion) && item.conversion > 0
+                        ? item.conversion
+                        : null,
             });
         }
         renderSupplierEntries();
@@ -4917,7 +5487,53 @@
         });
     };
 
-    const populateCategoryTree = (categories, selectedIds) => {
+    const normalizeCategorySearchTerm = (value = '') => String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim();
+
+    const categoryMatchesSearch = (name, normalizedTerm) => {
+        if (!normalizedTerm) return true;
+        return normalizeCategorySearchTerm(name).includes(normalizedTerm);
+    };
+
+    const filterCategoryTreeBySearch = (categories, normalizedTerm) => {
+        if (!Array.isArray(categories) || !categories.length) return [];
+        if (!normalizedTerm) return categories;
+
+        const walk = (nodes) => nodes
+            .map((node) => {
+                const children = Array.isArray(node?.children) ? node.children : [];
+                const selfMatch = categoryMatchesSearch(node?.nome || '', normalizedTerm);
+                if (selfMatch) {
+                    // Mantém todos os filhos quando o próprio grupo corresponde ao termo.
+                    return { ...node, children };
+                }
+                const filteredChildren = walk(children);
+                if (filteredChildren.length) {
+                    // Mantém o caminho pai -> filho quando só o descendente corresponde.
+                    return { ...node, children: filteredChildren };
+                }
+                return null;
+            })
+            .filter(Boolean);
+
+        return walk(categories);
+    };
+
+    const collectSelectedCategoryIdsFromTree = () => {
+        if (!categoryTreeContainer) return [];
+        return Array.from(categoryTreeContainer.querySelectorAll('input[type="checkbox"]:checked'))
+            .map((input) => input.value)
+            .filter(Boolean);
+    };
+
+    const populateCategoryTree = (categories, selectedIds, options = {}) => {
+        const selectedSet = new Set((Array.isArray(selectedIds) ? selectedIds : []).map((id) => String(id)));
+        const normalizedTerm = normalizeCategorySearchTerm(options.searchTerm || '');
+        const filteredCategories = filterCategoryTreeBySearch(categories, normalizedTerm);
+
         const createList = (categories, depth = 0) => {
             const ul = document.createElement('ul');
             if (depth > 0) ul.className = 'pl-5';
@@ -4932,7 +5548,7 @@
                 const checkbox = document.createElement('input');
                 checkbox.type = 'checkbox';
                 checkbox.value = cat._id;
-                checkbox.checked = selectedIds.includes(cat._id);
+                checkbox.checked = selectedSet.has(String(cat._id));
                 
                 const span = document.createElement('span');
                 span.textContent = cat.nome;
@@ -4950,7 +5566,11 @@
             return ul;
         };
         categoryTreeContainer.innerHTML = '';
-        categoryTreeContainer.appendChild(createList(categories));
+        if (!filteredCategories.length) {
+            categoryTreeContainer.innerHTML = '<p class="text-xs text-gray-500">Nenhuma categoria encontrada para o termo informado.</p>';
+            return;
+        }
+        categoryTreeContainer.appendChild(createList(filteredCategories));
     };
 
     const prepareFormForCreation = () => {
@@ -5016,7 +5636,7 @@
             fractionChildCreateBarcodeInput.value = '';
         }
 
-        document.querySelectorAll('input[name="spec-idade"], input[name="spec-pet"], input[name="spec-porte"]').forEach((input) => {
+        document.querySelectorAll('input[name="spec-idade"], input[name="spec-pet"], input[name="spec-porte"], input[name="spec-tipo"], input[name="spec-castracao"]').forEach((input) => {
             if (input instanceof HTMLInputElement) {
                 input.checked = false;
             }
@@ -5032,6 +5652,8 @@
         if (vigenciaInput) {
             vigenciaInput.value = getTodayDateString();
         }
+
+        applyDefaultIatAndProductType();
 
         updateMarkupFromValues();
         setSubmitButtonIdleText();
@@ -5322,9 +5944,15 @@
         document.querySelectorAll('input[name="spec-idade"]').forEach(cb => {
             cb.checked = Array.isArray(espec.idade) ? espec.idade.includes(cb.value) : false;
         });
-        // Pet
-        document.querySelectorAll('input[name="spec-pet"]').forEach(cb => {
-            cb.checked = Array.isArray(espec.pet) ? espec.pet.includes(cb.value) : false;
+        // Tipo (usa especificacoes.tipo e fallback para o primeiro valor legado em especificacoes.pet)
+        const legacyPetType = Array.isArray(espec.pet) && espec.pet.length ? espec.pet[0] : '';
+        const selectedType = espec.tipo || legacyPetType || '';
+        document.querySelectorAll('input[name="spec-tipo"]').forEach(cb => {
+            cb.checked = cb.value === selectedType;
+        });
+        // Castrado
+        document.querySelectorAll('input[name="spec-castracao"]').forEach(cb => {
+            cb.checked = cb.value === (espec.castracao || '');
         });
         // Porte RaÃ§a
         document.querySelectorAll('input[name="spec-porte"]').forEach(cb => {
@@ -5464,12 +6092,25 @@
         applySelectedRuleToActiveCompany();
     });
 
+    const refreshCategoryTreeWithSearch = (term = '') => {
+        const currentSelectedIds = collectSelectedCategoryIdsFromTree();
+        const selectedIds = currentSelectedIds.length ? currentSelectedIds : productCategories;
+        populateCategoryTree(allHierarchicalCategories, selectedIds, { searchTerm: term });
+    };
+
     addCategoryBtn.addEventListener('click', () => {
-        populateCategoryTree(allHierarchicalCategories, productCategories);
+        if (categorySearchInput) {
+            categorySearchInput.value = '';
+        }
+        populateCategoryTree(allHierarchicalCategories, productCategories, { searchTerm: '' });
         categoryModal.classList.remove('hidden');
     });
     cancelCategoryModalBtn.addEventListener('click', () => categoryModal.classList.add('hidden'));
     closeCategoryModalBtn.addEventListener('click', () => categoryModal.classList.add('hidden'));
+
+    categorySearchInput?.addEventListener('input', () => {
+        refreshCategoryTreeWithSearch(categorySearchInput.value || '');
+    });
 
     const debounceSupplierSuggestions = (value, allowEmpty) => {
         if (supplierSearchDebounce) {
@@ -5899,6 +6540,15 @@
         event.preventDefault();
         if (!submitButton) return;
 
+        const submitter = event.submitter instanceof HTMLElement ? event.submitter : null;
+        const isExplicitSaveClick = submitter === submitButton
+            || (submitter && submitter.getAttribute('form') === 'edit-product-form');
+        const isImageInteractionWindowActive =
+            Date.now() - imageInputInteractionAt <= IMAGE_INPUT_SUBMIT_GUARD_MS;
+        if (imageUploadInProgress || (isImageInteractionWindowActive && !isExplicitSaveClick)) {
+            return;
+        }
+
         if (autoSaveTimeoutId) {
             clearTimeout(autoSaveTimeoutId);
             autoSaveTimeoutId = null;
@@ -5942,6 +6592,7 @@
         }
         let responseJson = null;
         let createdProductId = null;
+        let uploadedProductPayload = null;
 
         try {
             const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
@@ -5994,71 +6645,68 @@
             const files = imageUploadInput?.files || [];
             const targetProductId = isEditMode ? productId : createdProductId;
             if (files.length > 0) {
-                if (!targetProductId) {
-                    throw new Error('NÃ£o foi possÃ­vel identificar o produto para enviar as imagens.');
+                const uploadPayload = await uploadProductImages(targetProductId, Array.from(files), token);
+                if (uploadPayload && typeof uploadPayload === 'object') {
+                    uploadedProductPayload = uploadPayload;
                 }
-                const imageFormData = new FormData();
-                for (const file of files) {
-                    imageFormData.append('imagens', file);
-                }
-                const uploadResponse = await fetch(`${API_CONFIG.BASE_URL}/products/${targetProductId}/upload`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: imageFormData,
-                });
-                if (!uploadResponse.ok) throw new Error('Falha ao enviar as imagens.');
             }
 
             if (isEditMode) {
-                try {
-                    const productRes = await fetch(`${API_CONFIG.BASE_URL}/products/${productId}`);
-                    if (productRes.ok) {
-                        const updatedProduct = await productRes.json();
-                        populateForm(updatedProduct);
-                    }
-                } catch (e) {
-                    console.warn('NÃ£o foi possÃ­vel recarregar o produto apÃ³s salvar.', e);
-                }
-
-                showModal({
-                    title: 'Sucesso!',
-                    message: 'Produto atualizado com sucesso.',
-                    confirmText: 'OK'
-                });
-            } else {
-                if (createdProductId) {
-                    productId = createdProductId;
-                    isEditMode = true;
+                if (isFromNfeImport || isEmbeddedIframeContext) {
+                    const fallbackPayload =
+                        responseJson?.product && typeof responseJson.product === 'object'
+                            ? responseJson.product
+                            : responseJson;
+                    const payloadForVisualSync = uploadedProductPayload || fallbackPayload || null;
+                    applyEditModeAfterSaveWithoutReset(productId, payloadForVisualSync);
+                } else {
                     try {
                         const productRes = await fetch(`${API_CONFIG.BASE_URL}/products/${productId}`);
                         if (productRes.ok) {
-                            const createdProduct = await productRes.json();
-                            populateForm(createdProduct);
+                            const updatedProduct = await productRes.json();
+                            populateForm(updatedProduct);
                         }
                     } catch (e) {
-                        console.warn('NÃ£o foi possÃ­vel carregar o produto recÃ©m-criado.', e);
+                        console.warn('NÃ£o foi possÃ­vel recarregar o produto apÃ³s salvar.', e);
                     }
+                }
 
-                    try {
-                        const currentUrl = new URL(window.location.href);
-                        currentUrl.searchParams.set('id', productId);
-                        window.history.replaceState({}, '', currentUrl.toString());
-                    } catch (urlError) {
-                        console.warn('NÃ£o foi possÃ­vel atualizar a URL apÃ³s o cadastro do produto.', urlError);
+                showToastMessage('Produto salvo com sucesso.', 'success');
+            } else {
+                if (createdProductId) {
+                    if (isFromNfeImport || isEmbeddedIframeContext) {
+                        const fallbackPayload =
+                            responseJson?.product && typeof responseJson.product === 'object'
+                                ? responseJson.product
+                                : responseJson;
+                        const payloadForVisualSync = uploadedProductPayload || fallbackPayload || null;
+                        applyEditModeAfterSaveWithoutReset(createdProductId, payloadForVisualSync);
+                    } else {
+                        productId = createdProductId;
+                        isEditMode = true;
+                        try {
+                            const productRes = await fetch(`${API_CONFIG.BASE_URL}/products/${productId}`);
+                            if (productRes.ok) {
+                                const createdProduct = await productRes.json();
+                                populateForm(createdProduct);
+                            }
+                        } catch (e) {
+                            console.warn('NÃ£o foi possÃ­vel carregar o produto recÃ©m-criado.', e);
+                        }
+
+                        try {
+                            const currentUrl = new URL(window.location.href);
+                            currentUrl.searchParams.set('id', productId);
+                            window.history.replaceState({}, '', currentUrl.toString());
+                        } catch (urlError) {
+                            console.warn('NÃ£o foi possÃ­vel atualizar a URL apÃ³s o cadastro do produto.', urlError);
+                        }
                     }
                 } else {
                     console.warn('Produto criado, mas nenhum identificador foi retornado pela API.');
                 }
 
-                showModal({
-                    title: 'Sucesso!',
-                    message: createdProductId
-                        ? 'Produto cadastrado com sucesso. Continue preenchendo as demais informaÃ§Ãµes.'
-                        : 'Produto cadastrado com sucesso.',
-                    confirmText: 'OK'
-                });
+                showToastMessage('Produto salvo com sucesso.', 'success');
                 try {
                     if (typeof sessionStorage !== 'undefined') {
                         sessionStorage.removeItem(PRODUCT_DRAFT_STORAGE_KEY);

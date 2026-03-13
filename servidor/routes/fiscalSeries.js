@@ -6,6 +6,7 @@ const Store = require('../models/Store');
 const User = require('../models/User');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
+const { hasAdminMasterGlobalAccess } = require('../utils/adminMasterMode');
 
 const router = express.Router();
 
@@ -26,10 +27,13 @@ const normalizeAmbiente = (value) => {
   return '';
 };
 
-const resolveUserStoreAccess = async (userId) => {
+const resolveUserStoreAccess = async (req, userId) => {
   if (!userId) return { allowedStoreIds: [], allowAllStores: false };
   const user = await User.findById(userId).select('empresaPrincipal empresas role').lean();
   if (!user) return { allowedStoreIds: [], allowAllStores: false };
+  if (hasAdminMasterGlobalAccess(req, user)) {
+    return { allowedStoreIds: [], allowAllStores: true };
+  }
 
   const markedCompanies = Array.isArray(user.empresas)
     ? user.empresas
@@ -48,7 +52,7 @@ const resolveUserStoreAccess = async (userId) => {
         ? [String(user.empresaPrincipal)]
         : []);
 
-  const allowAllStores = user.role === 'admin_master' && allowedStoreIds.length === 0;
+  const allowAllStores = false;
 
   return { allowedStoreIds, allowAllStores };
 };
@@ -85,7 +89,7 @@ const getNextCodigo = async () => {
 
 router.get('/', requireAuth, authorizeRoles('admin', 'admin_master', 'funcionario'), async (req, res) => {
   try {
-    const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req.user?.id);
+    const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req, req.user?.id);
     if (!allowAllStores && (!Array.isArray(allowedStoreIds) || allowedStoreIds.length === 0)) {
       return res.json({ series: [] });
     }
@@ -136,7 +140,7 @@ router.get('/by-code/:codigo', requireAuth, authorizeRoles('admin', 'admin_maste
       return res.status(400).json({ message: 'Codigo invalido.' });
     }
 
-    const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req.user?.id);
+    const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req, req.user?.id);
     if (!allowAllStores && (!Array.isArray(allowedStoreIds) || allowedStoreIds.length === 0)) {
       return res.status(403).json({ message: 'Usuario sem empresas vinculadas.' });
     }
@@ -172,7 +176,7 @@ router.get('/by-code/:codigo', requireAuth, authorizeRoles('admin', 'admin_maste
 
 router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
   try {
-    const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req.user?.id);
+    const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req, req.user?.id);
     if (!allowAllStores && (!Array.isArray(allowedStoreIds) || allowedStoreIds.length === 0)) {
       return res.status(403).json({ message: 'Usuario sem empresas vinculadas.' });
     }
@@ -241,7 +245,7 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
 
 router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
   try {
-    const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req.user?.id);
+    const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req, req.user?.id);
     if (!allowAllStores && (!Array.isArray(allowedStoreIds) || allowedStoreIds.length === 0)) {
       return res.status(403).json({ message: 'Usuario sem empresas vinculadas.' });
     }

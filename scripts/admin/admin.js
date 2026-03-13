@@ -1,4 +1,111 @@
 // scripts/admin/admin.js
+const ADMIN_MASTER_MODE_KEY = 'eobicho-admin-master-active';
+let currentEffectiveRole = '';
+let currentOriginalRole = '';
+
+function isStoredAdminMasterModeActive() {
+  const value = localStorage.getItem(ADMIN_MASTER_MODE_KEY);
+  if (value === null) return true;
+  return value === '1';
+}
+
+function setStoredAdminMasterMode(active) {
+  localStorage.setItem(ADMIN_MASTER_MODE_KEY, active ? '1' : '0');
+}
+
+function ensureAdminMasterFetchHeaderPatch() {
+  if (window.__adminMasterFetchHeaderPatched) return;
+  const originalFetch = window.fetch.bind(window);
+
+  window.fetch = (resource, init = {}) => {
+    const url =
+      typeof resource === 'string'
+        ? resource
+        : resource && typeof resource === 'object' && typeof resource.url === 'string'
+        ? resource.url
+        : '';
+
+    const apiBase = typeof API_CONFIG !== 'undefined' && API_CONFIG?.BASE_URL ? API_CONFIG.BASE_URL : '/api';
+    const isApiCall =
+      (typeof url === 'string' && url.startsWith('/api/')) ||
+      (typeof url === 'string' && apiBase && url.startsWith(apiBase));
+
+    const shouldSendMode =
+      currentOriginalRole === 'admin_master' ||
+      (JSON.parse(localStorage.getItem('loggedInUser') || 'null')?.role === 'admin_master');
+
+    if (!isApiCall || !shouldSendMode) {
+      return originalFetch(resource, init);
+    }
+
+    const headers = new Headers(init?.headers || {});
+    headers.set('x-admin-master-active', isStoredAdminMasterModeActive() ? '1' : '0');
+
+    return originalFetch(resource, {
+      ...init,
+      headers,
+    });
+  };
+
+  window.__adminMasterFetchHeaderPatched = true;
+}
+
+function renderAdminMasterToggle() {
+  const slot = document.querySelector('[data-admin-master-toggle-slot]');
+  if (!slot) return;
+
+  if (currentOriginalRole !== 'admin_master') {
+    slot.classList.add('hidden');
+    slot.innerHTML = '';
+    return;
+  }
+
+  if (!localStorage.getItem(ADMIN_MASTER_MODE_KEY)) {
+    setStoredAdminMasterMode(true);
+  }
+
+  slot.classList.remove('hidden');
+  slot.innerHTML = `
+    <label class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-2 py-1 text-xs text-gray-600 select-none">
+      <span class="font-semibold">AdminMaster</span>
+      <button type="button" data-admin-master-mode-toggle class="relative inline-flex h-5 w-9 items-center rounded-full transition bg-gray-300" aria-pressed="false" aria-label="Alternar modo Admin Master">
+        <span data-admin-master-mode-thumb class="inline-block h-4 w-4 transform rounded-full bg-white transition translate-x-0.5"></span>
+      </button>
+      <span data-admin-master-mode-label class="text-[11px] font-semibold text-primary"></span>
+    </label>
+  `;
+
+  const toggle = slot.querySelector('[data-admin-master-mode-toggle]');
+  const thumb = slot.querySelector('[data-admin-master-mode-thumb]');
+  const label = slot.querySelector('[data-admin-master-mode-label]');
+
+  const applyVisualState = () => {
+    const active = isStoredAdminMasterModeActive();
+    toggle?.setAttribute('aria-pressed', active ? 'true' : 'false');
+    if (toggle) {
+      toggle.classList.toggle('bg-primary', active);
+      toggle.classList.toggle('bg-gray-300', !active);
+    }
+    if (thumb) {
+      thumb.classList.toggle('translate-x-4', active);
+      thumb.classList.toggle('translate-x-0.5', !active);
+    }
+    if (label) {
+      label.textContent = active ? 'Ativo' : '';
+    }
+  };
+
+  applyVisualState();
+
+  toggle?.addEventListener('click', () => {
+    const next = !isStoredAdminMasterModeActive();
+    setStoredAdminMasterMode(next);
+    applyVisualState();
+    window.location.reload();
+  });
+}
+
+ensureAdminMasterFetchHeaderPatch();
 async function checkAdminAccess() {
   // Esconde conteúdo até validar
   document.body.style.visibility = 'hidden';
@@ -28,6 +135,10 @@ async function checkAdminAccess() {
 
     const data = await resp.json();
     const role = data?.role;
+    currentEffectiveRole = role || '';
+    currentOriginalRole = data?.originalRole || role || '';
+    window.__ADMIN_ROLE = currentEffectiveRole;
+    window.__ADMIN_ORIGINAL_ROLE = currentOriginalRole;
 
     // Libera funcionarios, franqueado, franqueador, admin e admin_master
     const allowed = ['funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master'].includes(role);
@@ -40,9 +151,13 @@ async function checkAdminAccess() {
 
     // Ok, mostra a página
     document.body.style.visibility = 'visible';
+    renderAdminMasterToggle();
     initAdminScreenSecurity();
     consumeAdminToast();
     initAdminTableEnhancer();
+    window.dispatchEvent(new CustomEvent('admin:auth-checked', {
+      detail: { role: currentEffectiveRole, originalRole: currentOriginalRole },
+    }));
   } catch (err) {
     console.error('Erro ao verificar permissões:', err);
     alert('Erro ao verificar permissões. Faça login novamente.');
@@ -983,6 +1098,10 @@ function initAdminScreenSecurity() {
   enforceCurrentScreen();
 }
 
+document.addEventListener('components:ready', () => {
+  renderAdminMasterToggle();
+});
+
 // Garante que o body não pisca antes da validação
 document.body.style.visibility = 'hidden';
 
@@ -994,3 +1113,4 @@ if (typeof API_CONFIG !== 'undefined') {
   // mesmo assim tenta validar após um pequeno delay
   setTimeout(checkAdminAccess, 100);
 }
+

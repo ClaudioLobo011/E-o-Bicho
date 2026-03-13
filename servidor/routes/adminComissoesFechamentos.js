@@ -18,6 +18,7 @@ const AccountingAccount = require('../models/AccountingAccount');
 const BankAccount = require('../models/BankAccount');
 const AccountPayable = require('../models/AccountPayable');
 const ProfessionalCommissionConfig = require('../models/ProfessionalCommissionConfig');
+const { hasAdminMasterGlobalAccess } = require('../utils/adminMasterMode');
 
 const ADMIN_ROLES = ['admin', 'admin_master'];
 const DEFAULT_WINDOW_DAYS = 90;
@@ -189,10 +190,13 @@ const toEndOfDay = (value) => {
   return date;
 };
 
-const resolveUserStoreAccess = async (userId) => {
+const resolveUserStoreAccess = async (req, userId) => {
   if (!userId) return { allowedStoreIds: [], allowAllStores: false };
   const user = await User.findById(userId).select('empresaPrincipal empresas role').lean();
   if (!user) return { allowedStoreIds: [], allowAllStores: false };
+  if (hasAdminMasterGlobalAccess(req, user)) {
+    return { allowedStoreIds: [], allowAllStores: true };
+  }
 
   const allowedSet = new Set();
   if (user.empresaPrincipal && isValidObjectId(user.empresaPrincipal)) {
@@ -205,7 +209,7 @@ const resolveUserStoreAccess = async (userId) => {
   }
 
   const allowedStoreIds = Array.from(allowedSet);
-  const allowAllStores = user.role === 'admin_master' && allowedStoreIds.length === 0;
+  const allowAllStores = false;
 
   return { allowedStoreIds, allowAllStores };
 };
@@ -1375,7 +1379,7 @@ router.get(
   authorizeRoles(...ADMIN_ROLES),
   async (req, res) => {
     try {
-      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req.user?.id);
+      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req, req.user?.id);
       if (!allowAllStores && !allowedStoreIds.length) {
         return res.json([]);
       }
@@ -1407,7 +1411,7 @@ router.get(
     try {
       const requestedStoreId =
         req.query?.store && isValidObjectId(req.query.store) ? String(req.query.store) : null;
-      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req.user?.id);
+      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req, req.user?.id);
       const allowedStoreSet = new Set(allowedStoreIds);
       if (!allowAllStores && (!requestedStoreId || !allowedStoreSet.has(requestedStoreId))) {
         return res.status(403).json({ message: 'Empresa nao permitida para o usuario.' });
@@ -1470,7 +1474,7 @@ router.post(
       if (!storeId || !isValidObjectId(storeId)) {
         return res.status(400).json({ message: 'Informe a empresa.' });
       }
-      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req.user?.id);
+      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req, req.user?.id);
       const allowedStoreSet = new Set(allowedStoreIds);
       if (!allowAllStores && !allowedStoreSet.has(String(storeId))) {
         return res.status(403).json({ message: 'Empresa nao permitida para o usuario.' });
@@ -1543,7 +1547,7 @@ router.get(
     try {
       const requestedStoreId =
         req.query?.store && isValidObjectId(req.query.store) ? String(req.query.store) : null;
-      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req.user?.id);
+      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req, req.user?.id);
       const allowedStoreSet = new Set(allowedStoreIds);
 
       if (!allowAllStores && !allowedStoreSet.size) {
@@ -1804,7 +1808,7 @@ router.get(
 
       const requestedStoreId =
         req.query?.store && isValidObjectId(req.query.store) ? String(req.query.store) : null;
-      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req.user?.id);
+      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req, req.user?.id);
       const allowedStoreSet = new Set(allowedStoreIds.map(String));
 
       if (!allowAllStores && !allowedStoreSet.size) {
@@ -1874,7 +1878,7 @@ router.get(
       const requestedStoreId = req.query?.store && isValidObjectId(req.query.store)
         ? String(req.query.store)
         : null;
-      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req.user?.id);
+      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req, req.user?.id);
       const allowedStoreSet = new Set(allowedStoreIds);
 
       if (!allowAllStores && !allowedStoreSet.size) {
@@ -2021,7 +2025,7 @@ router.get(
       }
 
       const requestedStoreId = normalizeObjectId(closing.store?._id || closing.store);
-      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req.user?.id);
+      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req, req.user?.id);
       const allowedStoreSet = new Set(allowedStoreIds.map(String));
       if (!allowAllStores && (!requestedStoreId || !allowedStoreSet.has(requestedStoreId))) {
         return res.status(403).json({ message: 'Empresa nao permitida para o usuario.' });
@@ -2137,7 +2141,7 @@ router.post(
         return res.status(400).json({ message: 'Profissional obrigatorio.' });
       }
       const requestedStoreId = storeId && isValidObjectId(storeId) ? String(storeId) : null;
-      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req.user?.id);
+      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req, req.user?.id);
       const allowedStoreSet = new Set(allowedStoreIds);
       if (!allowAllStores && !allowedStoreSet.size) {
         return res.status(403).json({ message: 'Nenhuma empresa permitida para o usuario.' });
@@ -2374,7 +2378,7 @@ router.delete(
       const closing = await CommissionClosing.findById(id);
       if (!closing) return res.status(404).json({ message: 'Fechamento nao encontrado.' });
 
-      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req.user?.id);
+      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req, req.user?.id);
       const allowedStoreSet = new Set(allowedStoreIds.map((v) => String(v)));
       if (!allowAllStores && allowedStoreSet.size) {
         const closingStore = closing.store ? String(closing.store) : null;
@@ -2403,4 +2407,5 @@ router.delete(
 );
 
 module.exports = router;
+
 

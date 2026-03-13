@@ -1,4 +1,4 @@
-var basePath = basePath || '';
+﻿var basePath = basePath || '';
 
 function normalizeProductImageUrl(rawUrl) {
   const placeholder = `${API_CONFIG.SERVER_URL}/image/placeholder.svg`;
@@ -50,7 +50,7 @@ async function loadComponents() {
                 }
 
                 if (id === 'cart-placeholder') {
-                    initializeCart(); // A função agora é chamada aqui!
+                    initializeCart(); // A funÃ§Ã£o agora Ã© chamada aqui!
                 }
                 
                 if (id === 'admin-sidebar-placeholder') {
@@ -266,13 +266,13 @@ function initFuncionarioVetHoverMenu() {
 
   // Itens do menu
   const ITEMS = [
-    { label: 'Ficha Clínica', icon: 'fas fa-notes-medical', href: '/pages/funcionarios/vet-ficha-clinica.html', status: 'Em breve' },
+    { label: 'Ficha ClÃ­nica', icon: 'fas fa-notes-medical', href: '/pages/funcionarios/vet-ficha-clinica.html', status: 'Em breve' },
     { label: 'Documentos',    icon: 'fas fa-file-medical', href: '/pages/funcionarios/vet-documentos.html',    status: '' },
     { label: 'Receitas',      icon: 'fas fa-prescription-bottle-medical', href: '/pages/funcionarios/vet-receitas.html', status: '' },
     { label: 'Assinatura',    icon: 'fas fa-signature',     href: '/pages/funcionarios/vet-assinatura.html',   status: 'Em breve' },
   ];
 
-  // Painel flutuante (fora do nav) — mesmo padrão visual do admin
+  // Painel flutuante (fora do nav) â€” mesmo padrÃ£o visual do admin
   let panel = document.getElementById('func-hover-panel');
   if (!panel) {
     panel = document.createElement('div');
@@ -281,7 +281,7 @@ function initFuncionarioVetHoverMenu() {
     panel.innerHTML = `
       <div class="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
         <i class="fas fa-stethoscope text-primary"></i>
-        <h3 class="font-semibold text-gray-800">Veterinário</h3>
+        <h3 class="font-semibold text-gray-800">VeterinÃ¡rio</h3>
       </div>
       <div class="p-2 space-y-1" data-list></div>
     `;
@@ -313,7 +313,7 @@ function initFuncionarioVetHoverMenu() {
 
   const showPanel = () => {
     const r = trigger.getBoundingClientRect();
-    // posiciona logo abaixo e alinhado à esquerda do botão
+    // posiciona logo abaixo e alinhado Ã  esquerda do botÃ£o
     panel.style.left = `${Math.max(8, Math.min(window.innerWidth - 336, r.left))}px`;
     panel.style.top  = `${r.bottom + 6}px`;
     panel.classList.remove('opacity-0','pointer-events-none','translate-y-2');
@@ -322,7 +322,7 @@ function initFuncionarioVetHoverMenu() {
     panel.classList.add('opacity-0','pointer-events-none','translate-y-2');
   };
 
-  // Interações (hover/click)
+  // InteraÃ§Ãµes (hover/click)
   trigger.addEventListener('mouseenter', () => {
     if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
     showPanel();
@@ -345,7 +345,7 @@ function initFuncionarioVetHoverMenu() {
     if (!panel.contains(e.target) && !trigger.contains(e.target)) hidePanel();
   });
 
-  // Deixa o botão ativo (verde) se estiver em alguma página vet-*
+  // Deixa o botÃ£o ativo (verde) se estiver em alguma pÃ¡gina vet-*
   const path = window.location.pathname;
   const isVetInner = /\/pages\/funcionarios\/vet-(ficha-clinica|documentos|receitas|assinatura)\.html$/.test(path);
   if (isVetInner) {
@@ -388,7 +388,7 @@ async function initializeHeaderScripts() {
         mobileMenuButton.addEventListener('click', () => menu.classList.toggle('hidden'));
     }
 
-    // Alinhar o popover do telefone à mesma posição do popover de usuário
+    // Alinhar o popover do telefone Ã  mesma posiÃ§Ã£o do popover de usuÃ¡rio
     try {
         const phoneTrigger = document.getElementById('phone-menu-trigger');
         const phonePanel = document.getElementById('phone-menu-panel');
@@ -483,7 +483,7 @@ function setupSiteMainSpacing() {
     }
 }
 
-// Busca do topo (auto-complete + sugestões)
+// Busca do topo (auto-complete + sugestÃµes)
 function initializeHeaderSearch() {
   const input = document.getElementById('top-search');
   const btn = document.getElementById('top-search-btn');
@@ -543,7 +543,7 @@ function initializeHeaderSearch() {
       <div class="mt-2 border-t">
         <div class="p-3 bg-gray-50 font-semibold text-gray-700">Produtos sugeridos</div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3">
-          ${productCards || '<p class="col-span-full text-sm text-gray-500">Nenhum produto disponível.</p>'}
+          ${productCards || '<p class="col-span-full text-sm text-gray-500">Nenhum produto disponÃ­vel.</p>'}
         </div>
       </div>`;
     panel.classList.remove('hidden');
@@ -730,7 +730,7 @@ function initializeAdminHeaderSearch() {
   const renderMatches = () => {
     list.innerHTML = matches
       .map((screen, index) => {
-        const breadcrumb = screen.groups.length ? `<span class="text-xs text-gray-500">${screen.groups.join(' • ')}</span>` : '';
+        const breadcrumb = screen.groups.length ? `<span class="text-xs text-gray-500">${screen.groups.join(' â€¢ ')}</span>` : '';
         return `
           <li>
             <a href="${screen.href}" data-index="${index}" class="flex w-full flex-col gap-1 rounded-lg px-3 py-2 text-sm text-gray-800 transition focus:outline-none focus:ring-0 hover:bg-primary/10">
@@ -842,7 +842,7 @@ const getBannerDisplaySettings = () => {
     try {
         return JSON.parse(localStorage.getItem(BANNER_SETTINGS_KEY)) || {};
     } catch (error) {
-        console.warn('Não foi possível ler ajustes de banner salvos localmente.', error);
+        console.warn('NÃ£o foi possÃ­vel ler ajustes de banner salvos localmente.', error);
         return {};
     }
 };
@@ -880,7 +880,7 @@ async function initializeCarousel() {
     let bannerAspectRatio = null;
 
     if (!carouselContainer || !prevButton || !nextButton) {
-        console.warn('Elementos essenciais do carrossel (container, botões) não encontrados.');
+        console.warn('Elementos essenciais do carrossel (container, botÃµes) nÃ£o encontrados.');
         return;
     }
 
@@ -938,8 +938,8 @@ async function initializeCarousel() {
 
     } catch (error) {
         console.error("Erro ao carregar banners para o carrossel:", error);
-        carouselContainer.innerHTML = '<p class="text-center text-white font-semibold">Não foi possível carregar os banners no momento.</p>';
-        return; // Interrompe a execução se não conseguir carregar os banners
+        carouselContainer.innerHTML = '<p class="text-center text-white font-semibold">NÃ£o foi possÃ­vel carregar os banners no momento.</p>';
+        return; // Interrompe a execuÃ§Ã£o se nÃ£o conseguir carregar os banners
     }
 
     const updateHeightOnResize = () => {
@@ -958,7 +958,7 @@ async function initializeCarousel() {
 
     const slides = Array.from(carousel.querySelectorAll('.slide'));
 
-    // Se não houver slides após o carregamento, não faz nada
+    // Se nÃ£o houver slides apÃ³s o carregamento, nÃ£o faz nada
     if (slides.length === 0) {
         prevButton.style.display = 'none';
         nextButton.style.display = 'none';
@@ -967,7 +967,7 @@ async function initializeCarousel() {
     }
 
     const N = slides.length;
-    let currentIndex = 0; // Começa do primeiro slide
+    let currentIndex = 0; // ComeÃ§a do primeiro slide
     let autoPlayInterval;
     const AUTO_PLAY_INTERVAL = 5000;
 
@@ -991,15 +991,15 @@ async function initializeCarousel() {
         
         // Atualiza os indicadores (as barras de progresso)
         indicators.forEach((indicator, i) => {
-            if (i < N) { // Garante que só tentamos manipular indicadores que existem
+            if (i < N) { // Garante que sÃ³ tentamos manipular indicadores que existem
                 const progressBar = indicator.querySelector('.progress');
                 const barBg = indicator.querySelector('.bar-bg');
                 const dot = indicator.querySelector('.dot');
-                indicator.style.display = 'flex'; // Garante que o indicador é visível
+                indicator.style.display = 'flex'; // Garante que o indicador Ã© visÃ­vel
                 const isActive = i === currentIndex;
                 indicator.classList.toggle('active', isActive);
 
-                // Controle explícito de visibilidade para evitar interferência do SVG
+                // Controle explÃ­cito de visibilidade para evitar interferÃªncia do SVG
                 if (dot) {
                     dot.style.display = isActive ? 'none' : 'block';
                     try { dot.setAttribute('r', isActive ? '0' : '4'); } catch(_) {}
@@ -1009,7 +1009,7 @@ async function initializeCarousel() {
                     progressBar.style.display = isActive ? 'block' : 'none';
                     progressBar.style.animation = 'none';
                     if (isActive) {
-                        void progressBar.offsetWidth; // Reinicia a animação
+                        void progressBar.offsetWidth; // Reinicia a animaÃ§Ã£o
                         progressBar.style.animation = `fillIndicator ${AUTO_PLAY_INTERVAL / 1000}s linear forwards`;
                     }
                 }
@@ -1086,7 +1086,7 @@ function checkLoginState() {
         loggedOutView.classList.add('hidden');
         loggedInView.classList.remove('hidden');
         userAreaLink.href = `${basePath}pages/meus-dados.html`;
-        // Ajusta visual do topo: azul + ícone + ponto final
+        // Ajusta visual do topo: azul + Ã­cone + ponto final
         try {
           loggedInView.classList.remove('text-gray-700');
           ['flex','items-center','gap-2','text-primary','cursor-pointer'].forEach(c => loggedInView.classList.add(c));
@@ -1106,11 +1106,11 @@ function checkLoginState() {
         } catch(_) {}
         if (userGreeting) userGreeting.textContent = loggedInUser.nome.split(' ')[0];
 
-        // reaproveita lógica de sair existente
+        // reaproveita lÃ³gica de sair existente
         logoutBtn.classList.remove('hidden');
         logoutBtn.onclick = () => {
             showModal({
-                title: 'Confirmar Saída',
+                title: 'Confirmar SaÃ­da',
                 message: 'Tem a certeza que deseja sair da sua conta?',
                 confirmText: 'Sair',
                 cancelText: 'Cancelar',
@@ -1128,7 +1128,7 @@ function checkLoginState() {
             userMenuPanel.classList.remove('hidden');
             userMenuPanel.classList.add('peer-hover:block','hover:block');
         }
-        // oculta botão circular antigo, se existir
+        // oculta botÃ£o circular antigo, se existir
         const oldBtn = document.getElementById('user-menu-trigger');
         if (oldBtn) { oldBtn.style.display = 'none'; oldBtn.setAttribute('aria-hidden','true'); }
         if (userMenuLogout && logoutBtn) {
@@ -1141,7 +1141,7 @@ function checkLoginState() {
         logoutBtn.classList.add('hidden');
         userAreaLink.href = `${basePath}pages/login.html`;
 
-        // desabilita popover quando deslogado (não deve aparecer)
+        // desabilita popover quando deslogado (nÃ£o deve aparecer)
         if (userMenuPanel) {
             userMenuPanel.classList.add('hidden');
             userMenuPanel.classList.remove('peer-hover:block','hover:block');
@@ -1237,14 +1237,14 @@ async function loadFeaturedProducts() {
     const prevButton = document.getElementById('prev-featured-btn');
     const nextButton = document.getElementById('next-featured-btn');
 
-    // Se os elementos do slider não existirem na página, a função para.
+    // Se os elementos do slider nÃ£o existirem na pÃ¡gina, a funÃ§Ã£o para.
     if (!container || !wrapper || !prevButton || !nextButton) {
         return;
     }
 
     try {
         const response = await fetch(`${API_CONFIG.BASE_URL}/products/destaques`);
-        if (!response.ok) throw new Error('Não foi possível buscar os produtos em destaque.');
+        if (!response.ok) throw new Error('NÃ£o foi possÃ­vel buscar os produtos em destaque.');
         
         const products = await response.json();
 
@@ -1256,7 +1256,7 @@ async function loadFeaturedProducts() {
         container.innerHTML = ''; 
 
         products.forEach(product => {
-            // A lógica de preços que já definimos continua igual
+            // A lÃ³gica de preÃ§os que jÃ¡ definimos continua igual
             let priceHtml = '';
             if (product.promocao && product.promocao.ativa && product.promocao.porcentagem > 0) {
                 const discountedPrice = product.venda * (1 - product.promocao.porcentagem / 100);
@@ -1298,7 +1298,7 @@ async function loadFeaturedProducts() {
                 priceHtml = `<span class="block text-lg font-bold text-gray-950">R$ ${product.venda.toFixed(2).replace('.', ',')}</span>`;
             }
 
-            // Criação do card completo do produto
+            // CriaÃ§Ã£o do card completo do produto
             const productCard = `
                 <a href="${basePath}pages/menu-departments-item/product.html?id=${product._id}" class="relative block bg-white rounded-lg shadow product-card transition duration-300 group overflow-hidden w-60 sm:w-64 flex-shrink-0">
                     
@@ -1334,14 +1334,14 @@ async function loadFeaturedProducts() {
                 event.preventDefault();
                 const productId = cartButton.dataset.productId;
                 await CartManager.addItem(productId);
-                // Notificação leve (não bloqueia a navegação)
+                // NotificaÃ§Ã£o leve (nÃ£o bloqueia a navegaÃ§Ã£o)
                 if (typeof showToast === 'function') {
-                showToast('Produto adicionado à sacola.', 'success');
+                showToast('Produto adicionado Ã  sacola.', 'success');
                 }
             }
         });
 
-        // Lógica de navegação do slider
+        // LÃ³gica de navegaÃ§Ã£o do slider
         let currentIndex = 0;
         const totalItems = products.length;
         const updateSlider = () => {
@@ -1402,35 +1402,35 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadIcons();
     }
 
-    // Inicializador de páginas específicas
+    // Inicializador de pÃ¡ginas especÃ­ficas
     const path = window.location.pathname;
 
-    // ----> Lógica para a página inicial
+    // ----> LÃ³gica para a pÃ¡gina inicial
     if (path.endsWith('/') || path.endsWith('index.html')) {
         initializeCarousel();
         loadFeaturedProducts();
     }
 
-    // ----> Lógica para as páginas de admin
+    // ----> LÃ³gica para as pÃ¡ginas de admin
     if (path.includes('/admin/')) {
         if (path.endsWith('admin-destaques.html')) {
             if (typeof initializeAdminDestaquesPage === 'function') initializeAdminDestaquesPage();
         }
     }
     
-    // ----> Lógica para as páginas de conta do utilizador
+    // ----> LÃ³gica para as pÃ¡ginas de conta do utilizador
     if (path.endsWith('meus-dados.html')) {
         if (typeof initializeAccountPage === 'function') initializeAccountPage();
     }
     
-    // ----> Lógica para as páginas de autenticação (Login e Cadastro)
+    // ----> LÃ³gica para as pÃ¡ginas de autenticaÃ§Ã£o (Login e Cadastro)
     if (path.endsWith('login.html') || path.endsWith('cadastro.html')) {
         if (typeof initializeAuth === 'function') {
             initializeAuth();
         }
     }
 
-    // Dog Icon Hover Effect (força a transição toda vez)
+    // Dog Icon Hover Effect (forÃ§a a transiÃ§Ã£o toda vez)
     const dogLink = document.querySelector('a[href*="Cachorro"]');
     const dogIcon = dogLink?.querySelector('.dog-anim');
 

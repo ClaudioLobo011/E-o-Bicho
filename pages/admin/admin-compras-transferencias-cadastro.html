@@ -225,10 +225,18 @@
                   </article>
                 </div>
                 <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-                  <div class="w-full md:max-w-xs">
+                  <div class="w-fit">
                     <label for="transfer-selected-product-quantity" class="block text-sm font-medium text-gray-700 mb-1">Quantidade para transferir</label>
-                    <input type="number" id="transfer-selected-product-quantity" min="1" step="1" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="1">
-                    <p id="transfer-selected-product-warning" class="mt-1 hidden text-xs text-amber-600">Selecione os depósitos de origem e destino para visualizar os saldos.</p>
+                    <div class="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-1 py-1">
+                      <button type="button" id="transfer-selected-product-minus" class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 text-gray-600 transition hover:bg-gray-50" aria-label="Diminuir quantidade">
+                        <i class="fas fa-minus text-xs"></i>
+                      </button>
+                      <input type="text" id="transfer-selected-product-quantity" inputmode="decimal" class="h-8 w-28 rounded-md border border-gray-200 px-2 text-center text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="1,000" autocomplete="off">
+                      <button type="button" id="transfer-selected-product-plus" class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 text-gray-600 transition hover:bg-gray-50" aria-label="Aumentar quantidade">
+                        <i class="fas fa-plus text-xs"></i>
+                      </button>
+                    </div>
+                    <p id="transfer-selected-product-warning" class="mt-1 hidden text-xs text-amber-600">Selecione os dep&oacute;sitos de origem e destino para visualizar os saldos.</p>
                   </div>
                   <button type="button" id="transfer-selected-product-add" class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90">
                     <i class="fas fa-plus-circle"></i>
@@ -460,6 +468,7 @@
   <script src="../../scripts/core/ui.js"></script>
   <script src="../../scripts/core/main.js"></script>
   <script src="../../scripts/admin/admin.js"></script>
+  <script src="https://unpkg.com/imask"></script>
   <script src="../../scripts/admin/admin-compras-transferencias-cadastro.js"></script>
 </body>
 </html>

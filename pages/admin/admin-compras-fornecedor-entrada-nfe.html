@@ -1208,7 +1208,7 @@
           </p>
         </div>
 
-        <div class="flex-1 overflow-y-auto px-4 py-4">
+        <div class="min-h-0 flex-1 overflow-y-auto px-4 pt-4 pb-24">
           <div class="overflow-x-auto rounded-lg border border-gray-200">
             <table class="min-w-full divide-y divide-gray-200 text-sm">
               <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-600">
@@ -1768,7 +1768,7 @@
   <div id="import-xml-modal" class="fixed inset-0 z-[999] hidden">
     <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-import-modal></div>
     <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
-      <div data-import-modal-card class="relative flex w-full max-w-[1352px] transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl opacity-0 transition-all duration-200 ease-out scale-95 max-h-[90vh] min-h-0 text-[12px] leading-[1.35]">
+      <div data-import-modal-card class="relative flex w-full max-w-[1352px] transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl opacity-0 transition-all duration-200 ease-out scale-95 min-h-0 text-[12px] leading-[1.35]" style="height:min(90vh,calc(100vh - 3rem));">
         <header class="flex flex-col gap-2.5 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <span class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
@@ -1789,7 +1789,7 @@
           <button type="button" data-import-tab="xml" class="import-tab-button">Importar XML</button>
         </nav>
 
-        <div class="flex-1 overflow-y-auto px-4 py-4">
+        <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
           <div data-import-tab-panel="pending" class="space-y-3.5">
             <section class="rounded-xl border border-gray-200 bg-white shadow-sm">
               <header class="flex flex-col gap-1.5 border-b border-gray-100 bg-gray-50 px-4 py-3">
@@ -2012,20 +2012,24 @@
                 <div class="space-y-1.5">
                   <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-600">Ações rápidas</label>
                   <div class="grid grid-cols-1 gap-1.5 text-[10px] font-medium text-gray-600 sm:grid-cols-2">
-                    <label class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-1.5 transition hover:border-primary/40 hover:text-primary">
+                    <label class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-1.5 transition hover:border-primary/40 hover:text-primary" data-quick-action-normal>
                       <input type="checkbox" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/40" checked>
                       Importar automaticamente produtos novos
                     </label>
-                    <label class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-1.5 transition hover:border-primary/40 hover:text-primary">
+                    <label class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-1.5 transition hover:border-primary/40 hover:text-primary" data-quick-action-normal>
                       <input type="checkbox" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/40" checked>
                       Atualizar preços de compra existentes
+                    </label>
+                    <label class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-1.5 transition hover:border-primary/40 hover:text-primary sm:col-span-2" data-quick-action-bonus-dilution style="display:none;">
+                      <input type="checkbox" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/40" data-bonus-dilution-checkbox>
+                      Diluir em mais de um produto
                     </label>
                   </div>
                 </div>
                 <div class="lg:col-span-3 grid grid-cols-1 gap-1.5 pt-1 md:grid-cols-2 xl:grid-cols-3" data-import-supplier-insights>
-                  <div data-file-feedback class="hidden h-full rounded-lg border px-3 py-2 text-[10px] font-medium leading-snug"></div>
                   <div data-import-supplier-status class="hidden h-full rounded-lg border px-3 py-2 text-[10px] text-gray-600 space-y-1.5 sm:space-y-0">
-                    <div class="flex items-start gap-1.5">
+                    <div data-file-feedback class="hidden rounded-md px-2 py-1.5 text-[10px] font-medium leading-snug"></div>
+                    <div data-supplier-status-main class="flex items-start gap-1.5">
                       <i data-supplier-status-icon class="fas fa-circle-info mt-0.5 text-[12px]"></i>
                       <div class="space-y-0.5">
                         <p data-supplier-message class="text-[11px] font-semibold text-gray-700 leading-snug"></p>
@@ -2054,6 +2058,18 @@
                         <dd data-supplier-summary-contact class="text-gray-700 leading-snug"></dd>
                       </div>
                     </dl>
+                  </div>
+                  <div data-import-validation-box class="h-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[10px] text-gray-600 space-y-1.5">
+                    <p class="text-[11px] font-semibold text-gray-700 leading-snug">Anotações rápidas</p>
+                    <label for="import-tags-input" class="sr-only">Adicionar anotação</label>
+                    <input
+                      id="import-tags-input"
+                      data-import-tags-input
+                      type="text"
+                      class="w-full rounded-md border border-gray-200 px-2 py-1 text-[10px] focus:border-primary focus:ring-2 focus:ring-primary/20"
+                      placeholder="Digite e pressione Enter"
+                    >
+                    <div data-import-tags-list class="flex flex-wrap gap-1"></div>
                   </div>
                 </div>
               </div>
@@ -2165,6 +2181,22 @@
                   </span>
                   <button
                     type="button"
+                    class="inline-flex items-center gap-1 rounded-full border border-gray-200 px-2 py-0.5 text-[10px] font-semibold text-gray-700 transition hover:border-primary/40 hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
+                    data-verify-import-factors
+                  >
+                    <i class="fas fa-magnifying-glass text-[11px]" data-verify-import-factors-icon></i>
+                    Verificar fator
+                  </button>
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 transition hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                    data-save-import-factors
+                  >
+                    <i class="fas fa-floppy-disk text-[11px]" data-save-import-factors-icon></i>
+                    Salvar fator
+                  </button>
+                  <button
+                    type="button"
                     class="inline-flex items-center gap-1 rounded-full border border-primary px-2 py-0.5 text-[10px] font-semibold text-primary transition hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
                     data-refresh-import-products
                   >
@@ -2185,7 +2217,8 @@
               </div>
             </section>
           </div>
-          <footer class="flex flex-col gap-3 border-t border-gray-100 bg-gray-50 px-5 py-3 sm:flex-row sm:items-center sm:justify-end">
+        </div>
+          <footer class="z-30 shrink-0 flex flex-col gap-3 border-t border-gray-200 bg-white/95 px-5 py-3 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-end">
             <div class="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row sm:items-center">
               <button type="button" data-close-import-modal class="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100">Cancelar</button>
               <button
@@ -2370,6 +2403,111 @@
     </div>
   </div>
 
+  <div id="bonus-dilution-modal" class="fixed inset-0 hidden" aria-hidden="true" style="z-index:1300;">
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-bonus-dilution-modal></div>
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
+      <div
+        data-bonus-dilution-card
+        class="relative flex w-full max-w-[1200px] transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl transition-all duration-200 ease-out"
+        style="z-index:1301;height:min(86vh,calc(100vh - 4rem));"
+      >
+        <header class="flex items-start justify-between gap-3 border-b border-gray-100 px-5 py-4">
+          <div class="space-y-1">
+            <h3 class="text-lg font-semibold text-gray-900">Diluir em mais de um produto</h3>
+            <p class="text-[11px] text-gray-600">
+              Selecione múltiplos produtos da nota original e múltiplos itens da bonificação.
+            </p>
+          </div>
+          <button
+            type="button"
+            class="inline-flex items-center justify-center rounded-full border border-gray-200 p-2 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700"
+            data-close-bonus-dilution-modal
+            aria-label="Fechar diluição de bonificação"
+          >
+            <i class="fas fa-times"></i>
+          </button>
+        </header>
+
+        <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+          <div class="grid gap-4" style="grid-template-columns:minmax(320px,34%) minmax(0,1fr);">
+            <section class="min-w-0 rounded-xl border border-gray-200">
+              <header class="flex items-center justify-between gap-2 border-b border-gray-100 bg-gray-50 px-3 py-2">
+                <div class="flex items-center gap-2">
+                  <h4 class="text-[12px] font-semibold text-gray-800">Produtos da nota de bonificação</h4>
+                  <div class="flex flex-wrap items-center gap-1" data-bonus-dilution-groups></div>
+                  <button
+                    type="button"
+                    class="inline-flex h-5 w-5 items-center justify-center rounded border border-primary/30 bg-white text-[10px] font-semibold text-primary transition hover:bg-primary/10"
+                    data-bonus-dilution-add-group
+                    title="Criar grupo com os produtos selecionados"
+                    aria-label="Criar grupo"
+                  >
+                    +
+                  </button>
+                </div>
+                <span class="text-[10px] text-gray-600" data-bonus-dilution-bonus-count>0 selecionado(s)</span>
+              </header>
+              <div class="overflow-auto p-3" style="max-height:44vh;">
+                <div class="grid grid-cols-1 gap-2" data-bonus-dilution-bonus-body></div>
+              </div>
+            </section>
+
+            <section class="min-w-0 rounded-xl border border-gray-200">
+              <header class="flex items-center justify-between gap-2 border-b border-gray-100 bg-gray-50 px-3 py-2">
+                <h4 class="text-[12px] font-semibold text-gray-800">Produtos da nota original</h4>
+                <span class="text-[10px] text-gray-600" data-bonus-dilution-original-count>0 selecionado(s)</span>
+              </header>
+              <div class="overflow-auto" style="max-height:44vh;">
+                <table class="min-w-full table-auto divide-y divide-gray-200 text-[11px]">
+                  <thead class="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-600">
+                    <tr>
+                      <th class="px-3 py-2 text-center font-semibold w-10">
+                        <input
+                          type="checkbox"
+                          class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/40"
+                          data-bonus-dilution-original-check-all
+                          aria-label="Selecionar todos os produtos da nota original"
+                        >
+                      </th>
+                      <th class="px-3 py-2 text-left font-semibold">Cod</th>
+                      <th class="px-3 py-2 text-left font-semibold">Nome</th>
+                      <th class="px-3 py-2 text-right font-semibold">Qtd</th>
+                      <th class="px-3 py-2 text-right font-semibold">Custo</th>
+                      <th class="px-3 py-2 text-right font-semibold">Desconto %</th>
+                      <th class="px-3 py-2 text-right font-semibold">Custo novo</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-100 bg-white" data-bonus-dilution-original-body></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <footer class="z-10 shrink-0 flex flex-col gap-2 border-t border-gray-100 bg-gray-50 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p class="text-[11px] text-gray-600" data-bonus-dilution-summary>Nenhuma seleção feita.</p>
+          <div class="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+            <button
+              type="button"
+              class="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100"
+              data-close-bonus-dilution-modal
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              class="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90"
+              data-apply-bonus-dilution
+            >
+              <i class="fas fa-check"></i>
+              Aplicar seleção
+            </button>
+          </div>
+        </footer>
+      </div>
+    </div>
+  </div>
+
   <div id="admin-footer-placeholder"></div>
 
   <script>var basePath = '../../';</script>
@@ -2485,6 +2623,23 @@
         const importTabPanels = importModal.querySelectorAll('[data-import-tab-panel]');
         const importModeRadios = importModal.querySelectorAll('input[name="import-mode"]');
         const importModePanels = importModal.querySelectorAll('[data-import-mode-panel]');
+        const importQuickActionNormalItems = importModal.querySelectorAll('[data-quick-action-normal]');
+        const importQuickActionBonusDilution = importModal.querySelector('[data-quick-action-bonus-dilution]');
+        const bonusDilutionCheckbox = importModal.querySelector('[data-bonus-dilution-checkbox]');
+        const bonusDilutionModal = document.getElementById('bonus-dilution-modal');
+        const bonusDilutionCard = bonusDilutionModal?.querySelector('[data-bonus-dilution-card]') || null;
+        const bonusDilutionCloseTriggers = bonusDilutionModal
+          ? bonusDilutionModal.querySelectorAll('[data-close-bonus-dilution-modal]')
+          : [];
+        const bonusDilutionOriginalBody = bonusDilutionModal?.querySelector('[data-bonus-dilution-original-body]') || null;
+        const bonusDilutionOriginalCheckAll = bonusDilutionModal?.querySelector('[data-bonus-dilution-original-check-all]') || null;
+        const bonusDilutionBonusBody = bonusDilutionModal?.querySelector('[data-bonus-dilution-bonus-body]') || null;
+        const bonusDilutionOriginalCount = bonusDilutionModal?.querySelector('[data-bonus-dilution-original-count]') || null;
+        const bonusDilutionBonusCount = bonusDilutionModal?.querySelector('[data-bonus-dilution-bonus-count]') || null;
+        const bonusDilutionSummary = bonusDilutionModal?.querySelector('[data-bonus-dilution-summary]') || null;
+        const bonusDilutionApplyButton = bonusDilutionModal?.querySelector('[data-apply-bonus-dilution]') || null;
+        const bonusDilutionGroups = bonusDilutionModal?.querySelector('[data-bonus-dilution-groups]') || null;
+        const bonusDilutionAddGroupButton = bonusDilutionModal?.querySelector('[data-bonus-dilution-add-group]') || null;
         const pendingCompanySelect = importModal.querySelector('[data-pending-company]') || null;
         const pendingPeriodStartInput = importModal.querySelector('[data-pending-period-start]') || null;
         const pendingPeriodEndInput = importModal.querySelector('[data-pending-period-end]') || null;
@@ -2512,6 +2667,9 @@
         const importSupplierDescription = importSupplierStatus
           ? importSupplierStatus.querySelector('[data-supplier-description]')
           : null;
+        const importSupplierMain = importSupplierStatus
+          ? importSupplierStatus.querySelector('[data-supplier-status-main]')
+          : null;
         const importSupplierActions = importSupplierStatus
           ? importSupplierStatus.querySelector('[data-supplier-actions]')
           : null;
@@ -2534,6 +2692,8 @@
         const importSupplierSummaryContact = importSupplierSummary
           ? importSupplierSummary.querySelector('[data-supplier-summary-contact]')
           : null;
+        const importTagsInput = importModal.querySelector('[data-import-tags-input]');
+        const importTagsList = importModal.querySelector('[data-import-tags-list]');
         const importSummaryEmitenteName = importModal.querySelector('[data-import-emitente-nome]');
         const importSummaryEmitenteDocument = importModal.querySelector('[data-import-emitente-document]');
         const importSummaryAccessKey = importModal.querySelector('[data-import-access-key]');
@@ -2551,6 +2711,14 @@
         const importXmlValidationBadge = importModal.querySelector('[data-import-xml-validation]');
         const importXmlValidationText = importModal.querySelector('[data-import-xml-validation-text]');
         const importXmlValidationIcon = importModal.querySelector('[data-import-xml-validation-icon]');
+        const verifyImportFactorsButton = importModal.querySelector('[data-verify-import-factors]');
+        const verifyImportFactorsIcon = verifyImportFactorsButton
+          ? verifyImportFactorsButton.querySelector('[data-verify-import-factors-icon]')
+          : null;
+        const saveImportFactorsButton = importModal.querySelector('[data-save-import-factors]');
+        const saveImportFactorsIcon = saveImportFactorsButton
+          ? saveImportFactorsButton.querySelector('[data-save-import-factors-icon]')
+          : null;
         const refreshImportedProductsButton = importModal.querySelector('[data-refresh-import-products]');
         const refreshImportedProductsIcon = refreshImportedProductsButton
           ? refreshImportedProductsButton.querySelector('[data-refresh-import-products-icon]')
@@ -2676,8 +2844,10 @@
         const priceUpdateButtonIcon = priceUpdateButton?.querySelector('[data-price-update-icon]') || priceUpdateButton?.querySelector('i') || null;
         const priceUpdateButtonText = priceUpdateButton?.querySelector('[data-price-update-text]') || null;
         const priceFilterInputs = new Map();
+        const priceCurrentStockCache = new Map();
         let updatePriceButtonAvailability = () => {};
         let closePriceAdjustmentModal = () => {};
+        let pricePendingVerticalFocus = null;
         const priceAdjustmentState = {
           items: [],
           filters: {},
@@ -2705,6 +2875,8 @@
           'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
         let previouslyFocusedElement = null;
         let productModalPreviousFocus = null;
+        let productIframePendingRevalidationItem = null;
+        let productIframePendingRevalidationSource = '';
         let productLinkPreviousFocus = null;
         let productLinkActiveItem = null;
         let productLinkSearchAbortController = null;
@@ -2720,6 +2892,35 @@
         let codeLookupLastError = null;
         let codeLookupLastCompanyId = '';
         let isLoadingDraftDetails = false;
+        const bonusDilutionState = {
+          isOpen: false,
+          originalItems: [],
+          bonusItems: [],
+          selectedOriginalKeys: new Set(),
+          groups: [],
+          activeGroupId: '',
+        };
+        const BONUS_DILUTION_GROUP_COLORS = [
+          { border: 'border-emerald-500', bg: 'bg-emerald-50', text: 'text-emerald-700', row: 'bg-emerald-50/40' },
+          { border: 'border-sky-500', bg: 'bg-sky-50', text: 'text-sky-700', row: 'bg-sky-50/40' },
+          { border: 'border-amber-500', bg: 'bg-amber-50', text: 'text-amber-700', row: 'bg-amber-50/40' },
+          { border: 'border-fuchsia-500', bg: 'bg-fuchsia-50', text: 'text-fuchsia-700', row: 'bg-fuchsia-50/40' },
+          { border: 'border-indigo-500', bg: 'bg-indigo-50', text: 'text-indigo-700', row: 'bg-indigo-50/40' },
+          { border: 'border-rose-500', bg: 'bg-rose-50', text: 'text-rose-700', row: 'bg-rose-50/40' },
+        ];
+        const resolveNextBonusGroupColorIndex = () => {
+          const used = new Set(
+            bonusDilutionState.groups
+              .map((group) => (Number.isFinite(group?.colorIndex) ? group.colorIndex : null))
+              .filter((value) => value !== null)
+          );
+          for (let index = 0; index < BONUS_DILUTION_GROUP_COLORS.length; index += 1) {
+            if (!used.has(index)) return index;
+          }
+          return bonusDilutionState.groups.length % BONUS_DILUTION_GROUP_COLORS.length;
+        };
+        let isVerifyingImportFactors = false;
+        let isSavingImportFactors = false;
         const apiBaseUrl =
           typeof API_CONFIG !== 'undefined' && API_CONFIG?.BASE_URL
             ? API_CONFIG.BASE_URL.replace(/\/+$/, '')
@@ -2821,6 +3022,7 @@
         let currentDraftStatus = 'draft';
         let isSavingDraft = false;
         let isApprovingDraft = false;
+        let isStockMovementFinalizing = false;
         let isDeletingDraft = false;
         let isFormLocked = false;
         let updateStatusBadgeDisplay = () => {};
@@ -2907,6 +3109,19 @@
 
         const digitsOnly = (value) => String(value ?? '').replace(/\D+/g, '');
 
+        const shouldBlockPageRefresh = () => Boolean(isApprovingDraft || isStockMovementFinalizing);
+
+        const handleBeforeUnloadWhileFinalizing = (event) => {
+          if (!shouldBlockPageRefresh()) return undefined;
+          event.preventDefault();
+          event.returnValue = '';
+          return '';
+        };
+
+        if (typeof window !== 'undefined') {
+          window.addEventListener('beforeunload', handleBeforeUnloadWhileFinalizing);
+        }
+
         const resetProductLookupCaches = () => {
           productLookupCache.clear();
           productLookupPromises.clear();
@@ -2927,6 +3142,939 @@
           }
           if (refreshImportedProductsIcon) {
             refreshImportedProductsIcon.classList.toggle('fa-spin', shouldDisable);
+          }
+        };
+
+        const buildBonusDilutionItemKey = (item, fallbackPrefix, fallbackIndex) => {
+          const code = canonicalSupplierProductCode(item?.supplierCode || item?.internalCode || '');
+          if (code) return `${fallbackPrefix}:CODE:${code}`;
+          const desc = String(item?.description || '').trim().toUpperCase();
+          if (desc) return `${fallbackPrefix}:DESC:${desc}`;
+          return `${fallbackPrefix}:INDEX:${Number.isFinite(fallbackIndex) ? fallbackIndex : 0}`;
+        };
+
+        const resolveOriginalItemsForDilution = () => {
+          const items = Array.isArray(lastNfeData?.items) ? lastNfeData.items : [];
+          return items.filter((item) => {
+            if (!item || typeof item !== 'object') return false;
+            return item.cfopClassification !== 'bonificacao';
+          });
+        };
+
+        const resolveBonusItemsForDilution = () => {
+          if (importModalContext === IMPORT_CONTEXT_BONUS && Array.isArray(pendingBonusData?.items)) {
+            return pendingBonusData.items;
+          }
+          const items = Array.isArray(lastNfeData?.items) ? lastNfeData.items : [];
+          return items.filter((item) => item?.cfopClassification === 'bonificacao');
+        };
+
+        const updateBonusDilutionSummary = () => {
+          const activeGroup = bonusDilutionState.groups.find((group) => group.id === bonusDilutionState.activeGroupId) || null;
+          const originalCount = activeGroup?.originalKeys?.size || 0;
+          const bonusCount = activeGroup?.bonusKeys?.size || 0;
+          if (bonusDilutionOriginalCount) {
+            bonusDilutionOriginalCount.textContent = `${originalCount} selecionado(s)`;
+          }
+          if (bonusDilutionBonusCount) {
+            bonusDilutionBonusCount.textContent = `${bonusCount} selecionado(s)`;
+          }
+          if (bonusDilutionSummary) {
+            if (!originalCount && !bonusCount) {
+              bonusDilutionSummary.textContent = 'Nenhuma seleção feita.';
+            } else {
+              const activeMetrics = activeGroup ? computeBonusDilutionForGroup(activeGroup) : null;
+              const totalBonusLabel = formatMoneyValue(activeMetrics?.totalBonusValue || 0);
+              const totalBaseLabel = formatMoneyValue(activeMetrics?.totalOriginalValue || 0);
+              const groupLabel = activeGroup?.label || 'Sem grupo';
+              bonusDilutionSummary.textContent =
+                `${groupLabel}: ${originalCount} item(ns) original(is) e ` +
+                `${bonusCount} item(ns) de bonificação. ` +
+                `Bonificação: R$ ${totalBonusLabel} | Base: R$ ${totalBaseLabel}.`;
+            }
+          }
+        };
+
+        const roundMoney = (value) => {
+          if (!Number.isFinite(value)) return 0;
+          return Math.round((value + Number.EPSILON) * 100) / 100;
+        };
+
+        const ceilMoney = (value) => {
+          if (!Number.isFinite(value)) return 0;
+          return Math.ceil((value - Number.EPSILON) * 100) / 100;
+        };
+
+        const resolveItemUnitCostForDilution = (item) => {
+          if (!item || typeof item !== 'object') return null;
+
+          const directCost = toNumeric(item?.unitCostWithTaxes);
+          if (Number.isFinite(directCost) && directCost >= 0) {
+            return directCost;
+          }
+
+          const unitPrice = toNumeric(item?.unitPrice);
+          if (Number.isFinite(unitPrice) && unitPrice >= 0) {
+            return unitPrice;
+          }
+
+          const totalCandidates = [toNumeric(item?.totalWithTaxes), toNumeric(item?.total), toNumeric(item?.netProductValue)];
+          const totalValue = totalCandidates.find((candidate) => Number.isFinite(candidate) && candidate >= 0);
+          const quantity = toNumeric(item?.quantity);
+          if (Number.isFinite(totalValue) && Number.isFinite(quantity) && quantity > 0) {
+            return totalValue / quantity;
+          }
+
+          return null;
+        };
+
+        const resolveItemQuantityForDilution = (item) => {
+          const quantity = toNumeric(item?.quantity);
+          const baseQuantity = Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
+
+          const resolveItemFactor = (entry) => {
+            if (!entry || typeof entry !== 'object') return null;
+            const entryQty = toNumeric(entry?.quantity);
+            const entryStock = toNumeric(entry?.entryStockQuantity);
+            if (
+              Number.isFinite(entryQty) &&
+              entryQty > 0 &&
+              Number.isFinite(entryStock) &&
+              entryStock > 0
+            ) {
+              return entryStock / entryQty;
+            }
+            const conversion = toNumeric(entry?.conversion);
+            if (Number.isFinite(conversion) && conversion > 0) {
+              return conversion;
+            }
+            const multiplier = toNumeric(entry?.conversionMultiplier);
+            const divider = toNumeric(entry?.conversionDivider);
+            if (Number.isFinite(multiplier) && multiplier > 0 && Number.isFinite(divider) && divider > 0) {
+              return multiplier / divider;
+            }
+            const qTrib = toNumeric(entry?.qTrib);
+            if (Number.isFinite(entryQty) && entryQty > 0 && Number.isFinite(qTrib) && qTrib > 0) {
+              return qTrib / entryQty;
+            }
+            return null;
+          };
+
+          const resolveReferenceFactorForBonusItem = (bonusItem) => {
+            if (!bonusItem || typeof bonusItem !== 'object') return null;
+            const pool = Array.isArray(lastNfeData?.items) ? lastNfeData.items : [];
+            if (!pool.length) return null;
+
+            const bonusSupplierCode = canonicalSupplierProductCode(bonusItem?.supplierCode || '');
+            const bonusBarcodes = new Set(
+              (Array.isArray(bonusItem?.barcodeCandidates) ? bonusItem.barcodeCandidates : [])
+                .map((code) => normalizeBarcodeForComparison(code))
+                .filter(Boolean)
+            );
+            const bonusDescription = String(bonusItem?.description || '').trim().toUpperCase();
+
+            const matches = (candidate) => {
+              if (!candidate || candidate?.cfopClassification === 'bonificacao') return false;
+              const candidateSupplierCode = canonicalSupplierProductCode(candidate?.supplierCode || '');
+              if (bonusSupplierCode && candidateSupplierCode && bonusSupplierCode === candidateSupplierCode) {
+                return true;
+              }
+              const candidateBarcodes = (Array.isArray(candidate?.barcodeCandidates) ? candidate.barcodeCandidates : [])
+                .map((code) => normalizeBarcodeForComparison(code))
+                .filter(Boolean);
+              if (bonusBarcodes.size && candidateBarcodes.some((code) => bonusBarcodes.has(code))) {
+                return true;
+              }
+              const candidateDescription = String(candidate?.description || '').trim().toUpperCase();
+              if (bonusDescription && candidateDescription && bonusDescription === candidateDescription) {
+                return true;
+              }
+              return false;
+            };
+
+            for (const candidate of pool) {
+              if (!matches(candidate)) continue;
+              const factor = resolveItemFactor(candidate);
+              if (Number.isFinite(factor) && factor > 0) {
+                return factor;
+              }
+            }
+
+            return null;
+          };
+
+          let factor = resolveItemFactor(item);
+          const isBonusItem = item?.cfopClassification === 'bonificacao' || importModalContext === IMPORT_CONTEXT_BONUS;
+          if ((!Number.isFinite(factor) || factor <= 1.000001) && isBonusItem) {
+            const referenceFactor = resolveReferenceFactorForBonusItem(item);
+            if (Number.isFinite(referenceFactor) && referenceFactor > 0) {
+              factor = referenceFactor;
+            }
+          }
+
+          if (Number.isFinite(factor) && factor > 0) {
+            return baseQuantity * factor;
+          }
+
+          const computedEntryStock = calculateEntryStockQuantity(item);
+          if (Number.isFinite(computedEntryStock) && computedEntryStock > 0) {
+            return computedEntryStock;
+          }
+
+          return baseQuantity;
+        };
+
+        const resolveBonusItemTotalForDilution = (item) => {
+          if (!item || typeof item !== 'object') return null;
+
+          const info = item?.bonificationInfo && typeof item.bonificationInfo === 'object' ? item.bonificationInfo : null;
+          const infoSources = [
+            info?.originalTotals,
+            info?.bonusTotals,
+            item,
+          ];
+          for (const source of infoSources) {
+            const value = extractBonificationAmount(source);
+            if (Number.isFinite(value) && value > 0) {
+              return value;
+            }
+          }
+
+          const unitCost = resolveItemUnitCostForDilution(item);
+          const quantity = toNumeric(item?.quantity);
+          if (Number.isFinite(unitCost) && unitCost > 0) {
+            const safeQuantity = Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
+            return unitCost * safeQuantity;
+          }
+
+          return null;
+        };
+
+        const resolveBonusTotalFallbackForDilution = (source, bonusItems = []) => {
+          const directCandidates = [
+            toNumeric(source?.bonusTotalValue),
+            extractBonificationAmount(source?.bonusTotals),
+            extractBonificationAmount(source?.totals),
+            extractBonificationAmount(pendingBonusData?.totals),
+            extractBonificationAmount(lastNfeData?.totals),
+          ];
+
+          const inputValue = totalsBonificationInput ? parseNumber(totalsBonificationInput.value) : null;
+          if (Number.isFinite(inputValue)) {
+            directCandidates.push(inputValue);
+          }
+
+          const direct = directCandidates.find((value) => Number.isFinite(value) && value > 0);
+          if (Number.isFinite(direct) && direct > 0) return direct;
+
+          const computed = computeBonificationTotal(Array.isArray(bonusItems) ? bonusItems : []);
+          return Number.isFinite(computed) && computed > 0 ? computed : 0;
+        };
+
+        // Pure function: receives normalized rows and returns per-item dilution for one group.
+        const calculateDilutionByGroup = ({ groupId = '', bonusRows = [], originalRows = [] } = {}) => {
+          const validBonusRows = Array.isArray(bonusRows)
+            ? bonusRows.filter(
+                (row) =>
+                  row &&
+                  row.id &&
+                  Number.isFinite(row.quantity) &&
+                  row.quantity > 0 &&
+                  Number.isFinite(row.unitCost) &&
+                  row.unitCost > 0
+              )
+            : [];
+          const validOriginalRows = Array.isArray(originalRows)
+            ? originalRows.filter(
+                (row) =>
+                  row &&
+                  row.id &&
+                  Number.isFinite(row.quantity) &&
+                  row.quantity > 0 &&
+                  Number.isFinite(row.unitCost) &&
+                  row.unitCost >= 0
+              )
+            : [];
+
+          const totalBonusValue = validBonusRows.reduce(
+            (sum, row) => sum + row.quantity * row.unitCost,
+            0
+          );
+          const rowsWithBase = validOriginalRows.map((row) => ({
+            ...row,
+            baseValue: row.quantity * row.unitCost,
+          }));
+          const totalBase = rowsWithBase.reduce(
+            (sum, row) => sum + (Number.isFinite(row.baseValue) ? row.baseValue : 0),
+            0
+          );
+
+          if (!(totalBonusValue > 0) || !(totalBase > 0) || !rowsWithBase.length) {
+            return {
+              groupId,
+              totalBonusValue: roundMoney(totalBonusValue),
+              totalBase: roundMoney(totalBase),
+              items: rowsWithBase.map((row) => ({
+                itemId: row.id,
+                quantity: row.quantity,
+                originalCost: row.unitCost,
+                baseValue: row.baseValue,
+                weight: 0,
+                allocatedValue: 0,
+                unitDiscount: 0,
+                newUnitCost: row.unitCost,
+                discountPercent: 0,
+              })),
+            };
+          }
+
+          let allocatedAccumulated = 0;
+          const lastIndex = rowsWithBase.length - 1;
+          const items = rowsWithBase.map((row, index) => {
+            const weight = row.baseValue / totalBase;
+            const rawAllocated = totalBonusValue * weight;
+            const remainingBefore = Math.max(0, roundMoney(totalBonusValue - allocatedAccumulated));
+            const candidateAllocated = roundMoney(rawAllocated);
+            const allocatedValue =
+              index === lastIndex
+                ? remainingBefore
+                : Math.min(candidateAllocated, remainingBefore);
+
+            if (index !== lastIndex) {
+              allocatedAccumulated += allocatedValue;
+            }
+
+            const unitDiscount = row.quantity > 0 ? allocatedValue / row.quantity : 0;
+            const newUnitCost = ceilMoney(row.unitCost - unitDiscount);
+            const discountPercent =
+              row.unitCost > 0 ? (unitDiscount / row.unitCost) * 100 : 0;
+
+            return {
+              itemId: row.id,
+              quantity: row.quantity,
+              originalCost: row.unitCost,
+              baseValue: row.baseValue,
+              weight,
+              allocatedValue,
+              unitDiscount,
+              newUnitCost,
+              discountPercent,
+            };
+          });
+
+          return {
+            groupId,
+            totalBonusValue: roundMoney(totalBonusValue),
+            totalBase: roundMoney(totalBase),
+            items,
+          };
+        };
+
+        const computeBonusDilutionForGroup = (group, context = null) => {
+          if (!group || !(group.originalKeys instanceof Set) || !(group.bonusKeys instanceof Set)) {
+            return {
+              groupId: group?.id || '',
+              totalBonusValue: 0,
+              totalOriginalValue: 0,
+              byOriginalKey: new Map(),
+              entries: [],
+            };
+          }
+
+          const source = context || {};
+          const originalItems = Array.isArray(source.originalItems) ? source.originalItems : bonusDilutionState.originalItems;
+          const bonusItems = Array.isArray(source.bonusItems) ? source.bonusItems : bonusDilutionState.bonusItems;
+
+          const originalMap = new Map();
+          originalItems.forEach((item, index) => {
+            originalMap.set(buildBonusDilutionItemKey(item, 'ORI', index), item);
+          });
+
+          const bonusMap = new Map();
+          bonusItems.forEach((item, index) => {
+            bonusMap.set(buildBonusDilutionItemKey(item, 'BON', index), item);
+          });
+
+          const bonusRows = [];
+          const selectedBonusItems = [];
+          group.bonusKeys.forEach((key) => {
+            const item = bonusMap.get(key);
+            if (!item) return;
+            selectedBonusItems.push(item);
+            const quantity = resolveItemQuantityForDilution(item);
+            let unitCost = resolveItemUnitCostForDilution(item);
+            const itemTotal = resolveBonusItemTotalForDilution(item);
+            if ((!Number.isFinite(unitCost) || unitCost <= 0) && Number.isFinite(itemTotal) && quantity > 0) {
+              unitCost = itemTotal / quantity;
+            }
+            if (Number.isFinite(quantity) && quantity > 0 && Number.isFinite(unitCost) && unitCost > 0) {
+              bonusRows.push({ id: key, quantity, unitCost });
+            }
+          });
+
+          if (!bonusRows.length && selectedBonusItems.length) {
+            const fallbackTotal = resolveBonusTotalFallbackForDilution(source, bonusItems);
+            const totalQtySelected = selectedBonusItems.reduce(
+              (sum, entry) => sum + resolveItemQuantityForDilution(entry),
+              0
+            );
+            if (fallbackTotal > 0 && totalQtySelected > 0) {
+              bonusRows.push({
+                id: `${group.id}:fallback-bonus`,
+                quantity: totalQtySelected,
+                unitCost: fallbackTotal / totalQtySelected,
+              });
+            }
+          }
+
+          const originalRows = [];
+          group.originalKeys.forEach((key) => {
+            const item = originalMap.get(key);
+            if (!item) return;
+            const quantity = resolveItemQuantityForDilution(item);
+            const unitCost = resolveItemUnitCostForDilution(item);
+            if (Number.isFinite(quantity) && quantity > 0 && Number.isFinite(unitCost) && unitCost >= 0) {
+              originalRows.push({ id: key, quantity, unitCost });
+            }
+          });
+
+          const dilution = calculateDilutionByGroup({
+            groupId: group.id,
+            bonusRows,
+            originalRows,
+          });
+
+          const byOriginalKey = new Map();
+          dilution.items.forEach((entry) => {
+            byOriginalKey.set(entry.itemId, {
+              discountPercent: entry.discountPercent,
+              newUnitCost: entry.newUnitCost,
+              allocatedValue: entry.allocatedValue,
+              unitDiscount: entry.unitDiscount,
+              originalCost: entry.originalCost,
+              quantity: entry.quantity,
+            });
+          });
+
+          return {
+            groupId: dilution.groupId,
+            totalBonusValue: dilution.totalBonusValue,
+            totalOriginalValue: dilution.totalBase,
+            byOriginalKey,
+            entries: dilution.items,
+          };
+        };
+
+        const applyBonusDilutionToOriginalItems = () => {
+          const originalItems = Array.isArray(lastNfeData?.items)
+            ? lastNfeData.items.filter((item) => item?.cfopClassification !== 'bonificacao')
+            : [];
+          const bonusItems = Array.isArray(pendingBonusData?.items)
+            ? pendingBonusData.items
+            : resolveBonusItemsForDilution();
+          const originalItemMap = new Map();
+          originalItems.forEach((item, index) => {
+            originalItemMap.set(buildBonusDilutionItemKey(item, 'ORI', index), item);
+          });
+
+          // Revert previous dilution before recalculating to avoid compounding.
+          originalItems.forEach((item) => {
+            if (!item || typeof item !== 'object') return;
+            if (!item.dilutionApplied) return;
+            const originalCost = toNumeric(item?.dilutionOriginalCostWithTaxes);
+            if (Number.isFinite(originalCost) && originalCost >= 0) {
+              item.unitCostWithTaxes = originalCost;
+            }
+            if (Number.isFinite(toNumeric(item?.dilutionOriginalDiscountPercent))) {
+              item.discountPercent = toNumeric(item.dilutionOriginalDiscountPercent);
+            } else {
+              item.discountPercent = 0;
+            }
+            item.dilutionApplied = false;
+            item.dilutionGroupId = '';
+            item.dilutionMethod = '';
+            item.dilutionAllocatedValue = null;
+            item.dilutionUnitDiscount = null;
+            item.dilutionPercent = null;
+            item.dilutionAppliedAt = '';
+            item.dilutionOriginalCostWithTaxes = null;
+            item.dilutionOriginalDiscountPercent = null;
+          });
+
+          let affected = 0;
+          const appliedAt = new Date().toISOString();
+          bonusDilutionState.groups.forEach((group) => {
+            const result = computeBonusDilutionForGroup(group, { originalItems, bonusItems });
+            if (!(result.byOriginalKey instanceof Map) || !result.byOriginalKey.size) return;
+
+            result.byOriginalKey.forEach((metrics, key) => {
+              const item = originalItemMap.get(key) || null;
+              if (!item) return;
+              const currentCost = toNumeric(item?.unitCostWithTaxes);
+              const currentDiscount = toNumeric(item?.discountPercent);
+              if (!Number.isFinite(toNumeric(item?.dilutionOriginalCostWithTaxes)) && Number.isFinite(currentCost)) {
+                item.dilutionOriginalCostWithTaxes = currentCost;
+              }
+              if (!Number.isFinite(toNumeric(item?.dilutionOriginalDiscountPercent)) && Number.isFinite(currentDiscount)) {
+                item.dilutionOriginalDiscountPercent = currentDiscount;
+              }
+              item.discountPercent = metrics.discountPercent;
+              item.dilutionApplied = true;
+              item.dilutionGroupId = result.groupId || group.id || '';
+              item.dilutionMethod = 'bonus-dilution';
+              item.dilutionAllocatedValue = Number.isFinite(metrics.allocatedValue)
+                ? metrics.allocatedValue
+                : null;
+              item.dilutionUnitDiscount = Number.isFinite(metrics.unitDiscount)
+                ? metrics.unitDiscount
+                : null;
+              item.dilutionPercent = Number.isFinite(metrics.discountPercent)
+                ? metrics.discountPercent
+                : null;
+              item.dilutionAppliedAt = appliedAt;
+              ensureItemCostWithTaxes(item);
+              affected += 1;
+            });
+          });
+
+          return affected;
+        };
+
+        const getSelectableOriginalKeysForActiveGroup = () => {
+          const activeGroup =
+            bonusDilutionState.groups.find((group) => group.id === bonusDilutionState.activeGroupId) || null;
+          if (!activeGroup) return [];
+          const { originalToGroup } = buildBonusDilutionAssignmentMaps();
+          return bonusDilutionState.originalItems
+            .map((item, index) => buildBonusDilutionItemKey(item, 'ORI', index))
+            .filter((key) => {
+              const assignedGroupId = originalToGroup.get(key) || '';
+              return !assignedGroupId || assignedGroupId === activeGroup.id;
+            });
+        };
+
+        const buildBonusDilutionAssignmentMaps = () => {
+          const bonusToGroup = new Map();
+          const originalToGroup = new Map();
+          bonusDilutionState.groups.forEach((group) => {
+            if (!group) return;
+            if (group.bonusKeys instanceof Set) {
+              group.bonusKeys.forEach((key) => {
+                if (!bonusToGroup.has(key)) {
+                  bonusToGroup.set(key, group.id);
+                }
+              });
+            }
+            if (group.originalKeys instanceof Set) {
+              group.originalKeys.forEach((key) => {
+                if (!originalToGroup.has(key)) {
+                  originalToGroup.set(key, group.id);
+                }
+              });
+            }
+          });
+          return { bonusToGroup, originalToGroup };
+        };
+
+        const renderBonusDilutionGroups = () => {
+          if (!bonusDilutionGroups) return;
+          bonusDilutionGroups.innerHTML = '';
+          if (!bonusDilutionState.groups.length) {
+            const hint = document.createElement('span');
+            hint.className = 'text-[9px] text-gray-500';
+            hint.textContent = 'Sem grupos';
+            bonusDilutionGroups.appendChild(hint);
+            return;
+          }
+          const fragment = document.createDocumentFragment();
+          bonusDilutionState.groups.forEach((group) => {
+            const isActive = group.id === bonusDilutionState.activeGroupId;
+            const color =
+              BONUS_DILUTION_GROUP_COLORS[
+                Number.isFinite(group.colorIndex) ? group.colorIndex % BONUS_DILUTION_GROUP_COLORS.length : 0
+              ];
+            const wrapper = document.createElement('span');
+            wrapper.className = isActive
+              ? `inline-flex items-center rounded-full border ${color.border} ${color.bg} ${color.text}`
+              : `inline-flex items-center rounded-full border ${color.border} bg-white ${color.text}`;
+
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.setAttribute('data-bonus-dilution-group-id', group.id);
+            button.className =
+              'px-2 py-0.5 text-[10px] font-semibold transition hover:text-primary';
+            button.textContent = group.label;
+
+            const removeButton = document.createElement('button');
+            removeButton.type = 'button';
+            removeButton.setAttribute('data-bonus-dilution-remove-group-id', group.id);
+            removeButton.className =
+              'inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold transition hover:bg-rose-100 hover:text-rose-600';
+            removeButton.title = `Remover ${group.label}`;
+            removeButton.setAttribute('aria-label', `Remover ${group.label}`);
+            removeButton.textContent = 'x';
+
+            wrapper.append(button, removeButton);
+            fragment.appendChild(wrapper);
+          });
+          bonusDilutionGroups.appendChild(fragment);
+        };
+
+        const renderBonusDilutionTables = () => {
+          if (!bonusDilutionOriginalBody || !bonusDilutionBonusBody) return;
+
+          bonusDilutionOriginalBody.innerHTML = '';
+          bonusDilutionBonusBody.innerHTML = '';
+
+          const activeGroup =
+            bonusDilutionState.groups.find((group) => group.id === bonusDilutionState.activeGroupId) || null;
+          const { bonusToGroup, originalToGroup } = buildBonusDilutionAssignmentMaps();
+          const metricsByGroupId = new Map();
+          bonusDilutionState.groups.forEach((group) => {
+            metricsByGroupId.set(group.id, computeBonusDilutionForGroup(group));
+          });
+
+          if (!bonusDilutionState.originalItems.length) {
+            bonusDilutionOriginalBody.innerHTML =
+              '<tr><td colspan="7" class="px-3 py-5 text-center text-gray-500">Nenhum produto da nota original disponível.</td></tr>';
+            if (bonusDilutionOriginalCheckAll) {
+              bonusDilutionOriginalCheckAll.checked = false;
+              bonusDilutionOriginalCheckAll.indeterminate = false;
+              bonusDilutionOriginalCheckAll.disabled = true;
+            }
+          } else {
+            const originalFragment = document.createDocumentFragment();
+            const selectableKeys = [];
+            let selectedSelectableCount = 0;
+            bonusDilutionState.originalItems.forEach((item, index) => {
+              const key = buildBonusDilutionItemKey(item, 'ORI', index);
+              const assignedGroupId = originalToGroup.get(key) || '';
+              const assignedGroup = assignedGroupId
+                ? bonusDilutionState.groups.find((group) => group.id === assignedGroupId) || null
+                : null;
+              const assignedColor = assignedGroup
+                ? BONUS_DILUTION_GROUP_COLORS[
+                    Number.isFinite(assignedGroup.colorIndex)
+                      ? assignedGroup.colorIndex % BONUS_DILUTION_GROUP_COLORS.length
+                      : 0
+                  ]
+                : null;
+              const checked = Boolean(assignedGroupId);
+              const disabled = Boolean(assignedGroupId && assignedGroupId !== activeGroup?.id);
+              if (!disabled) {
+                selectableKeys.push(key);
+                if (checked) selectedSelectableCount += 1;
+              }
+              const code = item?.internalCode || item?.supplierCode || item?.nItem || `ITEM-${index + 1}`;
+              const name = item?.description || item?.nome || 'Produto sem descrição';
+              const quantityValue = resolveItemQuantityForDilution(item);
+              const quantityLabel = formatQuantity(quantityValue);
+              const costValue = resolveItemUnitCostForDilution(item);
+              const costLabel = Number.isFinite(costValue) ? formatMoneyValue(costValue) : '—';
+              const metricsGroupId = assignedGroupId || activeGroup?.id || '';
+              const metrics = metricsGroupId ? metricsByGroupId.get(metricsGroupId) : null;
+              const originalMetrics = metrics?.byOriginalKey instanceof Map ? metrics.byOriginalKey.get(key) : null;
+              const discountValue = Number.isFinite(originalMetrics?.discountPercent)
+                ? originalMetrics.discountPercent
+                : 0;
+              const discountLabel = formatPercentValue(discountValue);
+              const newCostValue = Number.isFinite(originalMetrics?.newUnitCost)
+                ? originalMetrics.newUnitCost
+                : costValue;
+              const newCostLabel = Number.isFinite(newCostValue) ? formatMoneyValue(newCostValue) : '—';
+              const row = document.createElement('tr');
+              if (assignedColor?.row) {
+                row.classList.add(assignedColor.row);
+              }
+              row.innerHTML = `
+                <td class="px-3 py-2 text-center">
+                  <input type="checkbox" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/40" data-bonus-dilution-original-check="${key}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+                </td>
+                <td class="px-3 py-2 text-gray-700">${escapeHtml(code)}</td>
+                <td class="px-3 py-2 text-gray-700">${escapeHtml(name)}</td>
+                <td class="px-3 py-2 text-right text-gray-700">${escapeHtml(quantityLabel)}</td>
+                <td class="px-3 py-2 text-right text-gray-700">${escapeHtml(costLabel)}</td>
+                <td class="px-3 py-2 text-right text-gray-700">${escapeHtml(discountLabel)}</td>
+                <td class="px-3 py-2 text-right text-gray-700">${escapeHtml(newCostLabel)}</td>
+              `;
+              originalFragment.appendChild(row);
+            });
+            bonusDilutionOriginalBody.appendChild(originalFragment);
+            if (bonusDilutionOriginalCheckAll) {
+              const allSelected = selectableKeys.length > 0 && selectedSelectableCount === selectableKeys.length;
+              const someSelected = selectedSelectableCount > 0 && !allSelected;
+              bonusDilutionOriginalCheckAll.checked = allSelected;
+              bonusDilutionOriginalCheckAll.indeterminate = someSelected;
+              bonusDilutionOriginalCheckAll.disabled = !activeGroup || !selectableKeys.length;
+            }
+          }
+
+          if (!bonusDilutionState.bonusItems.length) {
+            bonusDilutionBonusBody.innerHTML =
+              '<div class="rounded-lg border border-dashed border-gray-200 px-3 py-5 text-center text-gray-500">Nenhum item de bonificação disponível.</div>';
+          } else {
+            const bonusFragment = document.createDocumentFragment();
+            bonusDilutionState.bonusItems.forEach((item, index) => {
+              const key = buildBonusDilutionItemKey(item, 'BON', index);
+              const assignedGroupId = bonusToGroup.get(key) || '';
+              const assignedGroup = assignedGroupId
+                ? bonusDilutionState.groups.find((group) => group.id === assignedGroupId) || null
+                : null;
+              const assignedColor = assignedGroup
+                ? BONUS_DILUTION_GROUP_COLORS[
+                    Number.isFinite(assignedGroup.colorIndex)
+                      ? assignedGroup.colorIndex % BONUS_DILUTION_GROUP_COLORS.length
+                      : 0
+                  ]
+                : null;
+              const checked = Boolean(assignedGroupId);
+              const activeColor = activeGroup
+                ? BONUS_DILUTION_GROUP_COLORS[
+                    Number.isFinite(activeGroup.colorIndex)
+                      ? activeGroup.colorIndex % BONUS_DILUTION_GROUP_COLORS.length
+                      : 0
+                  ]
+                : null;
+              const previewColor = assignedColor || activeColor;
+              const code = item?.supplierCode || item?.internalCode || item?.nItem || `BON-${index + 1}`;
+              const name = item?.description || item?.nome || 'Produto sem descrição';
+              const quantity = resolveItemQuantityForDilution(item);
+              const qtyLabel = Number.isFinite(quantity) ? formatQuantity(quantity) : '—';
+              const card = document.createElement('button');
+              card.type = 'button';
+              card.setAttribute('data-bonus-dilution-bonus-card', key);
+              card.setAttribute('aria-pressed', checked ? 'true' : 'false');
+              if (assignedGroupId) {
+                card.setAttribute('data-bonus-dilution-assigned-group-id', assignedGroupId);
+              }
+              card.className = checked
+                ? `w-full rounded-lg border-2 ${previewColor?.border || 'border-emerald-500'} ${previewColor?.bg || 'bg-emerald-50'} px-3 py-2 text-left shadow-sm transition`
+                : 'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-left transition hover:border-primary/40 hover:bg-primary/5';
+              card.innerHTML = `
+                <div class="flex items-start justify-between gap-2">
+                  <div>
+                    <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">${escapeHtml(code)}</p>
+                    <p class="mt-0.5 text-[11px] font-medium text-gray-800">${escapeHtml(name)}</p>
+                  </div>
+                  <span class="${checked ? (previewColor?.text || 'text-emerald-700') : 'text-gray-500'} text-[10px] font-semibold">
+                    Qtd: ${escapeHtml(qtyLabel)}
+                  </span>
+                </div>
+              `;
+              bonusFragment.appendChild(card);
+            });
+            bonusDilutionBonusBody.appendChild(bonusFragment);
+          }
+
+          renderBonusDilutionGroups();
+          updateBonusDilutionSummary();
+        };
+
+        const openBonusDilutionModal = () => {
+          if (!bonusDilutionModal) return;
+          const originalItems = resolveOriginalItemsForDilution();
+          const bonusItems = resolveBonusItemsForDilution();
+          if (!originalItems.length) {
+            notify('Não há produtos da nota original para diluição.', 'warning');
+            if (bonusDilutionCheckbox) bonusDilutionCheckbox.checked = false;
+            return;
+          }
+          if (!bonusItems.length) {
+            notify('Importe o XML de bonificação para usar a diluição.', 'warning');
+            if (bonusDilutionCheckbox) bonusDilutionCheckbox.checked = false;
+            return;
+          }
+
+          bonusDilutionState.originalItems = originalItems;
+          bonusDilutionState.bonusItems = bonusItems;
+          bonusDilutionState.selectedOriginalKeys = new Set();
+          const initialGroupId = `group-${Date.now()}-1`;
+          bonusDilutionState.groups = [
+            {
+              id: initialGroupId,
+              label: 'Grupo 1',
+              bonusKeys: new Set(),
+              originalKeys: new Set(),
+              colorIndex: 0,
+            },
+          ];
+          bonusDilutionState.activeGroupId = initialGroupId;
+          bonusDilutionState.isOpen = true;
+
+          renderBonusDilutionTables();
+          bonusDilutionModal.classList.remove('hidden');
+          bonusDilutionModal.setAttribute('data-modal-open', 'true');
+
+          if (bonusDilutionCard) {
+            bonusDilutionCard.classList.add('opacity-0', 'scale-95');
+            requestAnimationFrame(() => {
+              bonusDilutionCard.classList.remove('opacity-0', 'scale-95');
+              bonusDilutionCard.classList.add('opacity-100', 'scale-100');
+            });
+          }
+        };
+
+        const closeBonusDilutionModal = ({ keepCheckboxChecked = false } = {}) => {
+          if (!bonusDilutionModal) return;
+          bonusDilutionState.isOpen = false;
+          bonusDilutionModal.classList.add('hidden');
+          bonusDilutionModal.removeAttribute('data-modal-open');
+          if (!keepCheckboxChecked && bonusDilutionCheckbox) {
+            bonusDilutionCheckbox.checked = false;
+          }
+        };
+
+        const setVerifyImportFactorsButtonState = (isLoading) => {
+          if (!verifyImportFactorsButton) return;
+          const shouldDisable = Boolean(isLoading);
+          verifyImportFactorsButton.disabled = shouldDisable;
+          verifyImportFactorsButton.classList.toggle('opacity-60', shouldDisable);
+          verifyImportFactorsButton.classList.toggle('cursor-not-allowed', shouldDisable);
+          if (shouldDisable) {
+            verifyImportFactorsButton.setAttribute('aria-busy', 'true');
+          } else {
+            verifyImportFactorsButton.removeAttribute('aria-busy');
+          }
+          if (verifyImportFactorsIcon) {
+            verifyImportFactorsIcon.classList.toggle('fa-spin', shouldDisable);
+          }
+        };
+
+        const setSaveImportFactorsButtonState = (isLoading) => {
+          if (!saveImportFactorsButton) return;
+          const shouldDisable = Boolean(isLoading);
+          saveImportFactorsButton.disabled = shouldDisable;
+          saveImportFactorsButton.classList.toggle('opacity-60', shouldDisable);
+          saveImportFactorsButton.classList.toggle('cursor-not-allowed', shouldDisable);
+          if (shouldDisable) {
+            saveImportFactorsButton.setAttribute('aria-busy', 'true');
+          } else {
+            saveImportFactorsButton.removeAttribute('aria-busy');
+          }
+          if (saveImportFactorsIcon) {
+            saveImportFactorsIcon.classList.toggle('fa-spin', shouldDisable);
+          }
+        };
+
+        const parseFactorFromImportedDescription = (rawText) => {
+          const source = String(rawText || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+          if (!source) return null;
+
+          const patterns = [
+            /(?:^|[\s(])(\d{1,4})\s*[xX×]\s*\d{1,4}(?:[.,]\d+)?\s*(?:g|kg|gr|grama|gramas|ml|l)\b/i,
+            /(?:^|[\s(])(\d{1,4})\s*(?:un(?:i)?(?:dade|dades)?|uni)\b/i,
+          ];
+
+          for (const pattern of patterns) {
+            const match = source.match(pattern);
+            if (!match || !match[1]) continue;
+            const value = Number.parseInt(match[1], 10);
+            if (Number.isFinite(value) && value > 0) {
+              return Number.parseFloat(value.toFixed(3));
+            }
+          }
+
+          return null;
+        };
+
+        const verifyImportedFactorsFromDescription = () => {
+          if (isVerifyingImportFactors) return;
+          const items = Array.isArray(lastNfeData?.items) ? lastNfeData.items : [];
+          if (!items.length) {
+            notify('Importe um XML autorizado para verificar fator.', 'warning');
+            return;
+          }
+
+          isVerifyingImportFactors = true;
+          setVerifyImportFactorsButtonState(true);
+          try {
+            let updatedCount = 0;
+            let detectedCount = 0;
+            items.forEach((item) => {
+              if (!item || typeof item !== 'object') return;
+              const descriptionCandidates = [
+                item.description,
+                item.nomeProdutoFornecedor,
+                item.supplierName,
+              ].filter(Boolean);
+              const extractedFactor = parseFactorFromImportedDescription(descriptionCandidates.join(' '));
+              if (!Number.isFinite(extractedFactor) || extractedFactor <= 0) return;
+
+              detectedCount += 1;
+
+              const currentFactor = toNumeric(item?.conversion);
+              if (Number.isFinite(currentFactor) && Math.abs(currentFactor - extractedFactor) <= 0.0005) {
+                return;
+              }
+
+              item.manualConversionOverride = true;
+              item.supplierAppliedConversion = null;
+              updateItemConversion(item, extractedFactor);
+              updatedCount += 1;
+            });
+
+            renderImportedProducts(items);
+            if (Array.isArray(mainProductTableState.items) && mainProductTableState.items.length) {
+              updateMainProductsTableDisplay();
+            }
+
+            if (!detectedCount) {
+              notify('Nenhum padrão de fator foi identificado nos nomes dos itens.', 'warning');
+              return;
+            }
+
+            if (!updatedCount) {
+              notify('Os fatores identificados já estavam aplicados na lista.', 'info');
+              return;
+            }
+
+            notify(`${updatedCount} fator(es) atualizados automaticamente pela descrição do item.`, 'success');
+          } finally {
+            setVerifyImportFactorsButtonState(false);
+            isVerifyingImportFactors = false;
+          }
+        };
+
+        const saveImportedFactorsToSupplier = async () => {
+          if (isSavingImportFactors) return;
+
+          const items = Array.isArray(lastNfeData?.items) ? lastNfeData.items : [];
+          if (!items.length) {
+            notify('Importe um XML autorizado para salvar fator.', 'warning');
+            return;
+          }
+
+          const eligibleItems = items.filter((item) => {
+            if (!item || item.validationStatus !== 'matched' || !item.matchedProduct) return false;
+            if (!item.manualConversionOverride) return false;
+            const factor = toNumeric(item?.conversion);
+            return Number.isFinite(factor) && factor > 0;
+          });
+
+          if (!eligibleItems.length) {
+            notify('Não há fatores manuais para salvar no fornecedor.', 'warning');
+            return;
+          }
+
+          isSavingImportFactors = true;
+          setSaveImportFactorsButtonState(true);
+          try {
+            await syncSupplierFactorsForItems(eligibleItems, lastNfeData);
+            renderImportedProducts(items);
+            if (Array.isArray(mainProductTableState.items) && mainProductTableState.items.length) {
+              updateMainProductsTableDisplay();
+            }
+            notify(`${eligibleItems.length} fator(es) salvo(s) no cadastro do fornecedor.`, 'success');
+          } catch (error) {
+            console.error('Erro ao salvar fator no fornecedor:', error);
+            notify(error?.message || 'Não foi possível salvar os fatores no fornecedor.', 'error');
+          } finally {
+            setSaveImportFactorsButtonState(false);
+            isSavingImportFactors = false;
           }
         };
 
@@ -3065,6 +4213,38 @@
         const ensureItemCostWithTaxes = (item, options = {}) => {
           if (!item || typeof item !== 'object') return item;
 
+          const dilutionUnitDiscountPriority = toNumeric(item?.dilutionUnitDiscount);
+          const dilutionBaseCost = toNumeric(item?.dilutionOriginalCostWithTaxes);
+          const dilutionHasPriority =
+            Boolean(item?.dilutionApplied) &&
+            Number.isFinite(dilutionUnitDiscountPriority) &&
+            dilutionUnitDiscountPriority >= 0 &&
+            Number.isFinite(dilutionBaseCost) &&
+            dilutionBaseCost >= 0;
+
+          if (dilutionHasPriority) {
+            const entryStockQuantity = calculateEntryStockQuantity(item);
+            const quantityValue = toNumeric(item.quantity);
+            const effectiveQuantity =
+              Number.isFinite(entryStockQuantity) && entryStockQuantity > 0
+                ? entryStockQuantity
+                : Number.isFinite(quantityValue) && quantityValue > 0
+                ? quantityValue
+                : null;
+            const dilutedUnitCost = ceilMoney(Math.max(0, dilutionBaseCost - dilutionUnitDiscountPriority));
+
+            item.entryStockQuantity =
+              Number.isFinite(entryStockQuantity) && entryStockQuantity >= 0 ? entryStockQuantity : null;
+            item.unitCostWithTaxes = dilutedUnitCost;
+            if (Number.isFinite(effectiveQuantity) && effectiveQuantity > 0) {
+              item.totalWithTaxes = dilutedUnitCost * effectiveQuantity;
+            }
+            if (Number.isFinite(toNumeric(item?.dilutionPercent))) {
+              item.discountPercent = toNumeric(item.dilutionPercent);
+            }
+            return item;
+          }
+
           const hasExplicitSkip = Object.prototype.hasOwnProperty.call(
             options,
             'skipTaxComputation'
@@ -3193,6 +4373,18 @@
               ? computedUnitCost
               : null;
 
+            const dilutionUnitDiscount = toNumeric(item?.dilutionUnitDiscount);
+            const hasDilution = Boolean(item?.dilutionApplied) && Number.isFinite(dilutionUnitDiscount) && dilutionUnitDiscount >= 0;
+            const adjustedUnitCost = hasDilution
+              ? ceilMoney(Math.max(0, (Number.isFinite(unitCost) ? unitCost : 0) - dilutionUnitDiscount))
+              : unitCost;
+            const adjustedTotal = hasDilution &&
+              Number.isFinite(adjustedUnitCost) &&
+              Number.isFinite(quantityForCost) &&
+              quantityForCost > 0
+              ? adjustedUnitCost * quantityForCost
+              : effectiveTotal;
+
             item.discount = Number.isFinite(discountValue) ? discountValue : 0;
             item.entryStockQuantity =
               Number.isFinite(entryStockQuantity) && entryStockQuantity >= 0 ? entryStockQuantity : null;
@@ -3204,8 +4396,11 @@
                 : null;
             item.taxesTotal = Number.isFinite(taxesTotal) ? taxesTotal : 0;
             item.additionalsTotal = additionalsTotal;
-            item.totalWithTaxes = Number.isFinite(effectiveTotal) && effectiveTotal >= 0 ? effectiveTotal : null;
-            item.unitCostWithTaxes = Number.isFinite(unitCost) && unitCost >= 0 ? unitCost : null;
+            item.totalWithTaxes = Number.isFinite(adjustedTotal) && adjustedTotal >= 0 ? adjustedTotal : null;
+            item.unitCostWithTaxes = Number.isFinite(adjustedUnitCost) && adjustedUnitCost >= 0 ? adjustedUnitCost : null;
+            if (hasDilution && Number.isFinite(toNumeric(item?.dilutionPercent))) {
+              item.discountPercent = toNumeric(item.dilutionPercent);
+            }
 
             return item;
           }
@@ -3218,6 +4413,18 @@
               ? totalWithTaxes / effectiveQuantity
               : null;
 
+          const dilutionUnitDiscount = toNumeric(item?.dilutionUnitDiscount);
+          const hasDilution = Boolean(item?.dilutionApplied) && Number.isFinite(dilutionUnitDiscount) && dilutionUnitDiscount >= 0;
+          const adjustedUnitCostWithTaxes = hasDilution
+            ? ceilMoney(Math.max(0, (Number.isFinite(unitCostWithTaxes) ? unitCostWithTaxes : 0) - dilutionUnitDiscount))
+            : unitCostWithTaxes;
+          const adjustedTotalWithTaxes = hasDilution &&
+            Number.isFinite(adjustedUnitCostWithTaxes) &&
+            Number.isFinite(effectiveQuantity) &&
+            effectiveQuantity > 0
+            ? adjustedUnitCostWithTaxes * effectiveQuantity
+            : totalWithTaxes;
+
           item.discount = Number.isFinite(discountValue) ? discountValue : 0;
           item.entryStockQuantity =
             Number.isFinite(entryStockQuantity) && entryStockQuantity >= 0 ? entryStockQuantity : null;
@@ -3226,9 +4433,12 @@
           item.taxesTotal = taxesTotal;
           item.additionalsTotal = additionalsTotal;
           item.totalWithTaxes =
-            Number.isFinite(netBaseTotal) || taxesTotal || additionalsTotal ? totalWithTaxes : null;
+            Number.isFinite(netBaseTotal) || taxesTotal || additionalsTotal ? adjustedTotalWithTaxes : null;
           item.unitCostWithTaxes =
-            Number.isFinite(unitCostWithTaxes) && unitCostWithTaxes >= 0 ? unitCostWithTaxes : null;
+            Number.isFinite(adjustedUnitCostWithTaxes) && adjustedUnitCostWithTaxes >= 0 ? adjustedUnitCostWithTaxes : null;
+          if (hasDilution && Number.isFinite(toNumeric(item?.dilutionPercent))) {
+            item.discountPercent = toNumeric(item.dilutionPercent);
+          }
 
           return item;
         };
@@ -5670,6 +6880,40 @@
           return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
         };
 
+        const computeFactorFromSupplierCalc = (calcType, calcValue) => {
+          const normalizedType = canonicalSupplierCalcType(calcType);
+          const normalizedValue = parseSupplierCalcValue(calcValue);
+          if (!normalizedType || normalizedValue === null) return null;
+          if (normalizedType === 'divide') {
+            return normalizedValue > 0 ? 1 / normalizedValue : null;
+          }
+          return normalizedValue;
+        };
+
+        const resolveSupplierCalcConfig = (entry) => {
+          if (!entry || typeof entry !== 'object') return { type: '', value: null };
+          const primaryType = canonicalSupplierCalcType(entry?.tipoCalculo);
+          const fallbackType = canonicalSupplierCalcType(entry?.calculoTipo || entry?.tipo || entry?.operacaoCalculo);
+          const rawValue =
+            entry?.valorCalculo ??
+            entry?.calculo ??
+            entry?.fator ??
+            entry?.factor ??
+            null;
+          const parsedValue = parseSupplierCalcValue(rawValue);
+
+          if (primaryType && parsedValue !== null) {
+            return { type: primaryType, value: parsedValue };
+          }
+          if (fallbackType && parsedValue !== null) {
+            return { type: fallbackType, value: parsedValue };
+          }
+          if (!primaryType && !fallbackType && parsedValue !== null) {
+            return { type: 'multiply', value: parsedValue };
+          }
+          return { type: '', value: null };
+        };
+
         const getBaseConversionFactor = (item) => {
           if (!item) return 1;
           const original = Number.isFinite(item?.originalConversionFactor)
@@ -5701,6 +6945,7 @@
 
           const supplierInfo = resolveActiveSupplierInfo(nfeData);
           const normalizedSupplierName = canonicalSupplierName(supplierInfo.name);
+          const normalizedSupplierDocument = digitsOnly(supplierInfo.document);
           const itemSupplierCode = canonicalSupplierProductCode(item?.supplierCode);
 
           let candidates = suppliers;
@@ -5709,8 +6954,16 @@
             const codeMatches = suppliers.filter(
               (entry) => canonicalSupplierProductCode(entry?.codigoProduto) === itemSupplierCode
             );
-            if (codeMatches.length) {
-              candidates = codeMatches;
+            if (!codeMatches.length) return null;
+            candidates = codeMatches;
+          }
+
+          if (normalizedSupplierDocument) {
+            const documentMatches = candidates.filter(
+              (entry) => digitsOnly(entry?.documentoFornecedor) === normalizedSupplierDocument
+            );
+            if (documentMatches.length) {
+              candidates = documentMatches;
             }
           }
 
@@ -5723,20 +6976,16 @@
             }
           }
 
-          const hasValidCalc = (entry) =>
-            Boolean(canonicalSupplierCalcType(entry?.tipoCalculo)) && parseSupplierCalcValue(entry?.valorCalculo) !== null;
+          const hasValidCalc = (entry) => {
+            const calcConfig = resolveSupplierCalcConfig(entry);
+            return Boolean(calcConfig.type) && calcConfig.value !== null;
+          };
 
           const prioritized = candidates.filter(hasValidCalc);
           if (prioritized.length) {
             return prioritized[0];
           }
-
-          const fallbackWithCalc = suppliers.filter(hasValidCalc);
-          if (fallbackWithCalc.length) {
-            return fallbackWithCalc[0];
-          }
-
-          return candidates[0] || suppliers[0] || null;
+          return candidates[0] || null;
         };
 
         const applySupplierConversionFromProduct = (item, product, nfeData) => {
@@ -5749,25 +6998,15 @@
             return false;
           }
 
-          const calcType = canonicalSupplierCalcType(supplierEntry?.tipoCalculo);
-          const calcValue = parseSupplierCalcValue(supplierEntry?.valorCalculo);
+          const { type: calcType, value: calcValue } = resolveSupplierCalcConfig(supplierEntry);
           if (!calcType || calcValue === null) {
             item.supplierAppliedConversion = null;
             item.manualConversionOverride = false;
             return false;
           }
 
-          let baseFactor = getBaseConversionFactor(item);
-          if (!Number.isFinite(baseFactor) || baseFactor <= 0) {
-            baseFactor = 1;
-          }
-
-          let adjustedFactor = baseFactor;
-          if (calcType === 'multiply') {
-            adjustedFactor = baseFactor * calcValue;
-          } else if (calcType === 'divide') {
-            adjustedFactor = baseFactor / calcValue;
-          }
+          const baseFactor = 1;
+          const adjustedFactor = computeFactorFromSupplierCalc(calcType, calcValue);
 
           if (!Number.isFinite(adjustedFactor) || adjustedFactor <= 0) {
             item.supplierAppliedConversion = null;
@@ -5801,6 +7040,19 @@
           };
           item.manualConversionOverride = false;
           return true;
+        };
+
+        const applySupplierConversionForMatchedItems = (nfeData) => {
+          const items = Array.isArray(nfeData?.items) ? nfeData.items : [];
+          if (!items.length) return 0;
+          let updatedCount = 0;
+          items.forEach((item) => {
+            if (!item || item?.validationStatus !== 'matched' || !item?.matchedProduct) return;
+            if (applySupplierConversionFromProduct(item, item.matchedProduct, nfeData)) {
+              updatedCount += 1;
+            }
+          });
+          return updatedCount;
         };
 
         const ensureProductSupplierLink = (product, item, nfeData, options = {}) => {
@@ -5911,22 +7163,13 @@
             return null;
           }
 
-          let baseFactor = getBaseConversionFactor(item);
-          if (!Number.isFinite(baseFactor) || baseFactor <= 0) {
-            baseFactor = 1;
-          }
+          const baseFactor = 1;
 
           const supplierEntry = findSupplierEntryForProduct(item.matchedProduct, item, nfeData);
-          const existingType = canonicalSupplierCalcType(supplierEntry?.tipoCalculo);
-          const existingValue = parseSupplierCalcValue(supplierEntry?.valorCalculo);
+          const { type: existingType, value: existingValue } = resolveSupplierCalcConfig(supplierEntry);
 
           if (existingType && Number.isFinite(existingValue)) {
-            const computedFactor = (() => {
-              if (existingType === 'divide') {
-                return existingValue > 0 ? baseFactor / existingValue : null;
-              }
-              return baseFactor * existingValue;
-            })();
+            const computedFactor = computeFactorFromSupplierCalc(existingType, existingValue);
             if (
               Number.isFinite(computedFactor) &&
               Math.abs(computedFactor - targetFactor) <= FACTOR_COMPARISON_TOLERANCE
@@ -5935,16 +7178,10 @@
             }
           }
 
-          let ratio = targetFactor / baseFactor;
+          let ratio = targetFactor;
           let calcType = 'multiply';
 
-          if (!Number.isFinite(ratio) || ratio <= 0) {
-            if (targetFactor <= 0) {
-              return null;
-            }
-            ratio = baseFactor / targetFactor;
-            calcType = 'divide';
-          }
+          if (!Number.isFinite(ratio) || ratio <= 0) return null;
 
           if (!Number.isFinite(ratio) || ratio <= 0) {
             return null;
@@ -5975,6 +7212,7 @@
 
         const updateSupplierFactorForItem = (item, nfeData) => {
           if (!item || !item.matchedProduct) return null;
+          if (!item.manualConversionOverride) return null;
 
           const productId = getProductIdFromRecord(item.matchedProduct);
           if (!productId) return null;
@@ -6315,6 +7553,9 @@
                 };
               }
             }
+            if (lastSupplierRecord) {
+              syncImportQuickTagsFromSupplier(lastSupplierRecord);
+            }
             supplierSelect.dispatchEvent(new Event('change', { bubbles: true }));
             return true;
           }
@@ -6337,6 +7578,9 @@
                   legalName: option.dataset?.supplierName || '',
                   cnpj: optionDocument,
                 };
+              }
+              if (lastSupplierRecord) {
+                syncImportQuickTagsFromSupplier(lastSupplierRecord);
               }
               supplierSelect.dispatchEvent(new Event('change', { bubbles: true }));
               return true;
@@ -6573,6 +7817,8 @@
           if (!deleteEntryButton) return;
           const hasDraft = Boolean(currentDraftId);
           const shouldDisable = Boolean(isProcessing) || !hasDraft;
+          const statusKey = determineDraftStatusKey(currentDraftStatus);
+          const idleLabel = statusKey === 'approved' ? 'Excluir nota' : 'Excluir rascunho';
           deleteEntryButton.disabled = shouldDisable;
           deleteEntryButton.classList.toggle('opacity-60', shouldDisable);
           deleteEntryButton.classList.toggle('cursor-wait', Boolean(isProcessing));
@@ -6582,7 +7828,7 @@
           if (deleteEntryText) {
             deleteEntryText.textContent = isProcessing
               ? 'Excluindo...'
-              : defaultDeleteText || 'Excluir nota';
+              : idleLabel;
           }
         };
 
@@ -7191,6 +8437,167 @@
           }
         };
 
+        let importQuickTags = [];
+        let importQuickTagsSupplierId = '';
+
+        const escapeHtml = (value) =>
+          String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+
+        const renderImportQuickTags = () => {
+          if (!importTagsList) return;
+          if (!importQuickTags.length) {
+            importTagsList.innerHTML = '<span class="text-[9px] text-gray-400">Sem tags</span>';
+            return;
+          }
+          importTagsList.innerHTML = importQuickTags
+            .map(
+              (tag, index) => `
+                <span class="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[9px] text-gray-700">
+                  <span class="max-w-[140px] truncate">${escapeHtml(tag)}</span>
+                  <button type="button" class="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full text-gray-500 hover:bg-red-100 hover:text-red-600" data-remove-import-tag-index="${index}" aria-label="Remover tag">&times;</button>
+                </span>
+              `
+            )
+            .join('');
+        };
+
+        const addImportQuickTag = (rawValue) => {
+          const value = String(rawValue || '').trim();
+          if (!value) return;
+          if (importQuickTags.includes(value)) return;
+          importQuickTags.push(value);
+          renderImportQuickTags();
+        };
+
+        const removeImportQuickTagAtIndex = (targetIndex) => {
+          if (!Number.isInteger(targetIndex)) return;
+          if (targetIndex < 0 || targetIndex >= importQuickTags.length) return;
+          importQuickTags.splice(targetIndex, 1);
+          renderImportQuickTags();
+        };
+
+        const resetImportQuickTags = () => {
+          importQuickTags = [];
+          importQuickTagsSupplierId = '';
+          if (importTagsInput) {
+            importTagsInput.value = '';
+          }
+          renderImportQuickTags();
+        };
+
+        const normalizeImportRuleSegment = (value) => String(value || '')
+          .replace(/_/g, ' ')
+          .trim();
+
+        const normalizeImportRuleField = (value) => {
+          const normalized = normalizeImportRuleSegment(value).toLowerCase();
+          if (!normalized) return '';
+          if (normalized === 'marca') return 'marca';
+          if (normalized === 'idade') return 'idade';
+          if (normalized === 'castrado') return 'castrado';
+          if (normalized === 'tipo') return 'tipo';
+          if (normalized === 'porte') return 'porte';
+          return '';
+        };
+
+        const parseImportQuickTagRule = (rawTag) => {
+          const raw = String(rawTag || '').trim();
+          if (!raw) return null;
+          const parts = raw.split(';');
+          if (parts.length < 3) return null;
+          const trigger = normalizeImportRuleSegment(parts.shift());
+          const field = normalizeImportRuleField(parts.shift());
+          const value = normalizeImportRuleSegment(parts.join(';'));
+          if (!trigger || !field || !value) return null;
+          return {
+            raw,
+            trigger,
+            field,
+            value,
+          };
+        };
+
+        const getActiveSupplierIdForRules = () => {
+          if (lastSupplierRecord?._id) return String(lastSupplierRecord._id);
+          const selectedId =
+            supplierSelect && supplierSelect.value ? String(supplierSelect.value).trim() : '';
+          if (selectedId && /^[a-f\d]{24}$/i.test(selectedId)) {
+            return selectedId;
+          }
+          return '';
+        };
+
+        const syncImportQuickTagsFromSupplier = (supplierRecord) => {
+          const rules = Array.isArray(supplierRecord?.importProductRules)
+            ? supplierRecord.importProductRules
+            : [];
+          importQuickTags = rules
+            .map((rule) => {
+              if (!rule || typeof rule !== 'object') return '';
+              const raw = String(rule.raw || '').trim();
+              if (raw) return raw;
+              const trigger = String(rule.trigger || '').trim().replace(/\s+/g, '_');
+              const field = String(rule.field || '').trim();
+              const value = String(rule.value || '').trim().replace(/\s+/g, '_');
+              if (!trigger || !field || !value) return '';
+              const fieldLabel = field.charAt(0).toUpperCase() + field.slice(1);
+              return `${trigger};${fieldLabel};${value}`;
+            })
+            .filter(Boolean);
+          importQuickTagsSupplierId = supplierRecord?._id ? String(supplierRecord._id) : '';
+          renderImportQuickTags();
+        };
+
+        const persistImportQuickTags = async () => {
+          const supplierId = getActiveSupplierIdForRules();
+          if (!supplierId) {
+            importQuickTagsSupplierId = '';
+            return;
+          }
+
+          const rules = importQuickTags
+            .map((tag) => parseImportQuickTagRule(tag))
+            .filter(Boolean);
+
+          if (!rules.length && importQuickTags.length) {
+            notify(
+              'As anotações devem seguir o padrão GATILHO;CAMPO;VALOR (ex.: SC;Marca;Special_Cat).',
+              'warning'
+            );
+          }
+
+          const headers = buildAuthHeaders();
+          headers.set('Content-Type', 'application/json');
+          const response = await fetch(`${apiBaseUrl}/suppliers/${supplierId}/import-product-rules`, {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({ rules }),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            if (response.status === 401) {
+              handleAuthError();
+            }
+            throw new Error(payload?.message || 'Não foi possível salvar as anotações do fornecedor.');
+          }
+
+          const updatedSupplier = payload?.supplier || null;
+          if (updatedSupplier) {
+            lastSupplierRecord = updatedSupplier;
+            const documentDigits = digitsOnly(updatedSupplier.cnpj || updatedSupplier.document || '');
+            if (documentDigits) {
+              supplierRegistry.byDocument.set(documentDigits, updatedSupplier);
+            }
+            syncImportQuickTagsFromSupplier(updatedSupplier);
+            importQuickTagsSupplierId = supplierId;
+          }
+        };
+
         const clearStatusMessages = () => {
           if (importFileFeedback) {
             importFileFeedback.classList.add('hidden');
@@ -7204,6 +8611,9 @@
             if (importSupplierDescription) {
               importSupplierDescription.textContent = '';
               importSupplierDescription.classList.remove('hidden');
+            }
+            if (importSupplierMain) {
+              importSupplierMain.classList.add('hidden');
             }
             if (importSupplierActions) {
               importSupplierActions.innerHTML = '';
@@ -7221,6 +8631,15 @@
           importFileFeedback.textContent = message;
           importFileFeedback.classList.remove('hidden');
           applyStatusClasses(importFileFeedback, type);
+          if (importSupplierStatus) {
+            toggleSupplierStatusLayout(true);
+            importSupplierStatus.classList.remove('hidden');
+            applyStatusClasses(importSupplierStatus, type);
+          }
+          if (importSupplierMain && importSupplierMessage && importSupplierDescription) {
+            const hasSupplierInfo = Boolean(importSupplierMessage.textContent || importSupplierDescription.textContent);
+            importSupplierMain.classList.toggle('hidden', !hasSupplierInfo);
+          }
         };
 
         const setSupplierSummary = (supplier) => {
@@ -7259,14 +8678,18 @@
           const hasMessage = Boolean(message);
           const hasDescription = Boolean(description);
           const hasActions = Array.isArray(actions) && actions.length > 0;
+          const hasInlineFileFeedback = Boolean(importFileFeedback && !importFileFeedback.classList.contains('hidden'));
 
-          if (!hasMessage && !hasDescription && !hasActions) {
+          if (!hasMessage && !hasDescription && !hasActions && !hasInlineFileFeedback) {
             importSupplierStatus.classList.add('hidden');
             toggleSupplierStatusLayout(false);
             if (importSupplierMessage) importSupplierMessage.textContent = '';
             if (importSupplierDescription) {
               importSupplierDescription.textContent = '';
               importSupplierDescription.classList.add('hidden');
+            }
+            if (importSupplierMain) {
+              importSupplierMain.classList.add('hidden');
             }
             if (importSupplierActions) {
               importSupplierActions.innerHTML = '';
@@ -7290,6 +8713,10 @@
 
           if (importSupplierMessage) {
             importSupplierMessage.textContent = message || '';
+          }
+
+          if (importSupplierMain) {
+            importSupplierMain.classList.toggle('hidden', !hasMessage && !hasDescription);
           }
 
           if (importSupplierDescription) {
@@ -7386,6 +8813,7 @@
               '';
             const supplierPayload = supplierSource
               ? {
+                  id: lastSupplierRecord?._id ? String(lastSupplierRecord._id) : '',
                   name: supplierName,
                   fantasyName: supplierSource?.fantasyName || '',
                   document: supplierSource?.document ? digitsOnly(supplierSource.document) : '',
@@ -7393,6 +8821,9 @@
                   email: supplierSource?.email || '',
                   phone: supplierSource?.phone || '',
                   address: supplierSource?.address || null,
+                  importProductRules: Array.isArray(lastSupplierRecord?.importProductRules)
+                    ? lastSupplierRecord.importProductRules
+                    : [],
                 }
               : null;
             const payload = {
@@ -7573,6 +9004,15 @@
         };
 
         const closeProductIframeModal = () => {
+          const pendingItem =
+            (productIframePendingRevalidationSource === 'register'
+              || productIframePendingRevalidationSource === 'select')
+              ? productIframePendingRevalidationItem
+              : null;
+
+          productIframePendingRevalidationItem = null;
+          productIframePendingRevalidationSource = '';
+
           if (!productIframeModal) return;
           resetProductIframeModal();
           teardownProductModalHeightSync();
@@ -7589,6 +9029,17 @@
             }
           }
           productModalPreviousFocus = null;
+
+          if (pendingItem && lastNfeData) {
+            setTimeout(async () => {
+              try {
+                invalidateLookupCachesForItem(pendingItem, lastNfeData);
+                await validateImportedProductItem(pendingItem, lastNfeData);
+              } catch (error) {
+                console.error('Não foi possível revalidar o produto cadastrado no iframe.', error);
+              }
+            }, 0);
+          }
         };
 
         const openProductIframeModal = (url, item, nfeData) => {
@@ -7626,6 +9077,8 @@
 
         const openProductRegistration = (item) => {
           if (!item) return;
+          productIframePendingRevalidationItem = item;
+          productIframePendingRevalidationSource = 'register';
           persistProductDraft(item, lastNfeData);
           const url = buildProductRegistrationUrl(item, lastNfeData);
           openProductIframeModal(url, item, lastNfeData);
@@ -7641,6 +9094,8 @@
             notify('Não foi possível identificar o produto cadastrado para abrir no modal.', 'error');
             return;
           }
+          productIframePendingRevalidationItem = item;
+          productIframePendingRevalidationSource = 'select';
           openProductIframeModal(url, item, lastNfeData);
         };
 
@@ -7695,6 +9150,71 @@
           const numeric = toNumericValue(value);
           if (!Number.isFinite(numeric)) return null;
           return Math.round(numeric * 1000) / 1000;
+        };
+
+        const resolveCurrentStockFromProductRecord = (product) => {
+          if (!product || typeof product !== 'object') return null;
+          if (Array.isArray(product.estoques) && product.estoques.length > 0) {
+            const total = product.estoques.reduce((sum, entry) => {
+              const quantity = toNumericValue(entry?.quantidade);
+              return Number.isFinite(quantity) ? sum + quantity : sum;
+            }, 0);
+            if (Number.isFinite(total)) {
+              return sanitizeQuantityValue(total);
+            }
+          }
+          const stockValue = toNumericValue(product.stock);
+          return Number.isFinite(stockValue) ? sanitizeQuantityValue(stockValue) : null;
+        };
+
+        const loadCurrentStockByProductId = async (productId) => {
+          const normalizedId = typeof productId === 'string' ? productId.trim() : String(productId || '').trim();
+          if (!normalizedId) return null;
+          if (priceCurrentStockCache.has(normalizedId)) {
+            return priceCurrentStockCache.get(normalizedId);
+          }
+          try {
+            const headers = buildAuthHeaders();
+            const response = await fetch(`${apiBaseUrl}/products/${normalizedId}`, { headers });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              return null;
+            }
+            const stockValue = resolveCurrentStockFromProductRecord(payload);
+            priceCurrentStockCache.set(normalizedId, stockValue);
+            return stockValue;
+          } catch (_) {
+            return null;
+          }
+        };
+
+        const refreshPriceItemsCurrentStock = async (items) => {
+          if (!Array.isArray(items) || !items.length) return;
+          const uniqueIds = Array.from(
+            new Set(
+              items
+                .map((entry) => (entry && entry.productId ? String(entry.productId).trim() : ''))
+                .filter(Boolean)
+            )
+          );
+          if (!uniqueIds.length) return;
+
+          await Promise.all(
+            uniqueIds.map(async (productId) => {
+              const stockValue = await loadCurrentStockByProductId(productId);
+              if (!Number.isFinite(stockValue)) return;
+              items.forEach((entry) => {
+                if (!entry || String(entry.productId || '') !== productId) return;
+                entry.currentStock = sanitizeQuantityValue(stockValue);
+                const entryStockValue = sanitizeQuantityValue(entry.entryStock);
+                entry.previousStock =
+                  Number.isFinite(entry.currentStock) && Number.isFinite(entryStockValue)
+                    ? Math.max(sanitizeQuantityValue(entry.currentStock - entryStockValue) || 0, 0)
+                    : null;
+                updateEntryDisplays(entry);
+              });
+            })
+          );
         };
 
         const resolveProductNumericField = (product, fields) => {
@@ -7801,7 +9321,7 @@
               item,
               resolveMainProductConversionFactor(item)
             ));
-            const currentStock = sanitizeQuantityValue(item.matchedProduct?.stock);
+            const currentStock = resolveCurrentStockFromProductRecord(item.matchedProduct);
             const previousStock =
               Number.isFinite(currentStock) && Number.isFinite(entryStock)
                 ? Math.max(sanitizeQuantityValue(currentStock - entryStock) || 0, 0)
@@ -8000,6 +9520,45 @@
           priceSelectAllCheckbox.indeterminate = selectedCount > 0 && selectedCount < items.length;
         };
 
+        const movePriceFieldFocusVertically = (currentInput, columnKey, direction = 1) => {
+          if (!priceTableBody || !currentInput || !columnKey) return null;
+          const currentRow = currentInput.closest('tr[data-price-row]');
+          if (!currentRow) return null;
+          const rows = Array.from(priceTableBody.querySelectorAll('tr[data-price-row]'));
+          if (!rows.length) return null;
+          const currentIndex = rows.indexOf(currentRow);
+          if (currentIndex < 0) return null;
+
+          let nextIndex = currentIndex + direction;
+          while (nextIndex >= 0 && nextIndex < rows.length) {
+            const candidate = rows[nextIndex].querySelector(`input[data-price-editable="${columnKey}"]`);
+            if (candidate && !candidate.disabled && !candidate.readOnly) {
+              const rowId = rows[nextIndex].dataset.priceRow || '';
+              if (!rowId) return null;
+              return { rowId, columnKey };
+            }
+            nextIndex += direction;
+          }
+          return null;
+        };
+
+        const applyPendingPriceVerticalFocus = () => {
+          if (!priceTableBody || !pricePendingVerticalFocus) return;
+          const { rowId, columnKey } = pricePendingVerticalFocus;
+          pricePendingVerticalFocus = null;
+          if (!rowId || !columnKey) return;
+          const targetInput = priceTableBody.querySelector(
+            `tr[data-price-row="${rowId}"] input[data-price-editable="${columnKey}"]`
+          );
+          if (!(targetInput instanceof HTMLInputElement) || targetInput.disabled || targetInput.readOnly) {
+            return;
+          }
+          targetInput.focus();
+          if (typeof targetInput.select === 'function') {
+            targetInput.select();
+          }
+        };
+
         const createPriceTableRow = (entry) => {
           const row = document.createElement('tr');
           row.dataset.priceRow = entry.id;
@@ -8040,8 +9599,22 @@
           costInput.type = 'text';
           costInput.inputMode = 'decimal';
           costInput.value = entry.displays.costNew;
+          costInput.dataset.priceEditable = 'cost';
           costInput.className = buildReadOnlyInputClasses(false);
           costInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Tab' && !event.altKey && !event.ctrlKey && !event.metaKey) {
+              event.preventDefault();
+              const direction = event.shiftKey ? -1 : 1;
+              const nextTarget = movePriceFieldFocusVertically(costInput, 'cost', direction);
+              if (!nextTarget) {
+                costInput.focus();
+                costInput.select();
+                return;
+              }
+              pricePendingVerticalFocus = nextTarget;
+              costInput.blur();
+              return;
+            }
             if (event.key === 'Enter') {
               event.preventDefault();
               costInput.blur();
@@ -8051,6 +9624,9 @@
             const value = sanitizeCurrencyValue(costInput.value);
             if (!Number.isFinite(value)) {
               costInput.value = entry.displays.costNew;
+              if (pricePendingVerticalFocus) {
+                renderPriceAdjustmentTable();
+              }
               return;
             }
             entry.costNew = value;
@@ -8066,10 +9642,24 @@
           markupInput.type = 'text';
           markupInput.inputMode = 'decimal';
           markupInput.value = entry.displays.markup;
+          markupInput.dataset.priceEditable = 'markup';
           const markupReadOnly = priceAdjustmentState.maintainMarkup;
           markupInput.readOnly = markupReadOnly;
           markupInput.className = buildReadOnlyInputClasses(markupReadOnly).replace('w-24', 'w-20');
           markupInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Tab' && !event.altKey && !event.ctrlKey && !event.metaKey) {
+              event.preventDefault();
+              const direction = event.shiftKey ? -1 : 1;
+              const nextTarget = movePriceFieldFocusVertically(markupInput, 'markup', direction);
+              if (!nextTarget) {
+                markupInput.focus();
+                markupInput.select();
+                return;
+              }
+              pricePendingVerticalFocus = nextTarget;
+              markupInput.blur();
+              return;
+            }
             if (event.key === 'Enter') {
               event.preventDefault();
               markupInput.blur();
@@ -8080,6 +9670,9 @@
             const value = sanitizePercentValue(markupInput.value);
             if (!Number.isFinite(value)) {
               markupInput.value = entry.displays.markup;
+              if (pricePendingVerticalFocus) {
+                renderPriceAdjustmentTable();
+              }
               return;
             }
             entry.markupCurrent = value;
@@ -8095,10 +9688,24 @@
           saleInput.type = 'text';
           saleInput.inputMode = 'decimal';
           saleInput.value = entry.displays.saleNew;
+          saleInput.dataset.priceEditable = 'sale';
           const saleReadOnly = priceAdjustmentState.maintainMarkup;
           saleInput.readOnly = saleReadOnly;
           saleInput.className = buildReadOnlyInputClasses(saleReadOnly);
           saleInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Tab' && !event.altKey && !event.ctrlKey && !event.metaKey) {
+              event.preventDefault();
+              const direction = event.shiftKey ? -1 : 1;
+              const nextTarget = movePriceFieldFocusVertically(saleInput, 'sale', direction);
+              if (!nextTarget) {
+                saleInput.focus();
+                saleInput.select();
+                return;
+              }
+              pricePendingVerticalFocus = nextTarget;
+              saleInput.blur();
+              return;
+            }
             if (event.key === 'Enter') {
               event.preventDefault();
               saleInput.blur();
@@ -8109,6 +9716,9 @@
             const value = sanitizeCurrencyValue(saleInput.value);
             if (!Number.isFinite(value)) {
               saleInput.value = entry.displays.saleNew;
+              if (pricePendingVerticalFocus) {
+                renderPriceAdjustmentTable();
+              }
               return;
             }
             entry.saleNew = value;
@@ -8177,6 +9787,7 @@
               priceEmptyRow.classList.remove('hidden');
             }
             syncPriceSelectAllState();
+            pricePendingVerticalFocus = null;
             return;
           }
 
@@ -8191,6 +9802,7 @@
           });
           priceTableBody.appendChild(fragment);
           syncPriceSelectAllState();
+          applyPendingPriceVerticalFocus();
         };
 
         const downloadPriceAdjustmentTableAsExcel = () => {
@@ -8436,6 +10048,7 @@
           if (!priceModal) return;
           if (priceAdjustmentState.isProcessing) return;
           priceAdjustmentState.isOpen = false;
+          pricePendingVerticalFocus = null;
           if (priceModalCard) {
             priceModalCard.classList.add('opacity-0', 'scale-95');
             setTimeout(() => {
@@ -8449,9 +10062,11 @@
           }
         };
 
-        const openPriceAdjustmentModal = () => {
+        const openPriceAdjustmentModal = async () => {
           if (!priceModal || !priceAdjustmentButton || priceAdjustmentButton.disabled) return;
+          pricePendingVerticalFocus = null;
           priceAdjustmentState.items = buildPriceAdjustmentItems();
+          await refreshPriceItemsCurrentStock(priceAdjustmentState.items);
           priceAdjustmentState.filters = {};
           priceFilterInputs.forEach((input) => {
             if (!(input instanceof HTMLInputElement)) return;
@@ -9318,6 +10933,30 @@
           return indicator;
         };
 
+        const buildDilutionIndicator = (item) => {
+          if (!item?.dilutionApplied) return null;
+          const indicator = document.createElement('span');
+          indicator.className =
+            'inline-flex h-4 w-4 items-center justify-center rounded-full bg-sky-100 text-[9px] font-bold text-sky-700';
+          indicator.textContent = 'D';
+
+          const details = [];
+          if (item.dilutionGroupId) {
+            details.push(`Grupo: ${item.dilutionGroupId}`);
+          }
+          if (Number.isFinite(toNumeric(item.dilutionAllocatedValue))) {
+            details.push(`Rateio: R$ ${formatMoneyValue(toNumeric(item.dilutionAllocatedValue))}`);
+          }
+          if (Number.isFinite(toNumeric(item.dilutionUnitDiscount))) {
+            details.push(`Desc. unit.: ${formatMoneyValue(toNumeric(item.dilutionUnitDiscount))}`);
+          }
+          details.push('Custo ajustado por diluição');
+          const tooltip = details.join('\n');
+          indicator.title = tooltip;
+          indicator.setAttribute('aria-label', tooltip.replace(/\n/g, ' · '));
+          return indicator;
+        };
+
         const buildInternalCodeCell = (item) => {
           const cell = document.createElement('td');
           cell.className = 'px-2 py-1.5 font-semibold text-gray-700 whitespace-nowrap';
@@ -9333,6 +10972,10 @@
           const indicator = buildBonificationIndicator(item);
           if (indicator) {
             wrapper.appendChild(indicator);
+          }
+          const dilutionIndicator = buildDilutionIndicator(item);
+          if (dilutionIndicator) {
+            wrapper.appendChild(dilutionIndicator);
           }
 
           cell.appendChild(wrapper);
@@ -9498,19 +11141,12 @@
             item?.matchedProduct && lastNfeData
               ? findSupplierEntryForProduct(item.matchedProduct, item, lastNfeData)
               : null;
-          const supplierCalcType = canonicalSupplierCalcType(supplierEntry?.tipoCalculo);
-          const supplierCalcValue = parseSupplierCalcValue(supplierEntry?.valorCalculo);
+          const { type: supplierCalcType, value: supplierCalcValue } = resolveSupplierCalcConfig(supplierEntry);
           let supplierBaseFactor = null;
           let supplierFactor = null;
           if (supplierEntry && supplierCalcType && supplierCalcValue !== null) {
-            supplierBaseFactor = getBaseConversionFactor(item);
-            if (!Number.isFinite(supplierBaseFactor) || supplierBaseFactor <= 0) {
-              supplierBaseFactor = 1;
-            }
-            const computedFactor =
-              supplierCalcType === 'divide'
-                ? supplierBaseFactor / supplierCalcValue
-                : supplierBaseFactor * supplierCalcValue;
+            supplierBaseFactor = 1;
+            const computedFactor = computeFactorFromSupplierCalc(supplierCalcType, supplierCalcValue);
             if (Number.isFinite(computedFactor) && computedFactor > 0) {
               supplierFactor = computedFactor;
             }
@@ -10725,6 +12361,101 @@
           return null;
         };
 
+        const invalidateLookupCachesForItem = (item, nfeData) => {
+          if (!item) return;
+
+          if (Array.isArray(item.barcodeCandidates)) {
+            item.barcodeCandidates.forEach((candidate) => {
+              const normalized = normalizeBarcodeForComparison(candidate);
+              if (!normalized) return;
+              productLookupCache.delete(normalized);
+              productLookupPromises.delete(normalized);
+            });
+          }
+
+          const supplierInfo = resolveActiveSupplierInfo(nfeData);
+          const cacheKey = buildSupplierLookupKey(supplierInfo, item.supplierCode);
+          if (cacheKey) {
+            supplierReferenceLookupCache.delete(cacheKey);
+            supplierReferenceLookupPromises.delete(cacheKey);
+          }
+        };
+
+        const validateImportedProductItem = async (item, nfeData) => {
+          if (!item || !nfeData) return;
+
+          const supplierInfo = resolveActiveSupplierInfo(nfeData);
+          const hasSupplierReference = Boolean(canonicalSupplierProductCode(item?.supplierCode));
+          const hasBarcodeCandidates = Array.isArray(item?.barcodeCandidates) && item.barcodeCandidates.length;
+
+          if (!hasSupplierReference && !hasBarcodeCandidates) {
+            renderImportedProducts(Array.isArray(nfeData.items) ? nfeData.items : []);
+            if (Array.isArray(mainProductTableState.items) && mainProductTableState.items.length) {
+              updateMainProductsTableDisplay();
+            }
+            return;
+          }
+
+          item.validationStatus = 'checking';
+          renderImportedProducts(Array.isArray(nfeData.items) ? nfeData.items : []);
+          if (Array.isArray(mainProductTableState.items) && mainProductTableState.items.length) {
+            updateMainProductsTableDisplay();
+          }
+
+          let matchedProduct = null;
+          let matched = false;
+
+          if (hasSupplierReference) {
+            try {
+              matchedProduct = await findProductBySupplierReference(supplierInfo, item.supplierCode);
+              matched = Boolean(matchedProduct);
+            } catch (error) {
+              console.error('Erro ao validar produto individual pelo fornecedor:', error);
+              item.validationStatus = 'error';
+              renderImportedProducts(Array.isArray(nfeData.items) ? nfeData.items : []);
+              if (Array.isArray(mainProductTableState.items) && mainProductTableState.items.length) {
+                updateMainProductsTableDisplay();
+              }
+              return;
+            }
+          }
+
+          if (!matched && hasBarcodeCandidates) {
+            try {
+              matchedProduct = await findProductMatchForCandidates(item.barcodeCandidates);
+              matched = Boolean(matchedProduct);
+            } catch (error) {
+              console.error('Erro ao validar produto individual pelo código de barras:', error);
+              item.validationStatus = 'error';
+              renderImportedProducts(Array.isArray(nfeData.items) ? nfeData.items : []);
+              if (Array.isArray(mainProductTableState.items) && mainProductTableState.items.length) {
+                updateMainProductsTableDisplay();
+              }
+              return;
+            }
+          }
+
+          if (matched && matchedProduct) {
+            normalizeProductPricing(matchedProduct);
+            item.matchedProduct = matchedProduct;
+            item.validationStatus = 'matched';
+            applySupplierConversionFromProduct(item, matchedProduct, nfeData);
+            try {
+              await ensureProductSupplierLink(matchedProduct, item, nfeData);
+            } catch (error) {
+              console.error('Erro ao vincular produto individual ao fornecedor automaticamente:', error);
+            }
+          } else {
+            item.matchedProduct = null;
+            item.validationStatus = 'not-found';
+          }
+
+          renderImportedProducts(Array.isArray(nfeData.items) ? nfeData.items : []);
+          if (Array.isArray(mainProductTableState.items) && mainProductTableState.items.length) {
+            updateMainProductsTableDisplay();
+          }
+        };
+
         const validateImportedProducts = async (nfeData) => {
           if (!nfeData) return;
           const items = Array.isArray(nfeData.items) ? nfeData.items : [];
@@ -10938,6 +12669,7 @@
           setSummaryInput('indicador-ie', formatIndIe(data.dest?.indIEDest));
 
           const items = Array.isArray(data.items) ? data.items : [];
+          applySupplierConversionForMatchedItems(data);
           renderImportedProducts(items);
         };
 
@@ -10965,6 +12697,24 @@
           if (refreshImportedProductsButton) {
             refreshImportedProductsButton.classList.toggle('hidden', normalized === IMPORT_CONTEXT_BONUS);
           }
+          if (verifyImportFactorsButton) {
+            verifyImportFactorsButton.classList.toggle('hidden', normalized === IMPORT_CONTEXT_BONUS);
+          }
+          if (saveImportFactorsButton) {
+            saveImportFactorsButton.classList.toggle('hidden', normalized === IMPORT_CONTEXT_BONUS);
+          }
+          if (importQuickActionNormalItems && importQuickActionNormalItems.length) {
+            importQuickActionNormalItems.forEach((element) => {
+              element.style.display = normalized === IMPORT_CONTEXT_BONUS ? 'none' : 'inline-flex';
+            });
+          }
+          if (importQuickActionBonusDilution) {
+            importQuickActionBonusDilution.style.display =
+              normalized === IMPORT_CONTEXT_BONUS ? 'inline-flex' : 'none';
+          }
+          if (bonusDilutionCheckbox) {
+            bonusDilutionCheckbox.checked = false;
+          }
 
           if (normalized === IMPORT_CONTEXT_BONUS) {
             const hasPendingBonus = Array.isArray(pendingBonusData?.items) && pendingBonusData.items.length > 0;
@@ -10981,6 +12731,7 @@
               }
             }
           } else if (normalized === IMPORT_CONTEXT_FULL) {
+            closeBonusDilutionModal({ keepCheckboxChecked: false });
             if (lastNfeData) {
               updateSummaryFromData(lastNfeData);
             } else {
@@ -10988,6 +12739,15 @@
             }
             if (refreshImportedProductsButton) {
               refreshImportedProductsButton.classList.remove('hidden');
+            }
+            if (verifyImportFactorsButton) {
+              verifyImportFactorsButton.classList.remove('hidden');
+            }
+            if (saveImportFactorsButton) {
+              saveImportFactorsButton.classList.remove('hidden');
+            }
+            if (importQuickActionBonusDilution) {
+              importQuickActionBonusDilution.style.display = 'none';
             }
           }
         };
@@ -11126,6 +12886,9 @@
                   legalName: selectedOption.dataset?.supplierName || '',
                   cnpj: optionDocument,
                 };
+              }
+              if (lastSupplierRecord) {
+                syncImportQuickTagsFromSupplier(lastSupplierRecord);
               }
             }
           }
@@ -12146,6 +13909,10 @@
             if (mainIndicator) {
               codeWrapper.appendChild(mainIndicator);
             }
+            const dilutionIndicator = buildDilutionIndicator(item);
+            if (dilutionIndicator) {
+              codeWrapper.appendChild(dilutionIndicator);
+            }
             codeCell.appendChild(codeWrapper);
 
             const descriptionCell = document.createElement('td');
@@ -12348,7 +14115,7 @@
           if (!deleteEntryButton) return;
           const normalized = determineDraftStatusKey(status ?? currentDraftStatus);
           const hasDraft = Boolean(currentDraftId);
-          const shouldShow = hasDraft && normalized === 'approved';
+          const shouldShow = hasDraft;
           deleteEntryButton.classList.toggle('hidden', !shouldShow);
 
           if (!shouldShow) {
@@ -12364,6 +14131,10 @@
             return;
           }
 
+          if (deleteEntryText) {
+            deleteEntryText.textContent =
+              normalized === 'approved' ? 'Excluir nota' : 'Excluir rascunho';
+          }
           setDeleteButtonState(isDeletingDraft);
         };
 
@@ -13459,9 +15230,19 @@
               `Fornecedor localizado: ${supplierName}`,
               `Aplicamos automaticamente o fornecedor cadastrado (${formattedDocument}).`
             );
+            if (lastSupplierRecord) {
+              syncImportQuickTagsFromSupplier(lastSupplierRecord);
+            }
+            if (lastNfeData && Array.isArray(lastNfeData.items) && lastNfeData.items.length) {
+              const updatedFactors = applySupplierConversionForMatchedItems(lastNfeData);
+              if (updatedFactors > 0) {
+                renderImportedProducts(lastNfeData.items);
+              }
+            }
             syncAccountingAccountWithDuplicates();
             return;
           }
+          resetImportQuickTags();
           const registerUrl = buildSupplierRegistrationUrl(supplier, lastNfeData);
           updateSupplierStatusCard(
             'warning',
@@ -14153,11 +15934,18 @@
             } catch (error) {
               console.error('Erro ao processar XML da NF-e:', error);
               showFileFeedback(error.message || 'Não foi possível processar o XML informado.', 'error');
+            } finally {
+              if (importFileInput) {
+                importFileInput.value = '';
+              }
             }
           };
           reader.onerror = () => {
             console.error('Erro ao ler o arquivo XML selecionado.', reader.error);
             showFileFeedback('Não foi possível ler o arquivo XML selecionado.', 'error');
+            if (importFileInput) {
+              importFileInput.value = '';
+            }
           };
           reader.readAsText(file);
         };
@@ -14188,6 +15976,7 @@
 
         function openImportModal() {
           previouslyFocusedElement = document.activeElement;
+          resetImportQuickTags();
           importModal.classList.remove('hidden');
           document.body.classList.add('overflow-hidden');
           setPendingPeriodDefaults();
@@ -14275,6 +16064,38 @@
           return applied;
         };
 
+        renderImportQuickTags();
+
+        importTagsInput?.addEventListener('keydown', (event) => {
+          if (event.key !== 'Enter') return;
+          event.preventDefault();
+          const value = importTagsInput.value || '';
+          const previousTags = [...importQuickTags];
+          addImportQuickTag(value);
+          importTagsInput.value = '';
+          persistImportQuickTags().catch((error) => {
+            importQuickTags = previousTags;
+            renderImportQuickTags();
+            notify(error?.message || 'Não foi possível salvar as anotações do fornecedor.', 'error');
+          });
+        });
+
+        importTagsList?.addEventListener('click', (event) => {
+          const target = event.target;
+          if (!(target instanceof HTMLElement)) return;
+          const removeButton = target.closest('[data-remove-import-tag-index]');
+          if (!removeButton) return;
+          const parsedIndex = Number(removeButton.getAttribute('data-remove-import-tag-index'));
+          if (!Number.isInteger(parsedIndex)) return;
+          const previousTags = [...importQuickTags];
+          removeImportQuickTagAtIndex(parsedIndex);
+          persistImportQuickTags().catch((error) => {
+            importQuickTags = previousTags;
+            renderImportQuickTags();
+            notify(error?.message || 'Não foi possível salvar as anotações do fornecedor.', 'error');
+          });
+        });
+
         openImportModalButtons.forEach((button) => {
           button.addEventListener('click', (event) => {
             event.preventDefault();
@@ -14308,6 +16129,10 @@
 
         document.addEventListener('keydown', (event) => {
           if (event.key === 'Escape') {
+            if (bonusDilutionModal && !bonusDilutionModal.classList.contains('hidden')) {
+              closeBonusDilutionModal();
+              return;
+            }
             if (codeLookupModal && !codeLookupModal.classList.contains('hidden')) {
               closeCodeLookupModal();
               return;
@@ -14325,6 +16150,212 @@
           refreshImportedProductsButton.addEventListener('click', (event) => {
             event.preventDefault();
             refreshImportedProductsList();
+          });
+        }
+
+        if (verifyImportFactorsButton) {
+          verifyImportFactorsButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            verifyImportedFactorsFromDescription();
+          });
+        }
+
+        if (saveImportFactorsButton) {
+          saveImportFactorsButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            saveImportedFactorsToSupplier();
+          });
+        }
+
+        bonusDilutionCheckbox?.addEventListener('change', () => {
+          if (bonusDilutionCheckbox.checked) {
+            openBonusDilutionModal();
+          } else {
+            closeBonusDilutionModal({ keepCheckboxChecked: false });
+          }
+        });
+
+        bonusDilutionAddGroupButton?.addEventListener('click', (event) => {
+          event.preventDefault();
+          const nextNumber = bonusDilutionState.groups.length + 1;
+          const groupId = `group-${Date.now()}-${nextNumber}`;
+          const group = {
+            id: groupId,
+            label: `Grupo ${nextNumber}`,
+            bonusKeys: new Set(),
+            originalKeys: new Set(),
+            colorIndex: resolveNextBonusGroupColorIndex(),
+          };
+          bonusDilutionState.groups.push(group);
+          bonusDilutionState.activeGroupId = groupId;
+          renderBonusDilutionTables();
+        });
+
+        if (bonusDilutionModal) {
+          bonusDilutionCloseTriggers.forEach((button) => {
+            button.addEventListener('click', (event) => {
+              event.preventDefault();
+              closeBonusDilutionModal();
+            });
+          });
+
+          bonusDilutionModal.addEventListener('click', (event) => {
+            const target = event.target;
+            if (!(target instanceof HTMLElement)) return;
+            if (target.hasAttribute('data-close-bonus-dilution-modal')) {
+              closeBonusDilutionModal();
+              return;
+            }
+
+            const originalCheckAll = target.closest('[data-bonus-dilution-original-check-all]');
+            if (originalCheckAll) {
+              const activeGroup =
+                bonusDilutionState.groups.find((group) => group.id === bonusDilutionState.activeGroupId) || null;
+              if (!activeGroup) {
+                notify('Crie e selecione um grupo antes de marcar produtos da nota original.', 'warning');
+                return;
+              }
+              const shouldCheckAll = Boolean(originalCheckAll.checked);
+              const selectableKeys = getSelectableOriginalKeysForActiveGroup();
+              selectableKeys.forEach((key) => {
+                if (shouldCheckAll) {
+                  activeGroup.originalKeys.add(key);
+                } else {
+                  activeGroup.originalKeys.delete(key);
+                }
+              });
+              renderBonusDilutionTables();
+              return;
+            }
+
+            const originalCheck = target.closest('[data-bonus-dilution-original-check]');
+            if (originalCheck) {
+              const activeGroup =
+                bonusDilutionState.groups.find((group) => group.id === bonusDilutionState.activeGroupId) || null;
+              if (!activeGroup) {
+                notify('Crie e selecione um grupo antes de marcar produtos da nota original.', 'warning');
+                renderBonusDilutionTables();
+                return;
+              }
+              const key = originalCheck.getAttribute('data-bonus-dilution-original-check') || '';
+              const checked = Boolean(originalCheck.checked);
+              if (key) {
+                if (checked) {
+                  activeGroup.originalKeys.add(key);
+                } else {
+                  activeGroup.originalKeys.delete(key);
+                }
+                renderBonusDilutionTables();
+              }
+              return;
+            }
+
+            const bonusCard = target.closest('[data-bonus-dilution-bonus-card]');
+            if (bonusCard) {
+              const key = bonusCard.getAttribute('data-bonus-dilution-bonus-card') || '';
+              const assignedGroupId = bonusCard.getAttribute('data-bonus-dilution-assigned-group-id') || '';
+              const activeGroup =
+                bonusDilutionState.groups.find((group) => group.id === bonusDilutionState.activeGroupId) || null;
+              if (!activeGroup) {
+                notify('Crie e selecione um grupo antes de marcar produtos de bonificação.', 'warning');
+                return;
+              }
+              if (assignedGroupId && assignedGroupId !== activeGroup.id) {
+                notify('Este item já está atribuído a outro grupo.', 'warning');
+                return;
+              }
+              if (key) {
+                if (activeGroup.bonusKeys.has(key)) {
+                  activeGroup.bonusKeys.delete(key);
+                } else {
+                  activeGroup.bonusKeys.add(key);
+                }
+                renderBonusDilutionTables();
+              }
+              return;
+            }
+
+            const groupButton = target.closest('[data-bonus-dilution-group-id]');
+            if (groupButton) {
+              const groupId = groupButton.getAttribute('data-bonus-dilution-group-id') || '';
+              const group = bonusDilutionState.groups.find((entry) => entry.id === groupId) || null;
+              if (!group) return;
+              bonusDilutionState.activeGroupId = groupId;
+              renderBonusDilutionTables();
+              return;
+            }
+
+            const removeGroupButton = target.closest('[data-bonus-dilution-remove-group-id]');
+            if (removeGroupButton) {
+              const groupId = removeGroupButton.getAttribute('data-bonus-dilution-remove-group-id') || '';
+              if (!groupId) return;
+              bonusDilutionState.groups = bonusDilutionState.groups.filter((group) => group.id !== groupId);
+
+              if (!bonusDilutionState.groups.length) {
+                const fallbackId = `group-${Date.now()}-1`;
+                bonusDilutionState.groups = [
+                  {
+                    id: fallbackId,
+                    label: 'Grupo 1',
+                    bonusKeys: new Set(),
+                    originalKeys: new Set(),
+                    colorIndex: 0,
+                  },
+                ];
+                bonusDilutionState.activeGroupId = fallbackId;
+              } else {
+                bonusDilutionState.groups = bonusDilutionState.groups.map((group, index) => {
+                  group.label = `Grupo ${index + 1}`;
+                  return group;
+                });
+                if (!bonusDilutionState.groups.some((group) => group.id === bonusDilutionState.activeGroupId)) {
+                  bonusDilutionState.activeGroupId = bonusDilutionState.groups[0].id;
+                }
+              }
+
+              renderBonusDilutionTables();
+              return;
+            }
+          });
+
+          bonusDilutionApplyButton?.addEventListener('click', (event) => {
+            event.preventDefault();
+            if (!bonusDilutionState.groups.length) {
+              notify('Crie ao menos um grupo para aplicar a diluição.', 'warning');
+              return;
+            }
+            const hasValidGroup = bonusDilutionState.groups.some((group) => {
+              if (!(group.originalKeys.size > 0 && group.bonusKeys.size > 0)) return false;
+              const metrics = computeBonusDilutionForGroup(group);
+              return metrics.totalBonusValue > 0 && metrics.totalOriginalValue > 0 && metrics.entries.length > 0;
+            });
+            if (!hasValidGroup) {
+              notify(
+                'Cada grupo precisa ter produtos válidos de bonificação e da nota original com quantidade/custo válidos.',
+                'warning'
+              );
+              return;
+            }
+            const affected = applyBonusDilutionToOriginalItems();
+            if (affected > 0) {
+              if (Array.isArray(lastNfeData?.items)) {
+                renderImportedProducts(lastNfeData.items);
+              }
+              if (Array.isArray(mainProductTableState.items) && mainProductTableState.items.length) {
+                updateMainProductsTableDisplay();
+              }
+              const shouldSaveNow =
+                typeof window !== 'undefined' &&
+                typeof window.confirm === 'function' &&
+                window.confirm(
+                  'Diluição aplicada nos produtos selecionados.\n\nOK: salvar em rascunho agora.\nCancelar: manter aplicado e salvar depois.'
+                );
+              if (shouldSaveNow && saveDraftButton) {
+                saveDraftButton.click();
+              }
+            }
+            notify('Seleção de diluição registrada.', 'success');
+            closeBonusDilutionModal({ keepCheckboxChecked: true });
           });
         }
 
@@ -14664,6 +16695,7 @@
             }
 
             isApprovingDraft = true;
+            isStockMovementFinalizing = true;
             setApproveButtonState(true);
 
             try {
@@ -14741,13 +16773,29 @@
                 loadCodeLookupList(companySelect.value, { forceReload: true }).catch(() => {});
               }
 
-              notify('Entrada da NF-e aprovada com sucesso.', 'success');
+              const stockMovementSummary =
+                approvalData?.stockMovement && typeof approvalData.stockMovement === 'object'
+                  ? approvalData.stockMovement
+                  : approvedDraft?.metadata?.stockMovement && typeof approvedDraft.metadata.stockMovement === 'object'
+                  ? approvedDraft.metadata.stockMovement
+                  : null;
+              const stockMovementCompleted = Boolean(stockMovementSummary?.completed);
+              const movedProductsCount = Number(stockMovementSummary?.products || 0);
+
+              if (!stockMovementCompleted || movedProductsCount <= 0) {
+                throw new Error(
+                  'A aprovação foi recebida, mas a movimentação de estoque não foi confirmada. Revise e tente novamente.'
+                );
+              }
+
+              notify('Entrada da NF-e aprovada e estoque movimentado com sucesso.', 'success');
             } catch (error) {
               console.error('Erro ao aprovar a entrada da NF-e:', error);
               notify(error?.message || 'Não foi possível aprovar a entrada da NF-e.', 'error');
               setFormLockState(determineDraftStatusKey(currentDraftStatus) === 'approved');
             } finally {
               isApprovingDraft = false;
+              isStockMovementFinalizing = false;
               setApproveButtonState(false);
             }
           });
@@ -14777,6 +16825,7 @@
 
             try {
               isDeletingDraft = true;
+              isStockMovementFinalizing = statusKey === 'approved';
               setDeleteButtonState(true);
 
               const headers = buildAuthHeaders();
@@ -14796,9 +16845,27 @@
                 throw new Error(message);
               }
 
+              const draftRemovedOnly = Boolean(result?.draftRemovedOnly);
+              const requiresStockReversalConfirmation = statusKey === 'approved' && !draftRemovedOnly;
+
+              if (requiresStockReversalConfirmation) {
+                const stockReversalSummary =
+                  result?.stockReversal && typeof result.stockReversal === 'object'
+                    ? result.stockReversal
+                    : null;
+                const stockReversalCompleted = Boolean(stockReversalSummary?.completed);
+                const reversedProductsCount = Number(stockReversalSummary?.products || 0);
+
+                if (!stockReversalCompleted || reversedProductsCount <= 0) {
+                  throw new Error(
+                    'A nota foi excluída, mas o estorno de estoque não foi confirmado. Revise e tente novamente.'
+                  );
+                }
+              }
+
               const successMessage =
-                statusKey === 'approved'
-                  ? 'Entrada da NF-e aprovada excluída com sucesso.'
+                requiresStockReversalConfirmation
+                  ? 'Entrada da NF-e aprovada excluída com sucesso e estoque estornado.'
                   : 'Nota excluída com sucesso.';
               notify(successMessage, 'success');
 
@@ -14813,6 +16880,7 @@
               notify(error?.message || 'Não foi possível excluir a entrada da NF-e.', 'error');
             } finally {
               isDeletingDraft = false;
+              isStockMovementFinalizing = false;
               setDeleteButtonState(false);
               updateDeleteButtonState(currentDraftStatus);
             }
@@ -14920,7 +16988,6 @@
         importModeRadios.forEach((radio) => {
           radio.addEventListener('change', updateImportMode);
         });
-
         if (importFilePanel && importFileInput) {
           const toggleHover = (isActive) => {
             importFilePanel.classList.toggle('border-primary/60', isActive);

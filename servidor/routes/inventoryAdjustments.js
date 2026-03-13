@@ -787,6 +787,24 @@ router.post('/', requireAuth, authorizeRoles(...allowedRoles), async (req, res) 
           quantity: delta,
           session,
           cascadeFractional: false,
+          movementContext: {
+            movementDate: parsedDate,
+            operation: normalizedOperation,
+            companyId: company,
+            sourceModule: 'compras.estoque',
+            sourceScreen: 'Entrada/Saída de Estoque',
+            sourceAction: 'movimentacao_manual',
+            sourceType: 'inventory_adjustment_manual',
+            referenceDocument: sanitizeString(referenceDocument),
+            notes: sanitizeString(notes),
+            userId: creatorId,
+            userName: sanitizeString(req.user?.nomeCompleto || req.user?.apelido || req.user?.name || ''),
+            userEmail: sanitizeString(req.user?.email || ''),
+            metadata: {
+              reason: sanitizedReason,
+              responsibleId: String(responsible),
+            },
+          },
         });
       }
 

@@ -4,6 +4,7 @@ const {
   recalculateFractionalStockForProduct,
   refreshParentFractionalStocks,
 } = require('./fractionalInventory');
+const { logInventoryMovement } = require('./inventoryMovementLogger');
 
 const toObjectIdOrNull = (value) => {
   if (!value) return null;
@@ -61,6 +62,7 @@ const adjustProductStockForDeposit = async ({
   session,
   cascadeFractional = true,
   visited,
+  movementContext,
 }) => {
   const delta = Number(quantity);
   if (!Number.isFinite(delta) || delta === 0) {
@@ -72,8 +74,6 @@ const adjustProductStockForDeposit = async ({
   if (!productObjectId || !depositObjectId) {
     return { updated: false };
   }
-
-  const tolerance = 0.000001;
 
   const loadProduct = async () => Product.findById(productObjectId).session(session);
 
@@ -159,29 +159,8 @@ const adjustProductStockForDeposit = async ({
     return { currentQuantity, nextQuantity };
   };
 
-  let { currentQuantity, nextQuantity } = computeNextQuantity();
-
-  if (delta < 0 && nextQuantity < -tolerance) {
-    const refreshed = await refreshFractionalSnapshot('insufficient_stock');
-    if (refreshed) {
-      entry = findEntry() || entry;
-      ({ currentQuantity, nextQuantity } = computeNextQuantity());
-    }
-  }
-
-  if (delta < 0 && nextQuantity < -tolerance) {
-    const error = new Error('Estoque insuficiente para concluir a movimentação.');
-    error.statusCode = 400;
-    error.details = {
-      productId: product._id.toString(),
-      depositId: depositKey,
-      available: currentQuantity,
-      requested: delta,
-    };
-    throw error;
-  }
-
-  entry.quantidade = nextQuantity > 0 ? nextQuantity : 0;
+  const { currentQuantity, nextQuantity } = computeNextQuantity();
+  entry.quantidade = nextQuantity;
   if (!entry.unidade) {
     entry.unidade = product.unidade || 'UN';
   }
@@ -191,10 +170,40 @@ const adjustProductStockForDeposit = async ({
     return sum + (Number.isFinite(qty) ? qty : 0);
   }, 0);
 
-  product.stock = Math.max(0, Math.round(totalStock * 1_000_000) / 1_000_000);
+  product.stock = Math.round(totalStock * 1_000_000) / 1_000_000;
   product.markModified('estoques');
 
   await product.save({ session });
+
+  await logInventoryMovement({
+    session,
+    movementDate: movementContext?.movementDate || new Date(),
+    companyId: movementContext?.companyId,
+    productId: product._id,
+    productCode: product?.cod || '',
+    productName: product?.nome || '',
+    depositId: depositObjectId,
+    fromDepositId: movementContext?.fromDepositId,
+    toDepositId: movementContext?.toDepositId,
+    operation: movementContext?.operation,
+    previousStock: currentQuantity,
+    quantityDelta: delta,
+    currentStock: entry.quantidade,
+    unitCost: Number.isFinite(Number(product?.custo)) ? Number(product.custo) : null,
+    totalValueDelta: Number.isFinite(Number(product?.custo)) ? delta * Number(product.custo) : null,
+    sourceModule: movementContext?.sourceModule || 'estoque',
+    sourceScreen: movementContext?.sourceScreen || '',
+    sourceAction: movementContext?.sourceAction || '',
+    sourceType: movementContext?.sourceType || '',
+    referenceDocument: movementContext?.referenceDocument || '',
+    notes: movementContext?.notes || '',
+    userId: movementContext?.userId,
+    userName: movementContext?.userName || '',
+    userEmail: movementContext?.userEmail || '',
+    metadata: movementContext?.metadata || null,
+  });
+
+  const operations = [{ product: product._id, quantity: delta }];
 
   if (cascadeFractional && !alreadyVisited) {
     const fractionalConfig = product.fracionado || {};
@@ -214,14 +223,20 @@ const adjustProductStockForDeposit = async ({
       if (!Number.isFinite(childDelta) || childDelta === 0) continue;
 
       try {
-        await adjustProductStockForDeposit({
+        const childResult = await adjustProductStockForDeposit({
           productId: childObjectId,
           depositId: depositObjectId,
           quantity: childDelta,
           session,
           cascadeFractional: true,
           visited: visitSet,
+          movementContext,
         });
+        if (Array.isArray(childResult?.operations) && childResult.operations.length) {
+          operations.push(...childResult.operations);
+        } else {
+          operations.push({ product: childObjectId, quantity: childDelta });
+        }
       } catch (error) {
         console.error('Erro ao ajustar estoque de produto fracionado vinculado.', {
           parentProductId: product._id.toString(),
@@ -249,7 +264,7 @@ const adjustProductStockForDeposit = async ({
     }, error);
   }
 
-  return { updated: true };
+  return { updated: true, operations };
 };
 
 module.exports = {

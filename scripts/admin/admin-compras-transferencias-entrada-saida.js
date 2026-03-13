@@ -1492,18 +1492,6 @@
         throw new Error('Produto selecionado está sem nome cadastrado.');
       }
 
-      if (state.operation === 'saida') {
-        const depositStock = stocks.find((entry) => entry?.depositId === String(depositId));
-        const available = Number(depositStock?.quantity) || 0;
-        const tolerance = 0.000001;
-        if (quantity - available > tolerance) {
-          showFeedback(
-            `Estoque insuficiente no depósito selecionado. Disponível: ${formatQuantity(available)}.`,
-            'error',
-          );
-          return;
-        }
-      }
 
       const unitValueParsed = parseDecimal(elements.productCostInput?.value);
       const hasUnitValueInput = unitValueParsed !== null && Number.isFinite(unitValueParsed);

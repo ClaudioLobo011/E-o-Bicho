@@ -192,6 +192,8 @@ const productSchema = new mongoose.Schema({
     especificacoes: {
         idade: { type: [String], default: [] }, // ex.: Filhotes, Adulto, Sênior
         pet: { type: [String], default: [] },   // ex.: Cachorro, Gato, Pássaros, etc.
+        tipo: { type: String, default: '' },    // ex.: Cães, Gatos, Pássaros, Outros
+        castracao: { type: String, default: '' }, // ex.: Castrado, Não castrado
         porteRaca: { type: [String], default: [] }, // ex.: Mini, Pequeno, Médio, Grande, Gigante
         apresentacao: { type: String, default: '' }
     },

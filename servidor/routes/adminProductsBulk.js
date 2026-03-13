@@ -4,6 +4,7 @@ const XLSX = require('xlsx');
 const Product = require('../models/Product');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
+const { logInventoryMovement } = require('../utils/inventoryMovementLogger');
 
 const router = express.Router();
 
@@ -1520,8 +1521,37 @@ router.put('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (req
 
     for (const product of products) {
       try {
+        const previousStock = Number(product?.stock) || 0;
         applyUpdatesToProduct(product, updates, req.user || {});
         await product.save();
+        if (hasEnabledField(updates, 'stock')) {
+          const currentStock = Number(product?.stock) || 0;
+          const quantityDelta = Math.round((currentStock - previousStock) * 1_000_000) / 1_000_000;
+          if (Math.abs(quantityDelta) > 0.0000005) {
+            await logInventoryMovement({
+              movementDate: new Date(),
+              productId: product._id,
+              productCode: product.cod || '',
+              productName: product.nome || '',
+              operation: quantityDelta > 0 ? 'entrada' : 'saida',
+              previousStock,
+              quantityDelta,
+              currentStock,
+              unitCost: Number.isFinite(Number(product?.custo)) ? Number(product.custo) : null,
+              sourceModule: 'compras.estoque',
+              sourceScreen: 'Relação para Alterar Produtos',
+              sourceAction: 'edicao_massa_produto',
+              sourceType: 'bulk_product_stock_edit',
+              referenceDocument: String(product._id),
+              userId: req.user?.id,
+              userName: normalizeString(req.user?.nomeCompleto || req.user?.apelido || req.user?.name || ''),
+              userEmail: normalizeString(req.user?.email || ''),
+              metadata: {
+                route: 'PUT /api/admin/products/bulk',
+              },
+            });
+          }
+        }
         result.updated += 1;
       } catch (error) {
         result.errors.push({ id: product._id.toString(), message: error.message || 'Falha ao atualizar o produto.' });

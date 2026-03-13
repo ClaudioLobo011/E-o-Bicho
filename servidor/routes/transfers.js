@@ -1109,6 +1109,25 @@ router.patch('/:id/status', requireAuth, authorizeRoles(...allowedRoles), async 
                         quantity: -quantity,
                         session,
                         cascadeFractional: true,
+                        movementContext: {
+                            movementDate: new Date(),
+                            operation: 'saida',
+                            companyId: transfer.originCompany,
+                            fromDepositId: originDepositId,
+                            toDepositId: destinationDepositId,
+                            sourceModule: 'compras.transferencias',
+                            sourceScreen: 'Transferências',
+                            sourceAction: 'aprovar_transferencia_saida',
+                            sourceType: 'transfer_approval',
+                            referenceDocument: `TRF-${Number(transfer.number) || 0}`,
+                            userId: req.user?.id,
+                            userName: sanitizeString(req.user?.nomeCompleto || req.user?.apelido || req.user?.name || ''),
+                            userEmail: sanitizeString(req.user?.email || ''),
+                            metadata: {
+                                transferId: String(transfer._id),
+                                status: normalizedStatus,
+                            },
+                        },
                     });
                 }
 
@@ -1121,6 +1140,25 @@ router.patch('/:id/status', requireAuth, authorizeRoles(...allowedRoles), async 
                         quantity,
                         session,
                         cascadeFractional: true,
+                        movementContext: {
+                            movementDate: new Date(),
+                            operation: 'entrada',
+                            companyId: transfer.destinationCompany,
+                            fromDepositId: originDepositId,
+                            toDepositId: destinationDepositId,
+                            sourceModule: 'compras.transferencias',
+                            sourceScreen: 'Transferências',
+                            sourceAction: 'aprovar_transferencia_entrada',
+                            sourceType: 'transfer_approval',
+                            referenceDocument: `TRF-${Number(transfer.number) || 0}`,
+                            userId: req.user?.id,
+                            userName: sanitizeString(req.user?.nomeCompleto || req.user?.apelido || req.user?.name || ''),
+                            userEmail: sanitizeString(req.user?.email || ''),
+                            metadata: {
+                                transferId: String(transfer._id),
+                                status: normalizedStatus,
+                            },
+                        },
                     });
                 }
             }

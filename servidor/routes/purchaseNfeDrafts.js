@@ -1,7 +1,6 @@
-const express = require('express');
+﻿const express = require('express');
 const mongoose = require('mongoose');
 const NfeDraft = require('../models/NfeDraft');
-const Product = require('../models/Product');
 const Deposit = require('../models/Deposit');
 const Store = require('../models/Store');
 const Supplier = require('../models/Supplier');
@@ -11,6 +10,7 @@ const AccountPayable = require('../models/AccountPayable');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 const { collectDistributedDocuments } = require('../services/dfeDistribution');
+const { adjustProductStockForDeposit } = require('../utils/inventoryStock');
 
 const router = express.Router();
 
@@ -430,7 +430,7 @@ router.get(
       if (!normalizedCompanyId) {
         return res
           .status(400)
-          .json({ message: 'Selecione uma empresa válida para consultar as notas autorizadas.' });
+          .json({ message: 'Selecione uma empresa vÃ¡lida para consultar as notas autorizadas.' });
       }
 
       const store = await Store.findById(normalizedCompanyId)
@@ -438,13 +438,13 @@ router.get(
         .lean();
 
       if (!store) {
-        return res.status(404).json({ message: 'Empresa não encontrada.' });
+        return res.status(404).json({ message: 'Empresa nÃ£o encontrada.' });
       }
 
       if (!store.certificadoArquivoCriptografado || !store.certificadoSenhaCriptografada) {
         return res
           .status(400)
-          .json({ message: 'A empresa não possui certificado digital configurado.' });
+          .json({ message: 'A empresa nÃ£o possui certificado digital configurado.' });
       }
 
       const validityDate = parseDateInput(store.certificadoValidade);
@@ -452,7 +452,7 @@ router.get(
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         if (validityDate < today) {
-          return res.status(400).json({ message: 'O certificado digital da empresa está vencido.' });
+          return res.status(400).json({ message: 'O certificado digital da empresa estÃ¡ vencido.' });
         }
       }
 
@@ -462,7 +462,7 @@ router.get(
       if (periodStart && periodEnd && periodEnd < periodStart) {
         return res
           .status(400)
-          .json({ message: 'O período informado é inválido. Ajuste as datas e tente novamente.' });
+          .json({ message: 'O perÃ­odo informado Ã© invÃ¡lido. Ajuste as datas e tente novamente.' });
       }
 
       const companyDocument = digitsOnly(
@@ -591,7 +591,7 @@ router.get(
     } catch (error) {
       console.error('Erro ao consultar DF-e na SEFAZ:', error);
       return res.status(500).json({
-        message: error.message || 'Não foi possível consultar as notas autorizadas na SEFAZ.',
+        message: error.message || 'NÃ£o foi possÃ­vel consultar as notas autorizadas na SEFAZ.',
       });
     }
   }
@@ -625,16 +625,16 @@ router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ message: 'Identificador do rascunho não informado.' });
+      return res.status(400).json({ message: 'Identificador do rascunho nÃ£o informado.' });
     }
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(404).json({ message: 'Rascunho de NF-e não encontrado.' });
+      return res.status(404).json({ message: 'Rascunho de NF-e nÃ£o encontrado.' });
     }
 
     const draft = await NfeDraft.findById(id).lean();
     if (!draft) {
-      return res.status(404).json({ message: 'Rascunho de NF-e não encontrado.' });
+      return res.status(404).json({ message: 'Rascunho de NF-e nÃ£o encontrado.' });
     }
 
     draft.id = String(draft._id || id);
@@ -651,12 +651,12 @@ router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ message: 'Identificador do rascunho não informado.' });
+      return res.status(400).json({ message: 'Identificador do rascunho nÃ£o informado.' });
     }
 
     const existingDraft = await NfeDraft.findById(id);
     if (!existingDraft) {
-      return res.status(404).json({ message: 'Rascunho de NF-e não encontrado.' });
+      return res.status(404).json({ message: 'Rascunho de NF-e nÃ£o encontrado.' });
     }
 
     const payload = req.body || {};
@@ -680,7 +680,7 @@ router.put('/:id', async (req, res) => {
 router.post('/:id/approve', async (req, res) => {
   const { id } = req.params;
   if (!id || !mongoose.Types.ObjectId.isValid(id)) {
-    return res.status(400).json({ message: 'Identificador da nota inválido.' });
+    return res.status(400).json({ message: 'Identificador da nota invÃ¡lido.' });
   }
 
   let session = null;
@@ -693,11 +693,11 @@ router.post('/:id/approve', async (req, res) => {
     await session.withTransaction(async () => {
       const draft = await NfeDraft.findById(id).session(session);
       if (!draft) {
-        throw buildHttpError(404, 'Entrada de NF-e não encontrada.');
+        throw buildHttpError(404, 'Entrada de NF-e nÃ£o encontrada.');
       }
 
       if (isApprovedStatus(draft.status)) {
-        throw buildHttpError(409, 'Esta entrada de NF-e já está aprovada e não pode ser alterada.');
+        throw buildHttpError(409, 'Esta entrada de NF-e jÃ¡ estÃ¡ aprovada e nÃ£o pode ser alterada.');
       }
 
       if (req.body && typeof req.body === 'object' && Object.keys(req.body).length > 0) {
@@ -711,7 +711,7 @@ router.post('/:id/approve', async (req, res) => {
 
       const companyId = draft.companyId || draft.selection?.companyId || '';
       if (!companyId || !mongoose.Types.ObjectId.isValid(companyId)) {
-        throw buildHttpError(400, 'Selecione a empresa responsável antes de aprovar a nota.', {
+        throw buildHttpError(400, 'Selecione a empresa responsÃ¡vel antes de aprovar a nota.', {
           focusTab: 'dados',
           field: 'company',
         });
@@ -719,7 +719,7 @@ router.post('/:id/approve', async (req, res) => {
       const companyObjectId = new mongoose.Types.ObjectId(companyId);
       const company = await Store.findById(companyObjectId).session(session);
       if (!company) {
-        throw buildHttpError(400, 'A empresa selecionada não foi encontrada.', {
+        throw buildHttpError(400, 'A empresa selecionada nÃ£o foi encontrada.', {
           focusTab: 'dados',
           field: 'company',
         });
@@ -736,7 +736,7 @@ router.post('/:id/approve', async (req, res) => {
         .populate({ path: 'otherInfo.accountingAccount', select: 'code name companies status' })
         .session(session);
       if (!supplier) {
-        throw buildHttpError(400, 'O fornecedor selecionado não foi encontrado.', {
+        throw buildHttpError(400, 'O fornecedor selecionado nÃ£o foi encontrado.', {
           focusTab: 'dados',
           field: 'supplier',
         });
@@ -744,7 +744,7 @@ router.post('/:id/approve', async (req, res) => {
 
       const accountingAccountRef = supplier.otherInfo?.accountingAccount;
       if (!accountingAccountRef || !accountingAccountRef._id) {
-        throw buildHttpError(400, 'Defina a conta contábil do fornecedor antes de aprovar.', {
+        throw buildHttpError(400, 'Defina a conta contÃ¡bil do fornecedor antes de aprovar.', {
           focusTab: 'duplicatas',
           field: 'accountingAccount',
         });
@@ -752,7 +752,7 @@ router.post('/:id/approve', async (req, res) => {
 
       const accountingAccount = await AccountingAccount.findById(accountingAccountRef._id).session(session);
       if (!accountingAccount) {
-        throw buildHttpError(400, 'A conta contábil vinculada ao fornecedor não foi encontrada.', {
+        throw buildHttpError(400, 'A conta contÃ¡bil vinculada ao fornecedor nÃ£o foi encontrada.', {
           focusTab: 'duplicatas',
           field: 'accountingAccount',
         });
@@ -767,7 +767,7 @@ router.post('/:id/approve', async (req, res) => {
       ) {
         throw buildHttpError(
           400,
-          'A conta contábil do fornecedor não está vinculada à empresa selecionada.',
+          'A conta contÃ¡bil do fornecedor nÃ£o estÃ¡ vinculada Ã  empresa selecionada.',
           {
             focusTab: 'duplicatas',
             field: 'accountingAccount',
@@ -777,20 +777,20 @@ router.post('/:id/approve', async (req, res) => {
 
       const depositId = draft.selection?.depositId || '';
       if (!depositId || !mongoose.Types.ObjectId.isValid(depositId)) {
-        throw buildHttpError(400, 'Selecione o depósito para lançar o estoque de entrada.', {
+        throw buildHttpError(400, 'Selecione o depÃ³sito para lanÃ§ar o estoque de entrada.', {
           focusTab: 'dados',
           field: 'deposit',
         });
       }
       const deposit = await Deposit.findById(depositId).session(session);
       if (!deposit) {
-        throw buildHttpError(400, 'O depósito selecionado não foi encontrado.', {
+        throw buildHttpError(400, 'O depÃ³sito selecionado nÃ£o foi encontrado.', {
           focusTab: 'dados',
           field: 'deposit',
         });
       }
       if (deposit.empresa?.toString() !== companyObjectId.toString()) {
-        throw buildHttpError(400, 'O depósito selecionado não pertence à empresa informada.', {
+        throw buildHttpError(400, 'O depÃ³sito selecionado nÃ£o pertence Ã  empresa informada.', {
           focusTab: 'dados',
           field: 'deposit',
         });
@@ -813,24 +813,42 @@ router.post('/:id/approve', async (req, res) => {
       if (unmatchedItems.length) {
         throw buildHttpError(
           400,
-          'Existe produto sem vinculação ao cadastro. Resolva todos os itens antes de aprovar.',
+          'Existe produto sem vinculaÃ§Ã£o ao cadastro. Resolva todos os itens antes de aprovar.',
           {
             focusTab: 'produtos',
           }
         );
       }
 
+      const invalidStockItems = [];
       const productQuantities = new Map();
-      items.forEach((item) => {
+      items.forEach((item, index) => {
         const productId = extractProductId(item.matchedProduct || item);
         const quantity = computeEntryStockQuantity(item);
         if (!productId) return;
-        if (!Number.isFinite(quantity)) return;
+        if (!Number.isFinite(quantity) || quantity <= 0) {
+          invalidStockItems.push({
+            index,
+            productId,
+            quantity,
+            description: cleanString(item?.description || item?.nome || ''),
+          });
+          return;
+        }
         const normalizedQuantity = quantity > 0 ? quantity : 0;
+        if (normalizedQuantity <= 0) return;
         const key = String(productId);
         const current = productQuantities.get(key) || 0;
         productQuantities.set(key, current + normalizedQuantity);
       });
+
+      if (invalidStockItems.length) {
+        throw buildHttpError(400, 'Revise o estoque de entrada de todos os produtos antes de aprovar.', {
+          focusTab: 'produtos',
+          field: 'entryStock',
+          invalidItems: invalidStockItems.slice(0, 20),
+        });
+      }
 
       if (!productQuantities.size) {
         throw buildHttpError(400, 'Informe o estoque de entrada dos produtos antes de aprovar.', {
@@ -864,7 +882,7 @@ router.post('/:id/approve', async (req, res) => {
 
         const valueNumeric = toNumber(duplicate?.value);
         if (!Number.isFinite(valueNumeric) || valueNumeric <= 0) {
-          throw buildHttpError(400, `Informe um valor válido para a parcela ${duplicate?.number || index + 1}.`, {
+          throw buildHttpError(400, `Informe um valor vÃ¡lido para a parcela ${duplicate?.number || index + 1}.`, {
             focusTab: 'duplicatas',
             duplicateIndex: index,
             field: 'value',
@@ -913,7 +931,7 @@ router.post('/:id/approve', async (req, res) => {
       bankAccountIds.forEach((bankId) => {
         const account = bankAccountMap.get(bankId);
         if (!account) {
-          throw buildHttpError(400, 'Alguma conta corrente informada nas duplicatas não foi encontrada.', {
+          throw buildHttpError(400, 'Alguma conta corrente informada nas duplicatas nÃ£o foi encontrada.', {
             focusTab: 'duplicatas',
             field: 'bankAccount',
           });
@@ -921,7 +939,7 @@ router.post('/:id/approve', async (req, res) => {
         if (account.company?.toString() !== companyObjectId.toString()) {
           throw buildHttpError(
             400,
-            'As contas correntes das duplicatas devem pertencer à empresa selecionada.',
+            'As contas correntes das duplicatas devem pertencer Ã  empresa selecionada.',
             {
               focusTab: 'duplicatas',
               field: 'bankAccount',
@@ -955,36 +973,54 @@ router.post('/:id/approve', async (req, res) => {
       draft.markModified('duplicates');
       draft.markModified('totals');
 
+      let stockMovementProducts = 0;
+      let stockMovementOperations = 0;
+      let stockMovementQuantityTotal = 0;
       for (const [productId, quantity] of productQuantities.entries()) {
-        if (!Number.isFinite(quantity)) continue;
-        const product = await Product.findById(productId).session(session);
-        if (!product) {
+        if (!Number.isFinite(quantity) || quantity <= 0) continue;
+        const movementResult = await adjustProductStockForDeposit({
+          productId,
+          depositId: deposit._id,
+          quantity,
+          session,
+          cascadeFractional: true,
+          movementContext: {
+            movementDate: new Date(),
+            operation: 'entrada',
+            companyId: companyObjectId,
+            sourceModule: 'compras.fornecedor',
+            sourceScreen: 'Entrada de NF-e',
+            sourceAction: 'aprovar_entrada_nfe',
+            sourceType: 'purchase_nfe_approved',
+            referenceDocument: cleanString(draft.xml?.accessKey || draft._id),
+            userId: req.user?.id,
+            userName: cleanString(req.user?.nomeCompleto || req.user?.apelido || req.user?.name || ''),
+            userEmail: cleanString(req.user?.email || ''),
+            metadata: {
+              draftId: String(draft._id),
+            },
+          },
+        });
+        if (!movementResult?.updated) {
           throw buildHttpError(
-            400,
-            'Alguns produtos vinculados não foram encontrados. Atualize a página e valide os itens novamente.',
-            { focusTab: 'produtos' }
+            500,
+            'Não foi possível concluir todas as movimentações de estoque da nota. Tente novamente.'
           );
         }
-        if (!Array.isArray(product.estoques)) {
-          product.estoques = [];
+        stockMovementProducts += 1;
+        stockMovementQuantityTotal += quantity;
+        if (Array.isArray(movementResult.operations)) {
+          stockMovementOperations += movementResult.operations.length;
+        } else {
+          stockMovementOperations += 1;
         }
-        const depositKey = deposit._id.toString();
-        let stockEntry = product.estoques.find(
-          (entry) => entry?.deposito && entry.deposito.toString() === depositKey
+      }
+
+      if (stockMovementProducts !== productQuantities.size) {
+        throw buildHttpError(
+          500,
+          'Movimentação de estoque incompleta. Nenhuma confirmação foi registrada.'
         );
-        if (!stockEntry) {
-          stockEntry = { deposito: deposit._id, quantidade: 0, unidade: product.unidade || 'UN' };
-          product.estoques.push(stockEntry);
-        }
-        const currentQuantity =
-          typeof stockEntry.quantidade === 'number'
-            ? stockEntry.quantidade
-            : toNumber(stockEntry.quantidade);
-        const baseQuantity = Number.isFinite(currentQuantity) ? currentQuantity : 0;
-        const nextQuantity = Math.round((baseQuantity + quantity) * 1000000) / 1000000;
-        stockEntry.quantidade = nextQuantity;
-        product.markModified('estoques');
-        await product.save({ session });
       }
 
       const payableInstallments = installmentsData.map((installment) => {
@@ -1028,6 +1064,12 @@ router.post('/:id/approve', async (req, res) => {
       const metadata = draft.metadata && typeof draft.metadata === 'object' ? draft.metadata : {};
       metadata.accountPayableId = accountPayableRecord._id;
       metadata.approvedAt = new Date().toISOString();
+      metadata.stockMovement = {
+        completed: true,
+        products: stockMovementProducts,
+        operations: stockMovementOperations,
+        quantityTotal: Number(formatCurrencyValue(stockMovementQuantityTotal)),
+      };
       draft.metadata = metadata;
       draft.markModified('metadata');
 
@@ -1041,6 +1083,7 @@ router.post('/:id/approve', async (req, res) => {
 
     return res.json({
       draft: draftPayload,
+      stockMovement: draftPayload?.metadata?.stockMovement || null,
       accountPayable: accountPayableRecord
         ? {
             _id: accountPayableRecord._id,
@@ -1055,7 +1098,7 @@ router.post('/:id/approve', async (req, res) => {
     console.error('Erro ao aprovar entrada de NF-e:', error);
     const status = Number.isInteger(error.status) ? error.status : 500;
     const responsePayload = {
-      message: error.message || 'Não foi possível aprovar a entrada da NF-e.',
+      message: error.message || 'NÃ£o foi possÃ­vel aprovar a entrada da NF-e.',
     };
     if (error.details) {
       responsePayload.details = error.details;
@@ -1081,11 +1124,32 @@ router.post('/:id/approve', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   const { id } = req.params;
   if (!id || !mongoose.Types.ObjectId.isValid(id)) {
-    return res.status(400).json({ message: 'Identificador da nota inválido.' });
+    return res.status(400).json({ message: 'Identificador da nota invÃ¡lido.' });
+  }
+
+  const draftSnapshot = await NfeDraft.findById(id).select('_id status').lean();
+  if (!draftSnapshot) {
+    return res.status(404).json({ message: 'Entrada de NF-e nÃ£o encontrada.' });
+  }
+
+  if (!isApprovedStatus(draftSnapshot.status)) {
+    const removeResult = await NfeDraft.deleteOne({ _id: id });
+    if (!removeResult?.deletedCount) {
+      return res.status(404).json({ message: 'Entrada de NF-e nÃ£o encontrada.' });
+    }
+    return res.json({
+      message: 'Rascunho removido com sucesso.',
+      draftRemovedOnly: true,
+      accountPayableRemoved: false,
+      accountPayableId: null,
+      stockReversal: null,
+    });
   }
 
   let session = null;
   let removedPayableId = null;
+  let stockReversalSummary = null;
+  let draftWasApproved = false;
 
   try {
     session = await mongoose.startSession();
@@ -1093,17 +1157,18 @@ router.delete('/:id', async (req, res) => {
     await session.withTransaction(async () => {
       const draft = await NfeDraft.findById(id).session(session);
       if (!draft) {
-        throw buildHttpError(404, 'Entrada de NF-e não encontrada.');
+        throw buildHttpError(404, 'Entrada de NF-e nÃ£o encontrada.');
       }
 
       const approved = isApprovedStatus(draft.status);
+      draftWasApproved = approved;
 
       if (approved) {
         const depositId = draft.selection?.depositId;
         if (!depositId || !mongoose.Types.ObjectId.isValid(depositId)) {
           throw buildHttpError(
             400,
-            'Não foi possível estornar o estoque da nota aprovada: depósito vinculado inválido.'
+            'NÃ£o foi possÃ­vel estornar o estoque da nota aprovada: depÃ³sito vinculado invÃ¡lido.'
           );
         }
 
@@ -1111,60 +1176,77 @@ router.delete('/:id', async (req, res) => {
         if (!deposit) {
           throw buildHttpError(
             400,
-            'Não foi possível estornar o estoque da nota aprovada: depósito vinculado não encontrado.'
+            'NÃ£o foi possÃ­vel estornar o estoque da nota aprovada: depÃ³sito vinculado nÃ£o encontrado.'
           );
         }
 
-        const { quantities: productQuantities, details: productDetails } =
+        const { quantities: productQuantities } =
           collectProductEntrySummary(Array.isArray(draft.items) ? draft.items : []);
-        const depositKey = deposit._id.toString();
+
+        if (!productQuantities.size) {
+          throw buildHttpError(
+            400,
+            'Não foi possível estornar o estoque da nota aprovada: nenhum item válido de estoque foi encontrado.'
+          );
+        }
+
+        let reversedProducts = 0;
+        let reversedOperations = 0;
+        let reversedQuantityTotal = 0;
 
         for (const [productId, quantity] of productQuantities.entries()) {
           if (!Number.isFinite(quantity) || quantity <= 0) continue;
-
-          const product = await Product.findById(productId).session(session);
-          if (!product) {
-            const info = productDetails.get(productId) || {};
-            const label = info.name || info.code || 'produto vinculado';
+          const movementResult = await adjustProductStockForDeposit({
+            productId,
+            depositId: deposit._id,
+            quantity: -quantity,
+            session,
+            cascadeFractional: true,
+            movementContext: {
+              movementDate: new Date(),
+              operation: 'saida',
+              companyId: draft.companyId || draft.selection?.companyId || null,
+              sourceModule: 'compras.fornecedor',
+              sourceScreen: 'Entrada de NF-e',
+              sourceAction: 'estorno_entrada_nfe',
+              sourceType: 'purchase_nfe_reverted',
+              referenceDocument: cleanString(draft.xml?.accessKey || draft._id),
+              userId: req.user?.id,
+              userName: cleanString(req.user?.nomeCompleto || req.user?.apelido || req.user?.name || ''),
+              userEmail: cleanString(req.user?.email || ''),
+              metadata: {
+                draftId: String(draft._id),
+              },
+            },
+          });
+          if (!movementResult?.updated) {
             throw buildHttpError(
-              400,
-              `Não foi possível localizar o produto ${label} para estornar o estoque da nota.`
+              500,
+              'Não foi possível concluir todas as movimentações de estorno de estoque da nota.'
             );
           }
-
-          if (!Array.isArray(product.estoques)) {
-            const label =
-              product.nome || product.name || (productDetails.get(productId) || {}).name || 'produto';
-            throw buildHttpError(
-              400,
-              `O produto ${label} não possui controle de estoque para o depósito vinculado à nota.`
-            );
+          reversedProducts += 1;
+          reversedQuantityTotal += quantity;
+          if (Array.isArray(movementResult.operations)) {
+            reversedOperations += movementResult.operations.length;
+          } else {
+            reversedOperations += 1;
           }
-
-          const stockEntry = product.estoques.find(
-            (entry) => entry?.deposito && entry.deposito.toString() === depositKey
-          );
-          if (!stockEntry) {
-            const info = productDetails.get(productId) || {};
-            const label =
-              info.name || product.nome || product.name || info.code || 'produto vinculado';
-            throw buildHttpError(
-              400,
-              `Não foi possível estornar o estoque do produto ${label}: depósito não localizado no cadastro do produto.`
-            );
-          }
-
-          const currentQuantityValue =
-            typeof stockEntry.quantidade === 'number'
-              ? stockEntry.quantidade
-              : toNumber(stockEntry.quantidade);
-          const baseQuantity = Number.isFinite(currentQuantityValue) ? currentQuantityValue : 0;
-          const nextQuantityRaw = Math.round((baseQuantity - quantity) * 1000000) / 1000000;
-          const nextQuantity = Math.abs(nextQuantityRaw) <= 0.0000005 ? 0 : nextQuantityRaw;
-          stockEntry.quantidade = nextQuantity;
-          product.markModified('estoques');
-          await product.save({ session });
         }
+
+        if (reversedProducts !== productQuantities.size) {
+          throw buildHttpError(
+            500,
+            'Estorno de estoque incompleto. A nota não foi excluída.'
+          );
+        }
+
+        stockReversalSummary = {
+          completed: true,
+          products: reversedProducts,
+          operations: reversedOperations,
+          quantityTotal: Number(formatCurrencyValue(reversedQuantityTotal)),
+        };
 
         const accountPayableId = draft.metadata?.accountPayableId;
         if (accountPayableId && mongoose.Types.ObjectId.isValid(accountPayableId)) {
@@ -1181,14 +1263,16 @@ router.delete('/:id', async (req, res) => {
 
     return res.json({
       message: 'Entrada da NF-e removida com sucesso.',
+      draftRemovedOnly: !draftWasApproved,
       accountPayableRemoved: Boolean(removedPayableId),
       accountPayableId: removedPayableId,
+      stockReversal: stockReversalSummary,
     });
   } catch (error) {
     console.error('Erro ao excluir entrada de NF-e:', error);
     const status = Number.isInteger(error.status) ? error.status : 500;
     const responsePayload = {
-      message: error.message || 'Não foi possível excluir a entrada da NF-e.',
+      message: error.message || 'NÃ£o foi possÃ­vel excluir a entrada da NF-e.',
     };
     if (error.details) {
       responsePayload.details = error.details;
@@ -1202,3 +1286,5 @@ router.delete('/:id', async (req, res) => {
 });
 
 module.exports = router;
+
+

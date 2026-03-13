@@ -157,6 +157,29 @@ document.addEventListener('DOMContentLoaded', () => {
         filterDebounceTimers.set(field, timeoutId);
     };
 
+    const buildInventoryParams = (page = state.pagination.page || 1, limit = state.pagination.limit || 20) => {
+        const params = new URLSearchParams({
+            page: String(page),
+            limit: String(limit),
+            sortField: state.sortField,
+            sortOrder: state.sortOrder,
+        });
+
+        if (state.search) {
+            params.set('search', state.search);
+        }
+
+        Object.entries(state.filters).forEach(([field, value]) => {
+            const paramKey = filterParamMap[field];
+            if (!paramKey) return;
+            if (value) {
+                params.set(paramKey, value);
+            }
+        });
+
+        return params;
+    };
+
     const updateSelectAllState = () => {
         if (!selectAllCheckbox) return;
         if (!state.items.length) {
@@ -276,6 +299,38 @@ document.addEventListener('DOMContentLoaded', () => {
         paginationContainer.appendChild(controls);
     };
 
+    const requestInventoryIds = async (token) => {
+        const params = buildInventoryParams(1, 1);
+        params.delete('page');
+        params.delete('limit');
+
+        const response = await fetch(`${API_CONFIG.BASE_URL}/deposits/${state.activeDepositId}/inventory/ids?${params.toString()}`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (!response.ok) {
+            const errorPayload = await response.json().catch(() => ({}));
+            const message = errorPayload.message || 'Não foi possível carregar todos os produtos para seleção.';
+            const error = new Error(message);
+            error.status = response.status;
+            throw error;
+        }
+
+        return response.json();
+    };
+
+    const fetchAllFilteredProductIds = async () => {
+        if (!state.activeDepositId) return [];
+        const token = getToken();
+        if (!token) {
+            throw new Error('Sessão expirada. Faça login novamente para continuar.');
+        }
+
+        const payload = await requestInventoryIds(token);
+        const ids = Array.isArray(payload?.ids) ? payload.ids : [];
+        return [...new Set(ids.filter(Boolean))];
+    };
+
     const fetchStores = async () => {
         try {
             const token = getToken();
@@ -329,24 +384,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const params = new URLSearchParams({
-            page: String(state.pagination.page || 1),
-            limit: String(state.pagination.limit || 20),
-            sortField: state.sortField,
-            sortOrder: state.sortOrder,
-        });
-
-        if (state.search) {
-            params.set('search', state.search);
-        }
-
-        Object.entries(state.filters).forEach(([field, value]) => {
-            const paramKey = filterParamMap[field];
-            if (!paramKey) return;
-            if (value) {
-                params.set(paramKey, value);
-            }
-        });
+        const params = buildInventoryParams();
 
         setLoading(true);
         try {
@@ -462,20 +500,40 @@ document.addEventListener('DOMContentLoaded', () => {
         fetchInventory();
     };
 
-    const handleSelectAll = (event) => {
-        if (!state.items.length) return;
+    const handleSelectAll = async (event) => {
+        if (!state.activeDepositId) return;
         const checked = event.target.checked;
-        state.items.forEach((item) => {
-            if (!item?._id) return;
+
+        if (selectAllCheckbox) {
+            selectAllCheckbox.setAttribute('disabled', 'disabled');
+        }
+        zeroButton?.setAttribute('disabled', 'disabled');
+
+        try {
+            const allFilteredIds = await fetchAllFilteredProductIds();
             if (checked) {
-                state.selectedIds.add(item._id);
+                allFilteredIds.forEach((id) => state.selectedIds.add(id));
             } else {
-                state.selectedIds.delete(item._id);
+                allFilteredIds.forEach((id) => state.selectedIds.delete(id));
             }
-        });
-        updateSelectAllState();
-        updateZeroButtonState();
-        renderTable();
+            renderTable();
+        } catch (error) {
+            console.error('Erro ao selecionar todos os produtos:', error);
+            if (selectAllCheckbox) {
+                selectAllCheckbox.checked = !checked;
+                selectAllCheckbox.indeterminate = false;
+            }
+            showModal({
+                title: 'Erro',
+                message: error.message || 'Não foi possível selecionar todos os produtos.',
+                confirmText: 'Entendi',
+            });
+            updateSelectAllState();
+            updateZeroButtonState();
+        } finally {
+            updateSelectAllState();
+            updateZeroButtonState();
+        }
     };
 
     const handleRowSelection = (event) => {

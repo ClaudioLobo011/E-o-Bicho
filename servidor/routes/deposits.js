@@ -56,6 +56,57 @@ const parseLocaleNumber = (value) => {
     return Number.isFinite(parsed) ? parsed : null;
 };
 
+const buildInventoryBasePipeline = ({ depositId, searchTerm, filterBarcode, filterName, quantityFilterValue }) => {
+    const matchStage = {
+        'estoques.deposito': depositId,
+    };
+
+    if (searchTerm) {
+        const regex = new RegExp(escapeRegExp(searchTerm), 'i');
+        matchStage.$or = [
+            { nome: regex },
+            { cod: regex },
+            { codbarras: regex },
+        ];
+    }
+
+    if (filterBarcode) {
+        matchStage.codbarras = { $regex: new RegExp(escapeRegExp(filterBarcode), 'i') };
+    }
+
+    if (filterName) {
+        matchStage.nome = { $regex: new RegExp(escapeRegExp(filterName), 'i') };
+    }
+
+    const pipeline = [
+        { $match: matchStage },
+        {
+            $addFields: {
+                estoqueSelecionado: {
+                    $first: {
+                        $filter: {
+                            input: '$estoques',
+                            as: 'item',
+                            cond: { $eq: ['$$item.deposito', depositId] },
+                        },
+                    },
+                },
+            },
+        },
+        {
+            $addFields: {
+                quantidade: { $ifNull: ['$estoqueSelecionado.quantidade', 0] },
+            },
+        },
+    ];
+
+    if (quantityFilterValue !== null) {
+        pipeline.push({ $match: { quantidade: quantityFilterValue } });
+    }
+
+    return pipeline;
+};
+
 router.get('/', async (req, res) => {
     try {
         const { empresa } = req.query;
@@ -109,52 +160,13 @@ router.get('/:id/inventory', requireAuth, authorizeRoles('admin', 'admin_master'
 
         const depositId = new mongoose.Types.ObjectId(id);
 
-        const matchStage = {
-            'estoques.deposito': depositId,
-        };
-
-        if (searchTerm) {
-            const regex = new RegExp(escapeRegExp(searchTerm), 'i');
-            matchStage.$or = [
-                { nome: regex },
-                { cod: regex },
-                { codbarras: regex },
-            ];
-        }
-
-        if (filterBarcode) {
-            matchStage.codbarras = { $regex: new RegExp(escapeRegExp(filterBarcode), 'i') };
-        }
-
-        if (filterName) {
-            matchStage.nome = { $regex: new RegExp(escapeRegExp(filterName), 'i') };
-        }
-
-        const basePipeline = [
-            { $match: matchStage },
-            {
-                $addFields: {
-                    estoqueSelecionado: {
-                        $first: {
-                            $filter: {
-                                input: '$estoques',
-                                as: 'item',
-                                cond: { $eq: ['$$item.deposito', depositId] },
-                            },
-                        },
-                    },
-                },
-            },
-            {
-                $addFields: {
-                    quantidade: { $ifNull: ['$estoqueSelecionado.quantidade', 0] },
-                },
-            },
-        ];
-
-        if (quantityFilterValue !== null) {
-            basePipeline.push({ $match: { quantidade: quantityFilterValue } });
-        }
+        const basePipeline = buildInventoryBasePipeline({
+            depositId,
+            searchTerm,
+            filterBarcode,
+            filterName,
+            quantityFilterValue,
+        });
 
         basePipeline.push(
             {
@@ -238,6 +250,61 @@ router.get('/:id/inventory', requireAuth, authorizeRoles('admin', 'admin_master'
     }
 });
 
+router.get('/:id/inventory/ids', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ message: 'Depósito inválido.' });
+        }
+
+        const deposit = await Deposit.findById(id).lean();
+        if (!deposit) {
+            return res.status(404).json({ message: 'Depósito não encontrado.' });
+        }
+
+        const searchTerm = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+        const filterBarcode = typeof req.query.filterBarcode === 'string' ? req.query.filterBarcode.trim() : '';
+        const filterName = typeof req.query.filterName === 'string' ? req.query.filterName.trim() : '';
+        const quantityFilterRaw = typeof req.query.filterQuantity === 'string' ? req.query.filterQuantity.trim() : '';
+        const quantityFilterValue = quantityFilterRaw ? parseLocaleNumber(quantityFilterRaw) : null;
+
+        const depositId = new mongoose.Types.ObjectId(id);
+        const basePipeline = buildInventoryBasePipeline({
+            depositId,
+            searchTerm,
+            filterBarcode,
+            filterName,
+            quantityFilterValue,
+        });
+
+        const idsResult = await Product.aggregate([
+            ...basePipeline,
+            { $project: { _id: 1 } },
+        ])
+            .allowDiskUse(true)
+            .exec();
+
+        const ids = idsResult
+            .map((item) => item?._id)
+            .filter(Boolean)
+            .map((value) => value.toString());
+
+        res.json({
+            deposit: {
+                _id: deposit._id,
+                nome: deposit.nome,
+                codigo: deposit.codigo,
+            },
+            total: ids.length,
+            ids,
+        });
+    } catch (error) {
+        console.error('Erro ao listar IDs do estoque do depósito:', error);
+        res.status(500).json({ message: 'Erro ao carregar IDs dos itens do depósito.' });
+    }
+});
+
 router.post('/:id/zero-stock', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
     try {
         const { id } = req.params;
@@ -269,7 +336,7 @@ router.post('/:id/zero-stock', requireAuth, authorizeRoles('admin', 'admin_maste
         const products = await Product.find({
             _id: { $in: uniqueProductIds },
             'estoques.deposito': depositId,
-        }).lean();
+        }, '_id nome codbarras estoques stock').lean();
 
         if (!products.length) {
             return res.json({ updated: 0, affectedProducts: [] });

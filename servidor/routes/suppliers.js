@@ -81,6 +81,78 @@ const parseRepresentatives = (value) => {
     .filter(Boolean);
 };
 
+const SUPPLIER_IMPORT_RULE_FIELDS = new Set(['marca', 'idade', 'castrado', 'tipo', 'porte']);
+
+const normalizeImportRuleField = (value) => {
+  const normalized = normalizeLower(value);
+  if (!normalized) return '';
+  if (normalized === 'marca') return 'marca';
+  if (normalized === 'idade') return 'idade';
+  if (normalized === 'castrado') return 'castrado';
+  if (normalized === 'tipo') return 'tipo';
+  if (normalized === 'porte') return 'porte';
+  return '';
+};
+
+const parseImportProductRules = (value) => {
+  if (!value) return [];
+  let rawEntries = [];
+  if (Array.isArray(value)) {
+    rawEntries = value;
+  } else if (typeof value === 'string') {
+    rawEntries = [value];
+  } else if (typeof value === 'object') {
+    rawEntries = [value];
+  }
+
+  const parsed = rawEntries
+    .map((entry) => {
+      if (!entry) return null;
+      if (typeof entry === 'string') {
+        const raw = normalizeString(entry);
+        if (!raw) return null;
+        const parts = raw.split(';').map((part) => normalizeString(part));
+        if (parts.length < 3) return null;
+        const [triggerRaw, fieldRaw, ...valueParts] = parts;
+        const field = normalizeImportRuleField(fieldRaw);
+        if (!triggerRaw || !field) return null;
+        const parsedValue = normalizeString(valueParts.join(';'));
+        if (!parsedValue) return null;
+        return {
+          raw,
+          trigger: triggerRaw,
+          field,
+          value: parsedValue,
+        };
+      }
+      if (typeof entry === 'object') {
+        const raw = normalizeString(entry.raw);
+        const trigger = normalizeString(entry.trigger);
+        const field = normalizeImportRuleField(entry.field);
+        const parsedValue = normalizeString(entry.value);
+        if (!trigger || !field || !parsedValue) return null;
+        return {
+          raw: raw || `${trigger};${field};${parsedValue}`,
+          trigger,
+          field,
+          value: parsedValue,
+        };
+      }
+      return null;
+    })
+    .filter(Boolean);
+
+  const seen = new Set();
+  const unique = [];
+  parsed.forEach((rule) => {
+    const key = `${normalizeUpper(rule.trigger)}::${rule.field}::${normalizeUpper(rule.value)}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    unique.push(rule);
+  });
+  return unique;
+};
+
 const parseRetentions = (value) => {
   if (!value) return [];
   let raw = [];
@@ -278,6 +350,16 @@ const buildPublicSupplier = (supplier) => {
           mobile: rep.mobile || '',
           email: rep.email || '',
         }))
+      : [],
+    importProductRules: Array.isArray(plain.importProductRules)
+      ? plain.importProductRules
+          .map((rule) => ({
+            raw: normalizeString(rule?.raw),
+            trigger: normalizeString(rule?.trigger),
+            field: normalizeImportRuleField(rule?.field),
+            value: normalizeString(rule?.value),
+          }))
+          .filter((rule) => rule.trigger && rule.field && rule.value && SUPPLIER_IMPORT_RULE_FIELDS.has(rule.field))
       : [],
     retentions: Array.isArray(plain.retentions) ? plain.retentions : [],
     createdAt: plain.createdAt,
@@ -480,6 +562,9 @@ router.put('/:id', async (req, res) => {
       accountNumber: payload.otherInfo?.accountNumber || '',
     };
     supplier.representatives = payload.representatives;
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'importProductRules')) {
+      supplier.importProductRules = parseImportProductRules(req.body?.importProductRules);
+    }
     supplier.retentions = payload.retentions;
 
     await supplier.save();
@@ -500,6 +585,37 @@ router.put('/:id', async (req, res) => {
       return res.status(400).json({ message: error.message });
     }
     res.status(500).json({ message: 'Erro ao atualizar fornecedor.' });
+  }
+});
+
+router.patch('/:id/import-product-rules', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Identificador inválido.' });
+    }
+
+    const supplier = await Supplier.findById(id);
+    if (!supplier) {
+      return res.status(404).json({ message: 'Fornecedor não encontrado.' });
+    }
+
+    const rules = parseImportProductRules(req.body?.rules ?? req.body?.importProductRules);
+    supplier.importProductRules = rules;
+    await supplier.save();
+
+    await supplier.populate([
+      { path: 'companies', select: 'nome nomeFantasia razaoSocial cnpj' },
+      { path: 'otherInfo.accountingAccount', select: 'code name' },
+    ]);
+
+    return res.json({
+      supplier: buildPublicSupplier(supplier),
+      importProductRules: buildPublicSupplier(supplier).importProductRules,
+    });
+  } catch (error) {
+    console.error('Erro ao salvar regras de importação do fornecedor:', error);
+    return res.status(500).json({ message: 'Erro ao salvar regras de importação do fornecedor.' });
   }
 });
 

@@ -5,6 +5,7 @@ const Setting = require('../models/Setting');
 const User = require('../models/User');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
+const { hasAdminMasterGlobalAccess } = require('../utils/adminMasterMode');
 
 const router = express.Router();
 
@@ -20,10 +21,13 @@ const normalizeStoreId = (value) => {
   return isValidObjectId(str) ? str : '';
 };
 
-const resolveUserStoreAccess = async (userId) => {
+const resolveUserStoreAccess = async (req, userId) => {
   if (!userId) return { allowedStoreIds: [], defaultStoreId: '', allowAllStores: false };
   const user = await User.findById(userId).select('empresaPrincipal empresas role').lean();
   if (!user) return { allowedStoreIds: [], defaultStoreId: '', allowAllStores: false };
+  if (hasAdminMasterGlobalAccess(req, user)) {
+    return { allowedStoreIds: [], defaultStoreId: '', allowAllStores: true };
+  }
 
   const allowedSet = new Set();
   const principal = normalizeStoreId(user.empresaPrincipal);
@@ -38,7 +42,7 @@ const resolveUserStoreAccess = async (userId) => {
 
   const allowedStoreIds = Array.from(allowedSet);
   const defaultStoreId = principal || allowedStoreIds[0] || '';
-  const allowAllStores = user.role === 'admin_master' && allowedStoreIds.length === 0;
+  const allowAllStores = false;
 
   return { allowedStoreIds, defaultStoreId, allowAllStores };
 };
@@ -73,7 +77,7 @@ const sanitizeRules = (rules) => {
 router.get('/', requireAuth, authorizeRoles('admin', 'admin_master', 'funcionario'), async (req, res) => {
   try {
     const queryStoreId = normalizeStoreId(req.query.storeId || req.query.companyId || req.query.empresa);
-    const { allowedStoreIds, defaultStoreId, allowAllStores } = await resolveUserStoreAccess(req.user?.id);
+    const { allowedStoreIds, defaultStoreId, allowAllStores } = await resolveUserStoreAccess(req, req.user?.id);
     const storeId = queryStoreId || defaultStoreId;
 
     if (storeId && !allowAllStores && !allowedStoreIds.includes(storeId)) {
@@ -118,7 +122,7 @@ router.put('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (req
       return res.status(400).json({ message: 'Informe a empresa.' });
     }
 
-    const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req.user?.id);
+    const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req, req.user?.id);
     if (!allowAllStores && !allowedStoreIds.includes(bodyStoreId)) {
       return res.status(403).json({ message: 'Acesso negado' });
     }

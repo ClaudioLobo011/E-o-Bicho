@@ -12,6 +12,7 @@ const PaymentMethod = require('../models/PaymentMethod');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 const { ensureScopedSequenceAtLeast, nextScopedSequence } = require('../utils/sequences');
+const { hasAdminMasterGlobalAccess } = require('../utils/adminMasterMode');
 
 const AUTH_ROLES = ['admin', 'admin_master', 'funcionario'];
 
@@ -21,10 +22,13 @@ function normalizeString(value) {
   return '';
 }
 
-const resolveUserStoreAccess = async (userId) => {
+const resolveUserStoreAccess = async (req, userId) => {
   if (!userId) return { allowedStoreIds: [], allowAllStores: false };
   const user = await User.findById(userId).select('empresaPrincipal empresas role').lean();
   if (!user) return { allowedStoreIds: [], allowAllStores: false };
+  if (hasAdminMasterGlobalAccess(req, user)) {
+    return { allowedStoreIds: [], allowAllStores: true };
+  }
 
   const markedCompanies = Array.isArray(user.empresas)
     ? user.empresas
@@ -718,7 +722,7 @@ router.get(
   authorizeRoles(...AUTH_ROLES),
   async (req, res) => {
     try {
-      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req.user?.id);
+      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req, req.user?.id);
       const allowedCompanyIds = allowAllStores
         ? null
         : allowedStoreIds.map((id) => String(id)).filter(Boolean);
@@ -772,7 +776,7 @@ router.get(
   async (req, res) => {
     try {
       const { company, customer, party } = req.query;
-      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req.user?.id);
+      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req, req.user?.id);
       const filter = {};
 
       if (company && mongoose.Types.ObjectId.isValid(company)) {

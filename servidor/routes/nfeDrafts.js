@@ -429,7 +429,7 @@ const collectStockMovementsFromItems = async ({ items = [], session }) => {
   return quantities;
 };
 
-const applyAuthorizedDraftStockMovement = async ({ draftId }) => {
+const applyAuthorizedDraftStockMovement = async ({ draftId, actor = null }) => {
   let movementResult = {
     applied: false,
     alreadyApplied: false,
@@ -496,6 +496,7 @@ const applyAuthorizedDraftStockMovement = async ({ draftId }) => {
       }
 
       const factor = requestedMovement === 'saida' ? -1 : 1;
+      const companyId = draft.companyId || draft.payload?.company?.id || '';
       for (const [productId, quantity] of itemQuantities.entries()) {
         const normalizedQuantity = Number(quantity);
         if (!Number.isFinite(normalizedQuantity) || normalizedQuantity <= 0) continue;
@@ -505,6 +506,24 @@ const applyAuthorizedDraftStockMovement = async ({ draftId }) => {
           quantity: normalizedQuantity * factor,
           session,
           cascadeFractional: true,
+          movementContext: {
+            movementDate: new Date(),
+            operation: requestedMovement,
+            companyId,
+            depositId,
+            sourceModule: 'fiscal.nfe',
+            sourceScreen: 'NF-e',
+            sourceAction: 'autorizacao_nfe',
+            sourceType: 'nfe_authorized_stock_movement',
+            referenceDocument: cleanString(draft?.xml?.accessKey || draft?._id),
+            userId: actor?.id,
+            userName: cleanString(actor?.nomeCompleto || actor?.apelido || actor?.name || ''),
+            userEmail: cleanString(actor?.email || ''),
+            metadata: {
+              draftId: String(draft._id),
+              requestedMovement,
+            },
+          },
         });
       }
 
@@ -538,7 +557,7 @@ const applyAuthorizedDraftStockMovement = async ({ draftId }) => {
   return movementResult;
 };
 
-const applyCanceledDraftStockReversal = async ({ draftId }) => {
+const applyCanceledDraftStockReversal = async ({ draftId, actor = null }) => {
   let movementResult = {
     applied: false,
     alreadyApplied: false,
@@ -599,6 +618,7 @@ const applyCanceledDraftStockReversal = async ({ draftId }) => {
       }
 
       const factor = reverseOperation === 'saida' ? -1 : 1;
+      const companyId = draft.companyId || draft.payload?.company?.id || '';
       for (const [productId, quantity] of itemQuantities.entries()) {
         const normalizedQuantity = Number(quantity);
         if (!Number.isFinite(normalizedQuantity) || normalizedQuantity <= 0) continue;
@@ -608,6 +628,24 @@ const applyCanceledDraftStockReversal = async ({ draftId }) => {
           quantity: normalizedQuantity * factor,
           session,
           cascadeFractional: true,
+          movementContext: {
+            movementDate: new Date(),
+            operation: reverseOperation,
+            companyId,
+            depositId,
+            sourceModule: 'fiscal.nfe',
+            sourceScreen: 'NF-e',
+            sourceAction: 'cancelamento_nfe',
+            sourceType: 'nfe_canceled_stock_reversal',
+            referenceDocument: cleanString(draft?.xml?.accessKey || draft?._id),
+            userId: actor?.id,
+            userName: cleanString(actor?.nomeCompleto || actor?.apelido || actor?.name || ''),
+            userEmail: cleanString(actor?.email || ''),
+            metadata: {
+              draftId: String(draft._id),
+              reverseOperation,
+            },
+          },
         });
       }
 
@@ -2095,7 +2133,7 @@ router.post('/:id/events', async (req, res) => {
     draft.markModified('metadata');
     await draft.save();
     if (eventName === 'Cancelamento') {
-      stockMovement = await applyCanceledDraftStockReversal({ draftId: draft._id });
+      stockMovement = await applyCanceledDraftStockReversal({ draftId: draft._id, actor: req.user || null });
     }
 
     return res.json({
@@ -2260,7 +2298,7 @@ router.post('/:id/sefaz/status', async (req, res) => {
       reason: 'not_canceled',
     };
     if (draft.status === 'canceled') {
-      stockMovement = await applyCanceledDraftStockReversal({ draftId: draft._id });
+      stockMovement = await applyCanceledDraftStockReversal({ draftId: draft._id, actor: req.user || null });
     }
 
     return res.json({
@@ -2585,7 +2623,7 @@ router.post('/:id/xml/transmit', async (req, res) => {
         }
       }
 
-      stockMovement = await applyAuthorizedDraftStockMovement({ draftId: draft._id });
+      stockMovement = await applyAuthorizedDraftStockMovement({ draftId: draft._id, actor: req.user || null });
     } else {
       stockMovement = {
         applied: false,

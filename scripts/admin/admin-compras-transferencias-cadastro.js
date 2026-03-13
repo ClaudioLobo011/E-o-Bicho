@@ -56,6 +56,8 @@
     selectedOriginUnit: document.getElementById('transfer-selected-product-origin-unit'),
     selectedDestinationUnit: document.getElementById('transfer-selected-product-destination-unit'),
     selectedProductQuantity: document.getElementById('transfer-selected-product-quantity'),
+    selectedProductMinusButton: document.getElementById('transfer-selected-product-minus'),
+    selectedProductPlusButton: document.getElementById('transfer-selected-product-plus'),
     selectedProductAddButton: document.getElementById('transfer-selected-product-add'),
     selectedProductClearButton: document.getElementById('transfer-selected-product-clear'),
     selectedProductWarning: document.getElementById('transfer-selected-product-warning'),
@@ -78,6 +80,8 @@
     lastResults: [],
     hideTimeout: null,
   };
+
+  let selectedProductQuantityMask = null;
 
   function showProductResults() {
     const container = productSearchSelectors.results;
@@ -219,6 +223,58 @@
     return stocks.find((stock) => String(stock.depositId) === String(depositId));
   }
 
+  function getSelectedProductQuantityValue() {
+    if (selectedProductQuantityMask) {
+      const typed = Number(selectedProductQuantityMask.typedValue);
+      if (Number.isFinite(typed)) {
+        return typed;
+      }
+    }
+    return normalizeFiniteNumber(selectors.selectedProductQuantity?.value) || 0;
+  }
+
+  function setSelectedProductQuantityValue(value) {
+    const safeValue = Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : 1;
+    if (selectedProductQuantityMask) {
+      selectedProductQuantityMask.typedValue = safeValue;
+      return;
+    }
+    if (selectors.selectedProductQuantity) {
+      selectors.selectedProductQuantity.value = safeValue.toLocaleString('pt-BR', {
+        minimumFractionDigits: 3,
+        maximumFractionDigits: 3,
+      });
+    }
+  }
+
+  function adjustSelectedProductQuantity(step) {
+    const current = getSelectedProductQuantityValue();
+    const next = Math.max(0.001, Math.round((current + step) * 1000) / 1000);
+    setSelectedProductQuantityValue(next);
+  }
+
+  function initSelectedProductQuantityMask() {
+    const input = selectors.selectedProductQuantity;
+    if (!input) return;
+    if (typeof IMask === 'undefined') {
+      input.value = '1,000';
+      return;
+    }
+
+    selectedProductQuantityMask = IMask(input, {
+      mask: Number,
+      scale: 3,
+      signed: false,
+      thousandsSeparator: '.',
+      padFractionalZeros: true,
+      normalizeZeros: true,
+      radix: ',',
+      mapToRadix: ['.'],
+      min: 0.001,
+    });
+    selectedProductQuantityMask.typedValue = 1;
+  }
+
   function toggleSelectedProductWarning(show) {
     const warning = selectors.selectedProductWarning;
     if (!warning) return;
@@ -245,16 +301,16 @@
     container.classList.remove('hidden');
 
     if (selectors.selectedProductName) {
-      selectors.selectors.selectedProductName.textContent = product.description || 'Produto sem descricao';
+      selectors.selectedProductName.textContent = product.description || 'Produto sem descricao';
     }
     if (selectors.selectedProductSku) {
-      selectors.selectors.selectedProductSku.textContent = product.sku || '-';
+      selectors.selectedProductSku.textContent = product.sku || '-';
     }
     if (selectors.selectedProductBarcode) {
-      selectors.selectors.selectedProductBarcode.textContent = product.barcode || '-';
+      selectors.selectedProductBarcode.textContent = product.barcode || '-';
     }
     if (selectors.selectedProductUnit) {
-      selectors.selectors.selectedProductUnit.textContent = product.unit || '-';
+      selectors.selectedProductUnit.textContent = product.unit || '-';
     }
 
     const originDepositId = selectors.originDeposit?.value || '';
@@ -262,11 +318,11 @@
 
     if (selectors.selectedOriginDeposit) {
       const originName = getDepositNameById(originDepositId);
-      selectors.selectors.selectedOriginDeposit.textContent = originName || 'Selecione o deposito';
+      selectors.selectedOriginDeposit.textContent = originName || 'Selecione o deposito';
     }
     if (selectors.selectedDestinationDeposit) {
       const destinationName = getDepositNameById(destinationDepositId);
-      selectors.selectors.selectedDestinationDeposit.textContent = destinationName || 'Selecione o deposito';
+      selectors.selectedDestinationDeposit.textContent = destinationName || 'Selecione o deposito';
     }
 
     const originStock = findStockForDeposit(product.stocks, originDepositId);
@@ -296,10 +352,10 @@
     }
 
     if (selectors.selectedOriginUnit) {
-      selectors.selectors.selectedOriginUnit.textContent = originStock?.unit || product.unit || '-';
+      selectors.selectedOriginUnit.textContent = originStock?.unit || product.unit || '-';
     }
     if (selectors.selectedDestinationUnit) {
-      selectors.selectors.selectedDestinationUnit.textContent = destinationStock?.unit || product.unit || '-';
+      selectors.selectedDestinationUnit.textContent = destinationStock?.unit || product.unit || '-';
     }
 
     toggleSelectedProductWarning(!originDepositId || !destinationDepositId);
@@ -307,9 +363,7 @@
 
   function clearSelectedProduct() {
     state.selectedProduct = null;
-    if (selectors.selectedProductQuantity) {
-      selectors.selectedProductQuantity.value = '1';
-    }
+    setSelectedProductQuantityValue(1);
     renderSelectedProduct();
   }
 
@@ -1428,9 +1482,7 @@
       renderProductSearchMessage('<div class="flex items-center gap-2"><i class="fas fa-spinner fa-spin"></i> Carregando detalhes do produto...</div>', 'loading');
       const detailedProduct = await fetchProductDetails(product._id);
       state.selectedProduct = detailedProduct;
-      if (selectors.selectedProductQuantity) {
-        selectors.selectedProductQuantity.value = '1';
-      }
+      setSelectedProductQuantityValue(1);
       renderSelectedProduct();
       hideProductResults();
       if (productSearchSelectors.input) {
@@ -1548,6 +1600,8 @@
 
   function attachSelectedProductControls() {
     selectors.selectedProductAddButton?.addEventListener('click', addSelectedProductToTransfer);
+    selectors.selectedProductMinusButton?.addEventListener('click', () => adjustSelectedProductQuantity(-1));
+    selectors.selectedProductPlusButton?.addEventListener('click', () => adjustSelectedProductQuantity(1));
 
     selectors.selectedProductClearButton?.addEventListener('click', () => {
       clearSelectedProduct();
@@ -1558,10 +1612,12 @@
     });
 
     selectors.selectedProductQuantity?.addEventListener('blur', (event) => {
-      const value = Number(event.target.value);
+      const value = getSelectedProductQuantityValue();
       if (!Number.isFinite(value) || value <= 0) {
-        event.target.value = '1';
+        setSelectedProductQuantityValue(1);
+        return;
       }
+      setSelectedProductQuantityValue(value);
     });
   }
 
@@ -1581,7 +1637,7 @@
     }
 
     const quantityInput = selectors.selectedProductQuantity;
-    const quantityValue = Number(quantityInput?.value);
+    const quantityValue = getSelectedProductQuantityValue();
     if (!Number.isFinite(quantityValue) || quantityValue <= 0) {
       showToast('Informe uma quantidade valida para transferir.', 'warning');
       if (quantityInput) {
@@ -3137,6 +3193,7 @@
     attachTableListeners();
     attachCollectorTableEvents();
     attachProductSearchEvents();
+    initSelectedProductQuantityMask();
     attachSelectedProductControls();
     attachCollectorImportEvents();
     attachFormEvents();

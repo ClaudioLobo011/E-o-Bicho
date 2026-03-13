@@ -13,6 +13,7 @@ const { encryptBuffer, encryptText } = require('../utils/certificates');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 const User = require('../models/User');
+const { hasAdminMasterGlobalAccess } = require('../utils/adminMasterMode');
 
 // ConfiguraÃ§Ã£o do Multer para upload de imagens das lojas
 const storeImageStorage = multer.diskStorage({
@@ -334,10 +335,13 @@ const extractCertificateMetadata = async (buffer, password) => {
     }
 };
 
-const resolveUserStoreAccess = async (userId) => {
+const resolveUserStoreAccess = async (req, userId) => {
     if (!userId) return { allowedStoreIds: [] };
-    const user = await User.findById(userId).select('empresaPrincipal empresas').lean();
+    const user = await User.findById(userId).select('empresaPrincipal empresas role').lean();
     if (!user) return { allowedStoreIds: [] };
+    if (hasAdminMasterGlobalAccess(req, user)) {
+        return { allowedStoreIds: [], allowAllStores: true };
+    }
 
     const markedCompanies = Array.isArray(user.empresas)
         ? user.empresas
@@ -356,7 +360,7 @@ const resolveUserStoreAccess = async (userId) => {
                 ? [String(user.empresaPrincipal)]
                 : []);
 
-    return { allowedStoreIds };
+    return { allowedStoreIds, allowAllStores: false };
 };
 
 const sanitizeHorario = (horario) => {
@@ -581,12 +585,13 @@ router.post('/certificate/preview', requireAuth, authorizeRoles('admin', 'admin_
 // GET /api/stores/allowed - lojas vinculadas ao usuário autenticado
 router.get('/allowed', requireAuth, authorizeRoles('admin', 'admin_master', 'funcionario'), async (req, res) => {
     try {
-        const { allowedStoreIds } = await resolveUserStoreAccess(req.user?.id);
-        if (!Array.isArray(allowedStoreIds) || allowedStoreIds.length === 0) {
+        const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req, req.user?.id);
+        if (!allowAllStores && (!Array.isArray(allowedStoreIds) || allowedStoreIds.length === 0)) {
             return res.json({ stores: [] });
         }
 
-        const stores = await Store.find({ _id: { $in: allowedStoreIds } }).sort({ nome: 1 });
+        const query = allowAllStores ? {} : { _id: { $in: allowedStoreIds } };
+        const stores = await Store.find(query).sort({ nome: 1 });
         res.json({ stores });
     } catch (error) {
         console.error('Erro ao buscar lojas permitidas:', error);

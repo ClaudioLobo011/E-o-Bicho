@@ -16,6 +16,16 @@ const representativeSchema = new Schema(
   { _id: false }
 );
 
+const importProductRuleSchema = new Schema(
+  {
+    raw: { type: String, trim: true, default: '' },
+    trigger: { type: String, trim: true, default: '' },
+    field: { type: String, trim: true, default: '' },
+    value: { type: String, trim: true, default: '' },
+  },
+  { _id: false }
+);
+
 const supplierSchema = new Schema(
   {
     codeNumber: {
@@ -127,6 +137,10 @@ const supplierSchema = new Schema(
       },
     },
     representatives: [representativeSchema],
+    importProductRules: {
+      type: [importProductRuleSchema],
+      default: [],
+    },
     retentions: [
       {
         type: String,

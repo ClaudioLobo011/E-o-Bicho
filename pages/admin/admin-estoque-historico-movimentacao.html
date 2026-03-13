@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin: Histórico de Movimentação de Estoque - E o Bicho</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="../../src/output.css">
+</head>
+<body class="bg-gray-100 text-[13px] leading-relaxed">
+  <div id="admin-header-placeholder"></div>
+
+  <main class="container mx-auto px-4 pt-1 pb-8 min-h-screen">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <aside class="md:col-span-4">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
+
+      <div class="md:col-span-4 space-y-5">
+        <header class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div class="space-y-2">
+            <nav aria-label="Breadcrumb" class="flex items-center gap-2 text-[11px] text-gray-500 uppercase tracking-wide font-semibold">
+              <span class="inline-flex items-center gap-1 text-primary"><i class="fas fa-shopping-basket"></i> Compras</span>
+              <i class="fas fa-angle-right text-gray-400"></i>
+              <span class="text-gray-600">Estoque</span>
+              <i class="fas fa-angle-right text-gray-400"></i>
+              <span class="text-gray-800">Histórico de Movimentação</span>
+            </nav>
+            <div>
+              <h1 class="text-2xl font-bold text-gray-800">Histórico de Movimentação de Estoque</h1>
+              <p class="text-sm text-gray-600">Acompanhe alterações de estoque por produto, tela de origem, usuário e origem/destino da movimentação.</p>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2 text-xs font-semibold">
+            <button type="button" id="filters-reset" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-gray-600 hover:bg-gray-50 transition">
+              <i class="fas fa-rotate"></i>
+              Limpar filtros
+            </button>
+            <button type="submit" form="history-filters-form" class="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-1.5 text-white shadow-sm hover:bg-primary/90 transition">
+              <i class="fas fa-magnifying-glass"></i>
+              Buscar
+            </button>
+          </div>
+        </header>
+
+        <section class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+            <form id="history-filters-form" class="grid grid-cols-1 gap-4 md:grid-cols-2" autocomplete="off">
+              <div>
+                <label for="filter-start-date" class="block text-xs font-semibold text-gray-700">Data inicial</label>
+                <input type="date" id="filter-start-date" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+              </div>
+              <div>
+                <label for="filter-end-date" class="block text-xs font-semibold text-gray-700">Data final</label>
+                <input type="date" id="filter-end-date" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+              </div>
+              <div>
+                <label for="filter-company" class="block text-xs font-semibold text-gray-700">Empresa</label>
+                <select id="filter-company" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  <option value="">Todas</option>
+                </select>
+              </div>
+              <div>
+                <label for="filter-deposit" class="block text-xs font-semibold text-gray-700">Depósito</label>
+                <select id="filter-deposit" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  <option value="">Todos</option>
+                </select>
+              </div>
+              <div>
+                <label for="filter-user" class="block text-xs font-semibold text-gray-700">Usuário</label>
+                <select id="filter-user" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  <option value="">Todos</option>
+                </select>
+              </div>
+              <div>
+                <label for="filter-operation" class="block text-xs font-semibold text-gray-700">Operação</label>
+                <select id="filter-operation" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  <option value="">Todas</option>
+                  <option value="entrada">Entrada</option>
+                  <option value="saida">Saída</option>
+                  <option value="ajuste">Ajuste</option>
+                </select>
+              </div>
+              <div>
+                <label for="filter-screen" class="block text-xs font-semibold text-gray-700">Tela de origem</label>
+                <select id="filter-screen" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  <option value="">Todas</option>
+                </select>
+              </div>
+              <div>
+                <label for="filter-source-type" class="block text-xs font-semibold text-gray-700">Tipo da origem</label>
+                <input type="text" id="filter-source-type" placeholder="Ex.: pdv_sale, transfer_approval" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+              </div>
+              <div class="md:col-span-2">
+                <label for="filter-search" class="block text-xs font-semibold text-gray-700">Busca</label>
+                <input type="text" id="filter-search" placeholder="Produto, documento, usuário, tela..." class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+              </div>
+            </form>
+          </article>
+
+          <article class="grid grid-cols-1 sm:grid-cols-2 gap-4 content-start">
+            <article class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+              <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Movimentações</p>
+              <p id="summary-total-movements" class="mt-2 text-2xl font-bold text-gray-800">0</p>
+            </article>
+            <article class="rounded-xl border border-emerald-100 bg-emerald-50 p-4 shadow-sm">
+              <p class="text-xs font-semibold uppercase tracking-wide text-emerald-700">Qtd. adicionada</p>
+              <p id="summary-quantity-added" class="mt-2 text-2xl font-bold text-emerald-700">0</p>
+            </article>
+            <article class="rounded-xl border border-rose-100 bg-rose-50 p-4 shadow-sm">
+              <p class="text-xs font-semibold uppercase tracking-wide text-rose-700">Qtd. retirada</p>
+              <p id="summary-quantity-removed" class="mt-2 text-2xl font-bold text-rose-700">0</p>
+            </article>
+            <article class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+              <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Qtd. líquida</p>
+              <p id="summary-net-quantity" class="mt-2 text-2xl font-bold text-gray-800">0</p>
+            </article>
+            <article class="rounded-xl border border-emerald-100 bg-emerald-50 p-4 shadow-sm">
+              <p class="text-xs font-semibold uppercase tracking-wide text-emerald-700">Valor adicionado</p>
+              <p id="summary-value-added" class="mt-2 text-xl font-bold text-emerald-700">R$ 0,00</p>
+            </article>
+            <article class="rounded-xl border border-rose-100 bg-rose-50 p-4 shadow-sm">
+              <p class="text-xs font-semibold uppercase tracking-wide text-rose-700">Valor retirado</p>
+              <p id="summary-value-removed" class="mt-2 text-xl font-bold text-rose-700">R$ 0,00</p>
+            </article>
+            <article class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm sm:col-span-2">
+              <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Valor líquido</p>
+              <p id="summary-net-value" class="mt-2 text-xl font-bold text-gray-800">R$ 0,00</p>
+            </article>
+          </article>
+        </section>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4">
+          <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Lançamentos do histórico</h2>
+              <p class="text-sm text-gray-600">Estoque anterior, movimentação e estoque atual por operação registrada.</p>
+            </div>
+            <span id="history-pagination" class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">Mostrando 0 de 0</span>
+          </div>
+
+          <div class="overflow-x-auto rounded-xl border border-gray-200">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+              <thead class="bg-gray-50 text-[11px] font-semibold uppercase tracking-wide text-gray-600">
+                <tr>
+                  <th class="px-4 py-3 text-left">Data/Hora</th>
+                  <th class="px-4 py-3 text-left">Produto</th>
+                  <th class="px-4 py-3 text-left">De/Para</th>
+                  <th class="px-4 py-3 text-left">Usuário</th>
+                  <th class="px-4 py-3 text-left">Tela/Origem</th>
+                  <th class="px-4 py-3 text-right">Estoque anterior</th>
+                  <th class="px-4 py-3 text-right">Movimentação</th>
+                  <th class="px-4 py-3 text-right">Estoque atual</th>
+                  <th class="px-4 py-3 text-right">Valor mov.</th>
+                </tr>
+              </thead>
+              <tbody id="history-table-body" class="divide-y divide-gray-100"></tbody>
+            </table>
+            <div id="history-empty-state" class="hidden px-6 py-12 text-center text-sm text-gray-500">
+              <i class="fas fa-box-open text-2xl text-gray-300 mb-3"></i>
+              <p>Nenhuma movimentação encontrada para os filtros informados.</p>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <div id="admin-footer-placeholder"></div>
+  <div id="modal-placeholder"></div>
+  <div id="confirm-modal-placeholder"></div>
+
+  <script>var basePath = '../../';</script>
+  <script src="../../scripts/core/config.js"></script>
+  <script src="../../scripts/core/ui.js"></script>
+  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/admin/admin.js"></script>
+  <script src="../../scripts/admin/admin-estoque-historico-movimentacao.js"></script>
+</body>
+</html>

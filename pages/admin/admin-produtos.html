@@ -646,6 +646,22 @@
                                         </div>
                                     </div>
                                     <div class="rounded-xl border border-gray-200 bg-white p-3.5 shadow-sm">
+                                        <label class="block text-xs font-semibold text-gray-700">Tipo</label>
+                                        <div class="mt-3 flex flex-wrap gap-3 text-xs">
+                                            <label class="inline-flex items-center gap-2"><input type="radio" name="spec-tipo" value="C&atilde;es" class="h-4 w-4 border-gray-300 text-primary focus:ring-primary/20"> C&atilde;es</label>
+                                            <label class="inline-flex items-center gap-2"><input type="radio" name="spec-tipo" value="Gatos" class="h-4 w-4 border-gray-300 text-primary focus:ring-primary/20"> Gatos</label>
+                                            <label class="inline-flex items-center gap-2"><input type="radio" name="spec-tipo" value="P&aacute;ssaros" class="h-4 w-4 border-gray-300 text-primary focus:ring-primary/20"> P&aacute;ssaros</label>
+                                            <label class="inline-flex items-center gap-2"><input type="radio" name="spec-tipo" value="Outros" class="h-4 w-4 border-gray-300 text-primary focus:ring-primary/20"> Outros</label>
+                                        </div>
+                                    </div>
+                                    <div class="rounded-xl border border-gray-200 bg-white p-3.5 shadow-sm">
+                                        <label class="block text-xs font-semibold text-gray-700">Castrado</label>
+                                        <div class="mt-3 flex flex-wrap gap-3 text-xs">
+                                            <label class="inline-flex items-center gap-2"><input type="radio" name="spec-castracao" value="N&atilde;o castrado" class="h-4 w-4 border-gray-300 text-primary focus:ring-primary/20"> N&atilde;o castrado</label>
+                                            <label class="inline-flex items-center gap-2"><input type="radio" name="spec-castracao" value="Castrado" class="h-4 w-4 border-gray-300 text-primary focus:ring-primary/20"> Castrado</label>
+                                        </div>
+                                    </div>
+                                    <div class="rounded-xl border border-gray-200 bg-white p-3.5 shadow-sm">
                                         <label class="block text-xs font-semibold text-gray-700">Porte Raça</label>
                                         <div class="mt-3 flex flex-wrap gap-3 text-xs">
                                             <label class="inline-flex items-center gap-2"><input type="checkbox" name="spec-porte" value="Mini" class="rounded border-gray-300 text-primary focus:ring-primary/20"> Mini</label>
@@ -1348,6 +1364,10 @@
                 <h3 class="text-base font-semibold text-gray-800">Selecionar Categorias</h3>
                 <button type="button" id="close-category-modal-btn" class="inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-gray-600">&times;</button>
             </div>
+            <div class="border-b border-gray-100 px-5 py-3">
+                <label for="category-search-input" class="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-gray-600">Buscar categoria</label>
+                <input type="text" id="category-search-input" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Digite para filtrar (ex.: gato, bifinho)">
+            </div>
             <div id="category-tree-container" class="custom-scrollbar grow overflow-y-auto px-5 py-4" style="max-height: 60vh;"></div>
             <div class="flex items-center justify-end gap-3 border-t border-gray-100 bg-gray-50 px-5 py-4">
                 <button type="button" id="cancel-category-modal-btn" class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3.5 py-1.5 text-xs font-semibold text-gray-600 transition hover:bg-gray-100">Cancelar</button>
@@ -1364,7 +1384,7 @@
     <script src="../../scripts/core/ui.js"></script>
     <script src="../../scripts/core/main.js"></script>
     <script src="../../scripts/admin/admin.js"></script>
-    <script src="../../scripts/admin/admin-produto-form.js?v=20260210b"></script>
+    <script src="../../scripts/admin/admin-produto-form.js?v=20260312l"></script>
     <script src="/scripts/common/modal-bridge.js"></script>
 </body>
 </html>
