@@ -263,6 +263,7 @@
     deliveryStatusOverride: null,
     saleSource: '',
     activeFinalizeContext: null,
+    finalizeOperationId: '',
     saleStateBackup: null,
     saleCodeIdentifier: '',
     saleCodeSequence: 1,
@@ -13481,6 +13482,9 @@
       state.receivablesPaymentContext.entries = selection.map((entry) => ({ ...entry }));
     }
     state.activeFinalizeContext = context;
+    if (context === 'sale' && !state.finalizeOperationId) {
+      state.finalizeOperationId = createUid();
+    }
     applyFinalizeModalContext(context);
     renderSalePaymentMethods();
     renderSalePaymentsPreview();
@@ -13763,6 +13767,7 @@
     }
     applyFinalizeModalContext('sale');
     state.activeFinalizeContext = null;
+    state.finalizeOperationId = '';
   };
 
   const fiscalEmissionStepOrder = ['montando', 'assinando', 'transmitindo'];
@@ -15360,11 +15365,29 @@
     };
     const persistReceivablesOnServer = async () => {
       try {
+        const signature = JSON.stringify(
+          Array.isArray(saleRecord.receivables)
+            ? saleRecord.receivables.map((entry) => ({
+                id: entry?.id || '',
+                saleId: entry?.saleId || saleId,
+                parcelNumber: entry?.parcelNumber || 1,
+                value: Number(entry?.value || 0),
+                status: entry?.status || '',
+                accountReceivableId: entry?.accountReceivableId || '',
+              }))
+            : []
+        );
+        let hash = 0;
+        for (let index = 0; index < signature.length; index += 1) {
+          hash = (hash * 33 + signature.charCodeAt(index)) >>> 0;
+        }
         const persisted = await sendPdvCommandRequest('pdv.sale.sync_receivables', {
           saleId,
           receivables: Array.isArray(saleRecord.receivables)
             ? saleRecord.receivables.map((entry) => ({ ...entry }))
             : [],
+        }, {
+          idempotencyKey: `pdv-sale-sync-receivables:${normalizeId(state.selectedPdv)}:${normalizeId(saleId)}:${hash.toString(36)}`,
         });
         applyPersistedStateResponse(persisted);
       } catch (error) {
@@ -15379,7 +15402,7 @@
     commitReceivablesToState();
 
     if (!Array.isArray(backendRequests) || !backendRequests.length) {
-      await persistReceivablesOnServer();
+      // Recebíveis já foram persistidos junto do comando de finalização.
       return;
     }
 
@@ -15550,7 +15573,8 @@
     }
 
     commitReceivablesToState();
-    await persistReceivablesOnServer();
+    // Não bloqueia o fechamento da venda com a sincronização do snapshot no estado do PDV.
+    void persistReceivablesOnServer();
   };
 
   const emitFiscalForSale = async (saleId, { notifyOnSuccess = true } = {}) => {
@@ -15762,7 +15786,7 @@
     }
     const budgetIdToFinalize = state.activeBudgetId || '';
     const budgetToFinalize = budgetIdToFinalize ? findBudgetById(budgetIdToFinalize) : null;
-    const commandSaleId = createUid();
+    const commandSaleId = state.finalizeOperationId || createUid();
     const saleCode = state.currentSaleCode || '';
     const itensSnapshot = state.itens.map((item) => ({ ...item }));
     const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
@@ -15798,8 +15822,13 @@
       seller: state.selectedSeller ? { ...state.selectedSeller } : null,
       createdAt: saleReceivables.saleDate,
       receiptSnapshot: saleSnapshot,
+      receivables: Array.isArray(saleReceivables.entries)
+        ? saleReceivables.entries.map((entry) => ({ ...entry }))
+        : [],
       appointmentId: primaryAppointmentIdForSale,
       appointmentIds: appointmentIdsForSale,
+    }, {
+      idempotencyKey: `pdv-sale-finalize:${normalizeId(state.selectedPdv)}:${commandSaleId}`,
     });
     applyPersistedStateResponse(persistedState);
     const saleRecord =
@@ -25179,9 +25208,19 @@
       confirmButton.classList.add('opacity-60', 'cursor-not-allowed');
     }
     try {
+      const normalizedReason = normalizeString(reason);
+      const reasonHash = (() => {
+        let result = 0;
+        for (let index = 0; index < normalizedReason.length; index += 1) {
+          result = (result * 33 + normalizedReason.charCodeAt(index)) >>> 0;
+        }
+        return result.toString(36);
+      })();
       const persisted = await sendPdvCommandRequest('pdv.sale.cancel', {
         saleId,
-        reason,
+        reason: normalizedReason,
+      }, {
+        idempotencyKey: `pdv-sale-cancel:${normalizeId(state.selectedPdv)}:${normalizeId(saleId)}:${reasonHash}`,
       });
       applyPersistedStateResponse(persisted);
       const updatedSale = findCompletedSaleById(saleId) || sale;

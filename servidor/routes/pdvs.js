@@ -3332,6 +3332,39 @@ const buildPdvCommandMeta = (req) => {
   };
 };
 
+const buildReceivableFingerprint = (entry = {}) => {
+  const dueDate = safeDate(entry?.dueDate);
+  const dueIso = dueDate ? dueDate.toISOString() : '';
+  return [
+    normalizeString(entry?.id || ''),
+    normalizeString(entry?.saleId || ''),
+    String(Number.parseInt(entry?.parcelNumber ?? 0, 10) || 0),
+    String(safeNumber(entry?.value ?? 0, 0).toFixed(4)),
+    dueIso,
+    normalizeString(entry?.paymentMethodId || ''),
+    normalizeString(entry?.paymentMethodLabel || ''),
+    normalizeString(entry?.saleCode || ''),
+  ].join('|');
+};
+
+const areReceivablesEquivalent = (left = [], right = []) => {
+  const leftList = (Array.isArray(left) ? left : [])
+    .map((entry) => normalizeReceivableRecordPayload(entry))
+    .filter(Boolean)
+    .map((entry) => buildReceivableFingerprint(entry))
+    .sort();
+  const rightList = (Array.isArray(right) ? right : [])
+    .map((entry) => normalizeReceivableRecordPayload(entry))
+    .filter(Boolean)
+    .map((entry) => buildReceivableFingerprint(entry))
+    .sort();
+  if (leftList.length !== rightList.length) return false;
+  for (let index = 0; index < leftList.length; index += 1) {
+    if (leftList[index] !== rightList[index]) return false;
+  }
+  return true;
+};
+
 const parsePdvCommandRequest = (body = {}) => {
   const action = normalizeString(body?.action);
   const payload = body && typeof body === 'object' ? body.payload || {} : {};
@@ -3620,7 +3653,48 @@ const buildNextOpeningPaymentsFromClose = (payments = []) =>
     valor: isCashPaymentSnapshot(payment) ? Math.max(0, safeNumber(payment.valor, 0)) : 0,
   }));
 
+const PDV_PERF_LOGS_ENABLED = normalizeString(process.env.PDV_PERF_LOGS || '1') !== '0';
+const PDV_SALE_FINALIZE_LEGACY_WRITE =
+  normalizeString(process.env.PDV_SALE_FINALIZE_LEGACY_WRITE || '0') === '1';
+
+const createPdvPerfTracer = ({ scope = 'pdv', pdvId = '', action = '', requestId = '' } = {}) => {
+  const startedAt = Date.now();
+  let lastMark = startedAt;
+  const prefix = `[PDV PERF] [${scope}] pdv=${pdvId || '-'} action=${action || '-'} req=${requestId || '-'}`;
+  const mark = (step, extra) => {
+    if (!PDV_PERF_LOGS_ENABLED) return;
+    const now = Date.now();
+    const stepMs = now - lastMark;
+    const totalMs = now - startedAt;
+    lastMark = now;
+    if (extra && typeof extra === 'object') {
+      console.info(`${prefix} step=${step} stepMs=${stepMs} totalMs=${totalMs}`, extra);
+      return;
+    }
+    console.info(`${prefix} step=${step} stepMs=${stepMs} totalMs=${totalMs}`);
+  };
+  const flush = (status = 'ok', extra) => {
+    if (!PDV_PERF_LOGS_ENABLED) return;
+    const now = Date.now();
+    const totalMs = now - startedAt;
+    if (extra && typeof extra === 'object') {
+      console.info(`${prefix} done=${status} totalMs=${totalMs}`, extra);
+      return;
+    }
+    console.info(`${prefix} done=${status} totalMs=${totalMs}`);
+  };
+  return { mark, flush };
+};
+
 const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, user }) => {
+  const shouldTraceCommand = action === PDV_COMMANDS.SALE_FINALIZE;
+  const perf = createPdvPerfTracer({
+    scope: 'runPdvCommand',
+    pdvId,
+    action,
+    requestId: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+  });
+  if (shouldTraceCommand) perf.mark('start');
   if (action === PDV_COMMANDS.REFRESH_STATE) {
     const state = await PdvState.findOne({ pdv: pdvId });
     return {
@@ -4072,7 +4146,13 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
   }
 
   if (action === PDV_COMMANDS.SALE_FINALIZE) {
-    const existingStateDoc = await PdvState.findOne({ pdv: pdvId });
+    try {
+      if (!idempotencyKey) {
+        const error = new Error('Informe o cabeçalho X-Idempotency-Key para finalizar a venda.');
+        error.statusCode = 400;
+        throw error;
+      }
+      const existingStateDoc = await PdvState.findOne({ pdv: pdvId });
     if (
       idempotencyKey &&
       Array.isArray(existingStateDoc?.recentStateMutationKeys) &&
@@ -4093,12 +4173,17 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
       existingStateDoc && typeof existingStateDoc.toObject === 'function'
         ? existingStateDoc.toObject()
         : existingStateDoc;
+    perf.mark('sale_finalize.state_loaded');
     const createdAt = safeDate(payload?.createdAt) || new Date();
     const items = Array.isArray(payload?.items)
       ? payload.items
           .map((item) => (item && typeof item === 'object' ? { ...item } : null))
           .filter(Boolean)
       : [];
+    perf.mark('sale_finalize.payload_normalized', {
+      items: items.length,
+      payments: Array.isArray(payload?.payments) ? payload.payments.length : 0,
+    });
     if (!items.length) {
       const error = new Error('Adicione itens para finalizar a venda.');
       error.statusCode = 400;
@@ -4120,12 +4205,27 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
     }
 
     const providedSaleId = normalizeString(payload?.saleId || payload?.id);
+    const providedSaleCode = normalizeString(payload?.saleCode || payload?.saleCodeLabel || '').toUpperCase();
     const existingSales = Array.isArray(existingState?.completedSales)
       ? existingState.completedSales.map((sale) => ({ ...sale }))
       : [];
     if (
       providedSaleId &&
       existingSales.some((sale) => normalizeString(sale?.id || sale?._id) === providedSaleId)
+    ) {
+      return {
+        state: serializeStateForResponse(existingStateDoc),
+        shouldEmit: false,
+      };
+    }
+    if (
+      providedSaleCode &&
+      existingSales.some((sale) => {
+        const status = normalizeString(sale?.status).toLowerCase();
+        if (status === 'cancelled') return false;
+        const currentCode = normalizeString(sale?.saleCode || sale?.saleCodeLabel || '').toUpperCase();
+        return currentCode && currentCode === providedSaleCode;
+      })
     ) {
       return {
         state: serializeStateForResponse(existingStateDoc),
@@ -4156,6 +4256,15 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
     const paymentLabel = payments
       .map((payment) => `${payment.label || 'Pagamento'}: ${safeNumber(payment.valor, 0).toFixed(2)}`)
       .join(' | ');
+    const normalizedReceivables = (Array.isArray(payload?.receivables) ? payload.receivables : [])
+      .map((entry) =>
+        normalizeReceivableRecordPayload({
+          ...(entry && typeof entry === 'object' ? entry : {}),
+          saleId: providedSaleId,
+          saleCode: normalizeString(entry?.saleCode || '') || normalizeString(payload?.saleCode || ''),
+        })
+      )
+      .filter(Boolean);
 
     const incomingSale = normalizeSaleRecordPayload({
       id: providedSaleId || `sale-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
@@ -4180,6 +4289,7 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
           : null,
       status: 'completed',
       cashContributions,
+      receivables: normalizedReceivables,
     });
     if (!incomingSale) {
       const error = new Error('Não foi possível montar a venda para persistência.');
@@ -4200,6 +4310,7 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
       existingBudgets: currentBudgets,
     });
     nextSales = ensuredCodes.sales;
+    perf.mark('sale_finalize.codes_ensured');
 
     const productIds = collectProductIdsFromSales(nextSales);
     if (productIds.length) {
@@ -4209,6 +4320,7 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
       const productMap = new Map(products.map((product) => [product._id.toString(), product]));
       ensureSalesHaveCostData(nextSales, productMap);
     }
+    perf.mark('sale_finalize.costs_enriched', { products: productIds.length });
 
     nextSales = mergeInventoryProcessingStatus(nextSales, existingSales);
     const existingInventoryMovements = Array.isArray(existingState?.inventoryMovements)
@@ -4244,10 +4356,30 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
       }
       nextInventoryMovements = combinedMovements;
     }
+    perf.mark('sale_finalize.inventory_processed', {
+      inventoryEnabled: Boolean(depositConfig),
+      inventoryMovements: nextInventoryMovements.length,
+    });
 
     const finalizedSale = nextSales.find(
       (sale) => normalizeString(sale?.id || sale?._id) === normalizeString(incomingSale.id)
     );
+    const finalizedSaleId = normalizeString(finalizedSale?.id || finalizedSale?._id || incomingSale.id);
+    const finalizedSaleCode = normalizeString(
+      finalizedSale?.saleCode || finalizedSale?.saleCodeLabel || payload?.saleCode || ''
+    );
+    const nextAccountsReceivableBase = (Array.isArray(existingState?.accountsReceivable)
+      ? existingState.accountsReceivable
+      : []
+    ).filter((entry) => normalizeString(entry?.saleId || '') !== finalizedSaleId);
+    const nextAccountsReceivable = [
+      ...nextAccountsReceivableBase,
+      ...normalizedReceivables.map((entry) => ({
+        ...entry,
+        saleId: finalizedSaleId,
+        saleCode: normalizeString(entry?.saleCode || '') || finalizedSaleCode,
+      })),
+    ];
     const historyEntry = buildSaleHistoryEntry({
       saleCode: normalizeString(finalizedSale?.saleCode || finalizedSale?.saleCodeLabel),
       totalLiquido: safeNumber(finalizedSale?.totalLiquido ?? finalizedSale?.total ?? totalLiquido, 0),
@@ -4283,9 +4415,7 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
       completedSales: nextSales,
       budgets: currentBudgets,
       deliveryOrders: Array.isArray(existingState?.deliveryOrders) ? existingState.deliveryOrders : [],
-      accountsReceivable: Array.isArray(existingState?.accountsReceivable)
-        ? existingState.accountsReceivable
-        : [],
+      accountsReceivable: nextAccountsReceivable,
       inventoryMovements: nextInventoryMovements,
       saleCodeIdentifier:
         normalizeString(existingState?.saleCodeIdentifier) || resolveSaleCodeIdentifierForPdv(pdvDoc),
@@ -4302,30 +4432,81 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
     };
 
     reconcileCashStateFromSales({ existingState, updatePayload });
+    perf.mark('sale_finalize.cash_reconciled');
 
-    const updatedState = await PdvState.findOneAndUpdate(
-      { pdv: pdvId },
-      {
-        ...updatePayload,
-        pdv: pdvId,
-        empresa: existingState?.empresa || pdvDoc?.empresa,
-      },
-      { new: true, upsert: true, setDefaultsOnInsert: true }
-    );
+    let updatedState = null;
+    if (PDV_SALE_FINALIZE_LEGACY_WRITE) {
+      updatedState = await PdvState.findOneAndUpdate(
+        { pdv: pdvId },
+        {
+          ...updatePayload,
+          pdv: pdvId,
+          empresa: existingState?.empresa || pdvDoc?.empresa,
+        },
+        { new: true, upsert: true, setDefaultsOnInsert: true }
+      );
+    } else {
+      const optimizedSet = {
+        caixaAberto: true,
+        summary: updatePayload.summary,
+        caixaInfo: updatePayload.caixaInfo,
+        pagamentos: updatePayload.pagamentos,
+        history: updatePayload.history,
+        lastMovement: updatePayload.lastMovement,
+        completedSales: updatePayload.completedSales,
+        inventoryMovements: updatePayload.inventoryMovements,
+        saleCodeIdentifier: updatePayload.saleCodeIdentifier,
+        saleCodeSequence: updatePayload.saleCodeSequence,
+        budgetSequence: updatePayload.budgetSequence,
+        recentStateMutationKeys: updatePayload.recentStateMutationKeys,
+      };
+      if (Array.isArray(normalizedReceivables) && normalizedReceivables.length) {
+        optimizedSet.accountsReceivable = updatePayload.accountsReceivable;
+      }
 
-    await syncPdvCaixaSessionHistory({
+      updatedState = await PdvState.findOneAndUpdate(
+        { pdv: pdvId },
+        { $set: optimizedSet },
+        { new: true, upsert: false }
+      );
+    }
+    perf.mark('sale_finalize.state_persisted');
+
+    syncPdvCaixaSessionHistory({
       pdvDoc,
       existingState,
       updatedState,
+    }).catch((historyError) => {
+      console.error('Erro ao sincronizar histórico de caixas após venda finalizada:', historyError);
+    });
+    perf.mark('sale_finalize.session_sync_deferred');
+    perf.flush('ok', {
+      branch: action,
+      saleId: normalizeString(incomingSale?.id || ''),
+      totalLiquido: safeNumber(totalLiquido, 0),
     });
 
     return {
       state: serializeStateForResponse(updatedState),
       shouldEmit: true,
     };
+    } catch (error) {
+      if (shouldTraceCommand) {
+        perf.flush('error', {
+          branch: action,
+          message: normalizeString(error?.message || '') || 'Erro em sale_finalize',
+        });
+      }
+      throw error;
+    }
   }
 
   if (action === PDV_COMMANDS.SALE_CANCEL) {
+    if (!idempotencyKey) {
+      const error = new Error('Informe o cabeçalho X-Idempotency-Key para cancelar a venda.');
+      error.statusCode = 400;
+      throw error;
+    }
     const existingStateDoc = await PdvState.findOne({ pdv: pdvId });
     if (
       idempotencyKey &&
@@ -4697,6 +4878,13 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
         })
       )
       .filter(Boolean);
+    const existingSaleReceivables = Array.isArray(saleRecord?.receivables) ? saleRecord.receivables : [];
+    if (areReceivablesEquivalent(existingSaleReceivables, normalizedReceivables)) {
+      return {
+        state: serializeStateForResponse(existingStateDoc),
+        shouldEmit: false,
+      };
+    }
     const saleCode = normalizeString(saleRecord?.saleCode || saleRecord?.saleCodeLabel || '');
     const nextSales = [...existingSales];
     nextSales[saleIndex] = normalizeSaleRecordPayload({
@@ -5540,23 +5728,37 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
 
   const error = new Error('Comando de PDV não suportado.');
   error.statusCode = 400;
+  if (shouldTraceCommand) {
+    perf.flush('error', { message: error.message, branch: action });
+  }
   throw error;
 };
 
 router.post('/:id/commands', requireAuth, async (req, res) => {
+  const routePerf = createPdvPerfTracer({
+    scope: 'POST /:id/commands',
+    pdvId: req.params?.id || '',
+    action: normalizeString(req.body?.action || ''),
+    requestId: normalizeString(req.get('x-idempotency-key')) || `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+  });
+  routePerf.mark('start');
   try {
     const pdvId = req.params.id;
     if (!mongoose.Types.ObjectId.isValid(pdvId)) {
+      routePerf.flush('validation_error', { message: 'Identificador de PDV inválido.' });
       return res.status(400).json({ message: 'Identificador de PDV inválido.' });
     }
 
     const pdv = await Pdv.findById(pdvId).lean();
+    routePerf.mark('pdv_loaded');
     if (!pdv) {
+      routePerf.flush('not_found', { message: 'PDV não encontrado.' });
       return res.status(404).json({ message: 'PDV não encontrado.' });
     }
 
     const { action, payload } = parsePdvCommandRequest(req.body || {});
     if (!action) {
+      routePerf.flush('validation_error', { message: 'Informe a ação do comando do PDV.' });
       return res.status(400).json({ message: 'Informe a ação do comando do PDV.' });
     }
 
@@ -5571,6 +5773,7 @@ router.post('/:id/commands', requireAuth, async (req, res) => {
         user: req.user || {},
       });
     });
+    routePerf.mark('command_executed');
     const state = commandResult?.state || serializeStateForResponse(null);
 
     if (commandResult?.shouldEmit) {
@@ -5586,6 +5789,8 @@ router.post('/:id/commands', requireAuth, async (req, res) => {
         });
       }
     }
+    routePerf.mark('emit_processed', { emitted: Boolean(commandResult?.shouldEmit) });
+    routePerf.flush('ok', { shouldEmit: Boolean(commandResult?.shouldEmit) });
 
     return res.json({
       ok: true,
@@ -5604,6 +5809,10 @@ router.post('/:id/commands', requireAuth, async (req, res) => {
     } else {
       console.warn('Falha de validação em comando do PDV:', message);
     }
+    routePerf.flush(statusCode >= 500 ? 'error' : 'validation_error', {
+      statusCode,
+      message,
+    });
     return res.status(statusCode).json({ message });
   }
 });
