@@ -1,4 +1,11 @@
-import { api, state, els, AGENDA_NO_PREFERENCE_PROF_ID, buildNoPreferenceProfessional } from './core.js';
+import {
+  api,
+  state,
+  els,
+  AGENDA_NO_PREFERENCE_PROF_ID,
+  buildNoPreferenceProfessional,
+  isAdminMasterModeActive,
+} from './core.js';
 
 const DEFAULT_PROF_TYPE = 'esteticista';
 const TYPE_LABELS = {
@@ -9,6 +16,14 @@ const TYPE_LABELS = {
 };
 
 let modalProfissionais = [];
+
+function buildProfissionaisEndpoint(storeId) {
+  if (isAdminMasterModeActive()) {
+    return '/func/profissionais';
+  }
+  if (!storeId) return '';
+  return `/func/profissionais?storeId=${storeId}`;
+}
 
 function normalizeProfissionais(list) {
   return (Array.isArray(list) ? list : []).map((p) => {
@@ -79,11 +94,16 @@ function applyModalProfissionais(list, preselectId) {
 
 export async function populateModalProfissionais(storeId, preselectId) {
   try {
-    if (!storeId || !els.profSelect) {
+    if (!els.profSelect) {
       updateModalProfissionalLabel(preselectId);
       return;
     }
-    const resp = await api(`/func/profissionais?storeId=${storeId}`);
+    const endpoint = buildProfissionaisEndpoint(storeId);
+    if (!endpoint) {
+      updateModalProfissionalLabel(preselectId);
+      return;
+    }
+    const resp = await api(endpoint);
     const list = await resp.json().catch(() => []);
     applyModalProfissionais(list, preselectId);
   } catch {
@@ -92,14 +112,15 @@ export async function populateModalProfissionais(storeId, preselectId) {
 }
 
 export async function loadProfissionais() {
-  if (!state.selectedStoreId) {
+  const endpoint = buildProfissionaisEndpoint(state.selectedStoreId);
+  if (!endpoint) {
     state.profissionais = [];
     modalProfissionais = [];
     if (els.profSelect) els.profSelect.innerHTML = '';
     updateModalProfissionalLabel();
     return;
   }
-  const resp = await api(`/func/profissionais?storeId=${state.selectedStoreId}`);
+  const resp = await api(endpoint);
   const list = await resp.json().catch(() => []);
   state.profissionais = normalizeProfissionais(list);
   modalProfissionais = [buildNoPreferenceProfessional(), ...state.profissionais];

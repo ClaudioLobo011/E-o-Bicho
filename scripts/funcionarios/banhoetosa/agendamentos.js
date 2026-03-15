@@ -1,20 +1,43 @@
-import { api, state, els, normalizeDate, startOfWeek, addDays, startOfMonth, startOfNextMonth, updateHeaderLabel, todayStr } from './core.js';
+import {
+  api,
+  state,
+  els,
+  normalizeDate,
+  startOfWeek,
+  addDays,
+  startOfMonth,
+  startOfNextMonth,
+  updateHeaderLabel,
+  todayStr,
+  isAdminMasterModeActive,
+} from './core.js';
 import { renderGrid } from './grid.js';
 import { enhanceAgendaUI } from './ui.js';
 
 export async function loadAgendamentos() {
   const base = normalizeDate(els.dateInput?.value || todayStr());
+  const ignoreStoreScope = isAdminMasterModeActive();
+  const selectedStoreId = !ignoreStoreScope ? (state.selectedStoreId || '') : '';
   let url = '';
   if (state.view === 'week') {
     const ini = startOfWeek(base);
     const fim = addDays(ini, 7);
-    url = `/func/agendamentos/range?start=${ini}&end=${fim}&storeId=${state.selectedStoreId}`;
+    url = `/func/agendamentos/range?start=${ini}&end=${fim}`;
+    if (selectedStoreId) {
+      url += `&storeId=${encodeURIComponent(selectedStoreId)}`;
+    }
   } else if (state.view === 'month') {
     const m0 = startOfMonth(base);
     const m1 = startOfNextMonth(base);
-    url = `/func/agendamentos/range?start=${m0}&end=${m1}&storeId=${state.selectedStoreId}`;
+    url = `/func/agendamentos/range?start=${m0}&end=${m1}`;
+    if (selectedStoreId) {
+      url += `&storeId=${encodeURIComponent(selectedStoreId)}`;
+    }
   } else {
-    url = `/func/agendamentos?date=${base}&storeId=${state.selectedStoreId}`;
+    url = `/func/agendamentos?date=${base}`;
+    if (selectedStoreId) {
+      url += `&storeId=${encodeURIComponent(selectedStoreId)}`;
+    }
   }
   try {
     const resp = await api(url);
@@ -27,7 +50,7 @@ export async function loadAgendamentos() {
     const list = await resp.json();
     state.agendamentos = Array.isArray(list) ? list : [];
     updateHeaderLabel();
-    state.lastSnapshotHash = `${state.view}:${base}:${state.selectedStoreId || ''}:${state.agendamentos.length}`;
+    state.lastSnapshotHash = `${state.view}:${base}:${selectedStoreId || 'all'}:${state.agendamentos.length}`;
   } catch (e) {
     console.error('Erro ao carregar agendamentos', e);
     state.agendamentos = [];
@@ -65,4 +88,3 @@ export function startAutoRefresh() {
   state.lastSnapshotHash = snapshotHash(state.agendamentos);
   window.__agendaRefreshTimer = setInterval(refreshAgendaIfChanged, 60000);
 }
-

@@ -7384,6 +7384,9 @@
   border: 1px solid #e5e7eb;
   border-radius: 14px;
 }
+#modal-add-servico .agenda-add-modal-body.hidden {
+  display: none !important;
+}
 #modal-add-servico .agenda-add-modal-body > .grid, #modal-add-servico .agenda-add-modal-body .grid {
   gap: 0.75rem;
 }

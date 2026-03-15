@@ -3,6 +3,7 @@ import {
   normalizeDate, todayStr, pad, money, shortTutorName,
   clearChildren, getFilteredAgendamentos, getVisibleProfissionais,
   updateHeaderLabel, localDateStr, addDays, startOfWeek, startOfMonth, startOfNextMonth,
+  isAdminMasterModeActive,
   renderStatusBadge, statusMeta, AGENDA_NO_PREFERENCE_PROF_ID
 } from './core.js';
 import { openAddModal } from './modal.js';
@@ -412,6 +413,9 @@ function getSelectedStoreHorario() {
 }
 
 function getBusinessRangeForDate(dateStr) {
+  if (isAdminMasterModeActive()) {
+    return { startHour: 0, endHour: 24, closed: false };
+  }
   const fallback = { startHour: DEFAULT_BUSINESS_START, endHour: DEFAULT_BUSINESS_END, closed: false };
   const horario = getSelectedStoreHorario();
   if (!horario) return fallback;

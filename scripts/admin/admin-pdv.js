@@ -728,7 +728,6 @@
     refreshCurrentSaleCode();
     persistSaleSequence(pdvId, state.saleCodeSequence);
     updateSaleCodeDisplay();
-    scheduleStatePersist();
   };
   const getPdvCompanyId = (pdv) => {
     if (!pdv) return '';
@@ -1391,11 +1390,15 @@
 
   const applyPaymentInputMasks = () => {
     if (!elements.paymentList || typeof IMask === 'undefined') return;
+    const renderedPayments = getDisplayedPaymentRows();
+    const findRenderedPayment = (paymentId) =>
+      renderedPayments.find((item) => String(item?.id || '') === String(paymentId || '')) || null;
     const inputs = elements.paymentList.querySelectorAll('input[data-payment-input]');
     inputs.forEach((input) => {
       const paymentId = input.getAttribute('data-payment-input');
       if (!paymentId || paymentInputMasks.has(paymentId)) return;
       const payment = state.pagamentos.find((item) => item.id === paymentId);
+      const renderedPayment = findRenderedPayment(paymentId);
       const mask = IMask(input, {
         mask: Number,
         scale: 2,
@@ -1407,17 +1410,23 @@
         mapToRadix: ['.'],
         min: 0,
       });
-      mask.typedValue = Math.max(0, normalizeCurrencyAmount(payment?.valor, 0));
+      mask.typedValue = Math.max(
+        0,
+        normalizeCurrencyAmount(
+          (state.caixaAberto && !state.allowApuradoEdit ? renderedPayment?.valor : payment?.valor) ?? 0,
+          0
+        )
+      );
       mask.on('accept', () => {
         if (state.caixaAberto && !state.allowApuradoEdit) {
-          mask.typedValue = Math.max(0, normalizeCurrencyAmount(payment?.valor, 0));
+          const lockedRendered = findRenderedPayment(paymentId);
+          mask.typedValue = Math.max(0, normalizeCurrencyAmount(lockedRendered?.valor, 0));
           return;
         }
         const currentPayment = state.pagamentos.find((item) => item.id === paymentId);
         if (!currentPayment) return;
         currentPayment.valor = Math.max(0, normalizeCurrencyAmount(mask.typedValue, 0));
         updateSummary();
-        scheduleStatePersist();
       });
       input.addEventListener('focus', () => {
         window.requestAnimationFrame(() => {
@@ -1653,6 +1662,12 @@
   const getSaleItemsAdditionTotal = (items = state.itens) =>
     (Array.isArray(items) ? items : []).reduce(
       (sum, item) => sum + getSaleItemAdditionValue(item),
+      0
+    );
+
+  const getSaleItemsBruto = (items = state.itens) =>
+    (Array.isArray(items) ? items : []).reduce(
+      (sum, item) => sum + getSaleItemBaseSubtotal(item),
       0
     );
 
@@ -2301,10 +2316,14 @@
       .split('|')
       .map((chunk) => String(chunk || '').trim())
       .map((chunk) => {
-        const match = chunk.match(/^(.*?)\s+R\$\s*([\d.,]+)$/i);
+        const match = chunk.match(/^(.*?)(?:\s+R\$\s*|:\s*)([\d.,]+)$/i);
         if (!match) return null;
         const label = String(match[1] || '').trim();
-        const valor = normalizeCurrencyAmount(match[2].replace(/\./g, '').replace(',', '.'));
+        const rawAmount = String(match[2] || '').trim();
+        const parsedAmount = rawAmount.includes(',')
+          ? rawAmount.replace(/\./g, '').replace(',', '.')
+          : rawAmount;
+        const valor = normalizeCurrencyAmount(parsedAmount);
         if (!label || !(valor > 0)) return null;
         const normalizedLabel = label.toLowerCase();
         const basePayment =
@@ -2360,14 +2379,10 @@
     if (state.caixaAberto && state.allowApuradoEdit) {
       return clonePayments(basePayments);
     }
-    if (!(state.caixaAberto && !state.allowApuradoEdit)) {
-      return clonePayments(basePayments);
+    if (state.caixaAberto) {
+      return buildFechamentoPrevistoPaymentsByMethod();
     }
-    const recebimentosPorMeio = buildSalesPaymentsByMethod();
-    return basePayments.map((payment) => ({
-      ...payment,
-      valor: resolvePaymentSnapshotAmount(payment, recebimentosPorMeio),
-    }));
+    return clonePayments(basePayments);
   };
 
   const buildCaixaMovementPaymentsByMethod = () => {
@@ -3696,7 +3711,20 @@
     const finalizedAt = order.finalizedAt ? parseDateValue(order.finalizedAt) : null;
     const addressSource = order.address && typeof order.address === 'object' ? order.address : {};
     const customerSource = order.customer && typeof order.customer === 'object' ? order.customer : {};
-    const courierSource = order.courier && typeof order.courier === 'object' ? order.courier : {};
+    const courierRaw = order.courier;
+    const courierSource = courierRaw && typeof courierRaw === 'object' ? courierRaw : {};
+    const hasExplicitCourierField = Object.prototype.hasOwnProperty.call(order, 'courier');
+    const courierExplicitlyCleared = hasExplicitCourierField && (courierRaw === null || courierRaw === '');
+    const legacyCourierLabel =
+      courierExplicitlyCleared
+        ? ''
+        : typeof courierRaw === 'string'
+        ? courierRaw
+        : order.courierLabel || order.entregador || order.deliveryCourierLabel || '';
+    const legacyCourierId =
+      courierExplicitlyCleared
+        ? ''
+        : order.courierId || order.entregadorId || order.deliveryCourierId || '';
     const payments = Array.isArray(order.payments) ? order.payments.map((payment) => ({ ...payment })) : [];
     const items = Array.isArray(order.items) ? order.items.map((item) => ({ ...item })) : [];
     const normalizedAddress = {
@@ -3749,8 +3777,8 @@
           : null,
       address: normalizedAddress,
       courier: {
-        id: normalizeId(courierSource.id || ''),
-        label: String(courierSource.label || ''),
+        id: normalizeId(courierSource.id || courierSource._id || legacyCourierId || ''),
+        label: String(courierSource.label || courierSource.nome || courierSource.name || legacyCourierLabel || ''),
       },
       receiptSnapshot: order.receiptSnapshot || null,
       saleCode: String(order.saleCode || ''),
@@ -3835,6 +3863,83 @@
   };
 
   const mergeRecordsByKey = (serverRecords, localRecords, kind = 'generic') => {
+    const resolveDeliveryStamp = (record) => {
+      if (!record || typeof record !== 'object') return 0;
+      const raw =
+        record.updatedAt ||
+        record.statusUpdatedAt ||
+        record.createdAt ||
+        '';
+      const parsed = raw ? new Date(raw) : null;
+      if (!parsed || Number.isNaN(parsed.getTime())) return 0;
+      return parsed.getTime();
+    };
+
+    const resolveDeliveryCourier = (record) => {
+      if (!record || typeof record !== 'object') {
+        return { id: '', label: '', hasValue: false };
+      }
+      const courierRaw = record.courier;
+      const courierObj = courierRaw && typeof courierRaw === 'object' ? courierRaw : {};
+      const courierId = normalizeId(
+        courierObj.id ||
+          courierObj._id ||
+          record.courierId ||
+          record.entregadorId ||
+          record.deliveryCourierId ||
+          ''
+      );
+      const courierLabel = String(
+        courierObj.label ||
+          courierObj.nome ||
+          courierObj.name ||
+          (typeof courierRaw === 'string' ? courierRaw : '') ||
+          record.courierLabel ||
+          record.entregador ||
+          record.deliveryCourierLabel ||
+          ''
+      ).trim();
+      return {
+        id: courierId,
+        label: courierLabel,
+        hasValue: Boolean(courierId || courierLabel),
+      };
+    };
+
+    const applyDeliveryCourier = (record, courier) => {
+      const next = { ...(record && typeof record === 'object' ? record : {}) };
+      const hasValue = Boolean(courier?.id || courier?.label);
+      if (hasValue) {
+        next.courier = { id: courier.id || '', label: courier.label || '' };
+      } else {
+        next.courier = null;
+      }
+      next.courierId = courier?.id || '';
+      next.courierLabel = courier?.label || '';
+      next.entregadorId = courier?.id || '';
+      next.entregador = courier?.label || '';
+      next.deliveryCourierId = courier?.id || '';
+      next.deliveryCourierLabel = courier?.label || '';
+      return next;
+    };
+
+    const mergeDeliveryRecordConflict = (currentRecord, incomingRecord) => {
+      const current = currentRecord && typeof currentRecord === 'object' ? currentRecord : {};
+      const incoming = incomingRecord && typeof incomingRecord === 'object' ? incomingRecord : {};
+      const currentStamp = resolveDeliveryStamp(current);
+      const incomingStamp = resolveDeliveryStamp(incoming);
+      const incomingIsNewerOrEqual = incomingStamp >= currentStamp;
+      const base = incomingIsNewerOrEqual ? current : incoming;
+      const overlay = incomingIsNewerOrEqual ? incoming : current;
+      const merged = { ...base, ...overlay };
+      const baseCourier = resolveDeliveryCourier(base);
+      const overlayCourier = resolveDeliveryCourier(overlay);
+      // Evita apagar entregador por payload parcial/stale sem courier.
+      // Remoção explícita deve ocorrer via comando dedicado de update_courier.
+      const shouldApplyOverlayCourier = overlayCourier.hasValue || !baseCourier.hasValue;
+      return applyDeliveryCourier(merged, shouldApplyOverlayCourier ? overlayCourier : baseCourier);
+    };
+
     const getKey = (record) => {
       if (!record || typeof record !== 'object') return '';
       const createdAt = String(record.createdAt || '').trim();
@@ -3872,6 +3977,8 @@
         if (code) return `code:${code}`;
       }
       if (kind === 'delivery') {
+        const deliveryId = normalizeId(record.id || record._id || '');
+        if (deliveryId) return `delivery:${deliveryId}`;
         const saleRecordId = normalizeId(record.saleRecordId || '');
         if (saleRecordId) return `sale:${saleRecordId}`;
         const saleCode = String(record.saleCode || '').trim().toUpperCase();
@@ -3896,7 +4003,11 @@
         return;
       }
       if (source === 'local') {
-        merged[found] = record;
+        if (kind === 'delivery') {
+          merged[found] = mergeDeliveryRecordConflict(merged[found], record);
+        } else {
+          merged[found] = record;
+        }
       }
     };
 
@@ -3939,6 +4050,45 @@
       }),
       errorMessage: 'Não foi possível salvar o estado do PDV.',
     });
+  };
+
+  const sendPdvCommandRequest = async (action, payload = {}, options = {}) => {
+    const pdvId = normalizeId(state.selectedPdv);
+    if (!pdvId) {
+      throw new Error('Selecione um PDV para executar comandos.');
+    }
+    const bodyPayload = payload && typeof payload === 'object' ? payload : {};
+    const signature = JSON.stringify({ action: String(action || ''), payload: bodyPayload });
+    const hash = (() => {
+      let result = 0;
+      for (let index = 0; index < signature.length; index += 1) {
+        result = (result * 33 + signature.charCodeAt(index)) >>> 0;
+      }
+      return result.toString(36);
+    })();
+    const forcedIdempotencyKey =
+      options && typeof options === 'object' ? String(options.idempotencyKey || '').trim() : '';
+    const requestNonce = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const idempotencyKey =
+      forcedIdempotencyKey || `pdv-command:${pdvId}:${action}:${hash}:${requestNonce}`;
+    const token = getToken();
+    const response = await fetchWithOptionalAuth(`${API_BASE}/pdvs/${encodeURIComponent(pdvId)}/commands`, {
+      method: 'POST',
+      token,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify({
+        action: String(action || '').trim(),
+        payload: bodyPayload,
+      }),
+      errorMessage: 'Não foi possível executar o comando do PDV.',
+    });
+    if (response && typeof response === 'object' && response.state && typeof response.state === 'object') {
+      return response.state;
+    }
+    return response;
   };
 
   const applyPersistedStateResponse = (persisted) => {
@@ -5317,7 +5467,7 @@
     });
   };
 
-  const handlePrintToggleClick = (event) => {
+  const handlePrintToggleClick = async (event) => {
     if (!elements.printControls) return;
     const typeButton = event.target.closest('[data-print-type]');
     const confirmationButton = event.target.closest('[data-print-confirmation]');
@@ -5337,8 +5487,16 @@
       updatePrintControls();
       const modeLabel = PRINT_MODE_LABELS[nextMode] || PRINT_MODE_LABELS[nextBase] || PRINT_MODE_LABELS.M;
       const typeLabel = getPrintTypeLabel(type);
-      notify(`Impressão de ${typeLabel} definida para ${modeLabel}.`, 'info');
-      scheduleStatePersist();
+      try {
+        const persisted = await sendPdvCommandRequest('pdv.settings.print_preferences', {
+          printPreferences: { ...state.printPreferences },
+        });
+        applyPersistedStateResponse(persisted);
+        notify(`Impressão de ${typeLabel} definida para ${modeLabel}.`, 'info');
+      } catch (error) {
+        console.error('Erro ao salvar preferência de impressão:', error);
+        notify(error?.message || 'Não foi possível salvar a preferência de impressão.', 'error');
+      }
       return;
     }
     if (confirmationButton && elements.printControls.contains(confirmationButton)) {
@@ -5357,8 +5515,16 @@
       updatePrintControls();
       const typeLabel = getPrintTypeLabel(type);
       const promptLabel = PRINT_PROMPT_LABELS[nextPrompt ? 'ask' : 'skip'];
-      notify(`Confirmação de impressão para ${typeLabel} definida para ${promptLabel.toLowerCase()}.`, 'info');
-      scheduleStatePersist();
+      try {
+        const persisted = await sendPdvCommandRequest('pdv.settings.print_preferences', {
+          printPreferences: { ...state.printPreferences },
+        });
+        applyPersistedStateResponse(persisted);
+        notify(`Confirmação de impressão para ${typeLabel} definida para ${promptLabel.toLowerCase()}.`, 'info');
+      } catch (error) {
+        console.error('Erro ao salvar preferência de confirmação de impressão:', error);
+        notify(error?.message || 'Não foi possível salvar a preferência de impressão.', 'error');
+      }
     }
   };
 
@@ -6510,7 +6676,7 @@
     const stateValue = normalizeId(state.deliverySelectedCourierId || '');
     const currentValue = normalizeId(select.value || stateValue || '');
     const couriers = Array.isArray(state.deliveryCouriers) ? state.deliveryCouriers : [];
-    const options = ['<option value="">Selecione</option>'];
+    const options = ['<option value="">Selecione entregador</option>'];
     couriers.forEach((employee) => {
       const id = normalizeId(employee?._id || employee?.id || '');
       if (!id) return;
@@ -6537,6 +6703,24 @@
     }
     const option = select.selectedOptions?.[0] || null;
     state.deliverySelectedCourierLabel = option?.textContent?.trim() || '';
+  };
+
+  const getSelectedDeliveryCourierSnapshot = () => {
+    const select = elements.deliveryOrderCourier;
+    let id = '';
+    let label = '';
+    if (select) {
+      id = normalizeId(select.value || '');
+      const option = select.selectedOptions?.[0] || null;
+      label = option?.textContent?.trim() || '';
+    }
+    if (!id) {
+      id = normalizeId(state.deliverySelectedCourierId || '');
+    }
+    if (!label) {
+      label = String(state.deliverySelectedCourierLabel || '').trim();
+    }
+    return { id, label };
   };
 
   const loadDeliveryCouriersForActiveCompany = async () => {
@@ -6578,6 +6762,8 @@
     } finally {
       state.deliveryCouriersLoading = false;
       renderDeliveryCourierOptions();
+      // Re-render dos cards para atualizar as opções de entregador após carregamento assíncrono.
+      renderDeliveryOrders();
     }
   };
 
@@ -12659,8 +12845,9 @@
       li.className = 'rounded-lg border border-gray-200 bg-white p-3 space-y-2';
 
       const header = document.createElement('div');
-      header.className = 'flex items-start justify-between gap-2';
+      header.className = 'flex items-start justify-between gap-3';
       const customerBox = document.createElement('div');
+      customerBox.className = 'min-w-0';
       const nameEl = document.createElement('p');
       nameEl.className = 'text-[13px] font-semibold leading-tight text-gray-800';
       nameEl.textContent = order.customer.nome;
@@ -12679,10 +12866,93 @@
       }
       header.appendChild(customerBox);
 
+      const rightBox = document.createElement('div');
+      rightBox.className = 'flex min-w-[190px] flex-col items-end gap-1.5';
       const statusBadge = document.createElement('span');
       statusBadge.className = 'inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary';
       statusBadge.textContent = getDeliveryStatusLabel(order.status);
-      header.appendChild(statusBadge);
+      rightBox.appendChild(statusBadge);
+
+      const courierSelect = document.createElement('select');
+      courierSelect.dataset.deliveryCourier = order.id;
+      courierSelect.className =
+        'h-8 w-full rounded-md border border-gray-200 bg-white px-2 text-[11px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20';
+      const canChangeCourier = order.status !== 'emRota' && order.status !== 'finalizado';
+      const couriers = Array.isArray(state.deliveryCouriers) ? state.deliveryCouriers : [];
+      const courierRaw = order?.courier;
+      const courierObj = courierRaw && typeof courierRaw === 'object' ? courierRaw : {};
+      const hasExplicitCourierField = order && Object.prototype.hasOwnProperty.call(order, 'courier');
+      const courierExplicitlyCleared = hasExplicitCourierField && (courierRaw === null || courierRaw === '');
+      const currentCourierId = normalizeId(
+        courierObj.id ||
+        courierObj._id ||
+        (courierExplicitlyCleared ? '' : order?.courierId) ||
+        (courierExplicitlyCleared ? '' : order?.entregadorId) ||
+        ''
+      );
+      const currentCourierLabel = String(
+        courierObj.label ||
+        courierObj.nome ||
+        courierObj.name ||
+        (typeof courierRaw === 'string' ? courierRaw : '') ||
+        (courierExplicitlyCleared ? '' : order?.courierLabel) ||
+        (courierExplicitlyCleared ? '' : order?.entregador) ||
+        ''
+      ).trim();
+      const optionValues = new Set();
+      const optionLabels = new Set();
+      const defaultCourierLabel = 'Selecione entregador';
+      const normalizeLabelKey = (value) => String(value || '').trim().toLowerCase();
+      const isPlaceholderLabel = normalizeLabelKey(currentCourierLabel) === normalizeLabelKey(defaultCourierLabel);
+
+      const defaultOption = document.createElement('option');
+      defaultOption.value = '';
+      defaultOption.textContent = defaultCourierLabel;
+      courierSelect.appendChild(defaultOption);
+      optionLabels.add(normalizeLabelKey(defaultCourierLabel));
+
+      couriers.forEach((employee) => {
+        const courierId = normalizeId(employee?._id || employee?.id || '');
+        if (!courierId) return;
+        const code = getEmployeeCode(employee);
+        const name = getEmployeeDisplayName(employee);
+        const label = code ? `${code} - ${name}` : name;
+        const option = document.createElement('option');
+        option.value = courierId;
+        option.textContent = label;
+        optionValues.add(courierId);
+        optionLabels.add(normalizeLabelKey(label));
+        courierSelect.appendChild(option);
+      });
+
+      if (currentCourierId && !optionValues.has(currentCourierId)) {
+        const option = document.createElement('option');
+        option.value = currentCourierId;
+        option.textContent = currentCourierLabel || currentCourierId;
+        courierSelect.appendChild(option);
+      } else if (
+        !currentCourierId &&
+        currentCourierLabel &&
+        !isPlaceholderLabel &&
+        !optionLabels.has(normalizeLabelKey(currentCourierLabel))
+      ) {
+        const option = document.createElement('option');
+        option.value = `custom:${currentCourierLabel}`;
+        option.textContent = currentCourierLabel;
+        courierSelect.appendChild(option);
+      }
+
+      if (currentCourierId) {
+        courierSelect.value = currentCourierId;
+      } else if (currentCourierLabel && !isPlaceholderLabel) {
+        courierSelect.value = `custom:${currentCourierLabel}`;
+      } else {
+        courierSelect.value = '';
+      }
+      courierSelect.disabled = !canChangeCourier;
+      rightBox.appendChild(courierSelect);
+
+      header.appendChild(rightBox);
       li.appendChild(header);
 
       const details = document.createElement('div');
@@ -12696,17 +12966,6 @@
       addressText.textContent = order.address.formatted || 'Endereço não informado';
       addressRow.append(addressIcon, addressText);
       details.appendChild(addressRow);
-
-      if (order.courier?.label) {
-        const courierRow = document.createElement('p');
-        courierRow.className = 'flex items-start gap-1.5';
-        const courierIcon = document.createElement('i');
-        courierIcon.className = 'fas fa-motorcycle mt-0.5 text-[11px] text-gray-400';
-        const courierText = document.createElement('span');
-        courierText.textContent = `Entregador: ${order.courier.label}`;
-        courierRow.append(courierIcon, courierText);
-        details.appendChild(courierRow);
-      }
 
       const totalRow = document.createElement('p');
       const totalLabel = document.createElement('span');
@@ -12780,7 +13039,7 @@
     elements.deliveryList.appendChild(fragment);
   };
 
-  const updateDeliveryStatus = (orderId, nextStatus) => {
+  const updateDeliveryStatus = async (orderId, nextStatus) => {
     if (!orderId || !nextStatus) return;
     const order = state.deliveryOrders.find((item) => item.id === orderId);
     if (!order || order.status === nextStatus) return;
@@ -12792,15 +13051,25 @@
       openDeliveryFinalizeModalForOrder(order);
       return;
     }
-    order.status = nextStatus;
-    const nowIso = new Date().toISOString();
-    order.statusUpdatedAt = nowIso;
-    order.updatedAt = nowIso;
-    renderDeliveryOrders();
-    notify(`Status do delivery atualizado para ${getDeliveryStatusLabel(nextStatus)}.`, 'success');
+    try {
+      const persisted = await sendPdvCommandRequest('pdv.delivery.update_status', {
+        orderId: order.id,
+        saleRecordId: order.saleRecordId || '',
+        status: nextStatus,
+      });
+      applyPersistedStateResponse(persisted);
+      renderDeliveryOrders();
+      notify(`Status do delivery atualizado para ${getDeliveryStatusLabel(nextStatus)}.`, 'success');
+    } catch (error) {
+      console.error('Erro ao atualizar status do delivery:', error);
+      notify(
+        error?.message || 'Não foi possível atualizar o status do delivery.',
+        'error'
+      );
+    }
   };
 
-  const advanceDeliveryStatus = (orderId) => {
+  const advanceDeliveryStatus = async (orderId) => {
     const order = state.deliveryOrders.find((item) => item.id === orderId);
     if (!order) return;
     const currentIndex = getDeliveryStatusIndex(order.status);
@@ -12809,21 +13078,82 @@
       return;
     }
     const nextStatus = deliveryStatusSteps[currentIndex + 1].id;
-    updateDeliveryStatus(orderId, nextStatus);
+    await updateDeliveryStatus(orderId, nextStatus);
   };
 
-  const handleDeliveryListClick = (event) => {
+  const updateDeliveryCourier = async (orderId, courierPayload = {}) => {
+    if (!orderId) return;
+    const order = state.deliveryOrders.find((item) => item.id === orderId);
+    if (!order) return;
+    if (order.status === 'emRota' || order.status === 'finalizado') {
+      notify('Não é possível alterar entregador quando o delivery está em rota ou finalizado.', 'info');
+      renderDeliveryOrders();
+      return;
+    }
+
+    const nextCourierId = normalizeId(courierPayload.id || '');
+    const nextCourierLabel = String(courierPayload.label || '').trim();
+    const currentCourierId = normalizeId(order?.courier?.id || '');
+    const currentCourierLabel = String(order?.courier?.label || '').trim();
+    if (nextCourierId === currentCourierId && nextCourierLabel === currentCourierLabel) {
+      return;
+    }
+
+    try {
+      const persisted = await sendPdvCommandRequest('pdv.delivery.update_courier', {
+        orderId: order.id,
+        courier: {
+          id: nextCourierId,
+          label: nextCourierLabel,
+        },
+      });
+      applyPersistedStateResponse(persisted);
+      // Garante consistência visual imediata mesmo se a resposta do backend vier sem courier.
+      const targetOrder = state.deliveryOrders.find((item) => item.id === orderId);
+      if (targetOrder) {
+        if (nextCourierId || nextCourierLabel) {
+          targetOrder.courier = { id: nextCourierId, label: nextCourierLabel };
+          targetOrder.courierId = nextCourierId;
+          targetOrder.courierLabel = nextCourierLabel;
+          targetOrder.entregadorId = nextCourierId;
+          targetOrder.entregador = nextCourierLabel;
+          targetOrder.deliveryCourierId = nextCourierId;
+          targetOrder.deliveryCourierLabel = nextCourierLabel;
+        } else {
+          targetOrder.courier = null;
+          targetOrder.courierId = '';
+          targetOrder.courierLabel = '';
+          targetOrder.entregadorId = '';
+          targetOrder.entregador = '';
+          targetOrder.deliveryCourierId = '';
+          targetOrder.deliveryCourierLabel = '';
+        }
+      }
+      renderDeliveryOrders();
+      if (nextCourierLabel) {
+        notify(`Entregador atualizado para ${nextCourierLabel}.`, 'success');
+      } else {
+        notify('Entregador removido do delivery.', 'success');
+      }
+    } catch (error) {
+      console.error('Erro ao atualizar entregador do delivery:', error);
+      notify(error?.message || 'Não foi possível atualizar o entregador do delivery.', 'error');
+      renderDeliveryOrders();
+    }
+  };
+
+  const handleDeliveryListClick = async (event) => {
     const statusButton = event.target.closest('button[data-delivery-status]');
     if (statusButton) {
       const orderId = statusButton.getAttribute('data-delivery-id');
       const statusId = statusButton.getAttribute('data-delivery-status');
-      updateDeliveryStatus(orderId, statusId);
+      await updateDeliveryStatus(orderId, statusId);
       return;
     }
     const advanceButton = event.target.closest('button[data-delivery-advance]');
     if (advanceButton) {
       const orderId = advanceButton.getAttribute('data-delivery-advance');
-      advanceDeliveryStatus(orderId);
+      await advanceDeliveryStatus(orderId);
       return;
     }
     const printButton = event.target.closest('button[data-delivery-print]');
@@ -12837,6 +13167,33 @@
         });
       }
     }
+  };
+
+  const handleDeliveryListChange = async (event) => {
+    const courierSelect = event.target.closest('select[data-delivery-courier]');
+    if (!courierSelect) return;
+
+    const orderId = normalizeId(courierSelect.getAttribute('data-delivery-courier') || '');
+    if (!orderId) return;
+
+    const selectedOption =
+      courierSelect.options && courierSelect.selectedIndex >= 0
+        ? courierSelect.options[courierSelect.selectedIndex]
+        : null;
+    const rawValue = String(courierSelect.value || '').trim();
+
+    let courierId = normalizeId(rawValue);
+    let courierLabel = selectedOption?.textContent?.trim() || '';
+    if (rawValue.startsWith('custom:')) {
+      courierId = '';
+      courierLabel = rawValue.slice('custom:'.length).trim();
+    }
+    if (!rawValue) {
+      courierId = '';
+      courierLabel = '';
+    }
+
+    await updateDeliveryCourier(orderId, { id: courierId, label: courierLabel });
   };
 
   const promptDeliveryPrint = (snapshot, customer = null) => {
@@ -14263,7 +14620,7 @@
     renderBudgets();
   };
 
-  const handleBudgetImport = () => {
+  const handleBudgetImport = async () => {
     const budget = findBudgetById(state.selectedBudgetId);
     if (!budget) {
       notify('Selecione um orçamento para importar.', 'info');
@@ -14302,16 +14659,21 @@
     updateFinalizeButton();
     updateSaleSummary();
     clearSaleSearchAreas();
-    const nowIso = new Date().toISOString();
-    budget.importedAt = nowIso;
-    budget.updatedAt = nowIso;
-    renderBudgets();
-    scheduleStatePersist();
+    try {
+      const persisted = await sendPdvCommandRequest('pdv.budget.mark_imported', {
+        budgetId: budget.id,
+        importedAt: new Date().toISOString(),
+      });
+      applyPersistedStateResponse(persisted);
+    } catch (error) {
+      console.error('Erro ao marcar orçamento como importado:', error);
+      notify(error?.message || 'Não foi possível atualizar o status de importação do orçamento.', 'warning');
+    }
     notify('Orçamento importado para o PDV. Finalize a venda ou salve novamente para atualizar.', 'success');
     setActiveTab('pdv-tab');
   };
 
-  const handleBudgetDelete = () => {
+  const handleBudgetDelete = async () => {
     const budget = findBudgetById(state.selectedBudgetId);
     if (!budget) {
       notify('Selecione um orçamento para excluir.', 'info');
@@ -14319,15 +14681,24 @@
     }
     const confirmed = window.confirm(`Deseja realmente excluir o orçamento ${budget.code}?`);
     if (!confirmed) return;
-    state.budgets = state.budgets.filter((item) => item.id !== budget.id);
-    if (state.activeBudgetId === budget.id) {
-      state.activeBudgetId = '';
-      state.pendingBudgetValidityDays = null;
+    try {
+      const persisted = await sendPdvCommandRequest('pdv.budget.delete', {
+        budgetId: budget.id,
+      });
+      applyPersistedStateResponse(persisted);
+      if (state.activeBudgetId === budget.id) {
+        state.activeBudgetId = '';
+        state.pendingBudgetValidityDays = null;
+      }
+      if (state.selectedBudgetId === budget.id) {
+        state.selectedBudgetId = '';
+      }
+      renderBudgets();
+      notify('Orçamento excluído com sucesso.', 'success');
+    } catch (error) {
+      console.error('Erro ao excluir orçamento:', error);
+      notify(error?.message || 'Não foi possível excluir o orçamento.', 'error');
     }
-    state.selectedBudgetId = '';
-    renderBudgets();
-    scheduleStatePersist({ immediate: true });
-    notify('Orçamento excluído com sucesso.', 'success');
   };
 
   const handleBudgetPrint = () => {
@@ -14987,10 +15358,28 @@
       renderReceivablesList();
       renderReceivablesSelectedCustomer();
     };
+    const persistReceivablesOnServer = async () => {
+      try {
+        const persisted = await sendPdvCommandRequest('pdv.sale.sync_receivables', {
+          saleId,
+          receivables: Array.isArray(saleRecord.receivables)
+            ? saleRecord.receivables.map((entry) => ({ ...entry }))
+            : [],
+        });
+        applyPersistedStateResponse(persisted);
+      } catch (error) {
+        console.error('Erro ao sincronizar recebíveis da venda no servidor:', error);
+        notify(
+          error?.message || 'Não foi possível sincronizar os recebíveis da venda no servidor.',
+          'warning'
+        );
+      }
+    };
 
     commitReceivablesToState();
 
     if (!Array.isArray(backendRequests) || !backendRequests.length) {
+      await persistReceivablesOnServer();
       return;
     }
 
@@ -15161,7 +15550,7 @@
     }
 
     commitReceivablesToState();
-    scheduleStatePersist({ immediate: true });
+    await persistReceivablesOnServer();
   };
 
   const emitFiscalForSale = async (saleId, { notifyOnSuccess = true } = {}) => {
@@ -15190,18 +15579,16 @@
       emissionModalOpened = true;
     };
     ensureEmissionModal('montando');
-    // Garante que o backend conheça a venda antes da emissão fiscal
-    if (statePersistTimeout) {
-      window.clearTimeout(statePersistTimeout);
-      statePersistTimeout = null;
-    }
-    while (statePersistInFlight) {
-      // Aguarda persistências anteriores concluírem para evitar condições de corrida
-      // eslint-disable-next-line no-await-in-loop
-      await new Promise((resolve) => window.setTimeout(resolve, 50));
-    }
     updateFiscalEmissionStepIndicators('montando');
-    await flushStatePersist();
+    const refreshedState = await sendPdvCommandRequest('pdv.refresh_state', {});
+    applyPersistedStateResponse(refreshedState);
+    const refreshedSale = findCompletedSaleById(saleId);
+    if (!refreshedSale) {
+      throw new Error('Venda não encontrada no servidor para emissão fiscal.');
+    }
+    if (!refreshedSale.receiptSnapshot) {
+      throw new Error('Não há dados suficientes para gerar o XML fiscal desta venda.');
+    }
     updateFiscalEmissionStepIndicators('assinando');
     try {
       const token = getToken();
@@ -15218,8 +15605,8 @@
           method: 'POST',
           headers,
           body: JSON.stringify({
-            snapshot: sale.receiptSnapshot || null,
-            saleCode: sale.saleCode || '',
+            snapshot: refreshedSale.receiptSnapshot || null,
+            saleCode: refreshedSale.saleCode || '',
           }),
         }
       );
@@ -15229,31 +15616,32 @@
         throw new Error(message);
       }
       updateCompletedSaleRecord(saleId, {
+        persist: false,
         fiscalStatus: data?.fiscalStatus || 'emitted',
         fiscalEmittedAt: data?.fiscalEmittedAt || new Date().toISOString(),
         fiscalEmittedAtLabel: data?.fiscalEmittedAtLabel || '',
         fiscalDriveFileId: data?.fiscalDriveFileId || '',
         fiscalXmlUrl: data?.fiscalXmlUrl || '',
         fiscalXmlName: data?.fiscalXmlName || '',
-        fiscalXmlContent: data?.fiscalXmlContent || sale.fiscalXmlContent || '',
-        fiscalQrCodeData: data?.fiscalQrCodeData || sale.fiscalQrCodeData || '',
-        fiscalQrCodeImage: data?.fiscalQrCodeImage || sale.fiscalQrCodeImage || '',
+        fiscalXmlContent: data?.fiscalXmlContent || refreshedSale.fiscalXmlContent || '',
+        fiscalQrCodeData: data?.fiscalQrCodeData || refreshedSale.fiscalQrCodeData || '',
+        fiscalQrCodeImage: data?.fiscalQrCodeImage || refreshedSale.fiscalQrCodeImage || '',
         fiscalEnvironment: data?.fiscalEnvironment || '',
         fiscalSerie: data?.fiscalSerie || '',
         fiscalNumber:
           data?.fiscalNumber !== undefined && data?.fiscalNumber !== null
             ? (() => {
                 const numeric = Number(data.fiscalNumber);
-                return Number.isFinite(numeric) ? numeric : sale.fiscalNumber ?? null;
+                return Number.isFinite(numeric) ? numeric : refreshedSale.fiscalNumber ?? null;
               })()
-            : sale.fiscalNumber ?? null,
-        fiscalAccessKey: data?.fiscalAccessKey || sale.fiscalAccessKey || '',
-        fiscalDigestValue: data?.fiscalDigestValue || sale.fiscalDigestValue || '',
-        fiscalSignature: data?.fiscalSignature || sale.fiscalSignature || '',
-        fiscalProtocol: data?.fiscalProtocol || sale.fiscalProtocol || '',
+            : refreshedSale.fiscalNumber ?? null,
+        fiscalAccessKey: data?.fiscalAccessKey || refreshedSale.fiscalAccessKey || '',
+        fiscalDigestValue: data?.fiscalDigestValue || refreshedSale.fiscalDigestValue || '',
+        fiscalSignature: data?.fiscalSignature || refreshedSale.fiscalSignature || '',
+        fiscalProtocol: data?.fiscalProtocol || refreshedSale.fiscalProtocol || '',
         fiscalItemsSnapshot: Array.isArray(data?.fiscalItemsSnapshot)
           ? data.fiscalItemsSnapshot
-          : sale.fiscalItemsSnapshot,
+          : refreshedSale.fiscalItemsSnapshot,
       });
       if (elements.fiscalStatusTitle) {
         elements.fiscalStatusTitle.textContent = 'Nota fiscal emitida com sucesso!';
@@ -15262,7 +15650,6 @@
       if (notifyOnSuccess) {
         notify('Nota fiscal emitida e salva no Drive.', 'success');
       }
-      scheduleStatePersist({ immediate: true });
       if (emissionModalOpened) {
         await new Promise((resolve) => window.setTimeout(resolve, 300));
       }
@@ -15271,7 +15658,6 @@
       console.error('Erro ao emitir fiscal', error);
       sale.fiscalStatus = 'pending';
       renderSalesList();
-      scheduleStatePersist({ immediate: true });
       notify(error?.message || 'Não foi possível emitir a nota fiscal.', 'error');
       return { success: false, reason: 'error', error };
     }
@@ -15297,7 +15683,6 @@
       state.pendingBudgetValidityDays ?? DEFAULT_BUDGET_VALIDITY_DAYS
     );
     const now = new Date();
-    const nowIso = now.toISOString();
     const validUntil = new Date((toStartOfDay(now) || now).getTime() + validityDays * MS_PER_DAY);
     const itensSnapshot = state.itens.map((item) => ({ ...item }));
     const pagamentosSnapshot = state.vendaPagamentos.map((payment) => ({ ...payment }));
@@ -15309,56 +15694,35 @@
     const sellerSnapshot = state.selectedSeller ? { ...state.selectedSeller } : null;
     const sellerName = sellerSnapshot ? getSellerDisplayName(sellerSnapshot) : '';
     const sellerCode = sellerSnapshot ? getSellerCode(sellerSnapshot) : '';
-    const budgetId = state.activeBudgetId || '';
-    const existingBudget = budgetId ? findBudgetById(budgetId) : null;
-    let budget = existingBudget;
-    if (existingBudget) {
-      existingBudget.items = itensSnapshot;
-      existingBudget.payments = pagamentosSnapshot;
-      existingBudget.discount = discount;
-      existingBudget.addition = addition;
-      existingBudget.total = total;
-      existingBudget.customer = customerSnapshot;
-      existingBudget.pet = petSnapshot;
-      existingBudget.seller = sellerSnapshot || existingBudget.seller || null;
-      existingBudget.sellerName = sellerSnapshot ? sellerName : existingBudget.sellerName || '';
-      existingBudget.sellerCode = sellerSnapshot ? sellerCode : existingBudget.sellerCode || '';
-      existingBudget.validityDays = validityDays;
-      existingBudget.validUntil = validUntil.toISOString();
-      existingBudget.updatedAt = nowIso;
-      existingBudget.paymentLabel = describeSalePayments(pagamentosSnapshot);
-    } else {
-      budget = {
-        id: createUid(),
-        code: generateBudgetCode(),
-        createdAt: nowIso,
-        updatedAt: nowIso,
-        validityDays,
-        validUntil: validUntil.toISOString(),
-        total,
-        discount,
-        addition,
-        customer: customerSnapshot,
-        pet: petSnapshot,
-        seller: sellerSnapshot,
-        sellerName,
-        sellerCode,
-        items: itensSnapshot,
-        payments: pagamentosSnapshot,
-        paymentLabel: describeSalePayments(pagamentosSnapshot),
-        status: 'aberto',
-        importedAt: null,
-      };
-      state.budgets.unshift(budget);
-    }
-    state.selectedBudgetId = budget?.id || existingBudget?.id || '';
+    const budgetId = state.activeBudgetId || createUid();
+    const persisted = await sendPdvCommandRequest('pdv.budget.save', {
+      id: budgetId,
+      validityDays,
+      validUntil: validUntil.toISOString(),
+      items: itensSnapshot,
+      payments: pagamentosSnapshot,
+      discount,
+      addition,
+      total,
+      customer: customerSnapshot,
+      pet: petSnapshot,
+      seller: sellerSnapshot,
+      sellerName,
+      sellerCode,
+      paymentLabel: describeSalePayments(pagamentosSnapshot),
+      status: 'aberto',
+      updatedAt: new Date().toISOString(),
+    });
+    applyPersistedStateResponse(persisted);
+    const persistedBudget =
+      findBudgetById(budgetId) ||
+      (Array.isArray(state.budgets) && state.budgets.length ? state.budgets[0] : null);
+    state.selectedBudgetId = persistedBudget?.id || budgetId;
     state.pendingBudgetValidityDays = null;
     state.activeBudgetId = '';
     notify(
-      budget?.code
-        ? `Orçamento ${budget.code} salvo com sucesso.`
-        : existingBudget?.code
-        ? `Orçamento ${existingBudget.code} atualizado com sucesso.`
+      persistedBudget?.code
+        ? `Orçamento ${persistedBudget.code} salvo com sucesso.`
         : 'Orçamento salvo com sucesso.',
       'success'
     );
@@ -15376,7 +15740,6 @@
     updateFinalizeButton();
     updateSaleSummary();
     renderBudgets();
-    scheduleStatePersist({ immediate: true });
     closeFinalizeModal();
   };
 
@@ -15399,57 +15762,57 @@
     }
     const budgetIdToFinalize = state.activeBudgetId || '';
     const budgetToFinalize = budgetIdToFinalize ? findBudgetById(budgetIdToFinalize) : null;
-      const saleCode = state.currentSaleCode || '';
-      const itensSnapshot = state.itens.map((item) => ({ ...item }));
-      const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
-      const saleDate = new Date();
-      const saleReceivables = buildSaleReceivables({
-        payments: pagamentosVenda,
-        customer: state.vendaCliente,
-        saleCode,
-        items: itensSnapshot,
-        saleDate,
-      });
+    const commandSaleId = createUid();
+    const saleCode = state.currentSaleCode || '';
+    const itensSnapshot = state.itens.map((item) => ({ ...item }));
+    const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
+    const saleDate = new Date();
+    const saleReceivables = buildSaleReceivables({
+      payments: pagamentosVenda,
+      customer: state.vendaCliente,
+      saleCode,
+      items: itensSnapshot,
+      saleDate,
+    });
     const appointmentIdsForSale = normalizeAppointmentIdList(state.activeAppointmentIds);
     const primaryAppointmentIdForSale = appointmentIdsForSale[0] || state.activeAppointmentId || '';
-      const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda, {
-        saleCode,
-        appointmentId: primaryAppointmentIdForSale,
-        appointmentIds: appointmentIdsForSale,
-      });
-    const cashContributions = normalizeCashContributions(
-      registerSaleOnCaixa(pagamentosVenda, total, saleCode)
-    );
-    const saleRecord = registerCompletedSaleRecord({
-      type: 'venda',
+    const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda, {
       saleCode,
-      snapshot: saleSnapshot,
-      payments: pagamentosVenda,
-      items: itensSnapshot,
-      discount: state.vendaDesconto,
-      addition: state.vendaAcrescimo,
-      customer: state.vendaCliente,
-      createdAt: saleReceivables.saleDate,
-      receivables: saleReceivables.entries,
-      cashContributions,
       appointmentId: primaryAppointmentIdForSale,
       appointmentIds: appointmentIdsForSale,
-      seller: state.selectedSeller,
     });
+    const persistedState = await sendPdvCommandRequest('pdv.sale.finalize', {
+      saleId: commandSaleId,
+      saleCode,
+      type: 'venda',
+      typeLabel: 'Venda',
+      items: itensSnapshot,
+      payments: pagamentosVenda,
+      discountValue: state.vendaDesconto,
+      additionValue: state.vendaAcrescimo,
+      totalBruto: getSaleItemsBruto(itensSnapshot),
+      totalLiquido: total,
+      customer: state.vendaCliente ? { ...state.vendaCliente } : null,
+      customerName: resolveCustomerName(state.vendaCliente) || '',
+      customerDocument: resolveCustomerDocument(state.vendaCliente) || '',
+      seller: state.selectedSeller ? { ...state.selectedSeller } : null,
+      createdAt: saleReceivables.saleDate,
+      receiptSnapshot: saleSnapshot,
+      appointmentId: primaryAppointmentIdForSale,
+      appointmentIds: appointmentIdsForSale,
+    });
+    applyPersistedStateResponse(persistedState);
+    const saleRecord =
+      findCompletedSaleById(commandSaleId) ||
+      (Array.isArray(state.completedSales) ? state.completedSales[0] : null);
     if (saleRecord) {
-      if (state.skipInventoryForNextSale) {
-        saleRecord.inventoryProcessed = true;
-        saleRecord.inventoryProcessedAt = new Date().toISOString();
-      }
-      saleRecord.cashContributions = cashContributions;
       saleRecord.receivables = saleReceivables.entries.map((entry) => ({ ...entry }));
-      scheduleStatePersist();
       await syncAccountsReceivableForSale(
         saleRecord,
         saleReceivables.entries,
         saleReceivables.backendRequests,
         {
-          saleCode,
+          saleCode: saleRecord.saleCode || saleCode,
           customer: state.vendaCliente,
           items: saleReceivables.saleItems,
           saleDate: saleReceivables.saleDate,
@@ -15457,20 +15820,19 @@
       );
     }
     if (budgetToFinalize) {
-      const finalizeIso = new Date().toISOString();
-      budgetToFinalize.status = 'finalizado';
-      budgetToFinalize.finalizedAt = finalizeIso;
-      budgetToFinalize.updatedAt = finalizeIso;
-      if (saleRecord?.id) {
-        budgetToFinalize.finalizedSaleId = saleRecord.id;
-      }
-      state.selectedBudgetId = budgetToFinalize.id;
+      const budgetState = await sendPdvCommandRequest('pdv.budget.finalize', {
+        budgetId: budgetToFinalize.id,
+        finalizedSaleId: saleRecord?.id || commandSaleId,
+      });
+      applyPersistedStateResponse(budgetState);
+      state.selectedBudgetId = budgetToFinalize.id || '';
     }
-    const successMessage = saleCode
-      ? `Venda ${saleCode} finalizada com sucesso.`
+    const finalizedSaleCode = saleRecord?.saleCode || saleCode;
+    const successMessage = finalizedSaleCode
+      ? `Venda ${finalizedSaleCode} finalizada com sucesso.`
       : 'Venda finalizada com sucesso.';
     notify(successMessage, 'success');
-    await syncAppointmentsAfterSale(appointmentIdsForSale, saleCode);
+    await syncAppointmentsAfterSale(appointmentIdsForSale, finalizedSaleCode);
     setActiveSaleAppointments([]);
     state.activeBudgetId = '';
     state.pendingBudgetValidityDays = null;
@@ -15488,11 +15850,6 @@
     updateFinalizeButton();
     updateSaleSummary();
     closeFinalizeModal();
-    if (budgetToFinalize) {
-      renderBudgets();
-      scheduleStatePersist({ immediate: true });
-    }
-    advanceSaleCode();
     state.skipInventoryForNextSale = false;
     const preferences = state.printPreferences || {};
     const mode = normalizePrintMode(preferences.venda, 'PM');
@@ -15598,7 +15955,13 @@
 
       const customer = context.customer || state.receivablesSelectedCustomer;
       const receivedTotal = operations.reduce((sum, operation) => sum + operation.paidValue, 0);
-      registerReceivablesOnCaixa(payments, receivedTotal, customer);
+      const caixaPersisted = await sendPdvCommandRequest('pdv.caixa.client_receipt', {
+        customerName: resolveCustomerName(customer) || '',
+        payments: payments.map((payment) => ({ ...payment })),
+        total: receivedTotal,
+        timestamp: paymentDateIso,
+      });
+      applyPersistedStateResponse(caixaPersisted);
 
       const customerId = resolveCustomerId(customer);
       if (customerId) {
@@ -15653,74 +16016,58 @@
       notify('O valor pago é insuficiente para registrar o delivery.', 'warning');
       return;
     }
-      const saleCode = state.currentSaleCode || '';
-      const itensSnapshot = state.itens.map((item) => ({ ...item }));
-      const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
-      const saleDate = new Date();
-      const saleReceivables = buildSaleReceivables({
-        payments: pagamentosVenda,
-        customer: state.vendaCliente,
-        saleCode,
-        items: itensSnapshot,
-        saleDate,
-      });
-      const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda, {
-        deliveryAddress: activeDeliveryAddress,
-        saleCode,
-      });
+    const saleCode = state.currentSaleCode || '';
+    const itensSnapshot = state.itens.map((item) => ({ ...item }));
+    const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
+    const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda, {
+      deliveryAddress: activeDeliveryAddress,
+      saleCode,
+    });
     const statusOverride = resolveDeliveryStatusOverride(state.deliveryStatusOverride);
     const appointmentIdsForDelivery = normalizeAppointmentIdList(state.activeAppointmentIds);
-      const orderRecord = createDeliveryOrderRecord(
-        saleSnapshot,
-        activeDeliveryAddress,
-        pagamentosVenda,
-        total,
-        itensSnapshot,
-        state.vendaDesconto,
-        state.vendaAcrescimo,
-        saleCode,
-        {
-          status: statusOverride,
-          appointmentId: appointmentIdsForDelivery[0] || '',
-          appointmentIds: appointmentIdsForDelivery,
-        }
-      );
-    const cashContributions = normalizeCashContributions([]);
     const isIfoodSale = isIfoodSaleContext({
       items: itensSnapshot,
       payments: pagamentosVenda,
       address: activeDeliveryAddress,
     });
-    const saleRecord = registerCompletedSaleRecord({
-      type: 'delivery',
-      typeLabel: isIfoodSale ? 'Ifood' : '',
+    const selectedCourier = getSelectedDeliveryCourierSnapshot();
+    const commandOrderId = createUid();
+    const commandSaleId = createUid();
+
+    const persisted = await sendPdvCommandRequest('pdv.delivery.register', {
+      orderId: commandOrderId,
+      saleId: commandSaleId,
       saleCode,
-      snapshot: saleSnapshot,
-      payments: pagamentosVenda,
+      status: statusOverride,
+      typeLabel: isIfoodSale ? 'Ifood' : '',
       items: itensSnapshot,
-      discount: state.vendaDesconto,
-      addition: state.vendaAcrescimo,
-      customer: state.vendaCliente,
-      createdAt: orderRecord.createdAt,
-      receivables: saleReceivables.entries,
-      cashContributions,
+      payments: pagamentosVenda,
+      totalBruto: getSaleItemsBruto(itensSnapshot),
+      totalLiquido: total,
+      discountValue: state.vendaDesconto,
+      additionValue: state.vendaAcrescimo,
+      customer: state.vendaCliente ? { ...state.vendaCliente } : null,
+      customerName: resolveCustomerName(state.vendaCliente) || '',
+      customerDocument: resolveCustomerDocument(state.vendaCliente) || '',
+      address: activeDeliveryAddress ? { ...activeDeliveryAddress } : null,
+      courier: selectedCourier,
+      createdAt: new Date().toISOString(),
+      receiptSnapshot: saleSnapshot,
       appointmentId: appointmentIdsForDelivery[0] || '',
       appointmentIds: appointmentIdsForDelivery,
-      seller: state.selectedSeller,
     });
-    if (saleRecord) {
-      saleRecord.cashContributions = cashContributions;
-      saleRecord.receivables = saleReceivables.entries.map((entry) => ({ ...entry }));
-      scheduleStatePersist();
-      orderRecord.saleRecordId = saleRecord.id;
-    }
-    state.deliveryOrders.unshift(orderRecord);
-    renderDeliveryOrders();
-    const successMessage = saleCode
-      ? `Delivery ${saleCode} registrado com sucesso.`
+    applyPersistedStateResponse(persisted);
+
+    const registeredOrder =
+      (Array.isArray(state.deliveryOrders) ? state.deliveryOrders : []).find(
+        (entry) => normalizeId(entry?.id || '') === normalizeId(commandOrderId)
+      ) || null;
+    const registeredSaleCode = registeredOrder?.saleCode || saleCode;
+    const successMessage = registeredSaleCode
+      ? `Delivery ${registeredSaleCode} registrado com sucesso.`
       : 'Delivery registrado com sucesso.';
     notify(successMessage, 'success');
-    await syncAppointmentsAfterDeliveryRegistration(appointmentIdsForDelivery, saleCode);
+    await syncAppointmentsAfterDeliveryRegistration(appointmentIdsForDelivery, registeredSaleCode);
     setActiveSaleAppointments([]);
     state.itens = [];
     state.vendaPagamentos = [];
@@ -15736,8 +16083,10 @@
     updateFinalizeButton();
     updateSaleSummary();
     closeFinalizeModal();
-    advanceSaleCode();
-    promptDeliveryPrint(saleSnapshot, orderRecord.customerDetails || orderRecord.customer || null);
+    promptDeliveryPrint(
+      registeredOrder?.receiptSnapshot || saleSnapshot,
+      registeredOrder?.customerDetails || registeredOrder?.customer || state.vendaCliente || null
+    );
     state.deliverySelectedAddress = null;
     state.deliverySelectedAddressId = '';
     setActiveTab('delivery-tab');
@@ -15834,8 +16183,6 @@
     const appointmentIdsForDelivery = normalizeAppointmentIdList(
       Array.isArray(order.appointmentIds) ? order.appointmentIds : [order.appointmentId]
     );
-    order.appointmentId = appointmentIdsForDelivery[0] || '';
-    order.appointmentIds = appointmentIdsForDelivery;
     const itensSnapshot = state.itens.map((item) => ({ ...item }));
     const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
     const saleDate = order.createdAt ? new Date(order.createdAt) : new Date();
@@ -15859,108 +16206,64 @@
       notify('Selecione novamente o cliente do delivery antes de finalizar.', 'warning');
       return;
     }
-    const cashContributions = normalizeCashContributions(
-      registerSaleOnCaixa(pagamentosVenda, total, saleCode)
-    );
-    order.payments = pagamentosVenda;
-    order.paymentsLabel = summarizeDeliveryPayments(pagamentosVenda);
-    order.total = total;
-    order.items = itensSnapshot;
-    order.discount = state.vendaDesconto;
-    order.addition = state.vendaAcrescimo;
-    order.receiptSnapshot = saleSnapshot;
-    order.saleCode = saleCode;
-    order.status = 'finalizado';
-    const nowIso = new Date().toISOString();
-    order.statusUpdatedAt = nowIso;
-    order.updatedAt = nowIso;
-    order.finalizedAt = nowIso;
-    renderDeliveryOrders();
-    const isIfoodSale = isIfoodSaleContext({
-      items: itensSnapshot.length ? itensSnapshot : order.items,
+
+    const persisted = await sendPdvCommandRequest('pdv.delivery.finalize', {
+      orderId: order.id,
+      saleRecordId: order.saleRecordId || '',
+      saleId: order.saleRecordId || '',
+      saleCode,
+      items: itensSnapshot,
       payments: pagamentosVenda,
-      address: order.address,
+      totalBruto: getSaleItemsBruto(itensSnapshot),
+      totalLiquido: total,
+      discountValue: state.vendaDesconto,
+      additionValue: state.vendaAcrescimo,
+      customer: saleCustomer ? { ...saleCustomer } : null,
+      customerName: resolveCustomerName(saleCustomer) || '',
+      customerDocument: resolveCustomerDocument(saleCustomer) || '',
+      address: order.address ? { ...order.address } : null,
+      courier: order.courier && typeof order.courier === 'object' ? { ...order.courier } : null,
+      receiptSnapshot: saleSnapshot,
+      appointmentId: appointmentIdsForDelivery[0] || '',
+      appointmentIds: appointmentIdsForDelivery,
     });
-    const saleRecordId = order.saleRecordId;
-    if (saleRecordId) {
-      const saleRecord = updateCompletedSaleRecord(saleRecordId, {
-        saleCode: order.saleCode,
-        typeLabel: isIfoodSale ? 'Ifood' : undefined,
-        snapshot: saleSnapshot,
-        payments: pagamentosVenda,
-        items: itensSnapshot,
-        discount: state.vendaDesconto,
-        addition: state.vendaAcrescimo,
-        customer: saleCustomer,
-        receivables: saleReceivables.entries,
-        cashContributions,
-        appointmentId: appointmentIdsForDelivery[0] || '',
-        appointmentIds: appointmentIdsForDelivery,
-      });
-      if (saleRecord) {
-        saleRecord.cashContributions = cashContributions;
-        saleRecord.receivables = saleReceivables.entries.map((entry) => ({ ...entry }));
-        scheduleStatePersist();
-        await syncAccountsReceivableForSale(
-          saleRecord,
-          saleReceivables.entries,
-          saleReceivables.backendRequests,
-          {
-            saleCode,
-            customer: saleCustomer,
-            items: saleReceivables.saleItems,
-            saleDate: saleReceivables.saleDate,
-          }
-        );
-      }
-    } else {
-      const saleRecord = registerCompletedSaleRecord({
-        type: 'delivery',
-        typeLabel: isIfoodSale ? 'Ifood' : '',
-        saleCode,
-        snapshot: saleSnapshot,
-        payments: pagamentosVenda,
-        items: itensSnapshot,
-        discount: state.vendaDesconto,
-        addition: state.vendaAcrescimo,
-        customer: saleCustomer,
-        createdAt: order.createdAt,
-        receivables: saleReceivables.entries,
-        cashContributions,
-        appointmentId: appointmentIdsForDelivery[0] || '',
-        appointmentIds: appointmentIdsForDelivery,
-      });
-      if (saleRecord) {
-        saleRecord.cashContributions = cashContributions;
-        saleRecord.receivables = saleReceivables.entries.map((entry) => ({ ...entry }));
-        scheduleStatePersist();
-        await syncAccountsReceivableForSale(
-          saleRecord,
-          saleReceivables.entries,
-          saleReceivables.backendRequests,
-          {
-            saleCode,
-            customer: saleCustomer,
-            items: saleReceivables.saleItems,
-            saleDate: saleReceivables.saleDate,
-          }
-        );
-        order.saleRecordId = saleRecord.id;
-      }
+    applyPersistedStateResponse(persisted);
+
+    const updatedOrder =
+      (Array.isArray(state.deliveryOrders) ? state.deliveryOrders : []).find(
+        (entry) => normalizeId(entry?.id || '') === normalizeId(order.id)
+      ) || order;
+    const updatedSaleRecordId = normalizeId(updatedOrder?.saleRecordId || order.saleRecordId || '');
+    const saleRecord = updatedSaleRecordId ? findCompletedSaleById(updatedSaleRecordId) : null;
+    if (saleRecord) {
+      saleRecord.receivables = saleReceivables.entries.map((entry) => ({ ...entry }));
+      await syncAccountsReceivableForSale(
+        saleRecord,
+        saleReceivables.entries,
+        saleReceivables.backendRequests,
+        {
+          saleCode: updatedOrder?.saleCode || saleCode,
+          customer: saleCustomer,
+          items: saleReceivables.saleItems,
+          saleDate: saleReceivables.saleDate,
+        }
+      );
     }
-    const successMessage = saleCode
-      ? `Delivery ${saleCode} finalizado e registrado no caixa.`
+
+    const finalizedSaleCode = updatedOrder?.saleCode || saleCode;
+    const successMessage = finalizedSaleCode
+      ? `Delivery ${finalizedSaleCode} finalizado e registrado no caixa.`
       : 'Delivery finalizado e registrado no caixa.';
     notify(successMessage, 'success');
-    await syncAppointmentsAfterSale(appointmentIdsForDelivery, saleCode);
+    await syncAppointmentsAfterSale(appointmentIdsForDelivery, finalizedSaleCode);
     setSaleCustomer(null, null);
     state.saleSource = '';
     clearSaleSearchAreas();
     closeFinalizeModal();
-    if (!existingSaleCode && saleCode) {
-      advanceSaleCode();
-    }
-    promptDeliveryPrint(saleSnapshot, order.customerDetails || order.customer || saleCustomer || null);
+    promptDeliveryPrint(
+      updatedOrder?.receiptSnapshot || saleSnapshot,
+      updatedOrder?.customerDetails || updatedOrder?.customer || saleCustomer || null
+    );
   };
 
   const handleFinalizeConfirm = async () => {
@@ -16088,7 +16391,6 @@
       applyItemAdjustmentToItem(item);
       renderItemsList();
       updateSaleSummary();
-      scheduleStatePersist();
       closeSaleAdjustModal();
       return;
     }
@@ -16100,7 +16402,6 @@
       state.vendaAcrescimo = 0;
     }
     updateSaleSummary();
-    scheduleStatePersist();
     closeSaleAdjustModal();
   };
 
@@ -21879,11 +22180,21 @@
             .map(
               (item) => `
                   <tr>
-                    <td class="px-3 py-2 whitespace-nowrap text-gray-600">${escapeHtml(item.barcode || '—')}</td>
-                    <td class="px-3 py-2 text-gray-700">${escapeHtml(item.product)}</td>
-                    <td class="px-3 py-2 whitespace-nowrap text-gray-600">${escapeHtml(item.quantityLabel)}</td>
-                    <td class="px-3 py-2 whitespace-nowrap text-gray-600">${escapeHtml(item.unitLabel)}</td>
-                    <td class="px-3 py-2 whitespace-nowrap text-gray-600">${escapeHtml(item.totalLabel)}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-gray-600">${escapeHtml(
+                      getExchangeHistoryItemCode(item) || '—'
+                    )}</td>
+                    <td class="px-3 py-2 text-gray-700">${escapeHtml(
+                      getExchangeHistoryItemDescription(item)
+                    )}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-gray-600">${escapeHtml(
+                      getHistoryItemQuantityLabel(item)
+                    )}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-gray-600">${escapeHtml(
+                      getHistoryItemUnitLabel(item)
+                    )}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-gray-600">${escapeHtml(
+                      getHistoryItemTotalLabel(item)
+                    )}</td>
                   </tr>`
             )
             .join('')
@@ -24065,7 +24376,6 @@
     state.completedSales.unshift(record);
     renderDeliveryOrderHistory();
     renderSalesList();
-    scheduleStatePersist();
     return record;
   };
 
@@ -24291,7 +24601,6 @@
       sale.cancellationAtLabel = cancellationAt ? toDateLabel(cancellationAt) : '';
     }
     renderSalesList();
-    scheduleStatePersist();
     return sale;
   };
 
@@ -24447,7 +24756,7 @@
 
   const handleSaleEmitFiscal = (saleId) => emitFiscalForSale(saleId);
 
-  const handleSaleResetFiscalStatus = (saleId) => {
+  const handleSaleResetFiscalStatus = async (saleId) => {
     const sale = findCompletedSaleById(saleId);
     if (!sale) {
       return;
@@ -24456,9 +24765,18 @@
       notify('Esta venda não está com emissão em andamento.', 'info');
       return;
     }
-    updateCompletedSaleRecord(saleId, { fiscalStatus: 'pending' });
-    notify('Status da emissão fiscal redefinido. Tente emitir novamente.', 'info');
-    scheduleStatePersist({ immediate: true });
+    try {
+      const persisted = await sendPdvCommandRequest(
+        'pdv.sale.reset_fiscal_status',
+        { saleId },
+        { idempotencyKey: `sale-reset-fiscal-${saleId}-${Date.now()}` }
+      );
+      applyPersistedStateResponse(persisted);
+      notify('Status da emissão fiscal redefinido. Tente emitir novamente.', 'info');
+    } catch (error) {
+      console.error('Erro ao redefinir status fiscal da venda:', error);
+      notify(error?.message || 'Não foi possível redefinir o status fiscal da venda.', 'error');
+    }
   };
 
   const isModalActive = (modal) => Boolean(modal && !modal.classList.contains('hidden'));
@@ -24755,7 +25073,6 @@
     updateSummary();
     state.caixaInfo.fechamentoPrevisto = sumPayments(state.caixaInfo.previstoPagamentos || []);
     updateStatusBadge();
-    scheduleStatePersist();
     if (totalRemoved > 0) {
       const saleCode = sale.saleCode || sale.saleCodeLabel || '';
       const action = {
@@ -24795,7 +25112,6 @@
       customerReceivablesCache.delete(id);
       customerReceivablesDetailsCache.delete(id);
     });
-    scheduleStatePersist();
     if (!accountIds.size) {
       sale.receivables = [];
       return;
@@ -24851,29 +25167,32 @@
       closeSaleCancelModal();
       return;
     }
+    const linkedDeliveryOrder = (() => {
+      const orderIndex = findDeliveryOrderIndexBySale(sale);
+      if (orderIndex < 0) return null;
+      const order = state.deliveryOrders[orderIndex];
+      return order && typeof order === 'object' ? { ...order } : null;
+    })();
     const confirmButton = elements.saleCancelConfirm;
     if (confirmButton) {
       confirmButton.disabled = true;
       confirmButton.classList.add('opacity-60', 'cursor-not-allowed');
     }
     try {
-      sale.status = 'cancelled';
-      sale.cancellationReason = reason;
-      sale.cancellationAt = new Date().toISOString();
-      sale.cancellationAtLabel = toDateLabel(sale.cancellationAt);
-      sale.inventoryProcessed = false;
-      sale.inventoryProcessedAt = null;
-      const removedDeliveryOrder = removeDeliveryOrderLinkedToSale(sale);
-      revertSaleCashMovements(sale);
-      await removeSaleAccountsReceivable(sale);
-      renderSalesList();
-      renderDeliveryOrders();
-      await revertAppointmentAfterSaleCancellation(sale, {
-        appointmentIds: getAppointmentIdsFromDeliveryOrder(removedDeliveryOrder),
+      const persisted = await sendPdvCommandRequest('pdv.sale.cancel', {
+        saleId,
+        reason,
+      });
+      applyPersistedStateResponse(persisted);
+      const updatedSale = findCompletedSaleById(saleId) || sale;
+      await revertAppointmentAfterSaleCancellation(updatedSale, {
+        appointmentIds: getAppointmentIdsFromDeliveryOrder(linkedDeliveryOrder),
       });
       closeSaleCancelModal();
       notify('Venda cancelada com sucesso.', 'success');
-      scheduleStatePersist({ immediate: true });
+      if (updatedSale && updatedSale !== sale) {
+        renderSalesList();
+      }
     } catch (error) {
       console.error('Erro ao cancelar venda no PDV:', error);
       notify(error?.message || 'Não foi possível cancelar a venda.', 'error');
@@ -25085,12 +25404,11 @@
     amount,
     motivo,
     paymentLabel,
-    deltaOverride,
-    { skipPersist = false } = {}
+    deltaOverride
   ) => {
     const delta = typeof deltaOverride === 'number'
       ? deltaOverride
-      : action.id === 'saida' || action.id === 'envio' || action.id === 'fechamento'
+      : action.id === 'saida' || action.id === 'envio'
       ? -Math.abs(amount)
       : Math.abs(amount);
     const userMeta = getLoggedUserHistoryMeta();
@@ -25110,9 +25428,6 @@
     state.history.unshift(entry);
     renderHistory();
     setLastMovement(entry);
-    if (!skipPersist) {
-      scheduleStatePersist();
-    }
   };
 
   const resetPagamentos = () => {
@@ -25703,6 +26018,67 @@
       .map((sale) => normalizeSaleRecordForPersist(sale))
       .filter(Boolean)
       .map((sale) => {
+        const sourceItems = Array.isArray(sale.items) && sale.items.length
+          ? sale.items
+          : Array.isArray(sale.receiptSnapshot?.itens)
+          ? sale.receiptSnapshot.itens
+          : [];
+        const normalizedSaleItems = sourceItems.map((item, index) => {
+          const quantityValue = parseDecimalInput(
+            item?.quantityLabel ??
+              item?.quantidade ??
+              item?.qtd ??
+              item?.quantity ??
+              item?.quant ??
+              0
+          );
+          const unitValue = parseDecimalInput(
+            item?.unitLabel ??
+              item?.valorUnitario ??
+              item?.valor ??
+              item?.preco ??
+              item?.unit ??
+              item?.unitValue ??
+              item?.unitario ??
+              0
+          );
+          const totalValue = parseDecimalInput(
+            item?.totalLabel ??
+              item?.total ??
+              item?.subtotal ??
+              item?.totalValue ??
+              item?.valorTotal ??
+              unitValue * quantityValue
+          );
+          return {
+            ...item,
+            id: item?.id || `${sale.id}-item-${index}`,
+            barcode:
+              item?.barcode ||
+              item?.codigoBarras ||
+              item?.codigo ||
+              item?.codigoInterno ||
+              item?.codInterno ||
+              '-',
+            product:
+              item?.product ||
+              item?.nome ||
+              item?.descricao ||
+              item?.produto ||
+              'Item da venda',
+            quantityLabel:
+              item?.quantityLabel ||
+              quantityValue.toLocaleString('pt-BR', {
+                minimumFractionDigits: Number.isInteger(quantityValue) ? 0 : 2,
+                maximumFractionDigits: 3,
+              }),
+            unitLabel: item?.unitLabel || formatCurrency(unitValue),
+            totalLabel: item?.totalLabel || formatCurrency(totalValue),
+            quantity: quantityValue,
+            unitValue,
+            totalValue,
+          };
+        });
         const normalizedFiscalStatus =
           sale.fiscalStatus === 'emitting' || !sale.fiscalStatus ? 'pending' : sale.fiscalStatus;
         const normalizedReceivables = Array.isArray(sale.receivables)
@@ -25720,7 +26096,7 @@
           ...sale,
           fiscalStatus: normalizedFiscalStatus,
           paymentTags: Array.isArray(sale.paymentTags) ? sale.paymentTags : [],
-          items: Array.isArray(sale.items) ? sale.items : [],
+          items: normalizedSaleItems,
           receivables: normalizedReceivables.filter(Boolean),
         };
       });
@@ -25749,21 +26125,27 @@
     state.budgets = budgetsFonte.map((budget) => normalizeBudgetRecordForPersist(budget)).filter(Boolean);
     const deliveryOrdersFonte = Array.isArray(persistedState?.deliveryOrders)
       ? persistedState.deliveryOrders
-      : Array.isArray(pdv?.deliveryOrders)
-      ? pdv.deliveryOrders
       : Array.isArray(pdv?.caixa?.deliveryOrders)
       ? pdv.caixa.deliveryOrders
+      : Array.isArray(pdv?.deliveryOrders)
+      ? pdv.deliveryOrders
       : [];
     state.deliveryOrders = deliveryOrdersFonte
       .map((order) => normalizeDeliveryOrderForPersist(order))
       .filter(Boolean);
+    // Garante que os cards de delivery tenham lista de entregadores logo após hidratar o PDV.
+    void loadDeliveryCouriersForActiveCompany();
     const removedCancelledDeliveryOrders = pruneCancelledDeliveryOrders();
     if (removedCancelledDeliveryOrders > 0) {
-      scheduleStatePersist();
+      console.info(
+        `[PDV] ${removedCancelledDeliveryOrders} delivery(s) cancelado(s) removido(s) localmente durante hidratação.`
+      );
     }
     const repairedCancelledSalesCash = repairCancelledSalesCashReversals();
     if (repairedCancelledSalesCash > 0) {
-      scheduleStatePersist();
+      console.info(
+        `[PDV] ${repairedCancelledSalesCash} venda(s) cancelada(s) ajustada(s) localmente durante hidratação.`
+      );
     }
     if (pdv?.budgetSequence != null) {
       state.budgetSequence = Math.max(1, Number.parseInt(pdv.budgetSequence, 10) || 1);
@@ -26511,11 +26893,6 @@
     elements.paymentList.innerHTML = '';
     const inputsLocked = state.caixaAberto && !state.allowApuradoEdit;
     const displayPayments = getDisplayedPaymentRows();
-    const helperText = state.allowApuradoEdit
-      ? 'Informe o valor apurado'
-      : state.caixaAberto
-      ? 'Recebimentos por meio'
-      : 'Valor inicial / apurado';
     if (state.paymentMethodsLoading) {
       elements.paymentList.innerHTML =
         '<li class="rounded-lg border border-dashed border-gray-300 bg-white px-4 py-3 text-sm text-gray-500">Carregando meios de pagamento...</li>';
@@ -26541,7 +26918,6 @@
         li.innerHTML = `
           <div>
             <p class="text-sm font-semibold text-gray-700">${payment.label}</p>
-            <p class="text-xs text-gray-500">${helperText}</p>
           </div>
           <div class="flex items-center gap-2">
             <span class="text-xs text-gray-500">R$</span>
@@ -26576,7 +26952,6 @@
     if (!payment) return;
     payment.valor = parseMaskedMoneyValue(input.value);
     updateSummary();
-    scheduleStatePersist();
   };
 
   const handleResetPayments = () => {
@@ -26586,7 +26961,6 @@
     }
     resetPagamentos();
     notify('Valores dos meios de pagamento zerados.', 'info');
-    scheduleStatePersist();
   };
 
   const handleSearchInput = (event) => {
@@ -26752,113 +27126,84 @@
     caixaActionInFlight = true;
     setCaixaActionLoading(true, action.id);
     try {
-    if (action.id === 'abertura' || action.id === 'fechamento') {
-      await waitForStatePersistenceIdle();
-    }
-    const expectedCaixaAbertoAfterAction =
-      action.id === 'abertura' ? true : action.id === 'fechamento' ? false : null;
-    const amountValue = safeNumber(elements.actionAmount?.value || 0);
-    const paymentId = elements.paymentSelect?.value || (state.pagamentos[0]?.id ?? '');
-    const payment = state.pagamentos.find((item) => item.id === paymentId) || state.pagamentos[0];
-    const motivo = elements.motivoInput?.value.trim();
+      const amountValue = safeNumber(elements.actionAmount?.value || 0);
+      const paymentId = elements.paymentSelect?.value || (state.pagamentos[0]?.id ?? '');
+      const payment = state.pagamentos.find((item) => item.id === paymentId) || state.pagamentos[0];
+      const motivo = elements.motivoInput?.value.trim();
 
-    if (action.requiresAmount && amountValue <= 0) {
-      notify('Informe um valor válido para a operação.', 'warning');
-      elements.actionAmount?.focus();
-      return;
-    }
-    if (action.requiresMotivo && !motivo) {
-      notify('Descreva o motivo da movimentação.', 'warning');
-      elements.motivoInput?.focus();
-      return;
-    }
+      if (action.requiresAmount && amountValue <= 0) {
+        notify('Informe um valor válido para a operação.', 'warning');
+        elements.actionAmount?.focus();
+        return;
+      }
+      if (action.requiresMotivo && !motivo) {
+        notify('Descreva o motivo da movimentação.', 'warning');
+        elements.motivoInput?.focus();
+        return;
+      }
 
-    if (action.id === 'abertura') {
-      if (state.caixaAberto) {
-        notify('O caixa já está aberto.', 'warning');
-        return;
-      }
-      syncRenderedPaymentInputsToState();
-      const aberturaTotal = sumPayments(state.pagamentos);
-      state.caixaAberto = true;
-      state.allowApuradoEdit = false;
-      // Cada abertura inicia um novo ciclo de histórico do caixa.
-      state.history = [];
-      state.lastMovement = null;
-      state.summary.abertura = aberturaTotal;
-      state.summary.recebido = 0;
-      state.summary.recebimentosCliente = 0;
-      state.caixaInfo.aberturaData = new Date().toISOString();
-      state.caixaInfo.fechamentoData = null;
-      state.caixaInfo.fechamentoApurado = 0;
-      // "Recebimentos por meio" não deve considerar os valores de abertura.
-      state.caixaInfo.previstoPagamentos = state.pagamentos.map((payment) => ({
-        ...payment,
-        valor: 0,
-      }));
-      state.caixaInfo.apuradoPagamentos = [];
-      state.caixaInfo.fechamentoPrevisto = 0;
-      addHistoryEntry(action, aberturaTotal, motivo, describePaymentValues(state.pagamentos), undefined, {
-        skipPersist: true,
-      });
-    } else if (action.id === 'fechamento') {
-      if (!state.caixaAberto) {
-        notify('Abra o caixa antes de realizar o fechamento.', 'warning');
-        return;
-      }
-      const previstoPagamentos =
-        state.caixaInfo.previstoPagamentos?.length
-          ? state.caixaInfo.previstoPagamentos
-          : clonePayments(state.pagamentos);
-      const apuradoPagamentos = clonePayments(state.pagamentos);
-      const previstoTotal = sumPayments(previstoPagamentos);
-      const apuradoTotal = sumPayments(apuradoPagamentos);
-      addHistoryEntry(
-        action,
-        apuradoTotal,
-        motivo,
-        describePaymentValues(apuradoPagamentos),
-        -Math.abs(apuradoTotal),
-        { skipPersist: true }
-      );
-      state.caixaInfo.fechamentoData = new Date().toISOString();
-      state.caixaInfo.previstoPagamentos = clonePayments(previstoPagamentos);
-      state.caixaInfo.apuradoPagamentos = clonePayments(apuradoPagamentos);
-      state.caixaInfo.fechamentoPrevisto = previstoTotal;
-      state.caixaInfo.fechamentoApurado = apuradoTotal;
-      state.caixaAberto = false;
-      state.allowApuradoEdit = false;
-    } else {
-      if (!state.caixaAberto) {
-        notify('Abra o caixa antes de registrar movimentações.', 'warning');
-        return;
-      }
-      if (!payment) {
-        notify(
-          state.pagamentos.length
-            ? 'Selecione um meio de pagamento válido.'
-            : 'Cadastre meios de pagamento antes de registrar esta movimentação.',
-          'warning'
-        );
-        return;
-      }
-      if (action.id === 'entrada') {
-        payment.valor += amountValue;
-        addHistoryEntry(action, amountValue, motivo, payment.label);
+      let commandAction = '';
+      let commandPayload = {};
+
+      if (action.id === 'abertura') {
+        if (state.caixaAberto) {
+          notify('O caixa já está aberto.', 'warning');
+          return;
+        }
+        syncRenderedPaymentInputsToState();
+        commandAction = 'pdv.caixa.open';
+        commandPayload = {
+          reason: motivo || '',
+          payments: clonePayments(state.pagamentos),
+          openedAt: new Date().toISOString(),
+        };
+      } else if (action.id === 'fechamento') {
+        if (!state.caixaAberto) {
+          notify('Abra o caixa antes de realizar o fechamento.', 'warning');
+          return;
+        }
+        commandAction = 'pdv.caixa.close';
+        commandPayload = {
+          reason: motivo || '',
+          payments: clonePayments(state.pagamentos),
+          timestamp: new Date().toISOString(),
+        };
       } else {
-        applyDebitOnPayments(payment.id, amountValue);
-        addHistoryEntry(action, amountValue, motivo, payment.label, -Math.abs(amountValue));
+        if (!state.caixaAberto) {
+          notify('Abra o caixa antes de registrar movimentações.', 'warning');
+          return;
+        }
+        if (!payment) {
+          notify(
+            state.pagamentos.length
+              ? 'Selecione um meio de pagamento válido.'
+              : 'Cadastre meios de pagamento antes de registrar esta movimentação.',
+            'warning'
+          );
+          return;
+        }
+        commandAction =
+          action.id === 'entrada'
+            ? 'pdv.caixa.entry'
+            : action.id === 'saida'
+            ? 'pdv.caixa.exit'
+            : 'pdv.caixa.shipment';
+        commandPayload = {
+          paymentId: payment.id,
+          amount: amountValue,
+          reason: motivo || '',
+          timestamp: new Date().toISOString(),
+        };
       }
-      notify(action.successMessage, 'success');
-    }
 
-    if (action.id === 'fechamento' || action.id === 'abertura') {
-      const persisted = await flushStatePersist({ includeCollections: false });
+      const persisted = await sendPdvCommandRequest(commandAction, commandPayload);
+      applyPersistedStateResponse(persisted);
+
       state.selectedAction = null;
       state.allowApuradoEdit = false;
       state.caixaPagamentosAntesFechamento = null;
-      elements.actionAmount && (elements.actionAmount.value = '');
-      elements.motivoInput && (elements.motivoInput.value = '');
+      if (elements.actionAmount) elements.actionAmount.value = '';
+      if (elements.motivoInput) elements.motivoInput.value = '';
       renderPayments();
       updateSummary();
       updateStatusBadge();
@@ -26866,39 +27211,14 @@
       renderReceivablesSelectionSummary();
       renderCaixaActions();
       updateActionDetails();
-      if (
-        persisted &&
-        expectedCaixaAbertoAfterAction !== null &&
-        state.caixaAberto === expectedCaixaAbertoAfterAction
-      ) {
-        updateTabAvailability();
-        setActiveTab(action.id === 'abertura' ? 'pdv-tab' : 'caixa-tab');
-        if (action.id === 'fechamento') {
-          handleConfiguredPrint('fechamento');
-        }
-        notify(action.successMessage, 'success');
-        window.setTimeout(() => {
-          void refreshCurrentPdvStateFromServer().catch((error) => {
-            console.error(`Falha ao sincronizar estado após ${action.id} do caixa:`, error);
-          });
-        }, 0);
-      } else {
-        notify('Não foi possível salvar o estado do caixa.', 'error');
+
+      if (action.id === 'abertura') {
+        setActiveTab('pdv-tab');
+      } else if (action.id === 'fechamento') {
+        setActiveTab('caixa-tab');
+        handleConfiguredPrint('fechamento');
       }
-      return;
-    }
-    renderPayments();
-    updateSummary();
-    updateStatusBadge();
-    updateTabAvailability();
-    renderReceivablesSelectionSummary();
-    state.selectedAction = null;
-    state.allowApuradoEdit = false;
-    renderCaixaActions();
-    updateActionDetails();
-    elements.actionAmount && (elements.actionAmount.value = '');
-    elements.motivoInput && (elements.motivoInput.value = '');
-    scheduleStatePersist();
+      notify(action.successMessage, 'success');
     } finally {
       setCaixaActionLoading(false);
       renderCaixaActions();
@@ -27402,6 +27722,7 @@
     elements.deliveryAddressCancelForm?.addEventListener('click', handleDeliveryAddressCancelForm);
     elements.deliveryAddressForm?.addEventListener('submit', handleDeliveryAddressFormSubmit);
     elements.deliveryList?.addEventListener('click', handleDeliveryListClick);
+    elements.deliveryList?.addEventListener('change', handleDeliveryListChange);
     elements.salesList?.addEventListener('click', handleSalesListClick);
     elements.saleCancelConfirm?.addEventListener('click', handleSaleCancelConfirm);
     elements.saleCancelCancel?.addEventListener('click', closeSaleCancelModal);
@@ -27615,6 +27936,7 @@
   let ifoodActiveTab = 'pedidos';
   let ifoodBuckets = { awaiting: [], separation: [], packing: [], concluded: [], canceled: [] };
   let ifoodRefreshInFlight = false;
+  let ifoodEventSource = null;
   const ifoodCustomerCache = new Map();
   const ifoodOrderPrefillMap = new Map();
   const ifoodOrderImportMap = new Map();
@@ -28085,7 +28407,7 @@
       }
     }
 
-    state.deliveryStatusOverride = 'emSeparacao';
+    state.deliveryStatusOverride = 'registrado';
     notify('Pedido do iFood importado para o PDV.', 'success');
     return true;
   };
@@ -28129,6 +28451,11 @@
   const toggleIfoodModal = (show) => {
     if (!ifoodModal) return;
     ifoodModal.classList.toggle('hidden', !show);
+    if (show) {
+      ensureIfoodStreamConnection();
+    } else {
+      closeIfoodStreamConnection();
+    }
     if (!show) {
       if (ifoodNotifDot) ifoodNotifDot.classList.add('hidden');
       ifoodActiveTab = 'pedidos';
@@ -28138,6 +28465,43 @@
       ifoodEmptyEl?.classList.add('hidden');
       ifoodListEl?.classList.add('hidden');
       if (ifoodListEl) ifoodListEl.innerHTML = '';
+    }
+  };
+
+  const closeIfoodStreamConnection = () => {
+    if (!ifoodEventSource) return;
+    try {
+      ifoodEventSource.close();
+    } catch (_) {
+      // noop
+    }
+    ifoodEventSource = null;
+  };
+
+  const ensureIfoodStreamConnection = () => {
+    if (ifoodEventSource) return;
+    try {
+      const streamUrl = `${SERVER_URL || ''}/api/ifood/stream`;
+      const evtSource = new EventSource(streamUrl);
+      evtSource.addEventListener('message', (event) => {
+        try {
+          const data = JSON.parse(event.data || '{}');
+          if (data?.type === 'ifood-events' && !ifoodModal.classList.contains('hidden')) {
+            console.debug('[ifood][sse] evento recebido, atualizando modal', data);
+            fetchIfoodOrders();
+          } else if (data?.type === 'ifood-events' && ifoodModal.classList.contains('hidden')) {
+            if (ifoodNotifDot) ifoodNotifDot.classList.remove('hidden');
+          }
+        } catch (_) {
+          // ignore parse errors
+        }
+      });
+      evtSource.addEventListener('error', () => {
+        // EventSource reconecta automaticamente; evita quebrar fluxo da tela.
+      });
+      ifoodEventSource = evtSource;
+    } catch (_) {
+      // SSE não suportado
     }
   };
 
@@ -28392,26 +28756,9 @@
     if (e.target === ifoodModal) toggleIfoodModal(false);
   });
 
-  // SSE: atualizar modal quando servidor receber eventos do iFood
-  try {
-    const streamUrl = `${SERVER_URL || ''}/api/ifood/stream`;
-    const evtSource = new EventSource(streamUrl);
-    evtSource.addEventListener('message', (event) => {
-      try {
-        const data = JSON.parse(event.data || '{}');
-        if (data?.type === 'ifood-events' && !ifoodModal.classList.contains('hidden')) {
-          console.debug('[ifood][sse] evento recebido, atualizando modal', data);
-          fetchIfoodOrders();
-        } else if (data?.type === 'ifood-events' && ifoodModal.classList.contains('hidden')) {
-          if (ifoodNotifDot) ifoodNotifDot.classList.remove('hidden');
-        }
-      } catch (_) {
-        // ignore parse errors
-      }
-    });
-  } catch (_) {
-    // SSE não suportado
-  }
+  window.addEventListener('beforeunload', () => {
+    closeIfoodStreamConnection();
+  });
 })();
 
 

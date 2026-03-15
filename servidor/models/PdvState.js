@@ -159,6 +159,8 @@ const inventoryMovementSchema = new mongoose.Schema(
     paymentLabel: { type: String, trim: true, default: '' },
     status: { type: String, trim: true, default: 'aberto' },
     importedAt: { type: Date, default: null },
+    finalizedAt: { type: Date, default: null },
+    finalizedSaleId: { type: String, trim: true, default: '' },
   },
   { _id: false }
 );

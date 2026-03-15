@@ -441,8 +441,10 @@ const extractProductIdFromItem = (item) => {
     item.produto?.productId,
     item.productSnapshot?._id,
     item.productSnapshot?.id,
+    item.productSnapshot?.productId,
     item.produtoSnapshot?._id,
     item.produtoSnapshot?.id,
+    item.produtoSnapshot?.productId,
   ];
   for (const candidate of candidates) {
     const objectId = toObjectIdOrNull(candidate);
@@ -458,13 +460,24 @@ const collectSaleProductQuantities = (sale) => {
   if (!sale || typeof sale !== 'object') {
     return quantities;
   }
-  const source = Array.isArray(sale.fiscalItemsSnapshot)
-    ? sale.fiscalItemsSnapshot
-    : Array.isArray(sale.receiptSnapshot?.itens)
-    ? sale.receiptSnapshot.itens
-    : [];
+  const itemCandidates = [
+    sale.items,
+    sale.fiscalItemsSnapshot,
+    sale.itemsSnapshot,
+    sale.itemsSnapshot?.items,
+    sale.itemsSnapshot?.itens,
+    sale.receiptSnapshot?.items,
+    sale.receiptSnapshot?.itens,
+    sale.receiptSnapshot?.products,
+    sale.receiptSnapshot?.produtos,
+    sale.receiptSnapshot?.cart?.items,
+    sale.receiptSnapshot?.cart?.itens,
+    sale.receiptSnapshot?.cart?.products,
+    sale.receiptSnapshot?.cart?.produtos,
+  ];
+  const source = itemCandidates.find((list) => Array.isArray(list) && list.length) || [];
   for (const item of source) {
-    const productId = extractProductIdFromSnapshot(item);
+    const productId = extractProductIdFromItem(item) || extractProductIdFromSnapshot(item);
     if (!productId) continue;
     const rawQuantity =
       item?.quantity ??
@@ -1360,6 +1373,11 @@ const normalizeSaleRecordPayload = (record) => {
       };
     })
     .filter(Boolean);
+  const receivables = Array.isArray(record.receivables)
+    ? record.receivables
+        .map((entry) => normalizeReceivableRecordPayload(entry))
+        .filter(Boolean)
+    : [];
   return {
     id,
     type,
@@ -1407,6 +1425,7 @@ const normalizeSaleRecordPayload = (record) => {
     inventoryProcessed,
     inventoryProcessedAt,
     cashContributions,
+    receivables,
   };
 };
 
@@ -1515,6 +1534,12 @@ const normalizeBudgetRecordPayload = (budget, { useDefaults = false } = {}) => {
     normalizeString(budget.paymentLabel || budget.meioPagamento || budget.formaPagamento || budget.condicaoPagamento) || '';
   const status = normalizeString(budget.status || budget.situacao) || (useDefaults ? 'aberto' : '');
   const importedAt = safeDate(budget.importedAt || budget.importadoEm || budget.imported_at) || null;
+  const finalizedAt = safeDate(
+    budget.finalizedAt || budget.finalizadoEm || budget.finalized_at || budget.finalizacaoEm
+  ) || null;
+  const finalizedSaleId = normalizeString(
+    budget.finalizedSaleId || budget.finalizedSale || budget.vendaFinalizadaId
+  );
 
   return {
     id,
@@ -1536,6 +1561,8 @@ const normalizeBudgetRecordPayload = (budget, { useDefaults = false } = {}) => {
     paymentLabel,
     status: status || 'aberto',
     importedAt,
+    finalizedAt,
+    finalizedSaleId,
   };
 };
 
@@ -1987,6 +2014,7 @@ const resolveRecordMergeKey = (record, kind = 'generic') => {
     if (code) return `code:${code}`;
   }
   if (kind === 'delivery') {
+    if (id) return `delivery:${id}`;
     const saleRecordId = normalizeString(record.saleRecordId);
     if (saleRecordId) return `sale:${saleRecordId}`;
     const saleCode = normalizeString(record.saleCode).toUpperCase();
@@ -2140,6 +2168,75 @@ const reconcileCashStateFromSales = ({ existingState, updatePayload }) => {
 };
 
 const mergeRecordsByKey = (existingRecords, incomingRecords, kind = 'generic') => {
+  const resolveDeliveryStamp = (record) => {
+    if (!record || typeof record !== 'object') return 0;
+    const raw = record.updatedAt || record.statusUpdatedAt || record.createdAt || '';
+    const parsed = raw ? new Date(raw) : null;
+    if (!parsed || Number.isNaN(parsed.getTime())) return 0;
+    return parsed.getTime();
+  };
+
+  const resolveDeliveryCourier = (record) => {
+    if (!record || typeof record !== 'object') {
+      return { id: '', label: '', hasValue: false };
+    }
+    const courierRaw = record.courier;
+    const courierObj = courierRaw && typeof courierRaw === 'object' ? courierRaw : {};
+    const courierId = normalizeString(
+      courierObj.id ||
+        courierObj._id ||
+        record.courierId ||
+        record.entregadorId ||
+        record.deliveryCourierId ||
+        ''
+    );
+    const courierLabel = normalizeString(
+      courierObj.label ||
+        courierObj.nome ||
+        courierObj.name ||
+        (typeof courierRaw === 'string' ? courierRaw : '') ||
+        record.courierLabel ||
+        record.entregador ||
+        record.deliveryCourierLabel ||
+        ''
+    );
+    return {
+      id: courierId,
+      label: courierLabel,
+      hasValue: Boolean(courierId || courierLabel),
+    };
+  };
+
+  const applyDeliveryCourier = (record, courier) => {
+    const next = { ...(record && typeof record === 'object' ? record : {}) };
+    const hasValue = Boolean(courier?.id || courier?.label);
+    next.courier = hasValue ? { id: courier.id || '', label: courier.label || '' } : null;
+    next.courierId = courier?.id || '';
+    next.courierLabel = courier?.label || '';
+    next.entregadorId = courier?.id || '';
+    next.entregador = courier?.label || '';
+    next.deliveryCourierId = courier?.id || '';
+    next.deliveryCourierLabel = courier?.label || '';
+    return next;
+  };
+
+  const mergeDeliveryRecordConflict = (existingRecord, incomingRecord) => {
+    const existing = existingRecord && typeof existingRecord === 'object' ? existingRecord : {};
+    const incoming = incomingRecord && typeof incomingRecord === 'object' ? incomingRecord : {};
+    const existingStamp = resolveDeliveryStamp(existing);
+    const incomingStamp = resolveDeliveryStamp(incoming);
+    const incomingIsNewerOrEqual = incomingStamp >= existingStamp;
+    const base = incomingIsNewerOrEqual ? existing : incoming;
+    const overlay = incomingIsNewerOrEqual ? incoming : existing;
+    const merged = { ...base, ...overlay };
+    const baseCourier = resolveDeliveryCourier(base);
+    const overlayCourier = resolveDeliveryCourier(overlay);
+    // Evita apagar entregador por payload parcial/stale sem courier.
+    // Remoção explícita deve ocorrer via comando dedicado de update_courier.
+    const shouldApplyOverlayCourier = overlayCourier.hasValue || !baseCourier.hasValue;
+    return applyDeliveryCourier(merged, shouldApplyOverlayCourier ? overlayCourier : baseCourier);
+  };
+
   const merged = [];
   const keyIndex = new Map();
   const append = (record, source) => {
@@ -2156,7 +2253,11 @@ const mergeRecordsByKey = (existingRecords, incomingRecords, kind = 'generic') =
       return;
     }
     if (source === 'incoming') {
-      merged[foundIndex] = record;
+      if (kind === 'delivery') {
+        merged[foundIndex] = mergeDeliveryRecordConflict(merged[foundIndex], record);
+      } else {
+        merged[foundIndex] = record;
+      }
     }
   };
 
@@ -2560,6 +2661,8 @@ router.get('/:id', requireAuth, authorizeRoles('admin'), async (req, res) => {
       history: serializedState.history,
       completedSales: serializedState.completedSales,
       budgets: serializedState.budgets,
+      deliveryOrders: serializedState.deliveryOrders,
+      accountsReceivable: serializedState.accountsReceivable,
       orcamentos: serializedState.budgets,
       lastMovement: serializedState.lastMovement,
       saleCodeIdentifier: serializedState.saleCodeIdentifier,
@@ -3194,6 +3297,2314 @@ router.put('/:id/configuracoes', requireAuth, authorizeRoles('admin', 'admin_mas
         : 'Erro ao salvar configuraÃ§Ãµes do PDV.';
     console.error('Erro ao salvar configuraÃ§Ãµes do PDV:', error);
     res.status(statusCode).json({ message });
+  }
+});
+
+const PDV_COMMANDS = Object.freeze({
+  REFRESH_STATE: 'pdv.refresh_state',
+  CAIXA_OPEN: 'pdv.caixa.open',
+  CAIXA_ENTRY: 'pdv.caixa.entry',
+  CAIXA_EXIT: 'pdv.caixa.exit',
+  CAIXA_SHIPMENT: 'pdv.caixa.shipment',
+  CAIXA_CLOSE: 'pdv.caixa.close',
+  CAIXA_CLIENT_RECEIPT: 'pdv.caixa.client_receipt',
+  SALE_FINALIZE: 'pdv.sale.finalize',
+  SALE_SYNC_RECEIVABLES: 'pdv.sale.sync_receivables',
+  SALE_RESET_FISCAL_STATUS: 'pdv.sale.reset_fiscal_status',
+  BUDGET_SAVE: 'pdv.budget.save',
+  BUDGET_FINALIZE: 'pdv.budget.finalize',
+  BUDGET_MARK_IMPORTED: 'pdv.budget.mark_imported',
+  BUDGET_DELETE: 'pdv.budget.delete',
+  SETTINGS_PRINT_PREFERENCES: 'pdv.settings.print_preferences',
+  DELIVERY_REGISTER: 'pdv.delivery.register',
+  DELIVERY_UPDATE_STATUS: 'pdv.delivery.update_status',
+  DELIVERY_UPDATE_COURIER: 'pdv.delivery.update_courier',
+  DELIVERY_FINALIZE: 'pdv.delivery.finalize',
+  SALE_CANCEL: 'pdv.sale.cancel',
+});
+
+const buildPdvCommandMeta = (req) => {
+  const idempotencyKey = normalizeString(req.get('x-idempotency-key'));
+  return {
+    commandId: new mongoose.Types.ObjectId().toString(),
+    executedAt: new Date().toISOString(),
+    idempotencyKey: idempotencyKey || '',
+  };
+};
+
+const parsePdvCommandRequest = (body = {}) => {
+  const action = normalizeString(body?.action);
+  const payload = body && typeof body === 'object' ? body.payload || {} : {};
+  return { action, payload };
+};
+
+const normalizeCommandPayments = (payments = []) =>
+  (Array.isArray(payments) ? payments : [])
+    .map((entry) => normalizePaymentSnapshotPayload(entry))
+    .filter(Boolean);
+
+const getCommandHistoryUserMeta = (user = {}) => {
+  return {
+    userId: normalizeString(user?.id),
+    userName: normalizeString(user?.nomeCompleto || user?.apelido || user?.name || ''),
+    userLogin: normalizeString(user?.email || ''),
+  };
+};
+
+const getNextRecentMutationKeys = (existing = [], idempotencyKey = '') => {
+  if (!idempotencyKey) return Array.isArray(existing) ? existing : [];
+  const keys = new Set(Array.isArray(existing) ? existing : []);
+  keys.add(idempotencyKey);
+  return Array.from(keys).slice(-100);
+};
+
+const cloneCommandPayments = (payments = []) =>
+  (Array.isArray(payments) ? payments : []).map((entry) => ({ ...entry }));
+
+const resolveCommandTargetPayment = (payments = [], paymentId = '') => {
+  const normalizedId = normalizeString(paymentId);
+  if (!normalizedId) return payments[0] || null;
+  return (
+    payments.find((payment) => normalizeString(payment?.id) === normalizedId) ||
+    payments.find((payment) => normalizeString(payment?.label) === normalizedId) ||
+    null
+  );
+};
+
+const buildCaixaMovementHistoryEntry = ({
+  movementId,
+  movementLabel,
+  amount,
+  reason,
+  paymentLabel,
+  timestamp,
+  userMeta = {},
+}) => ({
+  id: movementId,
+  label: movementLabel,
+  amount: Math.abs(safeNumber(amount, 0)),
+  delta:
+    movementId === 'saida' || movementId === 'envio'
+      ? -Math.abs(safeNumber(amount, 0))
+      : Math.abs(safeNumber(amount, 0)),
+  motivo: normalizeString(reason),
+  paymentLabel: normalizeString(paymentLabel),
+  userId: userMeta.userId || '',
+  userName: userMeta.userName || '',
+  userLogin: userMeta.userLogin || '',
+  responsavel: userMeta.userName || userMeta.userLogin || '',
+  timestamp,
+});
+
+const buildSaleContributionsFromPayments = (payments = []) =>
+  (Array.isArray(payments) ? payments : [])
+    .map((payment) => {
+      const amount = safeNumber(payment?.valor ?? 0, 0);
+      if (!(amount > 0)) return null;
+      return {
+        paymentId: normalizeString(payment?.id || ''),
+        paymentLabel: normalizeString(payment?.label || payment?.id || 'Pagamento'),
+        amount,
+      };
+    })
+    .filter(Boolean);
+
+const buildSaleHistoryEntry = ({
+  saleCode,
+  totalLiquido,
+  paymentLabel,
+  createdAt,
+  userMeta = {},
+}) =>
+  normalizeHistoryEntryPayload({
+    id: 'venda',
+    label: saleCode ? `Venda ${saleCode} finalizada` : 'Venda finalizada',
+    amount: Math.abs(safeNumber(totalLiquido, 0)),
+    delta: Math.abs(safeNumber(totalLiquido, 0)),
+    motivo: '',
+    paymentLabel,
+    userId: userMeta.userId || '',
+    userName: userMeta.userName || '',
+  userLogin: userMeta.userLogin || '',
+  timestamp: createdAt,
+});
+
+const buildDeliveryOrderId = () => `delivery-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+
+const findPaymentSnapshotByContribution = (payments = [], contribution = {}) => {
+  const paymentId = normalizeString(contribution?.paymentId || '');
+  const paymentLabel = normalizeString(contribution?.paymentLabel || '');
+  if (paymentId) {
+    const byId = payments.find((payment) => normalizeString(payment?.id) === paymentId);
+    if (byId) return byId;
+  }
+  if (paymentLabel) {
+    const byLabel = payments.find((payment) => normalizeString(payment?.label) === paymentLabel);
+    if (byLabel) return byLabel;
+  }
+  return null;
+};
+
+const buildPaymentCatalogForClosing = (state = {}) => {
+  const catalog = new Map();
+  const addPayment = (payment = {}) => {
+    if (!payment || typeof payment !== 'object') return;
+    const normalized = normalizePaymentSnapshotPayload(payment);
+    if (!normalized) return;
+    const idKey = normalizeString(normalized.id).toLowerCase();
+    const labelKey = normalizeString(normalized.label).toLowerCase();
+    const key = idKey || labelKey;
+    if (!key) return;
+    if (!catalog.has(key)) {
+      catalog.set(key, {
+        ...normalized,
+        valor: 0,
+      });
+      return;
+    }
+    const current = catalog.get(key);
+    if (!normalizeString(current.id) && idKey) current.id = idKey;
+    if (!normalizeString(current.label) && normalized.label) current.label = normalized.label;
+    if (!normalizeString(current.type) && normalized.type) current.type = normalized.type;
+  };
+
+  (Array.isArray(state?.pagamentos) ? state.pagamentos : []).forEach(addPayment);
+  (Array.isArray(state?.caixaInfo?.previstoPagamentos) ? state.caixaInfo.previstoPagamentos : []).forEach(addPayment);
+  (Array.isArray(state?.caixaInfo?.apuradoPagamentos) ? state.caixaInfo.apuradoPagamentos : []).forEach(addPayment);
+
+  return catalog;
+};
+
+const parseOpeningPaymentsFromHistory = (state = {}, paymentCatalog = new Map()) => {
+  const history = Array.isArray(state?.history) ? state.history : [];
+  const openingEntry = history.find((entry) => normalizeString(entry?.id).toLowerCase() === 'abertura');
+  if (!openingEntry) return [];
+  const raw = normalizeString(openingEntry?.paymentLabel);
+  if (!raw) return [];
+
+  return raw
+    .split('|')
+    .map((chunk) => normalizeString(chunk))
+    .map((chunk) => {
+      if (!chunk) return null;
+      const match = chunk.match(/^(.*?):\s*([0-9.,-]+)$/);
+      if (!match) return null;
+      const label = normalizeString(match[1]);
+      const rawAmount = normalizeString(match[2]);
+      const amount = (() => {
+        if (!rawAmount) return 0;
+        if (rawAmount.includes(',')) {
+          return Math.max(0, safeNumber(rawAmount.replace(/\./g, '').replace(',', '.'), 0));
+        }
+        return Math.max(0, safeNumber(rawAmount, 0));
+      })();
+      if (!label || !(amount > 0)) return null;
+      const idFromCatalog =
+        Array.from(paymentCatalog.values()).find(
+          (entry) => normalizeString(entry?.label).toLowerCase() === label.toLowerCase()
+        ) || null;
+      return {
+        id: normalizeString(idFromCatalog?.id) || label,
+        label: normalizeString(idFromCatalog?.label) || label,
+        type: normalizeString(idFromCatalog?.type) || 'avista',
+        valor: amount,
+      };
+    })
+    .filter(Boolean);
+};
+
+const buildExpectedClosePaymentsByMethod = (state = {}) => {
+  const paymentCatalog = buildPaymentCatalogForClosing(state);
+  const amountsByKey = new Map();
+  const ensurePaymentInCatalog = (payment = {}) => {
+    const normalized = normalizePaymentSnapshotPayload(payment);
+    if (!normalized) return null;
+    const idKey = normalizeString(normalized.id).toLowerCase();
+    const labelKey = normalizeString(normalized.label).toLowerCase();
+    const key = idKey || labelKey;
+    if (!key) return null;
+    if (!paymentCatalog.has(key)) {
+      paymentCatalog.set(key, { ...normalized, valor: 0 });
+    }
+    return key;
+  };
+  const applyAmount = (payment = {}, delta = 0) => {
+    const key = ensurePaymentInCatalog(payment);
+    if (!key) return;
+    const next = safeNumber(amountsByKey.get(key), 0) + safeNumber(delta, 0);
+    amountsByKey.set(key, next);
+  };
+
+  const cycleStart = safeDate(state?.caixaInfo?.aberturaData || null);
+  parseOpeningPaymentsFromHistory(state, paymentCatalog).forEach((payment) => {
+    applyAmount(payment, safeNumber(payment.valor, 0));
+  });
+
+  const sales = Array.isArray(state?.completedSales) ? state.completedSales : [];
+  sales.forEach((sale) => {
+    if (!sale || typeof sale !== 'object') return;
+    if (normalizeString(sale.status).toLowerCase() === 'cancelled') return;
+    if (cycleStart) {
+      const saleDate = safeDate(sale.createdAt || sale.updatedAt || null);
+      if (!saleDate || saleDate.getTime() < cycleStart.getTime()) return;
+    }
+    (Array.isArray(sale.cashContributions) ? sale.cashContributions : []).forEach((entry) => {
+      if (!entry || typeof entry !== 'object') return;
+      const amount = Math.max(0, safeNumber(entry.amount ?? entry.valor ?? entry.total, 0));
+      if (!(amount > 0)) return;
+      applyAmount(
+        {
+          id: normalizeString(entry.paymentId || entry.id),
+          label: normalizeString(entry.paymentLabel || entry.label) || 'Pagamento',
+          type: normalizeString(entry.paymentType || entry.type) || 'avista',
+          valor: amount,
+        },
+        amount
+      );
+    });
+  });
+
+  const history = Array.isArray(state?.history) ? state.history : [];
+  history.forEach((entry) => {
+    if (!entry || typeof entry !== 'object') return;
+    const movementId = normalizeString(entry.id).toLowerCase();
+    if (!['entrada', 'saida', 'envio'].includes(movementId)) return;
+    const timestamp = safeDate(entry.timestamp || null);
+    if (cycleStart && (!timestamp || timestamp.getTime() < cycleStart.getTime())) return;
+    const label = normalizeString(entry.paymentLabel || '');
+    if (!label) return;
+    const amount = Math.max(0, safeNumber(entry.amount ?? entry.delta, 0));
+    if (!(amount > 0)) return;
+    const signal = movementId === 'entrada' ? 1 : -1;
+    applyAmount(
+      {
+        id: label,
+        label,
+        type: 'avista',
+      },
+      signal * amount
+    );
+  });
+
+  const expected = Array.from(paymentCatalog.entries()).map(([key, payment]) => {
+    const value = Math.max(0, safeNumber(amountsByKey.get(key), 0));
+    return normalizePaymentSnapshotPayload({
+      ...payment,
+      valor: value,
+    });
+  });
+
+  return expected.filter(Boolean);
+};
+
+const isCashPaymentSnapshot = (payment = {}) => {
+  const tokens = [
+    normalizeString(payment?.id).toLowerCase(),
+    normalizeString(payment?.label).toLowerCase(),
+    normalizeString(payment?.type).toLowerCase(),
+    ...(Array.isArray(payment?.aliases)
+      ? payment.aliases.map((alias) => normalizeString(alias).toLowerCase())
+      : []),
+  ].filter(Boolean);
+  return tokens.some((token) =>
+    token.includes('dinheiro') ||
+    token.includes('cash') ||
+    token.includes('especie') ||
+    token.includes('moeda')
+  );
+};
+
+const buildNextOpeningPaymentsFromClose = (payments = []) =>
+  normalizeCommandPayments(payments).map((payment) => ({
+    ...payment,
+    valor: isCashPaymentSnapshot(payment) ? Math.max(0, safeNumber(payment.valor, 0)) : 0,
+  }));
+
+const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, user }) => {
+  if (action === PDV_COMMANDS.REFRESH_STATE) {
+    const state = await PdvState.findOne({ pdv: pdvId });
+    return {
+      state: serializeStateForResponse(state),
+      shouldEmit: false,
+    };
+  }
+
+  if (action === PDV_COMMANDS.CAIXA_OPEN) {
+    const existingState = await PdvState.findOne({ pdv: pdvId });
+    if (
+      idempotencyKey &&
+      Array.isArray(existingState?.recentStateMutationKeys) &&
+      existingState.recentStateMutationKeys.includes(idempotencyKey)
+    ) {
+      return {
+        state: serializeStateForResponse(existingState),
+        shouldEmit: false,
+      };
+    }
+
+    if (Boolean(existingState?.caixaAberto)) {
+      const error = new Error('O caixa já está aberto neste PDV.');
+      error.statusCode = 409;
+      throw error;
+    }
+
+    const now = new Date();
+    const openingDate = safeDate(payload?.openedAt) || now;
+    const normalizedPayments = normalizeCommandPayments(payload?.payments || []);
+    if (!normalizedPayments.length) {
+      const error = new Error('Informe os meios de pagamento da abertura do caixa.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const openingTotal = normalizedPayments.reduce(
+      (sum, payment) => sum + safeNumber(payment?.valor ?? 0, 0),
+      0
+    );
+    const userMeta = getCommandHistoryUserMeta(user || {});
+    const openingReason = normalizeString(payload?.reason || payload?.motivo);
+    const paymentLabel = normalizedPayments
+      .map((payment) => `${payment.label || 'Pagamento'}: ${safeNumber(payment.valor, 0).toFixed(2)}`)
+      .join(' | ');
+
+    const historyEntry = {
+      id: 'abertura',
+      label: 'Abertura de Caixa',
+      amount: openingTotal,
+      delta: Math.abs(openingTotal),
+      motivo: openingReason,
+      paymentLabel,
+      userId: userMeta.userId || '',
+      userName: userMeta.userName || '',
+      userLogin: userMeta.userLogin || '',
+      responsavel: userMeta.userName || userMeta.userLogin || '',
+      timestamp: openingDate,
+    };
+
+    const saleCodeIdentifier =
+      normalizeString(existingState?.saleCodeIdentifier) || resolveSaleCodeIdentifierForPdv(pdvDoc);
+
+    const nextMutationKeys = getNextRecentMutationKeys(
+      existingState?.recentStateMutationKeys || [],
+      idempotencyKey
+    );
+
+    const updatedState = await PdvState.findOneAndUpdate(
+      { pdv: pdvId },
+      {
+        pdv: pdvId,
+        empresa: pdvDoc?.empresa,
+        caixaAberto: true,
+        summary: {
+          abertura: openingTotal,
+          recebido: 0,
+          recebimentosCliente: 0,
+          saldo: openingTotal,
+        },
+        caixaInfo: {
+          aberturaData: openingDate,
+          fechamentoData: null,
+          fechamentoPrevisto: 0,
+          fechamentoApurado: 0,
+          previstoPagamentos: normalizedPayments.map((payment) => ({
+            ...payment,
+            valor: 0,
+          })),
+          apuradoPagamentos: [],
+        },
+        pagamentos: normalizedPayments,
+        history: [historyEntry],
+        lastMovement: historyEntry,
+        saleCodeIdentifier,
+        saleCodeSequence: Math.max(1, Number.parseInt(existingState?.saleCodeSequence, 10) || 1),
+        budgetSequence: Math.max(1, Number.parseInt(existingState?.budgetSequence, 10) || 1),
+        printPreferences: {
+          fechamento: normalizePrintPreference(existingState?.printPreferences?.fechamento || 'PM'),
+          venda: normalizePrintPreference(existingState?.printPreferences?.venda || 'PM'),
+        },
+        recentStateMutationKeys: nextMutationKeys,
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+
+    await syncPdvCaixaSessionHistory({
+      pdvDoc,
+      existingState,
+      updatedState,
+    });
+
+    return {
+      state: serializeStateForResponse(updatedState),
+      shouldEmit: true,
+    };
+  }
+
+  if (
+    action === PDV_COMMANDS.CAIXA_ENTRY ||
+    action === PDV_COMMANDS.CAIXA_EXIT ||
+    action === PDV_COMMANDS.CAIXA_SHIPMENT ||
+    action === PDV_COMMANDS.CAIXA_CLOSE
+  ) {
+    const existingState = await PdvState.findOne({ pdv: pdvId });
+    if (
+      idempotencyKey &&
+      Array.isArray(existingState?.recentStateMutationKeys) &&
+      existingState.recentStateMutationKeys.includes(idempotencyKey)
+    ) {
+      return {
+        state: serializeStateForResponse(existingState),
+        shouldEmit: false,
+      };
+    }
+    if (!existingState || !existingState.caixaAberto) {
+      const error = new Error('Abra o caixa antes de registrar movimentações.');
+      error.statusCode = 409;
+      throw error;
+    }
+
+    const now = new Date();
+    const timestamp = safeDate(payload?.timestamp || payload?.at) || now;
+    const reason = normalizeString(payload?.reason || payload?.motivo);
+    const userMeta = getCommandHistoryUserMeta(user || {});
+    const recentMutationKeys = getNextRecentMutationKeys(
+      existingState?.recentStateMutationKeys || [],
+      idempotencyKey
+    );
+    const currentPayments = cloneCommandPayments(
+      normalizeCommandPayments(existingState?.pagamentos || [])
+    );
+    const currentPrevisto = cloneCommandPayments(
+      normalizeCommandPayments(existingState?.caixaInfo?.previstoPagamentos || [])
+    );
+    const currentSummary = existingState?.summary || {};
+    const nextSummary = {
+      abertura: safeNumber(currentSummary?.abertura, 0),
+      recebido: safeNumber(currentSummary?.recebido, 0),
+      recebimentosCliente: safeNumber(currentSummary?.recebimentosCliente, 0),
+      saldo: safeNumber(currentSummary?.saldo, 0),
+    };
+    const nextHistory = Array.isArray(existingState?.history)
+      ? existingState.history.map((entry) => ({ ...entry }))
+      : [];
+    const lastMovement = existingState?.lastMovement ? { ...existingState.lastMovement } : null;
+
+    if (action === PDV_COMMANDS.CAIXA_CLOSE) {
+      const apuradoPayments = normalizeCommandPayments(payload?.payments || currentPayments);
+      if (!apuradoPayments.length) {
+        const error = new Error('Informe os meios de pagamento apurados para o fechamento.');
+        error.statusCode = 400;
+        throw error;
+      }
+      const previstoPayments = buildExpectedClosePaymentsByMethod(existingState);
+      const fechamentoPrevisto = previstoPayments.reduce(
+        (sum, payment) => sum + safeNumber(payment?.valor ?? 0, 0),
+        0
+      );
+      const fechamentoApurado = apuradoPayments.reduce(
+        (sum, payment) => sum + safeNumber(payment?.valor ?? 0, 0),
+        0
+      );
+      const nextOpeningPayments = buildNextOpeningPaymentsFromClose(apuradoPayments);
+
+      const updatedState = await PdvState.findOneAndUpdate(
+        { pdv: pdvId },
+        {
+          $set: {
+            caixaAberto: false,
+            pagamentos: nextOpeningPayments,
+            history: nextHistory,
+            lastMovement: lastMovement || null,
+            summary: {
+              ...nextSummary,
+              saldo:
+                safeNumber(nextSummary.abertura, 0) +
+                safeNumber(nextSummary.recebido, 0) +
+                safeNumber(nextSummary.recebimentosCliente, 0),
+            },
+            caixaInfo: {
+              aberturaData: existingState?.caixaInfo?.aberturaData || null,
+              fechamentoData: timestamp,
+              fechamentoPrevisto,
+              fechamentoApurado,
+              previstoPagamentos: previstoPayments,
+              apuradoPagamentos: apuradoPayments,
+            },
+            recentStateMutationKeys: recentMutationKeys,
+          },
+        },
+        { new: true, upsert: false }
+      );
+
+      await syncPdvCaixaSessionHistory({
+        pdvDoc,
+        existingState,
+        updatedState,
+      });
+
+      return {
+        state: serializeStateForResponse(updatedState),
+        shouldEmit: true,
+      };
+    }
+
+    const amount = safeNumber(payload?.amount ?? payload?.valor, 0);
+    if (!(amount > 0)) {
+      const error = new Error('Informe um valor válido para a movimentação.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const targetPayment = resolveCommandTargetPayment(currentPayments, payload?.paymentId);
+    if (!targetPayment) {
+      const error = new Error('Selecione um meio de pagamento válido para a movimentação.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const targetPrevisto =
+      resolveCommandTargetPayment(currentPrevisto, payload?.paymentId) ||
+      resolveCommandTargetPayment(currentPrevisto, targetPayment?.id) ||
+      null;
+
+    let movementId = 'entrada';
+    let movementLabel = 'Entrada';
+    let delta = Math.abs(amount);
+    if (action === PDV_COMMANDS.CAIXA_EXIT) {
+      movementId = 'saida';
+      movementLabel = 'Saída';
+      delta = -Math.abs(amount);
+    } else if (action === PDV_COMMANDS.CAIXA_SHIPMENT) {
+      movementId = 'envio';
+      movementLabel = 'Envio';
+      delta = -Math.abs(amount);
+    }
+
+    const currentValue = safeNumber(targetPayment?.valor ?? 0, 0);
+    const nextValue = Math.max(0, currentValue + delta);
+    targetPayment.valor = nextValue;
+    if (targetPrevisto) {
+      const nextPrevistoValue = Math.max(0, safeNumber(targetPrevisto?.valor ?? 0, 0) + delta);
+      targetPrevisto.valor = nextPrevistoValue;
+    }
+
+    const movementEntry = buildCaixaMovementHistoryEntry({
+      movementId,
+      movementLabel,
+      amount,
+      reason,
+      paymentLabel: normalizeString(targetPayment?.label || ''),
+      timestamp,
+      userMeta,
+    });
+    nextHistory.unshift(movementEntry);
+
+    const updatedState = await PdvState.findOneAndUpdate(
+      { pdv: pdvId },
+      {
+        $set: {
+          pagamentos: currentPayments,
+          history: nextHistory,
+          lastMovement: movementEntry,
+          summary: {
+            ...nextSummary,
+            saldo:
+              safeNumber(nextSummary.abertura, 0) +
+              safeNumber(nextSummary.recebido, 0) +
+              safeNumber(nextSummary.recebimentosCliente, 0),
+          },
+          caixaInfo: {
+            ...(existingState?.caixaInfo || {}),
+            previstoPagamentos: currentPrevisto,
+            fechamentoPrevisto: currentPrevisto.reduce(
+              (sum, payment) => sum + safeNumber(payment?.valor ?? 0, 0),
+              0
+            ),
+          },
+          recentStateMutationKeys: recentMutationKeys,
+        },
+      },
+      { new: true, upsert: false }
+    );
+
+    await syncPdvCaixaSessionHistory({
+      pdvDoc,
+      existingState,
+      updatedState,
+    });
+
+    return {
+      state: serializeStateForResponse(updatedState),
+      shouldEmit: true,
+    };
+  }
+
+  if (action === PDV_COMMANDS.CAIXA_CLIENT_RECEIPT) {
+    const existingStateDoc = await PdvState.findOne({ pdv: pdvId });
+    if (
+      idempotencyKey &&
+      Array.isArray(existingStateDoc?.recentStateMutationKeys) &&
+      existingStateDoc.recentStateMutationKeys.includes(idempotencyKey)
+    ) {
+      return {
+        state: serializeStateForResponse(existingStateDoc),
+        shouldEmit: false,
+      };
+    }
+    if (!existingStateDoc || !existingStateDoc.caixaAberto) {
+      const error = new Error('Abra o caixa para registrar recebimentos de cliente.');
+      error.statusCode = 409;
+      throw error;
+    }
+    const existingState =
+      existingStateDoc && typeof existingStateDoc.toObject === 'function'
+        ? existingStateDoc.toObject()
+        : existingStateDoc;
+    const payments = normalizeCommandPayments(payload?.payments || []);
+    if (!payments.length) {
+      const error = new Error('Informe os meios de pagamento do recebimento de cliente.');
+      error.statusCode = 400;
+      throw error;
+    }
+    const totalFromPayments = payments.reduce(
+      (sum, payment) => sum + Math.max(0, safeNumber(payment?.valor ?? 0, 0)),
+      0
+    );
+    const total = safeNumber(payload?.total ?? payload?.amount, totalFromPayments);
+    if (!(total > 0)) {
+      const error = new Error('Informe um valor válido para o recebimento de cliente.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const nextPagamentos = clonePaymentSnapshots(existingState?.pagamentos || []);
+    const nextPrevisto = clonePaymentSnapshots(existingState?.caixaInfo?.previstoPagamentos || []);
+    const nextApurado = clonePaymentSnapshots(existingState?.caixaInfo?.apuradoPagamentos || []);
+    payments.forEach((paymentEntry) => {
+      const amount = Math.max(0, safeNumber(paymentEntry?.valor ?? 0, 0));
+      if (!(amount > 0)) return;
+      const targetPayment =
+        resolveCommandTargetPayment(nextPagamentos, paymentEntry?.id) ||
+        resolveCommandTargetPayment(nextPagamentos, paymentEntry?.label);
+      if (targetPayment) {
+        targetPayment.valor = safeNumber(targetPayment.valor, 0) + amount;
+      }
+      const targetPrevisto =
+        resolveCommandTargetPayment(nextPrevisto, paymentEntry?.id) ||
+        resolveCommandTargetPayment(nextPrevisto, paymentEntry?.label);
+      if (targetPrevisto) {
+        targetPrevisto.valor = safeNumber(targetPrevisto.valor, 0) + amount;
+      }
+    });
+
+    const nextSummary = {
+      abertura: safeNumber(existingState?.summary?.abertura, 0),
+      recebido: safeNumber(existingState?.summary?.recebido, 0),
+      recebimentosCliente:
+        safeNumber(existingState?.summary?.recebimentosCliente, 0) + Math.max(0, total),
+      saldo: 0,
+    };
+    nextSummary.saldo =
+      safeNumber(nextSummary.abertura, 0) +
+      safeNumber(nextSummary.recebido, 0) +
+      safeNumber(nextSummary.recebimentosCliente, 0);
+
+    const customerName = normalizeString(payload?.customerName || payload?.customer || '');
+    const paymentLabel = payments
+      .map((payment) => `${payment.label || 'Pagamento'}: ${safeNumber(payment.valor, 0).toFixed(2)}`)
+      .join(' | ');
+    const now = safeDate(payload?.timestamp || payload?.createdAt) || new Date();
+    const userMeta = getCommandHistoryUserMeta(user || {});
+    const historyEntry = normalizeHistoryEntryPayload({
+      id: 'recebimento-cliente',
+      label: 'Recebimentos de Cliente',
+      amount: Math.abs(safeNumber(total, 0)),
+      delta: Math.abs(safeNumber(total, 0)),
+      motivo: normalizeString(payload?.reason || payload?.motivo || ''),
+      paymentLabel: [customerName, paymentLabel].filter(Boolean).join(' • '),
+      userId: userMeta.userId || '',
+      userName: userMeta.userName || '',
+      userLogin: userMeta.userLogin || '',
+      responsavel: userMeta.userName || userMeta.userLogin || '',
+      timestamp: now,
+    });
+    const nextHistory = mergeRecordsByKey(
+      existingState?.history || [],
+      historyEntry ? [historyEntry] : [],
+      'history'
+    );
+
+    const updatedState = await PdvState.findOneAndUpdate(
+      { pdv: pdvId },
+      {
+        $set: {
+          pagamentos: nextPagamentos,
+          summary: nextSummary,
+          history: nextHistory,
+          lastMovement: nextHistory[0] || null,
+          caixaInfo: {
+            ...(existingState?.caixaInfo || {}),
+            previstoPagamentos: nextPrevisto,
+            apuradoPagamentos: nextApurado,
+            fechamentoPrevisto: nextPrevisto.reduce(
+              (sum, payment) => sum + safeNumber(payment?.valor ?? 0, 0),
+              0
+            ),
+          },
+          recentStateMutationKeys: getNextRecentMutationKeys(
+            existingState?.recentStateMutationKeys || [],
+            idempotencyKey
+          ),
+        },
+      },
+      { new: true, upsert: false }
+    );
+
+    await syncPdvCaixaSessionHistory({
+      pdvDoc,
+      existingState,
+      updatedState,
+    });
+
+    return {
+      state: serializeStateForResponse(updatedState),
+      shouldEmit: true,
+    };
+  }
+
+  if (action === PDV_COMMANDS.SALE_FINALIZE) {
+    const existingStateDoc = await PdvState.findOne({ pdv: pdvId });
+    if (
+      idempotencyKey &&
+      Array.isArray(existingStateDoc?.recentStateMutationKeys) &&
+      existingStateDoc.recentStateMutationKeys.includes(idempotencyKey)
+    ) {
+      return {
+        state: serializeStateForResponse(existingStateDoc),
+        shouldEmit: false,
+      };
+    }
+    if (!existingStateDoc || !existingStateDoc.caixaAberto) {
+      const error = new Error('Abra o caixa para finalizar a venda.');
+      error.statusCode = 409;
+      throw error;
+    }
+
+    const existingState =
+      existingStateDoc && typeof existingStateDoc.toObject === 'function'
+        ? existingStateDoc.toObject()
+        : existingStateDoc;
+    const createdAt = safeDate(payload?.createdAt) || new Date();
+    const items = Array.isArray(payload?.items)
+      ? payload.items
+          .map((item) => (item && typeof item === 'object' ? { ...item } : null))
+          .filter(Boolean)
+      : [];
+    if (!items.length) {
+      const error = new Error('Adicione itens para finalizar a venda.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const payments = normalizeCommandPayments(payload?.payments || []);
+    const totalBruto = safeNumber(payload?.totalBruto ?? payload?.total ?? payload?.totalLiquido ?? 0, 0);
+    const discountValue = safeNumber(payload?.discountValue ?? payload?.discount ?? 0, 0);
+    const additionValue = safeNumber(payload?.additionValue ?? payload?.addition ?? 0, 0);
+    const totalLiquido =
+      safeNumber(payload?.totalLiquido, NaN) ||
+      Math.max(0, totalBruto - discountValue + additionValue);
+
+    if (!(totalLiquido > 0)) {
+      const error = new Error('Informe o valor total da venda.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const providedSaleId = normalizeString(payload?.saleId || payload?.id);
+    const existingSales = Array.isArray(existingState?.completedSales)
+      ? existingState.completedSales.map((sale) => ({ ...sale }))
+      : [];
+    if (
+      providedSaleId &&
+      existingSales.some((sale) => normalizeString(sale?.id || sale?._id) === providedSaleId)
+    ) {
+      return {
+        state: serializeStateForResponse(existingStateDoc),
+        shouldEmit: false,
+      };
+    }
+
+    const customerSource = payload?.customer && typeof payload.customer === 'object' ? payload.customer : {};
+    const customerName = normalizeString(
+      payload?.customerName ||
+        customerSource?.nome ||
+        customerSource?.nomeCompleto ||
+        customerSource?.name ||
+        ''
+    );
+    const customerDocument = normalizeString(
+      payload?.customerDocument ||
+        customerSource?.cpf ||
+        customerSource?.cnpj ||
+        customerSource?.documento ||
+        customerSource?.doc ||
+        ''
+    );
+    const seller =
+      payload?.seller && typeof payload.seller === 'object' ? { ...payload.seller } : null;
+    const paymentTags = payments.map((payment) => normalizeString(payment?.label)).filter(Boolean);
+    const cashContributions = buildSaleContributionsFromPayments(payments);
+    const paymentLabel = payments
+      .map((payment) => `${payment.label || 'Pagamento'}: ${safeNumber(payment.valor, 0).toFixed(2)}`)
+      .join(' | ');
+
+    const incomingSale = normalizeSaleRecordPayload({
+      id: providedSaleId || `sale-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+      type: normalizeString(payload?.type) || 'venda',
+      typeLabel: normalizeString(payload?.typeLabel) || 'Venda',
+      saleCode: normalizeString(payload?.saleCode),
+      saleCodeLabel: normalizeString(payload?.saleCodeLabel),
+      customerName: customerName || 'Cliente não informado',
+      customerDocument,
+      seller,
+      paymentTags,
+      items,
+      discountValue,
+      additionValue,
+      total: totalLiquido,
+      totalLiquido,
+      totalBruto: totalBruto || totalLiquido,
+      createdAt,
+      receiptSnapshot:
+        payload?.receiptSnapshot && typeof payload.receiptSnapshot === 'object'
+          ? payload.receiptSnapshot
+          : null,
+      status: 'completed',
+      cashContributions,
+    });
+    if (!incomingSale) {
+      const error = new Error('Não foi possível montar a venda para persistência.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    let nextSales = [incomingSale, ...existingSales];
+    const currentBudgets = Array.isArray(existingState?.budgets)
+      ? existingState.budgets.map((budget) => ({ ...budget }))
+      : [];
+    const ensuredCodes = await ensureUniquePdvCodes({
+      pdvId,
+      pdvDoc,
+      sales: nextSales,
+      budgets: currentBudgets,
+      existingSales: existingSales,
+      existingBudgets: currentBudgets,
+    });
+    nextSales = ensuredCodes.sales;
+
+    const productIds = collectProductIdsFromSales(nextSales);
+    if (productIds.length) {
+      const products = await Product.find({ _id: { $in: productIds } })
+        .select('custo custoMedio custoCalculado precoCusto precoCustoUnitario')
+        .lean();
+      const productMap = new Map(products.map((product) => [product._id.toString(), product]));
+      ensureSalesHaveCostData(nextSales, productMap);
+    }
+
+    nextSales = mergeInventoryProcessingStatus(nextSales, existingSales);
+    const existingInventoryMovements = Array.isArray(existingState?.inventoryMovements)
+      ? existingState.inventoryMovements.map((movement) =>
+          movement && typeof movement.toObject === 'function' ? movement.toObject() : movement
+        )
+      : [];
+    const depositConfig = pdvDoc?.configuracoesEstoque?.depositoPadrao || null;
+    let nextInventoryMovements = existingInventoryMovements;
+    if (depositConfig) {
+      const inventoryResult = await applyInventoryMovementsToSales({
+        sales: nextSales,
+        depositId: depositConfig,
+        existingMovements: existingInventoryMovements,
+        movementContext: {
+          companyId: pdvDoc?.empresa || null,
+          userId: user?.id || null,
+          userName: normalizeString(user?.nomeCompleto || user?.apelido || user?.name || ''),
+          userEmail: normalizeString(user?.email || ''),
+        },
+      });
+      nextSales = inventoryResult.sales;
+      const newInventoryMovements = inventoryResult.movements || [];
+      const revertedSales = new Set(inventoryResult.revertedSales || []);
+      let combinedMovements = existingInventoryMovements;
+      if (revertedSales.size) {
+        combinedMovements = combinedMovements.filter(
+          (movement) => movement && !revertedSales.has(movement.saleId)
+        );
+      }
+      if (newInventoryMovements.length) {
+        combinedMovements = [...combinedMovements, ...newInventoryMovements];
+      }
+      nextInventoryMovements = combinedMovements;
+    }
+
+    const finalizedSale = nextSales.find(
+      (sale) => normalizeString(sale?.id || sale?._id) === normalizeString(incomingSale.id)
+    );
+    const historyEntry = buildSaleHistoryEntry({
+      saleCode: normalizeString(finalizedSale?.saleCode || finalizedSale?.saleCodeLabel),
+      totalLiquido: safeNumber(finalizedSale?.totalLiquido ?? finalizedSale?.total ?? totalLiquido, 0),
+      paymentLabel,
+      createdAt,
+      userMeta: getCommandHistoryUserMeta(user || {}),
+    });
+    const nextHistory = mergeRecordsByKey(
+      existingState?.history || [],
+      historyEntry ? [historyEntry] : [],
+      'history'
+    );
+
+    const updatePayload = {
+      caixaAberto: true,
+      summary: {
+        abertura: safeNumber(existingState?.summary?.abertura, 0),
+        recebido: safeNumber(existingState?.summary?.recebido, 0),
+        recebimentosCliente: safeNumber(existingState?.summary?.recebimentosCliente, 0),
+        saldo: safeNumber(existingState?.summary?.saldo, 0),
+      },
+      caixaInfo: {
+        aberturaData: existingState?.caixaInfo?.aberturaData || null,
+        fechamentoData: null,
+        fechamentoPrevisto: safeNumber(existingState?.caixaInfo?.fechamentoPrevisto, 0),
+        fechamentoApurado: safeNumber(existingState?.caixaInfo?.fechamentoApurado, 0),
+        previstoPagamentos: clonePaymentSnapshots(existingState?.caixaInfo?.previstoPagamentos || []),
+        apuradoPagamentos: clonePaymentSnapshots(existingState?.caixaInfo?.apuradoPagamentos || []),
+      },
+      pagamentos: clonePaymentSnapshots(existingState?.pagamentos || []),
+      history: nextHistory,
+      lastMovement: nextHistory[0] || null,
+      completedSales: nextSales,
+      budgets: currentBudgets,
+      deliveryOrders: Array.isArray(existingState?.deliveryOrders) ? existingState.deliveryOrders : [],
+      accountsReceivable: Array.isArray(existingState?.accountsReceivable)
+        ? existingState.accountsReceivable
+        : [],
+      inventoryMovements: nextInventoryMovements,
+      saleCodeIdentifier:
+        normalizeString(existingState?.saleCodeIdentifier) || resolveSaleCodeIdentifierForPdv(pdvDoc),
+      saleCodeSequence: ensuredCodes.nextSaleSequence,
+      budgetSequence: ensuredCodes.nextBudgetSequence,
+      printPreferences: {
+        fechamento: normalizePrintPreference(existingState?.printPreferences?.fechamento || 'PM'),
+        venda: normalizePrintPreference(existingState?.printPreferences?.venda || 'PM'),
+      },
+      recentStateMutationKeys: getNextRecentMutationKeys(
+        existingState?.recentStateMutationKeys || [],
+        idempotencyKey
+      ),
+    };
+
+    reconcileCashStateFromSales({ existingState, updatePayload });
+
+    const updatedState = await PdvState.findOneAndUpdate(
+      { pdv: pdvId },
+      {
+        ...updatePayload,
+        pdv: pdvId,
+        empresa: existingState?.empresa || pdvDoc?.empresa,
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+
+    await syncPdvCaixaSessionHistory({
+      pdvDoc,
+      existingState,
+      updatedState,
+    });
+
+    return {
+      state: serializeStateForResponse(updatedState),
+      shouldEmit: true,
+    };
+  }
+
+  if (action === PDV_COMMANDS.SALE_CANCEL) {
+    const existingStateDoc = await PdvState.findOne({ pdv: pdvId });
+    if (
+      idempotencyKey &&
+      Array.isArray(existingStateDoc?.recentStateMutationKeys) &&
+      existingStateDoc.recentStateMutationKeys.includes(idempotencyKey)
+    ) {
+      return {
+        state: serializeStateForResponse(existingStateDoc),
+        shouldEmit: false,
+      };
+    }
+    if (!existingStateDoc) {
+      const error = new Error('Estado do PDV não encontrado para cancelamento.');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    const existingState =
+      existingStateDoc && typeof existingStateDoc.toObject === 'function'
+        ? existingStateDoc.toObject()
+        : existingStateDoc;
+    const saleId = normalizeString(payload?.saleId || payload?.id || '');
+    if (!saleId) {
+      const error = new Error('Informe a venda que será cancelada.');
+      error.statusCode = 400;
+      throw error;
+    }
+    const cancellationReason = normalizeString(
+      payload?.reason || payload?.motivo || payload?.cancellationReason || ''
+    );
+    if (!cancellationReason) {
+      const error = new Error('Informe o motivo do cancelamento da venda.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const existingSales = Array.isArray(existingState?.completedSales)
+      ? existingState.completedSales.map((sale) => ({ ...sale }))
+      : [];
+    const saleIndex = existingSales.findIndex(
+      (sale) => normalizeString(sale?.id || sale?._id) === saleId
+    );
+    if (saleIndex < 0) {
+      const error = new Error('Venda não encontrada para cancelamento.');
+      error.statusCode = 404;
+      throw error;
+    }
+    const saleRecord = existingSales[saleIndex] || {};
+    if (normalizeString(saleRecord?.status).toLowerCase() === 'cancelled') {
+      return {
+        state: serializeStateForResponse(existingStateDoc),
+        shouldEmit: false,
+      };
+    }
+
+    const cancellationAt = safeDate(payload?.cancellationAt || payload?.cancelledAt) || new Date();
+    const saleCode = normalizeString(saleRecord?.saleCode || saleRecord?.saleCodeLabel || '');
+    const saleTotal = safeNumber(
+      saleRecord?.totalLiquido ?? saleRecord?.total ?? saleRecord?.totalBruto ?? 0,
+      0
+    );
+    const contributions = Array.isArray(saleRecord?.cashContributions)
+      ? saleRecord.cashContributions
+          .map((entry) => {
+            if (!entry || typeof entry !== 'object') return null;
+            const amount = safeNumber(entry.amount ?? entry.valor ?? entry.total ?? 0, 0);
+            if (!(amount > 0)) return null;
+            return {
+              paymentId: normalizeString(entry.paymentId || entry.id || ''),
+              paymentLabel: normalizeString(entry.paymentLabel || entry.label || ''),
+              amount,
+            };
+          })
+          .filter(Boolean)
+      : [];
+
+    const nextSales = [...existingSales];
+    nextSales[saleIndex] = normalizeSaleRecordPayload({
+      ...saleRecord,
+      status: 'cancelled',
+      cancellationReason,
+      cancellationAt,
+      updatedAt: cancellationAt,
+    });
+
+    const targetSaleKey = normalizeString(saleRecord?.id || saleRecord?._id || saleId);
+    const nextDeliveryOrders = (Array.isArray(existingState?.deliveryOrders)
+      ? existingState.deliveryOrders
+      : []
+    ).filter((order) => {
+      const orderSaleRecordId = normalizeString(order?.saleRecordId || '');
+      const orderSaleCode = normalizeString(order?.saleCode || '');
+      if (targetSaleKey && orderSaleRecordId === targetSaleKey) return false;
+      if (saleCode && orderSaleCode === saleCode) return false;
+      return true;
+    });
+
+    const nextAccountsReceivable = (Array.isArray(existingState?.accountsReceivable)
+      ? existingState.accountsReceivable
+      : []
+    ).map((entry) => {
+      if (!entry || typeof entry !== 'object') return entry;
+      if (normalizeString(entry.saleId || '') !== targetSaleKey) return entry;
+      return {
+        ...entry,
+        status: 'cancelled',
+        cancellationReason,
+        cancellationAt,
+      };
+    });
+
+    const nextSummary = {
+      abertura: safeNumber(existingState?.summary?.abertura, 0),
+      recebido: Math.max(0, safeNumber(existingState?.summary?.recebido, 0) - Math.abs(saleTotal)),
+      recebimentosCliente: safeNumber(existingState?.summary?.recebimentosCliente, 0),
+      saldo: 0,
+    };
+    nextSummary.saldo =
+      safeNumber(nextSummary.abertura, 0) +
+      safeNumber(nextSummary.recebido, 0) +
+      safeNumber(nextSummary.recebimentosCliente, 0);
+
+    const nextPagamentos = clonePaymentSnapshots(existingState?.pagamentos || []);
+    const nextPrevisto = clonePaymentSnapshots(existingState?.caixaInfo?.previstoPagamentos || []);
+    const nextApurado = clonePaymentSnapshots(existingState?.caixaInfo?.apuradoPagamentos || []);
+
+    contributions.forEach((contribution) => {
+      const amount = safeNumber(contribution?.amount, 0);
+      if (!(amount > 0)) return;
+      const currentPayment =
+        findPaymentSnapshotByContribution(nextPagamentos, contribution) ||
+        resolveCommandTargetPayment(nextPagamentos, contribution?.paymentId) ||
+        resolveCommandTargetPayment(nextPagamentos, contribution?.paymentLabel);
+      if (currentPayment) {
+        currentPayment.valor = Math.max(0, safeNumber(currentPayment.valor, 0) - amount);
+      }
+      const currentPrevisto =
+        findPaymentSnapshotByContribution(nextPrevisto, contribution) ||
+        resolveCommandTargetPayment(nextPrevisto, contribution?.paymentId) ||
+        resolveCommandTargetPayment(nextPrevisto, contribution?.paymentLabel);
+      if (currentPrevisto) {
+        currentPrevisto.valor = Math.max(0, safeNumber(currentPrevisto.valor, 0) - amount);
+      }
+    });
+
+    const paymentLabel = contributions
+      .map((entry) => `${entry.paymentLabel || entry.paymentId || 'Pagamento'}: ${safeNumber(entry.amount, 0).toFixed(2)}`)
+      .join(' | ');
+    const historyEntry = normalizeHistoryEntryPayload({
+      id: 'cancelamento-venda',
+      label: saleCode ? `Venda ${saleCode} cancelada` : 'Venda cancelada',
+      amount: Math.abs(saleTotal),
+      delta: -Math.abs(saleTotal),
+      motivo: cancellationReason,
+      paymentLabel,
+      userId: normalizeString(user?.id),
+      userName: normalizeString(user?.nomeCompleto || user?.apelido || user?.name || ''),
+      userLogin: normalizeString(user?.email || ''),
+      responsavel: normalizeString(user?.nomeCompleto || user?.apelido || user?.email || ''),
+      timestamp: cancellationAt,
+    });
+    const nextHistory = mergeRecordsByKey(
+      existingState?.history || [],
+      historyEntry ? [historyEntry] : [],
+      'history'
+    );
+
+    const existingInventoryMovements = Array.isArray(existingState?.inventoryMovements)
+      ? existingState.inventoryMovements.map((movement) =>
+          movement && typeof movement.toObject === 'function' ? movement.toObject() : movement
+        )
+      : [];
+    let nextInventoryMovements = existingInventoryMovements;
+    const depositConfig = pdvDoc?.configuracoesEstoque?.depositoPadrao || null;
+    if (depositConfig) {
+      const inventoryResult = await applyInventoryMovementsToSales({
+        sales: nextSales,
+        depositId: depositConfig,
+        existingMovements: existingInventoryMovements,
+        movementContext: {
+          companyId: pdvDoc?.empresa || null,
+          userId: user?.id || null,
+          userName: normalizeString(user?.nomeCompleto || user?.apelido || user?.name || ''),
+          userEmail: normalizeString(user?.email || ''),
+        },
+      });
+      const revertedSales = new Set(inventoryResult.revertedSales || []);
+      const newInventoryMovements = inventoryResult.movements || [];
+      let combinedMovements = existingInventoryMovements;
+      if (revertedSales.size) {
+        combinedMovements = combinedMovements.filter(
+          (movement) => movement && !revertedSales.has(movement.saleId)
+        );
+      }
+      if (newInventoryMovements.length) {
+        combinedMovements = [...combinedMovements, ...newInventoryMovements];
+      }
+      nextInventoryMovements = combinedMovements;
+    }
+
+    const updatedState = await PdvState.findOneAndUpdate(
+      { pdv: pdvId },
+      {
+        $set: {
+          completedSales: nextSales,
+          deliveryOrders: nextDeliveryOrders,
+          accountsReceivable: nextAccountsReceivable,
+          pagamentos: nextPagamentos,
+          summary: nextSummary,
+          history: nextHistory,
+          lastMovement: nextHistory[0] || null,
+          caixaInfo: {
+            ...(existingState?.caixaInfo || {}),
+            previstoPagamentos: nextPrevisto,
+            apuradoPagamentos: nextApurado,
+            fechamentoPrevisto: nextPrevisto.reduce(
+              (sum, payment) => sum + safeNumber(payment?.valor ?? 0, 0),
+              0
+            ),
+          },
+          inventoryMovements: nextInventoryMovements,
+          recentStateMutationKeys: getNextRecentMutationKeys(
+            existingState?.recentStateMutationKeys || [],
+            idempotencyKey
+          ),
+        },
+      },
+      { new: true, upsert: false }
+    );
+
+    await syncPdvCaixaSessionHistory({
+      pdvDoc,
+      existingState,
+      updatedState,
+    });
+
+    return {
+      state: serializeStateForResponse(updatedState),
+      shouldEmit: true,
+    };
+  }
+
+  if (action === PDV_COMMANDS.SALE_RESET_FISCAL_STATUS) {
+    const existingStateDoc = await PdvState.findOne({ pdv: pdvId });
+    if (
+      idempotencyKey &&
+      Array.isArray(existingStateDoc?.recentStateMutationKeys) &&
+      existingStateDoc.recentStateMutationKeys.includes(idempotencyKey)
+    ) {
+      return {
+        state: serializeStateForResponse(existingStateDoc),
+        shouldEmit: false,
+      };
+    }
+    if (!existingStateDoc) {
+      const error = new Error('Estado do PDV não encontrado para redefinir emissão fiscal.');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    const existingState =
+      existingStateDoc && typeof existingStateDoc.toObject === 'function'
+        ? existingStateDoc.toObject()
+        : existingStateDoc;
+    const saleId = normalizeString(payload?.saleId || payload?.id || '');
+    if (!saleId) {
+      const error = new Error('Informe a venda para redefinir o status fiscal.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const existingSales = Array.isArray(existingState?.completedSales)
+      ? existingState.completedSales.map((sale) => ({ ...sale }))
+      : [];
+    const saleIndex = existingSales.findIndex(
+      (sale) => normalizeString(sale?.id || sale?._id) === saleId
+    );
+    if (saleIndex < 0) {
+      const error = new Error('Venda não encontrada para redefinir o status fiscal.');
+      error.statusCode = 404;
+      throw error;
+    }
+    const saleRecord = existingSales[saleIndex] || {};
+    if (normalizeString(saleRecord?.fiscalStatus) !== 'emitting') {
+      const error = new Error('Esta venda não está com emissão em andamento.');
+      error.statusCode = 409;
+      throw error;
+    }
+
+    const resetAt = safeDate(payload?.resetAt) || new Date();
+    const nextSales = [...existingSales];
+    nextSales[saleIndex] = normalizeSaleRecordPayload({
+      ...saleRecord,
+      fiscalStatus: 'pending',
+      updatedAt: resetAt,
+    });
+
+    const updatedState = await PdvState.findOneAndUpdate(
+      { pdv: pdvId },
+      {
+        $set: {
+          completedSales: nextSales,
+          recentStateMutationKeys: getNextRecentMutationKeys(
+            existingState?.recentStateMutationKeys || [],
+            idempotencyKey
+          ),
+        },
+        $setOnInsert: {
+          pdv: pdvId,
+          empresa: existingState?.empresa || pdvDoc?.empresa,
+        },
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+
+    return {
+      state: serializeStateForResponse(updatedState),
+      shouldEmit: true,
+    };
+  }
+
+  if (action === PDV_COMMANDS.SALE_SYNC_RECEIVABLES) {
+    const existingStateDoc = await PdvState.findOne({ pdv: pdvId });
+    if (
+      idempotencyKey &&
+      Array.isArray(existingStateDoc?.recentStateMutationKeys) &&
+      existingStateDoc.recentStateMutationKeys.includes(idempotencyKey)
+    ) {
+      return {
+        state: serializeStateForResponse(existingStateDoc),
+        shouldEmit: false,
+      };
+    }
+    if (!existingStateDoc) {
+      const error = new Error('Estado do PDV não encontrado para sincronizar recebíveis.');
+      error.statusCode = 404;
+      throw error;
+    }
+    const existingState =
+      existingStateDoc && typeof existingStateDoc.toObject === 'function'
+        ? existingStateDoc.toObject()
+        : existingStateDoc;
+    const saleId = normalizeString(payload?.saleId || payload?.id || '');
+    if (!saleId) {
+      const error = new Error('Informe a venda para sincronizar os recebíveis.');
+      error.statusCode = 400;
+      throw error;
+    }
+    const existingSales = Array.isArray(existingState?.completedSales)
+      ? existingState.completedSales.map((sale) => ({ ...sale }))
+      : [];
+    const saleIndex = existingSales.findIndex(
+      (sale) => normalizeString(sale?.id || sale?._id) === saleId
+    );
+    if (saleIndex < 0) {
+      const error = new Error('Venda não encontrada para sincronizar recebíveis.');
+      error.statusCode = 404;
+      throw error;
+    }
+    const saleRecord = existingSales[saleIndex] || {};
+    const normalizedReceivables = (Array.isArray(payload?.receivables) ? payload.receivables : [])
+      .map((entry) =>
+        normalizeReceivableRecordPayload({
+          ...(entry && typeof entry === 'object' ? entry : {}),
+          saleId,
+          saleCode:
+            normalizeString(entry?.saleCode || '') ||
+            normalizeString(saleRecord?.saleCode || saleRecord?.saleCodeLabel || ''),
+        })
+      )
+      .filter(Boolean);
+    const saleCode = normalizeString(saleRecord?.saleCode || saleRecord?.saleCodeLabel || '');
+    const nextSales = [...existingSales];
+    nextSales[saleIndex] = normalizeSaleRecordPayload({
+      ...saleRecord,
+      receivables: normalizedReceivables,
+      updatedAt: new Date(),
+    });
+    const preservedReceivables = (Array.isArray(existingState?.accountsReceivable)
+      ? existingState.accountsReceivable
+      : []
+    ).filter((entry) => normalizeString(entry?.saleId || '') !== saleId);
+    const nextAccountsReceivable = [
+      ...preservedReceivables,
+      ...normalizedReceivables.map((entry) => ({
+        ...entry,
+        saleId,
+        saleCode: normalizeString(entry?.saleCode || '') || saleCode,
+      })),
+    ];
+
+    const updatedState = await PdvState.findOneAndUpdate(
+      { pdv: pdvId },
+      {
+        $set: {
+          completedSales: nextSales,
+          accountsReceivable: nextAccountsReceivable,
+          recentStateMutationKeys: getNextRecentMutationKeys(
+            existingState?.recentStateMutationKeys || [],
+            idempotencyKey
+          ),
+        },
+      },
+      { new: true, upsert: false }
+    );
+
+    return {
+      state: serializeStateForResponse(updatedState),
+      shouldEmit: true,
+    };
+  }
+
+  if (action === PDV_COMMANDS.SETTINGS_PRINT_PREFERENCES) {
+    const existingStateDoc = await PdvState.findOne({ pdv: pdvId });
+    if (
+      idempotencyKey &&
+      Array.isArray(existingStateDoc?.recentStateMutationKeys) &&
+      existingStateDoc.recentStateMutationKeys.includes(idempotencyKey)
+    ) {
+      return {
+        state: serializeStateForResponse(existingStateDoc),
+        shouldEmit: false,
+      };
+    }
+    const existingState =
+      existingStateDoc && typeof existingStateDoc.toObject === 'function'
+        ? existingStateDoc.toObject()
+        : existingStateDoc || {};
+    const incoming =
+      payload?.printPreferences && typeof payload.printPreferences === 'object'
+        ? payload.printPreferences
+        : payload && typeof payload === 'object'
+        ? payload
+        : {};
+    const nextPrintPreferences = {
+      fechamento: normalizePrintPreference(
+        incoming?.fechamento || existingState?.printPreferences?.fechamento || 'PM'
+      ),
+      venda: normalizePrintPreference(
+        incoming?.venda || existingState?.printPreferences?.venda || 'PM'
+      ),
+    };
+    const updatedState = await PdvState.findOneAndUpdate(
+      { pdv: pdvId },
+      {
+        $set: {
+          printPreferences: nextPrintPreferences,
+          recentStateMutationKeys: getNextRecentMutationKeys(
+            existingState?.recentStateMutationKeys || [],
+            idempotencyKey
+          ),
+        },
+        $setOnInsert: {
+          pdv: pdvId,
+          empresa: existingState?.empresa || pdvDoc?.empresa,
+        },
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+
+    return {
+      state: serializeStateForResponse(updatedState),
+      shouldEmit: true,
+    };
+  }
+
+  if (
+    action === PDV_COMMANDS.BUDGET_SAVE ||
+    action === PDV_COMMANDS.BUDGET_FINALIZE ||
+    action === PDV_COMMANDS.BUDGET_MARK_IMPORTED ||
+    action === PDV_COMMANDS.BUDGET_DELETE
+  ) {
+    const existingStateDoc = await PdvState.findOne({ pdv: pdvId });
+    if (
+      idempotencyKey &&
+      Array.isArray(existingStateDoc?.recentStateMutationKeys) &&
+      existingStateDoc.recentStateMutationKeys.includes(idempotencyKey)
+    ) {
+      return {
+        state: serializeStateForResponse(existingStateDoc),
+        shouldEmit: false,
+      };
+    }
+
+    const existingState =
+      existingStateDoc && typeof existingStateDoc.toObject === 'function'
+        ? existingStateDoc.toObject()
+        : existingStateDoc || {};
+    const now = new Date();
+    const existingSales = Array.isArray(existingState?.completedSales)
+      ? existingState.completedSales.map((sale) => ({ ...sale }))
+      : [];
+    const existingBudgets = Array.isArray(existingState?.budgets)
+      ? existingState.budgets.map((budget) => ({ ...budget }))
+      : [];
+    let nextBudgets = existingBudgets;
+
+    if (action === PDV_COMMANDS.BUDGET_SAVE) {
+      const budgetPayload = payload && typeof payload === 'object' ? payload : {};
+      const incomingId = normalizeString(
+        budgetPayload.id || budgetPayload.budgetId || budgetPayload._id || ''
+      );
+      const incomingItems = Array.isArray(budgetPayload.items) ? budgetPayload.items : [];
+      if (!incomingItems.length) {
+        const error = new Error('Adicione itens para salvar o orçamento.');
+        error.statusCode = 400;
+        throw error;
+      }
+
+      const normalizedBudget = normalizeBudgetRecordPayload(
+        {
+          ...budgetPayload,
+          id: incomingId || budgetPayload.id,
+          updatedAt: budgetPayload.updatedAt || now,
+          createdAt: budgetPayload.createdAt || now,
+          status: normalizeString(budgetPayload.status) || 'aberto',
+        },
+        { useDefaults: true }
+      );
+      if (!normalizedBudget) {
+        const error = new Error('Não foi possível montar o orçamento para persistência.');
+        error.statusCode = 400;
+        throw error;
+      }
+
+      const targetId = normalizeString(normalizedBudget.id);
+      const existingIndex = nextBudgets.findIndex(
+        (budget) => normalizeString(budget?.id || budget?._id) === targetId
+      );
+      if (existingIndex >= 0) {
+        nextBudgets[existingIndex] = {
+          ...nextBudgets[existingIndex],
+          ...normalizedBudget,
+          id: targetId,
+          createdAt: nextBudgets[existingIndex]?.createdAt || normalizedBudget.createdAt || now,
+          updatedAt: now,
+        };
+      } else {
+        nextBudgets = [
+          {
+            ...normalizedBudget,
+            createdAt: normalizedBudget.createdAt || now,
+            updatedAt: normalizedBudget.updatedAt || now,
+          },
+          ...nextBudgets,
+        ];
+      }
+    } else if (action === PDV_COMMANDS.BUDGET_FINALIZE) {
+      const budgetId = normalizeString(payload?.budgetId || payload?.id || '');
+      if (!budgetId) {
+        const error = new Error('Informe o orçamento que será finalizado.');
+        error.statusCode = 400;
+        throw error;
+      }
+      const index = nextBudgets.findIndex(
+        (budget) => normalizeString(budget?.id || budget?._id) === budgetId
+      );
+      if (index < 0) {
+        const error = new Error('Orçamento não encontrado para finalização.');
+        error.statusCode = 404;
+        throw error;
+      }
+      nextBudgets[index] = {
+        ...nextBudgets[index],
+        status: 'finalizado',
+        finalizedAt: safeDate(payload?.finalizedAt) || now,
+        finalizedSaleId: normalizeString(payload?.finalizedSaleId || payload?.saleId || ''),
+        updatedAt: now,
+      };
+    } else if (action === PDV_COMMANDS.BUDGET_MARK_IMPORTED) {
+      const budgetId = normalizeString(payload?.budgetId || payload?.id || '');
+      if (!budgetId) {
+        const error = new Error('Informe o orçamento que será marcado como importado.');
+        error.statusCode = 400;
+        throw error;
+      }
+      const index = nextBudgets.findIndex(
+        (budget) => normalizeString(budget?.id || budget?._id) === budgetId
+      );
+      if (index < 0) {
+        const error = new Error('Orçamento não encontrado para marcação de importação.');
+        error.statusCode = 404;
+        throw error;
+      }
+      nextBudgets[index] = {
+        ...nextBudgets[index],
+        importedAt: safeDate(payload?.importedAt) || now,
+        updatedAt: now,
+      };
+    } else if (action === PDV_COMMANDS.BUDGET_DELETE) {
+      const budgetId = normalizeString(payload?.budgetId || payload?.id || '');
+      if (!budgetId) {
+        const error = new Error('Informe o orçamento que será excluído.');
+        error.statusCode = 400;
+        throw error;
+      }
+      const index = nextBudgets.findIndex(
+        (budget) => normalizeString(budget?.id || budget?._id) === budgetId
+      );
+      if (index < 0) {
+        const error = new Error('Orçamento não encontrado para exclusão.');
+        error.statusCode = 404;
+        throw error;
+      }
+      nextBudgets.splice(index, 1);
+    }
+
+    const ensuredCodes = await ensureUniquePdvCodes({
+      pdvId,
+      pdvDoc,
+      sales: existingSales,
+      budgets: nextBudgets,
+      existingSales,
+      existingBudgets,
+    });
+    nextBudgets = ensuredCodes.budgets;
+
+    const updatedState = await PdvState.findOneAndUpdate(
+      { pdv: pdvId },
+      {
+        $set: {
+          budgets: nextBudgets,
+          budgetSequence: ensuredCodes.nextBudgetSequence,
+          recentStateMutationKeys: getNextRecentMutationKeys(
+            existingState?.recentStateMutationKeys || [],
+            idempotencyKey
+          ),
+        },
+        $setOnInsert: {
+          pdv: pdvId,
+          empresa: existingState?.empresa || pdvDoc?.empresa,
+        },
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+
+    return {
+      state: serializeStateForResponse(updatedState),
+      shouldEmit: true,
+    };
+  }
+
+  if (
+    action === PDV_COMMANDS.DELIVERY_REGISTER ||
+    action === PDV_COMMANDS.DELIVERY_UPDATE_STATUS ||
+    action === PDV_COMMANDS.DELIVERY_UPDATE_COURIER ||
+    action === PDV_COMMANDS.DELIVERY_FINALIZE
+  ) {
+    const existingStateDoc = await PdvState.findOne({ pdv: pdvId });
+    if (
+      idempotencyKey &&
+      Array.isArray(existingStateDoc?.recentStateMutationKeys) &&
+      existingStateDoc.recentStateMutationKeys.includes(idempotencyKey)
+    ) {
+      return {
+        state: serializeStateForResponse(existingStateDoc),
+        shouldEmit: false,
+      };
+    }
+
+    const existingState =
+      existingStateDoc && typeof existingStateDoc.toObject === 'function'
+        ? existingStateDoc.toObject()
+        : existingStateDoc || {};
+    if (!Boolean(existingState?.caixaAberto)) {
+      const error = new Error('Abra o caixa para operar delivery.');
+      error.statusCode = 409;
+      throw error;
+    }
+
+    const now = new Date();
+    const items = Array.isArray(payload?.items)
+      ? payload.items
+          .map((item) => (item && typeof item === 'object' ? { ...item } : null))
+          .filter(Boolean)
+      : [];
+    const payments = normalizeCommandPayments(payload?.payments || []);
+    const totalLiquido = safeNumber(payload?.totalLiquido ?? payload?.total ?? 0, 0);
+    const totalBruto = safeNumber(payload?.totalBruto ?? totalLiquido, 0);
+    const discountValue = safeNumber(payload?.discountValue ?? payload?.discount ?? 0, 0);
+    const additionValue = safeNumber(payload?.additionValue ?? payload?.addition ?? 0, 0);
+    const customerSource = payload?.customer && typeof payload.customer === 'object' ? payload.customer : {};
+    const customerName = normalizeString(
+      payload?.customerName || customerSource?.nome || customerSource?.nomeCompleto || ''
+    ) || 'Cliente não informado';
+    const customerDocument = normalizeString(
+      payload?.customerDocument || customerSource?.cpf || customerSource?.cnpj || customerSource?.documento || ''
+    );
+    const courierSource = payload?.courier && typeof payload.courier === 'object' ? payload.courier : {};
+    const courier = {
+      id: normalizeString(
+        courierSource?.id ||
+        courierSource?._id ||
+        payload?.courierId ||
+        payload?.entregadorId ||
+        ''
+      ),
+      label: normalizeString(
+        courierSource?.label ||
+        courierSource?.nome ||
+        courierSource?.name ||
+        payload?.courierLabel ||
+        payload?.entregador ||
+        ''
+      ),
+    };
+    const address =
+      payload?.address && typeof payload.address === 'object'
+        ? { ...payload.address }
+        : payload?.deliveryAddress && typeof payload.deliveryAddress === 'object'
+        ? { ...payload.deliveryAddress }
+        : null;
+
+    const existingSales = Array.isArray(existingState?.completedSales)
+      ? existingState.completedSales.map((sale) => ({ ...sale }))
+      : [];
+    const existingBudgets = Array.isArray(existingState?.budgets)
+      ? existingState.budgets.map((budget) => ({ ...budget }))
+      : [];
+    let nextSales = existingSales;
+    let nextDeliveryOrders = Array.isArray(existingState?.deliveryOrders)
+      ? existingState.deliveryOrders.map((order) => ({ ...order }))
+      : [];
+    let nextHistory = Array.isArray(existingState?.history)
+      ? existingState.history.map((entry) => ({ ...entry }))
+      : [];
+    const nextSummary = {
+      abertura: safeNumber(existingState?.summary?.abertura, 0),
+      recebido: safeNumber(existingState?.summary?.recebido, 0),
+      recebimentosCliente: safeNumber(existingState?.summary?.recebimentosCliente, 0),
+      saldo: safeNumber(existingState?.summary?.saldo, 0),
+    };
+    const nextPagamentos = clonePaymentSnapshots(existingState?.pagamentos || []);
+    const nextPrevisto = clonePaymentSnapshots(existingState?.caixaInfo?.previstoPagamentos || []);
+    const nextApurado = clonePaymentSnapshots(existingState?.caixaInfo?.apuradoPagamentos || []);
+
+    const deliveryStatus = normalizeString(payload?.status || payload?.deliveryStatus || '') || 'registrado';
+    const incomingOrderId = normalizeString(payload?.orderId || payload?.deliveryOrderId || payload?.id || '');
+    const incomingSaleId = normalizeString(payload?.saleId || payload?.saleRecordId || '');
+
+    if (action === PDV_COMMANDS.DELIVERY_UPDATE_STATUS) {
+      const allowedDeliveryStatuses = new Set(['registrado', 'emSeparacao', 'emRota', 'finalizado']);
+      if (!incomingOrderId) {
+        const error = new Error('Informe o delivery para atualizar o status.');
+        error.statusCode = 400;
+        throw error;
+      }
+      if (!allowedDeliveryStatuses.has(deliveryStatus)) {
+        const error = new Error('Informe um status de delivery válido.');
+        error.statusCode = 400;
+        throw error;
+      }
+
+      const orderIndex = nextDeliveryOrders.findIndex(
+        (order) => normalizeString(order?.id || '') === incomingOrderId
+      );
+      if (orderIndex < 0) {
+        const error = new Error('Delivery não encontrado para atualizar o status.');
+        error.statusCode = 404;
+        throw error;
+      }
+
+      const currentOrder = { ...nextDeliveryOrders[orderIndex] };
+      const currentStatus = normalizeString(currentOrder?.status || '');
+      if (currentStatus === 'finalizado' && deliveryStatus !== 'finalizado') {
+        const error = new Error('Delivery finalizado não pode ter o status alterado.');
+        error.statusCode = 409;
+        throw error;
+      }
+      if (currentStatus === deliveryStatus) {
+        return {
+          state: serializeStateForResponse(existingStateDoc),
+          shouldEmit: false,
+        };
+      }
+
+      const nowIso = now.toISOString();
+      currentOrder.status = deliveryStatus;
+      currentOrder.statusUpdatedAt = nowIso;
+      currentOrder.updatedAt = nowIso;
+      if (deliveryStatus === 'finalizado' && !currentOrder.finalizedAt) {
+        currentOrder.finalizedAt = nowIso;
+      }
+      nextDeliveryOrders[orderIndex] = currentOrder;
+
+      const updatedState = await PdvState.findOneAndUpdate(
+        { pdv: pdvId },
+        {
+          $set: {
+            deliveryOrders: nextDeliveryOrders,
+            recentStateMutationKeys: getNextRecentMutationKeys(
+              existingState?.recentStateMutationKeys || [],
+              idempotencyKey
+            ),
+          },
+          $setOnInsert: {
+            pdv: pdvId,
+            empresa: existingState?.empresa || pdvDoc?.empresa,
+          },
+        },
+        { new: true, upsert: true, setDefaultsOnInsert: true }
+      );
+
+      await syncPdvCaixaSessionHistory({
+        pdvDoc,
+        existingState,
+        updatedState,
+      });
+
+      return {
+        state: serializeStateForResponse(updatedState),
+        shouldEmit: true,
+      };
+    }
+
+    if (action === PDV_COMMANDS.DELIVERY_UPDATE_COURIER) {
+      if (!incomingOrderId) {
+        const error = new Error('Informe o delivery para atualizar o entregador.');
+        error.statusCode = 400;
+        throw error;
+      }
+
+      const orderIndex = nextDeliveryOrders.findIndex(
+        (order) => normalizeString(order?.id || '') === incomingOrderId
+      );
+      if (orderIndex < 0) {
+        const error = new Error('Delivery não encontrado para atualizar o entregador.');
+        error.statusCode = 404;
+        throw error;
+      }
+
+      const targetOrder = { ...nextDeliveryOrders[orderIndex] };
+      const currentStatus = normalizeString(targetOrder?.status || '');
+      if (currentStatus === 'emRota' || currentStatus === 'finalizado') {
+        const error = new Error('Não é possível alterar entregador para delivery em rota ou finalizado.');
+        error.statusCode = 409;
+        throw error;
+      }
+
+      const currentCourier = targetOrder?.courier && typeof targetOrder.courier === 'object'
+        ? {
+            id: normalizeString(targetOrder.courier.id || targetOrder.courier._id || ''),
+            label: normalizeString(targetOrder.courier.label || targetOrder.courier.nome || ''),
+          }
+        : { id: '', label: '' };
+      const nextCourier = { ...courier };
+      if (currentCourier.id === nextCourier.id && currentCourier.label === nextCourier.label) {
+        return {
+          state: serializeStateForResponse(existingStateDoc),
+          shouldEmit: false,
+        };
+      }
+
+      targetOrder.courier = nextCourier.id || nextCourier.label ? nextCourier : null;
+      // Compatibilidade com payloads legados do front: mantém/limpa campos antigos
+      targetOrder.courierId = nextCourier.id || '';
+      targetOrder.courierLabel = nextCourier.label || '';
+      targetOrder.entregadorId = nextCourier.id || '';
+      targetOrder.entregador = nextCourier.label || '';
+      targetOrder.deliveryCourierId = nextCourier.id || '';
+      targetOrder.deliveryCourierLabel = nextCourier.label || '';
+      targetOrder.updatedAt = now.toISOString();
+      nextDeliveryOrders[orderIndex] = targetOrder;
+
+      const updatedState = await PdvState.findOneAndUpdate(
+        { pdv: pdvId },
+        {
+          $set: {
+            deliveryOrders: nextDeliveryOrders,
+            recentStateMutationKeys: getNextRecentMutationKeys(
+              existingState?.recentStateMutationKeys || [],
+              idempotencyKey
+            ),
+          },
+          $setOnInsert: {
+            pdv: pdvId,
+            empresa: existingState?.empresa || pdvDoc?.empresa,
+          },
+        },
+        { new: true, upsert: true, setDefaultsOnInsert: true }
+      );
+
+      await syncPdvCaixaSessionHistory({
+        pdvDoc,
+        existingState,
+        updatedState,
+      });
+
+      return {
+        state: serializeStateForResponse(updatedState),
+        shouldEmit: true,
+      };
+    }
+
+    if (action === PDV_COMMANDS.DELIVERY_REGISTER) {
+      if (!items.length) {
+        const error = new Error('Adicione itens para registrar o delivery.');
+        error.statusCode = 400;
+        throw error;
+      }
+      if (!(totalLiquido > 0)) {
+        const error = new Error('Informe o valor total do delivery.');
+        error.statusCode = 400;
+        throw error;
+      }
+
+      const saleRecord = normalizeSaleRecordPayload({
+        id: incomingSaleId || `sale-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+        type: 'delivery',
+        typeLabel: normalizeString(payload?.typeLabel || 'Delivery'),
+        saleCode: normalizeString(payload?.saleCode || ''),
+        saleCodeLabel: normalizeString(payload?.saleCodeLabel || ''),
+        customerName,
+        customerDocument,
+        items,
+        discountValue,
+        additionValue,
+        total: totalLiquido,
+        totalLiquido,
+        totalBruto,
+        createdAt: safeDate(payload?.createdAt) || now,
+        receiptSnapshot:
+          payload?.receiptSnapshot && typeof payload.receiptSnapshot === 'object'
+            ? payload.receiptSnapshot
+            : null,
+        status: 'completed',
+        cashContributions: [],
+      });
+      nextSales = [saleRecord, ...nextSales];
+      const ensuredCodes = await ensureUniquePdvCodes({
+        pdvId,
+        pdvDoc,
+        sales: nextSales,
+        budgets: existingBudgets,
+        existingSales,
+        existingBudgets,
+      });
+      nextSales = ensuredCodes.sales;
+      const savedSale = nextSales.find(
+        (sale) => normalizeString(sale?.id || sale?._id) === normalizeString(saleRecord.id)
+      ) || saleRecord;
+
+      const orderRecord = {
+        id: incomingOrderId || buildDeliveryOrderId(),
+        saleRecordId: normalizeString(savedSale?.id || ''),
+        saleCode: normalizeString(savedSale?.saleCode || savedSale?.saleCodeLabel || ''),
+        status: deliveryStatus,
+        statusUpdatedAt: now.toISOString(),
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+        total: totalLiquido,
+        items: items.map((item) => ({ ...item })),
+        payments: payments.map((payment) => ({ ...payment })),
+        discount: discountValue,
+        addition: additionValue,
+        address: address ? { ...address } : null,
+        courier,
+        courierId: courier.id || '',
+        courierLabel: courier.label || '',
+        entregadorId: courier.id || '',
+        entregador: courier.label || '',
+        deliveryCourierId: courier.id || '',
+        deliveryCourierLabel: courier.label || '',
+        customer: customerSource && typeof customerSource === 'object' ? { ...customerSource } : null,
+        customerName,
+        customerDocument,
+        receiptSnapshot:
+          payload?.receiptSnapshot && typeof payload.receiptSnapshot === 'object'
+            ? payload.receiptSnapshot
+            : null,
+      };
+      nextDeliveryOrders = [orderRecord, ...nextDeliveryOrders];
+
+      const updatedState = await PdvState.findOneAndUpdate(
+        { pdv: pdvId },
+        {
+          $set: {
+            completedSales: nextSales,
+            deliveryOrders: nextDeliveryOrders,
+            saleCodeSequence: ensuredCodes.nextSaleSequence,
+            budgetSequence: ensuredCodes.nextBudgetSequence,
+            recentStateMutationKeys: getNextRecentMutationKeys(
+              existingState?.recentStateMutationKeys || [],
+              idempotencyKey
+            ),
+          },
+          $setOnInsert: {
+            pdv: pdvId,
+            empresa: existingState?.empresa || pdvDoc?.empresa,
+          },
+        },
+        { new: true, upsert: true, setDefaultsOnInsert: true }
+      );
+
+      await syncPdvCaixaSessionHistory({
+        pdvDoc,
+        existingState,
+        updatedState,
+      });
+
+      return {
+        state: serializeStateForResponse(updatedState),
+        shouldEmit: true,
+      };
+    }
+
+    // DELIVERY_FINALIZE
+    const targetOrderId = incomingOrderId;
+    if (!targetOrderId) {
+      const error = new Error('Informe o delivery que será finalizado.');
+      error.statusCode = 400;
+      throw error;
+    }
+    const orderIndex = nextDeliveryOrders.findIndex(
+      (order) => normalizeString(order?.id || '') === targetOrderId
+    );
+    if (orderIndex < 0) {
+      const error = new Error('Delivery não encontrado para finalização.');
+      error.statusCode = 404;
+      throw error;
+    }
+    if (!(totalLiquido > 0)) {
+      const error = new Error('Informe o valor total para finalizar o delivery.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const targetOrder = { ...nextDeliveryOrders[orderIndex] };
+    const targetSaleRecordId = normalizeString(
+      payload?.saleRecordId || targetOrder?.saleRecordId || incomingSaleId
+    );
+    const saleIndex = nextSales.findIndex(
+      (sale) => normalizeString(sale?.id || sale?._id) === targetSaleRecordId
+    );
+
+    const contributions = buildSaleContributionsFromPayments(payments);
+    const paymentLabel = payments
+      .map((payment) => `${payment.label || 'Pagamento'}: ${safeNumber(payment.valor, 0).toFixed(2)}`)
+      .join(' | ');
+    contributions.forEach((entry) => {
+      const payment =
+        resolveCommandTargetPayment(nextPagamentos, entry.paymentId) ||
+        resolveCommandTargetPayment(nextPagamentos, entry.paymentLabel);
+      if (payment) {
+        payment.valor = safeNumber(payment.valor, 0) + safeNumber(entry.amount, 0);
+      }
+      const previsto =
+        resolveCommandTargetPayment(nextPrevisto, entry.paymentId) ||
+        resolveCommandTargetPayment(nextPrevisto, entry.paymentLabel);
+      if (previsto) {
+        previsto.valor = safeNumber(previsto.valor, 0) + safeNumber(entry.amount, 0);
+      }
+    });
+    nextSummary.recebido = safeNumber(nextSummary.recebido, 0) + totalLiquido;
+    nextSummary.saldo =
+      safeNumber(nextSummary.abertura, 0) +
+      safeNumber(nextSummary.recebido, 0) +
+      safeNumber(nextSummary.recebimentosCliente, 0);
+
+    const historyEntry = buildSaleHistoryEntry({
+      saleCode: normalizeString(targetOrder?.saleCode || payload?.saleCode || ''),
+      totalLiquido,
+      paymentLabel,
+      createdAt: now,
+      userMeta: getCommandHistoryUserMeta(user || {}),
+    });
+    nextHistory = mergeRecordsByKey(nextHistory, historyEntry ? [historyEntry] : [], 'history');
+
+    if (saleIndex >= 0) {
+      const existingSale = nextSales[saleIndex];
+      nextSales[saleIndex] = normalizeSaleRecordPayload({
+        ...existingSale,
+        saleCode: normalizeString(payload?.saleCode || existingSale?.saleCode || targetOrder?.saleCode || ''),
+        saleCodeLabel: normalizeString(payload?.saleCode || existingSale?.saleCodeLabel || targetOrder?.saleCode || ''),
+        items: items.length ? items : Array.isArray(existingSale?.items) ? existingSale.items : [],
+        payments: payments.length ? payments : [],
+        discountValue: discountValue || safeNumber(existingSale?.discountValue, 0),
+        additionValue: additionValue || safeNumber(existingSale?.additionValue, 0),
+        total: totalLiquido,
+        totalLiquido,
+        totalBruto: totalBruto || safeNumber(existingSale?.totalBruto, totalLiquido),
+        customerName,
+        customerDocument,
+        cashContributions: contributions,
+      });
+    }
+
+    const ensuredCodes = await ensureUniquePdvCodes({
+      pdvId,
+      pdvDoc,
+      sales: nextSales,
+      budgets: existingBudgets,
+      existingSales,
+      existingBudgets,
+    });
+    nextSales = ensuredCodes.sales;
+    const saleForOrder = nextSales.find(
+      (sale) => normalizeString(sale?.id || sale?._id) === normalizeString(targetSaleRecordId)
+    );
+
+    targetOrder.saleRecordId = normalizeString(saleForOrder?.id || targetOrder?.saleRecordId || '');
+    targetOrder.saleCode = normalizeString(
+      payload?.saleCode || saleForOrder?.saleCode || saleForOrder?.saleCodeLabel || targetOrder?.saleCode || ''
+    );
+    targetOrder.status = 'finalizado';
+    targetOrder.statusUpdatedAt = now.toISOString();
+    targetOrder.finalizedAt = now.toISOString();
+    targetOrder.updatedAt = now.toISOString();
+    targetOrder.total = totalLiquido;
+    targetOrder.items = items.length ? items.map((item) => ({ ...item })) : targetOrder.items || [];
+    targetOrder.payments = payments.map((payment) => ({ ...payment }));
+    targetOrder.discount = discountValue;
+    targetOrder.addition = additionValue;
+    targetOrder.courier = courier.id || courier.label ? { ...courier } : targetOrder.courier || null;
+    const effectiveCourier =
+      targetOrder.courier && typeof targetOrder.courier === 'object'
+        ? {
+            id: normalizeString(targetOrder.courier.id || targetOrder.courier._id || ''),
+            label: normalizeString(
+              targetOrder.courier.label || targetOrder.courier.nome || targetOrder.courier.name || ''
+            ),
+          }
+        : { id: '', label: '' };
+    targetOrder.courierId = effectiveCourier.id || '';
+    targetOrder.courierLabel = effectiveCourier.label || '';
+    targetOrder.entregadorId = effectiveCourier.id || '';
+    targetOrder.entregador = effectiveCourier.label || '';
+    targetOrder.deliveryCourierId = effectiveCourier.id || '';
+    targetOrder.deliveryCourierLabel = effectiveCourier.label || '';
+    nextDeliveryOrders[orderIndex] = targetOrder;
+
+    const existingInventoryMovements = Array.isArray(existingState?.inventoryMovements)
+      ? existingState.inventoryMovements.map((movement) =>
+          movement && typeof movement.toObject === 'function' ? movement.toObject() : movement
+        )
+      : [];
+    let nextInventoryMovements = existingInventoryMovements;
+    const depositConfig = pdvDoc?.configuracoesEstoque?.depositoPadrao || null;
+    if (depositConfig) {
+      const inventoryResult = await applyInventoryMovementsToSales({
+        sales: nextSales,
+        depositId: depositConfig,
+        existingMovements: existingInventoryMovements,
+        movementContext: {
+          companyId: pdvDoc?.empresa || null,
+          userId: user?.id || null,
+          userName: normalizeString(user?.nomeCompleto || user?.apelido || user?.name || ''),
+          userEmail: normalizeString(user?.email || ''),
+        },
+      });
+      nextSales = inventoryResult.sales;
+      const newInventoryMovements = inventoryResult.movements || [];
+      const revertedSales = new Set(inventoryResult.revertedSales || []);
+      let combinedMovements = existingInventoryMovements;
+      if (revertedSales.size) {
+        combinedMovements = combinedMovements.filter(
+          (movement) => movement && !revertedSales.has(movement.saleId)
+        );
+      }
+      if (newInventoryMovements.length) {
+        combinedMovements = [...combinedMovements, ...newInventoryMovements];
+      }
+      nextInventoryMovements = combinedMovements;
+    }
+
+    const updatedState = await PdvState.findOneAndUpdate(
+      { pdv: pdvId },
+      {
+        $set: {
+          completedSales: nextSales,
+          deliveryOrders: nextDeliveryOrders,
+          pagamentos: nextPagamentos,
+          summary: nextSummary,
+          history: nextHistory,
+          lastMovement: nextHistory[0] || null,
+          caixaInfo: {
+            ...(existingState?.caixaInfo || {}),
+            previstoPagamentos: nextPrevisto,
+            apuradoPagamentos: nextApurado,
+            fechamentoPrevisto: nextPrevisto.reduce(
+              (sum, payment) => sum + safeNumber(payment?.valor ?? 0, 0),
+              0
+            ),
+          },
+          inventoryMovements: nextInventoryMovements,
+          saleCodeSequence: ensuredCodes.nextSaleSequence,
+          budgetSequence: ensuredCodes.nextBudgetSequence,
+          recentStateMutationKeys: getNextRecentMutationKeys(
+            existingState?.recentStateMutationKeys || [],
+            idempotencyKey
+          ),
+        },
+        $setOnInsert: {
+          pdv: pdvId,
+          empresa: existingState?.empresa || pdvDoc?.empresa,
+        },
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+
+    await syncPdvCaixaSessionHistory({
+      pdvDoc,
+      existingState,
+      updatedState,
+    });
+
+    return {
+      state: serializeStateForResponse(updatedState),
+      shouldEmit: true,
+    };
+  }
+
+  const error = new Error('Comando de PDV não suportado.');
+  error.statusCode = 400;
+  throw error;
+};
+
+router.post('/:id/commands', requireAuth, async (req, res) => {
+  try {
+    const pdvId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(pdvId)) {
+      return res.status(400).json({ message: 'Identificador de PDV inválido.' });
+    }
+
+    const pdv = await Pdv.findById(pdvId).lean();
+    if (!pdv) {
+      return res.status(404).json({ message: 'PDV não encontrado.' });
+    }
+
+    const { action, payload } = parsePdvCommandRequest(req.body || {});
+    if (!action) {
+      return res.status(400).json({ message: 'Informe a ação do comando do PDV.' });
+    }
+
+    const idempotencyKey = normalizeString(req.get('x-idempotency-key'));
+    const commandResult = await enqueuePdvStateWrite(pdvId, async () => {
+      return runPdvCommand({
+        action,
+        payload,
+        pdvId,
+        pdvDoc: pdv,
+        idempotencyKey,
+        user: req.user || {},
+      });
+    });
+    const state = commandResult?.state || serializeStateForResponse(null);
+
+    if (commandResult?.shouldEmit) {
+      const emitPdvStateUpdate =
+        req.app && typeof req.app.get === 'function' ? req.app.get('emitPdvStateUpdate') : null;
+      if (typeof emitPdvStateUpdate === 'function') {
+        emitPdvStateUpdate({
+          pdvId,
+          payload: {
+            updatedAt: state.updatedAt || new Date().toISOString(),
+            state,
+          },
+        });
+      }
+    }
+
+    return res.json({
+      ok: true,
+      action,
+      state,
+      meta: buildPdvCommandMeta(req),
+    });
+  } catch (error) {
+    const statusCode = Number.isInteger(error?.statusCode) ? error.statusCode : 500;
+    const message =
+      error?.message && typeof error.message === 'string'
+        ? error.message
+        : 'Erro ao executar comando do PDV.';
+    if (statusCode >= 500) {
+      console.error('Erro ao executar comando do PDV:', error);
+    } else {
+      console.warn('Falha de validação em comando do PDV:', message);
+    }
+    return res.status(statusCode).json({ message });
   }
 });
 

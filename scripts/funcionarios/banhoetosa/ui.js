@@ -1,4 +1,4 @@
-import { els, state, notify, buildLocalDateTime, todayStr, normalizeDate, pad, api, statusMeta, isNoPreferenceProfessionalId, getVisibleProfissionais } from './core.js';
+import { els, state, notify, buildLocalDateTime, todayStr, normalizeDate, pad, api, statusMeta, isNoPreferenceProfessionalId, getVisibleProfissionais, isAdminMasterModeActive } from './core.js';
 import { loadAgendamentos } from './agendamentos.js';
 import { renderKpis, renderFilters } from './filters.js';
 import { renderGrid } from './grid.js';
@@ -101,7 +101,7 @@ export function enableSlotQuickAdd() {
       if (!hasDay) return;
     } else {
       if (!hasHour) return; // hourly squares only (day/week)
-      if (slot.classList.contains('is-off')) return;
+      if (slot.classList.contains('is-off') && !isAdminMasterModeActive()) return;
     }
 
     const open = window.__openAddFromUI;
@@ -454,7 +454,22 @@ export function injectDndStylesOnce() {
 
 export async function moveAppointmentQuick(id, payload) {
   try {
-    const body = { ...payload, storeId: state.selectedStoreId || els.storeSelect?.value };
+    const appointment = (state.agendamentos || []).find((x) => String(x?._id || '') === String(id || ''));
+    const appointmentStoreId =
+      appointment?.storeId ||
+      appointment?.store?._id ||
+      appointment?.store?.id ||
+      '';
+    const scopedStoreId =
+      appointmentStoreId ||
+      state.selectedStoreId ||
+      els.storeSelect?.value ||
+      '';
+    const shouldSendStoreId = Boolean(scopedStoreId) && !isAdminMasterModeActive();
+    const body = {
+      ...payload,
+      ...(shouldSendStoreId ? { storeId: scopedStoreId } : {}),
+    };
     const resp = await api(`/func/agendamentos/${id}`, { method: 'PUT', body: JSON.stringify(body) });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));

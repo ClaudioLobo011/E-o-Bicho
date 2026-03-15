@@ -56,6 +56,17 @@ export function isPrivilegedRole() {
   const r = getCurrentRole();
   return r === 'admin' || r === 'admin_master';
 }
+export function isAdminMasterModeActive() {
+  const role = getCurrentRole();
+  if (role !== 'admin_master') return false;
+  try {
+    const value = localStorage.getItem('eobicho-admin-master-active');
+    if (value === null) return true;
+    return value === '1';
+  } catch (_) {
+    return true;
+  }
+}
 
 
 const TOAST_DEDUP_KEY = '__agendaToastState';

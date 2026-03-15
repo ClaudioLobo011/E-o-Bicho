@@ -185,6 +185,7 @@ window.__updateStatusQuick = (id, status, opts) => updateStatusQuick(id, status,
 window.__openAddFromUI = (opts) => openAddModal(opts);
 
 function setAddServiceTab(tab) {
+  ensureAddModalCadastroLayout();
   state.addModalTab = tab === 'clubinho' ? 'clubinho' : 'cadastro';
   const isClubinho = state.addModalTab === 'clubinho';
 
@@ -198,6 +199,16 @@ function setAddServiceTab(tab) {
   els.addTabBtnClubinho?.classList.toggle('bg-primary', isClubinho);
   els.addTabBtnClubinho?.classList.toggle('text-white', isClubinho);
   els.addTabBtnClubinho?.classList.toggle('text-gray-500', !isClubinho);
+}
+
+function ensureAddModalCadastroLayout() {
+  const cadastroTab = els.addTabCadastro;
+  if (!cadastroTab) return;
+
+  const servicesWrap = document.getElementById('add-serv-list-wrap');
+  if (servicesWrap && servicesWrap.parentElement !== cadastroTab) {
+    cadastroTab.appendChild(servicesWrap);
+  }
 }
 
 export function openAddModal(preselectProfId) {

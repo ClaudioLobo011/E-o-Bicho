@@ -111,6 +111,10 @@
   function getSelectedCaixaPrevistoMap() {
     const caixa = getSelectedCaixa();
     if (!caixa) return new Map();
+    const recalculatedMap = buildExpectedCloseMapFromCaixa(caixa);
+    if (recalculatedMap.size > 0) {
+      return recalculatedMap;
+    }
     const snapshots = Array.isArray(caixa?.caixaInfo?.previstoPagamentos)
       ? caixa.caixaInfo.previstoPagamentos
       : (Array.isArray(caixa?.caixaInfoSnapshot?.previstoPagamentos) ? caixa.caixaInfoSnapshot.previstoPagamentos : []);
@@ -169,6 +173,86 @@
     return map;
   }
 
+  function parseAmountFromHistoryPaymentLabel(rawLabel) {
+    const raw = String(rawLabel ?? '').trim();
+    if (!raw) return [];
+    return raw
+      .split('|')
+      .map((chunk) => String(chunk || '').trim())
+      .map((chunk) => {
+        if (!chunk) return null;
+        const match = chunk.match(/^(.*?):\s*([0-9.,-]+)$/);
+        if (!match) return null;
+        const label = String(match[1] || '').trim();
+        const amount = parseCurrencyInput(match[2]);
+        if (!label || !(amount > 0)) return null;
+        return { label, amount };
+      })
+      .filter(Boolean);
+  }
+
+  function buildExpectedCloseMapFromCaixa(caixa) {
+    if (!caixa || typeof caixa !== 'object') return new Map();
+    const caixaAberto = caixa?.status === 'aberto' || caixa?.aberto === true;
+    if (caixaAberto) return new Map();
+
+    const history = Array.isArray(caixa?.history) ? caixa.history : [];
+    const completedSales = Array.isArray(caixa?.completedSales) ? caixa.completedSales : [];
+    const cycleStartRaw = caixa?.aberturaData || caixa?.caixaInfo?.aberturaData || null;
+    const cycleStart = cycleStartRaw ? new Date(cycleStartRaw) : null;
+    const hasCycleStart = cycleStart && !Number.isNaN(cycleStart.getTime());
+    const valueMap = new Map();
+    const ensurePositive = (value) => (value > 0 ? value : 0);
+    const addAmount = (identifier, label, delta) => {
+      const parsedDelta = Number(delta);
+      if (!Number.isFinite(parsedDelta)) return;
+      const keys = Array.from(new Set([
+        normalizeLookupKey(identifier),
+        normalizeLookupKey(label),
+      ].filter(Boolean)));
+      if (!keys.length) return;
+      keys.forEach((key) => {
+        const current = Number(valueMap.get(key) || 0);
+        valueMap.set(key, ensurePositive(current + parsedDelta));
+      });
+    };
+
+    const openingEntry = history.find((entry) => normalizeLookupKey(entry?.id) === 'abertura');
+    parseAmountFromHistoryPaymentLabel(openingEntry?.paymentLabel).forEach((entry) => {
+      addAmount(entry.label, entry.label, entry.amount);
+    });
+
+    completedSales.forEach((sale) => {
+      if (!sale || typeof sale !== 'object') return;
+      if (normalizeLookupKey(sale?.status) === 'cancelled') return;
+      const saleDate = new Date(sale?.createdAt || sale?.updatedAt || 0);
+      if (hasCycleStart && !Number.isNaN(saleDate.getTime()) && saleDate < cycleStart) return;
+      const contributions = Array.isArray(sale?.cashContributions) ? sale.cashContributions : [];
+      contributions.forEach((entry) => {
+        const amount = parseCurrencyInput(entry?.amount ?? entry?.valor ?? entry?.total ?? 0);
+        if (!(amount > 0)) return;
+        const id = entry?.paymentId || entry?.id || entry?.payment;
+        const label = entry?.paymentLabel || entry?.label || id || 'Pagamento';
+        addAmount(id, label, amount);
+      });
+    });
+
+    history.forEach((entry) => {
+      if (!entry || typeof entry !== 'object') return;
+      const movementId = normalizeLookupKey(entry?.id);
+      if (!['entrada', 'saida', 'envio'].includes(movementId)) return;
+      const timestamp = new Date(entry?.timestamp || entry?.data || 0);
+      if (hasCycleStart && !Number.isNaN(timestamp.getTime()) && timestamp < cycleStart) return;
+      const label = String(entry?.paymentLabel || '').trim();
+      const amount = parseCurrencyInput(entry?.amount ?? entry?.delta ?? 0);
+      if (!label || !(amount > 0)) return;
+      const delta = movementId === 'entrada' ? amount : -amount;
+      addAmount(label, label, delta);
+    });
+
+    return valueMap;
+  }
+
   function getExpectedValueForPaymentMethod(method, previstoMap) {
     const keys = [
       method?._id,
@@ -190,22 +274,6 @@
 
   function getMappedValueForPaymentMethod(method, valuesMap) {
     return getExpectedValueForPaymentMethod(method, valuesMap);
-  }
-
-  function isCashLikePaymentMethod(method) {
-    const candidates = [
-      method?._id,
-      method?.id,
-      method?.code,
-      method?.name,
-      method?.nome,
-      method?.type,
-      method?.descricao,
-      ...(Array.isArray(method?.aliases) ? method.aliases : []),
-    ].map(normalizeLookupKey).filter(Boolean);
-    return candidates.some((value) =>
-      ['dinheiro', 'cash', 'especie', 'espécie', 'moeda'].some((term) => value.includes(normalizeLookupKey(term)))
-    );
   }
 
   function setTodayDefaults() {
@@ -362,11 +430,13 @@
       'entrada',
       'saida',
       'envio',
-      'fechamento',
       'recebimento-cliente',
     ]);
     if (actionId && allowedIds.has(actionId)) {
       return true;
+    }
+    if (actionId === 'fechamento') {
+      return false;
     }
 
     // Fallback para registros antigos sem `id` consistente.
@@ -380,7 +450,7 @@
     if (merged.includes('recebimentos de cliente') || merged.includes('recebimento de cliente')) {
       return true;
     }
-    return ['abertura de caixa', 'entrada', 'saida', 'saída', 'envio', 'tesouraria', 'fechamento']
+    return ['abertura de caixa', 'entrada', 'saida', 'saída', 'envio', 'tesouraria']
       .some((term) => merged.includes(normalizeLookupKey(term)));
   }
 
@@ -812,11 +882,7 @@
       const label = escapeHtml(
         method?.nome || method?.name || method?.descricao || method?.descricaoExibicao || 'Meio de pagamento'
       );
-      let previsto = getExpectedValueForPaymentMethod(method, previstoMap);
-      const aberturaCaixa = Number(getSelectedCaixa()?.summary?.abertura || 0);
-      if (Number.isFinite(aberturaCaixa) && aberturaCaixa > 0 && isCashLikePaymentMethod(method)) {
-        previsto += aberturaCaixa;
-      }
+      const previsto = getExpectedValueForPaymentMethod(method, previstoMap);
       const apurado = getMappedValueForPaymentMethod(method, apuradoMap);
       const hasApuradoMapValue = apuradoMap.size > 0 && (
         getMappedValueForPaymentMethod(method, apuradoMap) !== 0 ||
