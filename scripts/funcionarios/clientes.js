@@ -1660,12 +1660,36 @@
           method,
           body: JSON.stringify(payload),
         });
+        const savedCustomerId =
+          data?.id ||
+          data?._id ||
+          state.currentClienteId ||
+          '';
         notify(method === 'POST' ? 'Cliente cadastrado com sucesso.' : 'Cliente atualizado com sucesso.', 'success');
         await loadClientes(method === 'POST' ? 1 : state.pagination.page);
         if (method === 'POST' && data?.id) {
           await loadCliente(data.id);
         } else if (state.currentClienteId) {
           await loadCliente(state.currentClienteId);
+        }
+
+        if (window.parent && window.parent !== window) {
+          const customerSnapshot = {
+            id: String(savedCustomerId || ''),
+            document: payload.cpf || payload.cnpj || '',
+            mobile: payload.celular || '',
+            phone: payload.telefone || '',
+            email: payload.email || '',
+            code: data?.codigoCliente || data?.codigo || '',
+          };
+          window.parent.postMessage(
+            {
+              source: 'eo-bicho',
+              type: 'CUSTOMER_SAVED',
+              customer: customerSnapshot,
+            },
+            '*'
+          );
         }
       } catch (err) {
         console.error('Erro ao salvar cliente', err);

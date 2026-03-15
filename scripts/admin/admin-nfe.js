@@ -446,6 +446,11 @@
       classes: ['bg-emerald-100', 'text-emerald-700'],
       actions: { save: false, validate: false, emit: false, view: true, status: true, cancel: true },
     },
+    emitted: {
+      label: 'Emitida',
+      classes: ['bg-emerald-100', 'text-emerald-700'],
+      actions: { save: false, validate: false, emit: false, view: true, status: false, cancel: false },
+    },
     rejected: {
       label: 'Rejeitada',
       classes: ['bg-red-100', 'text-red-700'],
@@ -3049,6 +3054,16 @@
     )}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
   }
 
+  function escapeHtml(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   function buildDanfeHtml(xmlDoc, { mode = 'full' } = {}) {
     const infNFe = xmlDoc.querySelector('infNFe');
     const ide = xmlDoc.querySelector('ide');
@@ -3140,6 +3155,18 @@
     const transportUf = xmlGetText(transp, 'transporta UF');
     const modFrete = xmlGetText(transp, 'modFrete');
 
+    const DESCRIPTION_CHARS_PER_LINE = 34;
+    const estimateDescriptionLines = (description) => {
+      const normalized = String(description || '').replace(/\s+/g, ' ').trim();
+      if (!normalized) return 1;
+      return Math.max(1, Math.ceil(normalized.length / DESCRIPTION_CHARS_PER_LINE));
+    };
+    const estimateRowHeightMm = (description) => {
+      const lines = estimateDescriptionLines(description);
+      // Estimativa de altura da linha na tabela de itens (7.5pt + bordas/padding).
+      return 2.8 + lines * 3.1;
+    };
+
     const productRowsList = dets
       .map((det, index) => {
         const prod = det.querySelector('prod');
@@ -3153,11 +3180,13 @@
         const pICMS = xmlGetText(icmsNode, 'pICMS');
         const vIPI = xmlGetText(ipiNode, 'vIPI');
         const pIPI = xmlGetText(ipiNode, 'pIPI');
-        return `
+        const description = xmlGetText(prod, 'xProd');
+        return {
+          html: `
           <tr>
             <td class="center">${index + 1}</td>
             <td>${xmlGetText(prod, 'cProd')}</td>
-            <td>${xmlGetText(prod, 'xProd')}</td>
+            <td class="desc"><span class="desc-text">${escapeHtml(description)}</span></td>
             <td class="center ncm">${xmlGetText(prod, 'NCM')}</td>
             <td class="center">${cst || '0'}</td>
             <td class="center">${cfop}</td>
@@ -3171,10 +3200,11 @@
             <td class="num">${formatNumber(pICMS, 2)}</td>
             <td class="num">${formatNumber(pIPI, 2)}</td>
           </tr>
-        `;
-      });
-    const productsRows = productRowsList.join('');
-
+        `,
+          heightMm: estimateRowHeightMm(description),
+        };
+      })
+      ;
     const dupCards = dupList.map(
       (dup) => `
         <table class="dup-card">
@@ -3243,23 +3273,32 @@
           .map(
             (vol) => `
               <tr>
-                <td class="label">Qtd</td>
-                <td class="value right">${xmlGetText(vol, 'qVol')}</td>
-                <td class="label">Especie</td>
-                <td class="value">${xmlGetText(vol, 'esp')}</td>
-                <td class="label">Marca</td>
-                <td class="value">${xmlGetText(vol, 'marca')}</td>
-                <td class="label">Peso Bruto</td>
-                <td class="value right">${xmlGetText(vol, 'pesoB')}</td>
+                <td>
+                  <div class="label">Qtd</div>
+                  <div class="value right">${xmlGetText(vol, 'qVol')}</div>
+                </td>
+                <td>
+                  <div class="label">Especie</div>
+                  <div class="value">${xmlGetText(vol, 'esp')}</div>
+                </td>
+                <td>
+                  <div class="label">Marca</div>
+                  <div class="value">${xmlGetText(vol, 'marca')}</div>
+                </td>
+                <td>
+                  <div class="label">Peso Bruto</div>
+                  <div class="value right">${xmlGetText(vol, 'pesoB')}</div>
+                </td>
               </tr>
             `,
           )
           .join('')
       : `
         <tr>
-          <td colspan="8" class="value">Sem volumes informados.</td>
+          <td colspan="4" class="value">Sem volumes informados.</td>
         </tr>
       `;
+
     const additionalDataHtml = `
       <table class="block" style="page-break-inside: avoid; break-inside: avoid-page;">
         <colgroup>
@@ -3276,8 +3315,9 @@
         </tr>
       </table>
     `;
-    const FULL_FIRST_PAGE_ITEM_LIMIT = 11;
-    const FULL_NEXT_PAGE_ITEM_LIMIT = 24;
+    // Blocos fixos de paginação (A4): 1a folha com rodapé, demais sem rodapé.
+    const FIRST_PAGE_PRODUCTS_AREA_MM = 124;
+    const NEXT_PAGE_PRODUCTS_AREA_MM = 244;
 
     const buildFullItemsTable = (rowsHtml) => `
       <table class="items">
@@ -3323,21 +3363,36 @@
       </table>
     `;
 
-    const hasOverflowItems = productRowsList.length > FULL_FIRST_PAGE_ITEM_LIMIT;
-    const firstPageItems = hasOverflowItems
-      ? productRowsList.slice(0, FULL_FIRST_PAGE_ITEM_LIMIT)
-      : productRowsList;
-    const overflowItems = hasOverflowItems ? productRowsList.slice(FULL_FIRST_PAGE_ITEM_LIMIT) : [];
-    const firstPageItemsHtml = buildFullItemsTable(firstPageItems.join(''));
+    const consumeRowsForPage = (rows, startIndex, capacityMm) => {
+      const pageRows = [];
+      let usedMm = 0;
+      let index = startIndex;
+      while (index < rows.length) {
+        const row = rows[index];
+        const rowHeightMm = Math.max(3.2, Number(row?.heightMm) || 3.2);
+        if (pageRows.length > 0 && usedMm + rowHeightMm > capacityMm) {
+          break;
+        }
+        pageRows.push(row);
+        usedMm += rowHeightMm;
+        index += 1;
+      }
+      return { pageRows, nextIndex: index };
+    };
 
-    const continuationChunks = overflowItems.length
-      ? overflowItems.reduce((pages, _, index) => {
-          if (index % FULL_NEXT_PAGE_ITEM_LIMIT === 0) {
-            pages.push(overflowItems.slice(index, index + FULL_NEXT_PAGE_ITEM_LIMIT));
-          }
-          return pages;
-        }, [])
-      : [];
+    const firstPageChunk = consumeRowsForPage(productRowsList, 0, FIRST_PAGE_PRODUCTS_AREA_MM);
+    const firstPageItemsHtml = buildFullItemsTable(firstPageChunk.pageRows.map((item) => item.html).join(''));
+
+    const continuationChunks = [];
+    let cursor = firstPageChunk.nextIndex;
+    while (cursor < productRowsList.length) {
+      const nextChunk = consumeRowsForPage(productRowsList, cursor, NEXT_PAGE_PRODUCTS_AREA_MM);
+      if (!nextChunk.pageRows.length) {
+        break;
+      }
+      continuationChunks.push(nextChunk.pageRows);
+      cursor = nextChunk.nextIndex;
+    }
     const totalPages = 1 + continuationChunks.length;
 
     const buildDanfeTopHeaderHtml = (pageNumber) => `
@@ -3359,8 +3414,8 @@
           </td>
           <td class="center">
             <div class="danfe-box">
-              <div class="danfe-title">DANFE</div>
-              <div class="danfe-subtitle">Documento Auxiliar da Nota Fiscal Eletronica</div>
+              <div class="danfe-title">Transferencia</div>
+              <div class="danfe-subtitle">Documento Auxiliar da Transferencia</div>
               <div class="danfe-entry-row">
                 <div class="danfe-entry-text">
                   0 - ENTRADA<br>
@@ -3410,12 +3465,7 @@
           .map((pageRows, pageIndex) => `
             <div class="danfe danfe-page danfe-page-continuation">
               ${buildDanfeTopHeaderHtml(pageIndex + 2)}
-              <table class="block">
-                <tr>
-                  <td class="section-title">Itens da NF-e - Continuacao ${pageIndex + 1}</td>
-                </tr>
-              </table>
-              ${buildFullItemsTable(pageRows.join(''))}
+              ${buildFullItemsTable(pageRows.map((item) => item.html).join(''))}
             </div>
           `)
           .join('')
@@ -3425,7 +3475,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
-  <title>DANFE Simplificado</title>
+  <title>Transferencia</title>
   <style>
     @page { size: A4; margin: 6mm; }
     body { font-family: Arial, Helvetica, sans-serif; font-size: 7.5pt; color: #111; line-height: 1.25; }
@@ -3445,13 +3495,14 @@
     .items { table-layout: fixed; }
     .items thead th { background: #f5f5f5; }
     .items tbody tr { page-break-inside: avoid; }
+    .items td:nth-child(3) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .items .ncm { font-size: 6.2pt; letter-spacing: -0.2px; white-space: nowrap; }
   </style>
 </head>
 <body>
   <table>
     <tr>
-      <td colspan="3" class="section-title">DANFE SIMPLIFICADO</td>
+      <td colspan="3" class="section-title">TRANSFERENCIA</td>
     </tr>
     <tr>
       <td>
@@ -3460,8 +3511,8 @@
         <div>${emitAddressLine}</div>
       </td>
       <td class="center">
-        <div class="label">NF-e</div>
-        <div class="value">${numero}</div>
+        <div class="label">Transferencia</div>
+        <div class="value">N&#186; ${numero}</div>
         <div class="label">Serie</div>
         <div class="value">${serie}</div>
         <div class="label">Modelo</div>
@@ -3530,7 +3581,7 @@
   <table>
     <tr>
       <td>
-        <div class="label">Total NF-e</div>
+        <div class="label">Total Transferencia</div>
         <div class="value right">${formatBRL(xmlGetText(total, 'vNF'))}</div>
       </td>
       <td>
@@ -3551,7 +3602,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
-  <title>DANFE</title>
+  <title>Transferencia</title>
   <style>
     @page { size: A4; margin: 6mm; }
     body { font-family: Arial, Helvetica, sans-serif; font-size: 7.5pt; color: #111; line-height: 1.25; }
@@ -3574,6 +3625,13 @@
     .items { table-layout: fixed; }
     .items thead th { background: #f5f5f5; }
     .items tbody tr { page-break-inside: avoid; }
+    .items td.desc .desc-text {
+      display: block;
+      line-height: 1.2;
+      white-space: normal;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
     thead { display: table-header-group; }
     tfoot { display: table-footer-group; }
     .danfe-box { display: flex; flex-direction: column; gap: 2px; align-items: stretch; }
@@ -3595,7 +3653,6 @@
     .danfe-page:last-of-type { page-break-after: auto; break-after: auto; }
     .danfe-page-first { min-height: 0; }
     .danfe-page-continuation { min-height: calc(297mm - 12mm); }
-    .items td:nth-child(3) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   </style>
 </head>
 <body>
@@ -3612,7 +3669,7 @@
           DESTINATARIO: ${xmlGetText(dest, 'xNome')} - ${destAddress}
         </td>
         <td class="center" rowspan="2">
-          <div class="section-title">NF-e</div>
+          <div class="section-title">Transferencia</div>
           <div class="value">N&#186; ${numero}</div>
           <div class="value">Serie ${serie}</div>
         </td>
@@ -3751,7 +3808,7 @@
         <td class="value right">${formatBRL(xmlGetText(total, 'vST'))}</td>
         <td class="label">V. IPI</td>
         <td class="value right">${formatBRL(xmlGetText(total, 'vIPI'))}</td>
-        <td class="label">V. Total NF-e</td>
+        <td class="label">V. Total Transferencia</td>
         <td class="value right">${formatBRL(xmlGetText(total, 'vNF'))}</td>
       </tr>
       <tr>
@@ -3871,6 +3928,55 @@
     }
   }
 
+  function isEmprestimoEmissionSelected() {
+    return (
+      normalizeKeyword(getInputValue(naturezaSelect)) === 'emprestimo' ||
+      normalizeKeyword(getInputValue(finalidadeSelect)) === 'emprestimo'
+    );
+  }
+
+  function syncEmprestimoModeState() {
+    const emprestimoMode = isEmprestimoEmissionSelected();
+    if (emprestimoMode) {
+      const hadFiscalState =
+        currentStatus === 'authorized' ||
+        currentStatus === 'rejected' ||
+        currentStatus === 'ready' ||
+        Boolean(
+          normalizeString(currentDraftMetadata?.sefazProtocol || '') ||
+            normalizeString(currentDraftMetadata?.sefazStatus || '') ||
+            normalizeString(currentDraftMetadata?.sefazReceipt || '')
+        );
+
+      if (hadFiscalState) {
+        setStatus('draft', { log: false });
+        addHistory('Modo emprestimo selecionado. Fluxo fiscal revertido para emissao nao fiscal.');
+      }
+
+      currentDraftMetadata = {
+        ...(currentDraftMetadata || {}),
+        nonFiscal: true,
+        nonFiscalType: 'emprestimo',
+        sefazProtocol: '',
+        sefazStatus: '',
+        sefazReceipt: '',
+        sefazMessage: '',
+      };
+      currentDraftXmlAmbient = '';
+      nfeEventEntries = [];
+      updateManageModalContent();
+      return;
+    }
+
+    if (currentDraftMetadata?.nonFiscal) {
+      const nextMetadata = { ...(currentDraftMetadata || {}) };
+      delete nextMetadata.nonFiscal;
+      delete nextMetadata.nonFiscalType;
+      currentDraftMetadata = nextMetadata;
+      updateManageModalContent();
+    }
+  }
+
   async function handleManageAction(label) {
     if (!currentDraftId) {
       if (typeof showToast === 'function') {
@@ -3921,20 +4027,33 @@
       return;
     }
     if (label === 'Transmitir') {
+      const emprestimoMode = isEmprestimoEmissionSelected();
+      if (emprestimoMode) {
+        await saveDraft();
+      }
       const response = await fetch(`${API_BASE}/nfe/drafts/${currentDraftId}/xml/transmit`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...getAuthHeaders(),
         },
+        body: JSON.stringify({
+          skipFiscal: emprestimoMode,
+        }),
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
         throw new Error(payload?.message || 'Nao foi possivel transmitir a NF-e.');
       }
       const payload = await response.json().catch(() => ({}));
-      addHistory('NF-e transmitida para a SEFAZ.');
-      if (['100', '150'].includes(String(payload?.status || ''))) {
+      const nonFiscalEmission = Boolean(payload?.nonFiscal);
+      if (nonFiscalEmission) {
+        addHistory('NF-e emitida sem transmissao SEFAZ (emprestimo).');
+        setStatus('emitted', { log: false });
+      } else {
+        addHistory('NF-e transmitida para a SEFAZ.');
+      }
+      if (!nonFiscalEmission && ['100', '150'].includes(String(payload?.status || ''))) {
         currentDraftMetadata = {
           ...(currentDraftMetadata || {}),
           sefazProtocol: normalizeString(payload?.protocol || ''),
@@ -3942,14 +4061,18 @@
         };
         setStatus('authorized', { log: false });
         ensureLocalAuthorizationEvent();
-      } else {
+      } else if (!nonFiscalEmission) {
         setStatus('rejected', { log: false });
       }
       updateManageModalContent();
       await bumpNextNumberAfterTransmit();
       if (typeof showToast === 'function') {
-        const statusLabel = payload?.status ? ` (status ${payload.status})` : '';
-        showToast(`NF-e transmitida${statusLabel}.`, 'success');
+        if (nonFiscalEmission) {
+          showToast('Emissao de emprestimo concluida sem transmissao fiscal.', 'success');
+        } else {
+          const statusLabel = payload?.status ? ` (status ${payload.status})` : '';
+          showToast(`NF-e transmitida${statusLabel}.`, 'success');
+        }
       }
       return;
     }
@@ -7850,6 +7973,12 @@
     naturezaOperacaoSelect?.addEventListener('change', () => {
       syncModalCfopOptionsFromNatureza();
     });
+      naturezaSelect?.addEventListener('change', () => {
+        syncEmprestimoModeState();
+      });
+      finalidadeSelect?.addEventListener('change', () => {
+        syncEmprestimoModeState();
+      });
       operationSelect?.addEventListener('change', () => {
         syncStockMovementWithOperation();
         loadNaturezaOperacaoOptions();
@@ -7984,5 +8113,6 @@
 
   init();
 })();
+
 
 

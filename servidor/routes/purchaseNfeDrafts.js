@@ -742,37 +742,43 @@ router.post('/:id/approve', async (req, res) => {
         });
       }
 
+      const draftType = cleanString(draft.header?.type).toUpperCase();
+      const isReciboEntry = draftType === 'RECIBO';
+
       const accountingAccountRef = supplier.otherInfo?.accountingAccount;
-      if (!accountingAccountRef || !accountingAccountRef._id) {
-        throw buildHttpError(400, 'Defina a conta contÃ¡bil do fornecedor antes de aprovar.', {
-          focusTab: 'duplicatas',
-          field: 'accountingAccount',
-        });
-      }
-
-      const accountingAccount = await AccountingAccount.findById(accountingAccountRef._id).session(session);
-      if (!accountingAccount) {
-        throw buildHttpError(400, 'A conta contÃ¡bil vinculada ao fornecedor nÃ£o foi encontrada.', {
-          focusTab: 'duplicatas',
-          field: 'accountingAccount',
-        });
-      }
-
-      if (
-        Array.isArray(accountingAccount.companies) &&
-        accountingAccount.companies.length > 0 &&
-        !accountingAccount.companies.some(
-          (companyEntry) => companyEntry.toString() === companyObjectId.toString()
-        )
-      ) {
-        throw buildHttpError(
-          400,
-          'A conta contÃ¡bil do fornecedor nÃ£o estÃ¡ vinculada Ã  empresa selecionada.',
-          {
+      let accountingAccount = null;
+      if (!isReciboEntry) {
+        if (!accountingAccountRef || !accountingAccountRef._id) {
+          throw buildHttpError(400, 'Defina a conta contÃ¡bil do fornecedor antes de aprovar.', {
             focusTab: 'duplicatas',
             field: 'accountingAccount',
-          }
-        );
+          });
+        }
+
+        accountingAccount = await AccountingAccount.findById(accountingAccountRef._id).session(session);
+        if (!accountingAccount) {
+          throw buildHttpError(400, 'A conta contÃ¡bil vinculada ao fornecedor nÃ£o foi encontrada.', {
+            focusTab: 'duplicatas',
+            field: 'accountingAccount',
+          });
+        }
+
+        if (
+          Array.isArray(accountingAccount.companies) &&
+          accountingAccount.companies.length > 0 &&
+          !accountingAccount.companies.some(
+            (companyEntry) => companyEntry.toString() === companyObjectId.toString()
+          )
+        ) {
+          throw buildHttpError(
+            400,
+            'A conta contÃ¡bil do fornecedor nÃ£o estÃ¡ vinculada Ã  empresa selecionada.',
+            {
+              focusTab: 'duplicatas',
+              field: 'accountingAccount',
+            }
+          );
+        }
       }
 
       const depositId = draft.selection?.depositId || '';
@@ -857,69 +863,72 @@ router.post('/:id/approve', async (req, res) => {
       }
 
       const duplicates = Array.isArray(draft.duplicates) ? draft.duplicates : [];
-      if (!duplicates.length) {
-        throw buildHttpError(400, 'Informe as duplicatas da nota antes de aprovar.', {
-          focusTab: 'duplicatas',
-        });
-      }
 
       const bankAccountFallback = draft.selection?.bankAccountId || '';
       const installmentsData = [];
       const bankAccountIds = new Set();
       let duplicatesTotal = 0;
 
-      duplicates.forEach((duplicate, index) => {
-        const dueDate = parseDateInput(
-          duplicate?.manualDueDate || duplicate?.dueDate || duplicate?.originalDueDate
-        );
-        if (!dueDate) {
-          throw buildHttpError(400, `Defina o vencimento da parcela ${duplicate?.number || index + 1}.`, {
+      if (!isReciboEntry) {
+        if (!duplicates.length) {
+          throw buildHttpError(400, 'Informe as duplicatas da nota antes de aprovar.', {
             focusTab: 'duplicatas',
-            duplicateIndex: index,
-            field: 'dueDate',
           });
         }
 
-        const valueNumeric = toNumber(duplicate?.value);
-        if (!Number.isFinite(valueNumeric) || valueNumeric <= 0) {
-          throw buildHttpError(400, `Informe um valor vÃ¡lido para a parcela ${duplicate?.number || index + 1}.`, {
-            focusTab: 'duplicatas',
-            duplicateIndex: index,
-            field: 'value',
+        duplicates.forEach((duplicate, index) => {
+          const dueDate = parseDateInput(
+            duplicate?.manualDueDate || duplicate?.dueDate || duplicate?.originalDueDate
+          );
+          if (!dueDate) {
+            throw buildHttpError(400, `Defina o vencimento da parcela ${duplicate?.number || index + 1}.`, {
+              focusTab: 'duplicatas',
+              duplicateIndex: index,
+              field: 'dueDate',
+            });
+          }
+
+          const valueNumeric = toNumber(duplicate?.value);
+          if (!Number.isFinite(valueNumeric) || valueNumeric <= 0) {
+            throw buildHttpError(400, `Informe um valor vÃ¡lido para a parcela ${duplicate?.number || index + 1}.`, {
+              focusTab: 'duplicatas',
+              duplicateIndex: index,
+              field: 'value',
+            });
+          }
+
+          const bankAccountId = duplicate?.bankAccount || bankAccountFallback;
+          if (!bankAccountId || !mongoose.Types.ObjectId.isValid(bankAccountId)) {
+            throw buildHttpError(400, `Selecione a conta corrente da parcela ${duplicate?.number || index + 1}.`, {
+              focusTab: 'duplicatas',
+              duplicateIndex: index,
+              field: 'bankAccount',
+            });
+          }
+
+          bankAccountIds.add(String(bankAccountId));
+          duplicatesTotal += valueNumeric;
+
+          const numericNumber = Number.parseInt(duplicate?.number, 10);
+          const parcelNumber = Number.isFinite(numericNumber) && numericNumber > 0 ? numericNumber : index + 1;
+          const dueDateString = dueDate.toISOString().slice(0, 10);
+
+          duplicate.number = parcelNumber;
+          duplicate.dueDate = dueDateString;
+          duplicate.manualDueDate = dueDateString;
+          duplicate.value = valueNumeric;
+          duplicate.bankAccount = String(bankAccountId);
+          duplicate.bankAccountIsManual = true;
+
+          installmentsData.push({
+            index,
+            number: parcelNumber,
+            dueDate,
+            value: valueNumeric,
+            bankAccountId: String(bankAccountId),
           });
-        }
-
-        const bankAccountId = duplicate?.bankAccount || bankAccountFallback;
-        if (!bankAccountId || !mongoose.Types.ObjectId.isValid(bankAccountId)) {
-          throw buildHttpError(400, `Selecione a conta corrente da parcela ${duplicate?.number || index + 1}.`, {
-            focusTab: 'duplicatas',
-            duplicateIndex: index,
-            field: 'bankAccount',
-          });
-        }
-
-        bankAccountIds.add(String(bankAccountId));
-        duplicatesTotal += valueNumeric;
-
-        const numericNumber = Number.parseInt(duplicate?.number, 10);
-        const parcelNumber = Number.isFinite(numericNumber) && numericNumber > 0 ? numericNumber : index + 1;
-        const dueDateString = dueDate.toISOString().slice(0, 10);
-
-        duplicate.number = parcelNumber;
-        duplicate.dueDate = dueDateString;
-        duplicate.manualDueDate = dueDateString;
-        duplicate.value = valueNumeric;
-        duplicate.bankAccount = String(bankAccountId);
-        duplicate.bankAccountIsManual = true;
-
-        installmentsData.push({
-          index,
-          number: parcelNumber,
-          dueDate,
-          value: valueNumeric,
-          bankAccountId: String(bankAccountId),
         });
-      });
+      }
 
       const bankAccounts = bankAccountIds.size
         ? await BankAccount.find({ _id: { $in: Array.from(bankAccountIds) } })
@@ -963,13 +972,17 @@ router.post('/:id/approve', async (req, res) => {
       const roundedTotal = formatCurrencyValue(duplicatesTotal);
 
       draft.duplicatesSummary = computeDuplicatesSummary(draft.duplicates);
-      draft.duplicatesSummary.totalAmount = roundedTotal;
-      draft.duplicatesSummary.count = duplicates.length;
+      if (!isReciboEntry) {
+        draft.duplicatesSummary.totalAmount = roundedTotal;
+        draft.duplicatesSummary.count = duplicates.length;
+      }
 
       if (!draft.totals || typeof draft.totals !== 'object') {
         draft.totals = {};
       }
-      draft.totals.totalValue = roundedTotal;
+      if (!isReciboEntry) {
+        draft.totals.totalValue = roundedTotal;
+      }
       draft.markModified('duplicates');
       draft.markModified('totals');
 
@@ -1023,46 +1036,48 @@ router.post('/:id/approve', async (req, res) => {
         );
       }
 
-      const payableInstallments = installmentsData.map((installment) => {
-        const account = bankAccountMap.get(installment.bankAccountId);
-        return {
-          number: installment.number,
+      if (!isReciboEntry && installmentsData.length) {
+        const payableInstallments = installmentsData.map((installment) => {
+          const account = bankAccountMap.get(installment.bankAccountId);
+          return {
+            number: installment.number,
+            issueDate,
+            dueDate: installment.dueDate,
+            value: formatCurrencyValue(installment.value),
+            bankAccount: account._id,
+            accountingAccount: accountingAccount._id,
+            status: 'pending',
+          };
+        });
+
+        const payablePayload = {
+          code: await generatePayableSequentialCode(session),
+          company: companyObjectId,
+          partyType: 'Supplier',
+          party: supplier._id,
+          installmentsCount: payableInstallments.length,
           issueDate,
-          dueDate: installment.dueDate,
-          value: formatCurrencyValue(installment.value),
-          bankAccount: account._id,
+          dueDate,
+          totalValue: roundedTotal,
+          bankAccount: payableInstallments[0].bankAccount,
           accountingAccount: accountingAccount._id,
-          status: 'pending',
+          paymentMethod: undefined,
+          carrier: '',
+          bankDocumentNumber: '',
+          interestFeeValue: 0,
+          monthlyInterestPercent: 0,
+          interestPercent: 0,
+          notes: '',
+          installments: payableInstallments,
         };
-      });
 
-      const payablePayload = {
-        code: await generatePayableSequentialCode(session),
-        company: companyObjectId,
-        partyType: 'Supplier',
-        party: supplier._id,
-        installmentsCount: payableInstallments.length,
-        issueDate,
-        dueDate,
-        totalValue: roundedTotal,
-        bankAccount: payableInstallments[0].bankAccount,
-        accountingAccount: accountingAccount._id,
-        paymentMethod: undefined,
-        carrier: '',
-        bankDocumentNumber: '',
-        interestFeeValue: 0,
-        monthlyInterestPercent: 0,
-        interestPercent: 0,
-        notes: '',
-        installments: payableInstallments,
-      };
-
-      const createdPayable = await AccountPayable.create([payablePayload], { session });
-      accountPayableRecord = createdPayable[0].toObject();
+        const createdPayable = await AccountPayable.create([payablePayload], { session });
+        accountPayableRecord = createdPayable[0].toObject();
+      }
 
       draft.status = 'approved';
       const metadata = draft.metadata && typeof draft.metadata === 'object' ? draft.metadata : {};
-      metadata.accountPayableId = accountPayableRecord._id;
+      metadata.accountPayableId = accountPayableRecord?._id || null;
       metadata.approvedAt = new Date().toISOString();
       metadata.stockMovement = {
         completed: true,

@@ -2399,7 +2399,6 @@ router.post('/:id/xml/sign', async (req, res) => {
     if (!draft) {
       return res.status(404).json({ message: 'NF-e não encontrada.' });
     }
-
     const companyId = draft.companyId || draft.payload?.company?.id || '';
     const store = companyId
       ? await Store.findById(companyId)
@@ -2493,7 +2492,48 @@ router.post('/:id/xml/transmit', async (req, res) => {
     if (!draft) {
       return res.status(404).json({ message: 'NF-e não encontrada.' });
     }
+    
+    const finalidade = normalizeKeyword(
+      draft?.payload?.metadata?.finalidade || draft?.metadata?.finalidade || ''
+    );
+    const naturezaEmissao = normalizeKeyword(
+      draft?.payload?.metadata?.natureza || draft?.metadata?.natureza || ''
+    );
+    const skipFiscal =
+      Boolean(req.body?.skipFiscal) ||
+      finalidade === 'emprestimo' ||
+      naturezaEmissao === 'emprestimo';
+    if (skipFiscal) {
+      const nowIso = new Date().toISOString();
+      draft.metadata = draft.metadata || {};
+      draft.metadata.nonFiscal = true;
+      draft.metadata.nonFiscalType = 'emprestimo';
+      draft.metadata.sefazStatus = 'NAO_FISCAL';
+      draft.metadata.sefazMessage = 'Emissao de emprestimo sem transmissao SEFAZ.';
+      draft.metadata.sefazProtocol = '';
+      draft.metadata.sefazReceipt = '';
+      draft.metadata.sefazProcessedAt = nowIso;
+      draft.status = 'emitted';
+      appendDraftLog(draft, 'Emissao de emprestimo concluida sem transmissao SEFAZ.');
+      draft.markModified('metadata');
+      await draft.save();
 
+      const stockMovement = await applyAuthorizedDraftStockMovement({
+        draftId: draft._id,
+        actor: req.user || null,
+      });
+
+      return res.json({
+        status: 'EMITIDA',
+        message: 'Emissao de emprestimo concluida sem transmissao fiscal.',
+        protocol: '',
+        processedAt: nowIso,
+        receipt: '',
+        environment: 'nao_fiscal',
+        nonFiscal: true,
+        stockMovement,
+      });
+    }
     const companyId = draft.companyId || draft.payload?.company?.id || '';
     const store = companyId
       ? await Store.findById(companyId)
@@ -2746,6 +2786,10 @@ router._test = {
 };
 
 module.exports = router;
+
+
+
+
 
 
 

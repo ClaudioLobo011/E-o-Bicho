@@ -184,6 +184,22 @@ window.__openEditFromUI = (item) => openEditModal(item);
 window.__updateStatusQuick = (id, status, opts) => updateStatusQuick(id, status, opts);
 window.__openAddFromUI = (opts) => openAddModal(opts);
 
+function setAddServiceTab(tab) {
+  state.addModalTab = tab === 'clubinho' ? 'clubinho' : 'cadastro';
+  const isClubinho = state.addModalTab === 'clubinho';
+
+  els.addTabCadastro?.classList.toggle('hidden', isClubinho);
+  els.addTabClubinho?.classList.toggle('hidden', !isClubinho);
+
+  els.addTabBtnCadastro?.classList.toggle('bg-primary', !isClubinho);
+  els.addTabBtnCadastro?.classList.toggle('text-white', !isClubinho);
+  els.addTabBtnCadastro?.classList.toggle('text-gray-500', isClubinho);
+
+  els.addTabBtnClubinho?.classList.toggle('bg-primary', isClubinho);
+  els.addTabBtnClubinho?.classList.toggle('text-white', isClubinho);
+  els.addTabBtnClubinho?.classList.toggle('text-gray-500', !isClubinho);
+}
+
 export function openAddModal(preselectProfId) {
   let preselectedId = '';
   let prefilledDate = '';
@@ -252,6 +268,7 @@ export function openAddModal(preselectProfId) {
     updateModalProfissionalLabel(preselectedId);
   }
   if (els.modalDelete) els.modalDelete.classList.add('hidden');
+  setAddServiceTab('cadastro');
   els.modal.classList.remove('hidden');
   els.modal.classList.add('flex');
   els.cliInput?.focus();
@@ -1820,6 +1837,7 @@ export function openEditModal(a) {
     if (lockPaidEdit) els.modalDelete.classList.add('hidden');
     else els.modalDelete.classList.remove('hidden');
   }
+  setAddServiceTab('cadastro');
   els.modal.classList.remove('hidden');
   els.modal.classList.add('flex');
 }
@@ -2406,6 +2424,8 @@ export function bindModalAndActionsEvents() {
   els.customerSaveToggle?.addEventListener('change', agendaCustomerSyncRequiredIndicators);
   els.customerTabBtnCliente?.addEventListener('click', () => agendaCustomerSetTab('cliente'));
   els.customerTabBtnPet?.addEventListener('click', () => agendaCustomerSetTab('pet'));
+  els.addTabBtnCadastro?.addEventListener('click', () => setAddServiceTab('cadastro'));
+  els.addTabBtnClubinho?.addEventListener('click', () => setAddServiceTab('clubinho'));
   els.customerCode?.addEventListener('input', () => {
     const code = String(els.customerCode?.value || '').trim();
     if (code.length >= 1) {

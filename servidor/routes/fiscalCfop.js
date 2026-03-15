@@ -115,10 +115,17 @@ router.get('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (req
   try {
     const tipoRaw = normalizeString(req.query?.tipo || '');
     const normalizedTipo = ['entrada', 'saida'].includes(tipoRaw) ? tipoRaw : '';
+    const ativoRaw = normalizeString(req.query?.ativo || '').toLowerCase();
+    const hasAtivoFilter = ['true', 'false', '1', '0'].includes(ativoRaw);
+    const strictTipoRaw = normalizeString(req.query?.strictTipo || '').toLowerCase();
+    const strictTipo = strictTipoRaw === 'true' || strictTipoRaw === '1';
     const query = {};
 
     if (normalizedTipo) {
-      query.tipo = { $in: [normalizedTipo, 'ambos'] };
+      query.tipo = strictTipo ? normalizedTipo : { $in: [normalizedTipo, 'ambos'] };
+    }
+    if (hasAtivoFilter) {
+      query.ativo = ativoRaw === 'true' || ativoRaw === '1';
     }
 
     const items = await FiscalCfop.find(query)

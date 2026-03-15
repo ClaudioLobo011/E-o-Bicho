@@ -133,6 +133,10 @@ export const els = {
   modalCancel: document.getElementById('modal-add-cancel'),
   modalSave: document.getElementById('modal-add-save'),
   modalDelete: document.getElementById('modal-add-delete'),
+  addTabBtnCadastro: document.getElementById('agenda-add-tab-btn-cadastro'),
+  addTabBtnClubinho: document.getElementById('agenda-add-tab-btn-clubinho'),
+  addTabCadastro: document.getElementById('agenda-add-tab-cadastro'),
+  addTabClubinho: document.getElementById('agenda-add-tab-clubinho'),
 
   addStoreSelect: document.getElementById('add-store-select'),
   addDateInput: document.getElementById('add-date'),
@@ -246,6 +250,7 @@ export const state = {
     profTipo: '', // 'esteticista' | 'veterinario' | ''
   },
   customerModalTab: 'cliente',
+  addModalTab: 'cadastro',
 };
 
 export function isNoPreferenceProfessionalId(value) {

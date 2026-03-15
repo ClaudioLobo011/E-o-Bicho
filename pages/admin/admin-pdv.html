@@ -307,15 +307,20 @@
                                                     <img id="pdv-selected-image" src="" alt="Pré-visualização do produto" class="h-full w-full object-contain hidden">
                                                     <span id="pdv-selected-placeholder" class="text-xs text-gray-400">Sem imagem</span>
                                                 </div>
-                                                <div class="flex-1 space-y-2">
+                                                <div class="relative flex-1 space-y-2 pr-28">
                                                     <p id="pdv-selected-name" class="text-sm font-semibold text-gray-700">Nenhum produto selecionado.</p>
                                                     <p id="pdv-selected-sku" class="text-xs text-gray-500">Escolha um item para visualizar os detalhes.</p>
                                                     <div class="flex flex-wrap items-center gap-3 text-sm">
-                                                        <span id="pdv-selected-price" class="text-base font-semibold text-gray-800">R$ 0,00</span>
+                                                        <span id="pdv-selected-price" class="text-[28px] font-bold leading-none text-gray-950">R$ 0,00</span>
+                                                        <span id="pdv-selected-global-price" class="hidden text-sm font-bold text-emerald-600"><span id="pdv-selected-global-price-value">R$ 0,00</span></span>
                                                         <span id="pdv-selected-original-price" class="hidden text-xs text-gray-500 line-through">R$ 0,00</span>
                                                         <span id="pdv-selected-promo" class="hidden rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">Promoção ativa</span>
                                                     </div>
                                                     <p id="pdv-selected-general-warning" class="hidden text-[11px] font-medium text-amber-600">Vincule um cliente para aplicar a promoção geral deste item.</p>
+                                                    <span id="pdv-selected-conditional-price" class="hidden absolute bottom-0 right-0 text-right leading-tight">
+                                                        <span id="pdv-selected-conditional-label" class="block text-[10px] font-semibold uppercase tracking-wide text-gray-400">Condicional</span>
+                                                        <span id="pdv-selected-conditional-price-value" class="block text-xs font-bold text-gray-700">R$ 0,00</span>
+                                                    </span>
                                                 </div>
                                             </div>
 

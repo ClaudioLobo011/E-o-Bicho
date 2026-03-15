@@ -100,7 +100,14 @@
         </button>
       </div>
 
-      <div class="agenda-add-modal-body px-5 py-4 space-y-4 overflow-y-auto flex-1">
+      <div class="px-5 pt-3">
+        <div class="inline-flex rounded-lg bg-gray-200 p-1" role="tablist" aria-label="Modo de cadastro do serviço">
+          <button type="button" id="agenda-add-tab-btn-cadastro" class="rounded-md bg-primary px-4 py-2 text-[12px] font-semibold text-white transition">Cadastro</button>
+          <button type="button" id="agenda-add-tab-btn-clubinho" class="rounded-md px-4 py-2 text-[12px] font-semibold text-gray-500 transition">Clubinho</button>
+        </div>
+      </div>
+
+      <div id="agenda-add-tab-cadastro" class="agenda-add-modal-body px-5 py-4 space-y-4 overflow-y-auto flex-1">
         <!-- Empresa e Data -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -198,6 +205,13 @@
             <span id="add-serv-total" class="text-base font-semibold text-gray-900">R$ 0,00</span>
           </div>
         </div>
+      </div>
+
+      <div id="agenda-add-tab-clubinho" class="hidden agenda-add-modal-body px-5 py-4 overflow-y-auto flex-1">
+        <div class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-sm text-gray-600">
+          Aba Clubinho adicionada. ConteÃºdo em preparaÃ§Ã£o.
+        </div>
+      </div>
 
       <div class="agenda-add-modal-footer px-5 py-3 border-t flex items-center justify-between gap-3">
         <button id="modal-add-delete" class="px-4 py-2 rounded-lg border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 hidden">

@@ -11,6 +11,7 @@
           "cst": "00",
           "cfop": {
             "nfe": {
+              "entrada": "1102",
               "dentroEstado": "5102",
               "foraEstado": "6102",
               "transferencia": "5152",
@@ -18,6 +19,7 @@
               "industrializacao": "5101"
             },
             "nfce": {
+              "entrada": "",
               "dentroEstado": "5102",
               "foraEstado": "6108",
               "transferencia": "5656",
@@ -59,7 +61,7 @@
           "atualizadoPor": ""
         },
         "createdAt": "2026-01-21T22:58:39.324Z",
-        "updatedAt": "2026-01-22T00:06:15.127Z",
+        "updatedAt": "2026-03-14T16:07:16.452Z",
         "updatedBy": "68ae036a7d50176ccedb8255"
       },
       {
@@ -67,11 +69,12 @@
         "name": "5102 - Ração",
         "fiscal": {
           "origem": "0",
-          "cest": "17.001.00",
+          "cest": "22.001.00",
           "csosn": "102",
           "cst": "00",
           "cfop": {
             "nfe": {
+              "entrada": "1102",
               "dentroEstado": "5102",
               "foraEstado": "6102",
               "transferencia": "5152",
@@ -79,6 +82,7 @@
               "industrializacao": "5101"
             },
             "nfce": {
+              "entrada": "",
               "dentroEstado": "5102",
               "foraEstado": "6108",
               "transferencia": "5656",
@@ -120,7 +124,7 @@
           "atualizadoPor": ""
         },
         "createdAt": "2026-01-21T23:03:43.954Z",
-        "updatedAt": "2026-01-21T23:03:43.954Z",
+        "updatedAt": "2026-03-14T16:07:47.842Z",
         "updatedBy": "68ae036a7d50176ccedb8255"
       }
     ]

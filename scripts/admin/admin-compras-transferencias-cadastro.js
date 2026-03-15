@@ -2420,6 +2420,18 @@
     const transportUf = xmlGetText(transp, 'transporta UF');
     const modFrete = xmlGetText(transp, 'modFrete');
 
+    const DESCRIPTION_CHARS_PER_LINE = 34;
+    const estimateDescriptionLines = (description) => {
+      const normalized = String(description || '').replace(/\s+/g, ' ').trim();
+      if (!normalized) return 1;
+      return Math.max(1, Math.ceil(normalized.length / DESCRIPTION_CHARS_PER_LINE));
+    };
+    const estimateRowHeightMm = (description) => {
+      const lines = estimateDescriptionLines(description);
+      // Estimativa de altura da linha na tabela de itens (7.5pt + bordas/padding).
+      return 2.8 + lines * 3.1;
+    };
+
     const productRowsList = dets
       .map((det, index) => {
         const prod = det.querySelector('prod');
@@ -2433,11 +2445,13 @@
         const pICMS = xmlGetText(icmsNode, 'pICMS');
         const vIPI = xmlGetText(ipiNode, 'vIPI');
         const pIPI = xmlGetText(ipiNode, 'pIPI');
-        return `
+        const description = xmlGetText(prod, 'xProd');
+        return {
+          html: `
           <tr>
             <td class="center">${index + 1}</td>
             <td>${xmlGetText(prod, 'cProd')}</td>
-            <td>${xmlGetText(prod, 'xProd')}</td>
+            <td class="desc"><span class="desc-text">${escapeHtml(description)}</span></td>
             <td class="center ncm">${xmlGetText(prod, 'NCM')}</td>
             <td class="center">${cst || '0'}</td>
             <td class="center">${cfop}</td>
@@ -2451,11 +2465,11 @@
             <td class="num">${formatNumber(pICMS, 2)}</td>
             <td class="num">${formatNumber(pIPI, 2)}</td>
           </tr>
-        `;
+        `,
+          heightMm: estimateRowHeightMm(description),
+        };
       })
       ;
-    const productsRows = productRowsList.join('');
-
     const dupCards = dupList.map(
       (dup) => `
         <table class="dup-card">
@@ -2566,8 +2580,9 @@
         </tr>
       </table>
     `;
-    const FULL_FIRST_PAGE_ITEM_LIMIT = 11;
-    const FULL_NEXT_PAGE_ITEM_LIMIT = 24;
+    // Blocos fixos de paginação (A4): 1a folha com rodapé, demais sem rodapé.
+    const FIRST_PAGE_PRODUCTS_AREA_MM = 124;
+    const NEXT_PAGE_PRODUCTS_AREA_MM = 244;
 
     const buildFullItemsTable = (rowsHtml) => `
       <table class="items">
@@ -2613,22 +2628,36 @@
       </table>
     `;
 
-    const hasOverflowItems = productRowsList.length > FULL_FIRST_PAGE_ITEM_LIMIT;
-    const firstPageItems = hasOverflowItems
-      ? productRowsList.slice(0, FULL_FIRST_PAGE_ITEM_LIMIT)
-      : productRowsList;
-    const overflowItems = hasOverflowItems ? productRowsList.slice(FULL_FIRST_PAGE_ITEM_LIMIT) : [];
+    const consumeRowsForPage = (rows, startIndex, capacityMm) => {
+      const pageRows = [];
+      let usedMm = 0;
+      let index = startIndex;
+      while (index < rows.length) {
+        const row = rows[index];
+        const rowHeightMm = Math.max(3.2, Number(row?.heightMm) || 3.2);
+        if (pageRows.length > 0 && usedMm + rowHeightMm > capacityMm) {
+          break;
+        }
+        pageRows.push(row);
+        usedMm += rowHeightMm;
+        index += 1;
+      }
+      return { pageRows, nextIndex: index };
+    };
 
-    const firstPageItemsHtml = buildFullItemsTable(firstPageItems.join(''));
+    const firstPageChunk = consumeRowsForPage(productRowsList, 0, FIRST_PAGE_PRODUCTS_AREA_MM);
+    const firstPageItemsHtml = buildFullItemsTable(firstPageChunk.pageRows.map((item) => item.html).join(''));
 
-    const continuationChunks = overflowItems.length
-      ? overflowItems.reduce((pages, _, index) => {
-          if (index % FULL_NEXT_PAGE_ITEM_LIMIT === 0) {
-            pages.push(overflowItems.slice(index, index + FULL_NEXT_PAGE_ITEM_LIMIT));
-          }
-          return pages;
-        }, [])
-      : [];
+    const continuationChunks = [];
+    let cursor = firstPageChunk.nextIndex;
+    while (cursor < productRowsList.length) {
+      const nextChunk = consumeRowsForPage(productRowsList, cursor, NEXT_PAGE_PRODUCTS_AREA_MM);
+      if (!nextChunk.pageRows.length) {
+        break;
+      }
+      continuationChunks.push(nextChunk.pageRows);
+      cursor = nextChunk.nextIndex;
+    }
     const totalPages = 1 + continuationChunks.length;
 
     const buildDanfeTopHeaderHtml = (pageNumber) => `
@@ -2701,12 +2730,7 @@
           .map((pageRows, pageIndex) => `
             <div class="danfe danfe-page danfe-page-continuation">
               ${buildDanfeTopHeaderHtml(pageIndex + 2)}
-              <table class="block">
-                <tr>
-                  <td class="section-title">Itens da Transferencia - Continuacao ${pageIndex + 1}</td>
-                </tr>
-              </table>
-              ${buildFullItemsTable(pageRows.join(''))}
+              ${buildFullItemsTable(pageRows.map((item) => item.html).join(''))}
             </div>
           `)
           .join('')
@@ -2866,6 +2890,13 @@
     .items { table-layout: fixed; }
     .items thead th { background: #f5f5f5; }
     .items tbody tr { page-break-inside: avoid; }
+    .items td.desc .desc-text {
+      display: block;
+      line-height: 1.2;
+      white-space: normal;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
     thead { display: table-header-group; }
     tfoot { display: table-footer-group; }
     .danfe-box { display: flex; flex-direction: column; gap: 2px; align-items: stretch; }

@@ -19,6 +19,7 @@ const fiscalTaxSchema = new mongoose.Schema({
 }, { _id: false });
 
 const fiscalCfopSchema = new mongoose.Schema({
+    entrada: { type: String, trim: true, default: '' },
     dentroEstado: { type: String, trim: true, default: '' },
     foraEstado: { type: String, trim: true, default: '' },
     transferencia: { type: String, trim: true, default: '' },

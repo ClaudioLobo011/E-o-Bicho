@@ -348,7 +348,12 @@
               <div class="flex flex-wrap items-center justify-between gap-3">
                 <h3 class="text-sm font-semibold text-gray-700">Itens da nota</h3>
                 <div class="flex flex-wrap gap-2">
-                  <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
+                  <button
+                    type="button"
+                    data-open-manual-product-modal
+                    class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-400 transition opacity-60 cursor-not-allowed"
+                    disabled
+                  >
                     <i class="fas fa-plus-circle"></i>
                     Adicionar Produto
                   </button>
@@ -1164,6 +1169,430 @@
     </div>
   </div>
 
+  <div id="nfe-product-modal" class="fixed inset-0 z-50 hidden overflow-y-auto bg-black/40 p-3" aria-hidden="true">
+    <div class="mx-auto w-full max-w-5xl rounded-xl bg-white shadow-xl">
+      <div class="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+        <h3 class="text-base font-semibold text-gray-800">Informar Produtos</h3>
+        <button type="button" class="text-gray-400 hover:text-gray-600" data-nfe-modal-close>
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="max-h-[78vh] overflow-y-auto space-y-4 px-4 py-4 text-[11px]">
+        <div class="space-y-1">
+          <label for="nfe-modal-product" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Procura</label>
+          <div class="relative">
+            <span class="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400"><i class="fas fa-magnifying-glass"></i></span>
+            <input type="text" id="nfe-modal-product" class="w-full border-b border-gray-300 bg-transparent pb-1 pr-8 text-[11px] focus:border-primary focus:outline-none" placeholder="Digite o produto">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="space-y-1">
+            <label for="nfe-modal-qty" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Quantidade</label>
+            <input type="text" id="nfe-modal-qty" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,000">
+          </div>
+          <div class="space-y-1">
+            <label for="nfe-modal-unit" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Valor Unitario (R$)</label>
+            <input type="text" id="nfe-modal-unit" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,000">
+          </div>
+          <div class="space-y-1">
+            <label for="nfe-modal-subtotal" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">SubTotal (R$)</label>
+            <input type="text" id="nfe-modal-subtotal" class="w-full border-b border-gray-200 bg-transparent pb-1 text-[11px] text-gray-400" value="0,00" readonly>
+          </div>
+
+          <div class="space-y-1">
+            <label for="nfe-modal-discount-percent" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Desconto (%)</label>
+            <input type="text" id="nfe-modal-discount-percent" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+          </div>
+          <div class="space-y-1">
+            <label for="nfe-modal-discount-value" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Desconto (R$)</label>
+            <input type="text" id="nfe-modal-discount-value" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+          </div>
+          <div class="space-y-1">
+            <label for="nfe-modal-other-expenses" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Outras Despesas Acessorias (R$)</label>
+            <input type="text" id="nfe-modal-other-expenses" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+          </div>
+
+          <div class="space-y-1">
+            <label for="nfe-modal-total" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Valor Total (R$)</label>
+            <input type="text" id="nfe-modal-total" class="w-full border-b border-gray-200 bg-transparent pb-1 text-[11px] text-gray-400" value="0,00" readonly>
+          </div>
+          <div class="space-y-1">
+            <label for="nfe-modal-unidade-comercial" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Unidade Comercial</label>
+            <select id="nfe-modal-unidade-comercial" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none">
+              <option value="">--SELECIONE--</option>
+            </select>
+          </div>
+          <div class="space-y-1">
+            <label for="nfe-modal-peso" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Peso (Kg)</label>
+            <input type="text" id="nfe-modal-peso" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,000">
+          </div>
+
+          <div class="space-y-1">
+            <label for="nfe-modal-qty-trib" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Quantidade Tributavel</label>
+            <input type="text" id="nfe-modal-qty-trib" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,000">
+          </div>
+          <div class="space-y-1">
+            <label for="nfe-modal-unidade-tributavel" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Unidade Tributavel</label>
+            <select id="nfe-modal-unidade-tributavel" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none">
+              <option value="">--SELECIONE--</option>
+            </select>
+          </div>
+          <div class="space-y-1">
+            <label for="nfe-modal-unit-trib" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Valor Unitario de Tributacao</label>
+            <input type="text" id="nfe-modal-unit-trib" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,000">
+          </div>
+
+          <div class="space-y-1">
+            <label for="nfe-modal-ncm" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">NCM</label>
+            <input type="text" id="nfe-modal-ncm" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none">
+          </div>
+          <div class="space-y-1">
+            <label for="nfe-modal-cfop" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">CFOP</label>
+            <select id="nfe-modal-cfop" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none">
+              <option value="">--SELECIONE--</option>
+            </select>
+          </div>
+          <div class="space-y-1">
+            <label for="nfe-modal-cest" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Cest</label>
+            <div class="relative">
+              <input type="text" id="nfe-modal-cest" class="w-full border-b border-gray-300 bg-transparent pb-1 pr-5 text-[11px] focus:border-primary focus:outline-none" placeholder="--SELECIONE--" autocomplete="off">
+              <button type="button" class="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary" data-cest-toggle aria-label="Abrir lista de CEST">
+                <i class="fas fa-chevron-down text-[10px]"></i>
+              </button>
+              <div class="absolute z-50 mt-2 hidden max-h-56 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg text-xs text-gray-600" data-cest-dropdown></div>
+            </div>
+          </div>
+
+          <div class="space-y-1">
+            <label for="nfe-modal-beneficio" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Codigo do Beneficio Fiscal</label>
+            <input type="text" id="nfe-modal-beneficio" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none">
+          </div>
+          <div class="space-y-1">
+            <label for="nfe-modal-numero-pedido" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Numero Pedido</label>
+            <input type="text" id="nfe-modal-numero-pedido" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none">
+          </div>
+          <div class="space-y-1">
+            <label for="nfe-modal-numero-item-pedido" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Numero Item Pedido</label>
+            <input type="text" id="nfe-modal-numero-item-pedido" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none">
+          </div>
+        </div>
+
+        <div class="border-t border-gray-100 pt-3">
+          <div class="flex flex-wrap gap-2 text-[10px] font-semibold uppercase tracking-wide text-gray-500" role="tablist" aria-label="Abas do item">
+            <button type="button" class="rounded-full border border-gray-200 px-3 py-1.5 text-primary" data-nfe-modal-tab="icms" aria-selected="true">ICMS</button>
+            <button type="button" class="rounded-full border border-gray-200 px-3 py-1.5" data-nfe-modal-tab="ipi">IPI</button>
+            <button type="button" class="rounded-full border border-gray-200 px-3 py-1.5" data-nfe-modal-tab="pis-cofins">PIS / COFINS</button>
+            <button type="button" class="rounded-full border border-gray-200 px-3 py-1.5" data-nfe-modal-tab="info">Informacoes do Produto</button>
+          </div>
+          <div class="mt-4">
+            <div data-nfe-modal-panel="icms" class="space-y-4">
+              <div class="space-y-1">
+                <label for="nfe-modal-icms-cst" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">CST <span class="text-red-500">*</span></label>
+                <select id="nfe-modal-icms-cst" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none">
+                  <option value="">--SELECIONE--</option>
+                  <option value="00">CST 00 - Tributada integralmente</option>
+                  <option value="10">CST 10 - Tributada e com cobranca do ICMS por substituicao tributaria</option>
+                  <option value="20">CST 20 - Com reducao da base de calculo</option>
+                  <option value="30">CST 30 - Isenta ou nao tributada e com cobranca do ICMS por substituicao tributaria</option>
+                  <option value="40">CST 40 - Isenta</option>
+                  <option value="41">CST 41 - Nao tributada</option>
+                  <option value="50">CST 50 - Suspensao</option>
+                  <option value="51">CST 51 - Diferimento</option>
+                  <option value="60">CST 60 - ICMS cobrado anteriormente por substituicao tributaria</option>
+                  <option value="70">CST 70 - Com reducao da base de calculo e cobranca do ICMS por substituicao tributaria</option>
+                  <option value="90">CST 90 - Outras</option>
+                  <option value="101">CSOSN 101 - Tributada com permissao de credito</option>
+                  <option value="102">CSOSN 102 - Tributada sem permissao de credito</option>
+                  <option value="103">CSOSN 103 - Isencao do ICMS para faixa de receita bruta</option>
+                  <option value="201">CSOSN 201 - Tributada com permissao de credito e com cobranca do ICMS ST</option>
+                  <option value="202">CSOSN 202 - Tributada sem permissao de credito e com cobranca do ICMS ST</option>
+                  <option value="203">CSOSN 203 - Isencao para faixa de receita bruta e com cobranca do ICMS ST</option>
+                  <option value="300">CSOSN 300 - Imune</option>
+                  <option value="400">CSOSN 400 - Nao tributada</option>
+                  <option value="500">CSOSN 500 - ICMS cobrado anteriormente por ST ou por antecipacao</option>
+                  <option value="900">CSOSN 900 - Outros</option>
+                </select>
+              </div>
+              <div class="space-y-1">
+                <label for="nfe-modal-icms-modalidade" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Modalid. de determin. da BC ICMS</label>
+                <select id="nfe-modal-icms-modalidade" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none">
+                  <option value="nao-aplica">N&atilde;o se aplica</option>
+                  <option value="mva" selected>Margem Valor Agregado</option>
+                  <option value="pauta">Pauta (valor)</option>
+                  <option value="preco-tabelado">PreÃ§o Tabelado MÃ¡x. (valor)</option>
+                  <option value="valor-operacao">Valor da OperaÃ§Ã£o</option>
+                </select>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="space-y-1">
+                  <label for="nfe-modal-icms-base-percent" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Base ICMS (%)</label>
+                  <input type="text" id="nfe-modal-icms-base-percent" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="100">
+                </div>
+                <div class="space-y-1">
+                  <label for="nfe-modal-icms-base-value" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Base ICMS (R$)</label>
+                  <input type="text" id="nfe-modal-icms-base-value" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+                </div>
+                <div class="space-y-1">
+                  <label for="nfe-modal-icms-aliq" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Aliq. ICMS (%)</label>
+                  <input type="text" id="nfe-modal-icms-aliq" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+                </div>
+                <div class="space-y-1">
+                  <label for="nfe-modal-icms-valor" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Valor ICMS (R$)</label>
+                  <input type="text" id="nfe-modal-icms-valor" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+                </div>
+                <div class="space-y-1">
+                  <label for="nfe-modal-icms-aliq-fcp" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Aliq. FCP (%)</label>
+                  <input type="text" id="nfe-modal-icms-aliq-fcp" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+                </div>
+                <div class="space-y-1">
+                  <label for="nfe-modal-icms-valor-fcp" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Valor FCP (R$)</label>
+                  <input type="text" id="nfe-modal-icms-valor-fcp" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+                </div>
+              </div>
+            </div>
+            <div data-nfe-modal-panel="ipi" class="hidden space-y-4">
+              <div class="space-y-1">
+                <label for="nfe-modal-ipi-st" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">ST IPI</label>
+                <select id="nfe-modal-ipi-st" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none">
+                  <option value="">--SELECIONE--</option>
+                  <option value="00">CST 00 - Entrada com recuperacao de credito</option>
+                  <option value="01">CST 01 - Entrada tributada com aliquota zero</option>
+                  <option value="02">CST 02 - Entrada isenta</option>
+                  <option value="03">CST 03 - Entrada nao tributada</option>
+                  <option value="04">CST 04 - Entrada imune</option>
+                  <option value="05">CST 05 - Entrada com suspensao</option>
+                  <option value="49">CST 49 - Outras entradas</option>
+                  <option value="50">CST 50 - Saida tributada</option>
+                  <option value="51">CST 51 - Saida tributada com aliquota zero</option>
+                  <option value="52">CST 52 - Saida isenta</option>
+                  <option value="53">CST 53 - Saida nao tributada</option>
+                  <option value="54">CST 54 - Saida imune</option>
+                  <option value="55">CST 55 - Saida com suspensao</option>
+                  <option value="99">CST 99 - Outras saidas</option>
+                </select>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="space-y-1">
+                  <label for="nfe-modal-ipi-base" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Base IPI (R$)</label>
+                  <input type="text" id="nfe-modal-ipi-base" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+                </div>
+                <div class="space-y-1">
+                  <label for="nfe-modal-ipi-aliq" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">AlÃ­q. IPI (%)</label>
+                  <input type="text" id="nfe-modal-ipi-aliq" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+                </div>
+                <div class="space-y-1">
+                  <label for="nfe-modal-ipi-valor" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Valor IPI (R$)</label>
+                  <input type="text" id="nfe-modal-ipi-valor" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+                </div>
+              </div>
+              <div class="space-y-1">
+                <label for="nfe-modal-ipi-enquadramento" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">CÃ³d. de enquad.</label>
+                <input type="text" id="nfe-modal-ipi-enquadramento" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none">
+              </div>
+            </div>
+            <div data-nfe-modal-panel="pis-cofins" class="hidden space-y-4">
+              <div class="space-y-1">
+                <label for="nfe-modal-pis-st" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">ST PIS</label>
+                <select id="nfe-modal-pis-st" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none">
+                  <option value="">--SELECIONE--</option>
+                  <option value="01">CST 01 - Opera&ccedil;&atilde;o Tribut&aacute;vel (Base de C&aacute;lculo = Valor da Opera&ccedil;&atilde;o Al&iacute;quota Normal)</option>
+                  <option value="02">CST 02 - Opera&ccedil;&atilde;o Tribut&aacute;vel (Base de C&aacute;lculo = Valor da Opera&ccedil;&atilde;o Al&iacute;quota Diferenciada)</option>
+                  <option value="03">CST 03 - Opera&ccedil;&atilde;o Tribut&aacute;vel (Base de C&aacute;lculo = Quantidade Vendida x Al&iacute;quota por Unidade)</option>
+                  <option value="04">CST 04 - Opera&ccedil;&atilde;o Tribut&aacute;vel (Tributa&ccedil;&atilde;o Monof&aacute;sica - Al&iacute;quota Zero)</option>
+                  <option value="05">CST 05 - Opera&ccedil;&atilde;o Tribut&aacute;vel (Substitui&ccedil;&atilde;o Tribut&aacute;ria)</option>
+                  <option value="06">CST 06 - Opera&ccedil;&atilde;o Tribut&aacute;vel (Al&iacute;quota Zero)</option>
+                  <option value="07">CST 07 - Opera&ccedil;&atilde;o Isenta da Contribui&ccedil;&atilde;o</option>
+                  <option value="08">CST 08 - Opera&ccedil;&atilde;o Sem Incid&ecirc;ncia da Contribui&ccedil;&atilde;o</option>
+                  <option value="09">CST 09 - Opera&ccedil;&atilde;o com Suspens&atilde;o da Contribui&ccedil;&atilde;o</option>
+                  <option value="49">CST 49 - Outras Opera&ccedil;&otilde;es de Sa&iacute;da</option>
+                  <option value="50">CST 50 - Opera&ccedil;&atilde;o com Direito a Cr&eacute;dito - Vinculada Exclusivamente a Receita Tributada no Mercado Interno</option>
+                  <option value="51">CST 51 - Opera&ccedil;&atilde;o com Direito a Cr&eacute;dito - Vinculada Exclusivamente a Receita N&atilde;o Tributada no Mercado Interno</option>
+                  <option value="52">CST 52 - Opera&ccedil;&atilde;o com Direito a Cr&eacute;dito - Vinculada Exclusivamente a Receita de Exporta&ccedil;&atilde;o</option>
+                  <option value="53">CST 53 - Opera&ccedil;&atilde;o com Direito a Cr&eacute;dito - Vinculada a Receitas Tributadas e N&atilde;o-Tributadas no Mercado Interno</option>
+                  <option value="54">CST 54 - Opera&ccedil;&atilde;o com Direito a Cr&eacute;dito - Vinculada a Receitas Tributadas no Mercado Interno e de Exporta&ccedil;&atilde;o</option>
+                  <option value="55">CST 55 - Opera&ccedil;&atilde;o com Direito a Cr&eacute;dito - Vinculada a Receitas N&atilde;o-Tributadas no Mercado Interno e de Exporta&ccedil;&atilde;o</option>
+                  <option value="56">CST 56 - Opera&ccedil;&atilde;o com Direito a Cr&eacute;dito - Vinculada a Receitas Tributadas e N&atilde;o-Tributadas no Mercado Interno e de Exporta&ccedil;&atilde;o</option>
+                  <option value="60">CST 60 - Cr&eacute;dito Presumido - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o Vinculada Exclusivamente a Receita Tributada no Mercado Interno</option>
+                  <option value="61">CST 61 - Cr&eacute;dito Presumido - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o Vinculada Exclusivamente a Receita N&atilde;o Tributada no Mercado Interno</option>
+                  <option value="62">CST 62 - Cr&eacute;dito Presumido - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o Vinculada Exclusivamente a Receita de Exporta&ccedil;&atilde;o</option>
+                  <option value="63">CST 63 - Cr&eacute;dito Presumido - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o Vinculada a Receitas Tributadas e N&atilde;o-Tributadas no Mercado Interno</option>
+                  <option value="64">CST 64 - Cr&eacute;dito Presumido - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o Vinculada a Receitas Tributadas no Mercado Interno e de Exporta&ccedil;&atilde;o</option>
+                  <option value="65">CST 65 - Cr&eacute;dito Presumido - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o Vinculada a Receitas N&atilde;o-Tributadas no Mercado Interno e de Exporta&ccedil;&atilde;o</option>
+                  <option value="66">CST 66 - Cr&eacute;dito Presumido - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o Vinculada a Receitas Tributadas e N&atilde;o-Tributadas no Mercado Interno e de Exporta&ccedil;&atilde;o</option>
+                  <option value="67">CST 67 - Cr&eacute;dito Presumido - Outras Opera&ccedil;&otilde;es</option>
+                  <option value="70">CST 70 - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o sem Direito a Cr&eacute;dito</option>
+                  <option value="71">CST 71 - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o com Isen&ccedil;&atilde;o</option>
+                  <option value="72">CST 72 - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o com Suspens&atilde;o</option>
+                  <option value="73">CST 73 - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o a Al&iacute;quota Zero</option>
+                  <option value="74">CST 74 - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o sem Incid&ecirc;ncia da Contribui&ccedil;&atilde;o</option>
+                  <option value="75">CST 75 - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o por Substitui&ccedil;&atilde;o Tribut&aacute;ria</option>
+                  <option value="98">CST 98 - Outras Opera&ccedil;&otilde;es de Entrada</option>
+                  <option value="99">CST 99 - Outras Opera&ccedil;&otilde;es</option>
+                </select>
+              </div>
+              <div class="flex flex-wrap gap-4 text-[10px] text-gray-500">
+                <label class="inline-flex items-center gap-2">
+                  <input type="checkbox" id="nfe-modal-pis-st-total" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/30">
+                  Valor do PIS ST compÃµe valor total da NF-e
+                </label>
+                <label class="inline-flex items-center gap-2">
+                  <input type="checkbox" id="nfe-modal-pis-excluir-icms" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/30">
+                  Excluir o valor do ICMS da Base de CÃ¡lculo do PIS
+                </label>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="space-y-1">
+                  <label for="nfe-modal-pis-base" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Base PIS (R$)</label>
+                  <input type="text" id="nfe-modal-pis-base" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+                </div>
+                <div class="space-y-1">
+                  <label for="nfe-modal-pis-aliq" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">AlÃ­quota PIS (%)</label>
+                  <input type="text" id="nfe-modal-pis-aliq" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+                </div>
+                <div class="space-y-1">
+                  <label for="nfe-modal-pis-valor" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Valor PIS (R$)</label>
+                  <input type="text" id="nfe-modal-pis-valor" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+                </div>
+              </div>
+
+              <div class="space-y-1 pt-2">
+                <label for="nfe-modal-cofins-st" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">ST COFINS</label>
+                <select id="nfe-modal-cofins-st" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none">
+                  <option value="">--SELECIONE--</option>
+                  <option value="01">CST 01 - Opera&ccedil;&atilde;o Tribut&aacute;vel (Base de C&aacute;lculo = Valor da Opera&ccedil;&atilde;o Al&iacute;quota Normal)</option>
+                  <option value="02">CST 02 - Opera&ccedil;&atilde;o Tribut&aacute;vel (Base de C&aacute;lculo = Valor da Opera&ccedil;&atilde;o Al&iacute;quota Diferenciada)</option>
+                  <option value="03">CST 03 - Opera&ccedil;&atilde;o Tribut&aacute;vel (Base de C&aacute;lculo = Quantidade Vendida x Al&iacute;quota por Unidade)</option>
+                  <option value="04">CST 04 - Opera&ccedil;&atilde;o Tribut&aacute;vel (Tributa&ccedil;&atilde;o Monof&aacute;sica - Al&iacute;quota Zero)</option>
+                  <option value="05">CST 05 - Opera&ccedil;&atilde;o Tribut&aacute;vel (Substitui&ccedil;&atilde;o Tribut&aacute;ria)</option>
+                  <option value="06">CST 06 - Opera&ccedil;&atilde;o Tribut&aacute;vel (Al&iacute;quota Zero)</option>
+                  <option value="07">CST 07 - Opera&ccedil;&atilde;o Isenta da Contribui&ccedil;&atilde;o</option>
+                  <option value="08">CST 08 - Opera&ccedil;&atilde;o Sem Incid&ecirc;ncia da Contribui&ccedil;&atilde;o</option>
+                  <option value="09">CST 09 - Opera&ccedil;&atilde;o com Suspens&atilde;o da Contribui&ccedil;&atilde;o</option>
+                  <option value="49">CST 49 - Outras Opera&ccedil;&otilde;es de Sa&iacute;da</option>
+                  <option value="50">CST 50 - Opera&ccedil;&atilde;o com Direito a Cr&eacute;dito - Vinculada Exclusivamente a Receita Tributada no Mercado Interno</option>
+                  <option value="51">CST 51 - Opera&ccedil;&atilde;o com Direito a Cr&eacute;dito - Vinculada Exclusivamente a Receita N&atilde;o Tributada no Mercado Interno</option>
+                  <option value="52">CST 52 - Opera&ccedil;&atilde;o com Direito a Cr&eacute;dito - Vinculada Exclusivamente a Receita de Exporta&ccedil;&atilde;o</option>
+                  <option value="53">CST 53 - Opera&ccedil;&atilde;o com Direito a Cr&eacute;dito - Vinculada a Receitas Tributadas e N&atilde;o-Tributadas no Mercado Interno</option>
+                  <option value="54">CST 54 - Opera&ccedil;&atilde;o com Direito a Cr&eacute;dito - Vinculada a Receitas Tributadas no Mercado Interno e de Exporta&ccedil;&atilde;o</option>
+                  <option value="55">CST 55 - Opera&ccedil;&atilde;o com Direito a Cr&eacute;dito - Vinculada a Receitas N&atilde;o-Tributadas no Mercado Interno e de Exporta&ccedil;&atilde;o</option>
+                  <option value="56">CST 56 - Opera&ccedil;&atilde;o com Direito a Cr&eacute;dito - Vinculada a Receitas Tributadas e N&atilde;o-Tributadas no Mercado Interno e de Exporta&ccedil;&atilde;o</option>
+                  <option value="60">CST 60 - Cr&eacute;dito Presumido - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o Vinculada Exclusivamente a Receita Tributada no Mercado Interno</option>
+                  <option value="61">CST 61 - Cr&eacute;dito Presumido - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o Vinculada Exclusivamente a Receita N&atilde;o Tributada no Mercado Interno</option>
+                  <option value="62">CST 62 - Cr&eacute;dito Presumido - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o Vinculada Exclusivamente a Receita de Exporta&ccedil;&atilde;o</option>
+                  <option value="63">CST 63 - Cr&eacute;dito Presumido - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o Vinculada a Receitas Tributadas e N&atilde;o-Tributadas no Mercado Interno</option>
+                  <option value="64">CST 64 - Cr&eacute;dito Presumido - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o Vinculada a Receitas Tributadas no Mercado Interno e de Exporta&ccedil;&atilde;o</option>
+                  <option value="65">CST 65 - Cr&eacute;dito Presumido - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o Vinculada a Receitas N&atilde;o-Tributadas no Mercado Interno e de Exporta&ccedil;&atilde;o</option>
+                  <option value="66">CST 66 - Cr&eacute;dito Presumido - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o Vinculada a Receitas Tributadas e N&atilde;o-Tributadas no Mercado Interno e de Exporta&ccedil;&atilde;o</option>
+                  <option value="67">CST 67 - Cr&eacute;dito Presumido - Outras Opera&ccedil;&otilde;es</option>
+                  <option value="70">CST 70 - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o sem Direito a Cr&eacute;dito</option>
+                  <option value="71">CST 71 - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o com Isen&ccedil;&atilde;o</option>
+                  <option value="72">CST 72 - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o com Suspens&atilde;o</option>
+                  <option value="73">CST 73 - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o a Al&iacute;quota Zero</option>
+                  <option value="74">CST 74 - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o sem Incid&ecirc;ncia da Contribui&ccedil;&atilde;o</option>
+                  <option value="75">CST 75 - Opera&ccedil;&atilde;o de Aquisi&ccedil;&atilde;o por Substitui&ccedil;&atilde;o Tribut&aacute;ria</option>
+                  <option value="98">CST 98 - Outras Opera&ccedil;&otilde;es de Entrada</option>
+                  <option value="99">CST 99 - Outras Opera&ccedil;&otilde;es</option>
+                </select>
+              </div>
+              <div class="flex flex-wrap gap-4 text-[10px] text-gray-500">
+                <label class="inline-flex items-center gap-2">
+                  <input type="checkbox" id="nfe-modal-cofins-st-total" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/30">
+                  Valor do COFINS ST compÃµe valor total da NF-e
+                </label>
+                <label class="inline-flex items-center gap-2">
+                  <input type="checkbox" id="nfe-modal-cofins-excluir-icms" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/30">
+                  Excluir o valor do ICMS da Base de CÃ¡lculo do Cofins
+                </label>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="space-y-1">
+                  <label for="nfe-modal-cofins-base" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Base COFINS (R$)</label>
+                  <input type="text" id="nfe-modal-cofins-base" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+                </div>
+                <div class="space-y-1">
+                  <label for="nfe-modal-cofins-aliq" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">AlÃ­quota COFINS (%)</label>
+                  <input type="text" id="nfe-modal-cofins-aliq" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+                </div>
+                <div class="space-y-1">
+                  <label for="nfe-modal-cofins-valor" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Valor COFINS (R$)</label>
+                  <input type="text" id="nfe-modal-cofins-valor" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
+                </div>
+              </div>
+            </div>
+            <div data-nfe-modal-panel="info" class="hidden">
+              <div class="space-y-1">
+                <label for="nfe-modal-info-produto" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Inf. Adicionais Produto</label>
+                <textarea id="nfe-modal-info-produto" rows="3" class="w-full rounded-md border border-gray-200 bg-gray-50 p-2 text-[11px] text-gray-700 focus:border-primary focus:outline-none"></textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="flex items-center justify-end gap-2 border-t border-gray-100 px-4 py-3 text-[11px]">
+        <button type="button" id="nfe-modal-cancel" class="rounded-lg border border-gray-200 px-3 py-1.5 font-semibold text-gray-700 hover:bg-gray-50 transition">Cancelar</button>
+        <button type="button" id="nfe-modal-save" class="rounded-lg bg-primary px-3 py-1.5 font-semibold text-white hover:bg-primary/90 transition">Adicionar item</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="manual-product-lookup-modal" class="fixed inset-0 z-[999] hidden bg-black/40 p-3" aria-hidden="true">
+    <div class="absolute inset-0" data-close-manual-product-lookup></div>
+    <div class="relative mx-auto flex w-full max-w-5xl flex-col overflow-hidden rounded-xl bg-white shadow-xl" style="height:min(calc(100vh - 24px), 90vh);max-height:min(calc(100vh - 24px), 90vh);">
+      <div class="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+          <div>
+            <h3 class="text-base font-semibold text-gray-900">Selecionar Produto</h3>
+            <p class="text-[11px] text-gray-600">Cod | CodBarras | Nome | Custo</p>
+          </div>
+          <button
+            type="button"
+            class="inline-flex items-center justify-center rounded-full border border-gray-200 p-2 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700"
+            data-close-manual-product-lookup
+            aria-label="Fechar busca de produto"
+          >
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="border-b border-gray-100 bg-gray-50 px-4 py-3">
+          <div class="mb-2">
+            <label for="manual-product-lookup-search" class="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+              Buscar produto
+            </label>
+            <div class="relative">
+              <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
+                <i class="fas fa-search text-[11px]"></i>
+              </span>
+              <input
+                type="search"
+                id="manual-product-lookup-search"
+                data-manual-product-lookup-search
+                class="w-full rounded-lg border border-gray-200 bg-white py-2 pl-10 pr-3 text-[12px] leading-5 text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                placeholder="Digite nome, código ou código de barras"
+              >
+            </div>
+          </div>
+          <p class="text-[11px] text-gray-600" data-manual-product-lookup-term>Nenhuma busca realizada.</p>
+        </div>
+        <div class="flex-1 overflow-y-auto" style="min-height:0;max-height:100%;">
+          <table class="min-w-full divide-y divide-gray-200 text-[12px]">
+            <thead class="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase tracking-wide text-gray-600">
+              <tr>
+                <th class="px-3 py-2 text-left font-semibold">Cod</th>
+                <th class="px-3 py-2 text-left font-semibold">CodBarras</th>
+                <th class="px-3 py-2 text-left font-semibold">Nome</th>
+                <th class="px-3 py-2 text-right font-semibold">Custo</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 bg-white" data-manual-product-lookup-body>
+              <tr data-manual-product-lookup-empty>
+                <td colspan="4" class="px-3 py-4 text-center text-[11px] text-gray-500">Digite letras no campo de procura para buscar produtos.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+  </div>
+
   <div id="nfe-code-lookup-modal" class="fixed inset-0 z-[999] hidden">
     <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-code-modal></div>
     <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
@@ -1671,16 +2100,96 @@
                     <th class="px-3 py-2 text-center">
                       <input type="checkbox" class="h-3.5 w-3.5 rounded border-gray-300 text-primary focus:ring-primary" data-price-select-all />
                     </th>
-                    <th class="px-3 py-2">Código</th>
-                    <th class="px-3 py-2">Descrição</th>
-                    <th class="px-3 py-2 text-right">Custo anterior</th>
-                    <th class="px-3 py-2 text-right">Custo novo</th>
-                    <th class="px-3 py-2 text-right">Markup (%)</th>
-                    <th class="px-3 py-2 text-right">Venda novo</th>
-                    <th class="px-3 py-2 text-right">Venda anterior</th>
-                    <th class="px-3 py-2 text-right">Estoque entrada</th>
-                    <th class="px-3 py-2 text-right">Estoque atual</th>
-                    <th class="px-3 py-2 text-right">Estoque anterior</th>
+                    <th class="px-3 py-2">
+                      <div class="flex items-center justify-between gap-1">
+                        <span>Código</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-sort="code" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna Código"><i class="fas fa-sort-up text-[9px]"></i></button>
+                          <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-sort="code" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna Código"><i class="fas fa-sort-down text-[9px]"></i></button>
+                        </div>
+                      </div>
+                    </th>
+                    <th class="px-3 py-2">
+                      <div class="flex items-center justify-between gap-1">
+                        <span>Descrição</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-sort="description" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna Descrição"><i class="fas fa-sort-up text-[9px]"></i></button>
+                          <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-sort="description" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna Descrição"><i class="fas fa-sort-down text-[9px]"></i></button>
+                        </div>
+                      </div>
+                    </th>
+                    <th class="px-3 py-2 text-right">
+                      <div class="flex items-center justify-end gap-1">
+                        <span>Custo anterior</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-sort="costPrevious" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna Custo anterior"><i class="fas fa-sort-up text-[9px]"></i></button>
+                          <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-sort="costPrevious" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna Custo anterior"><i class="fas fa-sort-down text-[9px]"></i></button>
+                        </div>
+                      </div>
+                    </th>
+                    <th class="px-3 py-2 text-right">
+                      <div class="flex items-center justify-end gap-1">
+                        <span>Custo novo</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-sort="costNew" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna Custo novo"><i class="fas fa-sort-up text-[9px]"></i></button>
+                          <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-sort="costNew" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna Custo novo"><i class="fas fa-sort-down text-[9px]"></i></button>
+                        </div>
+                      </div>
+                    </th>
+                    <th class="px-3 py-2 text-right">
+                      <div class="flex items-center justify-end gap-1">
+                        <span>Markup (%)</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-sort="markup" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna Markup (%)"><i class="fas fa-sort-up text-[9px]"></i></button>
+                          <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-sort="markup" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna Markup (%)"><i class="fas fa-sort-down text-[9px]"></i></button>
+                        </div>
+                      </div>
+                    </th>
+                    <th class="px-3 py-2 text-right">
+                      <div class="flex items-center justify-end gap-1">
+                        <span>Venda novo</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-sort="saleNew" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna Venda novo"><i class="fas fa-sort-up text-[9px]"></i></button>
+                          <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-sort="saleNew" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna Venda novo"><i class="fas fa-sort-down text-[9px]"></i></button>
+                        </div>
+                      </div>
+                    </th>
+                    <th class="px-3 py-2 text-right">
+                      <div class="flex items-center justify-end gap-1">
+                        <span>Venda anterior</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-sort="salePrevious" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna Venda anterior"><i class="fas fa-sort-up text-[9px]"></i></button>
+                          <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-sort="salePrevious" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna Venda anterior"><i class="fas fa-sort-down text-[9px]"></i></button>
+                        </div>
+                      </div>
+                    </th>
+                    <th class="px-3 py-2 text-right">
+                      <div class="flex items-center justify-end gap-1">
+                        <span>Estoque entrada</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-sort="entryStock" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna Estoque entrada"><i class="fas fa-sort-up text-[9px]"></i></button>
+                          <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-sort="entryStock" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna Estoque entrada"><i class="fas fa-sort-down text-[9px]"></i></button>
+                        </div>
+                      </div>
+                    </th>
+                    <th class="px-3 py-2 text-right">
+                      <div class="flex items-center justify-end gap-1">
+                        <span>Estoque atual</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-sort="currentStock" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna Estoque atual"><i class="fas fa-sort-up text-[9px]"></i></button>
+                          <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-sort="currentStock" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna Estoque atual"><i class="fas fa-sort-down text-[9px]"></i></button>
+                        </div>
+                      </div>
+                    </th>
+                    <th class="px-3 py-2 text-right">
+                      <div class="flex items-center justify-end gap-1">
+                        <span>Estoque anterior</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-sort="previousStock" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna Estoque anterior"><i class="fas fa-sort-up text-[9px]"></i></button>
+                          <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-sort="previousStock" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna Estoque anterior"><i class="fas fa-sort-down text-[9px]"></i></button>
+                        </div>
+                      </div>
+                    </th>
                     <th class="px-3 py-2 text-center">Regra de imposto</th>
                   </tr>
                   <tr class="bg-white text-[10px] text-gray-600">
@@ -2565,6 +3074,7 @@
           event.preventDefault();
           input.focus();
           input.select?.();
+          input.dispatchEvent(new Event('input', { bubbles: true }));
         });
         wrapper.appendChild(trigger);
       };
@@ -2769,6 +3279,72 @@
         const entryDateInput = document.getElementById('entry-date');
         const nfeModelSelect = document.getElementById('nfe-model');
         const nfeTypeSelect = document.getElementById('nfe-type');
+        const manualProductAddButton = document.querySelector('[data-open-manual-product-modal]');
+        const manualProductModal = document.getElementById('nfe-product-modal');
+        const manualProductLookupModal = document.getElementById('manual-product-lookup-modal');
+        const manualProductLookupCloseTriggers = manualProductLookupModal
+          ? manualProductLookupModal.querySelectorAll('[data-close-manual-product-lookup]')
+          : [];
+        const manualProductLookupBody = manualProductLookupModal?.querySelector('[data-manual-product-lookup-body]') || null;
+        const manualProductLookupEmptyRow = manualProductLookupModal?.querySelector('[data-manual-product-lookup-empty]') || null;
+        const manualProductLookupTermLabel = manualProductLookupModal?.querySelector('[data-manual-product-lookup-term]') || null;
+        const manualProductLookupSearchInput = manualProductLookupModal?.querySelector('[data-manual-product-lookup-search]') || null;
+        const manualProductModalFields = {
+          product: document.getElementById('nfe-modal-product'),
+          qty: document.getElementById('nfe-modal-qty'),
+          unit: document.getElementById('nfe-modal-unit'),
+          subtotal: document.getElementById('nfe-modal-subtotal'),
+          discountPercent: document.getElementById('nfe-modal-discount-percent'),
+          discountValue: document.getElementById('nfe-modal-discount-value'),
+          otherExpenses: document.getElementById('nfe-modal-other-expenses'),
+          total: document.getElementById('nfe-modal-total'),
+          unidadeComercial: document.getElementById('nfe-modal-unidade-comercial'),
+          peso: document.getElementById('nfe-modal-peso'),
+          qtyTrib: document.getElementById('nfe-modal-qty-trib'),
+          unidadeTributavel: document.getElementById('nfe-modal-unidade-tributavel'),
+          unitTrib: document.getElementById('nfe-modal-unit-trib'),
+          ncm: document.getElementById('nfe-modal-ncm'),
+          cfop: document.getElementById('nfe-modal-cfop'),
+          cest: document.getElementById('nfe-modal-cest'),
+          codigoBeneficioFiscal: document.getElementById('nfe-modal-beneficio'),
+          numeroPedido: document.getElementById('nfe-modal-numero-pedido'),
+          numeroItemPedido: document.getElementById('nfe-modal-numero-item-pedido'),
+          icmsCst: document.getElementById('nfe-modal-icms-cst'),
+          icmsModalidade: document.getElementById('nfe-modal-icms-modalidade'),
+          icmsBasePercent: document.getElementById('nfe-modal-icms-base-percent'),
+          icmsBaseValue: document.getElementById('nfe-modal-icms-base-value'),
+          icmsAliq: document.getElementById('nfe-modal-icms-aliq'),
+          icmsValor: document.getElementById('nfe-modal-icms-valor'),
+          fcpAliq: document.getElementById('nfe-modal-icms-aliq-fcp'),
+          fcpValor: document.getElementById('nfe-modal-icms-valor-fcp'),
+          ipiCst: document.getElementById('nfe-modal-ipi-st'),
+          ipiEnquadramento: document.getElementById('nfe-modal-ipi-enquadramento'),
+          ipiBase: document.getElementById('nfe-modal-ipi-base'),
+          ipiAliq: document.getElementById('nfe-modal-ipi-aliq'),
+          ipiValor: document.getElementById('nfe-modal-ipi-valor'),
+          pisCst: document.getElementById('nfe-modal-pis-st'),
+          pisBase: document.getElementById('nfe-modal-pis-base'),
+          pisAliq: document.getElementById('nfe-modal-pis-aliq'),
+          pisValor: document.getElementById('nfe-modal-pis-valor'),
+          pisExcluirIcms: document.getElementById('nfe-modal-pis-excluir-icms'),
+          cofinsCst: document.getElementById('nfe-modal-cofins-st'),
+          cofinsBase: document.getElementById('nfe-modal-cofins-base'),
+          cofinsAliq: document.getElementById('nfe-modal-cofins-aliq'),
+          cofinsValor: document.getElementById('nfe-modal-cofins-valor'),
+          cofinsExcluirIcms: document.getElementById('nfe-modal-cofins-excluir-icms'),
+          save: document.getElementById('nfe-modal-save'),
+          cancel: document.getElementById('nfe-modal-cancel'),
+        };
+        const MANUAL_PRODUCT_UNIT_OPTIONS = [
+          { value: 'UN', label: 'Unidade (UN)' },
+          { value: 'KG', label: 'Quilograma (KG)' },
+          { value: 'G', label: 'Grama (G)' },
+          { value: 'L', label: 'Litro (L)' },
+          { value: 'ML', label: 'Mililitro (ML)' },
+          { value: 'CX', label: 'Caixa (CX)' },
+          { value: 'PCT', label: 'Pacote (PCT)' },
+          { value: 'SC', label: 'Saco (SC)' },
+        ];
         const depositSelect = document.getElementById('deposit');
         const importAccessKeyInput = document.getElementById('import-access-key');
         const accessKeyInput = document.getElementById('access-key');
@@ -2844,6 +3420,7 @@
         const priceUpdateButtonIcon = priceUpdateButton?.querySelector('[data-price-update-icon]') || priceUpdateButton?.querySelector('i') || null;
         const priceUpdateButtonText = priceUpdateButton?.querySelector('[data-price-update-text]') || null;
         const priceFilterInputs = new Map();
+        const priceSortButtons = new Map();
         const priceCurrentStockCache = new Map();
         let updatePriceButtonAvailability = () => {};
         let closePriceAdjustmentModal = () => {};
@@ -2851,6 +3428,7 @@
         const priceAdjustmentState = {
           items: [],
           filters: {},
+          sort: { key: '', direction: 'asc' },
           usarMarkup: false,
           maintainMarkup: false,
           costMode: 'add',
@@ -2875,6 +3453,14 @@
           'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
         let previouslyFocusedElement = null;
         let productModalPreviousFocus = null;
+        let manualProductLookupPreviousFocus = null;
+        let manualProductLookupAbortController = null;
+        let manualProductLookupDebounceTimer = null;
+        let manualProductLookupSilentInput = false;
+        let manualProductSelectedRecord = null;
+        let manualProductFiscalApplySequence = 0;
+        let manualProductPendingAutoCfop = '';
+        let manualProductEditingIndex = -1;
         let productIframePendingRevalidationItem = null;
         let productIframePendingRevalidationSource = '';
         let productLinkPreviousFocus = null;
@@ -7042,13 +7628,37 @@
           return true;
         };
 
+        const applyEntryCfopFromProductRule = (item, product) => {
+          if (!item || !product) return false;
+
+          const fiscalData = resolveSelectedProductFiscalData(product);
+          const entryCfop = resolveEntryCfopFromFiscal(fiscalData, product, { strictEntryOnly: true });
+          if (!entryCfop) return false;
+
+          const currentCfop = String(item?.cfop || '').trim();
+          if (!currentCfop) {
+            item.cfop = entryCfop;
+            return true;
+          }
+
+          if (currentCfop === entryCfop) return false;
+
+          if (!item.originalCfop) {
+            item.originalCfop = currentCfop;
+          }
+          item.cfop = entryCfop;
+          return true;
+        };
+
         const applySupplierConversionForMatchedItems = (nfeData) => {
           const items = Array.isArray(nfeData?.items) ? nfeData.items : [];
           if (!items.length) return 0;
           let updatedCount = 0;
           items.forEach((item) => {
             if (!item || item?.validationStatus !== 'matched' || !item?.matchedProduct) return;
-            if (applySupplierConversionFromProduct(item, item.matchedProduct, nfeData)) {
+            const supplierConversionUpdated = applySupplierConversionFromProduct(item, item.matchedProduct, nfeData);
+            const entryCfopUpdated = applyEntryCfopFromProductRule(item, item.matchedProduct);
+            if (supplierConversionUpdated || entryCfopUpdated) {
               updatedCount += 1;
             }
           });
@@ -8284,6 +8894,12 @@
           return 'NF';
         };
 
+        const resolveEntryType = (data) => {
+          const explicitType = String(data?.ide?.type || data?.header?.type || '').trim().toUpperCase();
+          if (explicitType === 'RECIBO') return 'RECIBO';
+          return mapModelToType(data?.ide?.model);
+        };
+
         const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
         const computeDateDiffInDays = (startInput, endInput) => {
@@ -9117,6 +9733,20 @@
             if (!key) return;
             priceFilterInputs.set(key, element);
           });
+          const sortElements = priceModal.querySelectorAll('[data-price-sort]');
+          sortElements.forEach((element) => {
+            if (!(element instanceof HTMLButtonElement)) return;
+            const key = element.dataset.priceSort || '';
+            const direction = element.dataset.sortDirection === 'desc' ? 'desc' : 'asc';
+            if (!key) return;
+            const current = priceSortButtons.get(key) || { ascButton: null, descButton: null };
+            if (direction === 'desc') {
+              current.descButton = element;
+            } else {
+              current.ascButton = element;
+            }
+            priceSortButtons.set(key, current);
+          });
         }
 
         const toNumericValue = (value) => (Number.isFinite(value) ? value : parseNumber(value));
@@ -9507,6 +10137,81 @@
           );
         };
 
+        const PRICE_SORT_COLUMN_ACCESSORS = new Map([
+          ['code', { type: 'text', getValue: (entry) => entry?.code || '' }],
+          ['description', { type: 'text', getValue: (entry) => entry?.description || '' }],
+          ['costPrevious', { type: 'numeric', getValue: (entry) => entry?.costPrevious }],
+          ['costNew', { type: 'numeric', getValue: (entry) => entry?.costNew }],
+          ['markup', { type: 'numeric', getValue: (entry) => entry?.markupCurrent }],
+          ['saleNew', { type: 'numeric', getValue: (entry) => entry?.saleNew }],
+          ['salePrevious', { type: 'numeric', getValue: (entry) => entry?.salePrevious }],
+          ['entryStock', { type: 'numeric', getValue: (entry) => entry?.entryStock }],
+          ['currentStock', { type: 'numeric', getValue: (entry) => entry?.currentStock }],
+          ['previousStock', { type: 'numeric', getValue: (entry) => entry?.previousStock }],
+        ]);
+
+        const updatePriceTableSortIndicators = () => {
+          priceSortButtons.forEach(({ ascButton, descButton }, key) => {
+            const isActive = priceAdjustmentState.sort.key === key;
+            setSortButtonState(ascButton, isActive && priceAdjustmentState.sort.direction === 'asc');
+            setSortButtonState(descButton, isActive && priceAdjustmentState.sort.direction === 'desc');
+          });
+        };
+
+        const togglePriceTableSort = (columnKey, direction) => {
+          if (!columnKey) return;
+          const normalizedDirection = direction === 'desc' ? 'desc' : 'asc';
+          const isSameSort =
+            priceAdjustmentState.sort.key === columnKey &&
+            priceAdjustmentState.sort.direction === normalizedDirection;
+          if (isSameSort) {
+            priceAdjustmentState.sort.key = '';
+            priceAdjustmentState.sort.direction = 'asc';
+          } else {
+            priceAdjustmentState.sort.key = columnKey;
+            priceAdjustmentState.sort.direction = normalizedDirection;
+          }
+          renderPriceAdjustmentTable();
+        };
+
+        const sortPriceItems = (items) => {
+          if (!Array.isArray(items)) return [];
+          const sortKey = priceAdjustmentState.sort.key || '';
+          const directionMultiplier = priceAdjustmentState.sort.direction === 'desc' ? -1 : 1;
+          if (!sortKey) return items.slice();
+          const accessor = PRICE_SORT_COLUMN_ACCESSORS.get(sortKey);
+          if (!accessor) return items.slice();
+
+          const sourceItems = Array.isArray(priceAdjustmentState.items) ? priceAdjustmentState.items : [];
+          const indexMap = new Map(sourceItems.map((entry, index) => [entry?.id || `idx-${index}`, index]));
+
+          return items.slice().sort((entryA, entryB) => {
+            const valueA = accessor.getValue(entryA);
+            const valueB = accessor.getValue(entryB);
+
+            if (accessor.type === 'numeric') {
+              const numericA = Number.isFinite(valueA) ? valueA : parseNumber(valueA);
+              const numericB = Number.isFinite(valueB) ? valueB : parseNumber(valueB);
+              const safeA = Number.isFinite(numericA) ? numericA : Number.NEGATIVE_INFINITY;
+              const safeB = Number.isFinite(numericB) ? numericB : Number.NEGATIVE_INFINITY;
+              if (safeA !== safeB) {
+                return safeA > safeB ? directionMultiplier : -directionMultiplier;
+              }
+            } else {
+              const textA = String(valueA ?? '');
+              const textB = String(valueB ?? '');
+              const comparison = textA.localeCompare(textB, 'pt-BR', { sensitivity: 'base', numeric: true });
+              if (comparison !== 0) {
+                return comparison * directionMultiplier;
+              }
+            }
+
+            const fallbackIndexA = indexMap.get(entryA?.id || '') ?? 0;
+            const fallbackIndexB = indexMap.get(entryB?.id || '') ?? 0;
+            return fallbackIndexA - fallbackIndexB;
+          });
+        };
+
         const syncPriceSelectAllState = () => {
           if (!priceSelectAllCheckbox) return;
           const items = Array.isArray(priceAdjustmentState.items) ? priceAdjustmentState.items : [];
@@ -9775,14 +10480,16 @@
 
         const renderPriceAdjustmentTable = () => {
           if (!priceTableBody) return;
+          updatePriceTableSortIndicators();
 
           const existingRows = priceTableBody.querySelectorAll('[data-price-row]');
           existingRows.forEach((row) => row.remove());
 
           const items = Array.isArray(priceAdjustmentState.items) ? priceAdjustmentState.items : [];
           const filteredItems = filterPriceItems(items);
+          const itemsToRender = sortPriceItems(filteredItems);
 
-          if (!filteredItems.length) {
+          if (!itemsToRender.length) {
             if (priceEmptyRow) {
               priceEmptyRow.classList.remove('hidden');
             }
@@ -9796,7 +10503,7 @@
           }
 
           const fragment = document.createDocumentFragment();
-          filteredItems.forEach((entry) => {
+          itemsToRender.forEach((entry) => {
             const row = createPriceTableRow(entry);
             fragment.appendChild(row);
           });
@@ -10294,6 +11001,21 @@
           });
         }
 
+        priceSortButtons.forEach(({ ascButton, descButton }, key) => {
+          if (ascButton instanceof HTMLButtonElement) {
+            ascButton.addEventListener('click', (event) => {
+              event.preventDefault();
+              togglePriceTableSort(key, 'asc');
+            });
+          }
+          if (descButton instanceof HTMLButtonElement) {
+            descButton.addEventListener('click', (event) => {
+              event.preventDefault();
+              togglePriceTableSort(key, 'desc');
+            });
+          }
+        });
+
         priceFilterInputs.forEach((input, key) => {
           if (!(input instanceof HTMLInputElement) || !key) return;
           input.addEventListener('input', () => {
@@ -10699,6 +11421,7 @@
             productLinkActiveItem.matchedProduct = product;
             productLinkActiveItem.validationStatus = 'matched';
             applySupplierConversionFromProduct(productLinkActiveItem, product, lastNfeData);
+            applyEntryCfopFromProductRule(productLinkActiveItem, product);
             productLinkActiveItem.internalCode = normalizeInternalCode(
               getProductCodeFromRecord(product)
             );
@@ -12440,6 +13163,7 @@
             item.matchedProduct = matchedProduct;
             item.validationStatus = 'matched';
             applySupplierConversionFromProduct(item, matchedProduct, nfeData);
+            applyEntryCfopFromProductRule(item, matchedProduct);
             try {
               await ensureProductSupplierLink(matchedProduct, item, nfeData);
             } catch (error) {
@@ -12532,6 +13256,7 @@
               item.matchedProduct = matchedProduct;
               item.validationStatus = 'matched';
               applySupplierConversionFromProduct(item, matchedProduct, nfeData);
+              applyEntryCfopFromProductRule(item, matchedProduct);
               const linkPromise = ensureProductSupplierLink(matchedProduct, item, nfeData);
               if (linkPromise) {
                 linkingTasks.push(
@@ -12761,7 +13486,10 @@
           const entry = normalizeDate(data.ide?.entryDate);
           if (entryDateInput) entryDateInput.value = entry.dateInput || '';
           if (nfeModelSelect && data.ide?.model) setSelectValue(nfeModelSelect, data.ide.model);
-          if (nfeTypeSelect) setSelectValue(nfeTypeSelect, mapModelToType(data.ide?.model));
+          if (nfeTypeSelect) {
+            setSelectValue(nfeTypeSelect, resolveEntryType(data));
+            setManualProductAddButtonState();
+          }
           if (accessKeyInput && data.accessKey) accessKeyInput.value = data.accessKey;
           if (importAccessKeyInput && data.accessKey) importAccessKeyInput.value = data.accessKey;
           if (companySelect) {
@@ -13893,6 +14621,8 @@
             const { item, index, displays } = entry;
             const row = document.createElement('tr');
             row.dataset.nfeProductsRow = 'true';
+            row.dataset.mainProductIndex = String(index);
+            row.classList.add('cursor-pointer');
 
             const indexCell = document.createElement('td');
             indexCell.className = 'px-4 py-3 text-gray-600';
@@ -14067,6 +14797,1056 @@
           }
         };
 
+        const isReciboTypeSelected = () => (nfeTypeSelect?.value || '') === 'RECIBO';
+
+        const setManualProductAddButtonState = () => {
+          if (!manualProductAddButton) return;
+          const enabled = isReciboTypeSelected();
+          manualProductAddButton.disabled = !enabled;
+          manualProductAddButton.classList.toggle('opacity-60', !enabled);
+          manualProductAddButton.classList.toggle('cursor-not-allowed', !enabled);
+          manualProductAddButton.classList.toggle('text-gray-400', !enabled);
+          manualProductAddButton.classList.toggle('text-gray-600', enabled);
+          manualProductAddButton.classList.toggle('hover:bg-gray-50', enabled);
+          if (!enabled && manualProductModal && !manualProductModal.classList.contains('hidden')) {
+            closeManualProductModal();
+          }
+        };
+
+        const closeManualProductLookupModal = () => {
+          if (manualProductLookupAbortController) {
+            manualProductLookupAbortController.abort();
+            manualProductLookupAbortController = null;
+          }
+          if (manualProductLookupDebounceTimer) {
+            clearTimeout(manualProductLookupDebounceTimer);
+            manualProductLookupDebounceTimer = null;
+          }
+          if (!manualProductLookupModal || manualProductLookupModal.classList.contains('hidden')) return;
+          manualProductLookupModal.classList.add('hidden');
+          manualProductLookupModal.setAttribute('aria-hidden', 'true');
+          if (!manualProductModal || manualProductModal.classList.contains('hidden')) {
+            document.body.classList.remove('overflow-hidden');
+          }
+          if (manualProductLookupPreviousFocus && typeof manualProductLookupPreviousFocus.focus === 'function') {
+            manualProductLookupPreviousFocus.focus();
+          }
+          manualProductLookupPreviousFocus = null;
+        };
+
+        const openManualProductLookupModal = (initialTerm = '') => {
+          if (!manualProductLookupModal) return;
+          if (!manualProductLookupModal.classList.contains('hidden')) return;
+          manualProductLookupPreviousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          manualProductLookupModal.classList.remove('hidden');
+          manualProductLookupModal.setAttribute('aria-hidden', 'false');
+          document.body.classList.add('overflow-hidden');
+          if (manualProductLookupSearchInput) {
+            manualProductLookupSearchInput.value = String(initialTerm || '').trim();
+            requestAnimationFrame(() => {
+              manualProductLookupSearchInput.focus();
+              const end = manualProductLookupSearchInput.value.length;
+              manualProductLookupSearchInput.setSelectionRange(end, end);
+            });
+          }
+        };
+
+        const setManualProductLookupEmptyMessage = (message) => {
+          if (!manualProductLookupBody || !manualProductLookupEmptyRow) return;
+          const cell = manualProductLookupEmptyRow.querySelector('td');
+          if (cell) cell.textContent = message;
+          manualProductLookupBody.querySelectorAll('[data-manual-product-lookup-row]').forEach((row) => row.remove());
+          manualProductLookupEmptyRow.classList.remove('hidden');
+        };
+
+        const normalizeFiscalCode = (value, fallbackLength = 2) => {
+          const digits = digitsOnly(value);
+          if (!digits) return '';
+          if (fallbackLength === 3 && digits.length <= 3) {
+            return digits.padStart(3, '0');
+          }
+          if (digits.length <= 2) {
+            return digits.padStart(2, '0');
+          }
+          return digits;
+        };
+
+        const resolveActiveFiscalStoreId = () => {
+          const selected = companySelect?.value ? String(companySelect.value).trim() : '';
+          if (selected) return selected;
+          const lastSelected = lastNfeData?.selectedCompanyId ? String(lastNfeData.selectedCompanyId).trim() : '';
+          if (lastSelected) return lastSelected;
+          const pendingSelected = pendingCompanyId ? String(pendingCompanyId).trim() : '';
+          if (pendingSelected) return pendingSelected;
+          return '';
+        };
+
+        const resolveSelectedProductFiscalData = (product) => {
+          if (!product || typeof product !== 'object') return {};
+          const selectedCompanyId = resolveActiveFiscalStoreId();
+          let fiscalCompany = null;
+          const fiscalPerCompany = product?.fiscalPorEmpresa;
+          if (selectedCompanyId && fiscalPerCompany) {
+            if (typeof fiscalPerCompany.get === 'function') {
+              fiscalCompany = fiscalPerCompany.get(selectedCompanyId) || null;
+            } else if (typeof fiscalPerCompany === 'object') {
+              fiscalCompany = fiscalPerCompany[selectedCompanyId] || null;
+            }
+          }
+          const fiscal = fiscalCompany && typeof fiscalCompany === 'object'
+            ? fiscalCompany
+            : product?.fiscal && typeof product.fiscal === 'object'
+            ? product.fiscal
+            : {};
+          return fiscal || {};
+        };
+
+        const normalizeCfopCandidate = (value) => {
+          const normalized = String(value || '').trim();
+          return normalized ? normalized.replace(/\D+/g, '') : '';
+        };
+
+        const firstValidCfopCandidate = (values = []) => {
+          for (const value of values) {
+            const normalized = normalizeCfopCandidate(value);
+            if (normalized) return normalized;
+          }
+          return '';
+        };
+
+        const parseFiscalRateValue = (value) => {
+          if (value === null || value === undefined) return null;
+          const text = String(value).trim();
+          if (!text) return null;
+          const parsed = Number(text.replace(',', '.'));
+          return Number.isFinite(parsed) ? parsed : null;
+        };
+
+        const resolveEntryCfopFromFiscal = (fiscalData, product = null, options = {}) => {
+          const strictEntryOnly = Boolean(options?.strictEntryOnly);
+          const cfopRoot = fiscalData?.cfop && typeof fiscalData.cfop === 'object'
+            ? fiscalData.cfop
+            : {};
+          const nfeCfop = cfopRoot?.nfe && typeof cfopRoot.nfe === 'object'
+            ? cfopRoot.nfe
+            : {};
+          const nfceCfop = cfopRoot?.nfce && typeof cfopRoot.nfce === 'object'
+            ? cfopRoot.nfce
+            : {};
+
+          // Entrada de NF deve priorizar sempre CFOP de entrada.
+          const entryCfop = firstValidCfopCandidate([
+            nfeCfop?.entrada,
+            nfceCfop?.entrada,
+            cfopRoot?.entrada,
+            nfeCfop?.entradaEstado,
+            nfeCfop?.cfopEntrada,
+            cfopRoot?.entradaEstado,
+            cfopRoot?.cfopEntrada,
+          ]);
+          if (entryCfop) {
+            return entryCfop;
+          }
+          if (strictEntryOnly) return '';
+
+          const companyId = companySelect?.value ? String(companySelect.value).trim() : '';
+          const company = companyId ? companyRegistry.index.get(companyId) || null : null;
+          const companyUf = String(company?.uf || company?.estado || '').trim().toUpperCase();
+          const supplierUf = String(supplierUfSelect?.value || '').trim().toUpperCase();
+          const isInterstate = companyUf && supplierUf && companyUf !== supplierUf;
+
+          const nfeDentro = nfeCfop?.dentroEstado ?? nfeCfop?.dentro ?? cfopRoot?.dentroEstado ?? cfopRoot?.dentro;
+          const nfeFora = nfeCfop?.foraEstado ?? nfeCfop?.fora ?? cfopRoot?.foraEstado ?? cfopRoot?.fora;
+          const nfeTransferencia = nfeCfop?.transferencia ?? cfopRoot?.transferencia;
+          const nfeDevolucao = nfeCfop?.devolucao ?? cfopRoot?.devolucao;
+          const nfeIndustrializacao = nfeCfop?.industrializacao ?? cfopRoot?.industrializacao;
+
+          const preferred = isInterstate
+            ? [nfeFora, nfeDentro]
+            : [nfeDentro, nfeFora];
+
+          const fallback = [
+            nfeTransferencia,
+            nfeDevolucao,
+            nfeIndustrializacao,
+            product?.cfop,
+          ];
+
+          return firstValidCfopCandidate([...preferred, ...fallback]);
+        };
+
+        const ensureManualCfopOption = (cfopValue, { allowDynamic = true } = {}) => {
+          if (!manualProductModalFields.cfop) return '';
+          const normalized = normalizeCfopCandidate(cfopValue);
+          if (!normalized) return '';
+
+          const alreadyExists = Array.from(manualProductModalFields.cfop.options || []).some(
+            (option) => normalizeCfopCandidate(option.value) === normalized
+          );
+          if (!alreadyExists && allowDynamic) {
+            const option = document.createElement('option');
+            option.value = normalized;
+            option.textContent = normalized;
+            manualProductModalFields.cfop.appendChild(option);
+          }
+          if (!alreadyExists && !allowDynamic) {
+            return '';
+          }
+          return normalized;
+        };
+
+        const loadManualEntryCfopOptions = async () => {
+          if (!manualProductModalFields.cfop) return;
+          const select = manualProductModalFields.cfop;
+          const selectedBefore = normalizeCfopCandidate(select.value);
+          const endpoint = `${apiBaseUrl}/fiscal/cfop?tipo=entrada&ativo=true`;
+
+          try {
+            const response = await fetch(endpoint, { headers: buildAuthHeaders() });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              if (response.status === 401 || response.status === 403) {
+                handleAuthError();
+              }
+              throw new Error(payload?.message || `Falha ao carregar CFOP de entrada (status ${response.status}).`);
+            }
+
+            const items = Array.isArray(payload?.items) ? payload.items : [];
+            const isEntryCfop = (cfopCode) => ['1', '2', '3'].includes(String(cfopCode || '').charAt(0));
+            const uniqueCfops = Array.from(
+              new Set(
+                items
+                  .map((item) => normalizeCfopCandidate(item?.cfop))
+                  .filter((cfopCode) => isEntryCfop(cfopCode))
+                  .filter(Boolean)
+              )
+            ).sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }));
+
+            const selectedDuringLoad = normalizeCfopCandidate(select.value);
+            const pendingAutoCfop = normalizeCfopCandidate(manualProductPendingAutoCfop);
+
+            select.innerHTML = '<option value="">--SELECIONE--</option>';
+            uniqueCfops.forEach((cfopCode) => {
+              const option = document.createElement('option');
+              option.value = cfopCode;
+              option.textContent = cfopCode;
+              select.appendChild(option);
+            });
+
+            const preferredSelection = selectedDuringLoad || pendingAutoCfop || selectedBefore;
+            if (preferredSelection && uniqueCfops.includes(preferredSelection)) {
+              select.value = preferredSelection;
+              if (pendingAutoCfop && pendingAutoCfop === preferredSelection) {
+                manualProductPendingAutoCfop = '';
+              }
+            }
+          } catch (error) {
+            console.warn('Não foi possível carregar CFOPs de entrada habilitados:', error);
+          }
+        };
+
+        const applyFiscalToManualProductModal = (fiscalData = {}, { icmsAliq = null } = {}) => {
+          const cstValue = normalizeFiscalCode(fiscalData?.cst || fiscalData?.csosn, 2);
+          if (manualProductModalFields.icmsCst && cstValue) {
+            manualProductModalFields.icmsCst.value = cstValue;
+          }
+
+          const cfopValue = resolveEntryCfopFromFiscal(
+            fiscalData,
+            manualProductSelectedRecord,
+            { strictEntryOnly: true }
+          );
+          if (manualProductModalFields.cfop && cfopValue) {
+            manualProductPendingAutoCfop = normalizeCfopCandidate(cfopValue);
+            const resolved = ensureManualCfopOption(cfopValue, { allowDynamic: false });
+            if (resolved) {
+              manualProductModalFields.cfop.value = resolved;
+              manualProductPendingAutoCfop = '';
+            }
+          }
+
+          const cestValue = String(fiscalData?.cest || '').trim();
+          if (manualProductModalFields.cest && cestValue) {
+            manualProductModalFields.cest.value = cestValue;
+          }
+
+          const pis = fiscalData?.pis && typeof fiscalData.pis === 'object' ? fiscalData.pis : {};
+          const cofins = fiscalData?.cofins && typeof fiscalData.cofins === 'object' ? fiscalData.cofins : {};
+          const ipi = fiscalData?.ipi && typeof fiscalData.ipi === 'object' ? fiscalData.ipi : {};
+          const fcp = fiscalData?.fcp && typeof fiscalData.fcp === 'object' ? fiscalData.fcp : {};
+
+          const pisCst = normalizeFiscalCode(pis?.cst, 2);
+          if (manualProductModalFields.pisCst && pisCst) {
+            manualProductModalFields.pisCst.value = pisCst;
+          }
+          const pisAliq = parseFiscalRateValue(pis?.aliquota);
+          if (Number.isFinite(pisAliq)) {
+            setManualFieldNumber(manualProductModalFields.pisAliq, pisAliq, 'percent');
+          }
+
+          const cofinsCst = normalizeFiscalCode(cofins?.cst, 2);
+          if (manualProductModalFields.cofinsCst && cofinsCst) {
+            manualProductModalFields.cofinsCst.value = cofinsCst;
+          }
+          const cofinsAliq = parseFiscalRateValue(cofins?.aliquota);
+          if (Number.isFinite(cofinsAliq)) {
+            setManualFieldNumber(manualProductModalFields.cofinsAliq, cofinsAliq, 'percent');
+          }
+
+          const ipiCst = normalizeFiscalCode(ipi?.cst, 2);
+          if (manualProductModalFields.ipiCst && ipiCst) {
+            manualProductModalFields.ipiCst.value = ipiCst;
+          }
+          const ipiAliq = parseFiscalRateValue(ipi?.aliquota);
+          if (Number.isFinite(ipiAliq)) {
+            setManualFieldNumber(manualProductModalFields.ipiAliq, ipiAliq, 'percent');
+          }
+          if (manualProductModalFields.ipiEnquadramento && ipi?.codigoEnquadramento) {
+            manualProductModalFields.ipiEnquadramento.value = String(ipi.codigoEnquadramento).trim();
+          }
+
+          const parsedFcpAliq = parseFiscalRateValue(fcp?.aliquota);
+          const fcpAliqValue = Number.isFinite(parsedFcpAliq) && (fcp?.aplica || parsedFcpAliq > 0)
+            ? parsedFcpAliq
+            : null;
+          if (fcpAliqValue !== null) {
+            setManualFieldNumber(manualProductModalFields.fcpAliq, fcpAliqValue, 'percent');
+          }
+
+          if (Number.isFinite(icmsAliq)) {
+            setManualFieldNumber(manualProductModalFields.icmsAliq, icmsAliq, 'percent');
+          }
+
+          updateManualProductTotals();
+        };
+
+        const fetchProductFiscalRuleForCurrentCompany = async (product) => {
+          const productId = getProductIdFromRecord(product);
+          const selectedCompanyId = resolveActiveFiscalStoreId();
+          if (!productId || !selectedCompanyId) {
+            return null;
+          }
+
+          const endpoint = `${apiBaseUrl}/fiscal/rules/${encodeURIComponent(productId)}?storeId=${encodeURIComponent(selectedCompanyId)}`;
+          const response = await fetch(endpoint, { headers: buildAuthHeaders() });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            if (response.status === 401 || response.status === 403) {
+              handleAuthError();
+            }
+            throw new Error(payload?.message || `Falha ao consultar regra fiscal do produto (status ${response.status}).`);
+          }
+          return payload;
+        };
+
+        const applyProductTaxRuleToManualModal = async (product) => {
+          const sequence = ++manualProductFiscalApplySequence;
+
+          const localFiscal = resolveSelectedProductFiscalData(product);
+          applyFiscalToManualProductModal(localFiscal);
+
+          try {
+            const fiscalPayload = await fetchProductFiscalRuleForCurrentCompany(product);
+            if (!fiscalPayload || sequence !== manualProductFiscalApplySequence) return;
+
+            const report = fiscalPayload?.produto && typeof fiscalPayload.produto === 'object'
+              ? fiscalPayload.produto
+              : {};
+            const fiscalCurrent = report?.fiscalAtual && typeof report.fiscalAtual === 'object'
+              ? report.fiscalAtual
+              : null;
+            const fiscalSuggestion = report?.sugestao && typeof report.sugestao === 'object'
+              ? report.sugestao
+              : null;
+            if (!fiscalCurrent && !fiscalSuggestion) return;
+
+            // No modal de Entrada de NF, usa fiscalAtual como base.
+            // Se faltar CFOP de entrada no fiscalAtual, completa somente esse campo via sugestão.
+            if (fiscalCurrent) {
+              const currentEntryCfop = resolveEntryCfopFromFiscal(
+                fiscalCurrent,
+                manualProductSelectedRecord,
+                { strictEntryOnly: true }
+              );
+              let fiscalForModal = fiscalCurrent;
+              if (!currentEntryCfop && fiscalSuggestion) {
+                const suggestionCfop = fiscalSuggestion?.cfop && typeof fiscalSuggestion.cfop === 'object'
+                  ? fiscalSuggestion.cfop
+                  : null;
+                if (suggestionCfop) {
+                  fiscalForModal = {
+                    ...fiscalCurrent,
+                    cfop: {
+                      ...(fiscalCurrent?.cfop && typeof fiscalCurrent.cfop === 'object' ? fiscalCurrent.cfop : {}),
+                      ...suggestionCfop,
+                    },
+                  };
+                }
+              }
+              applyFiscalToManualProductModal(fiscalForModal);
+            } else if (fiscalSuggestion) {
+              applyFiscalToManualProductModal(fiscalSuggestion);
+            }
+
+            let icmsAliq = null;
+            const cst = normalizeFiscalCode(
+              fiscalCurrent?.cst ||
+              fiscalCurrent?.csosn ||
+              fiscalSuggestion?.cst ||
+              fiscalSuggestion?.csosn,
+              2
+            );
+            const icmsMap = report?.sugestao?.icmsSimples && typeof report.sugestao.icmsSimples === 'object'
+              ? report.sugestao.icmsSimples
+              : null;
+            if (icmsMap && cst && icmsMap[cst] !== undefined && Number.isFinite(Number(icmsMap[cst]))) {
+              icmsAliq = Number(icmsMap[cst]);
+            }
+
+            if (Number.isFinite(icmsAliq)) {
+              applyFiscalToManualProductModal({}, { icmsAliq });
+            }
+          } catch (error) {
+            console.warn('Não foi possível carregar a regra fiscal detalhada do produto selecionado.', error);
+          }
+        };
+
+        const renderManualProductLookupRows = (products = []) => {
+          if (!manualProductLookupBody || !manualProductLookupEmptyRow) return;
+          manualProductLookupBody.querySelectorAll('[data-manual-product-lookup-row]').forEach((row) => row.remove());
+          if (!Array.isArray(products) || !products.length) {
+            setManualProductLookupEmptyMessage('Nenhum produto encontrado para os termos informados.');
+            return;
+          }
+
+          manualProductLookupEmptyRow.classList.add('hidden');
+          const fragment = document.createDocumentFragment();
+
+          products.forEach((product) => {
+            const row = document.createElement('tr');
+            row.dataset.manualProductLookupRow = 'true';
+            row.className = 'cursor-pointer transition hover:bg-gray-50';
+
+            const code = normalizeInternalCode(getProductCodeFromRecord(product)) || '—';
+            const barcode = formatGtinDisplay(getProductBarcodeFromRecord(product));
+            const name = getProductNameFromRecord(product) || product?.nome || product?.name || 'Produto sem nome';
+            const cost = resolveProductCostValue(product);
+
+            const codeCell = document.createElement('td');
+            codeCell.className = 'px-3 py-2 text-gray-700';
+            codeCell.textContent = code;
+
+            const barcodeCell = document.createElement('td');
+            barcodeCell.className = 'px-3 py-2 text-gray-700';
+            barcodeCell.textContent = barcode;
+
+            const nameCell = document.createElement('td');
+            nameCell.className = 'px-3 py-2 text-gray-900 font-medium';
+            nameCell.textContent = name;
+
+            const costCell = document.createElement('td');
+            costCell.className = 'px-3 py-2 text-right text-gray-700';
+            costCell.textContent = Number.isFinite(cost) ? `R$ ${formatMoneyValue(cost)}` : '—';
+
+            row.append(codeCell, barcodeCell, nameCell, costCell);
+            row.addEventListener('click', () => {
+              selectManualLookupProduct(product);
+            });
+
+            fragment.appendChild(row);
+          });
+
+          manualProductLookupBody.appendChild(fragment);
+        };
+
+        const selectManualLookupProduct = (product) => {
+          if (!product || typeof product !== 'object') return;
+          const name = getProductNameFromRecord(product) || product?.nome || product?.name || 'Produto sem nome';
+          manualProductSelectedRecord = product;
+          manualProductLookupSilentInput = true;
+          if (manualProductModalFields.product) {
+            manualProductModalFields.product.value = name;
+          }
+          const selectedCost = resolveProductCostValue(product);
+          if (Number.isFinite(selectedCost)) {
+            setManualFieldNumber(manualProductModalFields.unit, selectedCost, 'money');
+          }
+          const unitFromProduct = String(product?.unidade || product?.unit || '').trim();
+          if (unitFromProduct) {
+            if (manualProductModalFields.unidadeComercial) {
+              manualProductModalFields.unidadeComercial.value = unitFromProduct;
+            }
+            if (manualProductModalFields.unidadeTributavel) {
+              manualProductModalFields.unidadeTributavel.value = unitFromProduct;
+            }
+          }
+          if (manualProductModalFields.ncm && product?.ncm) {
+            manualProductModalFields.ncm.value = String(product.ncm).trim();
+          }
+          if (manualProductModalFields.cest && product?.cest) {
+            manualProductModalFields.cest.value = String(product.cest).trim();
+          }
+          void applyProductTaxRuleToManualModal(product);
+          updateManualProductTotals();
+          closeManualProductLookupModal();
+          setTimeout(() => {
+            manualProductLookupSilentInput = false;
+            manualProductModalFields.qty?.focus();
+          }, 0);
+        };
+
+        const fetchManualLookupProducts = async (term, { signal } = {}) => {
+          const normalizedTerm = String(term || '').trim();
+          if (!normalizedTerm) return [];
+          const params = new URLSearchParams({
+            search: normalizedTerm,
+            limit: '20',
+            includeHidden: 'true',
+          });
+          const response = await fetch(`${apiBaseUrl}/products?${params.toString()}`, {
+            headers: buildAuthHeaders(),
+            signal,
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            if (response.status === 401 || response.status === 403) {
+              handleAuthError();
+            }
+            throw new Error(payload?.message || `Falha ao buscar produtos (status ${response.status}).`);
+          }
+          const products = Array.isArray(payload?.products)
+            ? payload.products
+            : Array.isArray(payload)
+            ? payload
+            : [];
+          return products.filter((product) => !product?.inativo);
+        };
+
+        const resolveExactProductMatch = (products, term) => {
+          if (!Array.isArray(products) || !products.length) return null;
+          const normalizedTerm = String(term || '').trim();
+          if (!normalizedTerm) return null;
+          const termDigits = digitsOnly(normalizedTerm);
+          const lowered = normalizedTerm.toLowerCase();
+          return products.find((product) => {
+            const code = normalizeInternalCode(getProductCodeFromRecord(product));
+            const barcode = digitsOnly(getProductBarcodeFromRecord(product));
+            const extraCodes = Array.isArray(product?.codigosComplementares)
+              ? product.codigosComplementares.map((item) => String(item || '').trim())
+              : [];
+            const byCode = code && code.toLowerCase() === lowered;
+            const byBarcode = termDigits && barcode && termDigits === barcode;
+            const byExtraCode = extraCodes.some((value) => value && value.toLowerCase() === lowered);
+            return byCode || byBarcode || byExtraCode;
+          }) || null;
+        };
+
+        const handleManualProductEnterSearch = async (term) => {
+          const normalizedTerm = String(term || '').trim();
+          if (!normalizedTerm) return;
+          try {
+            const products = await fetchManualLookupProducts(normalizedTerm);
+            if (!products.length) {
+              notify('Nenhum produto encontrado para o código informado.', 'warning');
+              return;
+            }
+            const exactMatch = resolveExactProductMatch(products, normalizedTerm);
+            if (exactMatch) {
+              selectManualLookupProduct(exactMatch);
+              return;
+            }
+            if (products.length === 1) {
+              selectManualLookupProduct(products[0]);
+              return;
+            }
+            openManualProductLookupModal(normalizedTerm);
+            if (manualProductLookupSearchInput) {
+              manualProductLookupSearchInput.value = normalizedTerm;
+            }
+            if (manualProductLookupTermLabel) {
+              manualProductLookupTermLabel.textContent = `Busca: "${normalizedTerm}"`;
+            }
+            renderManualProductLookupRows(products);
+          } catch (error) {
+            console.error('Erro ao resolver produto por código no campo de procura:', error);
+            notify('Não foi possível buscar o produto pelo código informado.', 'error');
+          }
+        };
+
+        const searchManualProductLookup = async (term) => {
+          if (!manualProductLookupModal) return;
+          const normalizedTerm = String(term || '').trim();
+          if (!normalizedTerm || normalizedTerm.length < 2) {
+            setManualProductLookupEmptyMessage('Digite ao menos 2 letras para buscar produtos.');
+            return;
+          }
+
+          if (manualProductLookupAbortController) {
+            manualProductLookupAbortController.abort();
+          }
+          const abortController = new AbortController();
+          manualProductLookupAbortController = abortController;
+
+          setManualProductLookupEmptyMessage('Buscando produtos...');
+
+          try {
+            const products = await fetchManualLookupProducts(normalizedTerm, { signal: abortController.signal });
+            renderManualProductLookupRows(products);
+          } catch (error) {
+            if (error?.name === 'AbortError') return;
+            console.error('Erro ao pesquisar produtos no modal de entrada de NFe:', error);
+            setManualProductLookupEmptyMessage('Não foi possível buscar produtos no momento.');
+          } finally {
+            if (manualProductLookupAbortController === abortController) {
+              manualProductLookupAbortController = null;
+            }
+          }
+        };
+
+        const populateManualProductUnitOptions = () => {
+          const selects = [manualProductModalFields.unidadeComercial, manualProductModalFields.unidadeTributavel];
+          selects.forEach((select) => {
+            if (!select) return;
+            const currentValue = select.value || '';
+            select.innerHTML = '<option value="">--SELECIONE--</option>';
+            MANUAL_PRODUCT_UNIT_OPTIONS.forEach((option) => {
+              const element = document.createElement('option');
+              element.value = option.value;
+              element.textContent = option.label;
+              select.appendChild(element);
+            });
+            if (currentValue) {
+              select.value = currentValue;
+            }
+          });
+        };
+
+        const setManualFieldNumber = (field, value, format = 'money') => {
+          if (!field) return;
+          const numeric = toNumeric(value);
+          if (!Number.isFinite(numeric)) {
+            field.value = '';
+            return;
+          }
+          if (format === 'qty') {
+            field.value = formatQuantity(numeric);
+            return;
+          }
+          if (format === 'percent') {
+            field.value = formatPercentValue(numeric);
+            return;
+          }
+          field.value = formatMoneyValue(numeric);
+        };
+
+        const readManualFieldNumber = (field) => {
+          if (!field) return 0;
+          const numeric = toNumeric(field.value);
+          return Number.isFinite(numeric) ? numeric : 0;
+        };
+
+        const syncManualUnits = (source) => {
+          const uCom = (manualProductModalFields.unidadeComercial?.value || '').trim();
+          const uTrib = (manualProductModalFields.unidadeTributavel?.value || '').trim();
+          if (uCom && uTrib && uCom !== uTrib) {
+            return;
+          }
+          if (source === 'uCom') {
+            if (manualProductModalFields.unidadeTributavel) {
+              manualProductModalFields.unidadeTributavel.value = uCom;
+            }
+            if (manualProductModalFields.qtyTrib && manualProductModalFields.qty) {
+              manualProductModalFields.qtyTrib.value = manualProductModalFields.qty.value || '0,000';
+            }
+          } else if (source === 'uTrib') {
+            if (manualProductModalFields.unidadeComercial) {
+              manualProductModalFields.unidadeComercial.value = uTrib;
+            }
+            if (manualProductModalFields.qty && manualProductModalFields.qtyTrib) {
+              manualProductModalFields.qty.value = manualProductModalFields.qtyTrib.value || '0,000';
+            }
+          }
+        };
+
+        const updateManualProductTotals = (discountSource = '') => {
+          const qty = readManualFieldNumber(manualProductModalFields.qty);
+          const unit = readManualFieldNumber(manualProductModalFields.unit);
+          const subtotal = qty * unit;
+
+          let discountPercent = readManualFieldNumber(manualProductModalFields.discountPercent);
+          let discountValue = readManualFieldNumber(manualProductModalFields.discountValue);
+
+          if (discountSource === 'percent') {
+            discountValue = subtotal * (discountPercent / 100);
+            setManualFieldNumber(manualProductModalFields.discountValue, discountValue, 'money');
+          } else if (discountSource === 'value') {
+            discountPercent = subtotal > 0 ? (discountValue / subtotal) * 100 : 0;
+            setManualFieldNumber(manualProductModalFields.discountPercent, discountPercent, 'percent');
+          }
+
+          const otherExpenses = readManualFieldNumber(manualProductModalFields.otherExpenses);
+          const total = subtotal - discountValue + otherExpenses;
+
+          setManualFieldNumber(manualProductModalFields.subtotal, subtotal, 'money');
+          setManualFieldNumber(manualProductModalFields.total, total, 'money');
+
+          const icmsBasePercent = readManualFieldNumber(manualProductModalFields.icmsBasePercent);
+          const icmsBaseValue = total * (icmsBasePercent / 100);
+          const icmsAliq = readManualFieldNumber(manualProductModalFields.icmsAliq);
+          const icmsValor = icmsBaseValue * (icmsAliq / 100);
+          const fcpAliq = readManualFieldNumber(manualProductModalFields.fcpAliq);
+          const fcpValor = icmsBaseValue * (fcpAliq / 100);
+
+          setManualFieldNumber(manualProductModalFields.icmsBaseValue, icmsBaseValue, 'money');
+          setManualFieldNumber(manualProductModalFields.icmsValor, icmsValor, 'money');
+          setManualFieldNumber(manualProductModalFields.fcpValor, fcpValor, 'money');
+
+          const ipiBase = readManualFieldNumber(manualProductModalFields.ipiBase);
+          const ipiAliq = readManualFieldNumber(manualProductModalFields.ipiAliq);
+          const ipiValor = ipiBase * (ipiAliq / 100);
+          setManualFieldNumber(manualProductModalFields.ipiValor, ipiValor, 'money');
+
+          const pisExcludeIcms = Boolean(manualProductModalFields.pisExcluirIcms?.checked);
+          const pisAliq = readManualFieldNumber(manualProductModalFields.pisAliq);
+          const pisBase = Math.max(total - (pisExcludeIcms ? icmsValor : 0), 0);
+          const pisValor = pisBase * (pisAliq / 100);
+          setManualFieldNumber(manualProductModalFields.pisBase, pisBase, 'money');
+          setManualFieldNumber(manualProductModalFields.pisValor, pisValor, 'money');
+
+          const cofinsExcludeIcms = Boolean(manualProductModalFields.cofinsExcluirIcms?.checked);
+          const cofinsAliq = readManualFieldNumber(manualProductModalFields.cofinsAliq);
+          const cofinsBase = Math.max(total - (cofinsExcludeIcms ? icmsValor : 0), 0);
+          const cofinsValor = cofinsBase * (cofinsAliq / 100);
+          setManualFieldNumber(manualProductModalFields.cofinsBase, cofinsBase, 'money');
+          setManualFieldNumber(manualProductModalFields.cofinsValor, cofinsValor, 'money');
+
+          const uCom = (manualProductModalFields.unidadeComercial?.value || '').trim();
+          const uTrib = (manualProductModalFields.unidadeTributavel?.value || '').trim();
+          const qtyTrib = readManualFieldNumber(manualProductModalFields.qtyTrib);
+          if (!uCom || !uTrib || uCom === uTrib) {
+            if (manualProductModalFields.qtyTrib && manualProductModalFields.qty) {
+              manualProductModalFields.qtyTrib.value = manualProductModalFields.qty.value || '0,000';
+            }
+            setManualFieldNumber(manualProductModalFields.unitTrib, unit, 'money');
+          } else if (qtyTrib > 0) {
+            setManualFieldNumber(manualProductModalFields.unitTrib, total / qtyTrib, 'money');
+          }
+        };
+
+        const activateManualProductModalTab = (tabName) => {
+          if (!manualProductModal) return;
+          const buttons = manualProductModal.querySelectorAll('[data-nfe-modal-tab]');
+          const panels = manualProductModal.querySelectorAll('[data-nfe-modal-panel]');
+          const target = tabName || 'icms';
+          buttons.forEach((button) => {
+            const isActive = button.dataset.nfeModalTab === target;
+            button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            button.classList.toggle('text-primary', isActive);
+            button.classList.toggle('border-primary/40', isActive);
+            button.classList.toggle('bg-primary/5', isActive);
+          });
+          panels.forEach((panel) => {
+            panel.classList.toggle('hidden', panel.dataset.nfeModalPanel !== target);
+          });
+        };
+
+        const resetManualProductModalFields = () => {
+          if (!manualProductModal) return;
+          manualProductSelectedRecord = null;
+          manualProductPendingAutoCfop = '';
+          manualProductEditingIndex = -1;
+          if (manualProductModalFields.product) manualProductModalFields.product.value = '';
+          setManualFieldNumber(manualProductModalFields.qty, 1, 'qty');
+          setManualFieldNumber(manualProductModalFields.unit, 0, 'money');
+          setManualFieldNumber(manualProductModalFields.discountPercent, 0, 'percent');
+          setManualFieldNumber(manualProductModalFields.discountValue, 0, 'money');
+          setManualFieldNumber(manualProductModalFields.otherExpenses, 0, 'money');
+          setManualFieldNumber(manualProductModalFields.peso, 0, 'qty');
+          setManualFieldNumber(manualProductModalFields.qtyTrib, 1, 'qty');
+          setManualFieldNumber(manualProductModalFields.unitTrib, 0, 'money');
+          setManualFieldNumber(manualProductModalFields.icmsBasePercent, 100, 'percent');
+          setManualFieldNumber(manualProductModalFields.icmsAliq, 0, 'percent');
+          setManualFieldNumber(manualProductModalFields.fcpAliq, 0, 'percent');
+          setManualFieldNumber(manualProductModalFields.ipiBase, 0, 'money');
+          setManualFieldNumber(manualProductModalFields.ipiAliq, 0, 'percent');
+          setManualFieldNumber(manualProductModalFields.pisAliq, 0, 'percent');
+          setManualFieldNumber(manualProductModalFields.cofinsAliq, 0, 'percent');
+          if (manualProductModalFields.unidadeComercial) manualProductModalFields.unidadeComercial.value = '';
+          if (manualProductModalFields.unidadeTributavel) manualProductModalFields.unidadeTributavel.value = '';
+          if (manualProductModalFields.ncm) manualProductModalFields.ncm.value = '';
+          if (manualProductModalFields.cfop) manualProductModalFields.cfop.value = '';
+          if (manualProductModalFields.cest) manualProductModalFields.cest.value = '';
+          if (manualProductModalFields.icmsCst) manualProductModalFields.icmsCst.value = '';
+          if (manualProductModalFields.icmsModalidade) manualProductModalFields.icmsModalidade.value = 'mva';
+          if (manualProductModalFields.ipiCst) manualProductModalFields.ipiCst.value = '';
+          if (manualProductModalFields.pisCst) manualProductModalFields.pisCst.value = '';
+          if (manualProductModalFields.cofinsCst) manualProductModalFields.cofinsCst.value = '';
+          if (manualProductModalFields.codigoBeneficioFiscal) manualProductModalFields.codigoBeneficioFiscal.value = '';
+          if (manualProductModalFields.numeroPedido) manualProductModalFields.numeroPedido.value = '';
+          if (manualProductModalFields.numeroItemPedido) manualProductModalFields.numeroItemPedido.value = '';
+          if (manualProductModalFields.pisExcluirIcms) manualProductModalFields.pisExcluirIcms.checked = false;
+          if (manualProductModalFields.cofinsExcluirIcms) manualProductModalFields.cofinsExcluirIcms.checked = false;
+          updateManualProductTotals('percent');
+          activateManualProductModalTab('icms');
+          closeManualProductLookupModal();
+        };
+
+        const openManualProductModal = () => {
+          if (!manualProductModal || !isReciboTypeSelected()) return;
+          productModalPreviousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          void loadManualEntryCfopOptions();
+          resetManualProductModalFields();
+          manualProductModal.classList.remove('hidden');
+          manualProductModal.setAttribute('aria-hidden', 'false');
+          setTimeout(() => {
+            manualProductModalFields.product?.focus();
+          }, 0);
+        };
+
+        const openManualProductModalForEdit = async (itemIndex) => {
+          if (!manualProductModal || !isReciboTypeSelected()) return;
+          const items = Array.isArray(mainProductTableState.items) ? mainProductTableState.items : [];
+          const normalizedIndex = Number.parseInt(itemIndex, 10);
+          if (!Number.isInteger(normalizedIndex) || normalizedIndex < 0 || normalizedIndex >= items.length) return;
+
+          const item = items[normalizedIndex] || null;
+          if (!item || typeof item !== 'object') return;
+
+          productModalPreviousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          await loadManualEntryCfopOptions();
+          resetManualProductModalFields();
+
+          manualProductEditingIndex = normalizedIndex;
+          manualProductSelectedRecord =
+            item?.matchedProduct && typeof item.matchedProduct === 'object' ? item.matchedProduct : null;
+
+          if (manualProductModalFields.product) {
+            manualProductModalFields.product.value = String(item?.description || '').trim();
+          }
+          setManualFieldNumber(manualProductModalFields.qty, toNumeric(item?.quantity), 'qty');
+          setManualFieldNumber(
+            manualProductModalFields.unit,
+            toNumeric(item?.unitPrice ?? item?.unitCostWithTaxes ?? item?.valor),
+            'money'
+          );
+          setManualFieldNumber(manualProductModalFields.discountPercent, toNumeric(item?.discountPercent), 'percent');
+          setManualFieldNumber(manualProductModalFields.discountValue, toNumeric(item?.discount), 'money');
+          setManualFieldNumber(manualProductModalFields.otherExpenses, toNumeric(item?.other), 'money');
+          setManualFieldNumber(manualProductModalFields.total, toNumeric(item?.total), 'money');
+          setManualFieldNumber(manualProductModalFields.peso, toNumeric(item?.peso), 'qty');
+          setManualFieldNumber(manualProductModalFields.qtyTrib, toNumeric(item?.qTrib), 'qty');
+          setManualFieldNumber(manualProductModalFields.unitTrib, toNumeric(item?.unitTribValue), 'money');
+
+          if (manualProductModalFields.unidadeComercial) {
+            manualProductModalFields.unidadeComercial.value = String(item?.unit || 'UN').trim() || 'UN';
+          }
+          if (manualProductModalFields.unidadeTributavel) {
+            manualProductModalFields.unidadeTributavel.value =
+              String(item?.unitTrib || item?.unit || 'UN').trim() || 'UN';
+          }
+          if (manualProductModalFields.ncm) manualProductModalFields.ncm.value = String(item?.ncm || '').trim();
+          if (manualProductModalFields.cfop) {
+            const resolvedCfop = ensureManualCfopOption(String(item?.cfop || '').trim(), { allowDynamic: true });
+            manualProductModalFields.cfop.value = resolvedCfop || '';
+          }
+          if (manualProductModalFields.cest) manualProductModalFields.cest.value = String(item?.cest || '').trim();
+          if (manualProductModalFields.icmsCst) manualProductModalFields.icmsCst.value = String(item?.cst || '').trim();
+          setManualFieldNumber(manualProductModalFields.icmsAliq, toNumeric(item?.icmsRate), 'percent');
+          setManualFieldNumber(manualProductModalFields.icmsBaseValue, toNumeric(item?.icmsBase), 'money');
+          setManualFieldNumber(manualProductModalFields.icmsValor, toNumeric(item?.icmsValue), 'money');
+          setManualFieldNumber(manualProductModalFields.fcpValor, toNumeric(item?.fcpValue), 'money');
+          setManualFieldNumber(manualProductModalFields.ipiAliq, toNumeric(item?.ipiRate), 'percent');
+          setManualFieldNumber(manualProductModalFields.ipiBase, toNumeric(item?.ipiBase), 'money');
+          setManualFieldNumber(manualProductModalFields.ipiValor, toNumeric(item?.ipiValue), 'money');
+          if (manualProductModalFields.ipiCst) {
+            manualProductModalFields.ipiCst.value = String(item?.ipiCst || '').trim();
+          }
+          setManualFieldNumber(manualProductModalFields.pisAliq, toNumeric(item?.pisRate), 'percent');
+          setManualFieldNumber(manualProductModalFields.pisBase, toNumeric(item?.pisBase), 'money');
+          setManualFieldNumber(manualProductModalFields.pisValor, toNumeric(item?.pisValue), 'money');
+          setManualFieldNumber(manualProductModalFields.cofinsAliq, toNumeric(item?.cofinsRate), 'percent');
+          setManualFieldNumber(manualProductModalFields.cofinsBase, toNumeric(item?.cofinsBase), 'money');
+          setManualFieldNumber(manualProductModalFields.cofinsValor, toNumeric(item?.cofinsValue), 'money');
+          if (manualProductModalFields.codigoBeneficioFiscal) {
+            manualProductModalFields.codigoBeneficioFiscal.value = String(item?.codigoBeneficioFiscal || '').trim();
+          }
+          if (manualProductModalFields.numeroPedido) {
+            manualProductModalFields.numeroPedido.value = String(item?.numeroPedido || '').trim();
+          }
+          if (manualProductModalFields.numeroItemPedido) {
+            manualProductModalFields.numeroItemPedido.value = String(item?.numeroItemPedido || '').trim();
+          }
+
+          updateManualProductTotals('percent');
+          activateManualProductModalTab('icms');
+          manualProductModal.classList.remove('hidden');
+          manualProductModal.setAttribute('aria-hidden', 'false');
+          setTimeout(() => {
+            manualProductModalFields.product?.focus();
+          }, 0);
+        };
+
+        const closeManualProductModal = () => {
+          if (!manualProductModal) return;
+          manualProductModal.classList.add('hidden');
+          manualProductModal.setAttribute('aria-hidden', 'true');
+          closeManualProductLookupModal();
+          if (productModalPreviousFocus && typeof productModalPreviousFocus.focus === 'function') {
+            productModalPreviousFocus.focus();
+          }
+          productModalPreviousFocus = null;
+        };
+
+        const refreshTotalsFromManualItems = () => {
+          const items = Array.isArray(mainProductTableState.items) ? mainProductTableState.items : [];
+          const totals = {
+            products: 0,
+            bonification: 0,
+            icmsBase: 0,
+            icmsValue: 0,
+            icmsSt: 0,
+            fcpSt: 0,
+            discount: 0,
+            other: 0,
+            freight: 0,
+            ipi: 0,
+            insurance: 0,
+          };
+
+          items.forEach((item) => {
+            totals.products += Number.isFinite(toNumeric(item?.total)) ? toNumeric(item.total) : 0;
+            totals.icmsBase += Number.isFinite(toNumeric(item?.icmsBase)) ? toNumeric(item.icmsBase) : 0;
+            totals.icmsValue += Number.isFinite(toNumeric(item?.icmsValue)) ? toNumeric(item.icmsValue) : 0;
+            totals.icmsSt += Number.isFinite(toNumeric(item?.icmsStValue)) ? toNumeric(item.icmsStValue) : 0;
+            totals.fcpSt += Number.isFinite(toNumeric(item?.fcpStValue)) ? toNumeric(item.fcpStValue) : 0;
+            totals.discount += Number.isFinite(toNumeric(item?.discount)) ? toNumeric(item.discount) : 0;
+            totals.other += Number.isFinite(toNumeric(item?.other)) ? toNumeric(item.other) : 0;
+            totals.freight += Number.isFinite(toNumeric(item?.freight)) ? toNumeric(item.freight) : 0;
+            totals.ipi += Number.isFinite(toNumeric(item?.ipiValue)) ? toNumeric(item.ipiValue) : 0;
+            totals.insurance += Number.isFinite(toNumeric(item?.insurance)) ? toNumeric(item.insurance) : 0;
+          });
+
+          if (!lastNfeData || typeof lastNfeData !== 'object') {
+            lastNfeData = {};
+          }
+          lastNfeData.items = items;
+          lastNfeData.totals = {
+            ...(lastNfeData.totals || {}),
+            ...totals,
+            totalValue: totals.products + totals.freight + totals.other + totals.ipi - totals.discount,
+          };
+
+          fillTotalsFromNfeData(lastNfeData);
+
+          if (totalAmountDisplay) {
+            totalAmountDisplay.textContent = formatCurrencyBRL(lastNfeData.totals.totalValue || 0);
+          }
+        };
+
+        const saveManualProductFromModal = () => {
+          const description = (manualProductModalFields.product?.value || '').trim();
+          if (!description) {
+            notify('Informe o produto antes de adicionar.', 'warning');
+            manualProductModalFields.product?.focus();
+            return;
+          }
+
+          const quantity = readManualFieldNumber(manualProductModalFields.qty);
+          if (!(quantity > 0)) {
+            notify('Informe uma quantidade válida para o item.', 'warning');
+            manualProductModalFields.qty?.focus();
+            return;
+          }
+
+          const unitPrice = readManualFieldNumber(manualProductModalFields.unit);
+          const total = readManualFieldNumber(manualProductModalFields.total);
+          const discount = readManualFieldNumber(manualProductModalFields.discountValue);
+          const discountPercent = readManualFieldNumber(manualProductModalFields.discountPercent);
+          const qTrib = readManualFieldNumber(manualProductModalFields.qtyTrib);
+          const conversion = quantity > 0 && qTrib > 0 ? qTrib / quantity : 1;
+
+          const normalizedEditIndex =
+            Number.isInteger(manualProductEditingIndex) && manualProductEditingIndex >= 0
+              ? manualProductEditingIndex
+              : -1;
+          const nextItems = Array.isArray(mainProductTableState.items)
+            ? mainProductTableState.items.slice()
+            : [];
+          const targetIndex =
+            normalizedEditIndex >= 0 && normalizedEditIndex < nextItems.length
+              ? normalizedEditIndex
+              : nextItems.length;
+
+          const manualItem = {
+            index: targetIndex,
+            nItem: String(targetIndex + 1),
+            supplierCode: '',
+            description,
+            unit: (manualProductModalFields.unidadeComercial?.value || '').trim() || 'UN',
+            quantity,
+            unitPrice,
+            discount,
+            discountPercent,
+            total,
+            ncm: (manualProductModalFields.ncm?.value || '').trim(),
+            cfop: (manualProductModalFields.cfop?.value || '').trim(),
+            cest: (manualProductModalFields.cest?.value || '').trim(),
+            cst: (manualProductModalFields.icmsCst?.value || '').trim(),
+            icmsRate: readManualFieldNumber(manualProductModalFields.icmsAliq),
+            icmsBase: readManualFieldNumber(manualProductModalFields.icmsBaseValue),
+            icmsValue: readManualFieldNumber(manualProductModalFields.icmsValor),
+            icmsStRate: 0,
+            icmsStValue: 0,
+            fcpValue: readManualFieldNumber(manualProductModalFields.fcpValor),
+            fcpStValue: 0,
+            fcpStRetainedValue: 0,
+            ipiRate: readManualFieldNumber(manualProductModalFields.ipiAliq),
+            ipiBase: readManualFieldNumber(manualProductModalFields.ipiBase),
+            ipiValue: readManualFieldNumber(manualProductModalFields.ipiValor),
+            ipiCst: (manualProductModalFields.ipiCst?.value || '').trim(),
+            pisRate: readManualFieldNumber(manualProductModalFields.pisAliq),
+            pisBase: readManualFieldNumber(manualProductModalFields.pisBase),
+            pisValue: readManualFieldNumber(manualProductModalFields.pisValor),
+            cofinsRate: readManualFieldNumber(manualProductModalFields.cofinsAliq),
+            cofinsBase: readManualFieldNumber(manualProductModalFields.cofinsBase),
+            cofinsValue: readManualFieldNumber(manualProductModalFields.cofinsValor),
+            freight: 0,
+            insurance: 0,
+            other: readManualFieldNumber(manualProductModalFields.otherExpenses),
+            unitTrib: (manualProductModalFields.unidadeTributavel?.value || '').trim() || (manualProductModalFields.unidadeComercial?.value || '').trim() || 'UN',
+            qTrib,
+            conversionMultiplier: qTrib > 0 ? qTrib : quantity,
+            conversionDivider: quantity > 0 ? quantity : 1,
+            conversion,
+            originalConversionFactor: conversion,
+            codigoBeneficioFiscal: (manualProductModalFields.codigoBeneficioFiscal?.value || '').trim(),
+            numeroPedido: (manualProductModalFields.numeroPedido?.value || '').trim(),
+            numeroItemPedido: (manualProductModalFields.numeroItemPedido?.value || '').trim(),
+            peso: readManualFieldNumber(manualProductModalFields.peso),
+            barcodeDisplay: 'SEM GTIN',
+            barcodeTribDisplay: 'SEM GTIN',
+            barcodeCandidates: [],
+            ean: '',
+            eanTrib: '',
+            validationStatus: 'matched',
+            matchedProduct: manualProductSelectedRecord || {
+              codigoInterno: `REC-${targetIndex + 1}`,
+              nome: description,
+            },
+          };
+
+          ensureItemCostWithTaxes(manualItem);
+          if (normalizedEditIndex >= 0 && normalizedEditIndex < nextItems.length) {
+            nextItems[normalizedEditIndex] = manualItem;
+          } else {
+            nextItems.push(manualItem);
+          }
+
+          renderMainProductsFromNfe(nextItems);
+          refreshTotalsFromManualItems();
+          closeManualProductModal();
+          notify(normalizedEditIndex >= 0 ? 'Produto atualizado com sucesso.' : 'Produto adicionado com sucesso.', 'success');
+        };
         const CODE_STATUS_LABELS = {
           draft: 'Cadastrada',
           approved: 'Aprovada',
@@ -14464,6 +16244,196 @@
           );
         };
 
+        if (manualProductModal) {
+          void loadManualEntryCfopOptions();
+          populateManualProductUnitOptions();
+          activateManualProductModalTab('icms');
+          updateManualProductTotals('percent');
+
+          manualProductModal.addEventListener('click', (event) => {
+            if (event.target === manualProductModal) {
+              closeManualProductModal();
+            }
+          });
+
+          manualProductModal.querySelectorAll('[data-nfe-modal-close]').forEach((button) => {
+            button.addEventListener('click', closeManualProductModal);
+          });
+
+          manualProductModal.querySelectorAll('[data-nfe-modal-tab]').forEach((button) => {
+            button.addEventListener('click', () => activateManualProductModalTab(button.dataset.nfeModalTab || 'icms'));
+          });
+
+          manualProductModalFields.cancel?.addEventListener('click', (event) => {
+            event.preventDefault();
+            closeManualProductModal();
+          });
+
+          manualProductModalFields.save?.addEventListener('click', (event) => {
+            event.preventDefault();
+            saveManualProductFromModal();
+          });
+
+          manualProductModalFields.product?.addEventListener('input', (event) => {
+            if (manualProductLookupSilentInput) return;
+            const term = String(event?.target?.value || '').trim();
+            const hasLetters = /[A-Za-zÀ-ÿ]/.test(term);
+            if (!hasLetters) {
+              if (manualProductLookupDebounceTimer) {
+                clearTimeout(manualProductLookupDebounceTimer);
+                manualProductLookupDebounceTimer = null;
+              }
+              closeManualProductLookupModal();
+              manualProductSelectedRecord = null;
+              return;
+            }
+            manualProductSelectedRecord = null;
+            openManualProductLookupModal(term);
+            if (manualProductLookupSearchInput) {
+              manualProductLookupSearchInput.value = term;
+            }
+            if (manualProductLookupTermLabel) {
+              manualProductLookupTermLabel.textContent = `Busca: "${term}"`;
+            }
+            if (manualProductLookupDebounceTimer) {
+              clearTimeout(manualProductLookupDebounceTimer);
+            }
+            manualProductLookupDebounceTimer = setTimeout(() => {
+              searchManualProductLookup(term);
+            }, 220);
+          });
+
+          manualProductModalFields.product?.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            const term = String(manualProductModalFields.product?.value || '').trim();
+            if (!term) return;
+            void handleManualProductEnterSearch(term);
+          });
+
+          [
+            manualProductModalFields.qty,
+            manualProductModalFields.unit,
+            manualProductModalFields.otherExpenses,
+            manualProductModalFields.icmsBasePercent,
+            manualProductModalFields.icmsAliq,
+            manualProductModalFields.fcpAliq,
+            manualProductModalFields.ipiBase,
+            manualProductModalFields.ipiAliq,
+            manualProductModalFields.pisAliq,
+            manualProductModalFields.cofinsAliq,
+            manualProductModalFields.qtyTrib,
+          ].forEach((field) => {
+            field?.addEventListener('input', () => updateManualProductTotals());
+          });
+
+          manualProductModalFields.discountPercent?.addEventListener('input', () => updateManualProductTotals('percent'));
+          manualProductModalFields.discountValue?.addEventListener('input', () => updateManualProductTotals('value'));
+
+          manualProductModalFields.unidadeComercial?.addEventListener('change', () => {
+            syncManualUnits('uCom');
+            updateManualProductTotals();
+          });
+
+          manualProductModalFields.unidadeTributavel?.addEventListener('change', () => {
+            syncManualUnits('uTrib');
+            updateManualProductTotals();
+          });
+
+          manualProductModalFields.pisExcluirIcms?.addEventListener('change', () => updateManualProductTotals());
+          manualProductModalFields.cofinsExcluirIcms?.addEventListener('change', () => updateManualProductTotals());
+          manualProductModalFields.cfop?.addEventListener('change', () => {
+            manualProductPendingAutoCfop = '';
+          });
+        }
+
+        manualProductLookupCloseTriggers.forEach((trigger) => {
+          if (!(trigger instanceof HTMLElement)) return;
+          trigger.addEventListener('click', (event) => {
+            event.preventDefault();
+            closeManualProductLookupModal();
+          });
+        });
+
+        if (manualProductLookupSearchInput) {
+          manualProductLookupSearchInput.addEventListener('input', (event) => {
+            const term = String(event?.target?.value || '').trim();
+            if (manualProductModalFields.product) {
+              manualProductLookupSilentInput = true;
+              manualProductModalFields.product.value = term;
+              manualProductLookupSilentInput = false;
+            }
+            if (manualProductLookupTermLabel) {
+              manualProductLookupTermLabel.textContent = term ? `Busca: "${term}"` : 'Nenhuma busca realizada.';
+            }
+            if (manualProductLookupDebounceTimer) {
+              clearTimeout(manualProductLookupDebounceTimer);
+            }
+            manualProductLookupDebounceTimer = setTimeout(() => {
+              searchManualProductLookup(term);
+            }, 220);
+          });
+
+          manualProductLookupSearchInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              const term = String(manualProductLookupSearchInput.value || '').trim();
+              if (manualProductLookupDebounceTimer) {
+                clearTimeout(manualProductLookupDebounceTimer);
+                manualProductLookupDebounceTimer = null;
+              }
+              searchManualProductLookup(term);
+            }
+          });
+        }
+
+        if (manualProductLookupModal) {
+          manualProductLookupModal.addEventListener('click', (event) => {
+            if (event.target === manualProductLookupModal) {
+              closeManualProductLookupModal();
+            }
+          });
+        }
+
+        manualProductAddButton?.addEventListener('click', (event) => {
+          event.preventDefault();
+          if (!isReciboTypeSelected()) {
+            notify('Para adicionar produto manualmente, selecione o tipo Recibo.', 'warning');
+            return;
+          }
+          openManualProductModal();
+        });
+
+        nfeTypeSelect?.addEventListener('change', () => {
+          setManualProductAddButtonState();
+        });
+
+        document.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape' && manualProductLookupModal && !manualProductLookupModal.classList.contains('hidden')) {
+            closeManualProductLookupModal();
+            return;
+          }
+          if (event.key === 'Escape' && manualProductModal && !manualProductModal.classList.contains('hidden')) {
+            closeManualProductModal();
+          }
+        });
+
+        setManualProductAddButtonState();
+        if (mainProductsTableBody) {
+          mainProductsTableBody.addEventListener('dblclick', (event) => {
+            const row = event.target instanceof HTMLElement
+              ? event.target.closest('tr[data-nfe-products-row][data-main-product-index]')
+              : null;
+            if (!(row instanceof HTMLElement)) return;
+            if (!isReciboTypeSelected()) {
+              notify('Para editar produto pela grade, selecione o tipo Recibo.', 'warning');
+              return;
+            }
+            const rowIndex = Number.parseInt(row.dataset.mainProductIndex || '', 10);
+            if (!Number.isInteger(rowIndex) || rowIndex < 0) return;
+            void openManualProductModalForEdit(rowIndex);
+          });
+        }
         document.querySelectorAll('[data-main-products-filter]').forEach((input) => {
           const key = input.dataset.mainProductsFilter;
           if (!key) return;
@@ -15160,6 +17130,7 @@
           renderDocumentsFromNfe([]);
           renderDuplicatasFromNfe([], null);
           renderMainProductsFromNfe([]);
+          setManualProductAddButtonState();
         };
 
         const handleSupplierSelection = async (supplier) => {
@@ -16651,46 +18622,48 @@
             }
 
             const duplicates = Array.isArray(lastNfeData?.duplicates) ? lastNfeData.duplicates : [];
-            if (!duplicates.length) {
-              notify('Informe as duplicatas da nota antes de aprovar.', 'warning');
-              activateTab('duplicatas');
-              return;
-            }
-
-            const supplierAccount = resolveSupplierAccountingAccount();
-            if (!supplierAccount || !supplierAccount.id) {
-              notify('Defina a conta contábil vinculada ao fornecedor antes de aprovar.', 'warning');
-              activateTab('duplicatas');
-              accountingAccountInput?.focus();
-              return;
-            }
-
-            for (let index = 0; index < duplicates.length; index += 1) {
-              const duplicate = duplicates[index];
-              const dueInfo = normalizeDate(
-                duplicate?.manualDueDate || duplicate?.dueDate || duplicate?.originalDueDate || ''
-              );
-              if (!dueInfo.dateInput) {
-                notify(`Informe o vencimento da parcela ${duplicate?.number || index + 1}.`, 'warning');
+            if (!isReciboTypeSelected()) {
+              if (!duplicates.length) {
+                notify('Informe as duplicatas da nota antes de aprovar.', 'warning');
                 activateTab('duplicatas');
-                focusDuplicateField(index, 'dueDate');
                 return;
               }
 
-              const valueNumeric = toNumeric(duplicate?.value);
-              if (!Number.isFinite(valueNumeric) || valueNumeric <= 0) {
-                notify(`Informe um valor válido para a parcela ${duplicate?.number || index + 1}.`, 'warning');
+              const supplierAccount = resolveSupplierAccountingAccount();
+              if (!supplierAccount || !supplierAccount.id) {
+                notify('Defina a conta contábil vinculada ao fornecedor antes de aprovar.', 'warning');
                 activateTab('duplicatas');
-                focusDuplicateField(index, 'value');
+                accountingAccountInput?.focus();
                 return;
               }
 
-              const duplicateBank = duplicate?.bankAccount || bankAccountSelect?.value || '';
-              if (!duplicateBank) {
-                notify(`Selecione a conta corrente da parcela ${duplicate?.number || index + 1}.`, 'warning');
-                activateTab('duplicatas');
-                focusDuplicateField(index, 'bankAccount');
-                return;
+              for (let index = 0; index < duplicates.length; index += 1) {
+                const duplicate = duplicates[index];
+                const dueInfo = normalizeDate(
+                  duplicate?.manualDueDate || duplicate?.dueDate || duplicate?.originalDueDate || ''
+                );
+                if (!dueInfo.dateInput) {
+                  notify(`Informe o vencimento da parcela ${duplicate?.number || index + 1}.`, 'warning');
+                  activateTab('duplicatas');
+                  focusDuplicateField(index, 'dueDate');
+                  return;
+                }
+
+                const valueNumeric = toNumeric(duplicate?.value);
+                if (!Number.isFinite(valueNumeric) || valueNumeric <= 0) {
+                  notify(`Informe um valor válido para a parcela ${duplicate?.number || index + 1}.`, 'warning');
+                  activateTab('duplicatas');
+                  focusDuplicateField(index, 'value');
+                  return;
+                }
+
+                const duplicateBank = duplicate?.bankAccount || bankAccountSelect?.value || '';
+                if (!duplicateBank) {
+                  notify(`Selecione a conta corrente da parcela ${duplicate?.number || index + 1}.`, 'warning');
+                  activateTab('duplicatas');
+                  focusDuplicateField(index, 'bankAccount');
+                  return;
+                }
               }
             }
 
@@ -17160,6 +19133,14 @@
   </script>
 </body>
 </html>
+
+
+
+
+
+
+
+
 
 
 

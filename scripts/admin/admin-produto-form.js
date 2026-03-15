@@ -213,6 +213,7 @@
         statusNfce: document.getElementById('fiscal-status-nfce'),
         cfop: {
             nfe: {
+                entrada: document.getElementById('fiscal-cfop-nfe-entrada'),
                 interno: document.getElementById('fiscal-cfop-nfe-interno'),
                 interestadual: document.getElementById('fiscal-cfop-nfe-interestadual'),
                 transferencia: document.getElementById('fiscal-cfop-nfe-transferencia'),
@@ -220,6 +221,7 @@
                 industrializacao: document.getElementById('fiscal-cfop-nfe-industrializacao'),
             },
             nfce: {
+                entrada: document.getElementById('fiscal-cfop-nfce-entrada'),
                 interno: document.getElementById('fiscal-cfop-nfce-interno'),
                 interestadual: document.getElementById('fiscal-cfop-nfce-interestadual'),
                 transferencia: document.getElementById('fiscal-cfop-nfce-transferencia'),
@@ -279,11 +281,13 @@
 
         const cfopNfe = fiscal?.cfop?.nfe || {};
         const cfopNfce = fiscal?.cfop?.nfce || {};
+        setInputValue(fiscalInputs.cfop.nfe.entrada, cfopNfe?.entrada || '');
         setInputValue(fiscalInputs.cfop.nfe.interno, cfopNfe?.dentroEstado || '');
         setInputValue(fiscalInputs.cfop.nfe.interestadual, cfopNfe?.foraEstado || '');
         setInputValue(fiscalInputs.cfop.nfe.transferencia, cfopNfe?.transferencia || '');
         setInputValue(fiscalInputs.cfop.nfe.devolucao, cfopNfe?.devolucao || '');
         setInputValue(fiscalInputs.cfop.nfe.industrializacao, cfopNfe?.industrializacao || '');
+        setInputValue(fiscalInputs.cfop.nfce.entrada, cfopNfce?.entrada || '');
         setInputValue(fiscalInputs.cfop.nfce.interno, cfopNfce?.dentroEstado || '');
         setInputValue(fiscalInputs.cfop.nfce.interestadual, cfopNfce?.foraEstado || '');
         setInputValue(fiscalInputs.cfop.nfce.transferencia, cfopNfce?.transferencia || '');
@@ -325,6 +329,7 @@
         },
         cfop: {
             nfe: {
+                entrada: fiscalInputs.cfop.nfe.entrada?.value?.trim() || '',
                 dentroEstado: fiscalInputs.cfop.nfe.interno?.value?.trim() || '',
                 foraEstado: fiscalInputs.cfop.nfe.interestadual?.value?.trim() || '',
                 transferencia: fiscalInputs.cfop.nfe.transferencia?.value?.trim() || '',
@@ -332,6 +337,7 @@
                 industrializacao: fiscalInputs.cfop.nfe.industrializacao?.value?.trim() || '',
             },
             nfce: {
+                entrada: fiscalInputs.cfop.nfce.entrada?.value?.trim() || '',
                 dentroEstado: fiscalInputs.cfop.nfce.interno?.value?.trim() || '',
                 foraEstado: fiscalInputs.cfop.nfce.interestadual?.value?.trim() || '',
                 transferencia: fiscalInputs.cfop.nfce.transferencia?.value?.trim() || '',
@@ -376,6 +382,7 @@
         status: { nfe: 'pendente', nfce: 'pendente' },
         cfop: {
             nfe: {
+                entrada: '',
                 dentroEstado: '',
                 foraEstado: '',
                 transferencia: '',
@@ -383,6 +390,7 @@
                 industrializacao: '',
             },
             nfce: {
+                entrada: '',
                 dentroEstado: '',
                 foraEstado: '',
                 transferencia: '',
@@ -426,7 +434,7 @@
         const statusNfce = status.nfce || 'pendente';
         if (statusNfe !== 'pendente' || statusNfce !== 'pendente') return false;
 
-        const cfopFields = ['dentroEstado', 'foraEstado', 'transferencia', 'devolucao', 'industrializacao'];
+        const cfopFields = ['entrada', 'dentroEstado', 'foraEstado', 'transferencia', 'devolucao', 'industrializacao'];
         const cfopNfe = cfop.nfe || {};
         const cfopNfce = cfop.nfce || {};
         if (cfopFields.some((field) => !isEmptyString(cfopNfe[field] || ''))) return false;
@@ -850,6 +858,7 @@
         },
         cfop: {
             nfe: {
+                entrada: fiscal?.cfop?.nfe?.entrada || '',
                 dentroEstado: fiscal?.cfop?.nfe?.dentroEstado || '',
                 foraEstado: fiscal?.cfop?.nfe?.foraEstado || '',
                 transferencia: fiscal?.cfop?.nfe?.transferencia || '',
@@ -857,6 +866,7 @@
                 industrializacao: fiscal?.cfop?.nfe?.industrializacao || '',
             },
             nfce: {
+                entrada: fiscal?.cfop?.nfce?.entrada || '',
                 dentroEstado: fiscal?.cfop?.nfce?.dentroEstado || '',
                 foraEstado: fiscal?.cfop?.nfce?.foraEstado || '',
                 transferencia: fiscal?.cfop?.nfce?.transferencia || '',

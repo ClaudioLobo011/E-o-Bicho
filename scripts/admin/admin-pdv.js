@@ -4522,6 +4522,33 @@
     return null;
   };
 
+  const getConditionalPromotionDisplay = (product, basePrice) => {
+    const conditional = product?.promocaoCondicional;
+    if (!conditional?.ativa || !isWithinPromotionPeriod(conditional)) return { label: '', price: null };
+    const normalizedBase = safeNumber(basePrice);
+    if (!(normalizedBase > 0)) return { label: '', price: null };
+
+    if (conditional.tipo === 'acima_de') {
+      const min = Math.max(1, Math.trunc(Number(conditional.quantidadeMinima) || 0));
+      const discount = safeNumber(conditional.descontoPorcentagem);
+      if (!min || !(discount > 0)) return { label: '', price: null };
+      const discounted = Math.max(normalizedBase - normalizedBase * (discount / 100), 0);
+      if (!(discounted > 0 && discounted < normalizedBase)) return { label: '', price: null };
+      return { label: `Acima de ${min}:`, price: discounted };
+    }
+
+    if (conditional.tipo === 'leve_pague') {
+      const leve = Math.max(1, Math.trunc(Number(conditional.leve) || 0));
+      const pague = Math.max(0, Math.trunc(Number(conditional.pague) || 0));
+      if (!leve || !pague || pague > leve) return { label: '', price: null };
+      const discounted = (normalizedBase * pague) / leve;
+      if (!(discounted > 0 && discounted < normalizedBase)) return { label: '', price: null };
+      return { label: `Leve ${leve} pague ${pague}`, price: discounted };
+    }
+
+    return { label: '', price: null };
+  };
+
   const getPromotionPricing = (product, quantity = 1, options = {}) => {
     const basePrice = getBasePrice(product);
     if (!product) {
@@ -4654,6 +4681,11 @@
     elements.selectedName = document.getElementById('pdv-selected-name');
     elements.selectedSku = document.getElementById('pdv-selected-sku');
     elements.selectedPrice = document.getElementById('pdv-selected-price');
+    elements.selectedGlobalPrice = document.getElementById('pdv-selected-global-price');
+    elements.selectedGlobalPriceValue = document.getElementById('pdv-selected-global-price-value');
+    elements.selectedConditionalPrice = document.getElementById('pdv-selected-conditional-price');
+    elements.selectedConditionalLabel = document.getElementById('pdv-selected-conditional-label');
+    elements.selectedConditionalPriceValue = document.getElementById('pdv-selected-conditional-price-value');
     elements.selectedOriginalPrice = document.getElementById('pdv-selected-original-price');
     elements.selectedPromoBadge = document.getElementById('pdv-selected-promo');
     elements.selectedGeneralWarning = document.getElementById('pdv-selected-general-warning');
@@ -5460,6 +5492,21 @@
     if (elements.selectedPrice) {
       elements.selectedPrice.textContent = formatCurrency(0);
     }
+    if (elements.selectedGlobalPrice) {
+      elements.selectedGlobalPrice.classList.add('hidden');
+    }
+    if (elements.selectedGlobalPriceValue) {
+      elements.selectedGlobalPriceValue.textContent = formatCurrency(0);
+    }
+    if (elements.selectedConditionalPrice) {
+      elements.selectedConditionalPrice.classList.add('hidden');
+    }
+    if (elements.selectedConditionalLabel) {
+      elements.selectedConditionalLabel.textContent = 'Condicional';
+    }
+    if (elements.selectedConditionalPriceValue) {
+      elements.selectedConditionalPriceValue.textContent = formatCurrency(0);
+    }
     if (elements.selectedOriginalPrice) {
       elements.selectedOriginalPrice.classList.add('hidden');
     }
@@ -5498,6 +5545,22 @@
     const pricing = getItemPricing(product, true, quantity);
     const basePrice = pricing.valorBase;
     const finalPrice = pricing.valor;
+    const globalPromoPrice =
+      (() => {
+        const fromPercent = safeNumber(product?.promocao?.porcentagem);
+        if (fromPercent > 0) {
+          const discounted = Math.max(basePrice - basePrice * (fromPercent / 100), 0);
+          if (discounted > 0 && discounted < basePrice) return discounted;
+        }
+        const fromClub = safeNumber(product?.precoClube);
+        if (fromClub > 0 && fromClub < basePrice) return fromClub;
+        if (pricing?.promoType === 'general' && safeNumber(pricing?.promoPrice) > 0) {
+          const fallback = safeNumber(pricing.promoPrice);
+          if (fallback < basePrice) return fallback;
+        }
+        return null;
+      })();
+    const conditionalPreview = getConditionalPromotionDisplay(product, basePrice);
     const generalPromo = hasGeneralPromotion(product);
     const showGeneralWarning = generalPromo && !canApplyGeneralPromotion();
     if (elements.selectedName) {
@@ -5510,24 +5573,34 @@
       elements.selectedSku.textContent = info || 'Detalhes indisponíveis para o item selecionado.';
     }
     if (elements.selectedPrice) {
-      elements.selectedPrice.textContent = formatCurrency(finalPrice);
+      elements.selectedPrice.textContent = formatCurrency(basePrice);
+    }
+    if (elements.selectedGlobalPriceValue) {
+      elements.selectedGlobalPriceValue.textContent = formatCurrency(globalPromoPrice || 0);
+    }
+    if (elements.selectedGlobalPrice) {
+      elements.selectedGlobalPrice.classList.toggle('hidden', !(globalPromoPrice > 0));
+    }
+    if (elements.selectedConditionalLabel) {
+      elements.selectedConditionalLabel.textContent = conditionalPreview.label || 'Condicional';
+    }
+    if (elements.selectedConditionalPriceValue) {
+      elements.selectedConditionalPriceValue.textContent = formatCurrency(conditionalPreview.price || 0);
+    }
+    if (elements.selectedConditionalPrice) {
+      elements.selectedConditionalPrice.classList.toggle('hidden', !(conditionalPreview.price > 0));
     }
     if (elements.selectedOriginalPrice) {
-      if (pricing.hasPromotion && finalPrice < basePrice) {
-        elements.selectedOriginalPrice.textContent = formatCurrency(basePrice);
-        elements.selectedOriginalPrice.classList.remove('hidden');
-      } else {
-        elements.selectedOriginalPrice.classList.add('hidden');
-      }
+      elements.selectedOriginalPrice.classList.add('hidden');
     }
     if (elements.selectedPromoBadge) {
       let promoLabel = 'Promocao ativa';
       if (pricing.promoType === 'general') {
         promoLabel = 'Promocao geral';
       } else if (pricing.promoType === 'conditional') {
-        promoLabel = 'Promocao condicional';
+        promoLabel = 'Club';
       } else if (pricing.promoType === 'club') {
-        promoLabel = 'Preco clube';
+        promoLabel = 'Club';
       }
       elements.selectedPromoBadge.textContent = promoLabel;
       elements.selectedPromoBadge.classList.toggle('hidden', !pricing.hasPromotion);
@@ -11314,6 +11387,20 @@
     if (event.data.type === 'TAB_CONTENT_RESIZE') {
       const height = event.data.modalExtent || event.data.modalHeight || event.data.height;
       applyCustomerRegistrationFrameHeight(height);
+      return;
+    }
+    if (event.data.type === 'CUSTOMER_SAVED') {
+      resetDeliveryCustomerLookupState();
+      const documentDigits = normalizeDocumentDigits(elements.deliveryCustomerCpf?.value || '');
+      const phoneDigits = `${normalizePhoneDigits(elements.deliveryPhoneDdd?.value || '')}${normalizePhoneDigits(elements.deliveryPhoneNumber?.value || '')}`;
+      const customerCode = sanitizeCustomerCode(elements.deliveryCustomerSearch?.value || '');
+      if (documentDigits.length === 11 || documentDigits.length === 14) {
+        lookupAndApplyDeliveryCustomer('document', { force: true });
+      } else if (phoneDigits.length === 10 || phoneDigits.length === 11) {
+        lookupAndApplyDeliveryCustomer('phone', { force: true });
+      } else if (customerCode) {
+        lookupAndApplyDeliveryCustomer('code', { force: true });
+      }
     }
   };
 
@@ -11534,6 +11621,25 @@
     elements.saleMethods.innerHTML = html;
   };
 
+  const resetDeliveryCustomerLookupState = () => {
+    deliveryCustomerLastDocLookup = '';
+    deliveryCustomerLastPhoneLookup = '';
+    deliveryCustomerLastCodeLookup = '';
+    deliveryCustomerLookupRequestSeq += 1;
+    if (deliveryCustomerLookupDocTimeout) {
+      clearTimeout(deliveryCustomerLookupDocTimeout);
+      deliveryCustomerLookupDocTimeout = null;
+    }
+    if (deliveryCustomerLookupPhoneTimeout) {
+      clearTimeout(deliveryCustomerLookupPhoneTimeout);
+      deliveryCustomerLookupPhoneTimeout = null;
+    }
+    if (deliveryCustomerLookupCodeTimeout) {
+      clearTimeout(deliveryCustomerLookupCodeTimeout);
+      deliveryCustomerLookupCodeTimeout = null;
+    }
+  };
+
   const resetDeliveryAddressForm = () => {
     const fields = elements.deliveryAddressFields || {};
     if (fields.apelido) fields.apelido.value = '';
@@ -11551,21 +11657,7 @@
     deliveryCepLastDigits = '';
     deliveryCepLastResult = null;
     deliveryCepLastNotifiedDigits = '';
-    deliveryCustomerLastDocLookup = '';
-    deliveryCustomerLastPhoneLookup = '';
-    deliveryCustomerLastCodeLookup = '';
-    if (deliveryCustomerLookupDocTimeout) {
-      clearTimeout(deliveryCustomerLookupDocTimeout);
-      deliveryCustomerLookupDocTimeout = null;
-    }
-    if (deliveryCustomerLookupPhoneTimeout) {
-      clearTimeout(deliveryCustomerLookupPhoneTimeout);
-      deliveryCustomerLookupPhoneTimeout = null;
-    }
-    if (deliveryCustomerLookupCodeTimeout) {
-      clearTimeout(deliveryCustomerLookupCodeTimeout);
-      deliveryCustomerLookupCodeTimeout = null;
-    }
+    resetDeliveryCustomerLookupState();
   };
 
   const setDeliveryCustomerRegistrationRequired = (enabled) => {
@@ -20625,13 +20717,13 @@
   };
 
   const lookupAndApplyDeliveryCustomer = async (kind, options = {}) => {
-    const { notifyOnMissing = false } = options;
+    const { notifyOnMissing = false, force = false } = options;
     const sequence = ++deliveryCustomerLookupRequestSeq;
     let customer = null;
     if (kind === 'document') {
       const digits = normalizeDocumentDigits(elements.deliveryCustomerCpf?.value || '');
       if (digits.length !== 11 && digits.length !== 14) return;
-      if (deliveryCustomerLastDocLookup === digits) return;
+      if (!force && deliveryCustomerLastDocLookup === digits) return;
       deliveryCustomerLastDocLookup = digits;
       customer = await fetchDeliveryCustomerByDocument(digits);
     } else if (kind === 'code') {
@@ -20640,7 +20732,7 @@
       if (elements.deliveryCustomerSearch && elements.deliveryCustomerSearch.value !== code) {
         elements.deliveryCustomerSearch.value = code;
       }
-      if (deliveryCustomerLastCodeLookup === code) return;
+      if (!force && deliveryCustomerLastCodeLookup === code) return;
       deliveryCustomerLastCodeLookup = code;
       customer = await fetchDeliveryCustomerByCode(code);
     } else {
@@ -20648,7 +20740,7 @@
       const number = normalizePhoneDigits(elements.deliveryPhoneNumber?.value || '');
       const digits = `${ddd}${number}`;
       if (digits.length !== 10 && digits.length !== 11) return;
-      if (deliveryCustomerLastPhoneLookup === digits) return;
+      if (!force && deliveryCustomerLastPhoneLookup === digits) return;
       deliveryCustomerLastPhoneLookup = digits;
       customer = await fetchDeliveryCustomerByPhone(digits);
     }
@@ -25741,10 +25833,26 @@
       return;
     }
     const toReais = (value) => formatCurrency(value).replace('R$', '').trim();
+    const getGlobalPromotionPrice = (product, basePrice) => {
+      const percent = safeNumber(product?.promocao?.porcentagem);
+      if (percent <= 0) return null;
+      const discounted = Math.max(basePrice - basePrice * (percent / 100), 0);
+      return discounted > 0 && discounted < basePrice ? discounted : null;
+    };
     const html = results
       .map((product, index) => {
         const finalPrice = getFinalPrice(product);
+        const pricing = getPromotionPricing(product, 1);
         const basePrice = getBasePrice(product);
+        const globalPromoPrice =
+          getGlobalPromotionPrice(product, basePrice) ??
+          (safeNumber(product?.precoClube) > 0 && safeNumber(product?.precoClube) < basePrice
+            ? safeNumber(product.precoClube)
+            : null) ??
+          (pricing?.promoType === 'general' && safeNumber(pricing?.promoPrice) > 0
+            ? safeNumber(pricing.promoPrice)
+            : null);
+        const conditionalPreview = getConditionalPromotionDisplay(product, basePrice);
         const generalPromo = hasGeneralPromotion(product);
         const showGeneralWarning = generalPromo && !canApplyGeneralPromotion();
         const badge = finalPrice < basePrice
@@ -25754,27 +25862,37 @@
           ? '<span class="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">Cliente necessário</span>'
           : '';
         const badges = [badge, generalBadge].filter(Boolean).join('');
-        const priceLine = finalPrice < basePrice
-          ? `<span class="text-sm font-semibold text-primary">R$ ${toReais(finalPrice)}</span><span class="text-xs text-gray-400 line-through">R$ ${toReais(basePrice)}</span>`
-          : `<span class="text-sm font-semibold text-gray-800">R$ ${toReais(finalPrice)}</span>`;
+        const globalPriceLine = globalPromoPrice != null
+          ? `<span class="text-sm font-bold text-emerald-600">R$ ${toReais(globalPromoPrice)}</span>`
+          : '';
         const image = getImageUrl(product);
         const extraNotice = showGeneralWarning
           ? '<span class="block text-[11px] text-amber-600 mt-1">Vincule um cliente para aplicar a promoção geral.</span>'
           : '';
+        const conditionalPriceBlock = conditionalPreview.price != null
+          ? `
+            <span class="absolute bottom-3 right-4 text-right leading-tight">
+              <span class="block text-[10px] font-semibold uppercase tracking-wide text-gray-400">${escapeHtml(conditionalPreview.label || 'Condicional')}</span>
+              <span class="block text-xs font-bold text-gray-700">R$ ${toReais(conditionalPreview.price)}</span>
+            </span>
+          `
+          : '';
         return `
-          <button type="button" class="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-primary/5" data-result-index="${index}">
+          <button type="button" class="relative flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-primary/5" data-result-index="${index}">
             <span class="h-14 w-14 flex items-center justify-center rounded border border-gray-200 bg-white overflow-hidden">
               ${image ? `<img src="${image}" alt="${product.nome}" class="h-full w-full object-contain">` : '<i class="fas fa-image text-gray-300"></i>'}
             </span>
-            <span class="flex-1 min-w-0">
+            <span class="flex-1 min-w-0 pr-24">
               <span class="block text-sm font-semibold text-gray-800 truncate">${product.nome || 'Produto sem nome'}</span>
               <span class="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                ${priceLine}
+                <span class="text-lg font-bold text-gray-950">R$ ${toReais(basePrice)}</span>
+                ${globalPriceLine}
                 ${badges}
               </span>
               ${extraNotice}
               <span class="block text-[11px] text-gray-400 mt-1">Cód: ${getProductCode(product) || '—'} • Barras: ${getProductBarcode(product) || '—'}</span>
             </span>
+            ${conditionalPriceBlock}
           </button>
         `;
       })
@@ -25906,7 +26024,7 @@
         <td class="px-3 py-2 font-semibold text-gray-700">${escapeHtml(getProductCode(product) || '-')}</td>
         <td class="px-3 py-2 text-gray-700">${escapeHtml(getProductBarcode(product) || '-')}</td>
         <td class="px-3 py-2 text-gray-700">${escapeHtml(productName)}</td>
-        <td class="px-3 py-2 text-right text-gray-700">${escapeHtml(formatCurrency(getFinalPrice(product)))}</td>
+        <td class="px-3 py-2 text-right text-gray-700">${escapeHtml(formatCurrency(getBasePrice(product)))}</td>
         <td class="px-3 py-2 text-right text-gray-600">${escapeHtml(formatDecimalValue(getExchangeProductStock(product), 3))}</td>
       `;
       fragment.appendChild(row);

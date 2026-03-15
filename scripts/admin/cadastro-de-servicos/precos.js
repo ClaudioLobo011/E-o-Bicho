@@ -20,9 +20,17 @@
 
   var E = {
     btnTabCadastro: doc.getElementById('tab-btn-cadastro'),
+    btnTabClubinho: doc.getElementById('tab-btn-clubinho'),
     btnTabPrecos: doc.getElementById('tab-btn-precos'),
     tabCadastro: doc.getElementById('tab-cadastro'),
+    tabClubinho: doc.getElementById('tab-clubinho'),
     tabPrecos: doc.getElementById('tab-precos'),
+    cadastroActionBar: doc.getElementById('servicos-cadastro-action-bar'),
+    clubinhoActionBar: doc.getElementById('servicos-clubinho-action-bar'),
+    btnClubinhoDados: doc.getElementById('clubinho-subtab-btn-dados'),
+    btnClubinhoServicos: doc.getElementById('clubinho-subtab-btn-servicos'),
+    tabClubinhoDados: doc.getElementById('clubinho-subtab-dados'),
+    tabClubinhoServicos: doc.getElementById('clubinho-subtab-servicos'),
 
     servInput: doc.getElementById('ap-serv-input'),
     servSug: doc.getElementById('ap-serv-sug'),
@@ -120,7 +128,7 @@
       .map(function (part) { return part.replace(/\s*\(duplicata.*$/i, ''); })
       .map(function (part) {
         return part
-          .replace(/\s*[ï¿½?"-].*$/, '')
+          .replace(/\s*[�?"-].*$/, '')
           .replace(/\s*-\s*registro.*$/i, '');
       });
   }
@@ -763,20 +771,65 @@
     state.eventsBound = true;
 
     if (E.btnTabCadastro && E.btnTabPrecos && E.tabCadastro && E.tabPrecos) {
-      E.btnTabCadastro.addEventListener('click', function () {
-        E.tabCadastro.classList.remove('hidden');
-        E.tabPrecos.classList.add('hidden');
-        E.btnTabCadastro.classList.add('bg-primary', 'text-white');
-        E.btnTabPrecos.classList.remove('bg-primary', 'text-white');
-        E.btnTabPrecos.classList.add('border', 'border-gray-300', 'text-gray-700');
-      });
-      E.btnTabPrecos.addEventListener('click', function () {
-        E.tabPrecos.classList.remove('hidden');
-        E.tabCadastro.classList.add('hidden');
-        E.btnTabPrecos.classList.add('bg-primary', 'text-white');
-        E.btnTabCadastro.classList.remove('bg-primary', 'text-white');
-        E.btnTabCadastro.classList.add('border', 'border-gray-300', 'text-gray-700');
-      });
+      var tabMap = {
+        cadastro: { btn: E.btnTabCadastro, panel: E.tabCadastro },
+        clubinho: { btn: E.btnTabClubinho, panel: E.tabClubinho },
+        precos: { btn: E.btnTabPrecos, panel: E.tabPrecos }
+      };
+
+      function setTab(tabKey) {
+        for (var key in tabMap) {
+          if (!hasOwn(tabMap, key)) continue;
+          var entry = tabMap[key];
+          if (!entry || !entry.btn || !entry.panel) continue;
+          var active = key === tabKey;
+          entry.panel.classList.toggle('hidden', !active);
+          entry.btn.classList.toggle('bg-primary', active);
+          entry.btn.classList.toggle('text-white', active);
+          entry.btn.classList.toggle('border', !active);
+          entry.btn.classList.toggle('border-gray-300', !active);
+          entry.btn.classList.toggle('text-gray-700', !active);
+        }
+        if (E.cadastroActionBar) {
+          E.cadastroActionBar.classList.toggle('hidden', tabKey !== 'cadastro');
+        }
+        if (E.clubinhoActionBar) {
+          E.clubinhoActionBar.classList.toggle('hidden', tabKey !== 'clubinho');
+        }
+      }
+
+      E.btnTabCadastro.addEventListener('click', function () { setTab('cadastro'); });
+      E.btnTabPrecos.addEventListener('click', function () { setTab('precos'); });
+      if (E.btnTabClubinho && E.tabClubinho) {
+        E.btnTabClubinho.addEventListener('click', function () { setTab('clubinho'); });
+      }
+    }
+
+    if (E.btnClubinhoDados && E.btnClubinhoServicos && E.tabClubinhoDados && E.tabClubinhoServicos) {
+      function setClubinhoSubTab(tabKey) {
+        var isServicos = tabKey === 'servicos';
+
+        E.tabClubinhoDados.classList.toggle('hidden', isServicos);
+        E.tabClubinhoServicos.classList.toggle('hidden', !isServicos);
+
+        E.btnClubinhoDados.classList.toggle('bg-primary', !isServicos);
+        E.btnClubinhoDados.classList.toggle('text-white', !isServicos);
+        E.btnClubinhoDados.classList.toggle('border', isServicos);
+        E.btnClubinhoDados.classList.toggle('border-gray-300', isServicos);
+        E.btnClubinhoDados.classList.toggle('bg-white', isServicos);
+        E.btnClubinhoDados.classList.toggle('text-gray-700', isServicos);
+
+        E.btnClubinhoServicos.classList.toggle('bg-primary', isServicos);
+        E.btnClubinhoServicos.classList.toggle('text-white', isServicos);
+        E.btnClubinhoServicos.classList.toggle('border', !isServicos);
+        E.btnClubinhoServicos.classList.toggle('border-gray-300', !isServicos);
+        E.btnClubinhoServicos.classList.toggle('bg-white', !isServicos);
+        E.btnClubinhoServicos.classList.toggle('text-gray-700', !isServicos);
+      }
+
+      E.btnClubinhoDados.addEventListener('click', function () { setClubinhoSubTab('dados'); });
+      E.btnClubinhoServicos.addEventListener('click', function () { setClubinhoSubTab('servicos'); });
+      setClubinhoSubTab('dados');
     }
 
     if (E.servInput) {

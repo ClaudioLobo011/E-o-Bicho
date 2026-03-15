@@ -6,6 +6,7 @@
     "cst": "00",
     "cfop": {
       "nfe": {
+        "entrada": "1102",
         "dentroEstado": "5102",
         "foraEstado": "6102",
         "transferencia": "5152",
@@ -13,6 +14,7 @@
         "industrializacao": "5101"
       },
       "nfce": {
+        "entrada": "",
         "dentroEstado": "5102",
         "foraEstado": "6108",
         "transferencia": "5656",

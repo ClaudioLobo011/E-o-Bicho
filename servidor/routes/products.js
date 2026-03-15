@@ -1331,6 +1331,7 @@ const sanitizeFiscalTax = (tax = {}, existing = {}) => ({
 });
 
 const sanitizeFiscalCfop = (cfop = {}, existing = {}) => ({
+    entrada: sanitizeFiscalString(cfop?.entrada, existing?.entrada || ''),
     dentroEstado: sanitizeFiscalString(cfop?.dentroEstado, existing?.dentroEstado || ''),
     foraEstado: sanitizeFiscalString(cfop?.foraEstado, existing?.foraEstado || ''),
     transferencia: sanitizeFiscalString(cfop?.transferencia, existing?.transferencia || ''),

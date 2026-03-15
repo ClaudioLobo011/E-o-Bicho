@@ -159,12 +159,14 @@
     setValue('status.nfe', fiscal?.status?.nfe || 'pendente');
     setValue('status.nfce', fiscal?.status?.nfce || 'pendente');
 
+    setValue('cfop.nfe.entrada', fiscal?.cfop?.nfe?.entrada || '');
     setValue('cfop.nfe.dentro', fiscal?.cfop?.nfe?.dentroEstado || '');
     setValue('cfop.nfe.fora', fiscal?.cfop?.nfe?.foraEstado || '');
     setValue('cfop.nfe.transferencia', fiscal?.cfop?.nfe?.transferencia || '');
     setValue('cfop.nfe.devolucao', fiscal?.cfop?.nfe?.devolucao || '');
     setValue('cfop.nfe.industrializacao', fiscal?.cfop?.nfe?.industrializacao || '');
 
+    setValue('cfop.nfce.entrada', fiscal?.cfop?.nfce?.entrada || '');
     setValue('cfop.nfce.dentro', fiscal?.cfop?.nfce?.dentroEstado || '');
     setValue('cfop.nfce.fora', fiscal?.cfop?.nfce?.foraEstado || '');
     setValue('cfop.nfce.transferencia', fiscal?.cfop?.nfce?.transferencia || '');
@@ -219,6 +221,7 @@
       },
       cfop: {
         nfe: {
+          entrada: getValue('cfop.nfe.entrada'),
           dentroEstado: getValue('cfop.nfe.dentro'),
           foraEstado: getValue('cfop.nfe.fora'),
           transferencia: getValue('cfop.nfe.transferencia'),
@@ -226,6 +229,7 @@
           industrializacao: getValue('cfop.nfe.industrializacao'),
         },
         nfce: {
+          entrada: getValue('cfop.nfce.entrada'),
           dentroEstado: getValue('cfop.nfce.dentro'),
           foraEstado: getValue('cfop.nfce.fora'),
           transferencia: getValue('cfop.nfce.transferencia'),
@@ -299,7 +303,9 @@
         `Origem: ${fiscal?.origem || '-'}`,
         `CSOSN: ${fiscal?.csosn || '-'}`,
         `CST: ${fiscal?.cst || '-'}`,
+        `CFOP NF-e (Entrada): ${cfopNfe.entrada || '-'}`,
         `CFOP NF-e: ${cfopNfe.dentroEstado || '-'} / ${cfopNfe.foraEstado || '-'}`,
+        `CFOP NFC-e (Entrada): ${cfopNfce.entrada || '-'}`,
         `CFOP NFC-e: ${cfopNfce.dentroEstado || '-'} / ${cfopNfce.foraEstado || '-'}`,
       ];
 
