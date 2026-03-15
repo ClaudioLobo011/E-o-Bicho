@@ -3656,6 +3656,8 @@ const buildNextOpeningPaymentsFromClose = (payments = []) =>
 const PDV_PERF_LOGS_ENABLED = normalizeString(process.env.PDV_PERF_LOGS || '1') !== '0';
 const PDV_SALE_FINALIZE_LEGACY_WRITE =
   normalizeString(process.env.PDV_SALE_FINALIZE_LEGACY_WRITE || '0') === '1';
+const PDV_SALE_FINALIZE_PROCESS_ALL_SALES =
+  normalizeString(process.env.PDV_SALE_FINALIZE_PROCESS_ALL_SALES || '0') === '1';
 
 const createPdvPerfTracer = ({ scope = 'pdv', pdvId = '', action = '', requestId = '' } = {}) => {
   const startedAt = Date.now();
@@ -4297,28 +4299,75 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
       throw error;
     }
 
-    let nextSales = [incomingSale, ...existingSales];
     const currentBudgets = Array.isArray(existingState?.budgets)
       ? existingState.budgets.map((budget) => ({ ...budget }))
       : [];
-    const ensuredCodes = await ensureUniquePdvCodes({
-      pdvId,
-      pdvDoc,
-      sales: nextSales,
-      budgets: currentBudgets,
-      existingSales: existingSales,
-      existingBudgets: currentBudgets,
-    });
-    nextSales = ensuredCodes.sales;
+    const saleIdentifier = resolveSaleCodeIdentifierForPdv(pdvDoc);
+    const saleCounterKey = pdvSaleSequenceKey(pdvId);
+    const existingSaleCodes = new Set(
+      existingSales
+        .map((sale) => normalizeString(sale?.saleCode || sale?.saleCodeLabel).toUpperCase())
+        .filter(Boolean)
+    );
+    let incomingSaleCode = normalizeString(incomingSale.saleCode || incomingSale.saleCodeLabel).toUpperCase();
+    const providedSequence = parseTrailingSequence(incomingSaleCode);
+    const hasValidProvidedCode =
+      Boolean(incomingSaleCode) &&
+      incomingSaleCode.startsWith(`${saleIdentifier}-`) &&
+      providedSequence > 0 &&
+      !existingSaleCodes.has(incomingSaleCode);
+    let nextSaleSequence = Math.max(1, Number.parseInt(existingState?.saleCodeSequence, 10) || 1);
+
+    if (hasValidProvidedCode) {
+      await ensureScopedSequenceAtLeast({
+        scope: saleCounterKey.scope,
+        reference: saleCounterKey.reference,
+        value: providedSequence,
+      });
+      const currentSequence = await getScopedSequence({
+        scope: saleCounterKey.scope,
+        reference: saleCounterKey.reference,
+      });
+      nextSaleSequence = Math.max(1, currentSequence + 1);
+    } else {
+      let nextSeq = await nextScopedSequence({
+        scope: saleCounterKey.scope,
+        reference: saleCounterKey.reference,
+      });
+      let generated = buildSaleCodeValue(saleIdentifier, nextSeq).toUpperCase();
+      while (existingSaleCodes.has(generated)) {
+        nextSeq = await nextScopedSequence({
+          scope: saleCounterKey.scope,
+          reference: saleCounterKey.reference,
+        });
+        generated = buildSaleCodeValue(saleIdentifier, nextSeq).toUpperCase();
+      }
+      incomingSaleCode = generated;
+      nextSaleSequence = Math.max(1, nextSeq + 1);
+    }
+
+    incomingSale.saleCode = incomingSaleCode;
+    incomingSale.saleCodeLabel = incomingSaleCode;
+    if (incomingSale.receiptSnapshot && typeof incomingSale.receiptSnapshot === 'object') {
+      incomingSale.receiptSnapshot.meta = incomingSale.receiptSnapshot.meta || {};
+      incomingSale.receiptSnapshot.meta.saleCode = incomingSaleCode;
+    }
+    if (Array.isArray(incomingSale.receivables)) {
+      incomingSale.receivables = incomingSale.receivables.map((entry) =>
+        entry && typeof entry === 'object' ? { ...entry, saleCode: incomingSaleCode } : entry
+      );
+    }
+
+    let nextSales = [incomingSale, ...existingSales];
     perf.mark('sale_finalize.codes_ensured');
 
-    const productIds = collectProductIdsFromSales(nextSales);
+    const productIds = collectProductIdsFromSales([incomingSale]);
     if (productIds.length) {
       const products = await Product.find({ _id: { $in: productIds } })
         .select('custo custoMedio custoCalculado precoCusto precoCustoUnitario')
         .lean();
       const productMap = new Map(products.map((product) => [product._id.toString(), product]));
-      ensureSalesHaveCostData(nextSales, productMap);
+      ensureSalesHaveCostData([incomingSale], productMap);
     }
     perf.mark('sale_finalize.costs_enriched', { products: productIds.length });
 
@@ -4331,8 +4380,11 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
     const depositConfig = pdvDoc?.configuracoesEstoque?.depositoPadrao || null;
     let nextInventoryMovements = existingInventoryMovements;
     if (depositConfig) {
+      const salesToProcess = PDV_SALE_FINALIZE_PROCESS_ALL_SALES
+        ? nextSales
+        : nextSales.filter((sale) => normalizeString(sale?.id || sale?._id) === normalizeString(incomingSale.id));
       const inventoryResult = await applyInventoryMovementsToSales({
-        sales: nextSales,
+        sales: salesToProcess,
         depositId: depositConfig,
         existingMovements: existingInventoryMovements,
         movementContext: {
@@ -4342,7 +4394,14 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
           userEmail: normalizeString(user?.email || ''),
         },
       });
-      nextSales = inventoryResult.sales;
+      const processedSalesById = new Map(
+        (Array.isArray(inventoryResult.sales) ? inventoryResult.sales : [])
+          .map((sale) => [normalizeString(sale?.id || sale?._id), sale])
+      );
+      nextSales = nextSales.map((sale) => {
+        const key = normalizeString(sale?.id || sale?._id);
+        return processedSalesById.get(key) || sale;
+      });
       const newInventoryMovements = inventoryResult.movements || [];
       const revertedSales = new Set(inventoryResult.revertedSales || []);
       let combinedMovements = existingInventoryMovements;
@@ -4419,8 +4478,8 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
       inventoryMovements: nextInventoryMovements,
       saleCodeIdentifier:
         normalizeString(existingState?.saleCodeIdentifier) || resolveSaleCodeIdentifierForPdv(pdvDoc),
-      saleCodeSequence: ensuredCodes.nextSaleSequence,
-      budgetSequence: ensuredCodes.nextBudgetSequence,
+      saleCodeSequence: nextSaleSequence,
+      budgetSequence: Math.max(1, Number.parseInt(existingState?.budgetSequence, 10) || 1),
       printPreferences: {
         fechamento: normalizePrintPreference(existingState?.printPreferences?.fechamento || 'PM'),
         venda: normalizePrintPreference(existingState?.printPreferences?.venda || 'PM'),
