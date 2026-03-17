@@ -3,6 +3,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const feedback = document.getElementById('security-company-feedback');
   const tableBody = document.getElementById('security-screens-body');
   const tableEmpty = document.getElementById('security-screens-empty');
+  const bulkActions = document.getElementById('security-bulk-actions');
+  const screenFilterInput = document.getElementById('security-screen-filter');
+  const sortAscButton = document.getElementById('security-screen-sort-asc');
+  const sortDescButton = document.getElementById('security-screen-sort-desc');
   const sidebarPlaceholder = document.getElementById('admin-sidebar-placeholder');
   if (!select) return;
 
@@ -15,6 +19,8 @@ document.addEventListener('DOMContentLoaded', () => {
     currentCompanyId: '',
     requestId: 0,
     saveTimer: null,
+    screenFilter: '',
+    screenSortDirection: 'asc',
   };
 
   const getToken = () => {
@@ -80,14 +86,130 @@ document.addEventListener('DOMContentLoaded', () => {
     return headers;
   };
 
+  const rowActions = [
+    { key: 'hide', label: 'Nao mostrar' },
+    { key: 'block', label: 'Bloquear' },
+    { key: 'password', label: 'Pedir senha' },
+  ];
+
+  const bulkActionOptions = [
+    { key: 'hide', label: 'Todos Nao mostrar' },
+    { key: 'block', label: 'Todos Bloquear' },
+    { key: 'password', label: 'Todos Pedir senha' },
+  ];
+
   const updateActionCardState = (input) => {
     if (!input) return;
     const card = input.nextElementSibling;
     if (!card) return;
     const isActive = !!input.checked;
+    const isDisabled = !!input.disabled;
     card.classList.toggle('border-primary', isActive);
     card.classList.toggle('text-primary', isActive);
     card.classList.toggle('bg-primary/10', isActive);
+    card.classList.toggle('opacity-50', isDisabled);
+  };
+
+  const normalizeText = (value) =>
+    String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+
+  const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  const buildWildcardRegex = (pattern) => {
+    const normalized = normalizeText(pattern);
+    if (!normalized) return null;
+    const source = escapeRegex(normalized).replace(/\\\*/g, '.*');
+    try {
+      return new RegExp(source);
+    } catch {
+      return null;
+    }
+  };
+
+  const matchesFilter = (label, filterValue) => {
+    const normalizedLabel = normalizeText(label);
+    const normalizedFilter = normalizeText(filterValue);
+    if (!normalizedFilter) return true;
+    if (normalizedFilter.includes('*')) {
+      const regex = buildWildcardRegex(normalizedFilter);
+      return regex ? regex.test(normalizedLabel) : normalizedLabel.includes(normalizedFilter.replace(/\*/g, ''));
+    }
+    return normalizedLabel.includes(normalizedFilter);
+  };
+
+  const setActionForScreen = (screenKey, actionKey, checked) => {
+    if (!screenKey || !actionKey) return;
+    const config = state.screenConfig || {};
+    const entry = config[screenKey] || {};
+    entry[actionKey] = !!checked;
+
+    const hasAny =
+      entry.hide === true || entry.block === true || entry.password === true;
+
+    if (hasAny) {
+      config[screenKey] = entry;
+    } else {
+      delete config[screenKey];
+    }
+
+    state.screenConfig = config;
+  };
+
+  const updateBulkActionState = () => {
+    if (!bulkActions) return;
+    bulkActionOptions.forEach((action) => {
+      const bulkInput = bulkActions.querySelector(`input[data-bulk-action="${action.key}"]`);
+      if (!bulkInput) return;
+      const rowInputs = Array.from(
+        tableBody?.querySelectorAll(`input[type="checkbox"][data-action="${action.key}"][data-screen-key]`) || []
+      );
+      if (!rowInputs.length) {
+        bulkInput.checked = false;
+        bulkInput.indeterminate = false;
+        bulkInput.disabled = true;
+        updateActionCardState(bulkInput);
+        return;
+      }
+      bulkInput.disabled = false;
+      const checkedCount = rowInputs.filter((input) => input.checked).length;
+      bulkInput.checked = checkedCount > 0 && checkedCount === rowInputs.length;
+      bulkInput.indeterminate = checkedCount > 0 && checkedCount < rowInputs.length;
+      updateActionCardState(bulkInput);
+    });
+  };
+
+  const renderBulkActionControls = () => {
+    if (!bulkActions) return;
+    bulkActions.innerHTML = '';
+
+    bulkActionOptions.forEach((action, index) => {
+      const id = `security-bulk-${action.key}-${index}`;
+      const label = document.createElement('label');
+      label.className = 'relative';
+      label.setAttribute('for', id);
+
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.id = id;
+      input.className = 'peer sr-only';
+      input.dataset.bulkAction = action.key;
+
+      const card = document.createElement('span');
+      card.className =
+        'inline-flex items-center justify-center rounded-lg border border-gray-200 px-2 py-1 text-[10px] font-semibold text-gray-600 transition ' +
+        'hover:border-primary hover:text-primary';
+      card.textContent = action.label;
+
+      label.appendChild(input);
+      label.appendChild(card);
+      bulkActions.appendChild(label);
+    });
+
+    updateBulkActionState();
   };
 
   const fetchScreenConfig = async (companyId) => {
@@ -280,6 +402,30 @@ document.addEventListener('DOMContentLoaded', () => {
       input.checked = !!(entries[key] && entries[key][action]);
       updateActionCardState(input);
     });
+    updateBulkActionState();
+  };
+
+  const updateScreenSortButtonsState = () => {
+    const isAsc = state.screenSortDirection !== 'desc';
+    const setActive = (button, active) => {
+      if (!button) return;
+      button.classList.toggle('text-primary', active);
+      button.classList.toggle('border-primary/40', active);
+      button.classList.toggle('bg-primary/10', active);
+      button.classList.toggle('text-gray-400', !active);
+    };
+    setActive(sortAscButton, isAsc);
+    setActive(sortDescButton, !isAsc);
+  };
+
+  const getFilteredAndSortedScreens = (screens) => {
+    const list = Array.isArray(screens) ? screens.slice() : [];
+    const filtered = list.filter((screen) => matchesFilter(screen?.label || '', state.screenFilter));
+    filtered.sort((a, b) => {
+      const compare = String(a?.label || '').localeCompare(String(b?.label || ''), 'pt-BR', { sensitivity: 'base' });
+      return state.screenSortDirection === 'desc' ? compare * -1 : compare;
+    });
+    return filtered;
   };
 
   const renderScreensTable = () => {
@@ -289,20 +435,22 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!ready) return false;
 
     tableBody.innerHTML = '';
-    if (!screens.length) {
+    const processedScreens = getFilteredAndSortedScreens(screens);
+    if (!processedScreens.length) {
+      if (tableEmpty) {
+        tableEmpty.textContent = state.screenFilter
+          ? 'Nenhuma tela encontrada para o filtro informado.'
+          : 'Nenhuma tela encontrada no menu administrativo.';
+      }
       tableEmpty?.classList.remove('hidden');
+      updateBulkActionState();
+      updateScreenSortButtonsState();
       return true;
     }
 
     tableEmpty?.classList.add('hidden');
 
-    const actions = [
-      { key: 'hide', label: 'Nao mostrar' },
-      { key: 'block', label: 'Bloquear' },
-      { key: 'password', label: 'Pedir Senha' },
-    ];
-
-    screens.forEach((screen, index) => {
+    processedScreens.forEach((screen, index) => {
       const tr = document.createElement('tr');
 
       const screenTd = document.createElement('td');
@@ -320,7 +468,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const actionsWrap = document.createElement('div');
       actionsWrap.className = 'flex flex-wrap items-start justify-end gap-2';
 
-      actions.forEach((action) => {
+      rowActions.forEach((action) => {
         const id = `security-${action.key}-${index}`;
         const label = document.createElement('label');
         label.className = 'relative';
@@ -352,6 +500,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     applyScreenConfig(state.screenConfig);
+    updateBulkActionState();
+    updateScreenSortButtonsState();
     return true;
   };
 
@@ -377,25 +527,49 @@ document.addEventListener('DOMContentLoaded', () => {
     const actionKey = input.dataset.action;
     if (!screenKey || !actionKey) return;
 
-    const config = state.screenConfig || {};
-    const entry = config[screenKey] || {};
-    entry[actionKey] = !!input.checked;
-
     updateActionCardState(input);
-
-    const hasAny =
-      entry.hide === true || entry.block === true || entry.password === true;
-
-    if (hasAny) {
-      config[screenKey] = entry;
-    } else {
-      delete config[screenKey];
-    }
-
-    state.screenConfig = config;
+    setActionForScreen(screenKey, actionKey, !!input.checked);
+    updateBulkActionState();
     scheduleSave();
   });
 
+  bulkActions?.addEventListener('change', (event) => {
+    const input = event.target;
+    if (!input || input.tagName !== 'INPUT') return;
+    const actionKey = input.dataset.bulkAction;
+    if (!actionKey) return;
+
+    const checked = !!input.checked;
+    const rowInputs = Array.from(
+      tableBody?.querySelectorAll(`input[type="checkbox"][data-action="${actionKey}"][data-screen-key]`) || []
+    );
+    rowInputs.forEach((rowInput) => {
+      rowInput.checked = checked;
+      updateActionCardState(rowInput);
+      setActionForScreen(rowInput.dataset.screenKey, actionKey, checked);
+    });
+
+    updateBulkActionState();
+    scheduleSave();
+  });
+
+  screenFilterInput?.addEventListener('input', () => {
+    state.screenFilter = screenFilterInput.value || '';
+    renderScreensTable();
+  });
+
+  sortAscButton?.addEventListener('click', () => {
+    state.screenSortDirection = 'asc';
+    renderScreensTable();
+  });
+
+  sortDescButton?.addEventListener('click', () => {
+    state.screenSortDirection = 'desc';
+    renderScreensTable();
+  });
+
   loadCompanies();
+  renderBulkActionControls();
+  updateScreenSortButtonsState();
   initScreensTable();
 });

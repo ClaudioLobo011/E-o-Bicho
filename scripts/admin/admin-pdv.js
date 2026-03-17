@@ -3527,9 +3527,29 @@
       saleCodeLabel: record.saleCodeLabel ? String(record.saleCodeLabel) : '',
       customerName: record.customerName ? String(record.customerName) : 'Cliente não informado',
       customerDocument: record.customerDocument ? String(record.customerDocument) : '',
-      paymentTags: Array.isArray(record.paymentTags)
-        ? record.paymentTags.map((tag) => String(tag)).filter(Boolean)
-        : [],
+      paymentTags: (() => {
+        const directTags = Array.isArray(record.paymentTags)
+          ? record.paymentTags.map((tag) => String(tag)).filter(Boolean)
+          : [];
+        if (directTags.length) return directTags;
+        const paymentsSource = Array.isArray(record.payments)
+          ? record.payments
+          : Array.isArray(record.cashContributions)
+          ? record.cashContributions
+          : [];
+        return Array.from(
+          new Set(
+            paymentsSource
+              .map((payment) => {
+                const label = payment?.label || payment?.paymentLabel || 'Pagamento';
+                const parcelasRaw = Number(payment?.parcelas ?? payment?.installments ?? 1);
+                const parcelas = Number.isFinite(parcelasRaw) && parcelasRaw > 1 ? Math.trunc(parcelasRaw) : 1;
+                return parcelas > 1 ? `${label} (${parcelas}x)` : label;
+              })
+              .filter(Boolean)
+          )
+        );
+      })(),
       items: Array.isArray(record.items) ? record.items.map((item) => ({ ...item })) : [],
       discountValue: safeNumber(record.discountValue ?? 0),
       discountLabel: record.discountLabel ? String(record.discountLabel) : '',
@@ -11704,6 +11724,23 @@
     const liquido = bruto + state.vendaAcrescimo - state.vendaDesconto;
     return liquido < 0 ? 0 : liquido;
   };
+  const ensureSalePaymentUid = (payment = {}) => {
+    if (!payment || typeof payment !== 'object') {
+      return { uid: createUid(), id: '', label: 'Pagamento', parcelas: 1, valor: 0 };
+    }
+    const rawUid =
+      typeof payment.uid === 'string'
+        ? payment.uid.trim()
+        : payment.uid != null
+        ? String(payment.uid).trim()
+        : '';
+    return {
+      ...payment,
+      uid: rawUid || createUid(),
+    };
+  };
+  const normalizeSalePaymentsForUi = (payments = []) =>
+    (Array.isArray(payments) ? payments : []).map((payment) => ensureSalePaymentUid(payment));
   const getSalePagoTotal = () =>
     state.vendaPagamentos.reduce((sum, payment) => sum + safeNumber(payment.valor), 0);
 
@@ -11717,6 +11754,7 @@
 
   const renderSalePaymentsPreview = () => {
     if (!elements.salePaymentsList || !elements.salePaymentsEmpty) return;
+    state.vendaPagamentos = normalizeSalePaymentsForUi(state.vendaPagamentos);
     elements.salePaymentsList.innerHTML = '';
     if (!state.vendaPagamentos.length) {
       elements.salePaymentsList.classList.add('hidden');
@@ -11725,7 +11763,7 @@
       return;
     }
     const fragment = document.createDocumentFragment();
-    state.vendaPagamentos.forEach((payment) => {
+    state.vendaPagamentos.forEach((payment, index) => {
       const li = document.createElement('li');
       li.className = 'flex items-center justify-between gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2';
       const installmentsLabel = payment.parcelas > 1 ? ` (${payment.parcelas}x)` : '';
@@ -11734,7 +11772,7 @@
           <p class="text-sm font-semibold text-gray-700">${payment.label}${installmentsLabel}</p>
           <p class="text-xs text-gray-500">${formatCurrency(payment.valor)}</p>
         </div>
-        <button type="button" class="text-xs text-red-500 hover:text-red-600" data-sale-remove="${payment.uid}">
+        <button type="button" class="text-xs text-red-500 hover:text-red-600" data-sale-remove="${payment.uid}" data-sale-remove-index="${index}">
           <i class="fas fa-times"></i>
         </button>
       `;
@@ -13226,7 +13264,7 @@
       ? snapshot.vendaPagamentos
       : [];
     state.itens = itens.map((item) => ({ ...item }));
-    state.vendaPagamentos = pagamentos.map((payment) => ({ ...payment }));
+    state.vendaPagamentos = normalizeSalePaymentsForUi(pagamentos);
     state.vendaDesconto = safeNumber(snapshot.vendaDesconto);
     state.vendaAcrescimo = safeNumber(snapshot.vendaAcrescimo);
     state.selectedProduct = snapshot.selectedProduct
@@ -14483,7 +14521,14 @@
     const button = event.target.closest('[data-sale-remove]');
     if (!button) return;
     const uid = button.getAttribute('data-sale-remove');
-    state.vendaPagamentos = state.vendaPagamentos.filter((payment) => payment.uid !== uid);
+    const removeIndex = Number(button.getAttribute('data-sale-remove-index'));
+    if (uid) {
+      state.vendaPagamentos = state.vendaPagamentos.filter(
+        (payment) => String(payment?.uid || '') !== String(uid)
+      );
+    } else if (Number.isInteger(removeIndex) && removeIndex >= 0) {
+      state.vendaPagamentos.splice(removeIndex, 1);
+    }
     renderSalePaymentsPreview();
   };
 
@@ -22017,8 +22062,30 @@
         : item?.productSnapshot?._id || item?.productId || item?.produtoId || '';
       const sourceSaleCode = item?.sourceSaleCode || item?.referenceSaleCode || '';
       const exchangeCode = item?.exchangeCode || '';
+      const rawItemType = String(
+        item?.tipoItem ||
+        item?.itemType ||
+        item?.kind ||
+        item?.type ||
+        item?.raw?.tipo ||
+        item?.raw?.type ||
+        ''
+      ).trim().toLowerCase();
+      const normalizedItemType =
+        rawItemType === 'servico' || rawItemType === 'serviço' || rawItemType === 'service'
+          ? 'servico'
+          : rawItemType === 'produto' || rawItemType === 'product'
+          ? 'produto'
+          : item?.serviceId || item?.servicoId
+          ? 'servico'
+          : productId || item?.productSnapshot
+          ? 'produto'
+          : '';
       return {
         id: item?.id || `${Date.now()}-${index}`,
+        tipoItem: normalizedItemType,
+        itemType: normalizedItemType,
+        type: normalizedItemType === 'servico' ? 'service' : normalizedItemType === 'produto' ? 'product' : '',
         barcode: barcode || '-',
         product: productName,
         quantityLabel,
@@ -22036,6 +22103,8 @@
         status_comissao: statusComissao,
         sourceSaleCode,
         exchangeCode,
+        serviceId: item?.serviceId || item?.servicoId || '',
+        servicoId: item?.servicoId || item?.serviceId || '',
       };
     });
     const fiscalItemsSnapshot = saleItems.map((item) => {
@@ -22044,8 +22113,31 @@
       const productId = isValidObjectId(rawProductId)
         ? rawProductId
         : item?.productSnapshot?._id || item?.productId || item?.produtoId || null;
+      const rawItemType = String(
+        item?.tipoItem ||
+        item?.itemType ||
+        item?.kind ||
+        item?.type ||
+        item?.raw?.tipo ||
+        item?.raw?.type ||
+        ''
+      ).trim().toLowerCase();
+      const normalizedItemType =
+        rawItemType === 'servico' || rawItemType === 'serviço' || rawItemType === 'service'
+          ? 'servico'
+          : rawItemType === 'produto' || rawItemType === 'product'
+          ? 'produto'
+          : item?.serviceId || item?.servicoId
+          ? 'servico'
+          : productId || item?.productSnapshot
+          ? 'produto'
+          : '';
       return {
         productId,
+        itemType: normalizedItemType,
+        tipoItem: normalizedItemType,
+        type: normalizedItemType === 'servico' ? 'service' : normalizedItemType === 'produto' ? 'product' : '',
+        serviceId: item?.serviceId || item?.servicoId || null,
         quantity: safeNumber(item?.quantidade ?? item?.qtd ?? 0),
         unitPrice: safeNumber(item?.valor ?? item?.valorUnitario ?? item?.preco ?? 0),
         totalPrice: safeNumber(item?.subtotal ?? item?.total ?? 0),
@@ -22176,7 +22268,16 @@
     sales.forEach((sale) => {
       const saleId = sale.id;
       const chevronIcon = sale.expanded ? 'fa-chevron-up' : 'fa-chevron-down';
-      const paymentTagsHtml = sale.paymentTags
+      const salePaymentTags = Array.isArray(sale.paymentTags) && sale.paymentTags.length
+        ? sale.paymentTags
+        : Array.from(
+            new Set(
+              (Array.isArray(sale.cashContributions) ? sale.cashContributions : [])
+                .map((entry) => entry?.paymentLabel || entry?.label || '')
+                .filter(Boolean)
+            )
+          );
+      const paymentTagsHtml = salePaymentTags
         .map(
           (tag) =>
             `<span class="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-600">${escapeHtml(
@@ -23771,6 +23872,11 @@
       const value = safeNumber(service.valor);
       return {
         id: service.id || `${appointment.id}:${index}`,
+        tipoItem: 'servico',
+        itemType: 'servico',
+        type: 'service',
+        serviceId: service.id || '',
+        servicoId: service.id || '',
         codigo: service.id || '',
         codigoInterno: service.id || '',
         codigoBarras: '',
@@ -23787,6 +23893,11 @@
       const subtotal = safeNumber(sale.subtotal || value * quantity);
       return {
         id: sale.id || `${appointment.id}:venda:${index}`,
+        tipoItem: 'produto',
+        itemType: 'produto',
+        type: 'product',
+        productId: sale.produtoId || '',
+        produtoId: sale.produtoId || '',
         codigo: sale.produtoId || '',
         codigoInterno: sale.produtoId || '',
         codigoBarras: '',
@@ -23803,6 +23914,11 @@
     } else if (safeNumber(appointment.total) > 0) {
       items.push({
         id: `${appointment.id}:svc`,
+        tipoItem: 'servico',
+        itemType: 'servico',
+        type: 'service',
+        serviceId: appointment.id,
+        servicoId: appointment.id,
         codigo: appointment.id,
         codigoInterno: appointment.id,
         codigoBarras: '',
@@ -25208,7 +25324,7 @@
       confirmButton.classList.add('opacity-60', 'cursor-not-allowed');
     }
     try {
-      const normalizedReason = normalizeString(reason);
+      const normalizedReason = normalizeKeyword(reason);
       const reasonHash = (() => {
         let result = 0;
         for (let index = 0; index < normalizedReason.length; index += 1) {

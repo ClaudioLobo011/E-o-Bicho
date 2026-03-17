@@ -14,6 +14,9 @@
     loadingPaymentMethods: false,
     currentPdvSnapshot: null,
     filtersCollapsed: false,
+    productCostCache: new Map(),
+    productCostPromiseCache: new Map(),
+    productsRenderRequestId: 0,
   };
 
   function getToken() {
@@ -100,6 +103,22 @@
     if (negative && normalized) normalized = `-${normalized}`;
     const parsed = Number(normalized);
     return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function parseNumericCandidate(value) {
+    if (value == null || value === '') return null;
+    const direct = Number(value);
+    if (Number.isFinite(direct)) return direct;
+    const parsed = parseCurrencyInput(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  function findFirstNonNegativeNumber(candidates) {
+    for (const candidate of candidates) {
+      const parsed = parseNumericCandidate(candidate);
+      if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+    }
+    return null;
   }
 
   function getSelectedCaixa() {
@@ -579,6 +598,108 @@
     return /^[a-f0-9]{24}$/i.test(String(value || '').trim());
   }
 
+  function resolveCostFromProductRecord(record) {
+    if (!record || typeof record !== 'object') return null;
+    return findFirstNonNegativeNumber([
+      record.precoCusto,
+      record.preco_custo,
+      record.precoCustoUnitario,
+      record.preco_custo_unitario,
+      record.custo,
+      record.custoAtual,
+      record.custoCalculado,
+      record.custoUnitario,
+      record.custo_unitario,
+      record.custoMedio,
+      record.custoReferencia,
+      record.custo_referencia,
+      record.cost,
+      record.costPrice,
+      record.unitCost,
+      record.costValue,
+    ]);
+  }
+
+  async function fetchProductCostById(productId) {
+    const id = String(productId || '').trim();
+    if (!looksLikeObjectId(id)) return null;
+    const cacheKey = `id:${id}`;
+    if (state.productCostCache.has(cacheKey)) return state.productCostCache.get(cacheKey);
+    if (state.productCostPromiseCache.has(cacheKey)) return state.productCostPromiseCache.get(cacheKey);
+
+    const token = getToken();
+    const promise = fetch(`${API_BASE}/products/${encodeURIComponent(id)}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(async (resp) => {
+        if (!resp.ok) return null;
+        const product = await resp.json().catch(() => null);
+        const cost = resolveCostFromProductRecord(product);
+        state.productCostCache.set(cacheKey, cost);
+        return cost;
+      })
+      .catch(() => null)
+      .finally(() => {
+        state.productCostPromiseCache.delete(cacheKey);
+      });
+    state.productCostPromiseCache.set(cacheKey, promise);
+    return promise;
+  }
+
+  async function fetchProductCostByTerm(term) {
+    const query = String(term || '').trim();
+    if (!query) return null;
+    const cacheKey = `term:${normalizeLookupKey(query)}`;
+    if (state.productCostCache.has(cacheKey)) return state.productCostCache.get(cacheKey);
+    if (state.productCostPromiseCache.has(cacheKey)) return state.productCostPromiseCache.get(cacheKey);
+
+    const token = getToken();
+    const params = new URLSearchParams({ search: query, limit: '1', audience: 'pdv' });
+    const promise = fetch(`${API_BASE}/products?${params.toString()}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(async (resp) => {
+        if (!resp.ok) return null;
+        const payload = await resp.json().catch(() => ({}));
+        const product = Array.isArray(payload?.products) && payload.products.length ? payload.products[0] : null;
+        const cost = resolveCostFromProductRecord(product);
+        state.productCostCache.set(cacheKey, cost);
+        return cost;
+      })
+      .catch(() => null)
+      .finally(() => {
+        state.productCostPromiseCache.delete(cacheKey);
+      });
+    state.productCostPromiseCache.set(cacheKey, promise);
+    return promise;
+  }
+
+  async function resolveMissingCostForRow(row) {
+    if (!row || row.isService || row.cost != null) return row?.cost ?? null;
+
+    let cost = await fetchProductCostById(row.productId);
+    if (cost == null) cost = await fetchProductCostByTerm(row.code);
+    if (cost == null) cost = await fetchProductCostByTerm(row.barcode);
+    return cost;
+  }
+
+  async function enrichRowsMissingCost(rows, requestId) {
+    const list = Array.isArray(rows) ? rows : [];
+    const targets = list.filter((row) => row && !row.isService && row.cost == null);
+    if (!targets.length) return;
+
+    await Promise.all(targets.map(async (row) => {
+      const cost = await resolveMissingCostForRow(row);
+      if (requestId !== state.productsRenderRequestId) return;
+      if (!(Number.isFinite(cost) && cost > 0)) return;
+      row.cost = cost;
+      row.markupPct =
+        Number.isFinite(row.saleUnit) && row.saleUnit > 0
+          ? ((row.saleUnit - cost) / cost) * 100
+          : null;
+    }));
+  }
+
   function detectServiceCategoryFromText(value) {
     const text = normalizeLookupKey(value);
     if (!text) return '';
@@ -594,10 +715,30 @@
     }
     if ([
       'consulta', 'vacina', 'retorno', 'exame', 'ultrassom', 'raio x', 'raiox', 'procedimento',
-      'cirurgia', 'veterin', 'clinica', 'clínica', 'atendimento',
+      'cirurgia', 'clinica', 'clínica', 'atendimento',
     ].some((term) => text.includes(normalizeLookupKey(term)))) {
       return 'veterinario';
     }
+    return '';
+  }
+
+  function resolveSaleItemKind(item, fiscal) {
+    const normalizeKind = (value) => normalizeLookupKey(value);
+    const kindCandidates = [
+      item?.tipoItem,
+      item?.itemType,
+      item?.kind,
+      item?.type,
+      item?.raw?.tipo,
+      item?.raw?.type,
+      fiscal?.tipoItem,
+      fiscal?.itemType,
+      fiscal?.kind,
+      fiscal?.type,
+    ].map((value) => normalizeKind(value));
+
+    if (kindCandidates.some((value) => value === 'produto' || value === 'product')) return 'produto';
+    if (kindCandidates.some((value) => value === 'servico' || value === 'serviço' || value === 'service')) return 'servico';
     return '';
   }
 
@@ -627,31 +768,154 @@
         const name = item.product || item.nome || fiscal?.name || productSnapshot?.nome || 'Produto';
         const categoryFromName = detectServiceCategoryFromText(name);
         const categoryFromCode = detectServiceCategoryFromText(code);
-        const inferredServiceCategory = categoryFromName || categoryFromCode;
         const hasProductSnapshot = Boolean(productSnapshot);
+        const productId = fiscal?.productId || item?.productId || item?.produtoId || '';
         const hasProductReference = Boolean(
           fiscal?.productId ||
           item?.productId ||
           item?.produtoId
         );
+        const hasServiceReference = Boolean(
+          fiscal?.serviceId ||
+          item?.serviceId ||
+          item?.servicoId ||
+          item?.servico ||
+          item?.service
+        );
         const hasBarcode = Boolean(String(barcode || '').trim());
-        const rawId = item?.id || '';
+        const kind = resolveSaleItemKind(item, fiscal);
+        const isExplicitProduct = kind === 'produto';
+        const isExplicitService = kind === 'servico';
+        const hasStrongProductHint = hasProductSnapshot || hasProductReference || hasBarcode;
         const looksServiceByStructure =
-          !hasProductReference &&
-          !hasProductSnapshot &&
-          !hasBarcode &&
-          /serv/i.test(String(name || ''));
-        const isService = Boolean(inferredServiceCategory) || looksServiceByStructure;
+          hasServiceReference && !hasStrongProductHint;
+        const inferredServiceCategory =
+          !isExplicitProduct && (isExplicitService || !hasStrongProductHint)
+            ? (categoryFromName || categoryFromCode)
+            : '';
+        const isService =
+          isExplicitService ||
+          looksServiceByStructure ||
+          (!hasStrongProductHint && Boolean(inferredServiceCategory));
         const serviceCategory = inferredServiceCategory || (isService ? 'veterinario' : '');
 
-        const rawCostCandidates = [
+        const productSnapshotFromItem = item?.productSnapshot && typeof item.productSnapshot === 'object'
+          ? item.productSnapshot
+          : null;
+        const produtoSnapshotFromItem = item?.produtoSnapshot && typeof item.produtoSnapshot === 'object'
+          ? item.produtoSnapshot
+          : null;
+        const unitCostCandidates = [
+          item.precoCusto,
+          item.preco_custo,
+          item.precoCustoUnitario,
+          item.preco_custo_unitario,
+          item.precoCustoValue,
+          item.cost,
+          item.costPrice,
           item.unitCost,
+          item.custo,
+          item.custoCalculado,
+          item.custoUnitario,
+          item.custo_unitario,
+          item.custoMedio,
+          item.custoReferencia,
+          item.custo_referencia,
+          item.costValue,
+          fiscal?.precoCusto,
+          fiscal?.preco_custo,
+          fiscal?.precoCustoUnitario,
+          fiscal?.preco_custo_unitario,
+          fiscal?.cost,
+          fiscal?.costPrice,
           fiscal?.unitCost,
+          fiscal?.custo,
+          fiscal?.custoCalculado,
+          fiscal?.custoUnitario,
+          fiscal?.custo_unitario,
+          fiscal?.custoMedio,
+          fiscal?.custoReferencia,
+          fiscal?.custo_referencia,
+          productSnapshot?.precoCusto,
+          productSnapshot?.preco_custo,
+          productSnapshot?.precoCustoUnitario,
+          productSnapshot?.preco_custo_unitario,
           productSnapshot?.custo,
           productSnapshot?.custoAtual,
-          productSnapshot?.precoCusto,
+          productSnapshot?.custoCalculado,
+          productSnapshot?.custoMedio,
+          productSnapshot?.custoReferencia,
+          productSnapshotFromItem?.precoCusto,
+          productSnapshotFromItem?.preco_custo,
+          productSnapshotFromItem?.precoCustoUnitario,
+          productSnapshotFromItem?.preco_custo_unitario,
+          productSnapshotFromItem?.custo,
+          productSnapshotFromItem?.custoAtual,
+          productSnapshotFromItem?.custoCalculado,
+          productSnapshotFromItem?.custoMedio,
+          productSnapshotFromItem?.custoReferencia,
+          produtoSnapshotFromItem?.precoCusto,
+          produtoSnapshotFromItem?.preco_custo,
+          produtoSnapshotFromItem?.precoCustoUnitario,
+          produtoSnapshotFromItem?.preco_custo_unitario,
+          produtoSnapshotFromItem?.custo,
+          produtoSnapshotFromItem?.custoAtual,
+          produtoSnapshotFromItem?.custoCalculado,
+          produtoSnapshotFromItem?.custoMedio,
+          produtoSnapshotFromItem?.custoReferencia,
+          item?.product?.precoCusto,
+          item?.product?.preco_custo,
+          item?.product?.precoCustoUnitario,
+          item?.product?.preco_custo_unitario,
+          item?.product?.custo,
+          item?.product?.custoCalculado,
+          item?.product?.custoMedio,
+          item?.product?.custoReferencia,
+          item?.produto?.precoCusto,
+          item?.produto?.preco_custo,
+          item?.produto?.precoCustoUnitario,
+          item?.produto?.preco_custo_unitario,
+          item?.produto?.custo,
+          item?.produto?.custoCalculado,
+          item?.produto?.custoMedio,
+          item?.produto?.custoReferencia,
         ];
-        const cost = rawCostCandidates.map((v) => Number(v)).find((v) => Number.isFinite(v) && v >= 0);
+        const totalCostCandidates = [
+          item.precoCustoTotal,
+          item.totalPrecoCusto,
+          item.precoCustoValorTotal,
+          item.totalCost,
+          item.custoTotal,
+          item.totalCusto,
+          item.custoTotalCalculado,
+          item.totalCostValue,
+          fiscal?.precoCustoTotal,
+          fiscal?.totalPrecoCusto,
+          fiscal?.precoCustoValorTotal,
+          fiscal?.totalCost,
+          fiscal?.custoTotal,
+          fiscal?.totalCusto,
+          fiscal?.custoTotalCalculado,
+          fiscal?.totalCostValue,
+          productSnapshot?.precoCustoTotal,
+          productSnapshot?.custoTotal,
+          productSnapshot?.totalCusto,
+          productSnapshot?.custoTotalCalculado,
+          productSnapshotFromItem?.precoCustoTotal,
+          productSnapshotFromItem?.custoTotal,
+          productSnapshotFromItem?.totalCusto,
+          productSnapshotFromItem?.custoTotalCalculado,
+          produtoSnapshotFromItem?.precoCustoTotal,
+          produtoSnapshotFromItem?.custoTotal,
+          produtoSnapshotFromItem?.totalCusto,
+          produtoSnapshotFromItem?.custoTotalCalculado,
+        ];
+        const unitCost = findFirstNonNegativeNumber(unitCostCandidates);
+        const totalCost = findFirstNonNegativeNumber(totalCostCandidates);
+        const cost =
+          unitCost != null
+            ? unitCost
+            : (totalCost != null && Number.isFinite(quantity) && quantity > 0 ? totalCost / quantity : null);
         const normalizedSaleUnit = Number.isFinite(saleUnit) ? saleUnit : Number(fiscal?.unitPrice ?? 0);
         const normalizedTotal = Number.isFinite(lineTotal)
           ? lineTotal
@@ -666,6 +930,7 @@
           code: String(code || ''),
           barcode: String(barcode || ''),
           name: String(name || 'Produto'),
+          productId: String(productId || ''),
           isService,
           serviceCategory,
           cost: Number.isFinite(cost) ? cost : null,
@@ -699,7 +964,7 @@
     return true;
   }
 
-  function renderProductsSoldPanel() {
+  async function renderProductsSoldPanel() {
     const tbody = qs('#cashcheck-products-body');
     const countEl = qs('#cashcheck-products-count');
     const qtyTotalEl = qs('#cashcheck-products-qty-total');
@@ -729,11 +994,15 @@
     const salesWithinCaixa = filterSalesForSelectedCaixa(getSelectedCaixaCompletedSales(), caixa);
     const allRows = normalizeSoldProductRowsFromSales(salesWithinCaixa);
     const searchTerm = normalizeLookupKey(qs('#cashcheck-products-search')?.value || '');
+    const requestId = ++state.productsRenderRequestId;
     const rows = searchTerm
       ? allRows.filter((row) =>
           [row.code, row.barcode, row.name, row.saleCode].some((value) => normalizeLookupKey(value).includes(searchTerm))
         )
       : allRows;
+
+    await enrichRowsMissingCost(rows, requestId);
+    if (requestId !== state.productsRenderRequestId) return;
 
     if (!rows.length) {
       resetSummary();

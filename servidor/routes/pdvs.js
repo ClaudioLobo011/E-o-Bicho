@@ -1280,9 +1280,13 @@ const normalizeSaleRecordPayload = (record) => {
         sellerSource?.codigoCliente ||
         sellerSource?.id
     ) || '';
-  const paymentTags = Array.isArray(record.paymentTags)
+  const paymentTagsFromRecord = Array.isArray(record.paymentTags)
     ? record.paymentTags.map((tag) => normalizeString(tag)).filter(Boolean)
     : [];
+  const paymentTags =
+    paymentTagsFromRecord.length > 0
+      ? paymentTagsFromRecord
+      : buildPaymentTagsFromPayments(record.payments);
   const items = Array.isArray(record.items)
     ? record.items.map((item) => (item && typeof item === 'object' ? { ...item } : item))
     : [];
@@ -3376,6 +3380,22 @@ const normalizeCommandPayments = (payments = []) =>
     .map((entry) => normalizePaymentSnapshotPayload(entry))
     .filter(Boolean);
 
+const buildPaymentTagsFromPayments = (payments = []) =>
+  Array.from(
+    new Set(
+      (Array.isArray(payments) ? payments : [])
+        .map((payment) => {
+          const label = normalizeString(payment?.label || payment?.name || 'Pagamento');
+          if (!label) return '';
+          const installmentsRaw = Number.parseInt(payment?.parcelas ?? payment?.installments ?? 1, 10);
+          const installments =
+            Number.isFinite(installmentsRaw) && installmentsRaw > 1 ? installmentsRaw : 1;
+          return installments > 1 ? `${label} (${installments}x)` : label;
+        })
+        .filter(Boolean)
+    )
+  );
+
 const getCommandHistoryUserMeta = (user = {}) => {
   return {
     userId: normalizeString(user?.id),
@@ -4253,7 +4273,7 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
     );
     const seller =
       payload?.seller && typeof payload.seller === 'object' ? { ...payload.seller } : null;
-    const paymentTags = payments.map((payment) => normalizeString(payment?.label)).filter(Boolean);
+    const paymentTags = buildPaymentTagsFromPayments(payments);
     const cashContributions = buildSaleContributionsFromPayments(payments);
     const paymentLabel = payments
       .map((payment) => `${payment.label || 'Pagamento'}: ${safeNumber(payment.valor, 0).toFixed(2)}`)
@@ -5649,6 +5669,7 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
         saleCodeLabel: normalizeString(payload?.saleCode || existingSale?.saleCodeLabel || targetOrder?.saleCode || ''),
         items: items.length ? items : Array.isArray(existingSale?.items) ? existingSale.items : [],
         payments: payments.length ? payments : [],
+        paymentTags: buildPaymentTagsFromPayments(payments),
         discountValue: discountValue || safeNumber(existingSale?.discountValue, 0),
         additionValue: additionValue || safeNumber(existingSale?.additionValue, 0),
         total: totalLiquido,

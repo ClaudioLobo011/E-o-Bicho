@@ -1,6 +1,6 @@
 ﻿document.addEventListener('DOMContentLoaded', () => {
     
-    // --- REFERÃŠNCIAS AO DOM ---
+    // --- REFERENCIAS AO DOM ---
     const form = document.getElementById('edit-product-form');
     const submitButton = form?.querySelector('button[type="submit"]')
         || document.querySelector('button[type="submit"][form="edit-product-form"]');
@@ -140,7 +140,7 @@
             const parsed = JSON.parse(raw);
             return parsed && typeof parsed === 'object' ? parsed : {};
         } catch (error) {
-            console.warn('NÃ£o foi possÃ­vel carregar o estado persistido da ediÃ§Ã£o do produto.', error);
+            console.warn('Não foi possível carregar o estado persistido da edição do produto.', error);
             return {};
         }
     };
@@ -157,7 +157,7 @@
                 localStorage.removeItem(PRODUCT_EDIT_STATE_STORAGE_KEY);
             }
         } catch (error) {
-            console.warn('NÃ£o foi possÃ­vel salvar o estado da ediÃ§Ã£o do produto.', error);
+            console.warn('Não foi possível salvar o estado da edição do produto.', error);
         }
     };
     const updatePersistedProductEditState = (updates = {}) => {
@@ -922,8 +922,8 @@
     };
 
     const getCompanyNameByKey = (key) => {
-        if (key === FISCAL_GENERAL_KEY) return 'ConfiguraÃ§Ã£o geral do produto';
-        return storeNameMap.get(key) || `Empresa nÃ£o encontrada (${key})`;
+        if (key === FISCAL_GENERAL_KEY) return 'Configuração geral do produto';
+        return storeNameMap.get(key) || `Empresa não encontrada (${key})`;
     };
 
     const buildStatusBadge = (label, statusValue) => {
@@ -953,8 +953,8 @@
             }
         }
         const note = activeFiscalCompanyKey === FISCAL_GENERAL_KEY
-            ? 'Aplica-se como padrÃ£o para empresas sem configuraÃ§Ã£o especÃ­fica.'
-            : 'ConfiguraÃ§Ã£o exclusiva para a empresa selecionada.';
+            ? 'Aplica-se como padrão para empresas sem configuração específica.'
+            : 'Configuração exclusiva para a empresa selecionada.';
 
         fiscalCompanySummary.innerHTML = `
             <div class="flex flex-col gap-2 text-sm text-gray-600 md:items-end">
@@ -1238,7 +1238,7 @@
         if (!fiscalCompanySelect) return;
         const knownStoreIds = new Set(storesList.map((store) => store._id));
         const options = [
-            `<option value="${FISCAL_GENERAL_KEY}">ConfiguraÃ§Ã£o geral</option>`,
+            `<option value="${FISCAL_GENERAL_KEY}">Configuração geral</option>`,
         ];
 
         storesList.forEach((store) => {
@@ -1252,7 +1252,7 @@
 
         extraKeys.forEach((key) => {
             if (!storeNameMap.has(key)) {
-                storeNameMap.set(key, `Empresa nÃ£o encontrada (${key})`);
+                storeNameMap.set(key, `Empresa não encontrada (${key})`);
             }
             options.push(`<option value="${key}">${storeNameMap.get(key)}</option>`);
         });
@@ -1277,7 +1277,7 @@
         }
     };
 
-    // --- LÃ“GICA DAS ABAS (Geral / EspecificaÃ§Ãµes) ---
+    // --- LOGICA DAS ABAS (Geral / Especificacoes) ---
     const normalizeTabId = (tabId) => {
         if (typeof tabId !== 'string') return '';
         return tabId.startsWith('#') ? tabId.slice(1) : tabId;
@@ -1354,7 +1354,7 @@
         if (initialTab) activateProductTab(initialTab);
     }
 
-    // --- ESTADO DA PÃGINA ---
+    // --- ESTADO DA PÁGINA ---
     const urlParams = new URLSearchParams(window.location.search);
     const isFromNfeImport = urlParams.get('from') === 'nfe-import';
     const isEmbeddedIframeContext = (() => {
@@ -1367,8 +1367,8 @@
     let productId = urlParams.get('id');
     let isEditMode = Boolean(productId);
     let productCategories = []; // Array de IDs das categorias selecionadas
-    let allHierarchicalCategories = []; // Guarda a Ã¡rvore de categorias
-    let allFlatCategories = []; // Lista plana de categorias para consultas rÃ¡pidas
+    let allHierarchicalCategories = []; // Guarda a árvore de categorias
+    let allFlatCategories = []; // Lista plana de categorias para consultas rápidas
     let supplierEntries = [];
     let allDeposits = [];
     const depositStockMap = new Map();
@@ -1402,14 +1402,14 @@
         timeStyle: 'short',
     });
     const priceHistoryDefaultEmptyMessage = priceHistoryEmptyState?.textContent?.trim()
-        || 'Nenhuma alteraÃ§Ã£o de preÃ§o registrada para este produto.';
+        || 'Nenhuma alteração de preço registrada para este produto.';
     let priceHistoryLoading = false;
     let fractionalChildren = [];
     let fractionalSearchTimeoutId = null;
     let fractionalSearchAbortController = null;
     let currentProductSnapshot = null;
     const PRODUCT_SEARCH_RESULTS_COLUMNS = 5;
-    const PRODUCT_SEARCH_DEFAULT_MESSAGE = 'Digite para buscar produtos pelo cÃ³digo ou descriÃ§Ã£o.';
+    const PRODUCT_SEARCH_DEFAULT_MESSAGE = 'Digite para buscar produtos pelo código ou descrição.';
     let productSearchAbortController = null;
     let productSearchDebounceId = null;
     let lastProductSearchTerm = '';
@@ -1426,7 +1426,7 @@
             currentUrl.searchParams.set('id', productId);
             window.history.replaceState({}, '', currentUrl.toString());
         } catch (error) {
-            console.warn('NÃ£o foi possÃ­vel atualizar a URL com o produto persistido.', error);
+            console.warn('Não foi possível atualizar a URL com o produto persistido.', error);
         }
     }
     if (productId) {
@@ -1878,7 +1878,7 @@
         try {
             return JSON.parse(localStorage.getItem('loggedInUser') || 'null')?.token || null;
         } catch (error) {
-            console.error('Erro ao recuperar o token do usuÃ¡rio logado.', error);
+            console.error('Erro ao recuperar o token do usuário logado.', error);
             return null;
         }
     };
@@ -1995,15 +1995,15 @@
             fractionalChildren.forEach((child, index) => {
                 const productKey = child?.productId ? String(child.productId) : '';
                 if (!productKey) {
-                    fractionalErrors.push(`Produto filho invÃ¡lido na posiÃ§Ã£o ${index + 1}.`);
+                    fractionalErrors.push(`Produto filho inválido na posição ${index + 1}.`);
                     return;
                 }
                 if (productId && productKey === String(productId)) {
-                    fractionalErrors.push('O produto nÃ£o pode ser configurado como filho de si mesmo.');
+                    fractionalErrors.push('O produto não pode ser configurado como filho de si mesmo.');
                     return;
                 }
                 if (seenChildren.has(productKey)) {
-                    fractionalErrors.push('Existem produtos filhos duplicados na configuraÃ§Ã£o de fracionamento.');
+                    fractionalErrors.push('Existem produtos filhos duplicados na configuração de fracionamento.');
                     return;
                 }
                 const metrics = computeFractionChildMetrics(child);
@@ -2012,7 +2012,7 @@
                     return;
                 }
                 if (!metrics.fractionQuantity || metrics.fractionQuantity <= 0) {
-                    fractionalErrors.push(`Informe a quantidade apÃ³s fracionamento do produto filho ${child?.nome || productKey}.`);
+                    fractionalErrors.push(`Informe a quantidade após fracionamento do produto filho ${child?.nome || productKey}.`);
                     return;
                 }
                 seenChildren.add(productKey);
@@ -2070,7 +2070,7 @@
 
         const token = getAuthToken();
         if (!token) {
-            console.warn('Token de autenticaÃ§Ã£o indisponÃ­vel. Salvamento automÃ¡tico cancelado.');
+            console.warn('Token de autenticação indisponível. Salvamento automático cancelado.');
             return;
         }
 
@@ -2086,14 +2086,14 @@
             });
 
             if (!response.ok) {
-                const error = new Error('Falha ao salvar automaticamente as alteraÃ§Ãµes do produto.');
+                const error = new Error('Falha ao salvar automaticamente as alterações do produto.');
                 if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
                     window.showToast(error.message, 'error', 4000);
                 }
                 throw error;
             }
         } catch (error) {
-            console.error('Erro durante o salvamento automÃ¡tico do produto.', error);
+            console.error('Erro durante o salvamento automático do produto.', error);
         }
     };
 
@@ -2253,7 +2253,7 @@
         if (message) {
             priceHistoryErrorState.textContent = message;
         } else {
-            priceHistoryErrorState.textContent = 'NÃ£o foi possÃ­vel carregar o histÃ³rico de preÃ§os. Tente novamente.';
+            priceHistoryErrorState.textContent = 'Não foi possível carregar o histórico de preços. Tente novamente.';
         }
         priceHistoryErrorState.classList.toggle('hidden', !show);
     };
@@ -2545,7 +2545,7 @@
         if (priceHistoryEmptyState) {
             priceHistoryEmptyState.textContent = nextProductId
                 ? priceHistoryDefaultEmptyMessage
-                : 'Salve o produto para visualizar o histÃ³rico de preÃ§os.';
+                : 'Salve o produto para visualizar o histórico de preços.';
             priceHistoryEmptyState.classList.add('hidden');
         }
     };
@@ -2703,7 +2703,7 @@
                 priceHistoryTableBody.innerHTML = '';
             }
             updatePriceHistoryErrorState('', false);
-            updatePriceHistoryEmptyState('Salve o produto para visualizar o histÃ³rico de preÃ§os.', true);
+            updatePriceHistoryEmptyState('Salve o produto para visualizar o histórico de preços.', true);
             return;
         }
 
@@ -2717,7 +2717,7 @@
         const token = getAuthToken();
         if (!token) {
             setPriceHistoryLoadingState(false);
-            updatePriceHistoryErrorState('SessÃ£o expirada. FaÃ§a login novamente para consultar o histÃ³rico.', true);
+            updatePriceHistoryErrorState('Sessão expirada. Faça login novamente para consultar o histórico.', true);
             updatePriceHistoryEmptyState(priceHistoryDefaultEmptyMessage, false);
             return;
         }
@@ -2730,7 +2730,7 @@
             });
 
             if (!response.ok) {
-                throw new Error('Falha ao carregar o histÃ³rico de preÃ§os.');
+                throw new Error('Falha ao carregar o histórico de preços.');
             }
 
             const payload = await response.json();
@@ -2749,9 +2749,9 @@
                 updatePriceHistoryEmptyState(priceHistoryDefaultEmptyMessage, true);
             }
         } catch (error) {
-            console.error('Erro ao carregar histÃ³rico de preÃ§os do produto.', error);
+            console.error('Erro ao carregar histórico de preços do produto.', error);
             priceHistoryEntries = [];
-            updatePriceHistoryErrorState(error?.message || 'NÃ£o foi possÃ­vel carregar o histÃ³rico de preÃ§os. Tente novamente.', true);
+            updatePriceHistoryErrorState(error?.message || 'Não foi possível carregar o histórico de preços. Tente novamente.', true);
             updatePriceHistoryEmptyState(priceHistoryDefaultEmptyMessage, false);
         } finally {
             setPriceHistoryLoadingState(false);
@@ -2832,7 +2832,7 @@
 
     const formatProductSearchCurrency = (value) => {
         const parsed = parseProductSearchNumber(value);
-        return parsed === null ? 'â€”' : productSearchCurrencyFormatter.format(parsed);
+        return parsed === null ? '—' : productSearchCurrencyFormatter.format(parsed);
     };
 
     const getProductSearchId = (product = {}) => {
@@ -2959,7 +2959,7 @@
         try {
             return new RegExp(pattern, 'i');
         } catch (error) {
-            console.warn('Filtro invÃ¡lido ignorado na busca de produtos.', error);
+            console.warn('Filtro inválido ignorado na busca de produtos.', error);
             return null;
         }
     };
@@ -3105,7 +3105,7 @@
 
             const codeCell = document.createElement('td');
             codeCell.className = 'px-4 py-3 text-xs font-semibold text-gray-700 whitespace-nowrap';
-            codeCell.textContent = getProductSearchCode(product) || 'â€”';
+            codeCell.textContent = getProductSearchCode(product) || '—';
 
             const descriptionCell = document.createElement('td');
             descriptionCell.className = 'px-4 py-3 text-xs text-gray-700';
@@ -3113,21 +3113,21 @@
 
             const barcodeCell = document.createElement('td');
             barcodeCell.className = 'px-4 py-3 text-xs text-gray-600 whitespace-nowrap';
-            barcodeCell.textContent = getProductSearchBarcode(product) || 'â€”';
+            barcodeCell.textContent = getProductSearchBarcode(product) || '—';
 
             const costCell = document.createElement('td');
             costCell.className = 'px-4 py-3 text-xs text-right text-gray-700 whitespace-nowrap';
             const costNumber = getProductSearchCostNumber(product);
             costCell.textContent = Number.isFinite(costNumber)
                 ? productSearchCurrencyFormatter.format(costNumber)
-                : 'â€”';
+                : '—';
 
             const saleCell = document.createElement('td');
             saleCell.className = 'px-4 py-3 text-xs text-right font-semibold text-gray-800 whitespace-nowrap';
             const saleNumber = getProductSearchSaleNumber(product);
             saleCell.textContent = Number.isFinite(saleNumber)
                 ? productSearchCurrencyFormatter.format(saleNumber)
-                : 'â€”';
+                : '—';
 
             row.append(codeCell, descriptionCell, barcodeCell, costCell, saleCell);
             fragment.appendChild(row);
@@ -3177,7 +3177,7 @@
             : '';
         if (!productIdValue) {
             if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
-                window.showToast('NÃ£o foi possÃ­vel identificar o produto selecionado.', 'warning', 3500);
+                window.showToast('Não foi possível identificar o produto selecionado.', 'warning', 3500);
             }
             return;
         }
@@ -3191,13 +3191,13 @@
             lastSkuInputValue = skuInput?.value || '';
             closeProductSearchModal();
             if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
-                window.showToast('Produto carregado para ediÃ§Ã£o.', 'success', 3200);
+                window.showToast('Produto carregado para edição.', 'success', 3200);
             }
         } catch (error) {
             console.error('Erro ao carregar produto selecionado na busca:', error);
             showModal({
                 title: 'Erro',
-                message: error?.message || 'NÃ£o foi possÃ­vel carregar o produto selecionado.',
+                message: error?.message || 'Não foi possível carregar o produto selecionado.',
                 confirmText: 'Entendi',
             });
             window.setTimeout(() => {
@@ -3328,8 +3328,8 @@
 
                 if (!response.ok) {
                     const errorMessage = response.status === 401
-                        ? 'SessÃ£o expirada. FaÃ§a login novamente para buscar produtos.'
-                        : 'NÃ£o foi possÃ­vel buscar os produtos informados.';
+                        ? 'Sessão expirada. Faça login novamente para buscar produtos.'
+                        : 'Não foi possível buscar os produtos informados.';
                     throw new Error(errorMessage);
                 }
 
@@ -3360,7 +3360,7 @@
                 return;
             }
             console.error('Erro ao buscar produtos para o modal de pesquisa:', error);
-            showProductSearchFeedback(error?.message || 'NÃ£o foi possÃ­vel buscar os produtos informados.', 'error');
+            showProductSearchFeedback(error?.message || 'Não foi possível buscar os produtos informados.', 'error');
         } finally {
             if (productSearchAbortController === activeAbortController) {
                 productSearchAbortController = null;
@@ -3560,7 +3560,7 @@
         if (!existingImagesGrid) return;
 
         if (!Array.isArray(currentImages) || currentImages.length === 0) {
-            existingImagesGrid.innerHTML = '<p class="text-sm text-gray-500">Nenhuma imagem cadastrada atÃ© o momento.</p>';
+            existingImagesGrid.innerHTML = '<p class="text-sm text-gray-500">Nenhuma imagem cadastrada até o momento.</p>';
             hideImageOrderStatus();
             return;
         }
@@ -3579,10 +3579,10 @@
                         <div class="absolute inset-0 flex flex-col justify-between gap-2 bg-black/50 px-2 py-2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
                             <div class="flex items-center justify-between gap-2">
                                 <button type="button" class="reorder-image-btn move-left inline-flex h-7 w-1/2 items-center justify-center rounded bg-white/90 px-2 text-xs font-semibold text-gray-700 shadow-sm transition hover:bg-white" data-direction="left" data-image-url="${safeUrl}">
-                                    â†
+                                    <
                                 </button>
                                 <button type="button" class="reorder-image-btn move-right inline-flex h-7 w-1/2 items-center justify-center rounded bg-white/90 px-2 text-xs font-semibold text-gray-700 shadow-sm transition hover:bg-white" data-direction="right" data-image-url="${safeUrl}">
-                                    â†’
+                                    >
                                 </button>
                             </div>
                             <div class="flex justify-end">
@@ -3707,7 +3707,7 @@
         }
 
         if (!token) {
-            const error = new Error('SessÃ£o expirada. FaÃ§a login novamente.');
+            const error = new Error('Sessão expirada. Faça login novamente.');
             showImageOrderStatus({ message: error.message, tone: 'error' });
             throw error;
         }
@@ -3729,7 +3729,7 @@
         }
 
         if (!response.ok) {
-            const errorMessage = payload?.message || 'NÃ£o foi possÃ­vel atualizar a ordem das imagens.';
+            const errorMessage = payload?.message || 'Não foi possível atualizar a ordem das imagens.';
             showImageOrderStatus({ message: errorMessage, tone: 'error' });
             const error = new Error(errorMessage);
             error.payload = payload;
@@ -3766,7 +3766,7 @@
         renderExistingImages();
 
         if (!isEditMode || !productId) {
-            showImageOrderStatus({ message: 'A ordem serÃ¡ mantida apÃ³s salvar o produto.', tone: 'info' });
+            showImageOrderStatus({ message: 'A ordem será mantida após salvar o produto.', tone: 'info' });
             return;
         }
 
@@ -3777,7 +3777,7 @@
             renderExistingImages();
             showModal({
                 title: 'Erro',
-                message: `NÃ£o foi possÃ­vel atualizar a ordem das imagens: ${error.message}`,
+                message: `Não foi possível atualizar a ordem das imagens: ${error.message}`,
                 confirmText: 'OK'
             });
             console.error('Falha ao persistir a nova ordem das imagens:', error);
@@ -3881,7 +3881,7 @@
             try {
                 token = JSON.parse(localStorage.getItem('loggedInUser') || 'null')?.token || null;
             } catch (storageError) {
-                console.error('Erro ao recuperar token do usuÃ¡rio logado:', storageError);
+                console.error('Erro ao recuperar token do usuário logado:', storageError);
             }
 
             const headers = token ? { Authorization: `Bearer ${token}` } : {};
@@ -3889,7 +3889,7 @@
             if (!response.ok) {
                 const error = new Error(
                     response.status === 401
-                        ? 'Sua sessÃ£o expirou. FaÃ§a login novamente para carregar os fornecedores.'
+                        ? 'Sua sessão expirou. Faça login novamente para carregar os fornecedores.'
                         : `Erro ao carregar fornecedores (${response.status})`,
                 );
                 error.status = response.status;
@@ -4061,7 +4061,7 @@
         if (!results.length) {
             const message = term
                 ? `Nenhum fornecedor encontrado para "${escapeHtml(term)}".`
-                : 'Cadastre fornecedores para vinculÃ¡-los aos produtos.';
+                : 'Cadastre fornecedores para vinculá-los aos produtos.';
             showSupplierSuggestionsMessage(message, { tone: 'info' });
             return;
         }
@@ -4094,7 +4094,7 @@
                     badges.push('<span class="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">ONG</span>');
                 }
                 if (supplier?.flags?.bankSupplier) {
-                    badges.push('<span class="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-700">Fornecedor bancÃ¡rio</span>');
+                    badges.push('<span class="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-700">Fornecedor bancário</span>');
                 }
                 const badgesLine = badges.length ? `<div class="mt-1 flex flex-wrap items-center gap-2">${badges.join('')}</div>` : '';
                 const metadata = [];
@@ -4105,13 +4105,13 @@
                     metadata.push(`<span class="inline-flex items-center gap-1"><i class="fas fa-hashtag text-[10px]"></i>${escapeHtml(supplierCode)}</span>`);
                 }
                 const metadataLine = metadata.length
-                    ? `<div class="mt-1 flex flex-wrap items-center gap-3 text-xs text-gray-500">${metadata.join('<span class="text-gray-300">â€¢</span>')}</div>`
+                    ? `<div class="mt-1 flex flex-wrap items-center gap-3 text-xs text-gray-500">${metadata.join('<span class="text-gray-300">|</span>')}</div>`
                     : '';
                 const locationLine = locationLabel
                     ? `<div class="mt-1 text-[11px] text-gray-500"><i class="fas fa-location-dot text-[10px] mr-1"></i>${escapeHtml(locationLabel)}</div>`
                     : '';
                 const contactLine = contactBits.length
-                    ? `<div class="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-gray-500">${contactBits.join('<span class="text-gray-300">â€¢</span>')}</div>`
+                    ? `<div class="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-gray-500">${contactBits.join('<span class="text-gray-300">|</span>')}</div>`
                     : '';
                 const initials = getSupplierInitials(supplier);
                 return `
@@ -4154,12 +4154,12 @@
             try {
                 await ensureSuppliersLoaded();
             } catch (error) {
-                console.error('Erro ao carregar fornecedores para sugestÃ£o:', error);
+                console.error('Erro ao carregar fornecedores para sugestão:', error);
                 const unauthorized = Number(error?.status) === 401;
                 showSupplierSuggestionsMessage(
                     unauthorized
-                        ? 'Sua sessÃ£o expirou. FaÃ§a login novamente para buscar fornecedores.'
-                        : 'NÃ£o foi possÃ­vel carregar os fornecedores cadastrados. Tente novamente.',
+                        ? 'Sua sessão expirou. Faça login novamente para buscar fornecedores.'
+                        : 'Não foi possível carregar os fornecedores cadastrados. Tente novamente.',
                     {
                         tone: 'error',
                         actionLabel: unauthorized ? 'Ir para login' : 'Tentar novamente',
@@ -4174,7 +4174,7 @@
             }
         }
         if (!supplierDirectoryState.items.length) {
-            showSupplierSuggestionsMessage('Cadastre fornecedores para vinculÃ¡-los aos produtos.', { tone: 'info' });
+            showSupplierSuggestionsMessage('Cadastre fornecedores para vinculá-los aos produtos.', { tone: 'info' });
             return;
         }
         const results = filterSupplierDirectory(trimmed, { allowEmpty });
@@ -4182,7 +4182,7 @@
             if (trimmed || !allowEmpty) {
                 showSupplierSuggestionsMessage(`Nenhum fornecedor encontrado para "${escapeHtml(trimmed)}".`, { tone: 'info' });
             } else {
-                showSupplierSuggestionsMessage('Cadastre fornecedores para vinculÃ¡-los aos produtos.', { tone: 'info' });
+                showSupplierSuggestionsMessage('Cadastre fornecedores para vinculá-los aos produtos.', { tone: 'info' });
             }
             return;
         }
@@ -4223,7 +4223,7 @@
         deleteProductButton.classList.remove('hidden');
     };
 
-    const getSubmitButtonIdleLabel = () => (isEditMode ? 'Salvar AlteraÃ§Ãµes' : 'Cadastrar Produto');
+    const getSubmitButtonIdleLabel = () => (isEditMode ? 'Salvar Alterações' : 'Cadastrar Produto');
 
     const setSubmitButtonIdleText = () => {
         if (!submitButton) return;
@@ -4297,7 +4297,7 @@
             depositTableBody.innerHTML = `
                 <tr>
                     <td colspan="5" class="px-4 py-6 text-center text-xs text-gray-500">
-                        Nenhum depÃ³sito vinculado atÃ© o momento.
+                        Nenhum depósito vinculado até o momento.
                     </td>
                 </tr>
             `;
@@ -4321,7 +4321,7 @@
             tr.innerHTML = `
                 <td class="px-4 py-3 text-gray-700">
                     <div class="font-medium text-gray-800">${deposit.nome}</div>
-                    <div class="text-xs text-gray-500">${deposit.codigo}${deposit?.empresa?.nome ? ` â€¢ ${deposit.empresa.nome}` : ''}</div>
+                    <div class="text-xs text-gray-500">${deposit.codigo}${deposit?.empresa?.nome ? ` - ${deposit.empresa.nome}` : ''}</div>
                 </td>
                 <td class="px-4 py-3">
                     <input type="number" step="0.001" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" data-deposit-id="${depositId}" data-deposit-field="quantidade">
@@ -4374,7 +4374,7 @@
                 qtyInput.classList.toggle('bg-gray-100', fractionalLocked);
                 qtyInput.classList.toggle('cursor-not-allowed', fractionalLocked);
                 if (fractionalLocked) {
-                    qtyInput.setAttribute('title', 'O estoque do produto pai Ã© calculado automaticamente pelos produtos filhos fracionados.');
+                    qtyInput.setAttribute('title', 'O estoque do produto pai é calculado automaticamente pelos produtos filhos fracionados.');
                 } else {
                     qtyInput.removeAttribute('title');
                 }
@@ -4384,7 +4384,7 @@
                 unitInput.classList.toggle('bg-gray-100', fractionalLocked);
                 unitInput.classList.toggle('cursor-not-allowed', fractionalLocked);
                 if (fractionalLocked) {
-                    unitInput.setAttribute('title', 'O estoque do produto pai Ã© calculado automaticamente pelos produtos filhos fracionados.');
+                    unitInput.setAttribute('title', 'O estoque do produto pai é calculado automaticamente pelos produtos filhos fracionados.');
                 } else {
                     unitInput.removeAttribute('title');
                 }
@@ -4454,23 +4454,23 @@
             infoContainer.className = 'space-y-1 text-sm text-gray-700';
 
             const supplierLine = document.createElement('p');
-            const supplierName = escapeHtml(entry.fornecedor || 'â€”');
+            const supplierName = escapeHtml(entry.fornecedor || '—');
             const supplierDocument = entry.documentoFornecedor ? formatDocument(entry.documentoFornecedor) : '';
             const supplierDocumentHtml = supplierDocument
                 ? ` <span class="ml-2 inline-flex items-center gap-1 text-xs text-gray-500"><i class="fas fa-id-card text-[10px]"></i>${escapeHtml(supplierDocument)}</span>`
                 : '';
             supplierLine.innerHTML = `<span class="font-semibold">Fornecedor:</span> ${supplierName}${supplierDocumentHtml}`;
             const productNameLine = document.createElement('p');
-            productNameLine.innerHTML = `<span class="font-semibold">Nome do produto no fornecedor:</span> ${escapeHtml(entry.nomeProdutoFornecedor || 'â€”')}`;
+            productNameLine.innerHTML = `<span class="font-semibold">Nome do produto no fornecedor:</span> ${escapeHtml(entry.nomeProdutoFornecedor || '—')}`;
             const codeLine = document.createElement('p');
-            codeLine.innerHTML = `<span class="font-semibold">CÃ³digo do produto:</span> ${escapeHtml(entry.codigoProduto || 'â€”')}`;
+            codeLine.innerHTML = `<span class="font-semibold">Código do produto:</span> ${escapeHtml(entry.codigoProduto || '—')}`;
             const unitLine = document.createElement('p');
-            unitLine.innerHTML = `<span class="font-semibold">Unidade de entrada:</span> ${escapeHtml(entry.unidadeEntrada || 'â€”')}`;
+            unitLine.innerHTML = `<span class="font-semibold">Unidade de entrada:</span> ${escapeHtml(entry.unidadeEntrada || '—')}`;
             const calcLine = document.createElement('p');
-            const valorCalculo = Number.isFinite(entry.valorCalculo) ? entry.valorCalculo : 'â€”';
-            const calcLabel = escapeHtml(entry.tipoCalculo || 'â€”');
-            const calcValueLabel = valorCalculo !== 'â€”' ? ` (${valorCalculo})` : '';
-            calcLine.innerHTML = `<span class="font-semibold">CÃ¡lculo:</span> ${calcLabel}${calcValueLabel}`;
+            const valorCalculo = Number.isFinite(entry.valorCalculo) ? entry.valorCalculo : '—';
+            const calcLabel = escapeHtml(entry.tipoCalculo || '—');
+            const calcValueLabel = valorCalculo !== '—' ? ` (${valorCalculo})` : '';
+            calcLine.innerHTML = `<span class="font-semibold">Cálculo:</span> ${calcLabel}${calcValueLabel}`;
 
             infoContainer.appendChild(supplierLine);
             infoContainer.appendChild(productNameLine);
@@ -4495,7 +4495,7 @@
         });
     };
 
-    // --- CAMPOS RELACIONADOS A PREÃ‡OS ---
+    // --- CAMPOS RELACIONADOS A PRECOS ---
     const costInput = document.getElementById('custo');
     const saleInput = document.getElementById('venda');
     const markupInput = document.getElementById('markup');
@@ -4929,7 +4929,7 @@
             const codeParts = [];
             if (child?.cod) codeParts.push(escapeHtml(child.cod));
             if (child?.unidade) codeParts.push(escapeHtml(child.unidade));
-            const codeLabel = codeParts.length ? codeParts.join(' Â· ') : '&nbsp;';
+            const codeLabel = codeParts.length ? codeParts.join(' · ') : '&nbsp;';
 
             const row = document.createElement('tr');
             row.className = 'bg-white';
@@ -4975,7 +4975,7 @@
             fractionInput?.addEventListener('change', (event) => {
                 const parsedValue = Number(event.target.value);
                 if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
-                    showToastMessage('Informe a quantidade apÃ³s fracionamento maior que zero.', 'warning');
+                    showToastMessage('Informe a quantidade após fracionamento maior que zero.', 'warning');
                     event.target.value = metrics.fractionQuantity > 0 ? metrics.fractionQuantity : '';
                     return;
                 }
@@ -4997,11 +4997,11 @@
     const addFractionChild = (product) => {
         if (!product || !product.productId) return;
         if (productId && String(product.productId) === String(productId)) {
-            showToastMessage('NÃ£o Ã© possÃ­vel vincular o prÃ³prio produto como filho.', 'warning');
+            showToastMessage('Não é possível vincular o próprio produto como filho.', 'warning');
             return;
         }
         if (fractionalChildren.some((child) => String(child.productId) === String(product.productId))) {
-            showToastMessage('Este produto jÃ¡ estÃ¡ vinculado como filho.', 'warning');
+            showToastMessage('Este produto já está vinculado como filho.', 'warning');
             return;
         }
         fractionalChildren.push({
@@ -5030,7 +5030,7 @@
 
         const description = (fractionChildCreateDescriptionInput?.value || '').trim();
         if (!description) {
-            showToastMessage('Informe a descriÃ§Ã£o do produto filho.', 'warning');
+            showToastMessage('Informe a descrição do produto filho.', 'warning');
             fractionChildCreateDescriptionInput?.focus();
             return;
         }
@@ -5046,7 +5046,7 @@
 
         const basePayload = collectBaseProductPayloadForFractionChild();
         if (!basePayload) {
-            showToastMessage('NÃ£o foi possÃ­vel preparar os dados para criar o produto filho.', 'error');
+            showToastMessage('Não foi possível preparar os dados para criar o produto filho.', 'error');
             return;
         }
 
@@ -5063,7 +5063,7 @@
 
         const token = getAuthToken();
         if (!token) {
-            showToastMessage('FaÃ§a login novamente para criar produtos filhos.', 'warning');
+            showToastMessage('Faça login novamente para criar produtos filhos.', 'warning');
             return;
         }
 
@@ -5088,14 +5088,14 @@
             }
 
             if (!response.ok) {
-                const errorMessage = payload?.message || 'NÃ£o foi possÃ­vel criar o produto filho.';
+                const errorMessage = payload?.message || 'Não foi possível criar o produto filho.';
                 throw new Error(errorMessage);
             }
 
             const createdProduct = payload?.product || payload;
             const createdId = createdProduct?._id || createdProduct?.id;
             if (!createdId) {
-                throw new Error('Produto criado, mas nÃ£o foi possÃ­vel identificar o identificador retornado.');
+                throw new Error('Produto criado, mas não foi possível identificar o identificador retornado.');
             }
 
             addFractionChild({
@@ -5117,7 +5117,7 @@
             }
         } catch (error) {
             console.error('Erro ao criar produto filho automaticamente:', error);
-            showToastMessage(error?.message || 'NÃ£o foi possÃ­vel criar o produto filho.', 'error');
+            showToastMessage(error?.message || 'Não foi possível criar o produto filho.', 'error');
         } finally {
             setFractionChildCreateButtonLoading(false);
         }
@@ -5128,7 +5128,7 @@
         if (!items.length) {
             showFractionalSuggestionMessage(term
                 ? `Nenhum produto encontrado para "${escapeHtml(term)}".`
-                : 'Nenhum produto disponÃ­vel para seleÃ§Ã£o.');
+                : 'Nenhum produto disponível para seleção.');
             return;
         }
         const fragment = document.createDocumentFragment();
@@ -5143,7 +5143,7 @@
             button.innerHTML = `
                 <span class="flex flex-col">
                     <span class="font-semibold text-gray-800">${escapeHtml(item.nome || 'Produto sem nome')}</span>
-                    <span class="text-[11px] text-gray-500">${codeParts.length ? codeParts.join(' Â· ') : '&nbsp;'}</span>
+                    <span class="text-[11px] text-gray-500">${codeParts.length ? codeParts.join(' · ') : '&nbsp;'}</span>
                 </span>
                 <span class="text-[11px] font-semibold text-gray-700">${formatFractionCurrency(Number(item.custo) || 0)}</span>
             `;
@@ -5172,7 +5172,7 @@
 
         const token = getAuthToken();
         if (!token) {
-            showFractionalSuggestionMessage('FaÃ§a login para buscar produtos.');
+            showFractionalSuggestionMessage('Faça login para buscar produtos.');
             return;
         }
 
@@ -5193,7 +5193,7 @@
                 signal: fractionalSearchAbortController.signal,
             });
             if (!response.ok) {
-                throw new Error('NÃ£o foi possÃ­vel buscar os produtos informados.');
+                throw new Error('Não foi possível buscar os produtos informados.');
             }
             const payload = await response.json();
             const products = Array.isArray(payload?.products) ? payload.products : [];
@@ -5214,7 +5214,7 @@
         } catch (error) {
             if (error.name === 'AbortError') return;
             console.error('Erro ao buscar produtos fracionados:', error);
-            showFractionalSuggestionMessage(error.message || 'NÃ£o foi possÃ­vel buscar os produtos informados.');
+            showFractionalSuggestionMessage(error.message || 'Não foi possível buscar os produtos informados.');
         } finally {
             fractionalSearchAbortController = null;
         }
@@ -5298,7 +5298,7 @@
             if (!parsed || typeof parsed !== 'object') return null;
             return parsed;
         } catch (error) {
-            console.warn('NÃ£o foi possÃ­vel recuperar o rascunho importado da NF-e.', error);
+            console.warn('Não foi possível recuperar o rascunho importado da NF-e.', error);
             return null;
         }
     };
@@ -5324,16 +5324,16 @@
         if (pageDescription) {
             const descriptor = [];
             if (draft.nfe?.number) descriptor.push(`NF-e ${draft.nfe.number}`);
-            if (draft.nfe?.serie) descriptor.push(`SÃ©rie ${draft.nfe.serie}`);
+            if (draft.nfe?.serie) descriptor.push(`Série ${draft.nfe.serie}`);
             if (supplier.name) descriptor.push(supplier.name);
-            const suffix = descriptor.length ? ` (${descriptor.join(' Â· ')})` : '';
+            const suffix = descriptor.length ? ` (${descriptor.join(' · ')})` : '';
             pageDescription.textContent = `Revise os dados preenchidos automaticamente a partir do XML autorizado${suffix}.`;
         }
 
         if (skuInput) {
             skuInput.disabled = true;
             skuInput.classList.add('bg-gray-100', 'cursor-not-allowed');
-            skuInput.placeholder = 'Gerado automaticamente apÃ³s salvar';
+            skuInput.placeholder = 'Gerado automaticamente após salvar';
             skuInput.value = '';
         }
 
@@ -5364,7 +5364,7 @@
             const fiscalInfo = [];
             if (item.cfop) fiscalInfo.push(`CFOP ${item.cfop}`);
             if (item.ncm) fiscalInfo.push(`NCM ${item.ncm}`);
-            if (fiscalInfo.length) lines.push(fiscalInfo.join(' Â· '));
+            if (fiscalInfo.length) lines.push(fiscalInfo.join(' · '));
             if (draft.accessKey) lines.push(`Origem: XML NF-e ${draft.accessKey}`);
             detailedDescriptionInput.value = lines.join('\n');
         }
@@ -5482,7 +5482,7 @@
         return true;
     };
 
-    // --- FUNÃ‡Ã•ES DE LÃ“GICA ---
+    // --- FUNCOES DE LOGICA ---
     const renderCategoryTags = (categories) => {
         categoryTagsContainer.innerHTML = '';
         if (categories.length === 0) {
@@ -5633,7 +5633,7 @@
         currentImages = [];
         hideImageOrderStatus();
         if (existingImagesGrid) {
-            existingImagesGrid.innerHTML = '<p class="text-sm text-gray-500">Nenhuma imagem cadastrada atÃ© o momento.</p>';
+            existingImagesGrid.innerHTML = '<p class="text-sm text-gray-500">Nenhuma imagem cadastrada até o momento.</p>';
         }
 
         if (fractionChildCreateUnitSelect) {
@@ -5678,7 +5678,7 @@
         params.set(identifierType, identifierValue);
         const response = await fetch(`${API_CONFIG.BASE_URL}/products/check-unique?${params.toString()}`);
         if (!response.ok) {
-            throw new Error('NÃ£o foi possÃ­vel verificar o produto informado.');
+            throw new Error('Não foi possível verificar o produto informado.');
         }
         const payload = await response.json();
         if (!payload?.exists || !payload?.product) {
@@ -5689,11 +5689,11 @@
 
     const loadProductForEditing = async (targetProductId) => {
         if (!targetProductId) {
-            throw new Error('Produto nÃ£o informado.');
+            throw new Error('Produto não informado.');
         }
         const productResponse = await fetch(`${API_CONFIG.BASE_URL}/products/${targetProductId}`);
         if (!productResponse.ok) {
-            throw new Error('NÃ£o foi possÃ­vel carregar o produto selecionado.');
+            throw new Error('Não foi possível carregar o produto selecionado.');
         }
         const productPayload = await productResponse.json();
         populateForm(productPayload);
@@ -5714,7 +5714,7 @@
             if (!productSummary) {
                 if (identifierType === 'cod') {
                     if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
-                        window.showToast('Produto nÃ£o foi encontrado.', 'warning', 4000);
+                        window.showToast('Produto não foi encontrado.', 'warning', 4000);
                     }
                     if (inputRef) {
                         inputRef.value = '';
@@ -5731,10 +5731,10 @@
             }
 
             await showModal({
-                title: 'Produto jÃ¡ cadastrado',
-                message: `O produto "${productSummary.nome}" jÃ¡ estÃ¡ cadastrado. Deseja visualizÃ¡-lo?`,
+                title: 'Produto já cadastrado',
+                message: `O produto "${productSummary.nome}" já está cadastrado. Deseja visualizá-lo?`,
                 confirmText: 'Sim',
-                cancelText: 'NÃ£o',
+                cancelText: 'Não',
                 onConfirm: async () => {
                     productId = productSummary._id;
                     isEditMode = true;
@@ -5743,7 +5743,7 @@
                         await loadProductForEditing(productId);
                     } catch (error) {
                         console.error('Falha ao carregar produto existente:', error);
-                        showModal({ title: 'Erro', message: error.message || 'NÃ£o foi possÃ­vel carregar o produto selecionado.', confirmText: 'Entendi' });
+                        showModal({ title: 'Erro', message: error.message || 'Não foi possível carregar o produto selecionado.', confirmText: 'Entendi' });
                     }
                 },
                 onCancel: () => {
@@ -5754,7 +5754,7 @@
             });
         } catch (error) {
             console.error('Erro ao verificar duplicidade de produto:', error);
-            showModal({ title: 'Erro', message: error.message || 'NÃ£o foi possÃ­vel verificar o produto informado.', confirmText: 'Entendi' });
+            showModal({ title: 'Erro', message: error.message || 'Não foi possível verificar o produto informado.', confirmText: 'Entendi' });
         } finally {
             duplicateCheckInProgress = false;
         }
@@ -5778,7 +5778,7 @@
                 currentUrl.searchParams.set('id', productId);
                 window.history.replaceState({}, '', currentUrl.toString());
             } catch (error) {
-                console.warn('NÃ£o foi possÃ­vel registrar o produto atual na URL.', error);
+                console.warn('Não foi possível registrar o produto atual na URL.', error);
             }
         }
         resetPriceHistoryState(productId, { preserveUserState: true });
@@ -5856,7 +5856,7 @@
             Object.entries(product.fiscalPorEmpresa).forEach(([storeId, fiscalData]) => {
                 fiscalByCompany.set(storeId, cloneFiscalObject(fiscalData || {}));
                 if (!storeNameMap.has(storeId)) {
-                    storeNameMap.set(storeId, `Empresa nÃ£o encontrada (${storeId})`);
+                    storeNameMap.set(storeId, `Empresa não encontrada (${storeId})`);
                 }
             });
         }
@@ -5948,7 +5948,7 @@
         renderDepositStockRows();
         updateFractionalSummary();
 
-        // --- EspecificaÃ§Ãµes ---
+        // --- Especificações ---
         const espec = product.especificacoes || {};
         // Idade
         document.querySelectorAll('input[name="spec-idade"]').forEach(cb => {
@@ -5964,14 +5964,14 @@
         document.querySelectorAll('input[name="spec-castracao"]').forEach(cb => {
             cb.checked = cb.value === (espec.castracao || '');
         });
-        // Porte RaÃ§a
+        // Porte Raça
         document.querySelectorAll('input[name="spec-porte"]').forEach(cb => {
             cb.checked = Array.isArray(espec.porteRaca) ? espec.porteRaca.includes(cb.value) : false;
         });
-        // ApresentaÃ§Ã£o
+        // Apresentação
         const apInput = document.getElementById('spec-apresentacao');
         if (apInput) apInput.value = espec.apresentacao || '';
-        // CÃ³digo de barras (somente visual)
+        // Código de barras (somente visual)
         const eanInput = document.getElementById('spec-codbarras');
         if (eanInput) eanInput.value = product.codbarras || '';
 
@@ -6026,7 +6026,7 @@
             const storesRes = responses[index++];
 
             if (isEditMode && productId && productResponse?.status === 404) {
-                console.warn('Produto nÃ£o encontrado. A pÃ¡gina serÃ¡ aberta para cadastro de um novo item.');
+                console.warn('Produto não encontrado. A página será aberta para cadastro de um novo item.');
                 isEditMode = false;
                 productId = null;
                 productResponse = null;
@@ -6040,7 +6040,7 @@
                 (isEditMode && productId && !productResponse?.ok);
 
             if (hasErrored) {
-                throw new Error('Falha ao carregar os dados iniciais da pÃ¡gina.');
+                throw new Error('Falha ao carregar os dados iniciais da página.');
             }
 
             allHierarchicalCategories = await hierarchicalRes.json();
@@ -6071,7 +6071,7 @@
             populateCategoryTree(allHierarchicalCategories, productCategories);
 
         } catch (error) {
-            console.error('Erro ao inicializar a pÃ¡gina:', error);
+            console.error('Erro ao inicializar a página:', error);
             showModal({ title: 'Erro', message: error.message, confirmText: 'Voltar', onConfirm: () => window.location.href = 'admin-produtos.html' });
         }
 
@@ -6083,7 +6083,7 @@
         const selectedKey = fiscalCompanySelect.value || FISCAL_GENERAL_KEY;
         activeFiscalCompanyKey = isKnownCompanyKey(selectedKey) ? selectedKey : FISCAL_GENERAL_KEY;
         if (!storeNameMap.has(activeFiscalCompanyKey) && activeFiscalCompanyKey !== FISCAL_GENERAL_KEY) {
-            storeNameMap.set(activeFiscalCompanyKey, `Empresa nÃ£o encontrada (${activeFiscalCompanyKey})`);
+            storeNameMap.set(activeFiscalCompanyKey, `Empresa não encontrada (${activeFiscalCompanyKey})`);
         }
         const nextFiscalData = fiscalByCompany.get(activeFiscalCompanyKey) || getDefaultFiscalSnapshot();
         populateFiscalFields(nextFiscalData);
@@ -6158,7 +6158,7 @@
             return;
         }
         if (!tipoCalculo) {
-            alert('Selecione o tipo de cÃ¡lculo.');
+            alert('Selecione o tipo de cálculo.');
             return;
         }
 
@@ -6166,7 +6166,7 @@
         if (valorCalculoRaw) {
             const parsed = Number(valorCalculoRaw);
             if (!Number.isFinite(parsed)) {
-                alert('Informe um valor de cÃ¡lculo vÃ¡lido.');
+                alert('Informe um valor de cálculo válido.');
                 return;
             }
             valorCalculo = parsed;
@@ -6362,7 +6362,7 @@
             currentUrl.searchParams.delete('id');
             window.history.replaceState({}, '', currentUrl.toString());
         } catch (urlError) {
-            console.warn('NÃ£o foi possÃ­vel atualizar a URL ao limpar o formulÃ¡rio.', urlError);
+            console.warn('Não foi possível atualizar a URL ao limpar o formulário.', urlError);
         }
     });
 
@@ -6401,8 +6401,8 @@
     const handleDeleteProduct = () => {
         if (!productId) {
             showModal({
-                title: 'Produto nÃ£o selecionado',
-                message: 'Selecione um produto antes de tentar excluÃ­-lo.',
+                title: 'Produto não selecionado',
+                message: 'Selecione um produto antes de tentar excluí-lo.',
                 confirmText: 'Entendi'
             });
             return;
@@ -6410,7 +6410,7 @@
 
         showModal({
             title: 'Excluir produto',
-            message: 'Tem certeza de que deseja excluir este produto? A exclusÃ£o Ã© definitiva e sÃ³ serÃ¡ concluÃ­da caso nÃ£o existam vendas vinculadas.',
+            message: 'Tem certeza de que deseja excluir este produto? A exclusão é definitiva e só será concluída caso não existam vendas vinculadas.',
             confirmText: 'Excluir',
             cancelText: 'Cancelar',
             onConfirm: async () => {
@@ -6421,15 +6421,15 @@
                     try {
                         loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
                     } catch (storageError) {
-                        console.warn('NÃ£o foi possÃ­vel ler os dados do usuÃ¡rio logado.', storageError);
+                        console.warn('Não foi possível ler os dados do usuário logado.', storageError);
                     }
 
                     const token = loggedInUser?.token;
                     if (!token) {
                         setDeleteButtonIdleState();
                         showModal({
-                            title: 'SessÃ£o expirada',
-                            message: 'FaÃ§a login novamente para excluir produtos.',
+                            title: 'Sessão expirada',
+                            message: 'Faça login novamente para excluir produtos.',
                             confirmText: 'Ir para login',
                             onConfirm: () => {
                                 window.location.href = '/pages/login.html';
@@ -6456,8 +6456,8 @@
                     if (response.status === 401 || response.status === 403) {
                         setDeleteButtonIdleState();
                         showModal({
-                            title: 'SessÃ£o expirada',
-                            message: payload?.message || 'FaÃ§a login novamente para continuar.',
+                            title: 'Sessão expirada',
+                            message: payload?.message || 'Faça login novamente para continuar.',
                             confirmText: 'Ir para login',
                             onConfirm: () => {
                                 window.location.href = '/pages/login.html';
@@ -6469,8 +6469,8 @@
                     if (response.status === 409) {
                         setDeleteButtonIdleState();
                         showModal({
-                            title: 'NÃ£o foi possÃ­vel excluir',
-                            message: payload?.message || 'Este produto estÃ¡ vinculado a vendas e nÃ£o pode ser removido.',
+                            title: 'Não foi possível excluir',
+                            message: payload?.message || 'Este produto está vinculado a vendas e não pode ser removido.',
                             confirmText: 'Entendi'
                         });
                         return;
@@ -6495,11 +6495,11 @@
                         currentUrl.searchParams.delete('id');
                         window.history.replaceState({}, '', currentUrl.toString());
                     } catch (urlError) {
-                        console.warn('NÃ£o foi possÃ­vel atualizar a URL apÃ³s excluir o produto.', urlError);
+                        console.warn('Não foi possível atualizar a URL após excluir o produto.', urlError);
                     }
 
                     showModal({
-                        title: 'Produto excluÃ­do',
+                        title: 'Produto excluído',
                         message: successMessage,
                         confirmText: 'OK'
                     });
@@ -6509,8 +6509,8 @@
                     showModal({
                         title: 'Erro',
                         message: error?.message
-                            ? `NÃ£o foi possÃ­vel excluir o produto: ${error.message}`
-                            : 'NÃ£o foi possÃ­vel excluir o produto.',
+                            ? `Não foi possível excluir o produto: ${error.message}`
+                            : 'Não foi possível excluir o produto.',
                         confirmText: 'Entendi'
                     });
                 } finally {
@@ -6572,7 +6572,7 @@
         const { productName, updateData, fractionalErrors } = buildProductUpdatePayload();
         if (!productName) {
             showModal({
-                title: 'Dados obrigatÃ³rios',
+                title: 'Dados obrigatórios',
                 message: 'Informe o nome do produto antes de salvar.',
                 confirmText: 'Entendi',
             });
@@ -6593,7 +6593,7 @@
         if (!updateData) {
             showModal({
                 title: 'Erro',
-                message: 'NÃ£o foi possÃ­vel coletar os dados do produto para salvar. Tente novamente.',
+                message: 'Não foi possível coletar os dados do produto para salvar. Tente novamente.',
                 confirmText: 'Ok'
             });
             submitButton.disabled = false;
@@ -6677,7 +6677,7 @@
                             populateForm(updatedProduct);
                         }
                     } catch (e) {
-                        console.warn('NÃ£o foi possÃ­vel recarregar o produto apÃ³s salvar.', e);
+                        console.warn('Não foi possível recarregar o produto após salvar.', e);
                     }
                 }
 
@@ -6701,7 +6701,7 @@
                                 populateForm(createdProduct);
                             }
                         } catch (e) {
-                            console.warn('NÃ£o foi possÃ­vel carregar o produto recÃ©m-criado.', e);
+                            console.warn('Não foi possível carregar o produto recém-criado.', e);
                         }
 
                         try {
@@ -6709,7 +6709,7 @@
                             currentUrl.searchParams.set('id', productId);
                             window.history.replaceState({}, '', currentUrl.toString());
                         } catch (urlError) {
-                            console.warn('NÃ£o foi possÃ­vel atualizar a URL apÃ³s o cadastro do produto.', urlError);
+                            console.warn('Não foi possível atualizar a URL após o cadastro do produto.', urlError);
                         }
                     }
                 } else {
@@ -6722,13 +6722,13 @@
                         sessionStorage.removeItem(PRODUCT_DRAFT_STORAGE_KEY);
                     }
                 } catch (storageError) {
-                    console.warn('NÃ£o foi possÃ­vel limpar o rascunho importado da NF-e.', storageError);
+                    console.warn('Não foi possível limpar o rascunho importado da NF-e.', storageError);
                 }
                 pendingImportedProductDraft = null;
             }
 
         } catch (error) {
-            const baseMessage = isEditMode ? 'NÃ£o foi possÃ­vel salvar' : 'NÃ£o foi possÃ­vel cadastrar';
+            const baseMessage = isEditMode ? 'Não foi possível salvar' : 'Não foi possível cadastrar';
             showModal({ title: 'Erro', message: `${baseMessage}: ${error.message}`, confirmText: 'Tentar Novamente' });
         } finally {
             submitButton.disabled = false;
@@ -6745,8 +6745,8 @@
                 const imageUrlToDelete = deleteButton.dataset.imageUrl;
 
                 showModal({
-                    title: 'Confirmar ExclusÃ£o',
-                    message: 'Tem certeza de que deseja apagar esta imagem? Esta aÃ§Ã£o nÃ£o pode ser desfeita.',
+                    title: 'Confirmar Exclusão',
+                    message: 'Tem certeza de que deseja apagar esta imagem? Esta ação não pode ser desfeita.',
                     confirmText: 'Apagar',
                     cancelText: 'Cancelar',
                     onConfirm: async () => {
@@ -6754,7 +6754,7 @@
                             const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser') || 'null');
                             const token = loggedInUser?.token;
                             if (!token) {
-                                throw new Error('SessÃ£o expirada. FaÃ§a login novamente.');
+                                throw new Error('Sessão expirada. Faça login novamente.');
                             }
 
                             const response = await fetch(`${API_CONFIG.BASE_URL}/products/${productId}/images`, {
@@ -6779,7 +6779,7 @@
                             }
                             renderExistingImages();
                         } catch (error) {
-                            showModal({ title: 'Erro', message: `NÃ£o foi possÃ­vel excluir a imagem: ${error.message}`, confirmText: 'OK' });
+                            showModal({ title: 'Erro', message: `Não foi possível excluir a imagem: ${error.message}`, confirmText: 'OK' });
                         }
                     }
                 });

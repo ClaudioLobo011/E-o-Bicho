@@ -72,8 +72,33 @@
               <table class="min-w-full divide-y divide-gray-200 text-sm">
                 <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-600">
                   <tr>
-                    <th scope="col" class="px-4 py-3 text-left">Tela</th>
-                    <th scope="col" class="px-4 py-3 text-right">Acoes</th>
+                    <th scope="col" class="px-4 py-3 text-left">
+                      <div class="space-y-2">
+                        <div class="flex items-center gap-2">
+                          <span>Tela</span>
+                          <div class="inline-flex items-center gap-1">
+                            <button type="button" id="security-screen-sort-asc" class="flex h-4 w-4 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" aria-label="Ordenar crescente">
+                              <i class="fas fa-sort-up text-[9px]"></i>
+                            </button>
+                            <button type="button" id="security-screen-sort-desc" class="flex h-4 w-4 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" aria-label="Ordenar decrescente">
+                              <i class="fas fa-sort-down text-[9px]"></i>
+                            </button>
+                          </div>
+                        </div>
+                        <div class="relative max-w-xs normal-case tracking-normal">
+                          <span class="pointer-events-none absolute inset-y-0 left-2 flex items-center text-gray-400">
+                            <i class="fas fa-search text-[11px]"></i>
+                          </span>
+                          <input type="text" id="security-screen-filter" placeholder="Filtrar (* como coringa)" class="w-full rounded border border-gray-200 bg-white pl-8 pr-2 py-1 text-[11px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
+                        </div>
+                      </div>
+                    </th>
+                    <th scope="col" class="px-4 py-3 text-right">
+                      <div class="flex flex-col items-end gap-2">
+                        <span>Acoes</span>
+                        <div id="security-bulk-actions" class="flex flex-wrap items-center justify-end gap-2 text-[10px] normal-case tracking-normal"></div>
+                      </div>
+                    </th>
                   </tr>
                 </thead>
                 <tbody id="security-screens-body" class="divide-y divide-gray-100 bg-white"></tbody>

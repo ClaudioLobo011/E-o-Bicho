@@ -692,6 +692,13 @@ function rulesAreStale(activeCompanyId) {
 }
 
 async function fetchScreenRules({ force = false, retryOnForbidden = true } = {}) {
+  if (isAdminMasterBypassActive()) {
+    screenRulesCache = {};
+    screenRulesFetchedAt = Date.now();
+    screenRulesStoreId = '';
+    return screenRulesCache;
+  }
+
   const token = getToken();
   if (!token) {
     screenRulesCache = {};
@@ -784,6 +791,12 @@ function normalizeHref(href) {
 function buildScreenKey(href, label) {
   const normalized = href && href !== '#' ? normalizeHref(href) : '';
   return normalized || `label:${label || ''}`;
+}
+
+function isAdminMasterBypassActive() {
+  const cachedRole = JSON.parse(localStorage.getItem('loggedInUser') || 'null')?.role || '';
+  const originalRole = currentOriginalRole || cachedRole;
+  return originalRole === 'admin_master' && isStoredAdminMasterModeActive();
 }
 
 function shouldBlockScreen(rule) {
@@ -966,7 +979,63 @@ async function requestPassword() {
   });
 }
 
+function hasVisibleScreenLinks(root) {
+  if (!root) return false;
+  const links = root.querySelectorAll('a[href]');
+  return Array.from(links).some((link) => !link.classList.contains('hidden'));
+}
+
+function refreshSidebarGroupVisibility(panel) {
+  if (!panel) return;
+  const groups = Array.from(panel.querySelectorAll('div')).filter((group) => {
+    const button = group.querySelector(':scope > [data-accordion-button]');
+    const content = group.querySelector(':scope > [data-accordion-content]');
+    return Boolean(button && content);
+  });
+
+  groups
+    .sort((a, b) => b.querySelectorAll('div').length - a.querySelectorAll('div').length)
+    .forEach((group) => {
+      const content = group.querySelector(':scope > [data-accordion-content]');
+      if (!content) return;
+      const hasVisibleLinks = hasVisibleScreenLinks(content);
+      if (hasVisibleLinks) {
+        if (group.dataset.securityHidden === '1') {
+          group.classList.remove('hidden');
+          delete group.dataset.securityHidden;
+        }
+      } else {
+        group.classList.add('hidden');
+        group.dataset.securityHidden = '1';
+        if (!content.classList.contains('hidden')) {
+          content.classList.add('hidden');
+        }
+      }
+    });
+}
+
 function applyMenuRestrictions() {
+  if (isAdminMasterBypassActive()) {
+    const placeholder = document.getElementById('admin-sidebar-placeholder');
+    if (!placeholder) return false;
+
+    const panel = placeholder.querySelector('[data-admin-sidebar-panel]');
+    if (!panel) return false;
+
+    const links = panel.querySelectorAll('nav a[href]');
+    links.forEach((link) => {
+      link.classList.remove('hidden');
+      link.removeAttribute('aria-hidden');
+    });
+
+    panel.querySelectorAll('[data-security-hidden="1"]').forEach((group) => {
+      group.classList.remove('hidden');
+      delete group.dataset.securityHidden;
+    });
+
+    return true;
+  }
+
   const rules = screenRulesCache || {};
   const placeholder = document.getElementById('admin-sidebar-placeholder');
   if (!placeholder) return false;
@@ -990,6 +1059,8 @@ function applyMenuRestrictions() {
     }
   });
 
+  refreshSidebarGroupVisibility(panel);
+
   return true;
 }
 
@@ -999,6 +1070,8 @@ function bindMenuProtection() {
 
   placeholder.dataset.securityBound = 'true';
   placeholder.addEventListener('click', async (event) => {
+    if (isAdminMasterBypassActive()) return;
+
     const link = event.target.closest('a[href]');
     if (!link) return;
     const href = link.getAttribute('href') || '';
@@ -1040,6 +1113,8 @@ async function refreshMenuSecurity({ force = false } = {}) {
 }
 
 async function enforceCurrentScreen() {
+  if (isAdminMasterBypassActive()) return;
+
   await ensureScreenRules({ force: rulesAreStale() });
   const rules = screenRulesCache || {};
   if (!rules || !Object.keys(rules).length) return;

@@ -43,7 +43,7 @@
     cancelEdit: '#pdv-cancel-edit',
     resetForm: '#pdv-reset-form',
     submitLabel: '#pdv-submit-label',
-    submitButton: '#pdv-form button[type="submit"]',
+    submitButton: '#pdv-submit-button, #pdv-form button[type="submit"]',
     companySummary: '#pdv-company-summary',
     pdvList: '#pdv-list',
     pdvCount: '#pdv-count',

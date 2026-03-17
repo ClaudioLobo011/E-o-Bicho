@@ -1138,14 +1138,24 @@
   <div id="nfe-fixed-actions-bar" class="z-40 border-t border-gray-200 bg-white/95 backdrop-blur-sm" style="position: fixed; left: 0; right: 0; bottom: 0;">
     <div class="container mx-auto px-4 py-3">
       <div class="flex flex-col-reverse gap-3 md:flex-row md:items-center md:justify-between">
-        <button
-          type="button"
-          data-delete-entry
-          class="inline-flex items-center gap-2 self-start rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 hidden"
-        >
-          <i class="fas fa-trash" data-delete-entry-icon></i>
-          <span data-delete-entry-text>Excluir nota</span>
-        </button>
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            data-delete-entry
+            class="inline-flex items-center gap-2 self-start rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 hidden"
+          >
+            <i class="fas fa-trash" data-delete-entry-icon></i>
+            <span data-delete-entry-text>Excluir nota</span>
+          </button>
+          <button
+            type="button"
+            data-print-receipt
+            class="inline-flex items-center gap-2 self-start rounded-lg border border-primary/40 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/10 hidden"
+          >
+            <i class="fas fa-print" data-print-receipt-icon></i>
+            <span data-print-receipt-text>Imprimir Recibo</span>
+          </button>
+        </div>
 
         <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-end">
           <button type="button" data-save-draft class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
@@ -3391,12 +3401,15 @@
         const complementaryInfoInput = document.getElementById('informacoes-complementares');
         const clearImportButton = document.querySelector('[data-clear-import]');
         const deleteEntryButton = document.querySelector('[data-delete-entry]');
+        const printReceiptButton = document.querySelector('[data-print-receipt]');
         const saveDraftButton = document.querySelector('[data-save-draft]');
         const registerEntryButton = document.querySelector('[data-register-entry]');
         const registerEntryIcon = registerEntryButton?.querySelector('[data-register-entry-icon]') || null;
         const registerEntryText = registerEntryButton?.querySelector('[data-register-entry-text]') || null;
         const deleteEntryIcon = deleteEntryButton?.querySelector('[data-delete-entry-icon]') || null;
         const deleteEntryText = deleteEntryButton?.querySelector('[data-delete-entry-text]') || null;
+        const printReceiptIcon = printReceiptButton?.querySelector('[data-print-receipt-icon]') || null;
+        const printReceiptText = printReceiptButton?.querySelector('[data-print-receipt-text]') || null;
         const priceAdjustmentButton = document.querySelector('[data-open-price-modal]');
         const priceModal = document.getElementById('price-adjust-modal');
         const priceModalCard = priceModal?.querySelector('[data-price-modal-card]') || null;
@@ -3610,9 +3623,11 @@
         let isApprovingDraft = false;
         let isStockMovementFinalizing = false;
         let isDeletingDraft = false;
+        let isPrintingReceipt = false;
         let isFormLocked = false;
         let updateStatusBadgeDisplay = () => {};
         let updateDeleteButtonState = () => {};
+        let updatePrintReceiptButtonState = () => {};
         const PRODUCT_DRAFT_STORAGE_KEY = 'nfeImportProductDraft';
         const productLookupCache = new Map();
         const productLookupPromises = new Map();
@@ -8404,6 +8419,8 @@
         const defaultRegisterText = registerEntryText ? registerEntryText.textContent || '' : '';
         const defaultDeleteIconClass = deleteEntryIcon ? deleteEntryIcon.className : '';
         const defaultDeleteText = deleteEntryText ? deleteEntryText.textContent || '' : '';
+        const defaultPrintReceiptIconClass = printReceiptIcon ? printReceiptIcon.className : '';
+        const defaultPrintReceiptText = printReceiptText ? printReceiptText.textContent || '' : '';
 
         const setApproveButtonState = (isProcessing) => {
           if (!registerEntryButton) return;
@@ -8439,6 +8456,22 @@
             deleteEntryText.textContent = isProcessing
               ? 'Excluindo...'
               : idleLabel;
+          }
+        };
+
+        const setPrintReceiptButtonState = (isProcessing) => {
+          if (!printReceiptButton) return;
+          const shouldDisable = Boolean(isProcessing);
+          printReceiptButton.disabled = shouldDisable;
+          printReceiptButton.classList.toggle('opacity-60', shouldDisable);
+          printReceiptButton.classList.toggle('cursor-wait', Boolean(isProcessing));
+          if (printReceiptIcon) {
+            printReceiptIcon.className = isProcessing ? 'fas fa-circle-notch fa-spin' : defaultPrintReceiptIconClass;
+          }
+          if (printReceiptText) {
+            printReceiptText.textContent = isProcessing
+              ? 'Gerando recibo...'
+              : (defaultPrintReceiptText || 'Imprimir Recibo');
           }
         };
 
@@ -8498,6 +8531,7 @@
           if (button.hasAttribute('data-admin-sidebar-trigger')) return true;
           if (button.hasAttribute('data-admin-sidebar-close')) return true;
           if (button.hasAttribute('data-delete-entry')) return true;
+          if (button.hasAttribute('data-print-receipt')) return true;
           if (button.hasAttribute('data-open-price-modal')) return true;
           if (button.hasAttribute('data-clear-import')) return true;
           if (button.closest('#price-adjust-modal')) return true;
@@ -8587,6 +8621,7 @@
           updateStatusBadgeDisplay(normalized);
           setFormLockState(normalized === 'approved');
           updateDeleteButtonState(normalized);
+          updatePrintReceiptButtonState();
           return normalized;
         };
 
@@ -9064,6 +9099,768 @@
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
 
+        const getSelectLabel = (selectElement) => {
+          if (!selectElement || !selectElement.options || !selectElement.options.length) return '';
+          const selected = selectElement.options[selectElement.selectedIndex];
+          if (!selected) return '';
+          return String(selected.textContent || '').trim();
+        };
+
+        const pickFirstFilledValue = (...values) => {
+          for (const value of values) {
+            if (value === null || typeof value === 'undefined') continue;
+            const normalized = String(value).trim();
+            if (normalized) return normalized;
+          }
+          return '';
+        };
+
+        const toDanfeDateTime = (value) => {
+          if (!value) return '';
+          const raw = String(value);
+          const date = new Date(raw.includes('T') ? raw : `${raw}T00:00:00`);
+          if (Number.isNaN(date.getTime())) return '';
+          const pad = (num) => String(num).padStart(2, '0');
+          return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+            date.getHours()
+          )}:${pad(date.getMinutes())}:${pad(date.getSeconds())}-03:00`;
+        };
+
+        const formatDateTimeForDanfe = (value) => {
+          if (!value) return '';
+          const date = new Date(value);
+          if (Number.isNaN(date.getTime())) return String(value || '');
+          const pad = (num) => String(num).padStart(2, '0');
+          return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(
+            date.getHours()
+          )}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+        };
+
+        const formatDanfeChave = (value) => {
+          const digits = digitsOnly(value);
+          if (!digits) return '';
+          return digits.replace(/(.{4})/g, '$1 ').trim();
+        };
+
+        const buildReceiptAccessKey = (data) => {
+          const fromInput = digitsOnly(data?.accessKey || '');
+          if (fromInput.length >= 44) return fromInput.slice(0, 44);
+          const companyDigits = digitsOnly(data?.companyDocument || '').padStart(14, '0').slice(-14);
+          const numberDigits = digitsOnly(data?.number || '').padStart(9, '0').slice(-9);
+          const seriesDigits = digitsOnly(data?.series || '1').padStart(3, '0').slice(-3);
+          const issueRaw = String(data?.issueDateInput || '').replace(/\D/g, '');
+          const issuePart = issueRaw.length >= 6 ? issueRaw.slice(2, 6) : '0000';
+          const randomPart = String(Number(data?.draftCodeRaw || 0) || Date.now()).replace(/\D/g, '').slice(-8).padStart(8, '0');
+          const base43 = `35${issuePart}${companyDigits}550${seriesDigits}${numberDigits}100${randomPart}`.slice(0, 43).padEnd(43, '0');
+          let sum = 0;
+          let weight = 2;
+          for (let index = base43.length - 1; index >= 0; index -= 1) {
+            sum += Number(base43[index]) * weight;
+            weight = weight === 9 ? 2 : weight + 1;
+          }
+          const remainder = sum % 11;
+          const checkDigit = remainder === 0 || remainder === 1 ? 0 : 11 - remainder;
+          return `${base43}${checkDigit}`;
+        };
+
+        const resolveCompanyPrintInfo = (payload) => {
+          const companyId = String(
+            payload?.company?.id ||
+            payload?.selection?.companyId ||
+            companySelect?.value ||
+            ''
+          ).trim();
+          const option =
+            companySelect && companySelect.selectedOptions && companySelect.selectedOptions.length
+              ? companySelect.selectedOptions[0]
+              : null;
+          const company = companyId ? companyRegistry.index.get(companyId) || null : null;
+          const documentDigits = digitsOnly(
+            company?.cnpj ||
+            company?.documento ||
+            company?.document ||
+            company?.cpfCnpj ||
+            company?.taxId ||
+            option?.dataset?.companyDocument ||
+            ''
+          );
+          const addressObj = company?.address && typeof company.address === 'object'
+            ? company.address
+            : company?.endereco && typeof company.endereco === 'object'
+            ? company.endereco
+            : {};
+          return {
+            name:
+              pickFirstFilledValue(
+                company?.razaoSocial,
+                company?.nomeFantasia,
+                company?.nome,
+                option?.textContent
+              ) || getSelectLabel(companySelect),
+            document: documentDigits,
+            ie: pickFirstFilledValue(company?.inscricaoEstadual, company?.ie),
+            addressLine:
+              formatAddressLine({
+                street: pickFirstFilledValue(addressObj.street, addressObj.logradouro),
+                number: pickFirstFilledValue(addressObj.number, addressObj.numero),
+                complement: pickFirstFilledValue(addressObj.complement, addressObj.complemento),
+                neighborhood: pickFirstFilledValue(addressObj.neighborhood, addressObj.bairro),
+                city: pickFirstFilledValue(addressObj.city, addressObj.cidade),
+                state: pickFirstFilledValue(addressObj.state, addressObj.uf),
+                cep: pickFirstFilledValue(addressObj.cep),
+              }) || 'Endereço não informado',
+            phone: pickFirstFilledValue(company?.telefone, company?.phone),
+          };
+        };
+
+        const buildReceiptPrintData = () => {
+          const payload = buildDraftPayloadFromForm();
+          const company = resolveCompanyPrintInfo(payload);
+          const supplierName = payload?.supplier?.name || getSelectLabel(supplierSelect) || '';
+          const supplierDocument = payload?.supplier?.document || supplierCnpjInput?.value || '';
+          const supplierIe = payload?.supplier?.stateRegistration || supplierIeInput?.value || '';
+          const issueDateInputValue = payload?.header?.issueDate || issueDateInput?.value || '';
+          const entryDateInputValue = payload?.header?.entryDate || entryDateInput?.value || '';
+          const issueDate = formatDateForDisplay(issueDateInputValue) || '—';
+          const entryDate = formatDateForDisplay(entryDateInputValue) || '—';
+          const number = payload?.header?.number || nfeNumberInput?.value || '';
+          const series = payload?.header?.serie || nfeSeriesInput?.value || '';
+          const draftCodeLabel = currentDraftCode ? formatDraftCode(currentDraftCode) : '';
+          const accessKey = payload?.xml?.accessKey || accessKeyInput?.value || '';
+
+          const items = (Array.isArray(payload?.items) ? payload.items : []).map((item, index) => {
+            const quantity = toNumeric(item?.quantity);
+            const unitPrice = toNumeric(item?.unitPrice ?? item?.unitCostWithTaxes ?? item?.valor ?? item?.value);
+            const totalValue = toNumeric(item?.total ?? item?.totalWithTaxes ?? item?.netProductValue);
+            const normalizedQuantity = Number.isFinite(quantity) ? quantity : 0;
+            const normalizedUnitPrice = Number.isFinite(unitPrice) ? unitPrice : 0;
+            const normalizedTotal = Number.isFinite(totalValue)
+              ? totalValue
+              : normalizedQuantity * normalizedUnitPrice;
+            return {
+              index: index + 1,
+              code: item?.code || item?.internalCode || item?.barcode || item?.sku || '',
+              description: item?.description || item?.name || item?.productName || item?.xProd || `Item ${index + 1}`,
+              quantity: normalizedQuantity,
+              unitPrice: normalizedUnitPrice,
+              total: normalizedTotal,
+              cfop: item?.cfop || '',
+            };
+          });
+
+          const itemsTotal = items.reduce((sum, item) => sum + (Number.isFinite(item.total) ? item.total : 0), 0);
+          const payloadTotal = toNumeric(payload?.totals?.totalValue);
+          const totalValue = Number.isFinite(payloadTotal) ? payloadTotal : itemsTotal;
+
+          return {
+            companyName: company.name,
+            companyDocument: company.document,
+            companyIe: company.ie,
+            companyAddressLine: company.addressLine,
+            companyPhone: company.phone,
+            supplierName,
+            supplierDocument,
+            supplierIe,
+            supplierAddressLine: payload?.supplier?.addressText || supplierAddressInput?.value || 'Endereço não informado',
+            issueDate,
+            issueDateInput: issueDateInputValue,
+            entryDate,
+            entryDateInput: entryDateInputValue,
+            number,
+            series,
+            draftCodeLabel,
+            draftCodeRaw: currentDraftCode || '',
+            accessKey,
+            items,
+            totalValue,
+          };
+        };
+
+        const escapeXml = (value) =>
+          String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&apos;');
+
+        const buildReceiptDanfeXml = (data) => {
+          const chave = buildReceiptAccessKey(data);
+          const numberValue = Number.parseInt(String(data?.number || '1').replace(/\D/g, ''), 10) || 1;
+          const serieValue = Number.parseInt(String(data?.series || '1').replace(/\D/g, ''), 10) || 1;
+          const emitCnpj = digitsOnly(data?.supplierDocument || '').padStart(14, '0').slice(-14);
+          const destCnpj = digitsOnly(data?.companyDocument || '').padStart(14, '0').slice(-14);
+          const dhEmi = toDanfeDateTime(data?.issueDateInput || data?.entryDateInput || new Date().toISOString());
+          const dhSaiEnt = toDanfeDateTime(data?.entryDateInput || data?.issueDateInput || new Date().toISOString());
+          const totalProducts = Number.isFinite(data?.totalValue) ? data.totalValue : 0;
+          const totalVolume = Array.isArray(data?.items)
+            ? data.items.reduce((sum, item) => sum + (Number.isFinite(item?.quantity) ? item.quantity : 0), 0)
+            : 0;
+
+          const itemXml = (Array.isArray(data?.items) ? data.items : [])
+            .map((item, index) => {
+              const quantity = Number.isFinite(item?.quantity) ? item.quantity : 0;
+              const unitValue = Number.isFinite(item?.unitPrice) ? item.unitPrice : 0;
+              const total = Number.isFinite(item?.total) ? item.total : quantity * unitValue;
+              const code = String(item?.code || index + 1).trim() || String(index + 1);
+              const description = String(item?.description || `Item ${index + 1}`).trim();
+              const cfop = String(item?.cfop || '1102').trim() || '1102';
+              return `
+        <det nItem="${index + 1}">
+          <prod>
+            <cProd>${escapeXml(code)}</cProd>
+            <xProd>${escapeXml(description)}</xProd>
+            <NCM>00000000</NCM>
+            <CFOP>${escapeXml(cfop)}</CFOP>
+            <uCom>UN</uCom>
+            <qCom>${quantity.toFixed(4)}</qCom>
+            <vUnCom>${unitValue.toFixed(3)}</vUnCom>
+            <vProd>${total.toFixed(2)}</vProd>
+          </prod>
+          <imposto>
+            <ICMS><ICMS00><orig>0</orig><CST>00</CST><modBC>3</modBC><vBC>0.00</vBC><pICMS>0.00</pICMS><vICMS>0.00</vICMS></ICMS00></ICMS>
+            <IPI><IPITrib><CST>99</CST><vBC>0.00</vBC><pIPI>0.00</pIPI><vIPI>0.00</vIPI></IPITrib></IPI>
+          </imposto>
+        </det>`;
+            })
+            .join('');
+
+          return `<?xml version="1.0" encoding="UTF-8"?>
+<nfeProc>
+  <NFe>
+    <infNFe Id="NFe${escapeXml(chave)}">
+      <ide>
+        <cUF>35</cUF>
+        <natOp>Entrada por Recibo</natOp>
+        <mod>55</mod>
+        <serie>${serieValue}</serie>
+        <nNF>${numberValue}</nNF>
+        <dhEmi>${escapeXml(dhEmi)}</dhEmi>
+        <dhSaiEnt>${escapeXml(dhSaiEnt)}</dhSaiEnt>
+        <tpNF>0</tpNF>
+        <tpAmb>2</tpAmb>
+      </ide>
+      <emit>
+        <xNome>${escapeXml(data?.supplierName || 'Fornecedor')}</xNome>
+        <xFant>${escapeXml(data?.supplierName || 'Fornecedor')}</xFant>
+        <CNPJ>${escapeXml(emitCnpj)}</CNPJ>
+        <IE>${escapeXml(data?.supplierIe || 'ISENTO')}</IE>
+        <enderEmit>
+          <xLgr>${escapeXml(data?.supplierAddressLine || 'Endereco nao informado')}</xLgr>
+          <nro>S/N</nro>
+          <xCpl></xCpl>
+          <xBairro></xBairro>
+          <xMun></xMun>
+          <UF>SP</UF>
+          <CEP>00000000</CEP>
+        </enderEmit>
+      </emit>
+      <dest>
+        <xNome>${escapeXml(data?.companyName || 'Loja de Entrada')}</xNome>
+        <CNPJ>${escapeXml(destCnpj)}</CNPJ>
+        <IE>${escapeXml(data?.companyIe || 'ISENTO')}</IE>
+        <fone>${escapeXml(digitsOnly(data?.companyPhone || ''))}</fone>
+        <enderDest>
+          <xLgr>${escapeXml(data?.companyAddressLine || 'Endereco nao informado')}</xLgr>
+          <nro>S/N</nro>
+          <xCpl></xCpl>
+          <xBairro></xBairro>
+          <xMun></xMun>
+          <UF>SP</UF>
+          <CEP>00000000</CEP>
+        </enderDest>
+      </dest>
+      ${itemXml}
+      <total>
+        <ICMSTot>
+          <vBC>0.00</vBC><vICMS>0.00</vICMS><vBCST>0.00</vBCST><vST>0.00</vST>
+          <vProd>${totalProducts.toFixed(2)}</vProd><vFrete>0.00</vFrete><vSeg>0.00</vSeg><vDesc>0.00</vDesc><vOutro>0.00</vOutro>
+          <vIPI>0.00</vIPI><vTotTrib>0.00</vTotTrib><vNF>${totalProducts.toFixed(2)}</vNF>
+        </ICMSTot>
+      </total>
+      <transp>
+        <modFrete>9</modFrete>
+        <transporta>
+          <xNome>NAO INFORMADO</xNome>
+          <xEnder></xEnder>
+          <xMun></xMun>
+          <UF></UF>
+        </transporta>
+        <vol><qVol>${Math.max(0, totalVolume).toFixed(0)}</qVol><esp>VOLUMES</esp><marca>RECIBO</marca><pesoB>0.000</pesoB></vol>
+      </transp>
+      <infAdic><infCpl>Documento auxiliar gerado pelo modulo Entrada de NF-e.</infCpl></infAdic>
+    </infNFe>
+  </NFe>
+</nfeProc>`;
+        };
+
+        const parseReceiptDanfeXml = (xmlText) => {
+          const parser = new DOMParser();
+          return parser.parseFromString(xmlText || '', 'text/xml');
+        };
+
+        const receiptXmlGetText = (node, selector) => {
+          if (!node) return '';
+          const target = selector ? node.querySelector(selector) : node;
+          return target?.textContent?.trim() || '';
+        };
+
+        const parseReceiptXmlNumber = (raw) => {
+          if (typeof raw === 'number') return raw;
+          const value = String(raw || '').trim();
+          if (!value) return 0;
+          const hasComma = value.includes(',');
+          const hasDot = value.includes('.');
+          let normalized = value;
+          if (hasComma && hasDot) {
+            normalized = value.replace(/\./g, '').replace(',', '.');
+          } else if (hasComma) {
+            normalized = value.replace(/\./g, '').replace(',', '.');
+          } else if (hasDot) {
+            normalized = value.replace(/,/g, '');
+          }
+          normalized = normalized.replace(/[^\d.-]/g, '');
+          const parsed = Number(normalized);
+          return Number.isFinite(parsed) ? parsed : 0;
+        };
+
+        const receiptFormatNumber = (value, decimals = 2) =>
+          parseReceiptXmlNumber(value).toFixed(decimals).replace('.', ',');
+
+        const receiptFormatDateTime = (value) => formatDateTimeForDanfe(value || '');
+
+        const buildReceiptDanfeHtml = (data) => {
+          const xmlDoc = parseReceiptDanfeXml(buildReceiptDanfeXml(data));
+          const infNFe = xmlDoc.querySelector('infNFe');
+          const ide = xmlDoc.querySelector('ide');
+          const emit = xmlDoc.querySelector('emit');
+          const dest = xmlDoc.querySelector('dest');
+          const total = xmlDoc.querySelector('total ICMSTot');
+          const prot = xmlDoc.querySelector('protNFe infProt');
+          const transp = xmlDoc.querySelector('transp');
+          const volumes = Array.from(xmlDoc.querySelectorAll('vol'));
+          const dets = Array.from(xmlDoc.querySelectorAll('det'));
+
+          const chave = (infNFe?.getAttribute('Id') || '').replace(/^NFe/, '');
+          const chaveFormatada = formatDanfeChave(chave);
+          const numero = receiptXmlGetText(ide, 'nNF');
+          const serie = receiptXmlGetText(ide, 'serie');
+          const natOp = receiptXmlGetText(ide, 'natOp') || 'Entrada por Recibo';
+          const dhEmi = receiptFormatDateTime(receiptXmlGetText(ide, 'dhEmi') || receiptXmlGetText(ide, 'dEmi'));
+          const tpNF = receiptXmlGetText(ide, 'tpNF');
+          const protocolo = prot
+            ? `${receiptXmlGetText(prot, 'nProt')} - ${receiptFormatDateTime(receiptXmlGetText(prot, 'dhRecbto'))}`
+            : `SEM PROTOCOLO - ${dhEmi || ''}`;
+          const adicionais = receiptXmlGetText(xmlDoc, 'infAdic infCpl') || 'Sem informacoes adicionais.';
+
+          const emitAddressLine = [
+            receiptXmlGetText(emit, 'enderEmit xLgr'),
+            receiptXmlGetText(emit, 'enderEmit nro'),
+            receiptXmlGetText(emit, 'enderEmit xCpl'),
+            receiptXmlGetText(emit, 'enderEmit xBairro'),
+            receiptXmlGetText(emit, 'enderEmit xMun'),
+            receiptXmlGetText(emit, 'enderEmit UF'),
+          ]
+            .filter(Boolean)
+            .join(' - ');
+          const emitCep = formatCep(receiptXmlGetText(emit, 'enderEmit CEP'));
+
+          const destStreet = receiptXmlGetText(dest, 'enderDest xLgr');
+          const destNumber = receiptXmlGetText(dest, 'enderDest nro');
+          const destComplement = receiptXmlGetText(dest, 'enderDest xCpl');
+          const destBairro = receiptXmlGetText(dest, 'enderDest xBairro');
+          const destMunicipio = receiptXmlGetText(dest, 'enderDest xMun');
+          const destUf = receiptXmlGetText(dest, 'enderDest UF');
+          const destCep = formatCep(receiptXmlGetText(dest, 'enderDest CEP'));
+          const destFone = receiptXmlGetText(dest, 'fone') || receiptXmlGetText(dest, 'enderDest fone');
+          const destAddress = [destStreet, destNumber, destComplement, destBairro, destMunicipio && destUf ? `${destMunicipio} - ${destUf}` : destMunicipio || destUf]
+            .filter(Boolean)
+            .join(' - ');
+
+          const transportName = receiptXmlGetText(transp, 'transporta xNome');
+          const transportDoc = receiptXmlGetText(transp, 'transporta CNPJ') || receiptXmlGetText(transp, 'transporta CPF');
+          const transportIe = receiptXmlGetText(transp, 'transporta IE');
+          const transportAddress = receiptXmlGetText(transp, 'transporta xEnder');
+          const transportMun = receiptXmlGetText(transp, 'transporta xMun');
+          const transportUf = receiptXmlGetText(transp, 'transporta UF');
+          const modFrete = receiptXmlGetText(transp, 'modFrete');
+
+          const DESCRIPTION_CHARS_PER_LINE = 34;
+          const estimateDescriptionLines = (description) => {
+            const normalized = String(description || '').replace(/\s+/g, ' ').trim();
+            if (!normalized) return 1;
+            return Math.max(1, Math.ceil(normalized.length / DESCRIPTION_CHARS_PER_LINE));
+          };
+          const estimateRowHeightMm = (description) => {
+            const lines = estimateDescriptionLines(description);
+            return 2.8 + lines * 3.1;
+          };
+          const productRowsList = dets.map((det, index) => {
+            const prod = det.querySelector('prod');
+            const imposto = det.querySelector('imposto');
+            const icmsNode = imposto?.querySelector('ICMS')?.firstElementChild || null;
+            const ipiNode = imposto?.querySelector('IPI')?.firstElementChild || null;
+            const description = receiptXmlGetText(prod, 'xProd');
+            return {
+              html: `
+                <tr>
+                  <td class="center">${index + 1}</td>
+                  <td class="center">${escapeHtml(receiptXmlGetText(prod, 'cProd'))}</td>
+                  <td class="desc"><span class="desc-text">${escapeHtml(description)}</span></td>
+                  <td class="center ncm">${escapeHtml(receiptXmlGetText(prod, 'NCM'))}</td>
+                  <td class="center">${escapeHtml(receiptXmlGetText(icmsNode, 'CST') || receiptXmlGetText(icmsNode, 'CSOSN') || '0')}</td>
+                  <td class="center">${escapeHtml(receiptXmlGetText(prod, 'CFOP'))}</td>
+                  <td class="center">${escapeHtml(receiptXmlGetText(prod, 'uCom'))}</td>
+                  <td class="num">${receiptFormatNumber(receiptXmlGetText(prod, 'qCom'), 3)}</td>
+                  <td class="num">${receiptFormatNumber(receiptXmlGetText(prod, 'vUnCom'), 2)}</td>
+                  <td class="num">${receiptFormatNumber(receiptXmlGetText(prod, 'vProd'), 2)}</td>
+                  <td class="num">${receiptFormatNumber(receiptXmlGetText(icmsNode, 'vBC'), 2)}</td>
+                  <td class="num">${receiptFormatNumber(receiptXmlGetText(icmsNode, 'vICMS'), 2)}</td>
+                  <td class="num">${receiptFormatNumber(receiptXmlGetText(ipiNode, 'vIPI'), 2)}</td>
+                  <td class="num">${receiptFormatNumber(receiptXmlGetText(icmsNode, 'pICMS'), 2)}</td>
+                  <td class="num">${receiptFormatNumber(receiptXmlGetText(ipiNode, 'pIPI'), 2)}</td>
+                </tr>
+              `,
+              heightMm: estimateRowHeightMm(description),
+            };
+          });
+
+          const buildItemsTable = (rowsHtml) => `
+            <table class="block">
+              <colgroup>
+                <col style="width:4%"><col style="width:6%"><col style="width:22%"><col style="width:6%"><col style="width:5%"><col style="width:5%"><col style="width:4%"><col style="width:6%"><col style="width:7%"><col style="width:7%"><col style="width:7%"><col style="width:6%"><col style="width:5%"><col style="width:5%"><col style="width:5%">
+              </colgroup>
+              <thead>
+                <tr>
+                  <th class="center">Item</th><th class="center">Cod</th><th>Descricao</th><th class="center ncm">NCM</th><th class="center">CST</th><th class="center">CFOP</th><th class="center">UN</th><th class="center">QTD</th><th class="center">V. Unit</th><th class="center">V. Total</th><th class="center">BC ICMS</th><th class="center">V. ICMS</th><th class="center">V. IPI</th><th class="center">Aliq ICMS</th><th class="center">Aliq IPI</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml || '<tr><td colspan="15" class="center">Nenhum item informado.</td></tr>'}
+              </tbody>
+            </table>
+          `;
+
+          const consumeRowsForPage = (rows, startIndex, capacityMm) => {
+            const pageRows = [];
+            let usedMm = 0;
+            let index = startIndex;
+            while (index < rows.length) {
+              const row = rows[index];
+              const rowHeightMm = Math.max(3.2, Number(row?.heightMm) || 3.2);
+              if (pageRows.length > 0 && usedMm + rowHeightMm > capacityMm) {
+                break;
+              }
+              pageRows.push(row);
+              usedMm += rowHeightMm;
+              index += 1;
+            }
+            return { pageRows, nextIndex: index };
+          };
+
+          const FIRST_PAGE_PRODUCTS_AREA_MM = 118;
+          const NEXT_PAGE_PRODUCTS_AREA_MM = 244;
+          const firstPageChunk = consumeRowsForPage(productRowsList, 0, FIRST_PAGE_PRODUCTS_AREA_MM);
+          const firstPageItemsHtml = buildItemsTable(firstPageChunk.pageRows.map((item) => item.html).join(''));
+
+          const continuationChunks = [];
+          let cursor = firstPageChunk.nextIndex;
+          while (cursor < productRowsList.length) {
+            const nextChunk = consumeRowsForPage(productRowsList, cursor, NEXT_PAGE_PRODUCTS_AREA_MM);
+            if (!nextChunk.pageRows.length) break;
+            continuationChunks.push(nextChunk.pageRows);
+            cursor = nextChunk.nextIndex;
+          }
+
+          const continuationPagesHtml = continuationChunks.length
+            ? continuationChunks
+                .map(
+                  (pageRows, pageIndex) => `
+                    <div class="danfe danfe-page danfe-page-continuation">
+                      <table class="block">
+                        <colgroup><col style="width:46%"><col style="width:24%"><col style="width:30%"></colgroup>
+                        <tr>
+                          <td>
+                            <div class="section-title" style="font-style:italic;">Identificacao do Emitente</div>
+                            <div class="value">${escapeHtml(receiptXmlGetText(emit, 'xNome'))}</div>
+                          </td>
+                          <td class="center">
+                            <div class="danfe-box">
+                              <div class="danfe-title">Recibo</div>
+                              <div class="danfe-meta">N&#186; ${escapeHtml(numero)}</div>
+                              <div class="danfe-meta">Serie ${escapeHtml(serie)}</div>
+                              <div class="danfe-folha">Folha ${pageIndex + 2}/${continuationChunks.length + 1}</div>
+                            </div>
+                          </td>
+                          <td>
+                            <table style="width:100%; border-collapse:collapse;">
+                              <tr><td style="border:1px solid #000; padding:2px 3px;"><div class="label center">Chave de Acesso</div><div class="value center">${escapeHtml(chaveFormatada)}</div></td></tr>
+                            </table>
+                          </td>
+                        </tr>
+                      </table>
+                      ${buildItemsTable(pageRows.map((item) => item.html).join(''))}
+                    </div>
+                  `
+                )
+                .join('')
+            : '';
+
+          const volumesHtml = volumes.length
+            ? volumes.map((vol) => `
+              <tr>
+                <td><div class="label">Qtd</div><div class="value right">${escapeHtml(receiptXmlGetText(vol, 'qVol'))}</div></td>
+                <td><div class="label">Especie</div><div class="value">${escapeHtml(receiptXmlGetText(vol, 'esp'))}</div></td>
+                <td><div class="label">Marca</div><div class="value">${escapeHtml(receiptXmlGetText(vol, 'marca'))}</div></td>
+                <td><div class="label">Peso Bruto</div><div class="value right">${escapeHtml(receiptXmlGetText(vol, 'pesoB'))}</div></td>
+              </tr>
+            `).join('')
+            : '<tr><td colspan="4" class="value">Sem volumes informados.</td></tr>';
+
+          return `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>DANFE - Recibo de Entrada</title>
+  <style>
+    @page { size: A4; margin: 6mm; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 7.5pt; color: #111; line-height: 1.25; }
+    table { width: 100%; border-collapse: collapse; }
+    td, th { border: 1px solid #000; padding: 2px 3px; vertical-align: top; }
+    .label { font-size: 6.2pt; text-transform: uppercase; }
+    .value { font-size: 7.5pt; font-weight: 600; }
+    .center { text-align: center; }
+    .right { text-align: right; }
+    .num { text-align: right; white-space: nowrap; }
+    .block { margin-bottom: 4px; }
+    .small { font-size: 6.8pt; }
+    .section-title { font-size: 6.5pt; font-weight: 700; text-transform: uppercase; text-align: center; }
+    .muted { font-weight: 400; font-size: 6.5pt; }
+    .barcode-box { display: flex; flex-direction: column; gap: 2px; }
+    .barcode-fallback { border: 1px solid #000; height: 38px; display: flex; align-items: center; justify-content: center; font-size: 7pt; }
+    .items { table-layout: fixed; }
+    .items thead th { background: #f5f5f5; }
+    .items tbody tr { page-break-inside: avoid; }
+    .items td.desc .desc-text { display:block; line-height:1.2; white-space:normal; word-break:break-word; overflow-wrap:anywhere; }
+    thead { display: table-header-group; }
+    .danfe-box { display:flex; flex-direction:column; gap:2px; align-items:stretch; }
+    .danfe-title { font-size:12pt; font-weight:700; letter-spacing:0.5px; }
+    .danfe-subtitle { font-size:6.5pt; text-transform:uppercase; }
+    .danfe-entry-row { display:flex; align-items:center; justify-content:space-between; gap:6px; }
+    .danfe-entry-text { font-size:6.5pt; text-transform:uppercase; text-align:left; line-height:1.2; }
+    .danfe-entry-box { width:18px; height:18px; border:1px solid #000; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:9pt; }
+    .danfe-meta { font-size:8pt; font-weight:700; }
+    .danfe-folha { font-size:7pt; text-transform:uppercase; font-weight:600; }
+    .danfe-page { page-break-after: always; break-after: page; }
+    .danfe-page:last-of-type { page-break-after: auto; break-after: auto; }
+    .danfe-page-first { min-height: 0; }
+    .danfe-page-continuation { min-height: calc(297mm - 12mm); }
+  </style>
+</head>
+<body>
+  <div class="danfe danfe-page danfe-page-first">
+    <table class="block">
+      <colgroup><col style="width:82%"><col style="width:18%"></colgroup>
+      <tr>
+        <td class="label">
+          RECEBEMOS DE ${escapeHtml(receiptXmlGetText(emit, 'xNome'))} OS PRODUTOS E/OU SERVICOS CONSTANTES DA NOTA FISCAL
+          ELETRONICA INDICADA ABAIXO. EMISSAO: ${escapeHtml(dhEmi)} VALOR TOTAL: ${receiptFormatNumber(receiptXmlGetText(total, 'vNF'), 2)}
+          DESTINATARIO: ${escapeHtml(receiptXmlGetText(dest, 'xNome'))} - ${escapeHtml(destAddress)}
+        </td>
+        <td class="center" rowspan="2">
+          <div class="section-title">Recibo</div>
+          <div class="value">N&#186; ${escapeHtml(numero)}</div>
+          <div class="value">Serie ${escapeHtml(serie)}</div>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <table style="width:100%; border-collapse:collapse;">
+            <colgroup><col style="width:20%"><col style="width:80%"></colgroup>
+            <tr>
+              <td style="height:14px; position:relative;"><span style="font-size:5pt; text-transform:uppercase; position:absolute; left:2px; bottom:2px;">Data de Recebimento</span></td>
+              <td style="height:14px; position:relative;"><span style="font-size:5pt; text-transform:uppercase; position:absolute; left:2px; bottom:2px;">Identificacao e Assinatura do Recebedor</span></td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <table class="block">
+      <colgroup><col style="width:46%"><col style="width:24%"><col style="width:30%"></colgroup>
+      <tr>
+        <td>
+          <div class="section-title" style="font-style:italic;">Identificacao do Emitente</div>
+          <div class="value">${escapeHtml(receiptXmlGetText(emit, 'xNome'))}</div>
+          <div>${escapeHtml(emitAddressLine)}</div>
+          <div class="muted">CEP ${escapeHtml(emitCep)}</div>
+          <div class="muted">CNPJ ${escapeHtml(receiptXmlGetText(emit, 'CNPJ'))}</div>
+          <div class="muted">IE ${escapeHtml(receiptXmlGetText(emit, 'IE'))}</div>
+        </td>
+        <td class="center">
+          <div class="danfe-box">
+            <div class="danfe-title">Recibo</div>
+            <div class="danfe-subtitle">Documento Auxiliar do Recibo de Entrada</div>
+            <div class="danfe-entry-row">
+              <div class="danfe-entry-text">0 - ENTRADA<br>1 - SAIDA</div>
+              <div class="danfe-entry-box">${escapeHtml(tpNF || '0')}</div>
+            </div>
+            <div class="danfe-meta">N&#186; ${escapeHtml(numero)}</div>
+            <div class="danfe-meta">Serie ${escapeHtml(serie)}</div>
+            <div class="danfe-folha">Folha 1/1</div>
+          </div>
+        </td>
+        <td>
+          <table style="width:100%; border-collapse:collapse;">
+            <tr><td style="border:1px solid #000; padding:2px 3px;"><div class="barcode-box"><svg data-danfe-barcode></svg><div class="barcode-fallback" data-barcode-fallback>${escapeHtml(chave)}</div></div></td></tr>
+            <tr><td style="border:1px solid #000; padding:2px 3px;"><div class="label center">Chave de Acesso</div><div class="value center">${escapeHtml(chaveFormatada)}</div></td></tr>
+            <tr><td style="border:1px solid #000; padding:2px 3px;"><div class="muted center">Consulta de autenticidade no portal nacional da NF-e www.nfe.fazenda.gov.br/portal ou no site da SEFAZ Autorizadora</div></td></tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <table class="block">
+      <colgroup><col style="width:70%"><col style="width:30%"></colgroup>
+      <tr>
+        <td><div class="label">Natureza da Operacao</div><div class="value">${escapeHtml(natOp)}</div></td>
+        <td><div class="label">Protocolo de Autorizacao de Uso</div><div class="value">${escapeHtml(protocolo)}</div></td>
+      </tr>
+    </table>
+
+    <table class="block">
+      <colgroup><col style="width:48%"><col style="width:17%"><col style="width:13%"><col style="width:22%"></colgroup>
+      <tr>
+        <td><div class="label">Destinatario / Remetente</div><div class="value">${escapeHtml(receiptXmlGetText(dest, 'xNome'))}</div></td>
+        <td><div class="label">CNPJ/CPF</div><div class="value">${escapeHtml(receiptXmlGetText(dest, 'CPF') || receiptXmlGetText(dest, 'CNPJ'))}</div></td>
+        <td><div class="label">IE</div><div class="value">${escapeHtml(receiptXmlGetText(dest, 'IE'))}</div></td>
+        <td><div class="label">Data Emissao</div><div class="value">${escapeHtml(dhEmi)}</div></td>
+      </tr>
+      <tr>
+        <td><div class="label">Endereco</div><div class="value">${escapeHtml([destStreet, destNumber, destComplement].filter(Boolean).join(', '))}</div></td>
+        <td><div class="label">Bairro</div><div class="value">${escapeHtml(destBairro)}</div></td>
+        <td><div class="label">CEP</div><div class="value">${escapeHtml(destCep)}</div></td>
+        <td><div class="label">Data Saida/Entrada</div><div class="value">${escapeHtml(formatDateForDisplay(data.entryDateInput) || '')}</div></td>
+      </tr>
+      <tr>
+        <td><div class="label">Municipio</div><div class="value">${escapeHtml(destMunicipio)}</div></td>
+        <td><div class="label">UF</div><div class="value">${escapeHtml(destUf)}</div></td>
+        <td><div class="label">Fone/Fax</div><div class="value">${escapeHtml(destFone)}</div></td>
+        <td><div class="label">Hora Saida/Entrada</div><div class="value">${escapeHtml(dhEmi.split(' ')[1] || '')}</div></td>
+      </tr>
+    </table>
+
+    <table class="block">
+      <colgroup>
+        <col style="width:8.33%"><col style="width:8.33%"><col style="width:8.33%"><col style="width:8.33%"><col style="width:8.33%"><col style="width:8.33%"><col style="width:8.33%"><col style="width:8.33%"><col style="width:8.33%"><col style="width:8.33%"><col style="width:8.33%"><col style="width:8.33%">
+      </colgroup>
+      <tr><td colspan="12" class="section-title">Calculo do Imposto</td></tr>
+      <tr>
+        <td class="label">BC ICMS</td><td class="value right">${receiptFormatNumber(receiptXmlGetText(total, 'vBC'), 2)}</td>
+        <td class="label">V. ICMS</td><td class="value right">${receiptFormatNumber(receiptXmlGetText(total, 'vICMS'), 2)}</td>
+        <td class="label">BC ICMS ST</td><td class="value right">${receiptFormatNumber(receiptXmlGetText(total, 'vBCST'), 2)}</td>
+        <td class="label">V. ICMS ST</td><td class="value right">${receiptFormatNumber(receiptXmlGetText(total, 'vST'), 2)}</td>
+        <td class="label">V. IPI</td><td class="value right">${receiptFormatNumber(receiptXmlGetText(total, 'vIPI'), 2)}</td>
+        <td class="label">V. Total Entrada</td><td class="value right">${receiptFormatNumber(receiptXmlGetText(total, 'vNF'), 2)}</td>
+      </tr>
+      <tr>
+        <td class="label">V. Frete</td><td class="value right">${receiptFormatNumber(receiptXmlGetText(total, 'vFrete'), 2)}</td>
+        <td class="label">V. Seguro</td><td class="value right">${receiptFormatNumber(receiptXmlGetText(total, 'vSeg'), 2)}</td>
+        <td class="label">Desconto</td><td class="value right">${receiptFormatNumber(receiptXmlGetText(total, 'vDesc'), 2)}</td>
+        <td class="label">Outras Desp.</td><td class="value right">${receiptFormatNumber(receiptXmlGetText(total, 'vOutro'), 2)}</td>
+        <td class="label">V. Produtos</td><td class="value right">${receiptFormatNumber(receiptXmlGetText(total, 'vProd'), 2)}</td>
+        <td class="label">V. Tot. Trib.</td><td class="value right">${receiptFormatNumber(receiptXmlGetText(total, 'vTotTrib'), 2)}</td>
+      </tr>
+    </table>
+
+    <table class="block small">
+      <colgroup><col style="width:35%"><col style="width:15%"><col style="width:15%"><col style="width:35%"></colgroup>
+      <tr><td colspan="4" class="section-title">Transportador / Volumes Transportados</td></tr>
+      <tr>
+        <td><div class="label">Nome / Razao Social</div><div class="value">${escapeHtml(transportName)}</div></td>
+        <td><div class="label">Frete</div><div class="value">${escapeHtml(modFrete)}</div></td>
+        <td><div class="label">CNPJ/CPF</div><div class="value">${escapeHtml(transportDoc)}</div></td>
+        <td><div class="label">Endereco</div><div class="value">${escapeHtml(transportAddress)}</div></td>
+      </tr>
+      <tr>
+        <td><div class="label">Municipio</div><div class="value">${escapeHtml(transportMun)}</div></td>
+        <td><div class="label">UF</div><div class="value">${escapeHtml(transportUf)}</div></td>
+        <td><div class="label">IE</div><div class="value">${escapeHtml(transportIe)}</div></td>
+        <td></td>
+      </tr>
+      ${volumesHtml}
+    </table>
+
+    ${firstPageItemsHtml}
+
+    <table class="block">
+      <colgroup><col style="width:75%"><col style="width:25%"></colgroup>
+      <tr><td class="section-title">Dados Adicionais</td><td class="section-title">Reservado ao Fisco</td></tr>
+      <tr><td>${escapeHtml(adicionais)}</td><td></td></tr>
+    </table>
+  </div>
+  ${continuationPagesHtml}
+${'</bo' + 'dy>'}
+${'</ht' + 'ml>'}`;
+        };
+
+        const openDanfeReceiptPrintWindow = (html, chave) => {
+          const printWindow = window.open('', '_blank');
+          if (!printWindow) {
+            throw new Error('Não foi possível abrir a janela de impressão. Verifique o bloqueio de pop-ups.');
+          }
+          printWindow.document.open();
+          printWindow.document.write(html);
+          printWindow.document.close();
+
+          const chaveDigits = digitsOnly(chave || '');
+          if (!chaveDigits) {
+            printWindow.focus();
+            setTimeout(() => printWindow.print(), 250);
+            return;
+          }
+
+          const script = printWindow.document.createElement('script');
+          script.src = 'https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js';
+          script.onload = () => {
+            try {
+              const barcodes = Array.from(printWindow.document.querySelectorAll('[data-danfe-barcode]'));
+              if (barcodes.length && typeof printWindow.JsBarcode === 'function') {
+                barcodes.forEach((svg) => {
+                  printWindow.JsBarcode(svg, chaveDigits, {
+                    format: 'CODE128',
+                    displayValue: false,
+                    height: 48,
+                    margin: 0,
+                    width: 1.2,
+                  });
+                });
+                const fallbacks = Array.from(printWindow.document.querySelectorAll('[data-barcode-fallback]'));
+                fallbacks.forEach((fallback) => {
+                  fallback.style.display = 'none';
+                });
+              }
+            } catch (_) {
+              // ignore
+            } finally {
+              printWindow.focus();
+              setTimeout(() => printWindow.print(), 250);
+            }
+          };
+          script.onerror = () => {
+            printWindow.focus();
+            setTimeout(() => printWindow.print(), 250);
+          };
+          printWindow.document.head.appendChild(script);
+        };
+
+        const printReceiptDocument = () => {
+          const data = buildReceiptPrintData();
+          const chave = buildReceiptAccessKey(data);
+          const html = buildReceiptDanfeHtml(data);
+          openDanfeReceiptPrintWindow(html, chave);
+        };
+
         const renderImportQuickTags = () => {
           if (!importTagsList) return;
           if (!importQuickTags.length) {
@@ -9071,13 +9868,11 @@
             return;
           }
           importTagsList.innerHTML = importQuickTags
-            .map(
-              (tag, index) => `
-                <span class="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[9px] text-gray-700">
-                  <span class="max-w-[140px] truncate">${escapeHtml(tag)}</span>
-                  <button type="button" class="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full text-gray-500 hover:bg-red-100 hover:text-red-600" data-remove-import-tag-index="${index}" aria-label="Remover tag">&times;</button>
-                </span>
-              `
+            .map((tag, index) =>
+              '<span class="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[9px] text-gray-700">' +
+                '<span class="max-w-[140px] truncate">' + escapeHtml(tag) + '</span>' +
+                '<button type="button" class="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full text-gray-500 hover:bg-red-100 hover:text-red-600" data-remove-import-tag-index="' + index + '" aria-label="Remover tag">&times;</button>' +
+              '</span>'
             )
             .join('');
         };
@@ -13489,6 +14284,7 @@
           if (nfeTypeSelect) {
             setSelectValue(nfeTypeSelect, resolveEntryType(data));
             setManualProductAddButtonState();
+            updatePrintReceiptButtonState();
           }
           if (accessKeyInput && data.accessKey) accessKeyInput.value = data.accessKey;
           if (importAccessKeyInput && data.accessKey) importAccessKeyInput.value = data.accessKey;
@@ -15918,8 +16714,28 @@
           setDeleteButtonState(isDeletingDraft);
         };
 
+        updatePrintReceiptButtonState = () => {
+          if (!printReceiptButton) return;
+          const shouldShow = isReciboTypeSelected();
+          printReceiptButton.classList.toggle('hidden', !shouldShow);
+          if (!shouldShow) {
+            printReceiptButton.disabled = true;
+            printReceiptButton.classList.remove('cursor-wait');
+            printReceiptButton.classList.remove('opacity-60');
+            if (printReceiptIcon) {
+              printReceiptIcon.className = defaultPrintReceiptIconClass;
+            }
+            if (printReceiptText && defaultPrintReceiptText) {
+              printReceiptText.textContent = defaultPrintReceiptText;
+            }
+            return;
+          }
+          setPrintReceiptButtonState(isPrintingReceipt);
+        };
+
         updateStatusBadgeDisplay(currentDraftStatus);
         updateDeleteButtonState(currentDraftStatus);
+        updatePrintReceiptButtonState();
         setFormLockState(false);
 
         const parseDateForSort = (value) => {
@@ -16406,6 +17222,7 @@
 
         nfeTypeSelect?.addEventListener('change', () => {
           setManualProductAddButtonState();
+          updatePrintReceiptButtonState();
         });
 
         document.addEventListener('keydown', (event) => {
@@ -16419,6 +17236,7 @@
         });
 
         setManualProductAddButtonState();
+        updatePrintReceiptButtonState();
         if (mainProductsTableBody) {
           mainProductsTableBody.addEventListener('dblclick', (event) => {
             const row = event.target instanceof HTMLElement
@@ -17131,6 +17949,7 @@
           renderDuplicatasFromNfe([], null);
           renderMainProductsFromNfe([]);
           setManualProductAddButtonState();
+          updatePrintReceiptButtonState();
         };
 
         const handleSupplierSelection = async (supplier) => {
@@ -18856,6 +19675,29 @@
               isStockMovementFinalizing = false;
               setDeleteButtonState(false);
               updateDeleteButtonState(currentDraftStatus);
+            }
+          });
+        }
+
+        if (printReceiptButton) {
+          printReceiptButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            if (isPrintingReceipt) return;
+            if (!isReciboTypeSelected()) {
+              notify('A impressão deste recibo está disponível apenas para o tipo Recibo.', 'warning');
+              return;
+            }
+
+            try {
+              isPrintingReceipt = true;
+              setPrintReceiptButtonState(true);
+              printReceiptDocument();
+            } catch (error) {
+              console.error('Erro ao imprimir recibo da entrada:', error);
+              notify(error?.message || 'Não foi possível gerar o recibo para impressão.', 'error');
+            } finally {
+              isPrintingReceipt = false;
+              setPrintReceiptButtonState(false);
             }
           });
         }

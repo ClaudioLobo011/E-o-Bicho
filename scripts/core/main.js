@@ -730,7 +730,7 @@ function initializeAdminHeaderSearch() {
   const renderMatches = () => {
     list.innerHTML = matches
       .map((screen, index) => {
-        const breadcrumb = screen.groups.length ? `<span class="text-xs text-gray-500">${screen.groups.join(' â€¢ ')}</span>` : '';
+        const breadcrumb = screen.groups.length ? `<span class="text-xs text-gray-500">${screen.groups.join(' • ')}</span>` : '';
         return `
           <li>
             <a href="${screen.href}" data-index="${index}" class="flex w-full flex-col gap-1 rounded-lg px-3 py-2 text-sm text-gray-800 transition focus:outline-none focus:ring-0 hover:bg-primary/10">
