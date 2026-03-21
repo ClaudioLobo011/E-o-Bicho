@@ -3888,6 +3888,18 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
     const currentPrevisto = cloneCommandPayments(
       normalizeCommandPayments(existingState?.caixaInfo?.previstoPagamentos || [])
     );
+    const payloadPayments = cloneCommandPayments(normalizeCommandPayments(payload?.payments || []));
+    if (!currentPayments.length && payloadPayments.length) {
+      currentPayments.push(...cloneCommandPayments(payloadPayments));
+    }
+    if (!currentPrevisto.length && payloadPayments.length) {
+      currentPrevisto.push(
+        ...cloneCommandPayments(payloadPayments).map((payment) => ({
+          ...payment,
+          valor: safeNumber(payment?.valor ?? 0, 0),
+        }))
+      );
+    }
     const currentSummary = existingState?.summary || {};
     const nextSummary = {
       abertura: safeNumber(currentSummary?.abertura, 0),
@@ -3966,7 +3978,23 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
       throw error;
     }
 
-    const targetPayment = resolveCommandTargetPayment(currentPayments, payload?.paymentId);
+    let targetPayment = resolveCommandTargetPayment(currentPayments, payload?.paymentId);
+    if (!targetPayment && payloadPayments.length) {
+      const payloadTargetPayment = resolveCommandTargetPayment(payloadPayments, payload?.paymentId);
+      if (payloadTargetPayment) {
+        const alreadyInCurrent = resolveCommandTargetPayment(currentPayments, payloadTargetPayment.id);
+        if (!alreadyInCurrent) {
+          currentPayments.push({ ...payloadTargetPayment });
+        }
+        const alreadyInPrevisto = resolveCommandTargetPayment(currentPrevisto, payloadTargetPayment.id);
+        if (!alreadyInPrevisto) {
+          currentPrevisto.push({ ...payloadTargetPayment, valor: safeNumber(payloadTargetPayment?.valor ?? 0, 0) });
+        }
+        targetPayment =
+          resolveCommandTargetPayment(currentPayments, payloadTargetPayment.id) ||
+          resolveCommandTargetPayment(currentPayments, payloadTargetPayment.label);
+      }
+    }
     if (!targetPayment) {
       const error = new Error('Selecione um meio de pagamento válido para a movimentação.');
       error.statusCode = 400;

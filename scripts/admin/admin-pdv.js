@@ -27355,6 +27355,7 @@
           paymentId: String(resolvedPaymentId || '').trim(),
           amount: amountValue,
           reason: motivo || '',
+          payments: clonePayments(state.pagamentos),
           timestamp: new Date().toISOString(),
         };
       }
