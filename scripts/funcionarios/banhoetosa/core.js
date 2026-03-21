@@ -146,8 +146,10 @@ export const els = {
   modalDelete: document.getElementById('modal-add-delete'),
   addTabBtnCadastro: document.getElementById('agenda-add-tab-btn-cadastro'),
   addTabBtnClubinho: document.getElementById('agenda-add-tab-btn-clubinho'),
+  addTabBtnHistorico: document.getElementById('agenda-add-tab-btn-historico'),
   addTabCadastro: document.getElementById('agenda-add-tab-cadastro'),
   addTabClubinho: document.getElementById('agenda-add-tab-clubinho'),
+  addTabHistorico: document.getElementById('agenda-add-tab-historico'),
 
   addStoreSelect: document.getElementById('add-store-select'),
   addDateInput: document.getElementById('add-date'),
@@ -241,6 +243,7 @@ export const els = {
 
 // ----- State -----
 export const FILTER_STORAGE_KEY = 'agenda_filters_v1';
+export const STORE_STORAGE_KEY = 'agenda_selected_store_v1';
 export const AGENDA_NO_PREFERENCE_PROF_ID = '__SEM_PREFERENCIA__';
 export const AGENDA_NO_PREFERENCE_PROF_NAME = 'Sem Preferência';
 export const state = {
@@ -259,6 +262,7 @@ export const state = {
     statuses: new Set(),
     profIds: new Set(),
     profTipo: '', // 'esteticista' | 'veterinario' | ''
+    profSelectionTouched: false,
   },
   customerModalTab: 'cliente',
   addModalTab: 'cadastro',
@@ -376,7 +380,7 @@ export function normalizeStatus(s) {
 }
 export function getFilteredAgendamentos() {
   const hasStatus = state.filters.statuses.size > 0;
-  const hasProf   = state.filters.profIds.size   > 0;
+  const hasProf   = !!state.filters.profSelectionTouched && state.filters.profIds.size > 0;
   const hasTipo   = !!state.filters.profTipo;
 
   // se nenhum filtro ativo, retorna tudo
@@ -395,6 +399,9 @@ export function getFilteredAgendamentos() {
           .map(p => String(p._id))
       )
     : null;
+  if (idsTipo && state.filters.profTipo === 'esteticista') {
+    idsTipo.add(AGENDA_NO_PREFERENCE_PROF_ID);
+  }
 
   return (state.agendamentos || []).filter(a => {
     let ok = true;
@@ -436,6 +443,9 @@ export function getFilteredAgendamentos() {
         const fallback = byNameAll.get(String(nc).trim().toLowerCase()) || null;
         if (fallback) append(fallback);
       }
+      if (!ids.size) {
+        append(AGENDA_NO_PREFERENCE_PROF_ID);
+      }
       return ids;
     };
 
@@ -466,11 +476,11 @@ export function getVisibleProfissionais() {
   }
 
   // 2) Filtra por profissionais específicos, se houver chips selecionados
-  if (state.filters.profIds && state.filters.profIds.size) {
+  if (state.filters.profSelectionTouched && state.filters.profIds && state.filters.profIds.size) {
     profs = profs.filter(p => state.filters.profIds.has(String(p._id)));
   }
   const allowNoPreference =
-    (!state.filters.profIds?.size || state.filters.profIds.has(AGENDA_NO_PREFERENCE_PROF_ID));
+    (!state.filters.profSelectionTouched || !state.filters.profIds?.size || state.filters.profIds.has(AGENDA_NO_PREFERENCE_PROF_ID));
   if (allowNoPreference) {
     profs = [buildNoPreferenceProfessional(), ...profs];
   }

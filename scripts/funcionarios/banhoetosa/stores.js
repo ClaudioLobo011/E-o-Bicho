@@ -1,4 +1,27 @@
-import { state, els, notify, token } from './core.js';
+import { state, els, notify, token, STORE_STORAGE_KEY } from './core.js';
+
+export function loadSelectedStoreFromStorage() {
+  try {
+    const raw = localStorage.getItem(STORE_STORAGE_KEY);
+    const value = String(raw || '').trim();
+    if (!value) return '';
+    state.selectedStoreId = value;
+    return value;
+  } catch {
+    return '';
+  }
+}
+
+export function saveSelectedStoreToStorage(storeId) {
+  try {
+    const value = String(storeId || '').trim();
+    if (!value) {
+      localStorage.removeItem(STORE_STORAGE_KEY);
+      return;
+    }
+    localStorage.setItem(STORE_STORAGE_KEY, value);
+  } catch {}
+}
 
 export async function loadStores() {
   let stores = [];
@@ -23,6 +46,7 @@ export async function loadStores() {
   if (!hasSelection) {
     state.selectedStoreId = stores[0]?._id || '';
   }
+  saveSelectedStoreToStorage(state.selectedStoreId);
 
   const optionsHtml = stores.length
     ? ['<option value=\"\">Selecione a empresa</option>', ...stores.map((s) => `<option value=\"${s._id}\">${s.nome}</option>`)].join('')

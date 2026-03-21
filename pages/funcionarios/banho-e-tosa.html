@@ -104,6 +104,7 @@
         <div class="inline-flex rounded-lg bg-gray-200 p-1" role="tablist" aria-label="Modo de cadastro do serviço">
           <button type="button" id="agenda-add-tab-btn-cadastro" class="rounded-md bg-primary px-4 py-2 text-[12px] font-semibold text-white transition">Cadastro</button>
           <button type="button" id="agenda-add-tab-btn-clubinho" class="rounded-md px-4 py-2 text-[12px] font-semibold text-gray-500 transition">Clubinho</button>
+          <button type="button" id="agenda-add-tab-btn-historico" class="rounded-md px-4 py-2 text-[12px] font-semibold text-gray-500 transition">Hist&#243;rico</button>
         </div>
       </div>
 
@@ -213,6 +214,30 @@
         </div>
       </div>
 
+      <div id="agenda-add-tab-historico" class="hidden agenda-add-modal-body px-5 py-4 overflow-y-auto flex-1">
+        <div id="agenda-historico-state" class="mb-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+          Selecione cliente e pet na aba Cadastro para visualizar o hist&#243;rico.
+        </div>
+        <div class="overflow-x-auto rounded-md border border-gray-200">
+          <table class="min-w-full divide-y divide-gray-200 text-sm">
+            <thead class="bg-gray-50">
+              <tr class="text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
+                <th class="px-3 py-2">Data</th>
+                <th class="px-3 py-2">Servi&#231;o</th>
+                <th class="px-3 py-2">Profissional</th>
+                <th class="px-3 py-2 text-right">Valor</th>
+                <th class="px-3 py-2">Status</th>
+                <th class="px-3 py-2">Status Pagamento</th>
+              </tr>
+            </thead>
+            <tbody id="agenda-historico-list" class="divide-y divide-gray-200">
+              <tr>
+                <td colspan="6" class="px-3 py-4 text-center text-xs text-gray-500">Nenhum hist&#243;rico para exibir.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
       <div class="agenda-add-modal-footer px-5 py-3 border-t flex items-center justify-between gap-3">
         <button id="modal-add-delete" class="px-4 py-2 rounded-lg border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 hidden">
           Excluir
@@ -660,3 +685,4 @@
   <script src="/scripts/common/modal-bridge.js"></script>
 </body>
 </html>
+

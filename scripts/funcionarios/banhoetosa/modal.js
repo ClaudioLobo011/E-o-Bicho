@@ -184,21 +184,217 @@ window.__openEditFromUI = (item) => openEditModal(item);
 window.__updateStatusQuick = (id, status, opts) => updateStatusQuick(id, status, opts);
 window.__openAddFromUI = (opts) => openAddModal(opts);
 
+const addServiceHistoryCache = new Map();
+let addServiceHistoryRequestId = 0;
+
+function formatDateForApi(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function normalizeHistoryText(value) {
+  return String(value || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .trim().toLowerCase();
+}
+
+function getAddServiceHistorySelection() {
+  const clienteId = String(
+    state.selectedCliente?._id ||
+    state.editing?.clienteId ||
+    state.editing?.cliente?._id ||
+    state.editing?.cliente?.id ||
+    ''
+  ).trim();
+  const petId = String(
+    els.petSelect?.value ||
+    state.editing?.petId ||
+    state.editing?.pet?._id ||
+    state.editing?.pet?.id ||
+    ''
+  ).trim();
+  return { clienteId, petId };
+}
+
+function setAddServiceHistoryState(message) {
+  const stateEl = document.getElementById('agenda-historico-state');
+  if (stateEl) stateEl.textContent = message || '';
+}
+
+function renderAddServiceHistoryRows(rows) {
+  const listEl = document.getElementById('agenda-historico-list');
+  if (!listEl) return;
+  if (!rows.length) {
+    listEl.innerHTML = '<tr><td colspan="6" class="px-3 py-4 text-center text-xs text-gray-500">Nenhum historico encontrado.</td></tr>';
+    return;
+  }
+  listEl.innerHTML = rows.map((item) => `
+    <tr>
+      <td class="px-3 py-2 text-xs text-gray-700 whitespace-nowrap">${escapeHtml(item.data)}</td>
+      <td class="px-3 py-2 text-sm text-gray-800">${escapeHtml(item.servico)}</td>
+      <td class="px-3 py-2 text-xs text-gray-700 whitespace-nowrap">${escapeHtml(item.profissional)}</td>
+      <td class="px-3 py-2 text-sm text-gray-800 text-right whitespace-nowrap">${escapeHtml(item.valor)}</td>
+      <td class="px-3 py-2 text-xs text-gray-700 whitespace-nowrap">${escapeHtml(item.status)}</td>
+      <td class="px-3 py-2 text-xs text-gray-700 whitespace-nowrap">${escapeHtml(item.statusPagamento)}</td>
+    </tr>
+  `).join('');
+}
+
+function mapHistoryStatusLabel(raw) {
+  return statusMeta(raw).label || '-';
+}
+
+function mapHistoryPaymentStatus(item) {
+  if (item?.pago) return 'Pago';
+  if (item?.codigoVenda) return 'Faturado';
+  return 'Pendente';
+}
+
+function mapHistoryProfessionalName(item) {
+  const firstItemProfessional = Array.isArray(item?.servicos) && item.servicos.length
+    ? (item.servicos[0]?.profissionalNome || item.servicos[0]?.profissional || '')
+    : '';
+  const raw =
+    item?.profissional ||
+    firstItemProfessional ||
+    item?.profissionaisServicos?.[0]?.profissionalNome ||
+    '';
+  const name = String(raw || '').trim();
+  return name || 'Sem Profissional';
+}
+
+async function loadAddServiceHistory(options = {}) {
+  const { force = false } = options;
+  const { clienteId, petId } = getAddServiceHistorySelection();
+  if (!(clienteId && petId)) {
+    setAddServiceHistoryState('Selecione cliente e pet na aba Cadastro para visualizar o historico.');
+    renderAddServiceHistoryRows([]);
+    return;
+  }
+
+  const cacheKey = `${clienteId}|${petId}`;
+  if (!force && addServiceHistoryCache.has(cacheKey)) {
+    const cached = addServiceHistoryCache.get(cacheKey) || [];
+    setAddServiceHistoryState(`Agendamentos do pet: ${cached.length}`);
+    renderAddServiceHistoryRows(cached);
+    return;
+  }
+
+  const requestId = ++addServiceHistoryRequestId;
+  setAddServiceHistoryState('Carregando historico...');
+  renderAddServiceHistoryRows([]);
+  try {
+    const selectedClienteName = normalizeHistoryText(
+      state.selectedCliente?.nome ||
+      els.cliInput?.value ||
+      ''
+    );
+    const selectedPetName = normalizeHistoryText(
+      els.petSelect?.selectedOptions?.[0]?.textContent ||
+      state.editing?.pet?.nome ||
+      state.editing?.pet ||
+      ''
+    );
+
+    const endDate = new Date('2100-01-01T00:00:00');
+    const startDate = new Date('2000-01-01T00:00:00');
+    const query = new URLSearchParams({
+      start: formatDateForApi(startDate),
+      end: formatDateForApi(endDate),
+    });
+    const response = await api(`/func/agendamentos/range?${query.toString()}`);
+    const payload = await response.json().catch(() => (response.ok ? [] : {}));
+    if (!response.ok) {
+      const message = typeof payload?.message === 'string' ? payload.message : 'Nao foi possivel carregar o historico.';
+      throw new Error(message);
+    }
+    if (requestId !== addServiceHistoryRequestId) return;
+
+    const rows = (Array.isArray(payload) ? payload : [])
+      .filter((item) => {
+        const itemClienteId = String(item?.clienteId || item?.cliente?._id || item?.cliente?.id || '').trim();
+        const itemPetId = String(item?.petId || item?.pet?._id || item?.pet?.id || '').trim();
+        if (itemClienteId && itemPetId) {
+          return itemClienteId === clienteId && itemPetId === petId;
+        }
+
+        const itemClienteName = normalizeHistoryText(
+          item?.clienteNome ||
+          item?.cliente?.nomeCompleto ||
+          item?.cliente?.nomeContato ||
+          item?.cliente?.razaoSocial ||
+          item?.cliente?.nome ||
+          ''
+        );
+        const itemPetName = normalizeHistoryText(
+          typeof item?.pet === 'string' ? item.pet : (item?.pet?.nome || '')
+        );
+
+        if (!(selectedClienteName && selectedPetName)) return false;
+        return itemClienteName === selectedClienteName && itemPetName === selectedPetName;
+      })
+      .sort((a, b) => {
+        const da = new Date(a?.h || a?.scheduledAt || 0).getTime();
+        const db = new Date(b?.h || b?.scheduledAt || 0).getTime();
+        return db - da;
+      })
+      .map((item) => {
+        const when = new Date(item?.h || item?.scheduledAt || Date.now());
+        const dateText = Number.isNaN(when.getTime()) ? '-' : when.toLocaleDateString('pt-BR');
+        return {
+          data: dateText,
+          servico: item?.servico || '-',
+          profissional: mapHistoryProfessionalName(item),
+          valor: money(Number(item?.valor || 0)),
+          status: mapHistoryStatusLabel(item?.status),
+          statusPagamento: mapHistoryPaymentStatus(item),
+        };
+      });
+
+    addServiceHistoryCache.set(cacheKey, rows);
+    setAddServiceHistoryState(`Agendamentos do pet: ${rows.length}`);
+    renderAddServiceHistoryRows(rows);
+  } catch (error) {
+    if (requestId !== addServiceHistoryRequestId) return;
+    setAddServiceHistoryState(error?.message || 'Nao foi possivel carregar o historico.');
+    renderAddServiceHistoryRows([]);
+  }
+}
+
+function refreshAddServiceHistoryIfVisible(options = {}) {
+  if (state.addModalTab !== 'historico') return;
+  void loadAddServiceHistory(options);
+}
+
 function setAddServiceTab(tab) {
   ensureAddModalCadastroLayout();
-  state.addModalTab = tab === 'clubinho' ? 'clubinho' : 'cadastro';
-  const isClubinho = state.addModalTab === 'clubinho';
+  const normalized = ['cadastro', 'clubinho', 'historico'].includes(tab) ? tab : 'cadastro';
+  state.addModalTab = normalized;
+  const isCadastro = normalized === 'cadastro';
+  const isClubinho = normalized === 'clubinho';
+  const isHistorico = normalized === 'historico';
 
-  els.addTabCadastro?.classList.toggle('hidden', isClubinho);
+  els.addTabCadastro?.classList.toggle('hidden', !isCadastro);
   els.addTabClubinho?.classList.toggle('hidden', !isClubinho);
+  els.addTabHistorico?.classList.toggle('hidden', !isHistorico);
 
-  els.addTabBtnCadastro?.classList.toggle('bg-primary', !isClubinho);
-  els.addTabBtnCadastro?.classList.toggle('text-white', !isClubinho);
-  els.addTabBtnCadastro?.classList.toggle('text-gray-500', isClubinho);
+  els.addTabBtnCadastro?.classList.toggle('bg-primary', isCadastro);
+  els.addTabBtnCadastro?.classList.toggle('text-white', isCadastro);
+  els.addTabBtnCadastro?.classList.toggle('text-gray-500', !isCadastro);
 
   els.addTabBtnClubinho?.classList.toggle('bg-primary', isClubinho);
   els.addTabBtnClubinho?.classList.toggle('text-white', isClubinho);
   els.addTabBtnClubinho?.classList.toggle('text-gray-500', !isClubinho);
+
+  els.addTabBtnHistorico?.classList.toggle('bg-primary', isHistorico);
+  els.addTabBtnHistorico?.classList.toggle('text-white', isHistorico);
+  els.addTabBtnHistorico?.classList.toggle('text-gray-500', !isHistorico);
+
+  if (isHistorico) {
+    void loadAddServiceHistory();
+  }
 }
 
 function ensureAddModalCadastroLayout() {
@@ -1633,6 +1829,7 @@ async function agendaCustomerApplySelection() {
     els.petSelect.value = resolvedPetId;
   }
   customerModalState.petId = resolvedPetId;
+  refreshAddServiceHistoryIfVisible({ force: true });
   agendaCustomerCloseModal();
 }
 
@@ -1877,6 +2074,7 @@ export async function searchClientes(term) {
       if (els.petSelect) {
         els.petSelect.innerHTML = pets.map(p => `<option value="${p._id}">${p.nome}</option>`).join('');
       }
+      refreshAddServiceHistoryIfVisible({ force: true });
     });
   });
 }
@@ -2437,6 +2635,7 @@ export function bindModalAndActionsEvents() {
   els.customerTabBtnPet?.addEventListener('click', () => agendaCustomerSetTab('pet'));
   els.addTabBtnCadastro?.addEventListener('click', () => setAddServiceTab('cadastro'));
   els.addTabBtnClubinho?.addEventListener('click', () => setAddServiceTab('clubinho'));
+  els.addTabBtnHistorico?.addEventListener('click', () => setAddServiceTab('historico'));
   els.customerCode?.addEventListener('input', () => {
     const code = String(els.customerCode?.value || '').trim();
     if (code.length >= 1) {
@@ -2579,7 +2778,8 @@ export function bindModalAndActionsEvents() {
   });
   // Atualiza preÃ§os da lista e do item selecionado ao mudar empresa/pet
   els.addStoreSelect?.addEventListener('change', () => { updateVisibleServicePrices(); updateSelectedServicePrice(); });
-  els.petSelect?.addEventListener('change', () => { updateVisibleServicePrices(); updateSelectedServicePrice(); });
+  els.petSelect?.addEventListener('change', () => { updateVisibleServicePrices(); updateSelectedServicePrice(); refreshAddServiceHistoryIfVisible({ force: true }); });
+  els.addStoreSelect?.addEventListener('change', () => { refreshAddServiceHistoryIfVisible({ force: true }); });
   // Limpa erros ao interagir com campos
   els.cliInput?.addEventListener('input', () => { try { els.cliInput.classList.remove('border-red-500'); const e=els.cliInput.parentElement.querySelector('.form-err'); if(e) e.remove(); } catch{} });
   els.petSelect?.addEventListener('change', () => { try { els.petSelect.classList.remove('border-red-500'); const e=els.petSelect.parentElement.querySelector('.form-err'); if(e) e.remove(); } catch{} });

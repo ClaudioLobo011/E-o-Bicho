@@ -1,5 +1,5 @@
 import { els, state, todayStr } from './core.js';
-import { loadStores, updateStoreLabel } from './stores.js';
+import { loadSelectedStoreFromStorage, loadStores, saveSelectedStoreToStorage, updateStoreLabel } from './stores.js';
 import { loadProfissionais, populateModalProfissionais } from './profissionais.js';
 import { loadAgendamentos, startAutoRefresh } from './agendamentos.js';
 import { renderGrid } from './grid.js';
@@ -64,6 +64,7 @@ function bindBaseEvents() {
   }
   els.storeSelect?.addEventListener('change', async () => {
     state.selectedStoreId = els.storeSelect.value;
+    saveSelectedStoreToStorage(state.selectedStoreId);
     updateStoreLabel();
     state.__didInitialScroll = false;
     await loadProfissionais();
@@ -96,6 +97,7 @@ export async function initBanhoETosa() {
   if (!els.dateInput?.value) els.dateInput.value = todayStr();
   if (els.viewSelect && !els.viewSelect.value) els.viewSelect.value = 'day';
   state.view = (els.viewSelect?.value) || 'day';
+  loadSelectedStoreFromStorage();
   loadFiltersFromStorage();
   await loadStores();
   if (!state.selectedStoreId && els.storeSelect?.value) {
