@@ -27343,8 +27343,16 @@
             : action.id === 'saida'
             ? 'pdv.caixa.exit'
             : 'pdv.caixa.shipment';
+        const resolvedPaymentId =
+          payment.id ||
+          payment.paymentId ||
+          payment.code ||
+          payment._id ||
+          payment.raw?._id ||
+          payment.label ||
+          '';
         commandPayload = {
-          paymentId: payment.id,
+          paymentId: String(resolvedPaymentId || '').trim(),
           amount: amountValue,
           reason: motivo || '',
           timestamp: new Date().toISOString(),

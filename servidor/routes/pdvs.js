@@ -3416,12 +3416,28 @@ const cloneCommandPayments = (payments = []) =>
 
 const resolveCommandTargetPayment = (payments = [], paymentId = '') => {
   const normalizedId = normalizeString(paymentId);
-  if (!normalizedId) return payments[0] || null;
-  return (
-    payments.find((payment) => normalizeString(payment?.id) === normalizedId) ||
-    payments.find((payment) => normalizeString(payment?.label) === normalizedId) ||
-    null
-  );
+  const list = Array.isArray(payments) ? payments : [];
+  if (!list.length) return null;
+
+  if (!normalizedId) return list[0] || null;
+
+  const matches = (payment = {}) => {
+    const candidates = [
+      payment?.id,
+      payment?.paymentId,
+      payment?.code,
+      payment?._id,
+      payment?.raw?._id,
+      payment?.raw?.id,
+      payment?.raw?.code,
+      payment?.label,
+      payment?.name,
+      payment?.nome,
+    ];
+    return candidates.some((candidate) => normalizeString(candidate) === normalizedId);
+  };
+
+  return list.find(matches) || null;
 };
 
 const buildCaixaMovementHistoryEntry = ({
