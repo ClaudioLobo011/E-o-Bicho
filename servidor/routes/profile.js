@@ -1,4 +1,4 @@
-// servidor/routes/profile.js
+﻿// servidor/routes/profile.js
 const express = require('express');
 const router = express.Router();
 
@@ -13,6 +13,27 @@ function userToDTO(u) {
     (u.razaoSocial && String(u.razaoSocial).trim()) ||
     '';
 
+  const empresas = Array.isArray(u.empresas)
+    ? u.empresas
+        .filter(Boolean)
+        .map((empresa) => ({
+          _id: empresa?._id || empresa,
+          nome: empresa?.nome || empresa?.nomeFantasia || empresa?.razaoSocial || '',
+        }))
+        .filter((empresa) => String(empresa.nome || '').trim())
+    : [];
+
+  const empresaPrincipal = u.empresaPrincipal
+    ? {
+        _id: u.empresaPrincipal?._id || u.empresaPrincipal,
+        nome:
+          u.empresaPrincipal?.nome ||
+          u.empresaPrincipal?.nomeFantasia ||
+          u.empresaPrincipal?.razaoSocial ||
+          '',
+      }
+    : null;
+
   return {
     _id: u._id,
     email: u.email,
@@ -22,18 +43,23 @@ function userToDTO(u) {
     cpf: u.cpf,
     cnpj: u.cnpj,
     nome: nomeNorm,
+    empresas,
+    empresaPrincipal,
   };
 }
 
-// GET /api/profile/me  -> retorna usuário logado (token)
+// GET /api/profile/me  -> retorna usuario logado (token)
 router.get('/me', authMiddleware, async (req, res) => {
   try {
     const u = await User.findById(
       req.user?.id,
-      'nomeCompleto nomeContato razaoSocial email role tipoConta celular cpf cnpj'
-    ).lean();
+      'nomeCompleto nomeContato razaoSocial email role tipoConta celular cpf cnpj empresas empresaPrincipal'
+    )
+      .populate('empresas', 'nome nomeFantasia razaoSocial')
+      .populate('empresaPrincipal', 'nome nomeFantasia razaoSocial')
+      .lean();
 
-    if (!u) return res.status(404).json({ message: 'Usuário não encontrado.' });
+    if (!u) return res.status(404).json({ message: 'Usuario nao encontrado.' });
     return res.json(userToDTO(u));
   } catch (err) {
     console.error(err);

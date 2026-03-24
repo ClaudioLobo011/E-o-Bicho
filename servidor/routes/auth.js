@@ -122,6 +122,7 @@ function buildIdentifierQuery(identifier) {
 }
 
 const MAX_CODIGO_CLIENTE_SEQUENCIAL = 999999999;
+const STAFF_ROLES = new Set(['funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master']);
 
 function parseCodigoClienteSequencial(raw) {
   if (typeof raw === 'number' && Number.isFinite(raw)) {
@@ -313,6 +314,42 @@ router.post('/login', async (req, res) => {
         });
     } catch (error) {
         res.status(500).json({ message: 'Erro no servidor.' });
+    }
+});
+
+// ROTA: POST /api/auth/login-funcionario
+router.post('/login-funcionario', async (req, res) => {
+    const { identifier, senha } = req.body || {};
+    try {
+        const query = buildIdentifierQuery(identifier);
+        const user = query ? await User.findOne(query) : null;
+
+        if (!user || !(await bcrypt.compare(senha, user.senha))) {
+            return res.status(400).json({ message: 'Credenciais inválidas.' });
+        }
+
+        if (!STAFF_ROLES.has(String(user.role || '').toLowerCase())) {
+            return res.status(403).json({ message: 'Acesso permitido apenas para funcionários.' });
+        }
+
+        const token = jwt.sign(
+            { id: user._id, role: user.role },
+            process.env.JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+
+        return res.status(200).json({
+            message: 'Login de funcionário bem-sucedido!',
+            token,
+            user: {
+                id: user._id,
+                nome: user.nomeCompleto || user.razaoSocial || user.username,
+                email: user.email,
+                role: user.role
+            }
+        });
+    } catch (_error) {
+        return res.status(500).json({ message: 'Erro no servidor.' });
     }
 });
 

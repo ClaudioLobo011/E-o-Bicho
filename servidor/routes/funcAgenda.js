@@ -2745,6 +2745,7 @@ router.get('/agendamentos/range', authMiddleware, requireStaff, async (req, res)
       return {
         _id: a._id,
         pet: a.pet ? a.pet.nome : null,
+        petId: a.pet?._id || null,
         servico: servicosList.map(s => s.nome).join(', '),
         servicos: servicosList,
         profissionalId: primaryProfId,
