@@ -1,75 +1,38 @@
-const express = require('express');
-const fs = require('fs');
-const path = require('path');
+﻿const express = require('express');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 const Store = require('../models/Store');
+const FiscalDefaultRule = require('../models/FiscalDefaultRule');
 const { normalizeFiscalData } = require('../services/fiscalRuleEngine');
 
 const router = express.Router();
-const rulesPath = path.join(__dirname, '..', 'data', 'fiscal-default-rules.json');
-
-const readRulesFile = () => {
-  if (!fs.existsSync(rulesPath)) {
-    return { stores: {} };
-  }
-  try {
-    const raw = fs.readFileSync(rulesPath, 'utf8');
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') {
-      return { stores: {} };
-    }
-    if (!parsed.stores || typeof parsed.stores !== 'object') {
-      parsed.stores = {};
-    }
-    return parsed;
-  } catch (error) {
-    console.error('Erro ao ler fiscal-default-rules.json:', error);
-    return { stores: {} };
-  }
-};
-
-const writeRulesFile = (payload) => {
-  const data = payload && typeof payload === 'object' ? payload : { stores: {} };
-  if (!data.stores || typeof data.stores !== 'object') {
-    data.stores = {};
-  }
-  const tmpPath = `${rulesPath}.tmp`;
-  fs.writeFileSync(tmpPath, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
-  fs.renameSync(tmpPath, rulesPath);
-};
-
-const ensureStoreRules = (data, storeId) => {
-  if (!data.stores || typeof data.stores !== 'object') {
-    data.stores = {};
-  }
-  if (!Array.isArray(data.stores[storeId])) {
-    data.stores[storeId] = [];
-  }
-  return data.stores[storeId];
-};
 
 const parseRuleCode = (value) => {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 };
 
-const getNextCode = (rules) => {
-  if (!Array.isArray(rules) || !rules.length) return 1;
-  const maxCode = rules.reduce((max, rule) => {
-    const code = Number(rule?.code) || 0;
-    return code > max ? code : max;
-  }, 0);
-  return maxCode + 1;
+const toRulePayload = (rule) => ({
+  code: Number(rule?.code) || 0,
+  name: rule?.name || '',
+  fiscal: rule?.fiscal || {},
+  createdAt: rule?.createdAt || null,
+  updatedAt: rule?.updatedAt || null,
+  updatedBy: rule?.updatedBy || '',
+});
+
+const getNextCode = async (storeId) => {
+  const lastRule = await FiscalDefaultRule.findOne({ empresa: storeId })
+    .sort({ code: -1 })
+    .select({ code: 1, _id: 0 })
+    .lean();
+
+  return (Number(lastRule?.code) || 0) + 1;
 };
 
-const sortRules = (rules) => {
-  if (!Array.isArray(rules)) return [];
-  return [...rules].sort((a, b) => {
-    const left = Number(a?.code) || 0;
-    const right = Number(b?.code) || 0;
-    return left - right;
-  });
+const ensureStoreExists = async (storeId) => {
+  const exists = await Store.exists({ _id: storeId });
+  return Boolean(exists);
 };
 
 router.get('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
@@ -79,24 +42,26 @@ router.get('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (req
       return res.status(400).json({ message: 'Informe a empresa (storeId).' });
     }
 
-    const store = await Store.findById(storeId).lean();
-    if (!store) {
+    const storeExists = await ensureStoreExists(storeId);
+    if (!storeExists) {
       return res.status(404).json({ message: 'Empresa nao encontrada.' });
     }
 
-    const data = readRulesFile();
-    const rules = ensureStoreRules(data, String(storeId));
-    const sortedRules = sortRules(rules);
+    const rules = await FiscalDefaultRule.find({ empresa: storeId })
+      .sort({ code: 1 })
+      .lean();
 
-    res.json({
+    const nextCode = await getNextCode(storeId);
+
+    return res.json({
       storeId,
-      total: sortedRules.length,
-      nextCode: getNextCode(sortedRules),
-      rules: sortedRules,
+      total: rules.length,
+      nextCode,
+      rules: rules.map(toRulePayload),
     });
   } catch (error) {
     console.error('Erro ao carregar regras fiscais padrao:', error);
-    res.status(500).json({ message: 'Erro ao carregar regras fiscais padrao.' });
+    return res.status(500).json({ message: 'Erro ao carregar regras fiscais padrao.' });
   }
 });
 
@@ -106,39 +71,54 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
     if (!storeId) {
       return res.status(400).json({ message: 'Informe a empresa (storeId).' });
     }
+
     const trimmedName = typeof name === 'string' ? name.trim() : '';
     if (!trimmedName) {
       return res.status(400).json({ message: 'Informe o nome da regra.' });
     }
 
-    const store = await Store.findById(storeId).lean();
-    if (!store) {
+    const storeExists = await ensureStoreExists(storeId);
+    if (!storeExists) {
       return res.status(404).json({ message: 'Empresa nao encontrada.' });
     }
 
-    const data = readRulesFile();
-    const rules = ensureStoreRules(data, String(storeId));
-    const code = getNextCode(rules);
-    const timestamp = new Date().toISOString();
-    const rule = {
-      code,
-      name: trimmedName,
-      fiscal: normalizeFiscalData(fiscal || {}),
-      createdAt: timestamp,
-      updatedAt: timestamp,
-      updatedBy: req.user?.id || '',
-    };
-    rules.push(rule);
-    writeRulesFile(data);
+    const fiscalNormalized = normalizeFiscalData(fiscal || {});
+    const updatedBy = req.user?.id || '';
 
-    res.json({
-      rule,
-      total: rules.length,
-      nextCode: getNextCode(rules),
+    let created = null;
+    let attempts = 0;
+
+    while (!created && attempts < 3) {
+      attempts += 1;
+      const nextCode = await getNextCode(storeId);
+
+      try {
+        created = await FiscalDefaultRule.create({
+          empresa: storeId,
+          code: nextCode,
+          name: trimmedName,
+          fiscal: fiscalNormalized,
+          updatedBy,
+        });
+      } catch (createError) {
+        const isDuplicateCode = createError?.code === 11000 && String(createError?.message || '').includes('code');
+        if (!isDuplicateCode || attempts >= 3) {
+          throw createError;
+        }
+      }
+    }
+
+    const total = await FiscalDefaultRule.countDocuments({ empresa: storeId });
+    const nextCode = await getNextCode(storeId);
+
+    return res.json({
+      rule: toRulePayload(created),
+      total,
+      nextCode,
     });
   } catch (error) {
     console.error('Erro ao criar regra fiscal padrao:', error);
-    res.status(500).json({ message: 'Erro ao criar regra fiscal padrao.' });
+    return res.status(500).json({ message: 'Erro ao criar regra fiscal padrao.' });
   }
 });
 
@@ -148,41 +128,43 @@ router.put('/:code', requireAuth, authorizeRoles('admin', 'admin_master'), async
     if (!ruleCode) {
       return res.status(400).json({ message: 'Codigo de regra invalido.' });
     }
+
     const { storeId, name, fiscal } = req.body || {};
     if (!storeId) {
       return res.status(400).json({ message: 'Informe a empresa (storeId).' });
     }
+
     const trimmedName = typeof name === 'string' ? name.trim() : '';
     if (!trimmedName) {
       return res.status(400).json({ message: 'Informe o nome da regra.' });
     }
 
-    const store = await Store.findById(storeId).lean();
-    if (!store) {
+    const storeExists = await ensureStoreExists(storeId);
+    if (!storeExists) {
       return res.status(404).json({ message: 'Empresa nao encontrada.' });
     }
 
-    const data = readRulesFile();
-    const rules = ensureStoreRules(data, String(storeId));
-    const index = rules.findIndex((item) => Number(item?.code) === ruleCode);
-    if (index < 0) {
+    const updatedRule = await FiscalDefaultRule.findOneAndUpdate(
+      { empresa: storeId, code: ruleCode },
+      {
+        $set: {
+          name: trimmedName,
+          fiscal: normalizeFiscalData(fiscal || {}),
+          updatedBy: req.user?.id || '',
+        },
+      },
+      { new: true, runValidators: true }
+    ).lean();
+
+    if (!updatedRule) {
       return res.status(404).json({ message: 'Regra nao encontrada.' });
     }
 
-    const timestamp = new Date().toISOString();
-    rules[index] = {
-      ...rules[index],
-      name: trimmedName,
-      fiscal: normalizeFiscalData(fiscal || {}),
-      updatedAt: timestamp,
-      updatedBy: req.user?.id || '',
-    };
-
-    writeRulesFile(data);
-    res.json({ rule: rules[index], total: rules.length });
+    const total = await FiscalDefaultRule.countDocuments({ empresa: storeId });
+    return res.json({ rule: toRulePayload(updatedRule), total });
   } catch (error) {
     console.error('Erro ao atualizar regra fiscal padrao:', error);
-    res.status(500).json({ message: 'Erro ao atualizar regra fiscal padrao.' });
+    return res.status(500).json({ message: 'Erro ao atualizar regra fiscal padrao.' });
   }
 });
 
@@ -192,34 +174,33 @@ router.delete('/:code', requireAuth, authorizeRoles('admin', 'admin_master'), as
     if (!ruleCode) {
       return res.status(400).json({ message: 'Codigo de regra invalido.' });
     }
+
     const storeId = req.query.storeId || req.body?.storeId;
     if (!storeId) {
       return res.status(400).json({ message: 'Informe a empresa (storeId).' });
     }
 
-    const store = await Store.findById(storeId).lean();
-    if (!store) {
+    const storeExists = await ensureStoreExists(storeId);
+    if (!storeExists) {
       return res.status(404).json({ message: 'Empresa nao encontrada.' });
     }
 
-    const data = readRulesFile();
-    const rules = ensureStoreRules(data, String(storeId));
-    const index = rules.findIndex((item) => Number(item?.code) === ruleCode);
-    if (index < 0) {
+    const removed = await FiscalDefaultRule.findOneAndDelete({ empresa: storeId, code: ruleCode }).lean();
+    if (!removed) {
       return res.status(404).json({ message: 'Regra nao encontrada.' });
     }
 
-    const [removed] = rules.splice(index, 1);
-    writeRulesFile(data);
+    const total = await FiscalDefaultRule.countDocuments({ empresa: storeId });
+    const nextCode = await getNextCode(storeId);
 
-    res.json({
-      removed: removed?.code || ruleCode,
-      total: rules.length,
-      nextCode: getNextCode(rules),
+    return res.json({
+      removed: ruleCode,
+      total,
+      nextCode,
     });
   } catch (error) {
     console.error('Erro ao remover regra fiscal padrao:', error);
-    res.status(500).json({ message: 'Erro ao remover regra fiscal padrao.' });
+    return res.status(500).json({ message: 'Erro ao remover regra fiscal padrao.' });
   }
 });
 

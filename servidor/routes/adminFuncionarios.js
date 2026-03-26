@@ -334,6 +334,10 @@ function normalizeUserGroup(value) {
 
 function userToDTO(u) {
   const userGroup = normalizeUserGroup(u.userGroup);
+  const empresaContratualId = normalizeStoreId(u.empresaContratual);
+  const empresaContratualNome = (u?.empresaContratual && typeof u.empresaContratual === 'object')
+    ? (u.empresaContratual.nome || u.empresaContratual.razaoSocial || u.empresaContratual.nomeFantasia || '')
+    : '';
   return {
     _id: u._id,
     codigo: parseCodigoCliente(u.codigoCliente) || null,
@@ -348,6 +352,9 @@ function userToDTO(u) {
     nome: normName(u),
     grupos: Array.isArray(u.grupos) ? u.grupos : [],
     empresas: Array.isArray(u.empresas) ? u.empresas : [],
+    empresaContratual: empresaContratualId || null,
+    empresaContratualId: empresaContratualId || null,
+    empresaContratualNome: empresaContratualNome || '',
     userGroup,
     genero: u.genero || '',
     dataNascimento: u.dataNascimento || null,
@@ -469,10 +476,9 @@ router.get('/', authMiddleware, requireAdmin, async (req, res) => {
     const users = await User
       .find(
         filter,
-        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas userGroup genero dataNascimento racaCor deficiencia estadoCivil situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios codigoCliente'
+        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas empresaContratual userGroup genero dataNascimento racaCor deficiencia estadoCivil situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios codigoCliente'
       )
-      .populate('userGroup', 'nome codigo comissaoPercent')
-      .lean();
+      .populate('userGroup', 'nome codigo comissaoPercent').populate('empresaContratual', 'nome razaoSocial nomeFantasia').lean();
 
     // Ordenar: Admin Master > Admin > Funcionário; depois por nome
     users.sort((a, b) => {
@@ -524,8 +530,7 @@ router.get('/buscar-usuarios', authMiddleware, requireAdmin, async (req, res) =>
       )
       .sort({ createdAt: -1 })
       .limit(lim)
-      .populate('userGroup', 'nome codigo comissaoPercent')
-      .lean();
+      .populate('userGroup', 'nome codigo comissaoPercent').populate('empresaContratual', 'nome razaoSocial nomeFantasia').lean();
 
     res.json(users.map(userToDTO));
   } catch (err) {
@@ -593,8 +598,8 @@ router.post('/transformar', authMiddleware, requireAdmin, async (req, res) => {
 
     const ret = await User.findById(
       userId,
-      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas userGroup genero dataNascimento racaCor deficiencia estadoCivil rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios codigoCliente'
-    ).populate('userGroup', 'nome codigo comissaoPercent').lean();
+      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas empresaContratual userGroup genero dataNascimento racaCor deficiencia estadoCivil rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios codigoCliente'
+    ).populate('userGroup', 'nome codigo comissaoPercent').populate('empresaContratual', 'nome razaoSocial nomeFantasia').lean();
     res.json({ message: 'Usuário transformado com sucesso.', funcionario: userToDTO(ret) });
   } catch (err) {
     console.error(err);
@@ -610,8 +615,8 @@ router.get('/:id', authMiddleware, requireAdmin, async (req, res) => {
       await corrigirCodigoClienteSeInvalido(req.params.id);
       const u = await User.findById(
         req.params.id,
-        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas userGroup genero dataNascimento racaCor deficiencia estadoCivil rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios codigoCliente'
-      ).populate('userGroup', 'nome codigo comissaoPercent').lean();
+        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas empresaContratual userGroup genero dataNascimento racaCor deficiencia estadoCivil rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios codigoCliente'
+      ).populate('userGroup', 'nome codigo comissaoPercent').populate('empresaContratual', 'nome razaoSocial nomeFantasia').lean();
     if (!u || !STAFF_ROLES.includes(u.role)) {
       return res.status(404).json({ message: 'Funcionário não encontrado.' });
     }
@@ -725,6 +730,19 @@ router.post('/', authMiddleware, requireAdmin, async (req, res) => {
       empresasArr = empresasArr.filter(id => foundIds.has(String(id)));
     }
     doc.empresas = empresasArr;
+
+    if (Object.prototype.hasOwnProperty.call(req.body, 'empresaContratual')) {
+      const empresaContratualId = normalizeStoreId(req.body.empresaContratual);
+      if (!empresaContratualId) {
+        doc.empresaContratual = null;
+      } else {
+        const exists = await Store.exists({ _id: empresaContratualId });
+        if (!exists) {
+          return res.status(400).json({ message: 'Empresa contratual nao encontrada.' });
+        }
+        doc.empresaContratual = empresaContratualId;
+      }
+    }
 
     if (Object.prototype.hasOwnProperty.call(req.body, 'periodoExperienciaInicio')) {
       doc.periodoExperienciaInicio = parseDate(req.body.periodoExperienciaInicio);
@@ -885,6 +903,19 @@ router.put('/:id', authMiddleware, requireAdmin, async (req, res) => {
           arr = arr.filter(id => foundIds.has(String(id)));
         }
         update.empresas = arr;
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body, 'empresaContratual')) {
+      const empresaContratualId = normalizeStoreId(req.body.empresaContratual);
+      if (!empresaContratualId) {
+        update.empresaContratual = null;
+      } else {
+        const exists = await Store.exists({ _id: empresaContratualId }).select('_id').lean();
+        if (!exists) {
+          return res.status(400).json({ message: 'Empresa contratual nao encontrada.' });
+        }
+        update.empresaContratual = empresaContratualId;
       }
     }
 
@@ -1061,8 +1092,8 @@ router.put('/:id', authMiddleware, requireAdmin, async (req, res) => {
     const updated = await User.findByIdAndUpdate(
       req.params.id,
       update,
-      { new: true, runValidators: true, fields: 'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas userGroup genero dataNascimento racaCor deficiencia estadoCivil rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios' }
-    ).populate('userGroup', 'nome codigo comissaoPercent').lean();
+      { new: true, runValidators: true, fields: 'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas empresaContratual userGroup genero dataNascimento racaCor deficiencia estadoCivil rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios' }
+    ).populate('userGroup', 'nome codigo comissaoPercent').populate('empresaContratual', 'nome razaoSocial nomeFantasia').lean();
 
     res.json({ message: 'Funcionário atualizado com sucesso.', funcionario: userToDTO(updated) });
   } catch (err) {

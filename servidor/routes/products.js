@@ -104,16 +104,16 @@ const sanitizeFractionalConfig = async (rawConfig, { parentProductId = null, par
         const positionLabel = index + 1;
 
         if (!rawId || !mongoose.Types.ObjectId.isValid(rawId)) {
-            result.errors.push(`Produto filho inv√°lido na posi√ß√£o ${positionLabel}.`);
+            result.errors.push(`Produto filho inv·lido na posiÁ„o ${positionLabel}.`);
             return;
         }
         const childId = String(rawId);
         if (parentIdString && childId === parentIdString) {
-            result.errors.push('O produto n√£o pode ser configurado como filho de si mesmo.');
+            result.errors.push('O produto n„o pode ser configurado como filho de si mesmo.');
             return;
         }
         if (seenChildren.has(childId)) {
-            result.errors.push('Existem produtos filhos duplicados na configura√ß√£o de fracionamento.');
+            result.errors.push('Existem produtos filhos duplicados na configuraÁ„o de fracionamento.');
             return;
         }
         if (!baseQuantity || baseQuantity <= 0) {
@@ -121,7 +121,7 @@ const sanitizeFractionalConfig = async (rawConfig, { parentProductId = null, par
             return;
         }
         if (!fractionQuantity || fractionQuantity <= 0) {
-            result.errors.push('Informe a quantidade ap√≥s o fracionamento para cada produto filho.');
+            result.errors.push('Informe a quantidade apÛs o fracionamento para cada produto filho.');
             return;
         }
 
@@ -157,7 +157,7 @@ const sanitizeFractionalConfig = async (rawConfig, { parentProductId = null, par
                     }
                 }
             } catch (error) {
-                console.warn('N√£o foi poss√≠vel carregar o custo do produto pai para o fracionamento.', { parentProductId }, error);
+                console.warn('N„o foi possÌvel carregar o custo do produto pai para o fracionamento.', { parentProductId }, error);
             }
         }
     }
@@ -178,7 +178,7 @@ const sanitizeFractionalConfig = async (rawConfig, { parentProductId = null, par
     const itemsWithDetails = sanitizedItems.map((item) => {
         const child = childMap.get(item.produto);
         if (!child) {
-            result.errors.push('Alguns produtos filhos informados n√£o foram encontrados.');
+            result.errors.push('Alguns produtos filhos informados n„o foram encontrados.');
             return null;
         }
         const childStock = Number(child.stock);
@@ -541,7 +541,7 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
 
         const nome = normalizeString(payload.nome);
         if (!nome) {
-            return res.status(400).json({ message: 'Informe a descri√ß√£o do produto.' });
+            return res.status(400).json({ message: 'Informe a descriÁ„o do produto.' });
         }
 
         let codbarras = normalizeString(payload.codbarras);
@@ -549,7 +549,7 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
         if (barcodeProvided) {
             const existingBarcode = await Product.findOne({ codbarras }).lean();
             if (existingBarcode) {
-                return res.status(409).json({ message: 'J√° existe um produto com este c√≥digo de barras.' });
+                return res.status(409).json({ message: 'J· existe um produto com este cÛdigo de barras.' });
             }
         }
 
@@ -558,7 +558,7 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
         if (codProvided) {
             const existingCod = await Product.findOne({ cod }).lean();
             if (existingCod) {
-                return res.status(409).json({ message: 'J√° existe um produto com este c√≥digo interno.' });
+                return res.status(409).json({ message: 'J· existe um produto com este cÛdigo interno.' });
             }
         } else {
             cod = await generateSequentialCod();
@@ -707,17 +707,17 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
                     continue;
                 }
                 if (error?.code === 11000 && error?.keyPattern?.codbarras) {
-                    return res.status(409).json({ message: 'J√° existe um produto com este c√≥digo de barras.' });
+                    return res.status(409).json({ message: 'J· existe um produto com este cÛdigo de barras.' });
                 }
                 if (error?.code === 11000 && error?.keyPattern?.cod) {
-                    return res.status(409).json({ message: 'J√° existe um produto com este c√≥digo interno.' });
+                    return res.status(409).json({ message: 'J· existe um produto com este cÛdigo interno.' });
                 }
                 throw error;
             }
         }
 
         if (!createdProduct) {
-            return res.status(500).json({ message: 'N√£o foi poss√≠vel gerar um c√≥digo interno √∫nico para o produto.' });
+            return res.status(500).json({ message: 'N„o foi possÌvel gerar um cÛdigo interno ˙nico para o produto.' });
         }
 
         const populatedProduct = await Product.findById(createdProduct._id)
@@ -737,7 +737,7 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
 });
 
 
-// Fun√ß√£o auxiliar recursiva para encontrar todos os IDs de sub-categorias
+// FunÁ„o auxiliar recursiva para encontrar todos os IDs de sub-categorias
 async function findAllSubCategoryIds(categoryId) {
     let ids = [categoryId];
     const children = await Category.find({ parent: categoryId });
@@ -824,7 +824,7 @@ const generateSequentialCod = async () => {
     return String(candidate);
 };
 
-// GET /api/products/by-category (p√∫blica)
+// GET /api/products/by-category (p˙blica)
 router.get('/by-category', async (req, res) => {
     try {
         const { name: categoryName, parent: parentName, grandparent: grandParentName } = req.query;
@@ -866,10 +866,10 @@ router.get('/by-category', async (req, res) => {
     }
 });
 
-// GET /api/products (p√∫blica, listagem com pagina√ß√£o e busca)
+// GET /api/products (p˙blica, listagem com paginaÁ„o e busca)
 router.get('/', async (req, res) => {
     try {
-        const { page = 1, limit = 20, search = '', includeHidden = 'false', audience = '' } = req.query;
+        const { page = 1, limit = 20, search = '', includeHidden = 'false', audience = '', fastMode = 'false' } = req.query;
 
         let allowHiddenProducts = false;
         if (includeHidden === 'true' || audience === 'pdv') {
@@ -885,12 +885,15 @@ router.get('/', async (req, res) => {
         }
 
         const limitValue = Number.isFinite(parseInt(limit, 10)) ? parseInt(limit, 10) : 20;
+        const pageValue = Number.isFinite(parseInt(page, 10)) ? parseInt(page, 10) : 1;
+        const useFastMode = fastMode === 'true';
+        const sortCriteria = useFastMode ? { _id: 1 } : { nome: 1 };
 
         const products = await Product.find(query)
             .limit(limitValue)
-            .skip(limitValue * (page - 1))
+            .skip(limitValue * (pageValue - 1))
             .populate('categorias')
-            .sort({ nome: 1 })
+            .sort(sortCriteria)
             .lean();
 
         const total = await Product.countDocuments(query);
@@ -948,7 +951,7 @@ router.get('/', async (req, res) => {
 
         res.json({
             products,
-            page: parseInt(page),
+            page: pageValue,
             pages: Math.ceil(total / limit),
             total: total
         });
@@ -958,7 +961,7 @@ router.get('/', async (req, res) => {
     }
 });
 
-// GET /api/products/destaques (p√∫blica)
+// GET /api/products/destaques (p˙blica)
 router.get('/destaques', async (req, res) => {
     try {
         const destaques = await Product.find({
@@ -980,7 +983,7 @@ router.put('/bulk-update-category', requireAuth, authorizeRoles('admin', 'admin_
     try {
         const { productIds, newCategoryId, brandName } = req.body;
         if (!productIds || !newCategoryId || !Array.isArray(productIds) || productIds.length === 0) {
-            return res.status(400).json({ message: 'Dados inv√°lidos ou nenhum produto selecionado.' });
+            return res.status(400).json({ message: 'Dados inv·lidos ou nenhum produto selecionado.' });
         }
 
         const updateOperation = { $addToSet: { categorias: newCategoryId } };
@@ -999,7 +1002,7 @@ router.put('/destaques/order', requireAuth, authorizeRoles('admin', 'admin_maste
     try {
         const { orderedIds } = req.body;
         if (!Array.isArray(orderedIds)) {
-            return res.status(400).json({ message: 'Formato de dados inv√°lido.' });
+            return res.status(400).json({ message: 'Formato de dados inv·lido.' });
         }
         await Promise.all(
             orderedIds.map((id, index) =>
@@ -1012,7 +1015,7 @@ router.put('/destaques/order', requireAuth, authorizeRoles('admin', 'admin_maste
     }
 });
 
-// GET /api/products/by-barcode/:barcode (p√∫blica)
+// GET /api/products/by-barcode/:barcode (p˙blica)
 router.get('/by-barcode/:barcode', async (req, res) => {
     try {
         const fullBarcode = req.params.barcode;
@@ -1033,7 +1036,7 @@ router.get('/by-barcode/:barcode', async (req, res) => {
         }
 
         const product = await Product.findOne(filters).populate('categorias').lean();
-        if (!product) return res.status(404).json({ message: 'Produto n√£o encontrado.' });
+        if (!product) return res.status(404).json({ message: 'Produto n„o encontrado.' });
 
         if (imageIndex >= 0 && product.imagens && product.imagens[imageIndex]) {
             product.imagemPrincipal = product.imagens[imageIndex];
@@ -1043,19 +1046,19 @@ router.get('/by-barcode/:barcode', async (req, res) => {
 
         res.json({ products: [product], page: 1, pages: 1, total: 1 });
     } catch (error) {
-        console.error("Erro na busca por c√≥digo de barras:", error);
+        console.error("Erro na busca por cÛdigo de barras:", error);
         res.status(500).json({ message: 'Erro no servidor.' });
     }
 });
 
-// GET /api/products/check-unique (p√∫blica)
+// GET /api/products/check-unique (p˙blica)
 router.get('/check-unique', async (req, res) => {
     try {
         const rawCod = typeof req.query.cod === 'string' ? req.query.cod.trim() : '';
         const rawBarcode = typeof req.query.codbarras === 'string' ? req.query.codbarras.trim() : '';
 
         if (!rawCod && !rawBarcode) {
-            return res.status(400).json({ message: 'Informe o c√≥digo interno ou o c√≥digo de barras.' });
+            return res.status(400).json({ message: 'Informe o cÛdigo interno ou o cÛdigo de barras.' });
         }
 
         const filters = [];
@@ -1093,7 +1096,7 @@ router.get(
         try {
             const supplierCodeCanonical = canonicalSupplierProductCode(req.query?.supplierCode);
             if (!supplierCodeCanonical) {
-                return res.status(400).json({ message: 'Informe o c√≥digo do produto no fornecedor.' });
+                return res.status(400).json({ message: 'Informe o cÛdigo do produto no fornecedor.' });
             }
 
             const supplierNameCanonical = canonicalSupplierName(req.query?.supplierName);
@@ -1147,9 +1150,9 @@ router.get(
 );
 
 // ========================================================================
-// ========= FUN√á√ÉO AUXILIAR PARA BREADCRUMB ===============================
+// ========= FUN«√O AUXILIAR PARA BREADCRUMB ===============================
 async function getCategoryPath(categoryId) {
-    // Primeiro, monta a lista de categorias do n√≥ raiz at√© a folha
+    // Primeiro, monta a lista de categorias do nÛ raiz atÈ a folha
     const nodes = [];
     let currentIdToSearch = categoryId;
     for (let i = 0; i < 10; i++) {
@@ -1160,7 +1163,7 @@ async function getCategoryPath(categoryId) {
         currentIdToSearch = currentCategory.parent;
     }
 
-    // Em seguida, constr√≥i os hrefs incluindo parent/grandparent quando existirem
+    // Em seguida, constrÛi os hrefs incluindo parent/grandparent quando existirem
     const path = nodes.map((cat, index, arr) => {
         let href = `/pages/menu-departments-item/search.html?category=${encodeURIComponent(cat.nome)}`;
         if (index > 0) {
@@ -1175,7 +1178,7 @@ async function getCategoryPath(categoryId) {
     return path;
 }
 
-// GET /api/products/:id (p√∫blica)
+// GET /api/products/:id (p˙blica)
 router.get(
     '/:id/price-history',
     requireAuth,
@@ -1184,7 +1187,7 @@ router.get(
         try {
             const { id } = req.params;
             if (!mongoose.Types.ObjectId.isValid(id)) {
-                return res.status(400).json({ message: 'Identificador inv√°lido do produto.' });
+                return res.status(400).json({ message: 'Identificador inv·lido do produto.' });
             }
 
             const limitParam = Number.parseInt(req.query?.limit, 10);
@@ -1194,7 +1197,7 @@ router.get(
 
             const productExists = await Product.exists({ _id: id });
             if (!productExists) {
-                return res.status(404).json({ message: 'Produto n√£o encontrado.' });
+                return res.status(404).json({ message: 'Produto n„o encontrado.' });
             }
 
             const historyEntries = await ProductPriceHistory.find({ product: id })
@@ -1221,8 +1224,8 @@ router.get(
 
             res.json({ items: responsePayload });
         } catch (error) {
-            console.error('Erro ao buscar hist√≥rico de pre√ßos do produto:', error);
-            res.status(500).json({ message: 'Erro ao buscar o hist√≥rico de pre√ßos do produto.' });
+            console.error('Erro ao buscar histÛrico de preÁos do produto:', error);
+            res.status(500).json({ message: 'Erro ao buscar o histÛrico de preÁos do produto.' });
         }
     }
 );
@@ -1237,7 +1240,7 @@ router.get('/:id', async (req, res) => {
             })
             .populate('fracionado.itens.produto')
             .lean();
-        if (!productDocument) return res.status(404).json({ message: 'Produto n√£o encontrado.' });
+        if (!productDocument) return res.status(404).json({ message: 'Produto n„o encontrado.' });
 
         const product = applyFractionalSnapshot(productDocument);
 
@@ -1382,7 +1385,7 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
 
         const existingProduct = await Product.findById(req.params.id);
         if (!existingProduct) {
-            return res.status(404).json({ message: 'Produto n√£o encontrado.' });
+            return res.status(404).json({ message: 'Produto n„o encontrado.' });
         }
 
         const normalizeString = (value) => (typeof value === 'string' ? value.trim() : '');
@@ -1471,7 +1474,7 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
         if (payload.nome !== undefined) {
             const normalizedName = normalizeString(payload.nome);
             if (!normalizedName) {
-                return res.status(400).json({ message: 'Informe a descri√ß√£o do produto.' });
+                return res.status(400).json({ message: 'Informe a descriÁ„o do produto.' });
             }
             updatePayload.nome = normalizedName;
         }
@@ -1612,9 +1615,9 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
             });
         };
 
-        registerPriceChange('custo', 'Pre√ßo de Custo', existingProduct.custo);
-        registerPriceChange('venda', 'Pre√ßo de Venda', existingProduct.venda);
-        registerPriceChange('precoClube', 'Pre√ßo Promocional', existingProduct.precoClube);
+        registerPriceChange('custo', 'PreÁo de Custo', existingProduct.custo);
+        registerPriceChange('venda', 'PreÁo de Venda', existingProduct.venda);
+        registerPriceChange('precoClube', 'PreÁo Promocional', existingProduct.precoClube);
 
         let priceHistoryAuthor = {
             autorId: null,
@@ -1640,7 +1643,7 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
                     priceHistoryAuthor.autorEmail = authorDoc.email || priceHistoryAuthor.autorEmail;
                 }
             } catch (authorError) {
-                console.warn('N√£o foi poss√≠vel identificar o autor da altera√ß√£o de pre√ßo.', authorError);
+                console.warn('N„o foi possÌvel identificar o autor da alteraÁ„o de preÁo.', authorError);
             }
         }
 
@@ -1768,7 +1771,7 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
                     await ProductPriceHistory.insertMany(historyEntries);
                 }
             } catch (historyError) {
-                console.error('Erro ao registrar hist√≥rico de pre√ßos do produto:', historyError);
+                console.error('Erro ao registrar histÛrico de preÁos do produto:', historyError);
             }
         }
 
@@ -1842,7 +1845,7 @@ router.post(
             const productId = req.params.id;
             const product = await Product.findById(productId);
             if (!product) {
-                return res.status(404).json({ message: 'Produto n√£o encontrado.' });
+                return res.status(404).json({ message: 'Produto n„o encontrado.' });
             }
 
             const supplierName = normalizeSupplierString(req.body?.fornecedor);
@@ -1850,7 +1853,7 @@ router.post(
             if (!supplierProductCode) {
                 return res
                     .status(400)
-                    .json({ message: 'Informe o c√≥digo do produto no fornecedor.' });
+                    .json({ message: 'Informe o cÛdigo do produto no fornecedor.' });
             }
             if (!supplierName) {
                 return res.status(400).json({ message: 'Informe o nome do fornecedor.' });
@@ -1990,7 +1993,7 @@ router.post('/:id/destaque', requireAuth, authorizeRoles('admin', 'admin_master'
             { isDestaque: true, destaqueOrder: newOrder },
             { new: true }
         );
-        if (!product) return res.status(404).json({ message: 'Produto n√£o encontrado.' });
+        if (!product) return res.status(404).json({ message: 'Produto n„o encontrado.' });
         res.json(product);
     } catch (error) {
         res.status(500).json({ message: 'Erro ao marcar produto como destaque.' });
@@ -2005,7 +2008,7 @@ router.delete('/:id/destaque', requireAuth, authorizeRoles('admin', 'admin_maste
             { isDestaque: false, destaqueOrder: 0 },
             { new: true }
         );
-        if (!product) return res.status(404).json({ message: 'Produto n√£o encontrado.' });
+        if (!product) return res.status(404).json({ message: 'Produto n„o encontrado.' });
         res.json({ message: 'Produto removido dos destaques.' });
     } catch (error) {
         res.status(500).json({ message: 'Erro ao remover produto dos destaques.' });
@@ -2034,12 +2037,12 @@ router.post('/:id/upload', requireAuth, authorizeRoles('admin', 'admin_master'),
         const product = await Product.findById(req.params.id);
         if (!product) {
             await cleanupTempUploads();
-            return res.status(404).send('Produto n√£o encontrado');
+            return res.status(404).send('Produto n„o encontrado');
         }
 
         if (!isR2Configured()) {
             await cleanupTempUploads();
-            return res.status(500).json({ message: 'Armazenamento externo n√£o est√° configurado (Cloudflare).' });
+            return res.status(500).json({ message: 'Armazenamento externo n„o est· configurado (Cloudflare).' });
         }
 
         if (!tempFiles.length) {
@@ -2089,7 +2092,7 @@ router.post('/:id/upload', requireAuth, authorizeRoles('admin', 'admin_master'),
                     uploadResults.push({
                         status: 'error',
                         originalName: file?.originalname || '',
-                        message: r2ErrorMessage || 'N√£o foi poss√≠vel concluir o upload para o Cloudflare R2.',
+                        message: r2ErrorMessage || 'N„o foi possÌvel concluir o upload para o Cloudflare R2.',
                     });
                     continue;
                 }
@@ -2112,7 +2115,7 @@ router.post('/:id/upload', requireAuth, authorizeRoles('admin', 'admin_master'),
         if (!newImagePaths.length) {
             await cleanupTempUploads();
             return res.status(500).json({
-                message: 'N√£o foi poss√≠vel enviar as imagens selecionadas.',
+                message: 'N„o foi possÌvel enviar as imagens selecionadas.',
                 results: uploadResults,
             });
         }
@@ -2158,12 +2161,12 @@ router.patch(
             const receivedOrder = Array.isArray(req.body?.imagens) ? req.body.imagens : null;
 
             if (!receivedOrder) {
-                return res.status(400).json({ message: '√â necess√°rio informar a nova ordem das imagens.' });
+                return res.status(400).json({ message: '… necess·rio informar a nova ordem das imagens.' });
             }
 
             const product = await Product.findById(productId);
             if (!product) {
-                return res.status(404).json({ message: 'Produto n√£o encontrado.' });
+                return res.status(404).json({ message: 'Produto n„o encontrado.' });
             }
 
             const currentImages = Array.isArray(product.imagens)
@@ -2171,7 +2174,7 @@ router.patch(
                 : [];
 
             if (currentImages.length === 0) {
-                return res.status(400).json({ message: 'O produto n√£o possui imagens para reordenar.' });
+                return res.status(400).json({ message: 'O produto n„o possui imagens para reordenar.' });
             }
 
             const sanitizedReceived = receivedOrder
@@ -2179,7 +2182,7 @@ router.patch(
                 .filter(Boolean);
 
             if (sanitizedReceived.length === 0) {
-                return res.status(400).json({ message: 'A nova ordem n√£o cont√©m imagens v√°lidas.' });
+                return res.status(400).json({ message: 'A nova ordem n„o contÈm imagens v·lidas.' });
             }
 
             const validOrder = [];
@@ -2201,7 +2204,7 @@ router.patch(
             }
 
             if (validOrder.length === 0) {
-                return res.status(400).json({ message: 'N√£o foi poss√≠vel aplicar a nova ordem informada.' });
+                return res.status(400).json({ message: 'N„o foi possÌvel aplicar a nova ordem informada.' });
             }
 
             product.imagens = validOrder;
@@ -2229,10 +2232,10 @@ router.delete('/:productId/images', requireAuth, authorizeRoles('admin', 'admin_
     try {
         const { productId } = req.params;
         const { imageUrl } = req.body;
-        if (!imageUrl) return res.status(400).json({ message: 'O URL da imagem √© obrigat√≥rio.' });
+        if (!imageUrl) return res.status(400).json({ message: 'O URL da imagem È obrigatÛrio.' });
         
         const product = await Product.findById(productId);
-        if (!product) return res.status(404).json({ message: 'Produto n√£o encontrado.' });
+        if (!product) return res.status(404).json({ message: 'Produto n„o encontrado.' });
 
         product.imagens.pull(imageUrl);
         try {
@@ -2259,7 +2262,7 @@ router.delete('/:productId/categories/:categoryId', requireAuth, authorizeRoles(
     const { productId, categoryId } = req.params;
     try {
         const product = await Product.findByIdAndUpdate(productId, { $pull: { categorias: categoryId } }, { new: true });
-        if (!product) return res.status(404).json({ message: 'Produto n√£o encontrado.' });
+        if (!product) return res.status(404).json({ message: 'Produto n„o encontrado.' });
         res.json({ message: 'Categoria removida com sucesso.' });
     } catch (error) {
         console.error('Erro ao remover categoria do produto:', error);
@@ -2274,7 +2277,7 @@ router.delete('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), asyn
         const product = await Product.findById(id);
 
         if (!product) {
-            return res.status(404).json({ message: 'Produto n√£o encontrado.' });
+            return res.status(404).json({ message: 'Produto n„o encontrado.' });
         }
 
         const productId = product._id;
@@ -2317,7 +2320,7 @@ router.delete('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), asyn
         const hasSalesLinks = await PdvState.exists({ $or: salesLinkQuery });
 
         if (hasSalesLinks) {
-            return res.status(409).json({ message: 'N√£o √© poss√≠vel excluir produtos que possuam vendas registradas.' });
+            return res.status(409).json({ message: 'N„o È possÌvel excluir produtos que possuam vendas registradas.' });
         }
 
         const imagePaths = new Set();
@@ -2341,7 +2344,7 @@ router.delete('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), asyn
                     await deleteObjectFromR2(r2Key);
                 }
             } catch (fileError) {
-                console.warn(`N√£o foi poss√≠vel remover a imagem ${imagePath}:`, fileError);
+                console.warn(`N„o foi possÌvel remover a imagem ${imagePath}:`, fileError);
             }
         }
 

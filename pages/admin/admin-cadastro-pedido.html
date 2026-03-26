@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin: Cadastro de Pedido - E o Bicho</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="../../src/output.css">
+  <style>
+    body {
+      padding-bottom: 96px;
+    }
+
+    #cadastro-pedido-action-bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 40;
+    }
+  </style>
+</head>
+<body class="bg-gray-100">
+  <div id="admin-header-placeholder"></div>
+
+  <main class="container mx-auto px-4 pt-1 pb-10 min-h-screen">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <aside class="md:col-span-4">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
+
+      <div class="md:col-span-4 space-y-6">
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+          <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <nav aria-label="Breadcrumb" class="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                <span class="inline-flex items-center gap-2 text-primary"><i class="fas fa-cash-register"></i> Vendas</span>
+                <i class="fas fa-angle-right text-gray-400"></i>
+                <span class="text-gray-600">Cadastro de Pedido</span>
+              </nav>
+              <h1 class="text-2xl font-bold text-gray-800 mt-1">Cadastro de Pedido</h1>
+              <p class="text-gray-600 mt-1">Monte e salve um rascunho de pedido antes de finalizar no fluxo oficial de venda.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+          <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <h2 class="text-lg font-semibold text-gray-800">Itens do pedido</h2>
+            <div class="flex flex-wrap items-center gap-2">
+              <button id="pedido-exportar-excel" type="button" class="inline-flex items-center gap-2 rounded-lg border border-emerald-200 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 transition">
+                <i class="fas fa-file-excel"></i>
+                Exportar Excel
+              </button>
+              <button id="pedido-item-adicionar" type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">
+                <i class="fas fa-plus"></i>
+                Adicionar item
+              </button>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto rounded-lg border border-gray-100">
+            <table class="min-w-full text-sm">
+              <thead class="bg-gray-50 text-left text-gray-500">
+                <tr>
+                  <th class="px-3 py-2 w-52">Codbarras</th>
+                  <th class="px-3 py-2">Produto</th>
+                  <th class="px-3 py-2 w-28">Qtd</th>
+                  <th class="px-3 py-2 w-40">Valor unitario</th>
+                  <th class="px-3 py-2 w-40">Total</th>
+                  <th class="px-3 py-2 w-24">Acao</th>
+                </tr>
+              </thead>
+              <tbody id="pedido-itens-body" class="divide-y divide-gray-100"></tbody>
+            </table>
+          </div>
+
+          <div id="pedido-itens-vazio" class="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-sm text-gray-500 text-center">
+            Nenhum item no rascunho.
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <article class="rounded-lg border border-gray-100 bg-gray-50 p-4">
+              <p class="text-xs uppercase tracking-wide text-gray-500">Subtotal</p>
+              <p id="pedido-resumo-subtotal" class="text-xl font-bold text-gray-800 mt-1">R$ 0,00</p>
+            </article>
+            <article class="rounded-lg border border-gray-100 bg-gray-50 p-4">
+              <p class="text-xs uppercase tracking-wide text-gray-500">Desconto</p>
+              <p id="pedido-resumo-desconto" class="text-xl font-bold text-gray-800 mt-1">R$ 0,00</p>
+            </article>
+            <article class="rounded-lg border border-gray-100 bg-gray-50 p-4">
+              <p class="text-xs uppercase tracking-wide text-gray-500">Total do rascunho</p>
+              <p id="pedido-resumo-total" class="text-xl font-bold text-primary mt-1">R$ 0,00</p>
+            </article>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <div id="cadastro-pedido-action-bar" class="border-t border-gray-200 bg-white/95 backdrop-blur-sm shadow-[0_-6px_16px_rgba(15,23,42,0.08)]">
+    <div class="container mx-auto px-4 py-3">
+      <div class="flex flex-wrap items-center justify-end gap-3">
+        <button id="cadastro-pedido-importar" type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">
+          <i class="fas fa-file-import"></i>
+          Importar produtos
+        </button>
+        <button id="cadastro-pedido-limpar" type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">
+          <i class="fas fa-eraser"></i>
+          Limpar rascunho
+        </button>
+        <button id="cadastro-pedido-salvar" type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-secondary transition">
+          <i class="fas fa-save"></i>
+          Salvar rascunho
+        </button>
+      </div>
+    </div>
+  </div>
+
+
+  <div id="pedido-importar-modal" class="fixed inset-0 z-[100000] hidden" aria-hidden="true">
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-pedido-importar-dismiss="backdrop"></div>
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center"><div class="relative flex w-full max-w-[1352px] transform-gpu flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl min-h-0 text-[12px] leading-[1.35]" style="height:min(90vh,calc(100vh - 3rem));">
+      <div class="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+        <div>
+          <h3 class="text-base font-semibold text-gray-800">Importar produtos</h3>
+          <p class="text-xs text-gray-500 mt-1">Selecione os produtos para importar no rascunho.</p>
+        </div>
+        <button type="button" id="pedido-importar-fechar" class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50" aria-label="Fechar modal de importacao">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+
+      <div class="flex flex-col gap-3 border-b border-gray-100 px-5 py-4 md:flex-row md:items-center">
+        <div class="relative flex-1">
+          <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400"><i class="fas fa-search"></i></span>
+          <input id="pedido-importar-busca" type="search" placeholder="Buscar por cod, codbarras ou nome" class="w-full rounded-lg border border-gray-200 py-2 pl-10 pr-3 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+        </div>
+        <button id="pedido-importar-buscar" type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">
+          <i class="fas fa-filter"></i>
+          Buscar
+        </button>
+      </div>
+
+      <div class="min-h-0 flex-1 overflow-auto px-5 pt-0 pb-4">
+        <table id="pedido-importar-tabela" class="min-w-full text-sm">
+          <thead class="bg-gray-50 text-left text-gray-500">
+            <tr>
+              <th class="px-3 py-2 w-40">Selecione</th>
+              <th class="px-3 py-2">Cod</th>
+              <th class="px-3 py-2">CodBarras</th>
+              <th class="px-3 py-2">Nome</th>
+              <th class="px-3 py-2">Custo</th>
+            </tr>
+          </thead>
+          <tbody id="pedido-importar-resultados" class="divide-y divide-gray-100"></tbody>
+        </table>
+        <div id="pedido-importar-vazio" class="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500 mt-4">
+          Digite para buscar produtos.
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 bg-gray-50 px-5 py-3">
+        <span id="pedido-importar-selecionados" class="text-sm text-gray-600">0 selecionado(s)</span>
+        <div class="flex items-center gap-2">
+          <button id="pedido-importar-cancelar" type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100 transition">
+            Cancelar
+          </button>
+          <button id="pedido-importar-confirmar" type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-secondary transition">
+            <i class="fas fa-file-import"></i>
+            Importar selecionados
+          </button>
+        </div>
+      </div>
+    </div>
+    </div>
+  </div>
+  <div id="modal-placeholder"></div>
+  <div id="confirm-modal-placeholder"></div>
+  <div id="admin-footer-placeholder"></div>
+
+  <script>var basePath = '../../';</script>
+  <script src="../../scripts/core/config.js"></script>
+  <script src="../../scripts/core/ui.js"></script>
+  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/admin/admin.js"></script>
+  <script src="../../scripts/admin/admin-cadastro-pedido.js?v=20260325-07"></script>
+  <script src="/scripts/common/modal-bridge.js"></script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

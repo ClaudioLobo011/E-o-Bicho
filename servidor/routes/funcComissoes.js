@@ -961,12 +961,29 @@ const buildViewPayload = (records = [], opts = {}) => {
 
 router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
   try {
-    const user = await User.findById(req.user?.id || req.user?._id)
-      .select('nomeCompleto nomeContato razaoSocial codigoCliente userGroup')
+    const requesterId = req.user?.id || req.user?._id;
+    const requesterRole = String(req.user?.originalRole || req.user?.role || '').toLowerCase();
+    const isAdminMaster = requesterRole === 'admin_master';
+
+    const requestedProfessionalId = String(req.query?.profissionalId || req.query?.professionalId || '').trim();
+    const canImpersonate =
+      isAdminMaster &&
+      requestedProfessionalId &&
+      mongoose.Types.ObjectId.isValid(requestedProfessionalId);
+
+    const targetUserId = canImpersonate ? requestedProfessionalId : requesterId;
+
+    const user = await User.findById(targetUserId)
+      .select('nomeCompleto nomeContato razaoSocial codigoCliente userGroup role')
       .lean();
 
     if (!user) {
-      return res.status(404).json({ message: 'UsuÇ­rio nÇœo encontrado' });
+      return res.status(404).json({ message: 'Usuario nao encontrado' });
+    }
+
+    const targetRole = String(user.role || '').toLowerCase();
+    if (canImpersonate && !['funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master'].includes(targetRole)) {
+      return res.status(403).json({ message: 'Somente funcionarios podem ser usados na visualizacao de comissoes.' });
     }
 
   let userGroup = null;

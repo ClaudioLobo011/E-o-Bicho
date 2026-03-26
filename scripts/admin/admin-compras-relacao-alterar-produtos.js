@@ -8,11 +8,25 @@
     selectingAllMatches: false,
     categories: [],
     suppliers: [],
+    stores: [],
+    fiscalRulesByStore: new Map(),
+    fiscalRuleLabelsByStore: new Map(),
     loading: false,
     exporting: false,
     tableFilters: {
       sku: '',
+      barcode: '',
       nome: '',
+      marca: '',
+      apresentacao: '',
+      peso: '',
+      iat: '',
+      tipoProduto: '',
+      categorias: '',
+      idade: '',
+      especie: '',
+      porte: '',
+      castrado: '',
       unidade: '',
       imagem: '',
       custo: '',
@@ -23,6 +37,7 @@
       situacao: '',
     },
     tableSort: { key: '', direction: 'asc' },
+    visibleColumns: new Set(),
   };
 
   const elements = {};
@@ -33,7 +48,18 @@
 
   const TABLE_FILTER_QUERY_KEYS = {
     sku: 'col_sku',
+    barcode: 'col_barcode',
     nome: 'col_nome',
+    marca: 'col_marca',
+    apresentacao: 'col_apresentacao',
+    peso: 'col_peso',
+    iat: 'col_iat',
+    tipoProduto: 'col_tipo_produto',
+    categorias: 'col_categorias',
+    idade: 'col_idade',
+    especie: 'col_especie',
+    porte: 'col_porte',
+    castrado: 'col_castrado',
     unidade: 'col_unidade',
     imagem: 'col_imagem',
     custo: 'col_custo',
@@ -44,12 +70,19 @@
     situacao: 'col_situacao',
   };
 
+  const BASE_TABLE_COLUMNS = ['sku', 'barcode', 'nome', 'fornecedor', 'situacao'];
+  const PRICE_TABLE_COLUMNS = ['custo', 'markup', 'venda', 'promocao'];
+  const SETTINGS_TABLE_COLUMNS = ['marca', 'apresentacao'];
+  const GENERAL_INFO_TABLE_COLUMNS = ['peso', 'iat', 'tipoProduto', 'stock'];
+  const CLASSIFICATION_TABLE_COLUMNS = ['categorias', 'idade', 'especie', 'porte', 'castrado'];
+
   function initElements() {
     elements.filtersForm = document.getElementById('filters-form');
     elements.clearFiltersButton = document.getElementById('clear-filters');
     elements.appliedFilters = document.getElementById('applied-filters');
     elements.productsTableBody = document.getElementById('products-table-body');
     elements.resultsSummary = document.getElementById('results-summary');
+    elements.resultsSelectedCounter = document.getElementById('results-selected-counter');
     elements.paginationControls = document.getElementById('pagination-controls');
     elements.pageSizeSelect = document.getElementById('page-size-select');
     elements.selectAllCheckbox = document.getElementById('select-all-checkbox');
@@ -63,6 +96,14 @@
     elements.filterCategoriaSelect = document.getElementById('filter-categoria');
     elements.filterFornecedorSelect = document.getElementById('filter-fornecedor');
     elements.bulkCategoriasSelect = elements.bulkForm?.querySelector('[data-bulk-field="categorias"] select[multiple]');
+    elements.bulkFiscalStoreSelect = document.getElementById('bulk-fiscal-store');
+    elements.bulkFiscalRuleSelect = document.getElementById('bulk-fiscal-rule');
+    elements.bulkPricesDetails = document.getElementById('bulk-section-prices');
+    elements.bulkSettingsDetails = document.getElementById('bulk-section-settings');
+    elements.bulkGeneralInfoDetails = document.getElementById('bulk-section-general-info');
+    elements.bulkClassificationDetails = document.getElementById('bulk-section-classification');
+    elements.bulkFiscalDetails = document.getElementById('bulk-section-fiscal');
+    elements.productsTableHeadRow = document.querySelector('thead tr.align-top');
   }
 
   function getToken() {
@@ -142,11 +183,36 @@
   }
 
   function getFilterCandidates(product = {}, key) {
+    if (isFiscalStoreColumnKey(key)) {
+      return [getFiscalRuleLabelForProductStore(product, getStoreIdFromFiscalColumnKey(key)) || ''];
+    }
     switch (key) {
       case 'sku':
         return [product.cod || ''];
+      case 'barcode':
+        return [product.codbarras || product.barcode || ''];
       case 'nome':
         return [product.nome || ''];
+      case 'marca':
+        return [product.marca || ''];
+      case 'apresentacao':
+        return [product.apresentacao || ''];
+      case 'peso':
+        return [product.peso === null || product.peso === undefined ? '' : String(product.peso)];
+      case 'iat':
+        return [product.iat || ''];
+      case 'tipoProduto':
+        return [product.tipoProduto || ''];
+      case 'categorias':
+        return [product.categorias || ''];
+      case 'idade':
+        return [product.idade || ''];
+      case 'especie':
+        return [product.especie || ''];
+      case 'porte':
+        return [product.porte || ''];
+      case 'castrado':
+        return [product.castrado || ''];
       case 'unidade':
         return [product.unidade || ''];
       case 'imagem':
@@ -251,11 +317,36 @@
   }
 
   function getSortValue(product, key) {
+    if (isFiscalStoreColumnKey(key)) {
+      return getFiscalRuleLabelForProductStore(product, getStoreIdFromFiscalColumnKey(key)) || '';
+    }
     switch (key) {
       case 'sku':
         return product.cod || '';
+      case 'barcode':
+        return product.codbarras || product.barcode || '';
       case 'nome':
         return product.nome || '';
+      case 'marca':
+        return product.marca || '';
+      case 'apresentacao':
+        return product.apresentacao || '';
+      case 'peso':
+        return Number(product.peso);
+      case 'iat':
+        return product.iat || '';
+      case 'tipoProduto':
+        return product.tipoProduto || '';
+      case 'categorias':
+        return product.categorias || '';
+      case 'idade':
+        return product.idade || '';
+      case 'especie':
+        return product.especie || '';
+      case 'porte':
+        return product.porte || '';
+      case 'castrado':
+        return product.castrado || '';
       case 'unidade':
         return product.unidade || '';
       case 'imagem':
@@ -380,35 +471,343 @@
     });
   }
 
+  function getFiscalStoreColumnKey(storeId) {
+    const normalized = String(storeId || '').trim();
+    return normalized ? ('fiscal_store_' + normalized) : '';
+  }
+
+  function getFiscalStoreColumnKeys() {
+    return (Array.isArray(state.stores) ? state.stores : [])
+      .map((store) => getFiscalStoreColumnKey(store.id))
+      .filter(Boolean);
+  }
+
+  function isFiscalStoreColumnKey(key) {
+    return typeof key === 'string' && key.startsWith('fiscal_store_');
+  }
+
+  function getStoreIdFromFiscalColumnKey(key) {
+    if (!isFiscalStoreColumnKey(key)) return '';
+    return String(key).replace(/^fiscal_store_/, '').trim();
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function toFiscalString(value, fallback = '') {
+    if (typeof value === 'string') return value.trim();
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+    return fallback;
+  }
+
+  function toFiscalNumber(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  function normalizeFiscalTaxForMatch(tax = {}) {
+    return {
+      codigo: toFiscalString(tax?.codigo),
+      cst: toFiscalString(tax?.cst),
+      aliquota: toFiscalNumber(tax?.aliquota),
+      tipoCalculo: toFiscalString(tax?.tipoCalculo, 'percentual') || 'percentual',
+      valorBase: toFiscalNumber(tax?.valorBase),
+    };
+  }
+
+  function normalizeFiscalCfopForMatch(cfop = {}) {
+    return {
+      entrada: toFiscalString(cfop?.entrada || cfop?.entradaEstado || cfop?.cfopEntrada),
+      dentroEstado: toFiscalString(cfop?.dentroEstado || cfop?.dentro),
+      foraEstado: toFiscalString(cfop?.foraEstado || cfop?.fora),
+      transferencia: toFiscalString(cfop?.transferencia),
+      devolucao: toFiscalString(cfop?.devolucao),
+      industrializacao: toFiscalString(cfop?.industrializacao),
+    };
+  }
+
+  function normalizeFiscalIpiForMatch(ipi = {}) {
+    return {
+      cst: toFiscalString(ipi?.cst),
+      codigoEnquadramento: toFiscalString(ipi?.codigoEnquadramento),
+      aliquota: toFiscalNumber(ipi?.aliquota),
+      tipoCalculo: toFiscalString(ipi?.tipoCalculo, 'percentual') || 'percentual',
+      valorBase: toFiscalNumber(ipi?.valorBase),
+    };
+  }
+
+  function normalizeFiscalFcpForMatch(fcp = {}) {
+    return {
+      indicador: toFiscalString(fcp?.indicador, '0') || '0',
+      aliquota: toFiscalNumber(fcp?.aliquota),
+      aplica: Boolean(fcp?.aplica),
+    };
+  }
+
+  function normalizeFiscalStatusForMatch(status = {}) {
+    const allowed = new Set(['pendente', 'parcial', 'aprovado']);
+    const nfe = toFiscalString(status?.nfe).toLowerCase();
+    const nfce = toFiscalString(status?.nfce).toLowerCase();
+    return {
+      nfe: allowed.has(nfe) ? nfe : 'pendente',
+      nfce: allowed.has(nfce) ? nfce : 'pendente',
+    };
+  }
+
+  function sanitizeFiscalForMatch(fiscalValue) {
+    const fiscal = fiscalValue && typeof fiscalValue === 'object' ? fiscalValue : {};
+    return {
+      origem: toFiscalString(fiscal?.origem, '0') || '0',
+      cest: toFiscalString(fiscal?.cest),
+      csosn: toFiscalString(fiscal?.csosn),
+      cst: toFiscalString(fiscal?.cst),
+      cfop: {
+        nfe: normalizeFiscalCfopForMatch(fiscal?.cfop?.nfe || {}),
+        nfce: normalizeFiscalCfopForMatch(fiscal?.cfop?.nfce || {}),
+      },
+      pis: normalizeFiscalTaxForMatch(fiscal?.pis || {}),
+      cofins: normalizeFiscalTaxForMatch(fiscal?.cofins || {}),
+      ipi: normalizeFiscalIpiForMatch(fiscal?.ipi || {}),
+      fcp: normalizeFiscalFcpForMatch(fiscal?.fcp || {}),
+      status: normalizeFiscalStatusForMatch(fiscal?.status || {}),
+    };
+  }
+
+  function stableStringify(value) {
+    if (value === null || value === undefined) return 'null';
+    if (Array.isArray(value)) {
+      return '[' + value.map((item) => stableStringify(item)).join(',') + ']';
+    }
+    if (typeof value === 'object') {
+      const keys = Object.keys(value).sort();
+      return '{' + keys.map((key) => JSON.stringify(key) + ':' + stableStringify(value[key])).join(',') + '}';
+    }
+    return JSON.stringify(value);
+  }
+
+  function rebuildFiscalRuleLabelsForStore(storeId) {
+    const normalizedStoreId = String(storeId || '').trim();
+    if (!normalizedStoreId) return;
+    const rules = state.fiscalRulesByStore.get(normalizedStoreId) || [];
+    const lookup = new Map();
+    rules.forEach((rule) => {
+      const code = Number(rule?.code);
+      const name = String(rule?.name || '').trim();
+      const label = Number.isFinite(code) && code > 0
+        ? (String(code) + ' - ' + (name || 'Regra sem nome'))
+        : (name || 'Regra sem nome');
+      const signature = stableStringify(sanitizeFiscalForMatch(rule?.fiscal || {}));
+      lookup.set(signature, label);
+    });
+    state.fiscalRuleLabelsByStore.set(normalizedStoreId, lookup);
+  }
+
+  function getFiscalRuleLabelForProductStore(product, storeId) {
+    const normalizedStoreId = String(storeId || '').trim();
+    if (!normalizedStoreId) return '-';
+
+    const labelsByStore = product?.fiscalRegraPorEmpresa && typeof product.fiscalRegraPorEmpresa === 'object'
+      ? product.fiscalRegraPorEmpresa
+      : {};
+    const resolvedLabel = String(labelsByStore[normalizedStoreId] || '').trim();
+    if (resolvedLabel) return resolvedLabel;
+
+    const fiscalByStore = product?.fiscalPorEmpresa && typeof product.fiscalPorEmpresa === 'object'
+      ? product.fiscalPorEmpresa
+      : {};
+    const fiscalValue = fiscalByStore[normalizedStoreId];
+    if (!fiscalValue || typeof fiscalValue !== 'object') return '-';
+
+    const signature = stableStringify(sanitizeFiscalForMatch(fiscalValue));
+    const storeLookup = state.fiscalRuleLabelsByStore.get(normalizedStoreId);
+    if (!storeLookup || !(storeLookup instanceof Map)) return 'Regra configurada';
+    return storeLookup.get(signature) || 'Regra customizada';
+  }
+
+  async function ensureFiscalRulesLoadedForTableColumns() {
+    const stores = Array.isArray(state.stores) ? state.stores : [];
+    if (!stores.length) return;
+    await Promise.all(stores.map(async (store) => {
+      try {
+        await loadFiscalRulesForStore(store.id);
+      } catch (_) {
+        state.fiscalRuleLabelsByStore.set(String(store.id), new Map());
+      }
+    }));
+  }
+
+  function syncFiscalStoreHeaders() {
+    if (!elements.productsTableHeadRow) return;
+    elements.productsTableHeadRow
+      .querySelectorAll('th[data-dynamic-fiscal-column="true"]')
+      .forEach((th) => th.remove());
+
+    const stores = Array.isArray(state.stores) ? state.stores : [];
+    if (!stores.length) return;
+
+    const unitHeader = elements.productsTableHeadRow.querySelector('th[data-column-key="unidade"]');
+    if (!unitHeader) return;
+
+    stores.forEach((store) => {
+      const columnKey = getFiscalStoreColumnKey(store.id);
+      if (!columnKey) return;
+      const th = document.createElement('th');
+      th.scope = 'col';
+      th.className = 'px-4 py-2 text-left';
+      th.dataset.columnKey = columnKey;
+      th.dataset.dynamicFiscalColumn = 'true';
+      th.dataset.productsSortHeader = columnKey;
+      th.innerHTML =
+        '<div class="flex flex-col gap-1">' +
+          '<div class="flex items-center justify-between gap-1">' +
+            '<span class="whitespace-nowrap">' + escapeHtml(store.name) + '</span>' +
+            '<div class="flex flex-col items-center justify-center gap-px text-gray-400">' +
+              '<button type="button" class="flex h-3 w-3 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-products-sort="' + columnKey + '" data-sort-direction="asc" aria-label="Ordenar crescente por regra fiscal da empresa">' +
+                '<i class="fas fa-sort-up text-[9px]"></i>' +
+              '</button>' +
+              '<button type="button" class="flex h-3 w-3 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-products-sort="' + columnKey + '" data-sort-direction="desc" aria-label="Ordenar decrescente por regra fiscal da empresa">' +
+                '<i class="fas fa-sort-down text-[9px]"></i>' +
+              '</button>' +
+            '</div>' +
+          '</div>' +
+          '<input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium normal-case text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-products-filter="' + columnKey + '">' +
+        '</div>';
+      elements.productsTableHeadRow.insertBefore(th, unitHeader);
+      bindTableControls(th);
+    });
+  }
+  function getVisibleTableColumnKeys() {
+    const keys = new Set(BASE_TABLE_COLUMNS);
+    const pricesOpen = Boolean(elements.bulkPricesDetails?.open);
+    if (pricesOpen) {
+      PRICE_TABLE_COLUMNS.forEach((key) => keys.add(key));
+    }
+    const settingsOpen = Boolean(elements.bulkSettingsDetails?.open);
+    if (settingsOpen) {
+      SETTINGS_TABLE_COLUMNS.forEach((key) => keys.add(key));
+    }
+    const generalInfoOpen = Boolean(elements.bulkGeneralInfoDetails?.open);
+    if (generalInfoOpen) {
+      GENERAL_INFO_TABLE_COLUMNS.forEach((key) => keys.add(key));
+    }
+    const classificationOpen = Boolean(elements.bulkClassificationDetails?.open);
+    if (classificationOpen) {
+      CLASSIFICATION_TABLE_COLUMNS.forEach((key) => keys.add(key));
+    }
+    const fiscalOpen = Boolean(elements.bulkFiscalDetails?.open);
+    if (fiscalOpen) {
+      getFiscalStoreColumnKeys().forEach((key) => keys.add(key));
+    }
+    return keys;
+  }
+  function getVisibleTableColumnCount() {
+    const visible = state.visibleColumns instanceof Set ? state.visibleColumns : getVisibleTableColumnKeys();
+    return 1 + visible.size;
+  }
+  function updateTableColumnVisibility(options = {}) {
+    const { clearHiddenFilters = true, fetchAfterChange = true } = options;
+    const nextVisible = getVisibleTableColumnKeys();
+    state.visibleColumns = nextVisible;
+    document.querySelectorAll('[data-column-key]').forEach((cell) => {
+      const key = cell.dataset.columnKey;
+      if (!key) return;
+      if (key === 'select') {
+        cell.classList.remove('hidden');
+        return;
+      }
+      cell.classList.toggle('hidden', !nextVisible.has(key));
+    });
+    let shouldFetch = false;
+    if (clearHiddenFilters) {
+      Object.keys(state.tableFilters || {}).forEach((key) => {
+        if (nextVisible.has(key)) return;
+        if (!state.tableFilters[key]) return;
+        state.tableFilters[key] = '';
+        const input = tableFilterInputs.get(key);
+        if (input) input.value = '';
+        shouldFetch = true;
+      });
+      const { key: sortKey } = state.tableSort || {};
+      if (sortKey && !nextVisible.has(sortKey)) {
+        state.tableSort = { key: '', direction: 'asc' };
+        shouldFetch = true;
+      }
+    }
+    updateTableSortButtons();
+    if (shouldFetch && fetchAfterChange) {
+      state.pagination.page = 1;
+      fetchProducts(1);
+    }
+  }
+  function setupTableVisibilityBindings() {
+    const bindToggle = (detailsElement) => {
+      if (!detailsElement) return;
+      detailsElement.addEventListener('toggle', () => {
+        updateTableColumnVisibility();
+        renderProductsTable();
+      });
+    };
+
+    bindToggle(elements.bulkPricesDetails);
+    bindToggle(elements.bulkSettingsDetails);
+    bindToggle(elements.bulkGeneralInfoDetails);
+    bindToggle(elements.bulkClassificationDetails);
+    bindToggle(elements.bulkFiscalDetails);
+
+    elements.bulkFiscalDetails?.addEventListener('toggle', async () => {
+      if (!elements.bulkFiscalDetails.open) return;
+      await ensureFiscalRulesLoadedForTableColumns();
+      renderProductsTable();
+    });
+  }
+
+  function registerTableFilterInput(input) {
+    if (!input || input.dataset.productsBoundFilter === 'true') return;
+    const key = input.dataset.productsFilter;
+    if (!key) return;
+    tableFilterInputs.set(key, input);
+    const currentValue = state.tableFilters[key] || '';
+    if (input.value !== currentValue) {
+      input.value = currentValue;
+    }
+    input.addEventListener('input', (event) => {
+      setTableFilter(key, event.target.value || '');
+    });
+    input.dataset.productsBoundFilter = 'true';
+  }
+
+  function registerTableSortButton(button) {
+    if (!button || button.dataset.productsBoundSort === 'true') return;
+    const key = button.dataset.productsSort;
+    if (!key) return;
+    const direction = button.dataset.sortDirection === 'desc' ? 'desc' : 'asc';
+    tableSortButtons.set(button, { key, direction });
+    const header = button.closest('[data-products-sort-header]');
+    if (header) {
+      tableSortHeaders.set(key, header);
+    }
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      setTableSort(key, direction);
+    });
+    button.dataset.productsBoundSort = 'true';
+  }
+
+  function bindTableControls(scopeElement = document) {
+    if (!scopeElement) return;
+    scopeElement.querySelectorAll('[data-products-filter]').forEach(registerTableFilterInput);
+    scopeElement.querySelectorAll('[data-products-sort]').forEach(registerTableSortButton);
+  }
+
   function setupTableControls() {
-    document.querySelectorAll('[data-products-filter]').forEach((input) => {
-      const key = input.dataset.productsFilter;
-      if (!key) return;
-      tableFilterInputs.set(key, input);
-      const currentValue = state.tableFilters[key] || '';
-      if (input.value !== currentValue) {
-        input.value = currentValue;
-      }
-      input.addEventListener('input', (event) => {
-        setTableFilter(key, event.target.value || '');
-      });
-    });
-
-    document.querySelectorAll('[data-products-sort]').forEach((button) => {
-      const key = button.dataset.productsSort;
-      if (!key) return;
-      const direction = button.dataset.sortDirection === 'desc' ? 'desc' : 'asc';
-      tableSortButtons.set(button, { key, direction });
-      const header = button.closest('[data-products-sort-header]');
-      if (header && !tableSortHeaders.has(key)) {
-        tableSortHeaders.set(key, header);
-      }
-      button.addEventListener('click', (event) => {
-        event.preventDefault();
-        setTableSort(key, direction);
-      });
-    });
-
+    bindTableControls(document);
     updateTableSortButtons();
   }
 
@@ -613,6 +1012,14 @@
     } else {
       elements.selectedSummary.innerHTML = `<i class="fas fa-boxes-stacked"></i> ${formatNumber(count)} produtos selecionados`;
     }
+
+
+    if (elements.resultsSelectedCounter) {
+      elements.resultsSelectedCounter.textContent = count === 1
+        ? '1 selecionado'
+        : formatNumber(count) + ' selecionados';
+    }
+
     updateBulkButtonsState();
   }
 
@@ -631,16 +1038,18 @@
     elements.productsTableBody.innerHTML = '';
 
     updateTableSortButtons();
+    updateTableColumnVisibility({ clearHiddenFilters: false, fetchAfterChange: false });
 
     const rawProducts = Array.isArray(state.products) ? state.products : [];
     const visibleProducts = getVisibleProducts();
     const hasActiveColumnFilters = Object.values(state.tableFilters || {}).some(
       (value) => typeof value === 'string' && value.trim() !== '',
     );
+    const visibleColumnCount = getVisibleTableColumnCount();
 
     if (!rawProducts.length) {
       const emptyRow = document.createElement('tr');
-      emptyRow.innerHTML = '<td colspan="11" class="px-4 py-6 text-center text-xs text-gray-500">Nenhum produto encontrado para os filtros informados.</td>';
+      emptyRow.innerHTML = '<td colspan="' + visibleColumnCount + '" class="px-4 py-6 text-center text-xs text-gray-500">Nenhum produto encontrado para os filtros informados.</td>';
       elements.productsTableBody.appendChild(emptyRow);
       if (elements.selectAllCheckbox) {
         elements.selectAllCheckbox.checked = false;
@@ -651,7 +1060,7 @@
 
     if (!visibleProducts.length && hasActiveColumnFilters) {
       const emptyRow = document.createElement('tr');
-      emptyRow.innerHTML = '<td colspan="11" class="px-4 py-6 text-center text-xs text-gray-500">Nenhum produto corresponde aos filtros digitados na tabela.</td>';
+      emptyRow.innerHTML = '<td colspan="' + visibleColumnCount + '" class="px-4 py-6 text-center text-xs text-gray-500">Nenhum produto corresponde aos filtros digitados na tabela.</td>';
       elements.productsTableBody.appendChild(emptyRow);
       if (elements.selectAllCheckbox) {
         elements.selectAllCheckbox.checked = false;
@@ -664,25 +1073,47 @@
       const row = document.createElement('tr');
       row.className = 'hover:bg-gray-50';
       const isSelected = state.selected.has(product.id);
-      row.innerHTML = `
-        <td class="px-4 py-3">
-          <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20" data-product-checkbox data-product-id="${product.id}" ${isSelected ? 'checked' : ''}>
-        </td>
-        <td class="px-4 py-3 font-semibold text-gray-700">${product.cod || '-'}</td>
-        <td class="px-4 py-3 text-gray-600">${product.nome || '-'}</td>
-        <td class="px-4 py-3 text-gray-600">${product.unidade || '-'}</td>
-        <td class="px-4 py-3 text-gray-600">${product.temImagem ? 'Sim' : 'Não'}</td>
-        <td class="px-4 py-3 text-gray-700">${formatCurrency(product.custo)}</td>
-        <td class="px-4 py-3 text-gray-700">${product.markup === null || product.markup === undefined ? '—' : formatPercentage(product.markup)}</td>
-        <td class="px-4 py-3 text-gray-700">${formatCurrency(product.venda)}</td>
-        <td class="px-4 py-3 text-gray-600">${formatNumber(product.stock)}</td>
-        <td class="px-4 py-3 text-gray-600">${product.fornecedor || '—'}</td>
-        <td class="px-4 py-3">
-          ${product.inativo ? '<span class="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-semibold text-yellow-700">Inativo</span>' : '<span class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">Ativo</span>'}
-        </td>
-      `;
+      const fiscalCells = (Array.isArray(state.stores) ? state.stores : []).map((store) => {
+        const key = getFiscalStoreColumnKey(store.id);
+        const label = getFiscalRuleLabelForProductStore(product, store.id);
+        return '<td class="px-4 py-3 text-gray-600" data-column-key="' + key + '">' + escapeHtml(label || '-') + '</td>';
+      }).join('');
+
+      row.innerHTML =
+        '<td class="px-4 py-3" data-column-key="select">' +
+          '<input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20" data-product-checkbox data-product-id="' + product.id + '" ' + (isSelected ? 'checked' : '') + '>' +
+        '</td>' +
+        '<td class="px-4 py-3 font-semibold text-gray-700" data-column-key="sku">' + (product.cod || '-') + '</td>' +
+        '<td class="px-4 py-3 text-gray-600" data-column-key="barcode">' + (product.codbarras || product.barcode || '-') + '</td>' +
+        '<td class="px-4 py-3 text-gray-600" data-column-key="nome">' + (product.nome || '-') + '</td>' +
+        '<td class="px-4 py-3 text-gray-600" data-column-key="marca">' + (product.marca || '-') + '</td>' +
+        '<td class="px-4 py-3 text-gray-600" data-column-key="apresentacao">' + (product.apresentacao || '-') + '</td>' +
+        '<td class="px-4 py-3 text-gray-700" data-column-key="peso">' + (product.peso === null || product.peso === undefined ? '-' : formatNumber(product.peso)) + '</td>' +
+        '<td class="px-4 py-3 text-gray-600" data-column-key="iat">' + (product.iat || '-') + '</td>' +
+        '<td class="px-4 py-3 text-gray-600" data-column-key="tipoProduto">' + (product.tipoProduto || '-') + '</td>' +
+        '<td class="px-4 py-3 text-gray-600" data-column-key="categorias">' + (product.categorias || '-') + '</td>' +
+        '<td class="px-4 py-3 text-gray-600" data-column-key="idade">' + (product.idade || '-') + '</td>' +
+        '<td class="px-4 py-3 text-gray-600" data-column-key="especie">' + (product.especie || '-') + '</td>' +
+        '<td class="px-4 py-3 text-gray-600" data-column-key="porte">' + (product.porte || '-') + '</td>' +
+        '<td class="px-4 py-3 text-gray-600" data-column-key="castrado">' + (product.castrado || '-') + '</td>' +
+        fiscalCells +
+        '<td class="px-4 py-3 text-gray-600" data-column-key="unidade">' + (product.unidade || '-') + '</td>' +
+        '<td class="px-4 py-3 text-gray-600" data-column-key="imagem">' + (product.temImagem ? 'Sim' : 'Nao') + '</td>' +
+        '<td class="px-4 py-3 text-gray-700" data-column-key="custo">' + formatCurrency(product.custo) + '</td>' +
+        '<td class="px-4 py-3 text-gray-700" data-column-key="markup">' + (product.markup === null || product.markup === undefined ? '-' : formatPercentage(product.markup)) + '</td>' +
+        '<td class="px-4 py-3 text-gray-700" data-column-key="venda">' + formatCurrency(product.venda) + '</td>' +
+        '<td class="px-4 py-3 text-gray-700" data-column-key="promocao">' + (product.promocao === null || product.promocao === undefined ? '-' : formatCurrency(product.promocao)) + '</td>' +
+        '<td class="px-4 py-3 text-gray-600" data-column-key="stock">' + formatNumber(product.stock) + '</td>' +
+        '<td class="px-4 py-3 text-gray-600" data-column-key="fornecedor">' + (product.fornecedor || '-') + '</td>' +
+        '<td class="px-4 py-3" data-column-key="situacao">' +
+          (product.inativo
+            ? '<span class="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-semibold text-yellow-700">Inativo</span>'
+            : '<span class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">Ativo</span>') +
+        '</td>';
       elements.productsTableBody.appendChild(row);
     });
+
+    updateTableColumnVisibility({ clearHiddenFilters: false, fetchAfterChange: false });
 
     if (elements.selectAllCheckbox) {
       const pageSelection = visibleProducts.filter((product) => state.selected.has(product.id)).length;
@@ -769,10 +1200,6 @@
 
     const query = buildQueryString(filters, page);
     try {
-      if (page === 1) {
-        state.selected.clear();
-        updateSelectionSummary();
-      }
       const response = await fetchWithAuth(`${API_CONFIG.BASE_URL}/admin/products/bulk?${query}`);
       if (!response) return;
       if (!response.ok) {
@@ -957,6 +1384,26 @@
       updates[fieldKey] = { enabled: true, value };
     });
 
+    const storeUpdate = updates['fiscal.storeId'];
+    const ruleUpdate = updates['fiscal.ruleCode'];
+    const fiscalStoreEnabled = Boolean(storeUpdate?.enabled);
+    const fiscalRuleEnabled = Boolean(ruleUpdate?.enabled);
+
+    if (fiscalStoreEnabled || fiscalRuleEnabled) {
+      const storeId = String(storeUpdate?.value || '').trim();
+      const ruleCode = Number(ruleUpdate?.value);
+
+      if (!storeId) {
+        throw new Error('Selecione a empresa para aplicar a regra fiscal.');
+      }
+      if (!Number.isFinite(ruleCode) || ruleCode <= 0) {
+        throw new Error('Selecione o tipo de regra fiscal.');
+      }
+
+      updates['fiscal.storeId'] = { enabled: true, value: storeId };
+      updates['fiscal.ruleCode'] = { enabled: true, value: ruleCode };
+    }
+
     const hasAny = Object.values(updates).some((entry) => entry && entry.enabled);
     if (!hasAny) {
       throw new Error('Selecione ao menos um campo para alterar.');
@@ -1090,7 +1537,7 @@
       const payload = await response.json();
       const ids = Array.isArray(payload?.ids) ? payload.ids : [];
 
-      state.selected = new Set(ids);
+      ids.forEach((id) => state.selected.add(id));
 
       if (typeof payload?.total === 'number') {
         state.pagination.total = payload.total;
@@ -1120,6 +1567,8 @@
       }
       enableBulkField(wrapper, false);
     });
+
+
     updateBulkButtonsState();
   }
 
@@ -1210,6 +1659,127 @@
     elements.filterFornecedorSelect.value = currentValue;
   }
 
+  async function loadAllowedStores() {
+    try {
+      const response = await fetchWithAuth(`${API_CONFIG.BASE_URL}/stores/allowed`);
+      if (!response) return;
+      if (!response.ok) throw new Error('Falha ao carregar empresas permitidas.');
+      const payload = await response.json();
+      const stores = Array.isArray(payload?.stores) ? payload.stores : [];
+      state.stores = stores
+        .map((store) => ({
+          id: String(store?._id || store?.id || '').trim(),
+          name: store?.nome || store?.nomeFantasia || 'Empresa sem nome',
+        }))
+        .filter((store) => Boolean(store.id));
+      populateFiscalStoreSelect();
+      syncFiscalStoreHeaders();
+      updateTableColumnVisibility({ clearHiddenFilters: false, fetchAfterChange: false });
+      renderProductsTable();
+    } catch (error) {
+      console.error('Erro ao carregar empresas permitidas:', error);
+      state.stores = [];
+      populateFiscalStoreSelect();
+      syncFiscalStoreHeaders();
+    }
+  }
+
+  function populateFiscalStoreSelect() {
+    if (!elements.bulkFiscalStoreSelect) return;
+    const currentValue = elements.bulkFiscalStoreSelect.value;
+    elements.bulkFiscalStoreSelect.innerHTML = '<option value="">Selecione uma empresa</option>';
+
+    state.stores.forEach((store) => {
+      const option = document.createElement('option');
+      option.value = store.id;
+      option.textContent = store.name;
+      elements.bulkFiscalStoreSelect.appendChild(option);
+    });
+
+    if (currentValue && state.stores.some((store) => store.id === currentValue)) {
+      elements.bulkFiscalStoreSelect.value = currentValue;
+    }
+
+    const selectedStoreId = elements.bulkFiscalStoreSelect.value || '';
+    updateFiscalRuleSelect(selectedStoreId);
+  }
+
+  async function loadFiscalRulesForStore(storeId) {
+    const normalizedStoreId = String(storeId || '').trim();
+    if (!normalizedStoreId) {
+      return [];
+    }
+
+    if (state.fiscalRulesByStore.has(normalizedStoreId)) {
+      return state.fiscalRulesByStore.get(normalizedStoreId) || [];
+    }
+
+    const response = await fetchWithAuth(
+      `${API_CONFIG.BASE_URL}/fiscal/default-rules?storeId=${encodeURIComponent(normalizedStoreId)}`,
+    );
+    if (!response) return [];
+    if (!response.ok) {
+      throw new Error('Falha ao carregar regras fiscais da empresa selecionada.');
+    }
+
+    const payload = await response.json();
+    const rules = Array.isArray(payload?.rules) ? payload.rules : [];
+    state.fiscalRulesByStore.set(normalizedStoreId, rules);
+    rebuildFiscalRuleLabelsForStore(normalizedStoreId);
+    return rules;
+  }
+
+  async function updateFiscalRuleSelect(storeId) {
+    if (!elements.bulkFiscalRuleSelect) return;
+
+    const normalizedStoreId = String(storeId || '').trim();
+    const previousValue = elements.bulkFiscalRuleSelect.value;
+
+    if (!normalizedStoreId) {
+      elements.bulkFiscalRuleSelect.innerHTML = '<option value="">Selecione uma empresa primeiro</option>';
+      elements.bulkFiscalRuleSelect.value = '';
+      return;
+    }
+
+    elements.bulkFiscalRuleSelect.innerHTML = '<option value="">Carregando regras...</option>';
+    elements.bulkFiscalRuleSelect.value = '';
+
+    try {
+      const rules = await loadFiscalRulesForStore(normalizedStoreId);
+      elements.bulkFiscalRuleSelect.innerHTML = '<option value="">Selecione uma regra fiscal</option>';
+
+      rules.forEach((rule) => {
+        const code = Number(rule?.code);
+        if (!Number.isFinite(code) || code <= 0) return;
+        const option = document.createElement('option');
+        option.value = String(code);
+        option.textContent = `${code} - ${rule?.name || 'Regra sem nome'}`;
+        elements.bulkFiscalRuleSelect.appendChild(option);
+      });
+
+      if (previousValue && rules.some((rule) => String(rule?.code || '') === previousValue)) {
+        elements.bulkFiscalRuleSelect.value = previousValue;
+      }
+    } catch (error) {
+      console.error('Erro ao carregar regras fiscais da empresa:', error);
+      elements.bulkFiscalRuleSelect.innerHTML = '<option value="">Erro ao carregar regras</option>';
+      elements.bulkFiscalRuleSelect.value = '';
+    }
+  }
+
+  function setupFiscalRuleBindings() {
+    if (!elements.bulkFiscalStoreSelect || !elements.bulkFiscalRuleSelect) return;
+
+    elements.bulkFiscalStoreSelect.addEventListener('change', async () => {
+      const storeId = elements.bulkFiscalStoreSelect.value || '';
+      await updateFiscalRuleSelect(storeId);
+      if (Boolean(elements.bulkFiscalDetails?.open)) {
+        await ensureFiscalRulesLoadedForTableColumns();
+        renderProductsTable();
+      }
+    });
+  }
+
   function setupEventListeners() {
     elements.filtersForm.addEventListener('submit', (event) => {
       event.preventDefault();
@@ -1269,16 +1839,42 @@
     resetBulkSelections();
     setupEventListeners();
     setupTableControls();
+    setupTableVisibilityBindings();
+    setupFiscalRuleBindings();
     injectBulkCategoryCollector();
     attachBulkCategoryExtractor();
 
-    await Promise.all([loadCategories(), loadSuppliers()]);
+    await Promise.all([loadCategories(), loadSuppliers(), loadAllowedStores()]);
+    syncFiscalStoreHeaders();
+    if (Boolean(elements.bulkFiscalDetails?.open)) {
+      await ensureFiscalRulesLoadedForTableColumns();
+    }
     state.filters = collectFilters();
     renderAppliedFilters(state.filters);
     updateSelectionSummary();
     updateExportButtonState();
+    updateTableColumnVisibility({ clearHiddenFilters: true, fetchAfterChange: false });
     fetchProducts(1);
   }
 
   document.addEventListener('DOMContentLoaded', initialize);
 })();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

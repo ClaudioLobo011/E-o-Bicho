@@ -41,6 +41,7 @@ const userSchema = new Schema({
   telefoneSecundario: { type: String, trim: true },
   empresaPrincipal: { type: Schema.Types.ObjectId, ref: 'Store' },
   limiteCredito: { type: Number, default: 0 },
+  empresaContratual: { type: Schema.Types.ObjectId, ref: 'Store', default: null },
 
   // --- Campos Específicos de Pessoa Física ---
   nomeCompleto: { type: String },

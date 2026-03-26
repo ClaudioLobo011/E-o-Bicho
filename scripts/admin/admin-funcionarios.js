@@ -3175,7 +3175,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (empresaContratualSelect) {
       const contratualVal = empresaContratualSelect.value || '';
-      if (contratualVal) payload.empresaContratual = contratualVal;
+      payload.empresaContratual = contratualVal || null;
     }
     if (Array.isArray(enderecos)) {
       payload.enderecos = enderecos;

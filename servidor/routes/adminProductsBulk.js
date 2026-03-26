@@ -2,6 +2,9 @@ const express = require('express');
 const mongoose = require('mongoose');
 const XLSX = require('xlsx');
 const Product = require('../models/Product');
+const Store = require('../models/Store');
+const FiscalDefaultRule = require('../models/FiscalDefaultRule');
+const { normalizeFiscalData } = require('../services/fiscalRuleEngine');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 const { logInventoryMovement } = require('../utils/inventoryMovementLogger');
@@ -45,6 +48,116 @@ const normalizeForSearch = (value = '') => {
 
 const normalizeDigits = (value) => normalizeString(value).replace(/\D+/g, '');
 
+const toPlainObject = (value) => {
+  if (!value) return {};
+  if (typeof value.toObject === 'function') return value.toObject();
+  if (value instanceof Map) {
+    const out = {};
+    value.forEach((v, k) => { out[String(k)] = v; });
+    return out;
+  }
+  if (typeof value === 'object') return { ...value };
+  return {};
+};
+
+const stripFiscalMeta = (fiscal) => {
+  const source = fiscal && typeof fiscal === 'object' ? fiscal : {};
+  const cloned = JSON.parse(JSON.stringify(source));
+  delete cloned.atualizadoEm;
+  delete cloned.atualizadoPor;
+  return cloned;
+};
+
+const normalizeFiscalPerStoreForResponse = (value) => {
+  const plain = toPlainObject(value);
+  const result = {};
+  Object.entries(plain).forEach(([storeId, fiscal]) => {
+    const key = normalizeString(storeId);
+    if (!key) return;
+    result[key] = stripFiscalMeta(fiscal);
+  });
+  return result;
+};
+const isLikelyObjectId = (value = '') => /^[a-f\d]{24}$/i.test(normalizeString(value));
+
+const stableStringify = (value) => {
+  if (value === null || value === undefined) return 'null';
+  if (Array.isArray(value)) {
+    return '[' + value.map((item) => stableStringify(item)).join(',') + ']';
+  }
+  if (typeof value === 'object') {
+    const keys = Object.keys(value).sort();
+    return '{' + keys.map((key) => JSON.stringify(key) + ':' + stableStringify(value[key])).join(',') + '}';
+  }
+  return JSON.stringify(value);
+};
+
+const buildFiscalSignature = (fiscal) => stableStringify(stripFiscalMeta(normalizeFiscalData(fiscal || {})));
+
+const collectFiscalStoreIdsFromProducts = (products = []) => {
+  const ids = new Set();
+  products.forEach((product) => {
+    const fiscalByStore = toPlainObject(product?.fiscalPorEmpresa);
+    Object.keys(fiscalByStore || {}).forEach((storeId) => {
+      const normalizedStoreId = normalizeString(storeId);
+      if (normalizedStoreId) ids.add(normalizedStoreId);
+    });
+  });
+  return Array.from(ids);
+};
+
+const buildFiscalRuleLookupByStore = async (products = []) => {
+  const storeIds = collectFiscalStoreIdsFromProducts(products);
+  const lookupByStore = new Map();
+  if (!storeIds.length) return lookupByStore;
+
+  const storeObjectIds = storeIds
+    .map((value) => ensureObjectId(value))
+    .filter(Boolean);
+  if (!storeObjectIds.length) return lookupByStore;
+
+  const rules = await FiscalDefaultRule.find({ empresa: { $in: storeObjectIds } })
+    .select({ empresa: 1, code: 1, name: 1, fiscal: 1 })
+    .lean();
+
+  rules.forEach((rule) => {
+    const storeId = extractId(rule?.empresa);
+    if (!storeId) return;
+    if (!lookupByStore.has(storeId)) {
+      lookupByStore.set(storeId, new Map());
+    }
+    const code = Number(rule?.code);
+    const name = normalizeString(rule?.name);
+    const label = Number.isFinite(code) && code > 0
+      ? `${code} - ${name || 'Regra sem nome'}`
+      : (name || 'Regra sem nome');
+    const signature = buildFiscalSignature(rule?.fiscal || {});
+    lookupByStore.get(storeId).set(signature, label);
+  });
+
+  return lookupByStore;
+};
+
+const resolveFiscalRuleLabelsByStore = (fiscalByStore = {}, lookupByStore = new Map()) => {
+  const resolved = {};
+  Object.entries(fiscalByStore || {}).forEach(([storeId, fiscal]) => {
+    const normalizedStoreId = normalizeString(storeId);
+    if (!normalizedStoreId) return;
+    if (!fiscal || typeof fiscal !== 'object') {
+      resolved[normalizedStoreId] = '-';
+      return;
+    }
+
+    const storeLookup = lookupByStore.get(normalizedStoreId);
+    if (!(storeLookup instanceof Map)) {
+      resolved[normalizedStoreId] = 'Regra configurada';
+      return;
+    }
+    const signature = buildFiscalSignature(fiscal);
+    resolved[normalizedStoreId] = storeLookup.get(signature) || 'Regra customizada';
+  });
+  return resolved;
+};
 const normalizeImagePath = (value) => {
   if (!value) return '';
   if (typeof value === 'string') return value.trim();
@@ -69,6 +182,12 @@ const parseNumber = (value) => {
   if (value === null || value === undefined || value === '') return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+};
+
+const parsePositiveInt = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 };
 
 const parseDecimalString = (value) => {
@@ -116,7 +235,38 @@ const extractId = (doc) => {
   return String(raw);
 };
 
-const mapProductForResponse = (productDoc) => {
+const extractBarcodeValue = (entry) => {
+  if (entry === null || entry === undefined) return '';
+  if (typeof entry === 'string' || typeof entry === 'number') {
+    return normalizeString(entry);
+  }
+  if (typeof entry === 'object') {
+    const candidate =
+      entry.codigo ??
+      entry.codbarras ??
+      entry.barcode ??
+      entry.gtin ??
+      entry.value;
+    return normalizeString(candidate);
+  }
+  return '';
+};
+const collectProductBarcodes = (product = {}) => {
+  const unique = new Set();
+  const add = (value) => {
+    const normalized = normalizeString(value);
+    if (normalized) unique.add(normalized);
+  };
+  add(product.codbarras);
+  if (Array.isArray(product.codigosComplementares)) {
+    product.codigosComplementares.forEach((entry) => {
+      add(extractBarcodeValue(entry));
+    });
+  }
+  return Array.from(unique);
+};
+
+const mapProductForResponse = (productDoc, fiscalRuleLookupByStore = new Map()) => {
   const product = productDoc && typeof productDoc === 'object' ? productDoc : {};
 
   const saleValue = parseNumber(product.venda);
@@ -162,14 +312,39 @@ const mapProductForResponse = (productDoc) => {
     (imagemPrincipal && isValidImagePath(imagemPrincipal)) ||
     driveImages.length > 0;
 
+  const codbarrasDisplay = collectProductBarcodes(product).join(' | ');
+  const promotionActive = Boolean(product?.promocao?.ativa);
+  const promotionPercent = parseNumber(product?.promocao?.porcentagem);
+  let promotionalPrice = null;
+  if (promotionActive && saleValue !== null && promotionPercent !== null && promotionPercent > 0) {
+    const calculated = saleValue * (1 - (promotionPercent / 100));
+    promotionalPrice = Number.isFinite(calculated) ? calculated : null;
+  }
+
+  
+  const fiscalPorEmpresa = normalizeFiscalPerStoreForResponse(product.fiscalPorEmpresa);
+  const fiscalRegraPorEmpresa = resolveFiscalRuleLabelsByStore(fiscalPorEmpresa, fiscalRuleLookupByStore);
+
   return {
     id: extractId(product),
     cod: product.cod || '',
+    codbarras: codbarrasDisplay || '',
     nome: product.nome || '',
+    marca: normalizeString(product.marca),
+    apresentacao: normalizeString(product?.especificacoes?.apresentacao),
+    peso: parseNumber(product.peso),
+    iat: normalizeString(product.iat),
+    tipoProduto: normalizeString(product.tipoProduto),
+    categorias: Array.isArray(product.categorias) ? product.categorias.map((c) => { const name = normalizeString(c && typeof c === 'object' && !(c instanceof mongoose.Types.ObjectId) ? (c.nome || c.name) : ''); if (name) return name; const fallback = normalizeString(c); return isLikelyObjectId(fallback) ? '' : fallback; }).filter(Boolean).join(' | ') : '',
+    idade: Array.isArray(product?.especificacoes?.idade) ? product.especificacoes.idade.map((v) => normalizeString(v)).filter(Boolean).join(' | ') : '',
+    especie: Array.isArray(product?.especificacoes?.pet) ? product.especificacoes.pet.map((v) => normalizeString(v)).filter(Boolean).join(' | ') : '',
+    porte: Array.isArray(product?.especificacoes?.porteRaca) ? product.especificacoes.porteRaca.map((v) => normalizeString(v)).filter(Boolean).join(' | ') : '',
+    castrado: normalizeString(product?.especificacoes?.castracao),
     unidade: product.unidade || '',
     venda: saleValue || 0,
     custo: costValue || 0,
     markup,
+    promocao: promotionalPrice,
     stock: parseNumber(product.stock) || 0,
     fornecedor:
       Array.isArray(product.fornecedores) && product.fornecedores.length
@@ -178,12 +353,25 @@ const mapProductForResponse = (productDoc) => {
     inativo: Boolean(product.inativo),
     naoMostrarNoSite: Boolean(product.naoMostrarNoSite),
     temImagem,
+    fiscalPorEmpresa,
+    fiscalRegraPorEmpresa,
   };
 };
 
 const SORTABLE_COLUMNS = {
   sku: { sortField: 'cod' },
+  barcode: { sortField: 'codbarras' },
   nome: { sortField: 'nome' },
+  marca: { sortField: 'marca' },
+  apresentacao: { sortField: 'especificacoes.apresentacao' },
+  peso: { sortField: 'peso' },
+  iat: { sortField: 'iat' },
+  tipoProduto: { sortField: 'tipoProduto' },
+  categorias: { sortField: 'categorias' },
+  idade: { sortField: 'especificacoes.idade' },
+  especie: { sortField: 'especificacoes.pet' },
+  porte: { sortField: 'especificacoes.porteRaca' },
+  castrado: { sortField: 'especificacoes.castracao' },
   unidade: { sortField: 'unidade' },
   fornecedor: { sortField: 'fornecedores.0.fornecedor' },
   situacao: { sortField: 'inativo' },
@@ -226,6 +414,19 @@ const buildAggregationProjection = () => ({
   _id: 1,
   nome: 1,
   cod: 1,
+  codbarras: 1,
+  marca: 1,
+  categorias: 1,
+  especificacoes: {
+    apresentacao: '$especificacoes.apresentacao',
+    idade: '$especificacoes.idade',
+    pet: '$especificacoes.pet',
+    porteRaca: '$especificacoes.porteRaca',
+    castracao: '$especificacoes.castracao',
+  },
+  peso: 1,
+  iat: 1,
+  tipoProduto: 1,
   unidade: 1,
   inativo: 1,
   custo: 1,
@@ -233,6 +434,7 @@ const buildAggregationProjection = () => ({
   venda: 1,
   stock: 1,
   temImagem: 1,
+  fiscalPorEmpresa: 1,
   fornecedores: {
     $map: {
       input: {
@@ -289,7 +491,18 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
 
     const columnFilters = {
       sku: normalizeString(req.query.col_sku),
+      barcode: normalizeString(req.query.col_barcode),
       nome: normalizeString(req.query.col_nome),
+      marca: normalizeString(req.query.col_marca),
+      apresentacao: normalizeString(req.query.col_apresentacao),
+      peso: normalizeString(req.query.col_peso),
+      iat: normalizeString(req.query.col_iat),
+      tipoProduto: normalizeString(req.query.col_tipo_produto),
+      categorias: normalizeString(req.query.col_categorias),
+      idade: normalizeString(req.query.col_idade),
+      especie: normalizeString(req.query.col_especie),
+      porte: normalizeString(req.query.col_porte),
+      castrado: normalizeString(req.query.col_castrado),
       unidade: normalizeString(req.query.col_unidade),
       fornecedor: normalizeString(req.query.col_fornecedor),
       situacao: normalizeString(req.query.col_situacao),
@@ -392,6 +605,16 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
       andConditions.push({ cod: { $regex: new RegExp(escapeRegex(columnFilters.sku), 'i') } });
     }
 
+    if (columnFilters.barcode) {
+      const barcodeRegex = new RegExp(escapeRegex(columnFilters.barcode), 'i');
+      andConditions.push({
+        $or: [
+          { codbarras: { $regex: barcodeRegex } },
+          { codigosComplementares: { $regex: barcodeRegex } },
+        ],
+      });
+    }
+
     if (columnFilters.nome) {
       const columnNomeRegex =
         buildWildcardRegex(columnFilters.nome) || new RegExp(escapeRegex(columnFilters.nome), 'i');
@@ -413,6 +636,47 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
       } else if (columnConditions.length > 1) {
         andConditions.push({ $or: columnConditions });
       }
+    }
+
+    if (columnFilters.marca) {
+      andConditions.push({ marca: { $regex: new RegExp(escapeRegex(columnFilters.marca), 'i') } });
+    }
+
+    if (columnFilters.apresentacao) {
+      andConditions.push({ 'especificacoes.apresentacao': { $regex: new RegExp(escapeRegex(columnFilters.apresentacao), 'i') } });
+    }
+
+    const columnWeight = parseDecimalString(columnFilters.peso);
+    if (columnWeight !== null) {
+      andConditions.push({ peso: columnWeight });
+    }
+
+    if (columnFilters.iat) {
+      andConditions.push({ iat: { $regex: new RegExp(escapeRegex(columnFilters.iat), 'i') } });
+    }
+
+    if (columnFilters.tipoProduto) {
+      andConditions.push({ tipoProduto: { $regex: new RegExp(escapeRegex(columnFilters.tipoProduto), 'i') } });
+    }
+
+    if (columnFilters.categorias) {
+      andConditions.push({ categorias: { $elemMatch: { $regex: new RegExp(escapeRegex(columnFilters.categorias), 'i') } } });
+    }
+
+    if (columnFilters.idade) {
+      andConditions.push({ 'especificacoes.idade': { $regex: new RegExp(escapeRegex(columnFilters.idade), 'i') } });
+    }
+
+    if (columnFilters.especie) {
+      andConditions.push({ 'especificacoes.pet': { $regex: new RegExp(escapeRegex(columnFilters.especie), 'i') } });
+    }
+
+    if (columnFilters.porte) {
+      andConditions.push({ 'especificacoes.porteRaca': { $regex: new RegExp(escapeRegex(columnFilters.porte), 'i') } });
+    }
+
+    if (columnFilters.castrado) {
+      andConditions.push({ 'especificacoes.castracao': { $regex: new RegExp(escapeRegex(columnFilters.castrado), 'i') } });
     }
 
     if (columnFilters.unidade) {
@@ -484,11 +748,13 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
           .skip((page - 1) * limit)
           .limit(limit)
           .allowDiskUse(true)
+          .populate({ path: 'categorias', select: 'nome' })
           .lean(),
         Product.countDocuments(query).collation(DEFAULT_COLLATION),
       ]);
 
-      const mappedProducts = productsDocs.map((product) => mapProductForResponse(product));
+      const fiscalRuleLookupByStore = await buildFiscalRuleLookupByStore(productsDocs);
+      const mappedProducts = productsDocs.map((product) => mapProductForResponse(product, fiscalRuleLookupByStore));
 
       return res.json({
         products: mappedProducts,
@@ -738,6 +1004,7 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
     const productsDocs = ids.length
       ? await Product.find({ _id: { $in: idsForQuery } })
           .collation(DEFAULT_COLLATION)
+          .populate({ path: 'categorias', select: 'nome' })
           .lean()
       : [];
     const docsById = new Map(productsDocs.map((doc) => [extractId(doc), doc]));
@@ -786,7 +1053,18 @@ router.get(
 
       const columnFilters = {
         sku: normalizeString(req.query.col_sku),
+        barcode: normalizeString(req.query.col_barcode),
         nome: normalizeString(req.query.col_nome),
+        marca: normalizeString(req.query.col_marca),
+        apresentacao: normalizeString(req.query.col_apresentacao),
+        peso: normalizeString(req.query.col_peso),
+        iat: normalizeString(req.query.col_iat),
+        tipoProduto: normalizeString(req.query.col_tipo_produto),
+        categorias: normalizeString(req.query.col_categorias),
+        idade: normalizeString(req.query.col_idade),
+        especie: normalizeString(req.query.col_especie),
+        porte: normalizeString(req.query.col_porte),
+        castrado: normalizeString(req.query.col_castrado),
         unidade: normalizeString(req.query.col_unidade),
         fornecedor: normalizeString(req.query.col_fornecedor),
         situacao: normalizeString(req.query.col_situacao),
@@ -882,6 +1160,16 @@ router.get(
         andConditions.push({ cod: { $regex: new RegExp(escapeRegex(columnFilters.sku), 'i') } });
       }
 
+      if (columnFilters.barcode) {
+        const barcodeRegex = new RegExp(escapeRegex(columnFilters.barcode), 'i');
+        andConditions.push({
+          $or: [
+            { codbarras: { $regex: barcodeRegex } },
+            { codigosComplementares: { $regex: barcodeRegex } },
+          ],
+        });
+      }
+
       if (columnFilters.nome) {
         const columnNomeRegex =
           buildWildcardRegex(columnFilters.nome) || new RegExp(escapeRegex(columnFilters.nome), 'i');
@@ -903,6 +1191,47 @@ router.get(
         } else if (columnConditions.length > 1) {
           andConditions.push({ $or: columnConditions });
         }
+      }
+
+      if (columnFilters.marca) {
+        andConditions.push({ marca: { $regex: new RegExp(escapeRegex(columnFilters.marca), 'i') } });
+      }
+
+      if (columnFilters.apresentacao) {
+        andConditions.push({ 'especificacoes.apresentacao': { $regex: new RegExp(escapeRegex(columnFilters.apresentacao), 'i') } });
+      }
+
+      const columnWeight = parseDecimalString(columnFilters.peso);
+      if (columnWeight !== null) {
+        andConditions.push({ peso: columnWeight });
+      }
+
+      if (columnFilters.iat) {
+        andConditions.push({ iat: { $regex: new RegExp(escapeRegex(columnFilters.iat), 'i') } });
+      }
+
+      if (columnFilters.tipoProduto) {
+        andConditions.push({ tipoProduto: { $regex: new RegExp(escapeRegex(columnFilters.tipoProduto), 'i') } });
+      }
+
+      if (columnFilters.categorias) {
+        andConditions.push({ categorias: { $elemMatch: { $regex: new RegExp(escapeRegex(columnFilters.categorias), 'i') } } });
+      }
+
+      if (columnFilters.idade) {
+        andConditions.push({ 'especificacoes.idade': { $regex: new RegExp(escapeRegex(columnFilters.idade), 'i') } });
+      }
+
+      if (columnFilters.especie) {
+        andConditions.push({ 'especificacoes.pet': { $regex: new RegExp(escapeRegex(columnFilters.especie), 'i') } });
+      }
+
+      if (columnFilters.porte) {
+        andConditions.push({ 'especificacoes.porteRaca': { $regex: new RegExp(escapeRegex(columnFilters.porte), 'i') } });
+      }
+
+      if (columnFilters.castrado) {
+        andConditions.push({ 'especificacoes.castracao': { $regex: new RegExp(escapeRegex(columnFilters.castrado), 'i') } });
       }
 
       if (columnFilters.unidade) {
@@ -965,6 +1294,7 @@ router.get(
           .collation(DEFAULT_COLLATION)
           .sort(sortStage)
           .allowDiskUse(true)
+          .populate({ path: 'categorias', select: 'nome' })
           .lean();
       } else {
         const pipeline = [{ $match: query }];
@@ -1181,6 +1511,7 @@ router.get(
             .filter(Boolean);
           const productsDocs = await Product.find({ _id: { $in: idsForQuery } })
             .collation(DEFAULT_COLLATION)
+            .populate({ path: 'categorias', select: 'nome' })
             .lean();
           const docsById = new Map(productsDocs.map((doc) => [extractId(doc), doc]));
           orderedProducts = ids.map((id) => docsById.get(id)).filter(Boolean);
@@ -1189,7 +1520,8 @@ router.get(
         }
       }
 
-      const mappedProducts = orderedProducts.map((product) => mapProductForResponse(product));
+      const fiscalRuleLookupByStore = await buildFiscalRuleLookupByStore(orderedProducts);
+      const mappedProducts = orderedProducts.map((product) => mapProductForResponse(product, fiscalRuleLookupByStore));
 
       const worksheetHeader = [
         'ID',
@@ -1213,7 +1545,7 @@ router.get(
       const rows = mappedProducts.map((product) => ({
         ID: product.id,
         SKU: product.cod || '',
-        Descrição: product.nome || '',
+        'Descrição': product.nome || '',
         Unidade: product.unidade || '',
         'Tem imagem': product.temImagem ? 'Sim' : 'Não',
         'Preço de custo (R$)': toNumber(product.custo),
@@ -1221,7 +1553,7 @@ router.get(
         'Preço de venda (R$)': toNumber(product.venda),
         Estoque: toNumber(product.stock),
         'Fornecedor principal': product.fornecedor || '',
-        Situação: product.inativo ? 'Inativo' : 'Ativo',
+        'Situação': product.inativo ? 'Inativo' : 'Ativo',
       }));
 
       const worksheet = XLSX.utils.aoa_to_sheet([worksheetHeader]);
@@ -1303,7 +1635,7 @@ function applySupplierUpdate(product, payload = {}) {
   };
 }
 
-function applyUpdatesToProduct(product, updates, user) {
+function applyUpdatesToProduct(product, updates, user, options = {}) {
   const costField = updates.custo;
   if (hasEnabledField(updates, 'custo')) {
     const value = parseNumber(costField.value);
@@ -1385,7 +1717,7 @@ function applyUpdatesToProduct(product, updates, user) {
     product.categorias = categoryIds;
   }
 
-  if (hasEnabledField(updates, 'especificacoes.idade') || hasEnabledField(updates, 'especificacoes.pet') || hasEnabledField(updates, 'especificacoes.porteRaca')) {
+  if (hasEnabledField(updates, 'especificacoes.idade') || hasEnabledField(updates, 'especificacoes.pet') || hasEnabledField(updates, 'especificacoes.porteRaca') || hasEnabledField(updates, 'especificacoes.castracao')) {
     product.especificacoes = product.especificacoes && typeof product.especificacoes === 'object'
       ? { ...product.especificacoes }
       : { idade: [], pet: [], porteRaca: [] };
@@ -1410,6 +1742,10 @@ function applyUpdatesToProduct(product, updates, user) {
         : [];
       product.especificacoes.porteRaca = values.map((value) => normalizeString(value)).filter(Boolean);
     }
+
+    if (hasEnabledField(updates, 'especificacoes.castracao')) {
+      product.especificacoes.castracao = normalizeString(getFieldValue(updates, 'especificacoes.castracao'));
+    }
   }
 
   if (hasEnabledField(updates, 'descricao')) {
@@ -1427,6 +1763,33 @@ function applyUpdatesToProduct(product, updates, user) {
 
   if (hasEnabledField(updates, 'ncm')) {
     product.ncm = normalizeString(getFieldValue(updates, 'ncm'));
+  }
+
+  const fiscalRuleAssignment = options?.fiscalRuleAssignment || null;
+  if (fiscalRuleAssignment?.storeId && fiscalRuleAssignment?.fiscal) {
+    const normalizedStoreId = normalizeString(fiscalRuleAssignment.storeId);
+    if (normalizedStoreId) {
+      const normalizedFiscal = normalizeFiscalData(fiscalRuleAssignment.fiscal || {});
+      normalizedFiscal.atualizadoEm = new Date();
+      normalizedFiscal.atualizadoPor = normalizeString(user?.email || user?.id || '');
+
+      const currentFiscalPerStore = product.fiscalPorEmpresa;
+      let fiscalByStore = {};
+
+      if (currentFiscalPerStore && typeof currentFiscalPerStore.toObject === 'function') {
+        fiscalByStore = currentFiscalPerStore.toObject();
+      } else if (currentFiscalPerStore instanceof Map) {
+        currentFiscalPerStore.forEach((value, key) => {
+          fiscalByStore[String(key)] = value;
+        });
+      } else if (currentFiscalPerStore && typeof currentFiscalPerStore === 'object') {
+        fiscalByStore = { ...currentFiscalPerStore };
+      }
+
+      fiscalByStore[normalizedStoreId] = normalizedFiscal;
+      product.fiscalPorEmpresa = fiscalByStore;
+      product.markModified('fiscalPorEmpresa');
+    }
   }
 
   let fiscalTouched = false;
@@ -1503,12 +1866,93 @@ router.put('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (req
     .filter(Boolean);
 
   if (!validIds.length) {
-    return res.status(400).json({ message: 'Os identificadores dos produtos são inválidos.' });
+    return res.status(400).json({ message: 'Os identificadores dos produtos sao invalidos.' });
+  }
+
+  const fiscalStoreEnabled = hasEnabledField(updates, 'fiscal.storeId');
+  const fiscalRuleEnabled = hasEnabledField(updates, 'fiscal.ruleCode');
+  const updateOptions = {};
+
+  if (fiscalStoreEnabled || fiscalRuleEnabled) {
+    const fiscalStoreId = normalizeString(getFieldValue(updates, 'fiscal.storeId'));
+    const fiscalRuleCode = parsePositiveInt(getFieldValue(updates, 'fiscal.ruleCode'));
+
+    if (!fiscalStoreId) {
+      return res.status(400).json({ message: 'Informe a empresa para aplicar a regra fiscal.' });
+    }
+
+    if (!fiscalRuleCode) {
+      return res.status(400).json({ message: 'Informe o tipo de regra fiscal.' });
+    }
+
+    const fiscalStoreObjectId = ensureObjectId(fiscalStoreId);
+    if (!fiscalStoreObjectId) {
+      return res.status(400).json({ message: 'Empresa invalida para aplicacao da regra fiscal.' });
+    }
+
+    const storeExists = await Store.exists({ _id: fiscalStoreObjectId });
+    if (!storeExists) {
+      return res.status(404).json({ message: 'Empresa nao encontrada para aplicacao da regra fiscal.' });
+    }
+
+    const selectedRule = await FiscalDefaultRule.findOne({ empresa: fiscalStoreObjectId, code: fiscalRuleCode }).lean();
+    if (!selectedRule) {
+      return res.status(404).json({ message: 'Regra fiscal nao encontrada para a empresa selecionada.' });
+    }
+
+    updateOptions.fiscalRuleAssignment = {
+      storeId: fiscalStoreId,
+      code: fiscalRuleCode,
+      fiscal: normalizeFiscalData(selectedRule.fiscal || {}),
+    };
   }
 
   const result = { updated: 0, errors: [] };
 
+  const enabledUpdateKeys = Object.keys(updates || {}).filter((key) => hasEnabledField(updates, key));
+  const isOnlyFiscalRuleAssignment =
+    enabledUpdateKeys.length === 2 &&
+    enabledUpdateKeys.includes('fiscal.storeId') &&
+    enabledUpdateKeys.includes('fiscal.ruleCode') &&
+    updateOptions?.fiscalRuleAssignment?.storeId &&
+    updateOptions?.fiscalRuleAssignment?.fiscal;
+
   try {
+    if (isOnlyFiscalRuleAssignment) {
+      const assignmentStoreId = normalizeString(updateOptions.fiscalRuleAssignment.storeId);
+      const fiscalPayload = normalizeFiscalData(updateOptions.fiscalRuleAssignment.fiscal || {});
+      fiscalPayload.atualizadoEm = new Date();
+      fiscalPayload.atualizadoPor = normalizeString(req.user?.email || req.user?.id || '');
+
+      const setPath = `fiscalPorEmpresa.${assignmentStoreId}`;
+      const updateResult = await Product.updateMany(
+        { _id: { $in: validIds } },
+        { $set: { [setPath]: fiscalPayload } },
+      );
+
+      const matchedCount = Number(updateResult?.matchedCount ?? updateResult?.n ?? 0);
+      const modifiedCount = Number(updateResult?.modifiedCount ?? updateResult?.nModified ?? 0);
+
+      if (matchedCount < validIds.length) {
+        const matchedProducts = await Product.find({ _id: { $in: validIds } })
+          .select({ _id: 1 })
+          .lean();
+        const foundIds = new Set(matchedProducts.map((product) => String(product._id)));
+        validIds.forEach((objectId) => {
+          const stringId = objectId.toString();
+          if (!foundIds.has(stringId)) {
+            result.errors.push({ id: stringId, message: 'Produto n�o encontrado.' });
+          }
+        });
+      }
+
+      result.updated = modifiedCount;
+      return res.json({
+        ...result,
+        matched: matchedCount,
+      });
+    }
+
     const products = await Product.find({ _id: { $in: validIds } }).collation(DEFAULT_COLLATION);
     const foundIds = new Set(products.map((product) => product._id.toString()));
 
@@ -1522,7 +1966,7 @@ router.put('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (req
     for (const product of products) {
       try {
         const previousStock = Number(product?.stock) || 0;
-        applyUpdatesToProduct(product, updates, req.user || {});
+        applyUpdatesToProduct(product, updates, req.user || {}, updateOptions);
         await product.save();
         if (hasEnabledField(updates, 'stock')) {
           const currentStock = Number(product?.stock) || 0;
@@ -1566,3 +2010,16 @@ router.put('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (req
 });
 
 module.exports = router;
+
+
+
+
+
+
+
+
+
+
+
+
+
