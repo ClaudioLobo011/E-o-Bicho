@@ -569,6 +569,20 @@ export function toDateInputValueFromISO(isoStr) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+function normalizeServiceDateInput(raw, fallback = '') {
+  const str = String(raw || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+  if (str) {
+    const parsed = new Date(str);
+    if (!Number.isNaN(parsed.getTime())) {
+      return toDateInputValueFromISO(parsed.toISOString());
+    }
+  }
+  const fallbackStr = String(fallback || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(fallbackStr)) return fallbackStr;
+  return todayStr();
+}
+
 function agendaCustomerNormalizeId(value) {
   return String(value || '').trim();
 }
@@ -1947,6 +1961,7 @@ export function openEditModal(a) {
           profissionalId: x.profissionalId ? String(x.profissionalId) : '',
           profissionalNome: x.profissionalNome || '',
           itemId: x.itemId || null,
+          data: normalizeServiceDateInput(x.data || x.dataServico || x.date || x.scheduledAt || '', toDateInputValueFromISO(a.h || a.scheduledAt || new Date().toISOString())),
           hora: normalizeHourValue(x.hora || x.horario || x.h || x.scheduledAt || a.h || a.scheduledAt || ''),
           status: normalizeStatusValue(x.status || x.situacao || a.status || 'agendado'),
           observacao: typeof obsRaw === 'string' ? obsRaw : '',
@@ -1959,6 +1974,7 @@ export function openEditModal(a) {
         profissionalId: a.profissionalId ? String(a.profissionalId) : '',
         profissionalNome: typeof a.profissional === 'string' ? a.profissional : (a.profissional?.nomeCompleto || a.profissional?.nomeContato || a.profissional?.razaoSocial || ''),
         itemId: null,
+        data: normalizeServiceDateInput(a.data || a.date || a.h || a.scheduledAt || '', toDateInputValueFromISO(a.h || a.scheduledAt || new Date().toISOString())),
         hora: normalizeHourValue(a.h || a.scheduledAt || ''),
         status: normalizeStatusValue(a.status || 'agendado'),
         observacao: typeof a.observacoes === 'string' ? a.observacoes : '',
@@ -1979,7 +1995,7 @@ export function openEditModal(a) {
       els.addStoreSelect.innerHTML = state.stores.map(s => `<option value="${s._id}">${s.nome}</option>`).join('');
     }
     els.addStoreSelect.value = a.storeId || state.selectedStoreId || els.storeSelect?.value || '';
-    els.addStoreSelect.disabled = false;
+    els.addStoreSelect.disabled = lockPaidEdit;
   }
   if (els.addDateInput) {
     const iso = a.h || a.scheduledAt || new Date().toISOString();
@@ -2017,7 +2033,7 @@ export function openEditModal(a) {
       .trim().toLowerCase().replace(/[-\s]+/g, '_');
     const allowed = ['agendado', 'em_espera', 'em_atendimento', 'finalizado'];
     els.statusSelect.value = allowed.includes(keyRaw) ? keyRaw : 'agendado';
-    els.statusSelect.disabled = lockPaidEdit;
+    els.statusSelect.disabled = false;
   }
   if (els.obsInput) {
     els.obsInput.value = (a.observacoes || '').trim();
@@ -2282,18 +2298,19 @@ export function renderServicosLista() {
   const lockPaidEdit = isLockedPaidEditing();
   const profs = getModalProfissionaisList();
   const buildOptions = (selectedId, fallbackName = '') => {
-    const opts = ['<option value="">Selecione</option>'];
+    const selectedNormalized = selectedId ? String(selectedId) : AGENDA_NO_PREFERENCE_PROF_ID;
+    const opts = [];
     let hasSelected = false;
     profs.forEach((prof) => {
       const value = String(prof._id || '');
-      const isSelected = selectedId && value === String(selectedId);
+      const isSelected = value === selectedNormalized;
       if (isSelected) hasSelected = true;
       const label = escapeHtml(prof.nome || '');
       opts.push(`<option value="${value}"${isSelected ? ' selected' : ''}>${label}</option>`);
     });
-    if (selectedId && !hasSelected) {
-      const safeName = escapeHtml(fallbackName || 'Profissional');
-      const value = String(selectedId);
+    if (!hasSelected) {
+      const safeName = escapeHtml(fallbackName || 'Sem Preferência');
+      const value = selectedNormalized;
       opts.push(`<option value="${value}" selected>${safeName}</option>`);
     }
     return opts.join('');
@@ -2301,15 +2318,17 @@ export function renderServicosLista() {
   els.servListUL.innerHTML = items.map((it, idx) => {
     const valorFmt = money(Number(it.valor || 0));
     const nomeSafe = escapeHtml(it.nome || '');
-    const profId = it.profissionalId ? String(it.profissionalId) : '';
+    const profId = it.profissionalId ? String(it.profissionalId) : AGENDA_NO_PREFERENCE_PROF_ID;
     const options = buildOptions(profId, it.profissionalNome || '');
     const horaValue = normalizeHourValue(it.hora || it.horario || it.h || '');
+    const dataValue = normalizeServiceDateInput(it.data || it.dataServico || it.date || it.scheduledAt || '', els.addDateInput?.value || todayStr());
     const observacaoValue = escapeHtml(it.observacao || it.observacoes || '');
     const statusKey = normalizeStatusValue(it.status || it.situacao || 'agendado');
-    const horaDisabledAttr = lockPaidEdit ? ' disabled' : '';
-    const profissionalDisabledAttr = lockPaidEdit ? ' disabled' : '';
+    const horaDisabledAttr = '';
+    const profissionalDisabledAttr = '';
+    const dataDisabledAttr = '';
     const observacaoDisabledAttr = lockPaidEdit ? ' disabled' : '';
-    const statusDisabledAttr = lockPaidEdit ? ' disabled' : '';
+    const statusDisabledAttr = '';
     const removeDisabledAttr = lockPaidEdit ? ' disabled' : '';
     return `
       <tr>
@@ -2324,6 +2343,9 @@ export function renderServicosLista() {
           <select data-idx="${idx}" class="select-serv-prof w-full rounded-md border-gray-300 focus:ring-primary focus:border-primary text-sm"${profissionalDisabledAttr}>
             ${options}
           </select>
+        </td>
+        <td class="px-3 py-2 align-top">
+          <input type="date" value="${dataValue}" data-idx="${idx}" class="input-serv-data w-36 rounded-md border-gray-300 focus:border-primary focus:ring-primary"${dataDisabledAttr} />
         </td>
         <td class="px-3 py-2 align-top">
           <input type="text" value="${observacaoValue}" data-idx="${idx}" placeholder="Observação" class="input-serv-observacao w-full rounded-md border-gray-300 focus:border-primary focus:ring-primary"${observacaoDisabledAttr} />
@@ -2354,7 +2376,7 @@ export function renderServicosLista() {
     sel.addEventListener('change', () => {
       const i = parseInt(sel.getAttribute('data-idx'), 10);
       if (Number.isNaN(i) || !state.tempServicos[i]) return;
-      const selected = sel.value || '';
+      const selected = sel.value || AGENDA_NO_PREFERENCE_PROF_ID;
       state.tempServicos[i].profissionalId = selected;
       const option = sel.options[sel.selectedIndex];
       state.tempServicos[i].profissionalNome = option ? option.textContent.trim() : '';
@@ -2365,6 +2387,13 @@ export function renderServicosLista() {
       const i = parseInt(input.getAttribute('data-idx'), 10);
       if (Number.isNaN(i) || !state.tempServicos[i]) return;
       state.tempServicos[i].hora = normalizeHourValue(input.value);
+    });
+  });
+  els.servListUL.querySelectorAll('.input-serv-data').forEach((input) => {
+    input.addEventListener('input', () => {
+      const i = parseInt(input.getAttribute('data-idx'), 10);
+      if (Number.isNaN(i) || !state.tempServicos[i]) return;
+      state.tempServicos[i].data = normalizeServiceDateInput(input.value, els.addDateInput?.value || todayStr());
     });
   });
   els.servListUL.querySelectorAll('.input-serv-observacao').forEach((input) => {
@@ -2388,8 +2417,6 @@ export async function saveAgendamento() {
     const dateRaw = (els.addDateInput?.value) || (els.dateInput?.value) || todayStr();
     const storeIdSelected = (els.addStoreSelect?.value) || state.selectedStoreId || els.storeSelect?.value;
     const hora = els.horaInput?.value;
-    const defaultProfissionalIdRaw = (els.profSelect?.value || '').trim();
-    const defaultProfissionalId = isNoPreferenceProfessionalId(defaultProfissionalIdRaw) ? '' : defaultProfissionalIdRaw;
     const status = (els.statusSelect?.value) || 'agendado';
     if (!hora) { try { els.horaInput.classList.add('border-red-500'); const p=document.createElement('p'); p.className='form-err text-xs text-red-600 mt-1'; p.textContent='Informe a hora.'; els.horaInput.parentElement.appendChild(p);} catch{}; return; }
     if (!storeIdSelected) { try { (els.addStoreSelect||els.storeSelect).classList.add('border-red-500'); const p=document.createElement('p'); p.className='form-err text-xs text-red-600 mt-1'; p.textContent='Selecione a empresa.'; (els.addStoreSelect||els.storeSelect).parentElement.appendChild(p);} catch{}; return; }
@@ -2399,16 +2426,18 @@ export async function saveAgendamento() {
     const itemsRaw = Array.isArray(state.tempServicos) ? state.tempServicos : [];
     const normalizedServices = itemsRaw.map((svc) => {
       const profId = svc && svc.profissionalId ? String(svc.profissionalId).trim() : '';
-      const resolvedProfRaw = profId || defaultProfissionalIdRaw;
+      const resolvedProfRaw = profId;
       const resolvedProf = isNoPreferenceProfessionalId(resolvedProfRaw) ? '' : resolvedProfRaw;
       const serviceHour = normalizeHourValue((svc && (svc.hora || svc.horario)) || baseHora);
+      const serviceDate = normalizeServiceDateInput(svc?.data || svc?.dataServico || svc?.date || svc?.scheduledAt || '', dateRaw);
       const obsValueRaw = svc?.observacao ?? svc?.observacoes ?? '';
       const obsValue = typeof obsValueRaw === 'string' ? obsValueRaw : '';
       const statusValue = normalizeStatusValue(svc?.status || svc?.situacao || status);
       return {
         ...svc,
         profissionalId: resolvedProf ? String(resolvedProf) : '',
-        profissionalSemPreferencia: Boolean(resolvedProfRaw && isNoPreferenceProfessionalId(resolvedProfRaw)),
+        profissionalSemPreferencia: !resolvedProfRaw || isNoPreferenceProfessionalId(resolvedProfRaw),
+        data: serviceDate,
         hora: serviceHour,
         observacao: obsValue,
         status: statusValue,
@@ -2419,7 +2448,7 @@ export async function saveAgendamento() {
       if (window.showToast) window.showToast('Defina um profissional para cada serviço adicionado.', 'warning'); else alert('Defina um profissional para cada serviço adicionado.');
       return;
     }
-    const primaryProfissionalId = normalizedServices.find(svc => svc.profissionalId)?.profissionalId || defaultProfissionalId;
+    const primaryProfissionalId = normalizedServices.find(svc => svc.profissionalId)?.profissionalId || '';
 
     if (state.editing && state.editing._id) {
       const id = state.editing._id;
@@ -2427,13 +2456,20 @@ export async function saveAgendamento() {
       if (!normalizedServices.length) { try { els.servInput.classList.add('border-red-500'); const p=document.createElement('p'); p.className='form-err text-xs text-red-600 mt-1'; p.textContent='Adicione pelo menos 1 serviço.'; els.servInput.parentElement.appendChild(p);} catch{}; return; }
       const body = lockPaidEdit
         ? {
-            storeId: storeIdSelected,
-            profissionalId: primaryProfissionalId || null,
             scheduledAt,
-            serviceHour: baseHora,
-            serviceScheduledAt: scheduledAt,
-            serviceItemIds: normalizedServices
-              .map((svc) => (svc?.itemId ? String(svc.itemId).trim() : ''))
+            status: normalizeStatusValue(status),
+            serviceItemUpdates: normalizedServices
+              .map((svc) => {
+                const itemId = svc?.itemId ? String(svc.itemId).trim() : '';
+                if (!itemId) return null;
+                return {
+                  itemId,
+                  profissionalId: svc.profissionalId ? String(svc.profissionalId).trim() : null,
+                  data: svc.data ? normalizeServiceDateInput(svc.data, dateRaw) : null,
+                  hora: svc.hora || '',
+                  status: normalizeStatusValue(svc.status || status),
+                };
+              })
               .filter(Boolean),
           }
         : {
@@ -2450,6 +2486,7 @@ export async function saveAgendamento() {
                 ...(x.profissionalId ? { profissionalId: x.profissionalId } : {}),
                 ...(x.itemId ? { itemId: x.itemId } : {}),
               };
+              if (x.data) payload.data = normalizeServiceDateInput(x.data, dateRaw);
               if (x.hora) payload.hora = x.hora;
               const obs = typeof x.observacao === 'string' ? x.observacao.trim() : '';
               if (obs) payload.observacao = obs;
@@ -2489,6 +2526,7 @@ export async function saveAgendamento() {
           status: normalizeStatusValue(x.status || status),
           ...(x.profissionalId ? { profissionalId: x.profissionalId } : {}),
         };
+        if (x.data) payload.data = normalizeServiceDateInput(x.data, dateRaw);
         if (x.hora) payload.hora = x.hora;
         const obs = typeof x.observacao === 'string' ? x.observacao.trim() : '';
         if (obs) payload.observacao = obs;
@@ -2817,10 +2855,13 @@ export function bindModalAndActionsEvents() {
     const v = Number(els.valorInput?.value || 0);
     if (!s || !s._id) { try { els.servInput.classList.add('border-red-500'); const p=document.createElement('p'); p.className='form-err text-xs text-red-600 mt-1'; p.textContent='Escolha um serviço na busca.'; els.servInput.parentElement.appendChild(p);} catch{}; return; }
     if (!(v >= 0)) { try { els.valorInput.classList.add('border-red-500'); const p=document.createElement('p'); p.className='form-err text-xs text-red-600 mt-1'; p.textContent='Valor inválido.'; els.valorInput.parentElement.appendChild(p);} catch{}; return; }
-    const currentProfId = s && s.profissionalId ? String(s.profissionalId) : (els.profSelect?.value || '').trim();
+    const currentProfId = s && s.profissionalId
+      ? String(s.profissionalId)
+      : ((els.profSelect?.value || '').trim() || AGENDA_NO_PREFERENCE_PROF_ID);
     const profList = getModalProfissionaisList();
     const profEntry = profList.find(p => String(p._id || '') === currentProfId);
     const profNome = profEntry ? profEntry.nome : (s?.profissionalNome || '');
+    const dataDefault = normalizeServiceDateInput(els.addDateInput?.value || state.editing?.h || state.editing?.scheduledAt || '', todayStr());
     const horaDefault = normalizeHourValue(els.horaInput?.value || state.editing?.h || state.editing?.scheduledAt || '');
     const statusDefault = normalizeStatusValue((els.statusSelect?.value) || state.editing?.status || 'agendado');
     const obsDefault = typeof els.obsInput?.value === 'string' ? els.obsInput.value : '';
@@ -2831,6 +2872,7 @@ export function bindModalAndActionsEvents() {
       profissionalId: currentProfId,
       profissionalNome: profNome || '',
       itemId: s.itemId || null,
+      data: dataDefault,
       hora: horaDefault,
       status: statusDefault,
       observacao: obsDefault,

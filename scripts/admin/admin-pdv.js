@@ -4742,9 +4742,6 @@
     const conditionalPrice = getConditionalPromotionPrice(product, quantity, basePrice, options);
     const conditionalActive = conditionalPrice != null;
 
-    const clubActive = hasClubPromotion(product);
-    const clubPrice = clubActive ? safeNumber(product.precoClube) : null;
-
     let promoType = null;
     let promoPrice = basePrice;
     let canApply = false;
@@ -4753,10 +4750,6 @@
       // Regra do PDV: promoção condicional tem prioridade sobre clube.
       promoType = 'conditional';
       promoPrice = conditionalPrice;
-      canApply = true;
-    } else if (clubActive) {
-      promoType = 'club';
-      promoPrice = clubPrice;
       canApply = true;
     }
 
@@ -4847,6 +4840,7 @@
     elements.sellerResultsEmpty = document.getElementById('pdv-seller-results-empty');
     elements.sellerResultsLoading = document.getElementById('pdv-seller-results-loading');
 
+    elements.selectedPreview = document.getElementById('pdv-selected-preview');
     elements.selectedImage = document.getElementById('pdv-selected-image');
     elements.selectedPlaceholder = document.getElementById('pdv-selected-placeholder');
     elements.selectedName = document.getElementById('pdv-selected-name');
@@ -5445,7 +5439,7 @@
     }
     if (elements.selectedInfo) {
       elements.selectedInfo.textContent = state.caixaAberto
-        ? 'Caixa aberto e pronto para registrar vendas.'
+        ? ''
         : 'Abra o caixa para iniciar as vendas.';
     }
     updateSaleCodeDisplay();
@@ -5623,8 +5617,10 @@
     if (elements.fullscreenLabel) {
       elements.fullscreenLabel.textContent = active ? 'Sair' : 'Ativar';
     }
-    if (elements.selectionSection) {
-      elements.selectionSection.classList.toggle('hidden', active);
+    if (active) {
+      elements.selectionSection?.classList.add('hidden');
+    } else {
+      updateSelectionSectionVisibility();
     }
   };
 
@@ -5663,6 +5659,9 @@
   const clearSelectedProduct = () => {
     state.selectedProduct = null;
     state.quantidade = 1;
+    if (elements.selectedPreview) {
+      elements.selectedPreview.classList.add('hidden');
+    }
     if (elements.selectedImage) {
       elements.selectedImage.classList.add('hidden');
       elements.selectedImage.src = '';
@@ -5671,13 +5670,13 @@
       elements.selectedPlaceholder.classList.remove('hidden');
     }
     if (elements.selectedName) {
-      elements.selectedName.textContent = 'Nenhum produto selecionado.';
+      elements.selectedName.textContent = '';
     }
     if (elements.selectedSku) {
-      elements.selectedSku.textContent = 'Escolha um item para visualizar os detalhes.';
+      elements.selectedSku.textContent = '';
     }
     if (elements.selectedPrice) {
-      elements.selectedPrice.textContent = formatCurrency(0);
+      elements.selectedPrice.textContent = '';
     }
     if (elements.selectedGlobalPrice) {
       elements.selectedGlobalPrice.classList.add('hidden');
@@ -5714,6 +5713,9 @@
     if (!product) {
       clearSelectedProduct();
       return;
+    }
+    if (elements.selectedPreview) {
+      elements.selectedPreview.classList.remove('hidden');
     }
     const imageUrl = getImageUrl(product);
     if (imageUrl && elements.selectedImage) {
@@ -5823,7 +5825,7 @@
     }
     const hasCustomer = Boolean(state.vendaCliente);
     if (elements.customerSummaryEmpty) {
-      elements.customerSummaryEmpty.classList.toggle('hidden', hasCustomer);
+      elements.customerSummaryEmpty.classList.add('hidden');
     }
     if (elements.customerSummaryInfo) {
       elements.customerSummaryInfo.classList.toggle('hidden', !hasCustomer);
@@ -7443,7 +7445,7 @@
     }
     if (!normalized) {
       state.selectedSeller = null;
-      setSellerFeedback('Insira o vendedor.', 'muted');
+      setSellerFeedback('', 'muted');
       return;
     }
     setSellerFeedback('Validando vendedor...', 'muted');
@@ -11617,7 +11619,7 @@
     elements.itemsList.innerHTML = '';
     if (!state.itens.length) {
       elements.itemsList.classList.add('hidden');
-      elements.itemsEmpty.classList.remove('hidden');
+      elements.itemsEmpty.classList.add('hidden');
       elements.itemsCount.textContent = '0 itens';
       elements.itemsTotal.textContent = formatCurrency(0);
       if (state.skipInventoryForNextSale) {
@@ -13300,13 +13302,13 @@
         if (elements.sellerInput) {
           elements.sellerInput.value = sellerCode || '';
         }
-        setSellerFeedback(sellerName || sellerCode || 'Insira o vendedor.', sellerCode ? 'success' : 'muted');
+        setSellerFeedback(sellerName || sellerCode || '', sellerCode ? 'success' : 'muted');
       } else {
         state.selectedSeller = null;
         if (elements.sellerInput) {
           elements.sellerInput.value = '';
         }
-        setSellerFeedback('Insira o vendedor.', 'muted');
+        setSellerFeedback('', 'muted');
       }
     }
   };
@@ -25763,7 +25765,7 @@
     }
     state.sellerSearchQuery = '';
     renderSellerSearchResults();
-    setSellerFeedback('Insira o vendedor.', 'muted');
+    setSellerFeedback('', 'muted');
     if (elements.searchResults) {
       elements.searchResults.classList.add('hidden');
       elements.searchResults.innerHTML = '';

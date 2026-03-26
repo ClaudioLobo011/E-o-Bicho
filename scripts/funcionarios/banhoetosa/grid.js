@@ -738,13 +738,37 @@ function extractServiceHourValue(service, appointment) {
   return '';
 }
 
-function combineAppointmentDateWithHour(appointment, hourValue) {
-  const baseCandidates = [
+function extractServiceDateValue(service, appointment) {
+  const direct = String(service?.data || service?.date || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(direct)) return direct;
+  const dateCandidates = [
+    service?.scheduledAt,
+    service?.scheduled_at,
+    service?.h,
+    service?.hora,
+    service?.horario,
+  ];
+  for (const candidate of dateCandidates) {
+    const parsed = coerceToDate(candidate);
+    if (parsed) {
+      return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}`;
+    }
+  }
+  const fallback = coerceToDate(appointment?.h || appointment?.scheduledAt || appointment?.scheduled_at || appointment?.dataHora);
+  if (fallback) {
+    return `${fallback.getFullYear()}-${pad(fallback.getMonth() + 1)}-${pad(fallback.getDate())}`;
+  }
+  return '';
+}
+
+function combineAppointmentDateWithHour(appointment, hourValue, serviceDateValue = '') {
+  const baseCandidates = serviceDateValue ? [`${serviceDateValue}T00:00:00`] : [];
+  baseCandidates.push(
     appointment?.h,
     appointment?.scheduledAt,
     appointment?.scheduled_at,
     appointment?.dataHora,
-  ];
+  );
   let baseDate = null;
   for (const candidate of baseCandidates) {
     const parsed = coerceToDate(candidate);
@@ -799,15 +823,20 @@ function expandAppointmentsForCards(appointments) {
     }
     const groups = new Map();
     services.forEach((svc) => {
-      const profIdRaw = svc && svc.profissionalId ? String(svc.profissionalId) : (appt.profissionalId ? String(appt.profissionalId) : '');
+      const hasServiceProfField = !!(svc && Object.prototype.hasOwnProperty.call(svc, 'profissionalId'));
+      const profIdRaw = hasServiceProfField
+        ? (svc?.profissionalId ? String(svc.profissionalId) : AGENDA_NO_PREFERENCE_PROF_ID)
+        : (appt.profissionalId ? String(appt.profissionalId) : AGENDA_NO_PREFERENCE_PROF_ID);
       const horaValue = extractServiceHourValue(svc, appt);
-      const key = `${profIdRaw || '__sem_prof__'}|${horaValue || '__sem_hora__'}`;
+      const dataValue = extractServiceDateValue(svc, appt);
+      const key = `${profIdRaw || '__sem_prof__'}|${dataValue || '__sem_data__'}|${horaValue || '__sem_hora__'}`;
       if (!groups.has(key)) {
         groups.set(key, {
           profissionalId: profIdRaw || null,
           services: [],
           total: 0,
           itemIds: [],
+          data: dataValue || '',
           hora: horaValue || '',
           statusCounts: new Map(),
           observacoes: [],
@@ -823,6 +852,7 @@ function expandAppointmentsForCards(appointments) {
         svc?.id,
       ]);
       if (normalizedSvcItemId) bucket.itemIds.push(normalizedSvcItemId);
+      if (dataValue && !bucket.data) bucket.data = dataValue;
       if (horaValue && !bucket.hora) bucket.hora = horaValue;
       const svcStatusMeta = statusMeta(svc?.status || svc?.situacao || appt.status || 'agendado');
       const svcStatus = svcStatusMeta.key;
@@ -896,8 +926,15 @@ function expandAppointmentsForCards(appointments) {
       clone.status = cardStatusKey;
       clone.__statusDetails = bucket.statusDetails.slice();
       clone.__statusActionKey = actionStatusKey;
+      if (bucket.data) clone.__serviceDate = bucket.data;
       if (bucket.hora) {
-        const combined = combineAppointmentDateWithHour(appt, bucket.hora);
+        const combined = combineAppointmentDateWithHour(appt, bucket.hora, bucket.data || '');
+        if (combined) {
+          clone.h = combined;
+          clone.scheduledAt = combined;
+        }
+      } else if (bucket.data) {
+        const combined = combineAppointmentDateWithHour(appt, '', bucket.data);
         if (combined) {
           clone.h = combined;
           clone.scheduledAt = combined;
@@ -1202,9 +1239,15 @@ export function renderGrid() {
 
   const cards = expandAppointmentsForCards(filteredAppointments);
   let placed = 0;
+  const selectedDayKey = normalizeDate(date);
   for (const a of cards) {
     const when = a.h || a.scheduledAt;
     if (!when) continue;
+    const whenDate = new Date(when);
+    const cardDayKey = Number.isNaN(whenDate.getTime())
+      ? normalizeDate(String(when).slice(0, 10))
+      : localDateStr(whenDate);
+    if (selectedDayKey && cardDayKey && selectedDayKey !== cardDayKey) continue;
     const d  = new Date(when);
     const hh = `${pad(d.getHours())}:00`;
     let profId = a.profissionalId ? String(a.profissionalId) : null;

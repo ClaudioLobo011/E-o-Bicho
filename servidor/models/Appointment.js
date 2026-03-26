@@ -11,6 +11,7 @@ const AppointmentSchema = new Schema({
     valor:   { type: Number, required: true, min: 0 },
     profissional: { type: Schema.Types.ObjectId, ref: 'User' },
     hora: { type: String, trim: true },
+    data: { type: String, trim: true },
     status: {
       type: String,
       enum: ['agendado', 'em_espera', 'em_atendimento', 'finalizado'],

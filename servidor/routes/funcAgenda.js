@@ -747,6 +747,26 @@ function normalizeHourString(raw) {
   return null;
 }
 
+function normalizeServiceDate(raw, fallback = null) {
+  const source = String(raw || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(source)) {
+    return source;
+  }
+  if (source) {
+    const parsed = new Date(source);
+    if (!Number.isNaN(parsed.getTime())) {
+      return `${parsed.getFullYear()}-${pad2(parsed.getMonth() + 1)}-${pad2(parsed.getDate())}`;
+    }
+  }
+  if (fallback) {
+    const fallbackDate = fallback instanceof Date ? fallback : new Date(fallback);
+    if (!Number.isNaN(fallbackDate.getTime())) {
+      return `${fallbackDate.getFullYear()}-${pad2(fallbackDate.getMonth() + 1)}-${pad2(fallbackDate.getDate())}`;
+    }
+  }
+  return null;
+}
+
 function mapServiceItemResponse(item) {
   if (!item) return null;
   const serviceId = item.servico?._id || item.servico || null;
@@ -758,6 +778,7 @@ function mapServiceItemResponse(item) {
   const profDoc = item.profissional || null;
   const profissionalId = profDoc?._id || (typeof profDoc === 'string' ? profDoc : null);
   const horaRaw = typeof item.hora === 'string' ? item.hora.trim() : '';
+  const dataRaw = normalizeServiceDate(item.data || item.date || '', normalizeServiceDate(horaRaw));
   const observacaoRaw = typeof item.observacao === 'string'
     ? item.observacao.trim()
     : (typeof item.observacoes === 'string' ? item.observacoes.trim() : '');
@@ -771,6 +792,7 @@ function mapServiceItemResponse(item) {
     tiposPermitidos,
     profissionalId,
     profissionalNome: formatProfessionalName(profDoc) || null,
+    data: dataRaw || null,
     hora: horaRaw,
     status: statusRaw || normalizeServiceStatus(null),
     observacao: typeof observacaoRaw === 'string' ? observacaoRaw : '',
@@ -909,7 +931,7 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
     const {
       storeId, clienteId, petId, servicoId,
       profissionalId, scheduledAt, valor, pago, status, servicos, observacoes, codigoVenda,
-      serviceItemIds, serviceHour, serviceScheduledAt,
+      serviceItemIds, serviceHour, serviceScheduledAt, serviceItemUpdates,
     } = req.body || {};
 
     const hasStatusField = Object.prototype.hasOwnProperty.call(req.body || {}, 'status');
@@ -1005,6 +1027,8 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
         if (pid && mongoose.Types.ObjectId.isValid(pid)) {
           payload.profissional = pid;
         }
+        const dataRaw = normalizeServiceDate(it?.data || it?.date || '', scheduledAt || null);
+        if (dataRaw) payload.data = dataRaw;
         const horaRaw = typeof it?.hora === 'string' ? it.hora.trim() : '';
         if (horaRaw) payload.hora = horaRaw;
         const statusItem = normalizeServiceStatus(it?.status || it?.situacao, null);
@@ -1043,15 +1067,51 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
           .filter(Boolean)
       : [];
 
+    const normalizedServiceItemUpdates = Array.isArray(serviceItemUpdates)
+      ? serviceItemUpdates
+          .map((entry) => {
+            const itemId = entry?.itemId && mongoose.Types.ObjectId.isValid(entry.itemId)
+              ? String(entry.itemId)
+              : null;
+            if (!itemId) return null;
+            const next = { itemId };
+            if (Object.prototype.hasOwnProperty.call(entry || {}, 'profissionalId')) {
+              const pid = String(entry.profissionalId || '').trim();
+              next.profissionalId = (pid && mongoose.Types.ObjectId.isValid(pid)) ? pid : null;
+            }
+            if (Object.prototype.hasOwnProperty.call(entry || {}, 'data')) {
+              next.data = normalizeServiceDate(entry.data || '', scheduledAt || null);
+            }
+            if (Object.prototype.hasOwnProperty.call(entry || {}, 'hora')) {
+              next.hora = normalizeHourString(entry.hora || '') || '';
+            }
+            if (Object.prototype.hasOwnProperty.call(entry || {}, 'status')) {
+              next.status = normalizeServiceStatus(entry.status, null);
+            }
+            return next;
+          })
+          .filter(Boolean)
+      : [];
+
+    const serviceUpdatesMap = new Map(
+      normalizedServiceItemUpdates.map((entry) => [entry.itemId, entry])
+    );
+    const targetServiceItemIds = normalizedServiceItemIds.length
+      ? normalizedServiceItemIds
+      : Array.from(serviceUpdatesMap.keys());
+
     let currentItensDoc = null;
 
     if (
       !itensPayload
-      && normalizedServiceItemIds.length
+      && targetServiceItemIds.length
       && (
         (profissionalId && mongoose.Types.ObjectId.isValid(profissionalId))
         || hasProfessionalField
         || hasStatusField
+        || !!serviceHourNormalized
+        || !!serviceScheduledAtDate
+        || serviceUpdatesMap.size > 0
       )
     ) {
       currentItensDoc = await Appointment.findById(id).select('itens').lean();
@@ -1064,7 +1124,9 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
           valor: Number(it.valor || 0),
         };
         const currentProf = it.profissional ? String(it.profissional) : null;
-        const target = normalizedServiceItemIds.includes(String(it._id));
+        const itemKey = String(it._id);
+        const target = targetServiceItemIds.includes(itemKey);
+        const rowUpdate = serviceUpdatesMap.get(itemKey) || null;
         if (currentProf && mongoose.Types.ObjectId.isValid(currentProf)) {
           payload.profissional = currentProf;
         }
@@ -1075,14 +1137,40 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
             delete payload.profissional;
           }
         }
+        if (rowUpdate && Object.prototype.hasOwnProperty.call(rowUpdate, 'profissionalId')) {
+          if (rowUpdate.profissionalId && mongoose.Types.ObjectId.isValid(rowUpdate.profissionalId)) {
+            payload.profissional = rowUpdate.profissionalId;
+          } else {
+            delete payload.profissional;
+          }
+        }
+        const existingData = normalizeServiceDate(it.data || it.date || '', normalizeServiceDate(it.hora || ''));
+        if (existingData) {
+          payload.data = existingData;
+        }
         if (typeof it.hora === 'string' && it.hora.trim()) {
           payload.hora = it.hora.trim();
         }
         if (target) {
           if (serviceScheduledAtDate) {
-            payload.hora = serviceScheduledAtDate.toISOString();
-          } else if (serviceHourNormalized) {
+            payload.data = normalizeServiceDate(serviceScheduledAtDate);
+          }
+          if (serviceHourNormalized) {
             payload.hora = serviceHourNormalized;
+          } else if (serviceScheduledAtDate) {
+            payload.hora = `${pad2(serviceScheduledAtDate.getHours())}:${pad2(serviceScheduledAtDate.getMinutes())}`;
+          }
+        }
+        if (rowUpdate && Object.prototype.hasOwnProperty.call(rowUpdate, 'data') && rowUpdate.data) {
+          payload.data = rowUpdate.data;
+        }
+        if (rowUpdate && Object.prototype.hasOwnProperty.call(rowUpdate, 'hora')) {
+          if (rowUpdate.hora) payload.hora = rowUpdate.hora;
+          else delete payload.hora;
+        }
+        if (target && !payload.data) {
+          if (serviceScheduledAtDate) {
+            payload.data = normalizeServiceDate(serviceScheduledAtDate);
           }
         }
         const existingStatus = normalizeServiceStatus(it.status, null);
@@ -1091,6 +1179,9 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
         }
         if (target && hasStatusField && normalizedStatus) {
           payload.status = normalizedStatus;
+        }
+        if (rowUpdate && Object.prototype.hasOwnProperty.call(rowUpdate, 'status') && rowUpdate.status) {
+          payload.status = rowUpdate.status;
         }
         const existingObs = typeof it.observacao === 'string'
           ? it.observacao.trim()
@@ -1117,16 +1208,16 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
 
     if (hasStatusField && normalizedStatus) {
       let applyStatusToAppointment = false;
-      if (!normalizedServiceItemIds.length) {
+      if (!targetServiceItemIds.length) {
         applyStatusToAppointment = true;
       } else if (Array.isArray(itensPayload)) {
         const total = itensPayload.length;
-        if (total === 0 || normalizedServiceItemIds.length >= total) {
+        if (total === 0 || targetServiceItemIds.length >= total) {
           applyStatusToAppointment = true;
         }
       } else if (currentItensDoc && Array.isArray(currentItensDoc.itens)) {
         const total = currentItensDoc.itens.length;
-        if (total === 0 || normalizedServiceItemIds.length >= total) {
+        if (total === 0 || targetServiceItemIds.length >= total) {
           applyStatusToAppointment = true;
         }
       }
@@ -1143,11 +1234,12 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
       const privileged = (role === 'admin' || role === 'admin_master');
 
       // Intenções do request
-      const wantsServiceChange = Array.isArray(servicos) || typeof valor !== 'undefined' || !!servicoId;
+      const wantsServiceStructureChange = Array.isArray(servicos) || typeof valor !== 'undefined' || !!servicoId;
       const wantsCustomerOrPetChange = hasClienteField || hasPetField;
+      const wantsStoreChange = hasStoreField;
 
-      if (locked && !privileged && (wantsServiceChange || wantsCustomerOrPetChange)) {
-        return res.status(403).json({ message: 'Agendamento já faturado. Para este perfil, apenas empresa, profissional e horário podem ser alterados.' });
+      if (locked && !privileged && (wantsServiceStructureChange || wantsCustomerOrPetChange || wantsStoreChange)) {
+        return res.status(403).json({ message: 'Agendamento ja faturado. Para este perfil, so e permitido alterar data, horario, profissional e status.' });
       }
     } catch (_) {}
 
@@ -1188,6 +1280,7 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
         tiposPermitidos: extractAllowedStaffTypes(full.servico || {}),
         profissionalId: full.profissional?._id || null,
         profissionalNome: formatProfessionalName(full.profissional) || null,
+        data: normalizeServiceDate(full.scheduledAt),
         hora: '',
         status: normalizeServiceStatus(full.status || 'agendado'),
         observacao: typeof full.observacoes === 'string' ? full.observacoes : '',
@@ -2539,7 +2632,12 @@ router.get('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
     const start = new Date(y, m - 1, d, 0, 0, 0, 0);
     const end   = new Date(y, m - 1, d + 1, 0, 0, 0, 0);
 
-    const filter = { scheduledAt: { $gte: start, $lt: end } };
+    const filter = {
+      $or: [
+        { scheduledAt: { $gte: start, $lt: end } },
+        { 'itens.data': date },
+      ],
+    };
     if (storeId && mongoose.Types.ObjectId.isValid(storeId)) filter.store = storeId;
 
     const list = await Appointment.find(filter)
@@ -2608,6 +2706,7 @@ router.get('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
           tiposPermitidos: extractAllowedStaffTypes(a.servico || {}),
           profissionalId: a.profissional?._id || null,
           profissionalNome: formatProfessionalName(a.profissional) || null,
+          data: normalizeServiceDate(a.scheduledAt),
           hora: '',
           status: normalizeServiceStatus(a.status || 'agendado'),
           observacao: typeof a.observacoes === 'string' ? a.observacoes : '',
@@ -2669,7 +2768,12 @@ router.get('/agendamentos/range', authMiddleware, requireStaff, async (req, res)
     const start = new Date(ys, ms - 1, ds, 0, 0, 0, 0);
     const end   = new Date(ye, me - 1, de, 0, 0, 0, 0); // exclusivo
 
-    const filter = { scheduledAt: { $gte: start, $lt: end } };
+    const filter = {
+      $or: [
+        { scheduledAt: { $gte: start, $lt: end } },
+        { 'itens.data': { $gte: startStr, $lt: endStr } },
+      ],
+    };
     if (storeId && mongoose.Types.ObjectId.isValid(storeId)) filter.store = storeId;
 
     const list = await Appointment.find(filter)
@@ -2729,6 +2833,10 @@ router.get('/agendamentos/range', authMiddleware, requireStaff, async (req, res)
           tiposPermitidos: extractAllowedStaffTypes(a.servico || {}),
           profissionalId: a.profissional?._id || null,
           profissionalNome: formatProfessionalName(a.profissional) || null,
+          data: normalizeServiceDate(a.scheduledAt),
+          hora: '',
+          status: normalizeServiceStatus(a.status || 'agendado'),
+          observacao: typeof a.observacoes === 'string' ? a.observacoes : '',
         });
       }
       const valorTotal = servicosList.reduce((acc, s) => acc + Number(s.valor || 0), 0) || Number(a.valor || 0) || 0;
@@ -2804,6 +2912,8 @@ router.post('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
         const entry = { servico: sid, valor: Number(v || 0) };
         const pid = it?.profissionalId;
         if (pid && mongoose.Types.ObjectId.isValid(pid)) entry.profissional = pid;
+        const dataRaw = normalizeServiceDate(it?.data || it?.date || '', scheduledAt);
+        if (dataRaw) entry.data = dataRaw;
         const horaRaw = typeof it?.hora === 'string' ? it.hora.trim() : '';
         if (horaRaw) entry.hora = horaRaw;
         const statusItem = normalizeServiceStatus(it?.status || it?.situacao, null);
@@ -2827,6 +2937,7 @@ router.post('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
       }
       const entry = { servico: servicoId, valor: Number(valorFinal || 0) };
       if (profissionalId && mongoose.Types.ObjectId.isValid(profissionalId)) entry.profissional = profissionalId;
+      entry.data = normalizeServiceDate(scheduledAt);
       entry.status = normalizeServiceStatus(statusFinal);
       itens = [entry];
     }
@@ -2870,6 +2981,7 @@ router.post('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
         tiposPermitidos: extractAllowedStaffTypes(full.servico || {}),
         profissionalId: full.profissional?._id || null,
         profissionalNome: formatProfessionalName(full.profissional) || null,
+        data: normalizeServiceDate(full.scheduledAt),
         hora: '',
         status: normalizeServiceStatus(full.status || 'agendado'),
         observacao: typeof full.observacoes === 'string' ? full.observacoes : '',
@@ -3045,3 +3157,4 @@ router.delete('/agendamentos/:id', authMiddleware, requireStaff, async (req, res
 });
 
 module.exports = router;
+
