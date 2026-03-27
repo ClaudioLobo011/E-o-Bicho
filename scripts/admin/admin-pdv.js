@@ -188,6 +188,7 @@
     },
     selectedProduct: null,
     quantidade: 1,
+    selectedItemUnitValueOverride: null,
     itens: [],
     vendaCliente: null,
     vendaPet: null,
@@ -5659,6 +5660,7 @@
   const clearSelectedProduct = () => {
     state.selectedProduct = null;
     state.quantidade = 1;
+    state.selectedItemUnitValueOverride = null;
     if (elements.selectedPreview) {
       elements.selectedPreview.classList.add('hidden');
     }
@@ -5706,6 +5708,22 @@
       elements.itemQuantity.value = 1;
     }
     updateItemTotals();
+  };
+
+  const getSelectedProductPricingContext = () => {
+    const quantidade = Math.max(1, Math.trunc(state.quantidade));
+    const product = state.selectedProduct;
+    const pricing = product ? getItemPricing(product, true, quantidade) : { valor: 0 };
+    const overrideValue = normalizeCurrencyAmount(
+      safeNumber(state.selectedItemUnitValueOverride)
+    );
+    const hasOverride = overrideValue > 0;
+    return {
+      quantidade,
+      pricing,
+      hasOverride,
+      unitPrice: hasOverride ? overrideValue : safeNumber(pricing.valor),
+    };
   };
 
   const updateSelectedProductView = () => {
@@ -5800,18 +5818,21 @@
     if (elements.itemQuantity) {
       elements.itemQuantity.value = quantity;
     }
+    if (elements.itemValue) {
+      const overrideValue = normalizeCurrencyAmount(
+        safeNumber(state.selectedItemUnitValueOverride)
+      );
+      const hasOverride = overrideValue > 0;
+      if (!hasOverride) {
+        elements.itemValue.value = formatDecimalValue(finalPrice, 2);
+      }
+    }
     updateItemTotals();
   };
 
   const updateItemTotals = () => {
-    const product = state.selectedProduct;
-    const quantidade = Math.max(1, Math.trunc(state.quantidade));
-    const pricing = product ? getItemPricing(product, true, quantidade) : { valor: 0 };
-    const unitPrice = pricing.valor;
+    const { quantidade, unitPrice } = getSelectedProductPricingContext();
     const total = unitPrice * quantidade;
-    if (elements.itemValue) {
-      elements.itemValue.textContent = formatCurrency(unitPrice);
-    }
     if (elements.itemTotal) {
       elements.itemTotal.textContent = formatCurrency(total);
     }
@@ -5869,6 +5890,24 @@
       return;
     }
     state.itens = state.itens.map((item) => {
+      const manualUnitPrice = normalizeCurrencyAmount(
+        safeNumber(item?.manualUnitPriceOverride)
+      );
+      if (manualUnitPrice > 0) {
+        const nextItem = {
+          ...item,
+          valor: manualUnitPrice,
+          valorBase: manualUnitPrice,
+          valorPromocional: null,
+          valorSemAjuste: manualUnitPrice,
+          subtotalSemAjuste: manualUnitPrice * item.quantidade,
+          promoType: null,
+          usePromotion: false,
+          generalPromo: false,
+        };
+        applyItemAdjustmentToItem(nextItem);
+        return nextItem;
+      }
       if (!item.productSnapshot) {
         return {
           ...item,
@@ -5911,6 +5950,24 @@
   const recalculateSaleItemsPromotionPricing = () => {
     if (!Array.isArray(state.itens) || !state.itens.length) return;
     state.itens = state.itens.map((item) => {
+      const manualUnitPrice = normalizeCurrencyAmount(
+        safeNumber(item?.manualUnitPriceOverride)
+      );
+      if (manualUnitPrice > 0) {
+        const nextItem = {
+          ...item,
+          valor: manualUnitPrice,
+          valorBase: manualUnitPrice,
+          valorPromocional: null,
+          valorSemAjuste: manualUnitPrice,
+          subtotalSemAjuste: manualUnitPrice * item.quantidade,
+          promoType: null,
+          usePromotion: false,
+          generalPromo: false,
+        };
+        applyItemAdjustmentToItem(nextItem);
+        return nextItem;
+      }
       if (!item?.productSnapshot) return item;
       const snapshot = item.productSnapshot;
       const wantsPromotion = item.usePromotion !== false;
@@ -11641,12 +11698,20 @@
       li.className = 'flex items-start gap-3 py-3';
       const codigoInterno = item.codigoInterno || item.codigo || '—';
       const codigoBarras = item.codigoBarras || '—';
-      const basePrice = safeNumber(item.valorBase ?? item.valor);
+      const manualUnitPrice = normalizeCurrencyAmount(
+        safeNumber(item.manualUnitPriceOverride)
+      );
+      const hasManualUnitPrice = manualUnitPrice > 0;
+      const basePrice = hasManualUnitPrice
+        ? manualUnitPrice
+        : safeNumber(item.valorBase ?? item.valor);
       const baseSubtotal = getSaleItemBaseSubtotal(item);
       const itemAdjustmentDetail = buildSaleItemAdjustmentDetail(item);
       const promoPrice =
-        item.valorPromocional != null ? safeNumber(item.valorPromocional) : basePrice;
-      const promotionAvailable = promoPrice < basePrice;
+        !hasManualUnitPrice && item.valorPromocional != null
+          ? safeNumber(item.valorPromocional)
+          : basePrice;
+      const promotionAvailable = !hasManualUnitPrice && promoPrice < basePrice;
       const promoType = item.promoType || null;
       const promotionBlocked = promoType
         ? promoType === 'general' && !state.vendaCliente
@@ -13252,6 +13317,7 @@
     vendaAcrescimo: state.vendaAcrescimo,
     selectedProduct: state.selectedProduct ? { ...state.selectedProduct } : null,
     quantidade: state.quantidade,
+    selectedItemUnitValueOverride: state.selectedItemUnitValueOverride,
     vendaCliente: state.vendaCliente ? { ...state.vendaCliente } : null,
     vendaPet: state.vendaPet ? { ...state.vendaPet } : null,
     seller: state.selectedSeller ? { ...state.selectedSeller } : null,
@@ -13273,6 +13339,10 @@
       ? { ...snapshot.selectedProduct }
       : null;
     state.quantidade = snapshot.quantidade && snapshot.quantidade > 0 ? snapshot.quantidade : 1;
+    state.selectedItemUnitValueOverride =
+      safeNumber(snapshot.selectedItemUnitValueOverride) > 0
+        ? normalizeCurrencyAmount(snapshot.selectedItemUnitValueOverride)
+        : null;
     if (Object.prototype.hasOwnProperty.call(snapshot, 'deliveryStatusOverride')) {
       const override = resolveDeliveryStatusOverride(snapshot.deliveryStatusOverride);
       state.deliveryStatusOverride = override || null;
@@ -25611,6 +25681,7 @@
     state.searchResults = [];
     state.selectedProduct = null;
     state.quantidade = 1;
+    state.selectedItemUnitValueOverride = null;
     state.itens = [];
     state.vendaCliente = null;
     state.vendaPet = null;
@@ -26680,6 +26751,7 @@
     if (!product) return;
     state.selectedProduct = product;
     state.quantidade = 1;
+    state.selectedItemUnitValueOverride = null;
     if (elements.itemQuantity) {
       elements.itemQuantity.value = 1;
     }
@@ -26801,6 +26873,7 @@
     if (!product) return;
     state.selectedProduct = product;
     state.quantidade = 1;
+    state.selectedItemUnitValueOverride = null;
     updateSelectedProductView();
     if (elements.searchInput) {
       elements.searchInput.value = product?.nome || getProductCode(product) || '';
@@ -26811,9 +26884,11 @@
     }
   };
 
-  const appendProductToSale = (product, quantidade = 1) => {
+  const appendProductToSale = (product, quantidade = 1, options = {}) => {
     if (!product) return false;
     const quantidadeFinal = Math.max(1, Math.trunc(Number(quantidade) || 1));
+    const manualUnitPrice = normalizeCurrencyAmount(safeNumber(options.manualUnitPrice));
+    const hasManualUnitPrice = manualUnitPrice > 0;
     const usePromotion = false;
       const pricing = getItemPricing(product, usePromotion, quantidadeFinal, {
         useSaleGroup: true,
@@ -26838,19 +26913,37 @@
         : -1;
     if (existingWithSellerIndex >= 0) {
       const current = state.itens[existingWithSellerIndex];
+      const currentManualUnitPrice = normalizeCurrencyAmount(
+        safeNumber(current.manualUnitPriceOverride)
+      );
+      const shouldApplyManualUnitPrice = hasManualUnitPrice || currentManualUnitPrice > 0;
+      const resolvedManualUnitPrice = hasManualUnitPrice
+        ? manualUnitPrice
+        : currentManualUnitPrice;
       const shouldUsePromotion =
         current.usePromotion !== undefined ? current.usePromotion : false;
       current.quantidade += quantidadeFinal;
-      const currentPricing = getItemPricing(product, shouldUsePromotion, current.quantidade, {
-        useSaleGroup: true,
-        currentItemId: current.id,
-      });
-      current.valorBase = currentPricing.valorBase;
-      current.valorPromocional = currentPricing.valorPromocional;
-      current.usePromotion = currentPricing.hasPromotion ? shouldUsePromotion : false;
-      current.valorSemAjuste = currentPricing.valor;
-      current.subtotalSemAjuste = current.quantidade * currentPricing.valor;
-      current.promoType = currentPricing.promoType || null;
+      if (shouldApplyManualUnitPrice) {
+        current.manualUnitPriceOverride = resolvedManualUnitPrice;
+        current.valorBase = resolvedManualUnitPrice;
+        current.valorPromocional = null;
+        current.usePromotion = false;
+        current.valorSemAjuste = resolvedManualUnitPrice;
+        current.subtotalSemAjuste = current.quantidade * resolvedManualUnitPrice;
+        current.promoType = null;
+      } else {
+        const currentPricing = getItemPricing(product, shouldUsePromotion, current.quantidade, {
+          useSaleGroup: true,
+          currentItemId: current.id,
+        });
+        current.manualUnitPriceOverride = null;
+        current.valorBase = currentPricing.valorBase;
+        current.valorPromocional = currentPricing.valorPromocional;
+        current.usePromotion = currentPricing.hasPromotion ? shouldUsePromotion : false;
+        current.valorSemAjuste = currentPricing.valor;
+        current.subtotalSemAjuste = current.quantidade * currentPricing.valor;
+        current.promoType = currentPricing.promoType || null;
+      }
       current.codigoInterno = codigoInterno || current.codigoInterno;
       current.codigoBarras = codigoBarras || current.codigoBarras;
       current.generalPromo = generalPromo;
@@ -26862,6 +26955,7 @@
         useSaleGroup: true,
         includePendingQuantity: true,
       });
+      const unitPriceToApply = hasManualUnitPrice ? manualUnitPrice : pricingToApply.valor;
       const baseId = product._id || product.id || codigo || String(Date.now());
       const sellerKey = sellerInfo.id || sellerInfo.code;
       const saleItem = {
@@ -26871,16 +26965,21 @@
         codigoBarras,
         nome,
         quantidade: quantidadeFinal,
-        valorBase: pricingToApply.valorBase,
-        valorPromocional: pricingToApply.valorPromocional,
-        usePromotion: pricingToApply.hasPromotion ? usePromotion : false,
-        valorSemAjuste: pricingToApply.valor,
-        subtotalSemAjuste: pricingToApply.valor * quantidadeFinal,
-        valor: pricingToApply.valor,
-        subtotal: pricingToApply.valor * quantidadeFinal,
+        manualUnitPriceOverride: hasManualUnitPrice ? manualUnitPrice : null,
+        valorBase: hasManualUnitPrice ? manualUnitPrice : pricingToApply.valorBase,
+        valorPromocional: hasManualUnitPrice ? null : pricingToApply.valorPromocional,
+        usePromotion: hasManualUnitPrice
+          ? false
+          : pricingToApply.hasPromotion
+          ? usePromotion
+          : false,
+        valorSemAjuste: unitPriceToApply,
+        subtotalSemAjuste: unitPriceToApply * quantidadeFinal,
+        valor: unitPriceToApply,
+        subtotal: unitPriceToApply * quantidadeFinal,
         itemDiscountValue: 0,
         itemAdditionValue: 0,
-        promoType: pricingToApply.promoType || null,
+        promoType: hasManualUnitPrice ? null : pricingToApply.promoType || null,
         generalPromo,
         productSnapshot: snapshot,
         sellerId: sellerInfo.id,
@@ -26914,7 +27013,12 @@
       state.selectedProduct = product;
       updateSelectedProductView();
     }
-    appendProductToSale(product, quantidade);
+    const manualUnitPrice = normalizeCurrencyAmount(
+      safeNumber(state.selectedItemUnitValueOverride)
+    );
+    appendProductToSale(product, quantidade, {
+      manualUnitPrice: manualUnitPrice > 0 ? manualUnitPrice : null,
+    });
   };
 
   const handleSearchKeydown = async (event) => {
@@ -26964,6 +27068,7 @@
       const refreshedProduct = await resolveFreshProduct(product);
       state.selectedProduct = refreshedProduct;
       state.quantidade = 1;
+      state.selectedItemUnitValueOverride = null;
       if (elements.itemQuantity) {
         elements.itemQuantity.value = 1;
       }
@@ -27164,6 +27269,10 @@
       if (!Number.isInteger(index) || index < 0 || index >= state.itens.length) return;
       const item = state.itens[index];
       if (!item) return;
+      if (safeNumber(item?.manualUnitPriceOverride) > 0) {
+        notify('Este item usa valor manual e não possui promoção automática.', 'info');
+        return;
+      }
       const snapshot = item.productSnapshot || null;
       const target = snapshot || item;
       const nextUsePromotion = !(item.usePromotion !== false);
@@ -27225,6 +27334,19 @@
       elements.itemQuantity.value = value;
     }
     updateSelectedProductView();
+  };
+
+  const handleItemValueInput = () => {
+    const parsed = normalizeCurrencyAmount(parseDecimalInput(elements.itemValue?.value || ''));
+    state.selectedItemUnitValueOverride = parsed > 0 ? parsed : null;
+    updateItemTotals();
+  };
+
+  const handleItemValueBlur = () => {
+    const { unitPrice } = getSelectedProductPricingContext();
+    if (elements.itemValue) {
+      elements.itemValue.value = formatDecimalValue(unitPrice, 2);
+    }
   };
 
   const handleActionClick = (event) => {
@@ -27523,6 +27645,8 @@
     document.addEventListener('click', handleDocumentClick);
     elements.addItem?.addEventListener('click', addItemToList);
     elements.itemQuantity?.addEventListener('input', handleQuantityInput);
+    elements.itemValue?.addEventListener('input', handleItemValueInput);
+    elements.itemValue?.addEventListener('blur', handleItemValueBlur);
     elements.quantityButtons?.forEach((button) => {
       const delta = Number(button.getAttribute('data-quantity-change')) || 0;
       button.addEventListener('click', () => changeQuantity(delta));
