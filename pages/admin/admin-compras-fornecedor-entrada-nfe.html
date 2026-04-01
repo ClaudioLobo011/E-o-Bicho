@@ -1135,7 +1135,7 @@
     </div>
   </main>
 
-  <div id="nfe-fixed-actions-bar" class="z-40 border-t border-gray-200 bg-white/95 backdrop-blur-sm" style="position: fixed; left: 0; right: 0; bottom: 0;">
+  <div id="nfe-fixed-actions-bar" class="z-40 border-t border-gray-200 bg-white" style="position: fixed; left: 0; right: 0; bottom: 0;">
     <div class="container mx-auto px-4 py-3">
       <div class="flex flex-col-reverse gap-3 md:flex-row md:items-center md:justify-between">
         <div class="flex flex-wrap items-center gap-2">
@@ -1604,7 +1604,7 @@
   </div>
 
   <div id="nfe-code-lookup-modal" class="fixed inset-0 z-[999] hidden">
-    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-code-modal></div>
+    <div class="absolute inset-0 bg-gray-900/60" data-close-code-modal></div>
     <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
       <div
         data-code-modal-card
@@ -1966,7 +1966,7 @@
     class="fixed inset-0 z-[1000] hidden"
     aria-hidden="true"
   >
-    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-price-modal></div>
+    <div class="absolute inset-0 bg-gray-900/60" data-close-price-modal></div>
     <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
       <div
         data-price-modal-card
@@ -2285,7 +2285,7 @@
   </div>
 
   <div id="import-xml-modal" class="fixed inset-0 z-[999] hidden">
-    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-import-modal></div>
+    <div class="absolute inset-0 bg-gray-900/60" data-close-import-modal></div>
     <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
       <div data-import-modal-card class="relative flex w-full max-w-[1352px] transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl opacity-0 transition-all duration-200 ease-out scale-95 min-h-0 text-[12px] leading-[1.35]" style="height:min(90vh,calc(100vh - 3rem));">
         <header class="flex flex-col gap-2.5 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
@@ -2737,7 +2737,7 @@
             </section>
           </div>
         </div>
-          <footer class="z-30 shrink-0 flex flex-col gap-3 border-t border-gray-200 bg-white/95 px-5 py-3 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-end">
+          <footer class="z-30 shrink-0 flex flex-col gap-3 border-t border-gray-200 bg-white px-5 py-3 sm:flex-row sm:items-center sm:justify-end">
             <div class="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row sm:items-center">
               <button type="button" data-close-import-modal class="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100">Cancelar</button>
               <button
@@ -2760,7 +2760,7 @@
     aria-hidden="true"
   >
     <div
-      class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm"
+      class="absolute inset-0 bg-gray-900/60"
       data-close-product-link-modal
       aria-label="Fechar seleção de produto"
     ></div>
@@ -2863,7 +2863,7 @@
     aria-hidden="true"
   >
     <div
-      class="absolute inset-0 bg-gray-900/70 backdrop-blur-sm"
+      class="absolute inset-0 bg-gray-900/70"
       data-close-product-modal
       aria-label="Fechar cadastro de produto"
     ></div>
@@ -2923,7 +2923,7 @@
   </div>
 
   <div id="bonus-dilution-modal" class="fixed inset-0 hidden" aria-hidden="true" style="z-index:1300;">
-    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-bonus-dilution-modal></div>
+    <div class="absolute inset-0 bg-gray-900/60" data-close-bonus-dilution-modal></div>
     <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
       <div
         data-bonus-dilution-card
@@ -3435,6 +3435,7 @@
         const priceFilterInputs = new Map();
         const priceSortButtons = new Map();
         const priceCurrentStockCache = new Map();
+        const priceProductDetailsCache = new Map();
         let updatePriceButtonAvailability = () => {};
         let closePriceAdjustmentModal = () => {};
         let pricePendingVerticalFocus = null;
@@ -10613,6 +10614,33 @@ ${'</ht' + 'ml>'}`;
           }
         };
 
+        const loadProductDetailsById = async (productId) => {
+          const normalizedId = typeof productId === 'string' ? productId.trim() : String(productId || '').trim();
+          if (!normalizedId) return null;
+          if (priceProductDetailsCache.has(normalizedId)) {
+            return priceProductDetailsCache.get(normalizedId) || null;
+          }
+          try {
+            const headers = buildAuthHeaders();
+            const response = await fetch(`${apiBaseUrl}/products/${normalizedId}`, { headers });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              priceProductDetailsCache.set(normalizedId, null);
+              return null;
+            }
+            const resolvedProduct = payload?.product && typeof payload.product === 'object'
+              ? payload.product
+              : payload && typeof payload === 'object'
+              ? payload
+              : null;
+            priceProductDetailsCache.set(normalizedId, resolvedProduct);
+            return resolvedProduct;
+          } catch (_) {
+            priceProductDetailsCache.set(normalizedId, null);
+            return null;
+          }
+        };
+
         const refreshPriceItemsCurrentStock = async (items) => {
           if (!Array.isArray(items) || !items.length) return;
           const uniqueIds = Array.from(
@@ -10714,39 +10742,106 @@ ${'</ht' + 'ml>'}`;
           return Math.round(result * 100) / 100;
         };
 
-        const buildPriceAdjustmentItems = () => {
+        const buildPriceAdjustmentItems = async () => {
           const sourceItems = Array.isArray(mainProductTableState?.items) && mainProductTableState.items.length
             ? mainProductTableState.items
             : Array.isArray(lastNfeData?.items)
             ? lastNfeData.items
             : [];
 
-          const items = [];
-          sourceItems.forEach((item, index) => {
-            if (!item || item.validationStatus !== 'matched' || !item.matchedProduct) return;
+          const matchedEntries = [];
+          const parentIdsToLoad = new Set();
+
+          for (let index = 0; index < sourceItems.length; index += 1) {
+            const item = sourceItems[index];
+            if (!item || item.validationStatus !== 'matched' || !item.matchedProduct) continue;
             const productId = getProductIdFromRecord(item.matchedProduct);
-            if (!productId) return;
+            if (!productId) continue;
+
+            const matchedProduct = item.matchedProduct;
+            if (!matchedProduct?.fracionado || !Array.isArray(matchedProduct?.fracionado?.itens)) {
+              parentIdsToLoad.add(productId);
+            }
+
+            matchedEntries.push({
+              item,
+              index,
+              productId,
+              matchedProduct,
+            });
+          }
+
+          if (parentIdsToLoad.size) {
+            await Promise.all(
+              Array.from(parentIdsToLoad).map(async (productId) => {
+                await loadProductDetailsById(productId);
+              })
+            );
+            matchedEntries.forEach((entry) => {
+              if (entry?.matchedProduct?.fracionado && Array.isArray(entry.matchedProduct.fracionado.itens)) return;
+              const detailed = priceProductDetailsCache.get(entry.productId);
+              if (detailed && typeof detailed === 'object') {
+                entry.matchedProduct = detailed;
+                entry.item.matchedProduct = detailed;
+              }
+            });
+          }
+
+          const childIdsToLoad = new Set();
+          matchedEntries.forEach((entry) => {
+            const fractionalItems = Array.isArray(entry?.matchedProduct?.fracionado?.itens)
+              ? entry.matchedProduct.fracionado.itens
+              : [];
+            fractionalItems.forEach((fractionalItem) => {
+              const childProductRef = fractionalItem?.produto;
+              const childProduct = childProductRef && typeof childProductRef === 'object' ? childProductRef : null;
+              let childProductId = getProductIdFromRecord(childProduct);
+              if (!childProductId && (typeof childProductRef === 'string' || typeof childProductRef === 'number')) {
+                childProductId = String(childProductRef).trim();
+              }
+              if (!childProductId) return;
+              if (!childProduct || !getProductNameFromRecord(childProduct)) {
+                childIdsToLoad.add(childProductId);
+              }
+            });
+          });
+
+          if (childIdsToLoad.size) {
+            await Promise.all(
+              Array.from(childIdsToLoad).map(async (productId) => {
+                await loadProductDetailsById(productId);
+              })
+            );
+          }
+
+          const items = [];
+          for (const entry of matchedEntries) {
+            const item = entry.item;
+            const index = entry.index;
+            const productId = entry.productId;
+            const matchedProductRecord = entry.matchedProduct;
+            if (!matchedProductRecord || typeof matchedProductRecord !== 'object') continue;
 
             ensureItemCostWithTaxes(item);
 
-            const internalCode = normalizeInternalCode(getProductCodeFromRecord(item.matchedProduct)) || item.internalCode;
+            const internalCode = normalizeInternalCode(getProductCodeFromRecord(matchedProductRecord)) || item.internalCode;
             const supplierCode = item.supplierCode || '';
             const code = internalCode || supplierCode || `ITEM-${index + 1}`;
             const description =
-              getProductNameFromRecord(item.matchedProduct) ||
+              getProductNameFromRecord(matchedProductRecord) ||
               (typeof item.description === 'string' ? item.description : '') ||
               'Produto sem descrição';
 
-            normalizeProductPricing(item.matchedProduct);
+            normalizeProductPricing(matchedProductRecord);
 
-            const costPrevious = sanitizeCurrencyValue(resolveProductCostValue(item.matchedProduct));
-            const salePrevious = sanitizeCurrencyValue(resolveProductSaleValue(item.matchedProduct));
+            const costPrevious = sanitizeCurrencyValue(resolveProductCostValue(matchedProductRecord));
+            const salePrevious = sanitizeCurrencyValue(resolveProductSaleValue(matchedProductRecord));
             const costBase = sanitizeCurrencyValue(item.unitCostWithTaxes);
             const entryStock = sanitizeQuantityValue(resolveMainProductEntryStockQuantity(
               item,
               resolveMainProductConversionFactor(item)
             ));
-            const currentStock = resolveCurrentStockFromProductRecord(item.matchedProduct);
+            const currentStock = resolveCurrentStockFromProductRecord(matchedProductRecord);
             const previousStock =
               Number.isFinite(currentStock) && Number.isFinite(entryStock)
                 ? Math.max(sanitizeQuantityValue(currentStock - entryStock) || 0, 0)
@@ -10772,7 +10867,7 @@ ${'</ht' + 'ml>'}`;
               code,
               description,
               nfeItem: item,
-              matchedProduct: item.matchedProduct,
+              matchedProduct: matchedProductRecord,
               costPrevious,
               salePrevious,
               costBase: Number.isFinite(initialCost) ? initialCost : null,
@@ -10790,7 +10885,98 @@ ${'</ht' + 'ml>'}`;
 
             updateEntryDisplays(entryData);
             items.push(entryData);
-          });
+
+            const fractionalItems = Array.isArray(matchedProductRecord?.fracionado?.itens)
+              ? matchedProductRecord.fracionado.itens
+              : [];
+            for (let childIndex = 0; childIndex < fractionalItems.length; childIndex += 1) {
+              const fractionalItem = fractionalItems[childIndex];
+              const childProductRef = fractionalItem?.produto;
+              let childProduct = childProductRef && typeof childProductRef === 'object' ? childProductRef : null;
+              let childProductId = getProductIdFromRecord(childProduct);
+              if (!childProductId && (typeof childProductRef === 'string' || typeof childProductRef === 'number')) {
+                childProductId = String(childProductRef).trim();
+              }
+              if (!childProductId) continue;
+              if (!childProduct || !getProductNameFromRecord(childProduct)) {
+                const loadedChild = priceProductDetailsCache.get(childProductId) || null;
+                if (loadedChild && typeof loadedChild === 'object') {
+                  childProduct = loadedChild;
+                  childProductId = getProductIdFromRecord(loadedChild) || childProductId;
+                }
+              }
+              if (!childProduct || typeof childProduct !== 'object') continue;
+
+              normalizeProductPricing(childProduct);
+
+              const childCode =
+                normalizeInternalCode(getProductCodeFromRecord(childProduct)) ||
+                `FILHO-${childIndex + 1}`;
+              const childDescription =
+                getProductNameFromRecord(childProduct) ||
+                (typeof childProduct?.description === 'string' ? childProduct.description : '') ||
+                'Produto filho sem descrição';
+              const childCostPrevious = sanitizeCurrencyValue(resolveProductCostValue(childProduct));
+              const childSalePrevious = sanitizeCurrencyValue(resolveProductSaleValue(childProduct));
+              const childCurrentStock = resolveCurrentStockFromProductRecord(childProduct);
+              const fractionBaseQuantity = toNumericValue(fractionalItem?.quantidadeOrigem);
+              const fractionOutputQuantity = toNumericValue(fractionalItem?.quantidadeFracionada);
+              const parentToChildFactor =
+                Number.isFinite(fractionBaseQuantity) &&
+                fractionBaseQuantity > 0 &&
+                Number.isFinite(fractionOutputQuantity) &&
+                fractionOutputQuantity > 0
+                  ? fractionOutputQuantity / fractionBaseQuantity
+                  : null;
+              const childEntryStock =
+                Number.isFinite(entryStock) && Number.isFinite(parentToChildFactor)
+                  ? sanitizeQuantityValue(entryStock * parentToChildFactor)
+                  : null;
+              const childPreviousStock =
+                Number.isFinite(childCurrentStock) && Number.isFinite(childEntryStock)
+                  ? Math.max(sanitizeQuantityValue(childCurrentStock - childEntryStock) || 0, 0)
+                  : null;
+              const childMarkupPrevious = computeMarkupPercentage(childCostPrevious, childSalePrevious);
+              const childInitialCost = childCostPrevious;
+              let childMarkupCurrent = Number.isFinite(childMarkupPrevious) ? childMarkupPrevious : null;
+              let childSaleNew = Number.isFinite(childSalePrevious) ? childSalePrevious : null;
+
+              if (!Number.isFinite(childSaleNew) && Number.isFinite(childInitialCost) && Number.isFinite(childMarkupCurrent)) {
+                childSaleNew = computeSaleFromMarkup(childInitialCost, childMarkupCurrent);
+              }
+              if (!Number.isFinite(childMarkupCurrent) && Number.isFinite(childInitialCost) && Number.isFinite(childSaleNew)) {
+                childMarkupCurrent = computeMarkupPercentage(childInitialCost, childSaleNew);
+              }
+
+              const childEntryData = {
+                id: `${productId}-${index}-child-${childProductId}-${childIndex}`,
+                productId: childProductId,
+                code: childCode,
+                description: childDescription,
+                nfeItem: null,
+                matchedProduct: childProduct,
+                costPrevious: childCostPrevious,
+                salePrevious: childSalePrevious,
+                costBase: Number.isFinite(childInitialCost) ? childInitialCost : null,
+                costNew: Number.isFinite(childInitialCost) ? childInitialCost : null,
+                saleNew: childSaleNew,
+                markupPrevious: childMarkupPrevious,
+                markupCurrent: childMarkupCurrent,
+                entryStock: childEntryStock,
+                currentStock: childCurrentStock,
+                previousStock: childPreviousStock,
+                selected: false,
+                displays: {},
+                filterValues: {},
+                isFractionChild: true,
+                parentEntryId: entryData.id,
+                fractionChildIndex: childIndex,
+              };
+
+              updateEntryDisplays(childEntryData);
+              items.push(childEntryData);
+            }
+          }
 
           return items;
         };
@@ -10978,11 +11164,22 @@ ${'</ht' + 'ml>'}`;
           if (!accessor) return items.slice();
 
           const sourceItems = Array.isArray(priceAdjustmentState.items) ? priceAdjustmentState.items : [];
+          const sourceMap = new Map(sourceItems.map((entry) => [entry?.id || '', entry]));
           const indexMap = new Map(sourceItems.map((entry, index) => [entry?.id || `idx-${index}`, index]));
+          const getAnchorEntry = (entry) => {
+            if (!entry?.isFractionChild || !entry?.parentEntryId) return entry;
+            return sourceMap.get(entry.parentEntryId) || entry;
+          };
+          const getGroupId = (entry) => {
+            const anchor = getAnchorEntry(entry);
+            return anchor?.id || entry?.id || '';
+          };
 
           return items.slice().sort((entryA, entryB) => {
-            const valueA = accessor.getValue(entryA);
-            const valueB = accessor.getValue(entryB);
+            const anchorA = getAnchorEntry(entryA);
+            const anchorB = getAnchorEntry(entryB);
+            const valueA = accessor.getValue(anchorA);
+            const valueB = accessor.getValue(anchorB);
 
             if (accessor.type === 'numeric') {
               const numericA = Number.isFinite(valueA) ? valueA : parseNumber(valueA);
@@ -10998,6 +11195,16 @@ ${'</ht' + 'ml>'}`;
               const comparison = textA.localeCompare(textB, 'pt-BR', { sensitivity: 'base', numeric: true });
               if (comparison !== 0) {
                 return comparison * directionMultiplier;
+              }
+            }
+
+            const groupIdA = getGroupId(entryA);
+            const groupIdB = getGroupId(entryB);
+            if (groupIdA && groupIdA === groupIdB) {
+              const orderA = entryA?.isFractionChild ? (entryA?.fractionChildIndex ?? 0) + 1 : 0;
+              const orderB = entryB?.isFractionChild ? (entryB?.fractionChildIndex ?? 0) + 1 : 0;
+              if (orderA !== orderB) {
+                return orderA - orderB;
               }
             }
 
@@ -11062,7 +11269,9 @@ ${'</ht' + 'ml>'}`;
         const createPriceTableRow = (entry) => {
           const row = document.createElement('tr');
           row.dataset.priceRow = entry.id;
-          row.className = 'text-[11px] text-gray-700';
+          row.className = entry?.isFractionChild
+            ? 'text-[11px] text-gray-700 bg-amber-100'
+            : 'text-[11px] text-gray-700';
 
           const buildReadOnlyInputClasses = (readOnly) =>
             readOnly
@@ -11087,7 +11296,7 @@ ${'</ht' + 'ml>'}`;
 
           const descriptionCell = document.createElement('td');
           descriptionCell.className = 'px-3 py-2 align-top text-gray-600';
-          descriptionCell.textContent = entry.description || '—';
+          descriptionCell.textContent = entry?.isFractionChild ? `↳ ${entry.description || '—'}` : entry.description || '—';
 
           const costPreviousCell = document.createElement('td');
           costPreviousCell.className = 'px-3 py-2 align-top text-right text-gray-500 whitespace-nowrap';
@@ -11247,12 +11456,19 @@ ${'</ht' + 'ml>'}`;
           taxCell.className = 'px-3 py-2 align-top text-center';
           const taxButton = document.createElement('button');
           taxButton.type = 'button';
-          taxButton.className =
-            'inline-flex items-center gap-1 rounded-full border border-primary/40 px-3 py-0.5 text-[10px] font-semibold text-primary transition hover:bg-primary/10';
-          taxButton.textContent = 'Regra';
-          taxButton.addEventListener('click', () => {
-            openExistingProduct(entry.nfeItem);
-          });
+          if (entry?.isFractionChild || !entry?.nfeItem) {
+            taxButton.className =
+              'inline-flex items-center gap-1 rounded-full border border-gray-200 px-3 py-0.5 text-[10px] font-semibold text-gray-400 cursor-not-allowed';
+            taxButton.textContent = '—';
+            taxButton.disabled = true;
+          } else {
+            taxButton.className =
+              'inline-flex items-center gap-1 rounded-full border border-primary/40 px-3 py-0.5 text-[10px] font-semibold text-primary transition hover:bg-primary/10';
+            taxButton.textContent = 'Regra';
+            taxButton.addEventListener('click', () => {
+              openExistingProduct(entry.nfeItem);
+            });
+          }
           taxCell.appendChild(taxButton);
 
           row.append(
@@ -11269,6 +11485,23 @@ ${'</ht' + 'ml>'}`;
             previousStockCell,
             taxCell
           );
+
+          if (entry?.isFractionChild) {
+            [
+              selectCell,
+              codeCell,
+              descriptionCell,
+              costPreviousCell,
+              costNewCell,
+              markupCell,
+              saleNewCell,
+              salePreviousCell,
+              entryStockCell,
+              currentStockCell,
+              previousStockCell,
+              taxCell,
+            ].forEach((cell) => cell.classList.add('bg-amber-100'));
+          }
 
           return row;
         };
@@ -11567,7 +11800,7 @@ ${'</ht' + 'ml>'}`;
         const openPriceAdjustmentModal = async () => {
           if (!priceModal || !priceAdjustmentButton || priceAdjustmentButton.disabled) return;
           pricePendingVerticalFocus = null;
-          priceAdjustmentState.items = buildPriceAdjustmentItems();
+          priceAdjustmentState.items = await buildPriceAdjustmentItems();
           await refreshPriceItemsCurrentStock(priceAdjustmentState.items);
           priceAdjustmentState.filters = {};
           priceFilterInputs.forEach((input) => {
@@ -18765,6 +18998,7 @@ ${'</ht' + 'ml>'}`;
         }
 
         function openImportModal() {
+          if (!importModal || !importModal.classList.contains('hidden')) return;
           previouslyFocusedElement = document.activeElement;
           resetImportQuickTags();
           importModal.classList.remove('hidden');

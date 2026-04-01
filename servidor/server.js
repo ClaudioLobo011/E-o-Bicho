@@ -169,7 +169,6 @@ function buildWhatsappRoomKey(storeId, phoneNumberId) {
 }
 
 io.on('connection', (socket) => {
-  console.log('Um utilizador conectou-se via WebSocket');
   const joinedRooms = new Set();
   const joinedWhatsappRooms = new Set();
   const joinedPdvRooms = new Set();
@@ -231,7 +230,6 @@ io.on('connection', (socket) => {
     joinedRooms.clear();
     joinedWhatsappRooms.clear();
     joinedPdvRooms.clear();
-    console.log('Utilizador desconectou-se');
   });
 });
 

@@ -455,6 +455,30 @@ const extractProductIdFromItem = (item) => {
   return null;
 };
 
+const resolveSaleItemType = (item) => {
+  if (!item || typeof item !== 'object') return '';
+  const rawType = normalizeString(
+    item?.tipoItem ||
+      item?.itemType ||
+      item?.kind ||
+      item?.type ||
+      item?.raw?.tipo ||
+      item?.raw?.type
+  ).toLowerCase();
+  if (rawType === 'servico' || rawType === 'serviço' || rawType === 'service') {
+    return 'servico';
+  }
+  if (rawType === 'produto' || rawType === 'product') {
+    return 'produto';
+  }
+  if (normalizeString(item?.serviceId || item?.servicoId)) {
+    return 'servico';
+  }
+  return '';
+};
+
+const isServiceSaleItem = (item) => resolveSaleItemType(item) === 'servico';
+
 const collectSaleProductQuantities = (sale) => {
   const quantities = new Map();
   if (!sale || typeof sale !== 'object') {
@@ -477,6 +501,7 @@ const collectSaleProductQuantities = (sale) => {
   ];
   const source = itemCandidates.find((list) => Array.isArray(list) && list.length) || [];
   for (const item of source) {
+    if (isServiceSaleItem(item)) continue;
     const productId = extractProductIdFromItem(item) || extractProductIdFromSnapshot(item);
     if (!productId) continue;
     const rawQuantity =
@@ -815,9 +840,6 @@ const updateProductStockForDeposit = async ({
 
   const product = await Product.findById(productObjectId);
   if (!product) {
-    console.warn('Produto nÃ£o encontrado para movimentaÃ§Ã£o de estoque no PDV.', {
-      productId: productObjectId.toString(),
-    });
     return { updated: false, operations: [] };
   }
 
@@ -2634,6 +2656,9 @@ router.get('/:id/caixas', requireAuth, authorizeRoles('admin'), async (req, res)
 
 router.get('/:id', requireAuth, authorizeRoles('admin'), async (req, res) => {
   try {
+    const lightweightRequested = ['1', 'true', 'yes', 'on'].includes(
+      String(req.query?.lightweight || '').trim().toLowerCase()
+    );
     const pdv = await Pdv.findById(req.params.id)
       .populate('empresa')
       .populate('configuracoesEstoque.depositoPadrao')
@@ -2650,7 +2675,11 @@ router.get('/:id', requireAuth, authorizeRoles('admin'), async (req, res) => {
       return res.status(404).json({ message: 'PDV nao encontrado.' });
     }
 
-    const state = await PdvState.findOne({ pdv: pdv._id });
+    const stateQuery = PdvState.findOne({ pdv: pdv._id });
+    if (lightweightRequested) {
+      stateQuery.select(LIGHTWEIGHT_STATE_PROJECTION);
+    }
+    const state = await stateQuery;
     const serializedState = serializeStateForResponse(state);
 
     const response = {
@@ -3689,7 +3718,7 @@ const buildNextOpeningPaymentsFromClose = (payments = []) =>
     valor: isCashPaymentSnapshot(payment) ? Math.max(0, safeNumber(payment.valor, 0)) : 0,
   }));
 
-const PDV_PERF_LOGS_ENABLED = normalizeString(process.env.PDV_PERF_LOGS || '1') !== '0';
+const PDV_PERF_LOGS_ENABLED = false;
 const PDV_SALE_FINALIZE_LEGACY_WRITE =
   normalizeString(process.env.PDV_SALE_FINALIZE_LEGACY_WRITE || '0') === '1';
 const PDV_SALE_FINALIZE_PROCESS_ALL_SALES =

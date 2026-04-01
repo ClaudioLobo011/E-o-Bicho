@@ -4296,7 +4296,7 @@
   const refreshCurrentPdvStateFromServer = async () => {
     const pdvId = normalizeId(state.selectedPdv);
     if (!pdvId) return false;
-    const pdv = await fetchPdvDetails(pdvId);
+    const pdv = await fetchPdvDetails(pdvId, { lightweight: false });
     applyPdvData(pdv);
     return true;
   };
@@ -25998,9 +25998,14 @@
     populatePdvSelect();
   };
 
-  const fetchPdvDetails = async (pdvId) => {
+  const fetchPdvDetails = async (pdvId, options = {}) => {
     const token = getToken();
-    const payload = await fetchWithOptionalAuth(`${API_BASE}/pdvs/${pdvId}`, {
+    const lightweight =
+      options && typeof options === 'object' && Object.prototype.hasOwnProperty.call(options, 'lightweight')
+        ? Boolean(options.lightweight)
+        : true;
+    const query = lightweight ? '?lightweight=true' : '';
+    const payload = await fetchWithOptionalAuth(`${API_BASE}/pdvs/${pdvId}${query}`, {
       token,
       cache: 'no-store',
       errorMessage: 'Não foi possível carregar os dados do PDV selecionado.',

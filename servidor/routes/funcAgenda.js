@@ -1309,6 +1309,179 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
   }
 });
 
+// ---------- SYNC (FULL SNAPSHOT) ----------
+async function getCollectionSyncFingerprint(db, collectionName) {
+  const collection = db.collection(collectionName);
+  const count = await collection.estimatedDocumentCount();
+  const updatedFieldCandidates = ['updatedAt', 'updated_at', 'criadoEm', 'createdAt', 'created_at'];
+
+  for (const fieldName of updatedFieldCandidates) {
+    const latestDoc = await collection
+      .find({ [fieldName]: { $exists: true, $ne: null } })
+      .project({ [fieldName]: 1 })
+      .sort({ [fieldName]: -1 })
+      .limit(1)
+      .next();
+
+    if (!latestDoc) continue;
+    const rawValue = latestDoc[fieldName];
+    const parsedDate = new Date(rawValue);
+    const maxUpdatedAt = Number.isNaN(parsedDate.getTime())
+      ? String(rawValue)
+      : parsedDate.toISOString();
+    return {
+      count,
+      basis: fieldName,
+      maxUpdatedAt,
+      fingerprint: `${count}|${fieldName}|${maxUpdatedAt}`,
+      strategy: 'timestamp',
+    };
+  }
+
+  const latestById = await collection
+    .find({ _id: { $exists: true, $ne: null } })
+    .project({ _id: 1 })
+    .sort({ _id: -1 })
+    .limit(1)
+    .next();
+
+  if (latestById && latestById._id instanceof mongoose.Types.ObjectId) {
+    const maxUpdatedAt = latestById._id.getTimestamp().toISOString();
+    return {
+      count,
+      basis: '_id',
+      maxUpdatedAt,
+      fingerprint: `${count}|_id|${maxUpdatedAt}`,
+      strategy: 'insert-only',
+    };
+  }
+
+  return {
+    count,
+    basis: 'none',
+    maxUpdatedAt: null,
+    fingerprint: `${count}|none|none`,
+    strategy: 'always-download',
+  };
+}
+
+router.get('/sync/full', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const db = mongoose.connection?.db;
+    if (!db) {
+      return res.status(503).json({ message: 'Banco de dados indisponivel para sincronizacao.' });
+    }
+
+    const manifestOnly = String(req.query.manifest || '').trim() === '1';
+    const requestedCollection = String(req.query.collection || '').trim();
+    const chunkOffset = Math.max(parseInt(String(req.query.offset || '0'), 10) || 0, 0);
+    const chunkLimit = Math.min(
+      Math.max(parseInt(String(req.query.limit || '2000'), 10) || 2000, 1),
+      10000
+    );
+
+    const collectionsInfo = await db.listCollections({}, { nameOnly: true }).toArray();
+    const collectionNames = collectionsInfo
+      .map((entry) => String(entry?.name || '').trim())
+      .filter((name) => name && !name.startsWith('system.'))
+      .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+    if (requestedCollection) {
+      if (!collectionNames.includes(requestedCollection)) {
+        return res.status(404).json({ message: 'Colecao nao encontrada para sincronizacao.' });
+      }
+      const fingerprintInfo = await getCollectionSyncFingerprint(db, requestedCollection);
+      const ifNoneFingerprint = String(req.query.ifNoneFingerprint || '').trim();
+      if (
+        chunkOffset === 0 &&
+        ifNoneFingerprint &&
+        ifNoneFingerprint === String(fingerprintInfo.fingerprint || '')
+      ) {
+        return res.json({
+          version: 3,
+          mode: 'single-collection',
+          generatedAt: new Date().toISOString(),
+          database: db.databaseName || null,
+          collection: requestedCollection,
+          notModified: true,
+          count: Number(fingerprintInfo.count || 0),
+          fingerprint: fingerprintInfo,
+          data: [],
+        });
+      }
+      const docs = await db.collection(requestedCollection)
+        .find({})
+        .sort({ _id: 1 })
+        .skip(chunkOffset)
+        .limit(chunkLimit)
+        .toArray();
+      const totalCount = Number(fingerprintInfo.count || 0);
+      const loaded = docs.length;
+      const nextOffset = chunkOffset + loaded;
+      const hasMore = nextOffset < totalCount;
+      return res.json({
+        version: 3,
+        mode: 'single-collection',
+        generatedAt: new Date().toISOString(),
+        database: db.databaseName || null,
+        collection: requestedCollection,
+        count: totalCount,
+        loaded,
+        offset: chunkOffset,
+        limit: chunkLimit,
+        nextOffset,
+        hasMore,
+        fingerprint: fingerprintInfo,
+        data: docs,
+      });
+    }
+
+    if (manifestOnly) {
+      const fingerprints = {};
+      for (const collectionName of collectionNames) {
+        fingerprints[collectionName] = await getCollectionSyncFingerprint(db, collectionName);
+      }
+      return res.json({
+        version: 3,
+        mode: 'manifest',
+        generatedAt: new Date().toISOString(),
+        database: db.databaseName || null,
+        collections: collectionNames,
+        counts: Object.fromEntries(
+          collectionNames.map((name) => [name, Number(fingerprints[name]?.count || 0)])
+        ),
+        fingerprints,
+      });
+    }
+
+    const counts = {};
+    const fingerprints = {};
+    const data = {};
+    for (const collectionName of collectionNames) {
+      const fingerprintInfo = await getCollectionSyncFingerprint(db, collectionName);
+      const docs = await db.collection(collectionName).find({}).toArray();
+      data[collectionName] = docs;
+      counts[collectionName] = docs.length;
+      fingerprints[collectionName] = fingerprintInfo;
+    }
+
+    return res.json({
+      version: 3,
+      mode: 'full-database',
+      scope: 'global',
+      generatedAt: new Date().toISOString(),
+      database: db.databaseName || null,
+      collections: collectionNames,
+      counts,
+      fingerprints,
+      data,
+    });
+  } catch (error) {
+    console.error('GET /func/sync/full', error);
+    return res.status(500).json({ message: 'Erro ao montar sincronizacao completa.' });
+  }
+});
+
 // ---------- CLIENTES (GERENCIAMENTO) ----------
 router.get('/clientes', authMiddleware, requireStaff, async (req, res) => {
   try {
@@ -3157,4 +3330,3 @@ router.delete('/agendamentos/:id', authMiddleware, requireStaff, async (req, res
 });
 
 module.exports = router;
-
