@@ -10,9 +10,15 @@ router.use((req, res, next) => {
 const Pdv = require('../models/Pdv');
 const Store = require('../models/Store');
 const Deposit = require('../models/Deposit');
-const PdvState = require('../models/PdvState');
+const PdvState = require('../models/PdvStateNormalized');
 const PdvCaixaSession = require('../models/PdvCaixaSession');
+const PdvStateSale = require('../models/PdvStateSale');
+const PdvStateReceivable = require('../models/PdvStateReceivable');
+const PdvStateDeliveryOrder = require('../models/PdvStateDeliveryOrder');
+const PdvStateHistoryEvent = require('../models/PdvStateHistoryEvent');
+const PdvStateInventoryMovement = require('../models/PdvStateInventoryMovement');
 const Product = require('../models/Product');
+const crypto = require('crypto');
 const {
   recalculateFractionalStockForProduct,
   refreshParentFractionalStocks,
@@ -75,6 +81,24 @@ const normalizeString = (value) => {
   if (value === undefined || value === null) return '';
   return String(value).trim();
 };
+
+const PDV_NORMALIZED_DUAL_WRITE_ENABLED = (() => {
+  return normalizeString(process.env.PDV_NORMALIZED_DUAL_WRITE || '0') !== '0';
+})();
+const PDV_NORMALIZED_READ_MODE = normalizeString(process.env.PDV_NORMALIZED_READ_MODE || 'off').toLowerCase();
+const PDV_NORMALIZED_READ_PDVS = new Set(
+  normalizeString(process.env.PDV_NORMALIZED_READ_PDVS || '')
+    .split(',')
+    .map((entry) => normalizeString(entry))
+    .filter(Boolean)
+);
+const PDV_NORMALIZED_STRICT_READ_PDVS = new Set(
+  normalizeString(process.env.PDV_NORMALIZED_STRICT_READ_PDVS || '')
+    .split(',')
+    .map((entry) => normalizeString(entry))
+    .filter(Boolean)
+);
+const PDV_NORMALIZED_FORCE_ALL_STRICT = true;
 
 const isBelowFranqueado = (role) => {
   const normalizedRole = normalizeString(role).toLowerCase();
@@ -335,6 +359,78 @@ const safeDate = (value) => {
   if (!value) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const normalizeKeyword = (value) => {
+  const raw = normalizeString(value).toLowerCase();
+  if (!raw) return '';
+  const normalized = typeof raw.normalize === 'function' ? raw.normalize('NFD') : raw;
+  return normalized.replace(/[\u0300-\u036f]/g, '');
+};
+
+const normalizeDocumentDigits = (value) => normalizeString(value).replace(/\D/g, '');
+
+const getSaleCustomerId = (sale = {}) =>
+  normalizeString(
+    sale.customerId ||
+      sale.customer?.id ||
+      sale.customer?._id ||
+      sale.snapshotCustomer?.id ||
+      sale.snapshotCustomer?._id
+  );
+
+const getSaleCustomerDocument = (sale = {}) =>
+  normalizeDocumentDigits(
+    sale.customerDocument || sale.customer?.document || sale.snapshotCustomer?.documento || ''
+  );
+
+const getSaleCustomerName = (sale = {}) =>
+  normalizeKeyword(
+    sale.customerName || sale.customer?.name || sale.customer?.nome || sale.snapshotCustomer?.nome || ''
+  );
+
+const getSaleCreatedAtTime = (sale = {}) => {
+  const date = safeDate(sale.createdAt || sale.updatedAt || sale.date);
+  return date ? date.getTime() : 0;
+};
+
+const isSaleMatchingCustomerHistory = (sale, criteria = {}) => {
+  if (!sale || typeof sale !== 'object') return false;
+
+  const customerId = normalizeString(criteria.customerId);
+  const customerDocument = normalizeDocumentDigits(criteria.customerDocument);
+  const customerName = normalizeKeyword(criteria.customerName);
+
+  const saleCustomerId = getSaleCustomerId(sale);
+  if (customerId && saleCustomerId && customerId === saleCustomerId) {
+    return true;
+  }
+
+  const saleDocument = getSaleCustomerDocument(sale);
+  if (customerDocument && saleDocument && customerDocument === saleDocument) {
+    return true;
+  }
+
+  const saleName = getSaleCustomerName(sale);
+  if (customerName && saleName) {
+    return saleName.includes(customerName) || customerName.includes(saleName);
+  }
+
+  return false;
+};
+
+const dedupeSalesHistory = (sales = []) => {
+  const byKey = new Map();
+  (Array.isArray(sales) ? sales : []).forEach((sale) => {
+    if (!sale || typeof sale !== 'object') return;
+    const id = normalizeString(sale.id || sale._id);
+    const code = normalizeString(sale.saleCode || sale.saleCodeLabel).toUpperCase();
+    const key = id ? `id:${id}` : code ? `code:${code}` : '';
+    if (!key) return;
+    if (byKey.has(key)) return;
+    byKey.set(key, sale);
+  });
+  return Array.from(byKey.values()).sort((a, b) => getSaleCreatedAtTime(b) - getSaleCreatedAtTime(a));
 };
 
 const sameInstant = (left, right) => {
@@ -1992,6 +2088,51 @@ const LIGHTWEIGHT_STATE_PROJECTION = [
   'updatedAt',
 ].join(' ');
 
+const LIGHTWEIGHT_PDV_LOAD_PROJECTION = {
+  _id: 1,
+  pdv: 1,
+  empresa: 1,
+  caixaAberto: 1,
+  summary: 1,
+  caixaInfo: 1,
+  pagamentos: 1,
+  history: { $slice: 500 },
+  completedSales: { $slice: 500 },
+  budgets: { $slice: 500 },
+  deliveryOrders: { $slice: 500 },
+  accountsReceivable: { $slice: 1000 },
+  lastMovement: 1,
+  saleCodeIdentifier: 1,
+  saleCodeSequence: 1,
+  budgetSequence: 1,
+  printPreferences: 1,
+  recentStateMutationKeys: 1,
+  updatedAt: 1,
+};
+
+const LIGHTWEIGHT_CAIXA_ONLY_PROJECTION = {
+  _id: 1,
+  pdv: 1,
+  empresa: 1,
+  caixaAberto: 1,
+  summary: 1,
+  caixaInfo: 1,
+  pagamentos: 1,
+  history: 1,
+  lastMovement: 1,
+  saleCodeIdentifier: 1,
+  saleCodeSequence: 1,
+  budgetSequence: 1,
+  printPreferences: 1,
+  recentStateMutationKeys: 1,
+  updatedAt: 1,
+};
+
+const LIGHTWEIGHT_SESSION_SNAPSHOT_LIMIT = 300;
+
+const limitSnapshotArray = (entries, limit = LIGHTWEIGHT_SESSION_SNAPSHOT_LIMIT) =>
+  Array.isArray(entries) ? entries.slice(0, Math.max(1, Number.parseInt(limit, 10) || 1)) : [];
+
 const buildSaleCodeValue = (identifier, sequence) =>
   `${normalizeCodeToken(identifier)}-${String(Math.max(1, Number.parseInt(sequence, 10) || 1)).padStart(
     SALE_CODE_PADDING,
@@ -2488,6 +2629,421 @@ const ensureUniquePdvCodes = async ({ pdvId, pdvDoc, sales, budgets, existingSal
   };
 };
 
+const shouldUseNormalizedReadForPdv = (pdvId, query = null) => {
+  if (PDV_NORMALIZED_FORCE_ALL_STRICT) {
+    return true;
+  }
+  const normalizedPdvId = normalizeString(pdvId);
+  const queryOverride = normalizeString(query?.normalizedRead || query?.normalized || '').toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(queryOverride)) {
+    return true;
+  }
+  if (['0', 'false', 'no', 'off'].includes(queryOverride)) {
+    return false;
+  }
+  if (PDV_NORMALIZED_READ_MODE === 'all') {
+    return true;
+  }
+  if (PDV_NORMALIZED_READ_MODE === 'allowlist') {
+    return PDV_NORMALIZED_READ_PDVS.has(normalizedPdvId);
+  }
+  return false;
+};
+
+const shouldUseStrictNormalizedReadForPdv = (pdvId, query = null) => {
+  if (PDV_NORMALIZED_FORCE_ALL_STRICT) {
+    return true;
+  }
+  const normalizedPdvId = normalizeString(pdvId);
+  const strictOverride = normalizeString(query?.normalizedStrict || query?.strictNormalized || '').toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(strictOverride)) {
+    return true;
+  }
+  if (['0', 'false', 'no', 'off'].includes(strictOverride)) {
+    return false;
+  }
+  return PDV_NORMALIZED_STRICT_READ_PDVS.has(normalizedPdvId);
+};
+
+const loadNormalizedStateArrays = async ({ pdvId, lightweightRequested = false }) => {
+  const normalizedPdvId = toMirrorObjectIdOrNull(pdvId);
+  if (!normalizedPdvId) {
+    return {
+      history: null,
+      completedSales: null,
+      deliveryOrders: null,
+      accountsReceivable: null,
+    };
+  }
+
+  const lightweightLimit = Math.max(50, LIGHTWEIGHT_SESSION_SNAPSHOT_LIMIT);
+  const historyLimit = lightweightRequested ? lightweightLimit : 0;
+  const salesLimit = lightweightRequested ? lightweightLimit : 0;
+  const deliveryLimit = lightweightRequested ? lightweightLimit : 0;
+  const receivableLimit = lightweightRequested ? lightweightLimit * 3 : 0;
+
+  const makeQuery = (model, limit = 0) => {
+    const query = model
+      .find({ pdv: normalizedPdvId })
+      .sort({ _id: -1 })
+      .select('payload');
+    if (limit > 0) {
+      query.limit(limit);
+    }
+    return query.lean();
+  };
+
+  const [historyDocs, saleDocs, deliveryDocs, receivableDocs] = await Promise.all([
+    makeQuery(PdvStateHistoryEvent, historyLimit),
+    makeQuery(PdvStateSale, salesLimit),
+    makeQuery(PdvStateDeliveryOrder, deliveryLimit),
+    makeQuery(PdvStateReceivable, receivableLimit),
+  ]);
+
+  return {
+    history: historyDocs.map((entry) => entry.payload).filter(Boolean),
+    completedSales: saleDocs.map((entry) => entry.payload).filter(Boolean),
+    deliveryOrders: deliveryDocs.map((entry) => entry.payload).filter(Boolean),
+    accountsReceivable: receivableDocs.map((entry) => entry.payload).filter(Boolean),
+  };
+};
+
+const applyNormalizedArraysToSerializedState = (serializedState, normalizedArrays, options = {}) => {
+  if (!serializedState || typeof serializedState !== 'object') return serializedState;
+  if (!normalizedArrays || typeof normalizedArrays !== 'object') return serializedState;
+  const mergeWithLegacy =
+    options && typeof options === 'object' && Object.prototype.hasOwnProperty.call(options, 'mergeWithLegacy')
+      ? Boolean(options.mergeWithLegacy)
+      : true;
+
+  const buildMergeKey = (entry, kind) => {
+    if (!entry || typeof entry !== 'object') return '';
+    if (kind === 'sale') {
+      const id = normalizeString(entry.id || entry._id);
+      if (id) return `id:${id}`;
+      const code = normalizeString(entry.saleCode || entry.saleCodeLabel).toUpperCase();
+      if (code) return `code:${code}`;
+      return '';
+    }
+    if (kind === 'delivery') {
+      const id = normalizeString(entry.id || entry._id || entry.deliveryId);
+      if (id) return `id:${id}`;
+      const saleId = normalizeString(entry.saleRecordId || entry.saleId);
+      if (saleId) return `sale:${saleId}`;
+      const saleCode = normalizeString(entry.saleCode).toUpperCase();
+      if (saleCode) return `code:${saleCode}`;
+      return '';
+    }
+    if (kind === 'receivable') {
+      const id = normalizeString(entry.id || entry._id || entry.receivableId);
+      if (id) return `id:${id}`;
+      const saleId = normalizeString(entry.saleId);
+      const parcel = Number.parseInt(entry.parcelNumber ?? entry.parcela ?? 0, 10) || 0;
+      const dueDate = parseDateOrNull(entry.dueDate || entry.vencimento)?.toISOString() || '';
+      return `r:${saleId}:${parcel}:${dueDate}`;
+    }
+    if (kind === 'history') {
+      const id = normalizeString(entry.id || entry._id || entry.eventId);
+      const timestamp = normalizeString(entry.timestamp || entry.createdAt);
+      const label = normalizeString(entry.label);
+      const amount = safeNumber(entry.amount ?? entry.delta ?? 0, 0);
+      return id ? `id:${id}:${timestamp}` : `h:${timestamp}:${label}:${amount}`;
+    }
+    return '';
+  };
+
+  const mergePayloadArrays = (legacyList = [], normalizedList = [], kind = 'generic') => {
+    if (!mergeWithLegacy) {
+      return Array.isArray(normalizedList) ? normalizedList.slice() : [];
+    }
+    const merged = [];
+    const indexByKey = new Map();
+    const push = (entry, source = 'normalized') => {
+      if (!entry || typeof entry !== 'object') return;
+      const key = buildMergeKey(entry, kind);
+      if (!key) {
+        merged.push(entry);
+        return;
+      }
+      const existingIndex = indexByKey.get(key);
+      if (existingIndex === undefined) {
+        indexByKey.set(key, merged.length);
+        merged.push(entry);
+        return;
+      }
+      if (source === 'legacy') {
+        merged[existingIndex] = entry;
+      }
+    };
+    (Array.isArray(normalizedList) ? normalizedList : []).forEach((entry) => push(entry, 'normalized'));
+    (Array.isArray(legacyList) ? legacyList : []).forEach((entry) => push(entry, 'legacy'));
+    return merged;
+  };
+
+  if (Array.isArray(normalizedArrays.history)) {
+    serializedState.history = sortRecordsByDateDesc(
+      mergePayloadArrays(serializedState.history || [], normalizedArrays.history, 'history'),
+      'history'
+    );
+    if (serializedState.caixa && typeof serializedState.caixa === 'object') {
+      serializedState.caixa.historico = serializedState.history;
+    }
+    serializedState.lastMovement = serializedState.history[0] || serializedState.lastMovement || null;
+    if (serializedState.caixa && typeof serializedState.caixa === 'object') {
+      serializedState.caixa.ultimoLancamento = serializedState.lastMovement;
+    }
+  }
+  if (Array.isArray(normalizedArrays.completedSales)) {
+    serializedState.completedSales = sortRecordsByDateDesc(
+      mergePayloadArrays(serializedState.completedSales || [], normalizedArrays.completedSales, 'sale'),
+      'sale'
+    );
+  }
+  if (Array.isArray(normalizedArrays.deliveryOrders)) {
+    serializedState.deliveryOrders = sortRecordsByDateDesc(
+      mergePayloadArrays(serializedState.deliveryOrders || [], normalizedArrays.deliveryOrders, 'delivery'),
+      'delivery'
+    );
+    if (serializedState.caixa && typeof serializedState.caixa === 'object') {
+      serializedState.caixa.deliveryOrders = serializedState.deliveryOrders;
+    }
+  }
+  if (Array.isArray(normalizedArrays.accountsReceivable)) {
+    serializedState.accountsReceivable = sortRecordsByDateDesc(
+      mergePayloadArrays(serializedState.accountsReceivable || [], normalizedArrays.accountsReceivable, 'receivable'),
+      'receivable'
+    );
+  }
+
+  return serializedState;
+};
+
+const normalizeMirrorEntityId = (value) => normalizeString(value);
+
+const hashMirrorPayload = (payload) =>
+  crypto.createHash('sha1').update(JSON.stringify(payload || null)).digest('hex');
+
+const toMirrorObjectIdOrNull = (value) => {
+  if (!value) return null;
+  if (value instanceof mongoose.Types.ObjectId) return value;
+  const normalized = normalizeString(value);
+  return mongoose.Types.ObjectId.isValid(normalized) ? new mongoose.Types.ObjectId(normalized) : null;
+};
+
+const buildMirrorReceivableId = (entry = {}) => {
+  const explicit = normalizeMirrorEntityId(entry.id || entry._id || entry.receivableId);
+  if (explicit) return explicit;
+  const signature = {
+    saleId: normalizeMirrorEntityId(entry.saleId),
+    parcelNumber: entry.parcelNumber ?? entry.parcela ?? entry.installmentNumber ?? 0,
+    value: safeNumber(entry.value ?? entry.valor ?? entry.amount ?? 0),
+    dueDate: parseDateOrNull(entry.dueDate || entry.vencimento)?.toISOString() || '',
+    paymentMethodId: normalizeMirrorEntityId(entry.paymentMethodId || entry.metodoPagamentoId),
+  };
+  return `hash:${hashMirrorPayload(signature)}`;
+};
+
+const buildMirrorDeliveryId = (entry = {}) => {
+  const explicit = normalizeMirrorEntityId(entry.id || entry._id || entry.deliveryId);
+  if (explicit) return explicit;
+  const signature = {
+    saleRecordId: normalizeMirrorEntityId(entry.saleRecordId || entry.saleId),
+    saleCode: normalizeMirrorEntityId(entry.saleCode),
+    createdAt: parseDateOrNull(entry.createdAt || entry.registeredAt)?.toISOString() || '',
+    status: normalizeMirrorEntityId(entry.status),
+  };
+  return `hash:${hashMirrorPayload(signature)}`;
+};
+
+const buildMirrorHistoryEventId = (entry = {}) => {
+  const explicit = normalizeMirrorEntityId(entry.id || entry._id || entry.eventId);
+  if (explicit) return explicit;
+  const signature = {
+    label: normalizeMirrorEntityId(entry.label),
+    amount: safeNumber(entry.amount ?? entry.delta ?? 0),
+    timestamp: parseDateOrNull(entry.timestamp)?.toISOString() || '',
+    paymentId: normalizeMirrorEntityId(entry.paymentId),
+    motivo: normalizeMirrorEntityId(entry.motivo),
+  };
+  return `hash:${hashMirrorPayload(signature)}`;
+};
+
+const buildMirrorMovementId = (entry = {}) => {
+  const saleId = normalizeMirrorEntityId(entry.saleId);
+  const deposit = normalizeMirrorEntityId(entry.deposit);
+  if (saleId && deposit) return `${saleId}:${deposit}`;
+  const explicit = normalizeMirrorEntityId(entry.id || entry._id || entry.movementId);
+  if (explicit) return explicit;
+  return `hash:${hashMirrorPayload(entry)}`;
+};
+
+const syncPdvStateNormalizedMirror = async ({ pdvDoc, updatedState }) => {
+  if (!updatedState) return;
+  const pdvId = toMirrorObjectIdOrNull(updatedState.pdv || pdvDoc?._id);
+  if (!pdvId) return;
+  const empresaId = toMirrorObjectIdOrNull(updatedState.empresa || pdvDoc?.empresa);
+  const sourceState = toMirrorObjectIdOrNull(updatedState._id);
+  const sourceUpdatedAt = parseDateOrNull(updatedState.updatedAt) || new Date();
+
+  const sales = Array.isArray(updatedState.completedSales) ? updatedState.completedSales : [];
+  const saleIds = [];
+  const saleOps = [];
+  sales.forEach((sale) => {
+    const saleId = normalizeMirrorEntityId(sale?.id || sale?._id);
+    if (!saleId) return;
+    saleIds.push(saleId);
+    saleOps.push({
+      updateOne: {
+        filter: { pdv: pdvId, saleId },
+        update: {
+          $set: {
+            pdv: pdvId,
+            empresa: empresaId,
+            sourceState,
+            sourceUpdatedAt,
+            saleId,
+            saleCode: normalizeMirrorEntityId(sale?.saleCode || sale?.saleCodeLabel),
+            createdAtFromEntity: parseDateOrNull(sale?.createdAt),
+            payload: sale,
+          },
+        },
+        upsert: true,
+      },
+    });
+  });
+  if (saleOps.length) {
+    await PdvStateSale.bulkWrite(saleOps, { ordered: false });
+  }
+
+  const receivableSource = [
+    ...(Array.isArray(updatedState.accountsReceivable) ? updatedState.accountsReceivable : []),
+    ...sales.flatMap((sale) => (Array.isArray(sale?.receivables) ? sale.receivables : [])),
+  ];
+  const receivableIds = [];
+  const receivableOps = [];
+  const receivableSeen = new Set();
+  receivableSource.forEach((entry) => {
+    const receivableId = buildMirrorReceivableId(entry);
+    if (!receivableId || receivableSeen.has(receivableId)) return;
+    receivableSeen.add(receivableId);
+    receivableIds.push(receivableId);
+    receivableOps.push({
+      updateOne: {
+        filter: { pdv: pdvId, receivableId },
+        update: {
+          $set: {
+            pdv: pdvId,
+            empresa: empresaId,
+            sourceState,
+            sourceUpdatedAt,
+            receivableId,
+            saleId: normalizeMirrorEntityId(entry?.saleId),
+            createdAtFromEntity: parseDateOrNull(entry?.createdAt),
+            payload: entry,
+          },
+        },
+        upsert: true,
+      },
+    });
+  });
+  if (receivableOps.length) {
+    await PdvStateReceivable.bulkWrite(receivableOps, { ordered: false });
+  }
+
+  const deliveries = Array.isArray(updatedState.deliveryOrders) ? updatedState.deliveryOrders : [];
+  const deliveryIds = [];
+  const deliveryOps = [];
+  deliveries.forEach((entry) => {
+    const deliveryId = buildMirrorDeliveryId(entry);
+    if (!deliveryId) return;
+    deliveryIds.push(deliveryId);
+    deliveryOps.push({
+      updateOne: {
+        filter: { pdv: pdvId, deliveryId },
+        update: {
+          $set: {
+            pdv: pdvId,
+            empresa: empresaId,
+            sourceState,
+            sourceUpdatedAt,
+            deliveryId,
+            saleId: normalizeMirrorEntityId(entry?.saleRecordId || entry?.saleId),
+            createdAtFromEntity: parseDateOrNull(entry?.createdAt || entry?.registeredAt),
+            payload: entry,
+          },
+        },
+        upsert: true,
+      },
+    });
+  });
+  if (deliveryOps.length) {
+    await PdvStateDeliveryOrder.bulkWrite(deliveryOps, { ordered: false });
+  }
+
+  const historyEntries = Array.isArray(updatedState.history) ? updatedState.history : [];
+  const historyIds = [];
+  const historyOps = [];
+  historyEntries.forEach((entry) => {
+    const eventId = buildMirrorHistoryEventId(entry);
+    if (!eventId) return;
+    historyIds.push(eventId);
+    historyOps.push({
+      updateOne: {
+        filter: { pdv: pdvId, eventId },
+        update: {
+          $set: {
+            pdv: pdvId,
+            empresa: empresaId,
+            sourceState,
+            sourceUpdatedAt,
+            eventId,
+            eventType: normalizeMirrorEntityId(entry?.id || entry?.label).toLowerCase(),
+            createdAtFromEntity: parseDateOrNull(entry?.timestamp),
+            payload: entry,
+          },
+        },
+        upsert: true,
+      },
+    });
+  });
+  if (historyOps.length) {
+    await PdvStateHistoryEvent.bulkWrite(historyOps, { ordered: false });
+  }
+
+  const inventoryMovements = Array.isArray(updatedState.inventoryMovements)
+    ? updatedState.inventoryMovements
+    : [];
+  const movementIds = [];
+  const movementOps = [];
+  inventoryMovements.forEach((entry) => {
+    const movementId = buildMirrorMovementId(entry);
+    if (!movementId) return;
+    movementIds.push(movementId);
+    movementOps.push({
+      updateOne: {
+        filter: { pdv: pdvId, movementId },
+        update: {
+          $set: {
+            pdv: pdvId,
+            empresa: empresaId,
+            sourceState,
+            sourceUpdatedAt,
+            movementId,
+            saleId: normalizeMirrorEntityId(entry?.saleId),
+            deposit: toMirrorObjectIdOrNull(entry?.deposit),
+            createdAtFromEntity: parseDateOrNull(entry?.processedAt),
+            payload: entry,
+          },
+        },
+        upsert: true,
+      },
+    });
+  });
+  if (movementOps.length) {
+    await PdvStateInventoryMovement.bulkWrite(movementOps, { ordered: false });
+  }
+};
+
 const syncPdvCaixaSessionHistory = async ({ pdvDoc, existingState, updatedState }) => {
   if (!pdvDoc || !updatedState) return;
 
@@ -2555,6 +3111,12 @@ const syncPdvCaixaSessionHistory = async ({ pdvDoc, existingState, updatedState 
         { upsert: true, new: true }
       );
     }
+  }
+
+  if (PDV_NORMALIZED_DUAL_WRITE_ENABLED && shouldUseNormalizedReadForPdv(pdvId)) {
+    void syncPdvStateNormalizedMirror({ pdvDoc, updatedState }).catch((mirrorError) => {
+      console.error('Erro ao sincronizar espelho normalizado do estado do PDV:', mirrorError);
+    });
   }
 };
 
@@ -2654,11 +3216,81 @@ router.get('/:id/caixas', requireAuth, authorizeRoles('admin'), async (req, res)
   }
 });
 
+router.get('/:id/customer-sales', requireAuth, async (req, res) => {
+  try {
+    const pdvId = normalizeString(req.params.id);
+    if (!mongoose.Types.ObjectId.isValid(pdvId)) {
+      return res.status(400).json({ message: 'Identificador de PDV inválido.' });
+    }
+
+    const pdv = await Pdv.findById(pdvId).select('mostrarParaFuncionarios').lean();
+    if (!pdv) {
+      return res.status(404).json({ message: 'PDV não encontrado.' });
+    }
+
+    if (isBelowFranqueado(req.user?.role) && pdv.mostrarParaFuncionarios === false) {
+      return res.status(404).json({ message: 'PDV nao encontrado.' });
+    }
+
+    const criteria = {
+      customerId: normalizeString(req.query?.customerId),
+      customerDocument: normalizeDocumentDigits(req.query?.customerDocument),
+      customerName: normalizeString(req.query?.customerName),
+    };
+
+    if (!criteria.customerId && !criteria.customerDocument && !criteria.customerName) {
+      return res.json({ sales: [] });
+    }
+
+    const requestedLimit = Number.parseInt(req.query?.limit, 10);
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.min(Math.max(requestedLimit, 1), 500)
+      : 200;
+    const scanLimit = Math.max(limit * 5, 500);
+
+    const normalizedRead = shouldUseNormalizedReadForPdv(pdvId, req.query);
+    const strictNormalizedRead = normalizedRead && shouldUseStrictNormalizedReadForPdv(pdvId, req.query);
+    const normalizedPdvId = toMirrorObjectIdOrNull(pdvId);
+
+    let normalizedSales = [];
+    if (normalizedRead && normalizedPdvId) {
+      const normalizedQuery = PdvStateSale.find({
+        pdv: normalizedPdvId,
+        ...(criteria.customerId ? { 'payload.customerId': criteria.customerId } : {}),
+      })
+        .sort({ createdAtFromEntity: -1, _id: -1 })
+        .select('payload')
+        .limit(scanLimit)
+        .lean();
+      const docs = await normalizedQuery;
+      normalizedSales = docs
+        .map((entry) => entry?.payload)
+        .filter((sale) => isSaleMatchingCustomerHistory(sale, criteria));
+    }
+
+    let legacySales = [];
+    if (!strictNormalizedRead) {
+      const legacyState = await PdvState.findOne({ pdv: pdvId }).select({ completedSales: 1 }).lean();
+      legacySales = (Array.isArray(legacyState?.completedSales) ? legacyState.completedSales : []).filter((sale) =>
+        isSaleMatchingCustomerHistory(sale, criteria)
+      );
+    }
+
+    const mergedSales = dedupeSalesHistory([...normalizedSales, ...legacySales]).slice(0, limit);
+    return res.json({ sales: mergedSales });
+  } catch (error) {
+    console.error('Erro ao listar histórico de vendas por cliente no PDV:', error);
+    return res.status(500).json({ message: 'Erro ao listar histórico de vendas do cliente.' });
+  }
+});
+
 router.get('/:id', requireAuth, authorizeRoles('admin'), async (req, res) => {
   try {
     const lightweightRequested = ['1', 'true', 'yes', 'on'].includes(
       String(req.query?.lightweight || '').trim().toLowerCase()
     );
+    const scope = normalizeString(req.query?.scope || '').toLowerCase();
+    const caixaOnlyRequested = lightweightRequested && scope === 'caixa';
     const pdv = await Pdv.findById(req.params.id)
       .populate('empresa')
       .populate('configuracoesEstoque.depositoPadrao')
@@ -2675,12 +3307,57 @@ router.get('/:id', requireAuth, authorizeRoles('admin'), async (req, res) => {
       return res.status(404).json({ message: 'PDV nao encontrado.' });
     }
 
-    const stateQuery = PdvState.findOne({ pdv: pdv._id });
+    let state;
     if (lightweightRequested) {
-      stateQuery.select(LIGHTWEIGHT_STATE_PROJECTION);
+      const projection = caixaOnlyRequested
+        ? LIGHTWEIGHT_CAIXA_ONLY_PROJECTION
+        : LIGHTWEIGHT_PDV_LOAD_PROJECTION;
+      const baseState = await PdvState.findOne({ pdv: pdv._id }).select(projection).lean();
+      if (!caixaOnlyRequested) {
+        const openSession = await PdvCaixaSession.findOne({ pdv: pdv._id, status: 'aberto' })
+          .sort({ aberturaData: -1, stateUpdatedAt: -1, updatedAt: -1 })
+          .lean();
+        if (baseState && openSession) {
+          baseState.history = limitSnapshotArray(openSession.historySnapshot);
+          baseState.completedSales = limitSnapshotArray(openSession.completedSalesSnapshot);
+          if (Array.isArray(openSession.pagamentosSnapshot) && openSession.pagamentosSnapshot.length) {
+            baseState.pagamentos = openSession.pagamentosSnapshot;
+          }
+          if (openSession.caixaInfoSnapshot && typeof openSession.caixaInfoSnapshot === 'object') {
+            baseState.caixaInfo = {
+              ...(baseState.caixaInfo && typeof baseState.caixaInfo === 'object' ? baseState.caixaInfo : {}),
+              ...openSession.caixaInfoSnapshot,
+            };
+          }
+          if (openSession.summary && typeof openSession.summary === 'object') {
+            baseState.summary = {
+              ...(baseState.summary && typeof baseState.summary === 'object' ? baseState.summary : {}),
+              ...openSession.summary,
+            };
+          }
+          if (openSession.stateUpdatedAt) {
+            baseState.updatedAt = openSession.stateUpdatedAt;
+          }
+        }
+      }
+      state = baseState;
+    } else {
+      state = await PdvState.findOne({ pdv: pdv._id });
     }
-    const state = await stateQuery;
-    const serializedState = serializeStateForResponse(state);
+    let serializedState = serializeStateForResponse(state);
+    if (!caixaOnlyRequested && shouldUseNormalizedReadForPdv(req.params.id, req.query)) {
+      try {
+        const normalizedArrays = await loadNormalizedStateArrays({
+          pdvId: req.params.id,
+          lightweightRequested,
+        });
+        serializedState = applyNormalizedArraysToSerializedState(serializedState, normalizedArrays, {
+          mergeWithLegacy: !shouldUseStrictNormalizedReadForPdv(req.params.id, req.query),
+        });
+      } catch (normalizedReadError) {
+        console.error('Erro ao carregar leitura normalizada do PDV (GET /:id):', normalizedReadError);
+      }
+    }
 
     const response = {
       ...pdv,
@@ -3764,10 +4441,18 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
   if (shouldTraceCommand) perf.mark('start');
   if (action === PDV_COMMANDS.REFRESH_STATE) {
     const state = await PdvState.findOne({ pdv: pdvId });
-    return {
-      state: serializeStateForResponse(state),
-      shouldEmit: false,
-    };
+    let serialized = serializeStateForResponse(state);
+    if (shouldUseNormalizedReadForPdv(pdvId)) {
+      try {
+        const normalizedArrays = await loadNormalizedStateArrays({ pdvId, lightweightRequested: false });
+        serialized = applyNormalizedArraysToSerializedState(serialized, normalizedArrays, {
+          mergeWithLegacy: !shouldUseStrictNormalizedReadForPdv(pdvId),
+        });
+      } catch (normalizedReadError) {
+        console.error('Erro ao carregar leitura normalizada do PDV (refresh_state):', normalizedReadError);
+      }
+    }
+    return { state: serialized, shouldEmit: false };
   }
 
   if (action === PDV_COMMANDS.CAIXA_OPEN) {
@@ -3948,6 +4633,20 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
         error.statusCode = 400;
         throw error;
       }
+      const fechamentoEntry = normalizeHistoryEntryPayload({
+        id: 'fechamento',
+        label: 'Fechamento',
+        amount: 0,
+        delta: 0,
+        paymentId: '',
+        paymentLabel: '',
+        reason,
+        timestamp,
+        ...userMeta,
+      });
+      if (fechamentoEntry) {
+        nextHistory.unshift(fechamentoEntry);
+      }
       const previstoPayments = buildExpectedClosePaymentsByMethod(existingState);
       const fechamentoPrevisto = previstoPayments.reduce(
         (sum, payment) => sum + safeNumber(payment?.valor ?? 0, 0),
@@ -3966,7 +4665,7 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
             caixaAberto: false,
             pagamentos: nextOpeningPayments,
             history: nextHistory,
-            lastMovement: lastMovement || null,
+            lastMovement: nextHistory[0] || lastMovement || null,
             summary: {
               ...nextSummary,
               saldo:
@@ -5927,7 +6626,34 @@ router.post('/:id/commands', requireAuth, async (req, res) => {
       });
     });
     routePerf.mark('command_executed');
-    const state = commandResult?.state || serializeStateForResponse(null);
+    let state = commandResult?.state || serializeStateForResponse(null);
+    const strictNormalizedForPdv = shouldUseStrictNormalizedReadForPdv(pdvId, req.query);
+    const shouldOverlayNormalizedState =
+      shouldUseNormalizedReadForPdv(pdvId, req.query) &&
+      (action === PDV_COMMANDS.REFRESH_STATE || strictNormalizedForPdv);
+    if (strictNormalizedForPdv && action !== PDV_COMMANDS.REFRESH_STATE) {
+      try {
+        const latestLegacyState = await PdvState.findOne({ pdv: pdvId });
+        if (latestLegacyState) {
+          await syncPdvStateNormalizedMirror({ pdvDoc: pdv, updatedState: latestLegacyState });
+        }
+      } catch (normalizedSyncError) {
+        console.error('Erro ao sincronizar estado normalizado do PDV antes de responder comando:', normalizedSyncError);
+      }
+    }
+    if (shouldOverlayNormalizedState) {
+      try {
+        const normalizedArrays = await loadNormalizedStateArrays({
+          pdvId,
+          lightweightRequested: false,
+        });
+        state = applyNormalizedArraysToSerializedState(state, normalizedArrays, {
+          mergeWithLegacy: !shouldUseStrictNormalizedReadForPdv(pdvId, req.query),
+        });
+      } catch (normalizedReadError) {
+        console.error('Erro ao carregar leitura normalizada do PDV (POST /:id/commands):', normalizedReadError);
+      }
+    }
 
     if (commandResult?.shouldEmit) {
       const emitPdvStateUpdate =
@@ -6177,7 +6903,21 @@ router.put('/:id/state', requireAuth, async (req, res) => {
         throw updateError;
       }
 
-      const serialized = serializeStateForResponse(updatedState);
+      let serialized = serializeStateForResponse(updatedState);
+      if (shouldUseStrictNormalizedReadForPdv(pdvId, req.query)) {
+        try {
+          await syncPdvStateNormalizedMirror({ pdvDoc: pdv, updatedState });
+          const normalizedArrays = await loadNormalizedStateArrays({
+            pdvId,
+            lightweightRequested: false,
+          });
+          serialized = applyNormalizedArraysToSerializedState(serialized, normalizedArrays, {
+            mergeWithLegacy: false,
+          });
+        } catch (normalizedSyncError) {
+          console.error('Erro ao sincronizar/leitura normalizada do PDV (PUT /:id/state):', normalizedSyncError);
+        }
+      }
       res.json(serialized);
 
       setImmediate(async () => {

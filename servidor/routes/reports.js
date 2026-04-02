@@ -1,6 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const PdvState = require('../models/PdvState');
+const PdvStateSale = require('../models/PdvStateSale');
 const Store = require('../models/Store');
 const Pdv = require('../models/Pdv');
 const PaymentMethod = require('../models/PaymentMethod');
@@ -1042,24 +1043,154 @@ const calculateMarginPercentage = (sales = []) => {
   return (profit / totals.total) * 100;
 };
 
-const fetchSalesForPeriod = async (baseMatch, saleMatch, startDate, endDate) => {
-  const periodMatch = { ...saleMatch };
+const BILLING_SALE_SELECT =
+  [
+    'empresa',
+    'pdv',
+    'payload.id',
+    'payload.saleCode',
+    'payload.saleCodeLabel',
+    'payload.createdAt',
+    'payload.createdAtLabel',
+    'payload.type',
+    'payload.typeLabel',
+    'payload.status',
+    'payload.customerName',
+    'payload.customerDocument',
+    'payload.seller',
+    'payload.sellerName',
+    'payload.sellerCode',
+    'payload.paymentTags',
+    'payload.discountValue',
+    'payload.additionValue',
+    'payload.total',
+    'payload.totalLiquido',
+    'payload.totalBruto',
+    'payload.cost',
+    'payload.totalCost',
+    'payload.custo',
+    'payload.custoTotal',
+    'payload.fee',
+    'payload.feeValue',
+    'payload.taxa',
+    'payload.fiscalStatus',
+    'payload.fiscalXmlName',
+    'payload.fiscalXmlUrl',
+    'payload.fiscalEnvironment',
+    'payload.fiscalAccessKey',
+    'payload.fiscalSerie',
+    'payload.cashContributions',
+    'payload.receiptSnapshot.totais',
+    'payload.receiptSnapshot.customer',
+    'payload.receiptSnapshot.cliente',
+    'payload.receiptSnapshot.meta',
+    'payload.receiptSnapshot.pagamentos',
+    'payload.receiptSnapshot.payments',
+  ].join(' ');
 
-  if (startDate || endDate) {
-    const createdAt = { ...(saleMatch?.['completedSales.createdAt'] || {}) };
-    if (startDate) createdAt.$gte = startDate;
-    if (endDate) createdAt.$lte = endDate;
-    periodMatch['completedSales.createdAt'] = createdAt;
+const BILLING_ITEMS_SELECT = [
+  'payload.status',
+  'payload.discountValue',
+  'payload.receiptSnapshot.totais.descontoValor',
+  'payload.receiptSnapshot.totais.discountValue',
+  'payload.items.id',
+  'payload.items._id',
+  'payload.items.productId',
+  'payload.items.produtoId',
+  'payload.items.product',
+  'payload.items.produto',
+  'payload.items.codigo',
+  'payload.items.codigoProduto',
+  'payload.items.codigoInterno',
+  'payload.items.codInterno',
+  'payload.items.codigoBarras',
+  'payload.items.barcode',
+  'payload.items.nome',
+  'payload.items.descricao',
+  'payload.items.categoria',
+  'payload.items.category',
+  'payload.items.quantidade',
+  'payload.items.qtd',
+  'payload.items.quantity',
+  'payload.items.valor',
+  'payload.items.valorUnitario',
+  'payload.items.preco',
+  'payload.items.unit',
+  'payload.items.unitValue',
+  'payload.items.total',
+  'payload.items.subtotal',
+  'payload.items.totalValue',
+  'payload.items.valorTotal',
+  'payload.items.productSnapshot._id',
+  'payload.items.productSnapshot.nome',
+  'payload.items.productSnapshot.categoria',
+  'payload.items.produtoSnapshot._id',
+  'payload.items.produtoSnapshot.nome',
+  'payload.items.produtoSnapshot.categoria',
+].join(' ');
+
+const fetchSalesForPeriod = async (baseMatch, saleMatch, startDate, endDate) => {
+  const query = {};
+
+  if (baseMatch && typeof baseMatch === 'object') {
+    if (Object.prototype.hasOwnProperty.call(baseMatch, 'empresa')) {
+      query.empresa = baseMatch.empresa;
+    }
+    if (Object.prototype.hasOwnProperty.call(baseMatch, 'pdv')) {
+      query.pdv = baseMatch.pdv;
+    }
   }
 
-  const pipeline = [
-    { $match: baseMatch },
-    { $project: { completedSales: 1, empresa: 1 } },
-    { $unwind: '$completedSales' },
-    { $match: periodMatch },
-  ];
+  const createdAtFilter = {};
+  const explicitCreatedAt =
+    saleMatch && typeof saleMatch === 'object' ? saleMatch['completedSales.createdAt'] : null;
+  if (explicitCreatedAt && typeof explicitCreatedAt === 'object') {
+    if (explicitCreatedAt.$gte) createdAtFilter.$gte = explicitCreatedAt.$gte;
+    if (explicitCreatedAt.$lte) createdAtFilter.$lte = explicitCreatedAt.$lte;
+  }
+  if (startDate) createdAtFilter.$gte = startDate;
+  if (endDate) createdAtFilter.$lte = endDate;
+  if (Object.keys(createdAtFilter).length) {
+    query.createdAtFromEntity = createdAtFilter;
+  }
 
-  return PdvState.aggregate(pipeline);
+  if (saleMatch?.['completedSales.status']) {
+    query['payload.status'] = saleMatch['completedSales.status'];
+  }
+  if (saleMatch?.['completedSales.type']) {
+    query['payload.type'] = saleMatch['completedSales.type'];
+  }
+
+  const docs = await PdvStateSale.find(query)
+    .select(BILLING_SALE_SELECT)
+    .sort({ createdAtFromEntity: -1 })
+    .lean();
+  return docs.map((entry) => ({
+    completedSales: entry?.payload || {},
+    empresa: entry?.empresa || null,
+    pdv: entry?.pdv || null,
+  }));
+};
+
+const fetchSalesItemsForPeriod = async (baseMatch, startDate, endDate) => {
+  const query = {};
+  if (baseMatch && typeof baseMatch === 'object') {
+    if (Object.prototype.hasOwnProperty.call(baseMatch, 'empresa')) {
+      query.empresa = baseMatch.empresa;
+    }
+    if (Object.prototype.hasOwnProperty.call(baseMatch, 'pdv')) {
+      query.pdv = baseMatch.pdv;
+    }
+  }
+  const createdAtFilter = {};
+  if (startDate) createdAtFilter.$gte = startDate;
+  if (endDate) createdAtFilter.$lte = endDate;
+  if (Object.keys(createdAtFilter).length) {
+    query.createdAtFromEntity = createdAtFilter;
+  }
+
+  const docs = await PdvStateSale.find(query).select(BILLING_ITEMS_SELECT).lean();
+  return docs.map((entry) => ({ completedSales: entry?.payload || {} }));
 };
 
 const normalizeSaleRecord = (record) => record?.completedSales || record?.sale || record || {};
@@ -1904,9 +2035,10 @@ router.get(
 
       const saleMatch = {};
 
-      const [viewSalesRaw, compareSalesRaw] = await Promise.all([
+      const [viewSalesRaw, compareSalesRaw, viewSalesItemsRaw] = await Promise.all([
         fetchSalesForPeriod(baseMatch, saleMatch, viewPeriod?.start, viewPeriod?.end),
         fetchSalesForPeriod(baseMatch, saleMatch, comparePeriod?.start, comparePeriod?.end),
+        fetchSalesItemsForPeriod(baseMatch, viewPeriod?.start, viewPeriod?.end),
       ]);
 
       const paymentMethodCompanyIds = storeObjectId
@@ -1923,9 +2055,11 @@ router.get(
 
       const viewSales = viewSalesRaw.map(normalizeSaleRecord);
       const compareSales = compareSalesRaw.map(normalizeSaleRecord);
+      const viewSalesItems = viewSalesItemsRaw.map(normalizeSaleRecord);
 
       const { summary: viewSummary, completedSales: viewCompletedSales } = collectSalesSummary(viewSales);
       const { summary: compareSummary, completedSales: compareCompletedSales } = collectSalesSummary(compareSales);
+      const { completedSales: viewCompletedSalesWithItems } = collectSalesSummary(viewSalesItems);
 
       const billingNet = viewSummary.gross - viewSummary.costs - viewSummary.fees;
       const compareBillingNet = compareSummary.gross - compareSummary.costs - compareSummary.fees;
@@ -1947,7 +2081,7 @@ router.get(
       const viewCustomersSet = new Set(viewCompletedSales.map((sale) => deriveCustomerKey(sale)));
       const newCustomers = Array.from(viewCustomersSet).filter((key) => !compareCustomersSet.has(key));
 
-      const itemsSold = viewCompletedSales.reduce((acc, sale) => {
+      const itemsSold = viewCompletedSalesWithItems.reduce((acc, sale) => {
         const items = collectSaleItems(sale);
         return acc + items.reduce((sum, item) => sum + (deriveItemQuantity(item) || 0), 0);
       }, 0);
@@ -1955,7 +2089,7 @@ router.get(
       const channels = buildChannelBreakdown(viewCompletedSales, viewSummary.gross);
       const topCustomers = buildTopCustomers(viewCompletedSales);
       const topPets = buildTopPets(viewCompletedSales);
-      const topProducts = await buildTopProducts(viewCompletedSales);
+      const topProducts = await buildTopProducts(viewCompletedSalesWithItems);
       const paymentMethods = buildPaymentMethods(viewCompletedSales);
       const salesTable = buildSalesTable(viewSales);
 

@@ -9,7 +9,7 @@ const { MongoMemoryReplSet } = require('mongodb-memory-server');
 const Store = require('../../models/Store');
 const User = require('../../models/User');
 const Pdv = require('../../models/Pdv');
-const PdvState = require('../../models/PdvState');
+const PdvState = require('../../models/PdvStateNormalized');
 const Deposit = require('../../models/Deposit');
 const Product = require('../../models/Product');
 

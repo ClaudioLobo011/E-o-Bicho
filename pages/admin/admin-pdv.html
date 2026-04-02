@@ -201,7 +201,12 @@
                         </div>
                     </div>
 
-                    <p id="pdv-selection-hint" class="text-[11px] text-gray-500">Escolha a empresa para carregar os PDVs disponíveis.</p>
+                    <p id="pdv-selection-hint" class="inline-flex items-center gap-2 text-[11px] text-gray-500">
+                        <span id="pdv-selection-hint-spinner" class="hidden text-primary" aria-hidden="true">
+                            <i class="fas fa-spinner fa-spin"></i>
+                        </span>
+                        <span id="pdv-selection-hint-text">Escolha a empresa para carregar os PDVs disponíveis.</span>
+                    </p>
                 </section>
 
                 <section class="bg-white border border-gray-100 rounded-xl shadow-sm p-4 space-y-6 sm:p-5 xl:p-6">
@@ -610,6 +615,12 @@
                                     <div id="pdv-delivery-empty" class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center text-sm text-gray-500">
                                         Nenhum delivery registrado até o momento.
                                     </div>
+                                    <div id="pdv-delivery-loading" class="hidden rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center text-sm text-gray-500">
+                                        <span class="inline-flex items-center gap-2">
+                                            <i class="fas fa-spinner fa-spin text-primary"></i>
+                                            <span>Carregando entregas...</span>
+                                        </span>
+                                    </div>
                                     <ul id="pdv-delivery-list" class="hidden grid grid-cols-1 gap-3 lg:grid-cols-3"></ul>
                                 </div>
                             </div>
@@ -629,6 +640,12 @@
                                     </div>
                                     <div id="pdv-sales-empty" class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center text-sm text-gray-500">
                                         Nenhuma venda finalizada até o momento.
+                                    </div>
+                                    <div id="pdv-sales-loading" class="hidden rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center text-sm text-gray-500">
+                                        <span class="inline-flex items-center gap-2">
+                                            <i class="fas fa-spinner fa-spin text-primary"></i>
+                                            <span>Carregando vendas...</span>
+                                        </span>
                                     </div>
                                     <ul id="pdv-sales-list" class="hidden space-y-4"></ul>
                                 </div>
@@ -2030,7 +2047,7 @@
                 </button>
             </div>
 
-            <div class="flex-1 overflow-y-auto bg-gray-100 px-4 py-4">
+            <div id="pdv-delivery-modal-body" class="flex flex-1 flex-col overflow-y-auto bg-gray-100 px-4 py-4">
                 <div class="grid grid-cols-1 gap-3 lg:grid-cols-12">
                     <div class="lg:col-span-3">
                         <label for="pdv-delivery-telefone-ddd" class="block text-[11px] font-semibold text-gray-700">Telefone:</label>
@@ -2173,7 +2190,7 @@
                     </div>
                 </div>
 
-                <div id="pdv-delivery-tab-pedido" class="mt-0 hidden rounded-b-sm border border-gray-300 bg-gray-100 p-2">
+                <div id="pdv-delivery-tab-pedido" class="mt-0 hidden min-h-0 flex-1 flex-col rounded-b-sm border border-gray-300 bg-gray-100 p-2">
                     <div class="mb-1">
                         <p class="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-primary">
                             <i class="far fa-clipboard text-primary"></i>
@@ -2227,14 +2244,15 @@
                             <input type="text" value="R$ 0,00" class="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-[12px]">
                         </div>
                     </div>
-                    <div class="mt-2">
+                    <div class="mt-2 flex min-h-0 flex-1 flex-col">
                         <p class="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-primary">
                             <i class="far fa-clock text-primary"></i>
                             <span>Historico resumido de vendas do cliente:</span>
                         </p>
-                        <div class="overflow-hidden rounded-md border border-gray-300 bg-white">
-                            <table class="min-w-full divide-y divide-gray-200 text-left text-[11px] text-gray-600">
-                                <thead class="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500">
+                        <div class="relative overflow-hidden rounded-md border border-gray-300 bg-white">
+                            <div style="height: min(46vh, 500px); max-height: min(46vh, 500px); overflow-y: auto;">
+                                <table class="min-w-full divide-y divide-gray-200 text-left text-[11px] text-gray-600">
+                                <thead class="sticky top-0 z-[1] bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500">
                                     <tr>
                                         <th class="px-3 py-2 font-semibold">Venda</th>
                                         <th class="px-3 py-2 font-semibold">Cod Produto</th>
@@ -2248,9 +2266,10 @@
                                         </th>
                                     </tr>
                                 </thead>
-                                <tbody id="pdv-delivery-order-history-body"></tbody>
-                            </table>
-                            <div id="pdv-delivery-order-history-empty" class="flex h-[440px] items-center justify-center border-t border-gray-200 text-[32px] text-gray-500">
+                                    <tbody id="pdv-delivery-order-history-body"></tbody>
+                                </table>
+                            </div>
+                            <div id="pdv-delivery-order-history-empty" class="absolute inset-0 hidden items-center justify-center bg-white text-center text-[22px] text-gray-500">
                                 Nao ha conteudo na tabela
                             </div>
                         </div>

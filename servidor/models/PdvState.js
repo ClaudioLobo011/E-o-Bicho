@@ -204,4 +204,4 @@ const pdvStateSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports = mongoose.model('PdvState', pdvStateSchema);
+module.exports = mongoose.model('PdvState', pdvStateSchema, 'pdvstates_normalized');

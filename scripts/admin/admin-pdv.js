@@ -278,6 +278,12 @@
     deliveryCouriersLoading: false,
     deliveryOrderImportSelection: [],
     deliveryOrderImportMap: {},
+    deliveryOrderHistoryLoading: false,
+    deliveryOrderHistoryError: '',
+    deliveryOrderHistorySales: [],
+    deliveryOrderHistoryCache: {},
+    deliveryOrderHistoryRequestKey: '',
+    deliveryOrderHistoryCustomerKey: '',
     deliverySelectedCourierId: '',
     deliverySelectedCourierLabel: '',
     selectedSeller: null,
@@ -289,6 +295,7 @@
     completedSales: [],
     deliveryFilters: { start: getTodayIsoDate(), end: getTodayIsoDate() },
     salesFilters: { start: getTodayIsoDate(), end: getTodayIsoDate() },
+    historyHydrationLoading: false,
     budgets: [],
     selectedBudgetId: '',
     activeBudgetId: '',
@@ -806,6 +813,7 @@
   let receivablesDetailsRequestSequence = 0;
   let paymentModalState = null;
   let appointmentsRequestId = 0;
+  let fullStateHydrationInFlight = false;
   let transferProductSearchTimeout = null;
   let transferProductSearchController = null;
   let sellerLookupTimeout = null;
@@ -4054,7 +4062,13 @@
     })();
     const idempotencyKey = `pdv-state:${pdvId}:${hash}`;
     const token = getToken();
-    return fetchWithOptionalAuth(`${API_BASE}/pdvs/${encodeURIComponent(pdvId)}/state`, {
+    const flowParams = new URLSearchParams({
+      normalizedRead: '1',
+      normalizedStrict: '1',
+    });
+    return fetchWithOptionalAuth(
+      `${API_BASE}/pdvs/${encodeURIComponent(pdvId)}/state?${flowParams.toString()}`,
+      {
       method: 'PUT',
       token,
       headers: {
@@ -4071,7 +4085,8 @@
         },
       }),
       errorMessage: 'Não foi possível salvar o estado do PDV.',
-    });
+      }
+    );
   };
 
   const sendPdvCommandRequest = async (action, payload = {}, options = {}) => {
@@ -4094,7 +4109,13 @@
     const idempotencyKey =
       forcedIdempotencyKey || `pdv-command:${pdvId}:${action}:${hash}:${requestNonce}`;
     const token = getToken();
-    const response = await fetchWithOptionalAuth(`${API_BASE}/pdvs/${encodeURIComponent(pdvId)}/commands`, {
+    const flowParams = new URLSearchParams({
+      normalizedRead: '1',
+      normalizedStrict: '1',
+    });
+    const response = await fetchWithOptionalAuth(
+      `${API_BASE}/pdvs/${encodeURIComponent(pdvId)}/commands?${flowParams.toString()}`,
+      {
       method: 'POST',
       token,
       headers: {
@@ -4106,7 +4127,8 @@
         payload: bodyPayload,
       }),
       errorMessage: 'Não foi possível executar o comando do PDV.',
-    });
+      }
+    );
     if (response && typeof response === 'object' && response.state && typeof response.state === 'object') {
       return response.state;
     }
@@ -4160,12 +4182,33 @@
 
     if (Array.isArray(persisted.pagamentos)) {
       applyPagamentosData(persisted.pagamentos);
+      if (!state.caixaAberto) {
+        state.pagamentos = state.pagamentos.map((payment) => ({ ...payment, valor: 0 }));
+      } else if (
+        state.summary.abertura > 0 &&
+        !state.pagamentos.some((payment) => payment.valor > 0)
+      ) {
+        state.pagamentos = state.pagamentos.map((payment, index) =>
+          index === 0 ? { ...payment, valor: state.summary.abertura } : payment
+        );
+      }
     }
 
     if (Array.isArray(persisted.history)) {
       state.history = persisted.history
         .map((entry) => normalizeHistoryEntryForPersist(entry))
         .filter(Boolean);
+      if (state.caixaAberto && state.caixaInfo.aberturaData) {
+        const cycleStart = new Date(state.caixaInfo.aberturaData);
+        if (!Number.isNaN(cycleStart.getTime())) {
+          state.history = state.history.filter((entry) => {
+            const timestamp = entry?.timestamp ? new Date(entry.timestamp) : null;
+            return timestamp && !Number.isNaN(timestamp.getTime())
+              ? timestamp.getTime() >= cycleStart.getTime()
+              : false;
+          });
+        }
+      }
       renderHistory();
       setLastMovement(state.history[0] || null);
     }
@@ -4299,6 +4342,12 @@
     const pdv = await fetchPdvDetails(pdvId, { lightweight: false });
     applyPdvData(pdv);
     return true;
+  };
+
+  const setHistoryHydrationLoading = (loading) => {
+    state.historyHydrationLoading = Boolean(loading);
+    renderSalesList();
+    renderDeliveryOrders();
   };
 
   const mergeServerStateIntoLocalPayload = (serverState, localPayload) => ({
@@ -4799,6 +4848,8 @@
     elements.companySelect = document.getElementById('company-select');
     elements.pdvSelect = document.getElementById('pdv-select');
     elements.selectionHint = document.getElementById('pdv-selection-hint');
+    elements.selectionHintSpinner = document.getElementById('pdv-selection-hint-spinner');
+    elements.selectionHintText = document.getElementById('pdv-selection-hint-text');
     elements.selectionSection = document.getElementById('pdv-selection-section');
     elements.changeSelectionButton = document.getElementById('pdv-change-selection-button');
 
@@ -5077,10 +5128,12 @@
 
     elements.salesList = document.getElementById('pdv-sales-list');
     elements.salesEmpty = document.getElementById('pdv-sales-empty');
+    elements.salesLoading = document.getElementById('pdv-sales-loading');
     elements.salesStart = document.getElementById('pdv-sales-start');
     elements.salesEnd = document.getElementById('pdv-sales-end');
     elements.deliveryStart = document.getElementById('pdv-delivery-start');
     elements.deliveryEnd = document.getElementById('pdv-delivery-end');
+    elements.deliveryLoading = document.getElementById('pdv-delivery-loading');
 
     elements.budgetPresets = document.getElementById('pdv-budget-presets');
     elements.budgetStart = document.getElementById('pdv-budget-start');
@@ -5237,6 +5290,7 @@
     elements.crediarioRemainingStatus = document.getElementById('pdv-crediario-remaining-status');
 
     elements.deliveryAddressModal = document.getElementById('pdv-delivery-address-modal');
+    elements.deliveryModalBody = document.getElementById('pdv-delivery-modal-body');
     elements.deliveryAddressBackdrop =
       elements.deliveryAddressModal?.querySelector('[data-delivery-address-dismiss="backdrop"]') || null;
     elements.deliveryAddressClose =
@@ -12120,12 +12174,17 @@
     if (isPedido) {
       fillDeliveryOrderDateTimeNow();
       void loadDeliveryCouriersForActiveCompany();
+      void loadDeliveryOrderHistorySales({ force: true });
       renderDeliveryOrderHistory();
     }
     elements.deliveryTabCliente?.classList.toggle('hidden', isPedido);
     elements.deliveryTabPedido?.classList.toggle('hidden', !isPedido);
     elements.deliveryFooterCliente?.classList.toggle('hidden', isPedido);
     elements.deliveryFooterPedido?.classList.toggle('hidden', !isPedido);
+    if (elements.deliveryModalBody) {
+      elements.deliveryModalBody.classList.toggle('overflow-y-auto', !isPedido);
+      elements.deliveryModalBody.classList.toggle('overflow-y-hidden', isPedido);
+    }
     if (elements.deliveryTabBtnCliente) {
       elements.deliveryTabBtnCliente.classList.toggle('bg-primary', !isPedido);
       elements.deliveryTabBtnCliente.classList.toggle('text-white', !isPedido);
@@ -12936,6 +12995,16 @@
 
   const renderDeliveryOrders = () => {
     if (!elements.deliveryList || !elements.deliveryEmpty) return;
+    const isHydrating = Boolean(state.historyHydrationLoading);
+    if (elements.deliveryLoading) {
+      elements.deliveryLoading.classList.toggle('hidden', !isHydrating);
+    }
+    if (isHydrating) {
+      elements.deliveryList.innerHTML = '';
+      elements.deliveryList.classList.add('hidden');
+      elements.deliveryEmpty.classList.add('hidden');
+      return;
+    }
     pruneCancelledDeliveryOrders();
     renderDeliveryFilters();
     const orders = getFilteredDeliveryOrders();
@@ -20323,14 +20392,120 @@
     elements.deliveryClientCredit.textContent = formatCurrency(safeNumber(creditValue));
   };
 
-  const getDeliveryOrderHistorySales = (limit = 12) => {
+  const getDeliveryOrderHistoryCustomerKey = (customer) => {
+    if (!customer || typeof customer !== 'object') return '';
+    const customerId = normalizeId(resolveCustomerId(customer));
+    const customerDocument = normalizeDocumentValue(resolveCustomerDocument(customer));
+    const customerName = normalizeKeyword(resolveCustomerName(customer));
+    return `${customerId}|${customerDocument}|${customerName}`;
+  };
+
+  const loadDeliveryOrderHistorySales = async ({ force = false } = {}) => {
+    const customer = getDeliveryModalCustomer();
+    const pdvId = normalizeId(state.selectedPdv);
+    const customerKey = getDeliveryOrderHistoryCustomerKey(customer);
+    state.deliveryOrderHistoryCustomerKey = customerKey;
+    if (!customer || !pdvId || !customerKey) {
+      state.deliveryOrderHistorySales = [];
+      state.deliveryOrderHistoryError = '';
+      state.deliveryOrderHistoryLoading = false;
+      state.deliveryOrderHistoryRequestKey = '';
+      renderDeliveryOrderHistory();
+      return [];
+    }
+
+    const cache = state.deliveryOrderHistoryCache && typeof state.deliveryOrderHistoryCache === 'object'
+      ? state.deliveryOrderHistoryCache
+      : {};
+    state.deliveryOrderHistoryCache = cache;
+    if (!force && Array.isArray(cache[customerKey])) {
+      state.deliveryOrderHistorySales = cache[customerKey].map((sale) => ({ ...sale }));
+      state.deliveryOrderHistoryError = '';
+      state.deliveryOrderHistoryLoading = false;
+      state.deliveryOrderHistoryRequestKey = '';
+      renderDeliveryOrderHistory();
+      return state.deliveryOrderHistorySales;
+    }
+
+    const requestKey = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    state.deliveryOrderHistoryRequestKey = requestKey;
+    state.deliveryOrderHistoryLoading = true;
+    state.deliveryOrderHistoryError = '';
+    renderDeliveryOrderHistory();
+    try {
+      const params = new URLSearchParams();
+      const customerId = resolveCustomerId(customer);
+      const customerDocument = normalizeDocumentValue(resolveCustomerDocument(customer));
+      const customerName = resolveCustomerName(customer);
+      if (customerId) params.set('customerId', customerId);
+      if (customerDocument) params.set('customerDocument', customerDocument);
+      if (customerName) params.set('customerName', customerName);
+      params.set('limit', '300');
+      const token = getToken();
+      const payload = await fetchWithOptionalAuth(
+        `${API_BASE}/pdvs/${encodeURIComponent(pdvId)}/customer-sales?${params.toString()}`,
+        {
+          token,
+          errorMessage: 'Não foi possível carregar o histórico de vendas do cliente.',
+        }
+      );
+      if (state.deliveryOrderHistoryRequestKey !== requestKey) {
+        return [];
+      }
+      const sales = Array.isArray(payload?.sales) ? payload.sales : [];
+      cache[customerKey] = sales.map((sale) => ({ ...sale }));
+      state.deliveryOrderHistorySales = cache[customerKey].map((sale) => ({ ...sale }));
+      state.deliveryOrderHistoryError = '';
+      return state.deliveryOrderHistorySales;
+    } catch (error) {
+      if (state.deliveryOrderHistoryRequestKey !== requestKey) {
+        return [];
+      }
+      state.deliveryOrderHistoryError =
+        error?.message || 'Não foi possível carregar o histórico de vendas do cliente.';
+      state.deliveryOrderHistorySales = [];
+      return [];
+    } finally {
+      if (state.deliveryOrderHistoryRequestKey === requestKey) {
+        state.deliveryOrderHistoryLoading = false;
+        state.deliveryOrderHistoryRequestKey = '';
+        renderDeliveryOrderHistory();
+      }
+    }
+  };
+
+  const getDeliveryOrderHistorySales = (limit = 0) => {
     const customer = getDeliveryModalCustomer();
     if (!customer) return [];
-    const sales = Array.isArray(state.completedSales) ? state.completedSales : [];
-    return sales
-      .filter((sale) => isHistorySaleMatchingCustomer(sale, customer))
-      .sort((a, b) => getTimeValue(b.createdAt) - getTimeValue(a.createdAt))
-      .slice(0, Math.max(1, Number(limit) || 12));
+    const customerKey = getDeliveryOrderHistoryCustomerKey(customer);
+    const historySales = Array.isArray(state.deliveryOrderHistorySales)
+      ? state.deliveryOrderHistorySales
+      : [];
+    const hasRemoteSales =
+      customerKey &&
+      state.deliveryOrderHistoryCustomerKey === customerKey &&
+      (historySales.length > 0 || !state.deliveryOrderHistoryLoading);
+    const localMatches = Array.isArray(state.completedSales)
+      ? state.completedSales.filter((sale) => isHistorySaleMatchingCustomer(sale, customer))
+      : [];
+    const baseSales = hasRemoteSales ? [...historySales, ...localMatches] : localMatches;
+    const byKey = new Map();
+    baseSales.forEach((sale, index) => {
+      if (!sale || typeof sale !== 'object') return;
+      const saleId = normalizeId(sale?.id || sale?._id);
+      const saleCode = String(sale?.saleCode || sale?.saleCodeLabel || '').trim().toUpperCase();
+      const key = saleId ? `id:${saleId}` : saleCode ? `code:${saleCode}` : `idx:${index}`;
+      if (!byKey.has(key)) {
+        byKey.set(key, sale);
+      }
+    });
+    const sales = Array.from(byKey.values());
+    const sorted = [...sales].sort((a, b) => getTimeValue(b.createdAt) - getTimeValue(a.createdAt));
+    const parsedLimit = Number(limit);
+    if (parsedLimit > 0) {
+      return sorted.slice(0, parsedLimit);
+    }
+    return sorted;
   };
 
   const getDeliveryHistorySaleCode = (sale) =>
@@ -20494,9 +20669,47 @@
     const tbody = elements.deliveryOrderHistoryBody;
     const emptyState = elements.deliveryOrderHistoryEmpty;
     tbody.innerHTML = '';
-    const sales = getDeliveryOrderHistorySales(12);
+    const customer = getDeliveryModalCustomer();
+    if (!customer) {
+      emptyState.textContent = 'Selecione um cliente para ver o histórico.';
+      emptyState.classList.remove('hidden');
+      state.deliveryOrderImportMap = {};
+      state.deliveryOrderImportSelection = [];
+      syncDeliveryOrderHistoryImportAllControl();
+      return;
+    }
+    const customerKey = getDeliveryOrderHistoryCustomerKey(customer);
+    const hasCached =
+      customerKey &&
+      state.deliveryOrderHistoryCache &&
+      Array.isArray(state.deliveryOrderHistoryCache[customerKey]);
+    if (hasCached && state.deliveryOrderHistoryCustomerKey !== customerKey) {
+      state.deliveryOrderHistorySales = state.deliveryOrderHistoryCache[customerKey].map((sale) => ({ ...sale }));
+      state.deliveryOrderHistoryCustomerKey = customerKey;
+    }
+    if (!hasCached && !state.deliveryOrderHistoryLoading && !state.deliveryOrderHistoryRequestKey) {
+      void loadDeliveryOrderHistorySales();
+    }
+    if (state.deliveryOrderHistoryLoading) {
+      emptyState.textContent = 'Carregando histórico de vendas do cliente...';
+      emptyState.classList.remove('hidden');
+      state.deliveryOrderImportMap = {};
+      state.deliveryOrderImportSelection = [];
+      syncDeliveryOrderHistoryImportAllControl();
+      return;
+    }
+    if (state.deliveryOrderHistoryError) {
+      emptyState.textContent = state.deliveryOrderHistoryError;
+      emptyState.classList.remove('hidden');
+      state.deliveryOrderImportMap = {};
+      state.deliveryOrderImportSelection = [];
+      syncDeliveryOrderHistoryImportAllControl();
+      return;
+    }
+    const sales = getDeliveryOrderHistorySales();
     state.deliveryOrderImportMap = {};
     if (!sales.length) {
+      emptyState.textContent = 'Nao ha conteudo na tabela';
       emptyState.classList.remove('hidden');
       state.deliveryOrderImportSelection = [];
       syncDeliveryOrderHistoryImportAllControl();
@@ -22328,6 +22541,16 @@
   const renderSalesList = () => {
     if (!elements.salesList || !elements.salesEmpty) return;
     renderSalesFilters();
+    const isHydrating = Boolean(state.historyHydrationLoading);
+    if (elements.salesLoading) {
+      elements.salesLoading.classList.toggle('hidden', !isHydrating);
+    }
+    if (isHydrating) {
+      elements.salesList.innerHTML = '';
+      elements.salesList.classList.add('hidden');
+      elements.salesEmpty.classList.add('hidden');
+      return;
+    }
     const sales = getFilteredSales();
     elements.salesList.innerHTML = '';
     const hasSales = sales.length > 0;
@@ -25739,6 +25962,7 @@
     state.printerSettings = { venda: null, orcamento: null, contas: null, caixa: null };
     state.deliveryOrders = [];
     state.completedSales = [];
+    state.historyHydrationLoading = false;
     state.budgets = [];
     state.selectedBudgetId = '';
     state.activeBudgetId = '';
@@ -25875,9 +26099,17 @@
     lastPersistSignature = '';
   };
 
-  const updateSelectionHint = (message) => {
-    if (elements.selectionHint && message) {
+  const updateSelectionHint = (message, options = {}) => {
+    if (!message) return;
+    const loading =
+      typeof options.loading === 'boolean' ? options.loading : /^carregando\b/i.test(String(message));
+    if (elements.selectionHintText) {
+      elements.selectionHintText.textContent = message;
+    } else if (elements.selectionHint) {
       elements.selectionHint.textContent = message;
+    }
+    if (elements.selectionHintSpinner) {
+      elements.selectionHintSpinner.classList.toggle('hidden', !loading);
     }
   };
 
@@ -26004,7 +26236,14 @@
       options && typeof options === 'object' && Object.prototype.hasOwnProperty.call(options, 'lightweight')
         ? Boolean(options.lightweight)
         : true;
-    const query = lightweight ? '?lightweight=true' : '';
+    const scope =
+      options && typeof options === 'object' ? String(options.scope || '').trim().toLowerCase() : '';
+    const params = new URLSearchParams();
+    if (lightweight) params.set('lightweight', 'true');
+    if (scope) params.set('scope', scope);
+    params.set('normalizedRead', '1');
+    params.set('normalizedStrict', '1');
+    const query = params.toString() ? `?${params.toString()}` : '';
     const payload = await fetchWithOptionalAuth(`${API_BASE}/pdvs/${pdvId}${query}`, {
       token,
       cache: 'no-store',
@@ -26207,7 +26446,14 @@
       pdv?.pagamentos ||
       {};
     applyPagamentosData(pagamentosData);
-    if (state.summary.abertura > 0 && !state.pagamentos.some((payment) => payment.valor > 0)) {
+    if (!state.caixaAberto) {
+      state.pagamentos = state.pagamentos.map((payment) => ({ ...payment, valor: 0 }));
+    }
+    if (
+      state.caixaAberto &&
+      state.summary.abertura > 0 &&
+      !state.pagamentos.some((payment) => payment.valor > 0)
+    ) {
       state.pagamentos = state.pagamentos.map((payment, index) =>
         index === 0 ? { ...payment, valor: state.summary.abertura } : payment
       );
@@ -26429,6 +26675,24 @@
     }
     pendingActiveTabPreference = '';
     setActiveTab(targetTab);
+    const needsHydrationOnLoad =
+      !state.completedSales.length ||
+      !state.deliveryOrders.length ||
+      !state.accountsReceivable.length;
+    if (!fullStateHydrationInFlight && needsHydrationOnLoad) {
+      fullStateHydrationInFlight = true;
+      setHistoryHydrationLoading(true);
+      updateSelectionHint('Carregando histórico do PDV...');
+      void refreshCurrentPdvStateFromServer()
+        .catch((hydrationError) => {
+          console.error('Erro ao hidratar histórico completo do PDV após carregamento:', hydrationError);
+        })
+        .finally(() => {
+          fullStateHydrationInFlight = false;
+          setHistoryHydrationLoading(false);
+          updateSelectionHint('PDV carregado com sucesso.');
+        });
+    }
     state.remoteUpdatedAt = String(
       pdv?.caixaAtualizadoEm ||
         pdv?.state?.updatedAt ||
@@ -27570,7 +27834,7 @@
     }
     updateSelectionHint('Carregando dados do PDV selecionado...');
     try {
-      const pdv = await fetchPdvDetails(value);
+      const pdv = await fetchPdvDetails(value, { lightweight: true, scope: 'caixa' });
       state.selectionSectionForcedVisible = false;
       updateWorkspaceVisibility(true);
       applyPdvData(pdv);
@@ -27707,7 +27971,7 @@
       }
     });
     elements.tabTriggers?.forEach((trigger) => {
-      trigger.addEventListener('click', (event) => {
+      trigger.addEventListener('click', async (event) => {
         const target = trigger.getAttribute('data-tab-target');
         if (!target) return;
         if (target === 'pdv-tab' && !state.caixaAberto) {
@@ -27715,6 +27979,28 @@
           notify('Abra o caixa para acessar a aba de vendas.', 'warning');
           setActiveTab('caixa-tab');
           return;
+        }
+        const requiresFullState = target === 'sales-tab' || target === 'delivery-tab' || target === 'cliente-tab';
+        const needsHydration =
+          (target === 'sales-tab' && !state.completedSales.length) ||
+          (target === 'delivery-tab' && !state.deliveryOrders.length) ||
+          (target === 'cliente-tab' && !state.accountsReceivable.length);
+        if (
+          requiresFullState &&
+          !fullStateHydrationInFlight &&
+          needsHydration
+        ) {
+          fullStateHydrationInFlight = true;
+          setHistoryHydrationLoading(true);
+          updateSelectionHint('Carregando histórico do PDV...');
+          try {
+            await refreshCurrentPdvStateFromServer();
+          } catch (hydrationError) {
+            console.error('Erro ao carregar histórico completo do PDV:', hydrationError);
+          } finally {
+            fullStateHydrationInFlight = false;
+            setHistoryHydrationLoading(false);
+          }
         }
         setActiveTab(target);
       });
@@ -28104,7 +28390,20 @@
         }, 350);
       });
       elements.deliveryCustomerCpf.addEventListener('blur', () => {
-        lookupAndApplyDeliveryCustomer('document');
+        if (deliveryCustomerLookupDocTimeout) {
+          clearTimeout(deliveryCustomerLookupDocTimeout);
+          deliveryCustomerLookupDocTimeout = null;
+        }
+        void lookupAndApplyDeliveryCustomer('document', { force: true });
+      });
+      elements.deliveryCustomerCpf.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        if (deliveryCustomerLookupDocTimeout) {
+          clearTimeout(deliveryCustomerLookupDocTimeout);
+          deliveryCustomerLookupDocTimeout = null;
+        }
+        void lookupAndApplyDeliveryCustomer('document', { force: true });
       });
     }
     const handleDeliveryPhoneLookupInput = () => {
@@ -28115,11 +28414,45 @@
         lookupAndApplyDeliveryCustomer('phone');
       }, 350);
     };
+    const commitDeliveryPhoneLookup = () => {
+      if (deliveryCustomerLookupPhoneTimeout) {
+        clearTimeout(deliveryCustomerLookupPhoneTimeout);
+        deliveryCustomerLookupPhoneTimeout = null;
+      }
+      void lookupAndApplyDeliveryCustomer('phone', { force: true });
+    };
+    const handleDeliveryPhoneLookupEnter = (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      commitDeliveryPhoneLookup();
+    };
     elements.deliveryPhoneDdd?.addEventListener('input', handleDeliveryPhoneLookupInput);
     elements.deliveryPhoneNumber?.addEventListener('input', handleDeliveryPhoneLookupInput);
-    elements.deliveryPhoneDdd?.addEventListener('blur', () => lookupAndApplyDeliveryCustomer('phone'));
-    elements.deliveryPhoneNumber?.addEventListener('blur', () => lookupAndApplyDeliveryCustomer('phone'));
+    elements.deliveryPhoneDdd?.addEventListener('blur', commitDeliveryPhoneLookup);
+    elements.deliveryPhoneNumber?.addEventListener('blur', commitDeliveryPhoneLookup);
+    elements.deliveryPhoneDdd?.addEventListener('keydown', handleDeliveryPhoneLookupEnter);
+    elements.deliveryPhoneNumber?.addEventListener('keydown', handleDeliveryPhoneLookupEnter);
     if (elements.deliveryCustomerSearch) {
+      const commitDeliveryCustomerSearchLookup = ({ notifyOnMissing = true } = {}) => {
+        const input = elements.deliveryCustomerSearch;
+        if (!input) return;
+        const raw = String(input.value || '');
+        const trimmed = raw.trim();
+        if (deliveryCustomerLookupCodeTimeout) {
+          clearTimeout(deliveryCustomerLookupCodeTimeout);
+          deliveryCustomerLookupCodeTimeout = null;
+        }
+        if (/\p{L}/u.test(raw) || trimmed === '*') {
+          openCustomerLookupSearchModal(trimmed, {
+            onSelect: async (cliente) => {
+              await applyDeliveryCustomerToForm(cliente);
+              elements.deliveryCustomerSearch?.focus();
+            },
+          });
+          return;
+        }
+        void lookupAndApplyDeliveryCustomer('code', { force: true, notifyOnMissing });
+      };
       elements.deliveryCustomerSearch.addEventListener('input', () => {
         const input = elements.deliveryCustomerSearch;
         if (!input) return;
@@ -28150,7 +28483,14 @@
         }, 350);
       });
       elements.deliveryCustomerSearch.addEventListener('blur', () => {
-        lookupAndApplyDeliveryCustomer('code', { notifyOnMissing: true });
+        const raw = String(elements.deliveryCustomerSearch?.value || '');
+        if (/\p{L}/u.test(raw) || raw.trim() === '*') return;
+        commitDeliveryCustomerSearchLookup({ notifyOnMissing: true });
+      });
+      elements.deliveryCustomerSearch.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        commitDeliveryCustomerSearchLookup({ notifyOnMissing: true });
       });
     }
     elements.deliveryRegisterClient?.addEventListener('click', () => {

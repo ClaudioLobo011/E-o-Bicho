@@ -17,7 +17,7 @@ const AccountingAccount = require('../../models/AccountingAccount');
 const PaymentMethod = require('../../models/PaymentMethod');
 const AccountReceivable = require('../../models/AccountReceivable');
 const Pdv = require('../../models/Pdv');
-const PdvState = require('../../models/PdvState');
+const PdvState = require('../../models/PdvStateNormalized');
 const SequenceCounter = require('../../models/SequenceCounter');
 
 let mongo;
