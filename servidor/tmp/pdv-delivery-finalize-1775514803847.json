@@ -1,0 +1,53 @@
+{
+  "targetDate": "2026-04-06",
+  "updatedStates": [
+    {
+      "pdvId": "699cc15abdbbe9cd66e9e2c4",
+      "empresaId": "68ae259898f580f973cc506d",
+      "finalizedCount": 5,
+      "deltaRecebido": 476.50389999999993,
+      "before": {
+        "recebido": 1771.0920500000004,
+        "saldo": 1771.0920500000004,
+        "fechamentoPrevisto": 1294.59
+      },
+      "after": {
+        "recebido": 2247.5959500000004,
+        "saldo": 2247.5959500000004,
+        "fechamentoPrevisto": 0
+      },
+      "finalizedOrders": [
+        {
+          "orderId": "0768a9ac-4f3e-4410-92f9-a65d2d66a093",
+          "saleCode": "PDV003-001041",
+          "total": 130,
+          "paymentLabel": "Pix: 130.00"
+        },
+        {
+          "orderId": "98d0bf1d-46d5-4633-90fb-4bec411964db",
+          "saleCode": "PDV003-001040",
+          "total": 143.7,
+          "paymentLabel": "Crédito: 143.70"
+        },
+        {
+          "orderId": "2b13e871-31c4-4d40-b859-aa300a84b88c",
+          "saleCode": "PDV003-001039",
+          "total": 120.00390000000002,
+          "paymentLabel": "Débito: 120.00"
+        },
+        {
+          "orderId": "e0d48dfe-9424-4497-a2b2-fc34ef2a35c5",
+          "saleCode": "PDV003-001037",
+          "total": 32.9,
+          "paymentLabel": "Pix: 32.90"
+        },
+        {
+          "orderId": "c765d4f4-ad0c-4e01-89b8-14bbad10c80d",
+          "saleCode": "PDV003-001030",
+          "total": 49.9,
+          "paymentLabel": "Débito: 49.90"
+        }
+      ]
+    }
+  ]
+}

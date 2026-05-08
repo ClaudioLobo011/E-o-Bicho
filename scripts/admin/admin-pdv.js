@@ -291,6 +291,8 @@
     sellerSearchTarget: 'main',
     deliveryFinalizingOrderId: '',
     finalizeProcessing: false,
+    finalizeCreditAutoPrompted: false,
+    finalizeCreditPromptResolved: false,
     skipInventoryForNextSale: false,
     completedSales: [],
     deliveryFilters: { start: getTodayIsoDate(), end: getTodayIsoDate() },
@@ -373,6 +375,7 @@
   let budgetImportDefaultLabel = 'Importar orçamento';
   const BUDGET_IMPORT_FINALIZED_LABEL = 'Orçamento finalizado';
   const customerPetsCache = new Map();
+  const customerModalDetailsCache = new Map();
   let customerModalPetSpeciesMap = null;
   let customerModalPetSpeciesMapPromise = null;
   let customerModalPetBreedOptions = [];
@@ -6679,8 +6682,28 @@
   const getSellerCode = (seller) =>
     sanitizeSellerCode(seller?.codigo || seller?.codigoCliente || seller?.id || '');
 
-  const getCustomerCode = (cliente) =>
-    sanitizeCustomerCode(cliente?.codigo || cliente?.codigoCliente || cliente?.id || '');
+  const getCustomerCode = (cliente) => {
+    if (!cliente || typeof cliente !== 'object') return '';
+    const pickCodeCandidate = (...values) => {
+      for (const value of values) {
+        if (value == null) continue;
+        const raw = String(value).trim();
+        if (!raw) continue;
+        if (isValidObjectId(raw)) continue;
+        const digits = sanitizeCustomerCode(raw);
+        if (!digits) continue;
+        return digits;
+      }
+      return '';
+    };
+    return pickCodeCandidate(
+      cliente?.codigoCliente,
+      cliente?.codigo,
+      cliente?.code,
+      cliente?.customerCode,
+      cliente?.id
+    );
+  };
 
   const isExchangeCustomerSearchTarget = (target) =>
     target === 'exchange' || target === 'exchangeHistory';
@@ -6966,18 +6989,23 @@
       ? nascimentoDate.toISOString().slice(0, 10)
       : '';
     const creditLimit = resolveMoney(
+      cliente.financeiro?.limiteCredito,
+      cliente.financeiro?.limite_credito,
       cliente.limiteCredito,
       cliente.limite,
       cliente.creditoLimite,
       cliente.creditLimit
     );
     const debtBalance = resolveMoney(
+      cliente.financeiro?.valorPendente,
+      cliente.pendencias?.valorPendente,
+      cliente.valorPendente,
       cliente.saldoDevedor,
       cliente.debito,
       cliente.pending,
       cliente.saldo
     );
-    const availableCredit = Math.max(creditLimit - debtBalance, 0);
+    const availableCredit = creditLimit + debtBalance;
     const fidelityPoints = resolveMoney(
       cliente.pontosFidelidade,
       cliente.fidelidade,
@@ -9672,6 +9700,101 @@
     return true;
   };
 
+  const askExchangePositiveDifferenceAction = (differenceValue) =>
+    new Promise((resolve) => {
+      const amountLabel = formatCurrency(safeNumber(differenceValue));
+      const firstMessage = `O cliente possui ${amountLabel} para receber nesta troca. Como deseja tratar a diferença?`;
+      const fallbackSecondStep = () => {
+        const chooseChange = window.confirm(
+          'Deseja registrar como troco (saída de caixa)?\n\nOK: Troco\nCancelar: Não fazer nada'
+        );
+        resolve(chooseChange ? 'troco' : 'none');
+      };
+      if (typeof window?.showModal === 'function') {
+        window.showModal({
+          title: 'Diferença positiva na troca',
+          message: firstMessage,
+          confirmText: 'Gerar crédito',
+          cancelText: 'Outras opções',
+          onConfirm: () => resolve('credit'),
+          onCancel: () => {
+            window.showModal({
+              title: 'Outras opções',
+              message: 'Selecione como deseja concluir a troca com diferença positiva.',
+              confirmText: 'Troco',
+              cancelText: 'Não fazer nada',
+              onConfirm: () => resolve('troco'),
+              onCancel: () => resolve('none'),
+            });
+          },
+        });
+        return;
+      }
+      const chooseCredit = window.confirm(
+        `${firstMessage}\n\nOK: Gerar crédito\nCancelar: Outras opções`
+      );
+      if (chooseCredit) {
+        resolve('credit');
+        return;
+      }
+      fallbackSecondStep();
+    });
+
+  const applyExchangeCreditToCustomer = async ({ customer, amount }) => {
+    const customerId = normalizeId(customer?._id || customer?.id);
+    if (!customerId) {
+      throw new Error('Cliente da troca sem identificador para gerar crédito.');
+    }
+    const token = getToken();
+    await fetchWithOptionalAuth(
+      `${API_BASE}/func/clientes/${encodeURIComponent(customerId)}/pendencias/ajuste`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          valor: amount,
+          operation: 'credito',
+        }),
+        token,
+        errorMessage: 'Nao foi possivel gerar o credito para o cliente.',
+      }
+    );
+  };
+
+  const registerExchangeChangeCashOut = async ({ amount, customerCode, customerName }) => {
+    if (!state.caixaAberto) {
+      throw new Error('Abra o caixa antes de registrar o troco da troca.');
+    }
+    const payment = state.pagamentos.find((item) => {
+      const type = normalizeKeyword(item?.type || item?.tipo || '');
+      const label = normalizeKeyword(item?.label || item?.nome || '');
+      return type.includes('avista') || type.includes('dinheiro') || label.includes('dinheiro');
+    }) || state.pagamentos[0];
+    if (!payment) {
+      throw new Error('Cadastre meios de pagamento para registrar o troco da troca.');
+    }
+    const resolvedPaymentId =
+      payment.id ||
+      payment.paymentId ||
+      payment.code ||
+      payment._id ||
+      payment.raw?._id ||
+      payment.label ||
+      '';
+    const reason = `Troco de Troca para o cliente: (${customerCode}-${customerName})`;
+    const persisted = await sendPdvCommandRequest('pdv.caixa.exit', {
+      paymentId: String(resolvedPaymentId || '').trim(),
+      amount,
+      reason,
+      payments: clonePayments(state.pagamentos),
+      timestamp: new Date().toISOString(),
+    });
+    applyPersistedStateResponse(persisted);
+    updateSummary();
+    updateStatusBadge();
+    renderPayments();
+  };
+
   const handleExchangeFinish = async () => {
     if (exchangeFinalizeInFlight) return;
     const returnedItems = collectExchangeItemsFromTable(elements.exchangeReturnBody, 'return');
@@ -9733,10 +9856,29 @@
       }
       state.skipInventoryForNextSale = false;
       if (roundedDifference > 0) {
-        notify(
-          `Troca finalizada. Credito ao cliente de ${formatCurrency(roundedDifference)}.`,
-          'success'
-        );
+        const action = await askExchangePositiveDifferenceAction(roundedDifference);
+        const customerCode = elements.exchangeClient?.value || '';
+        const customerName = elements.exchangeClientName?.value || 'Cliente';
+        const customer = customerCode ? await fetchCustomerByCode(customerCode) : null;
+        if (action === 'credit') {
+          if (!customer) {
+            throw new Error('Selecione um cliente valido para gerar crédito na troca.');
+          }
+          await applyExchangeCreditToCustomer({ customer, amount: roundedDifference });
+          notify(
+            `Troca finalizada. Credito gerado para o cliente em ${formatCurrency(roundedDifference)}.`,
+            'success'
+          );
+        } else if (action === 'troco') {
+          await registerExchangeChangeCashOut({
+            amount: roundedDifference,
+            customerCode: customerCode || 'SemCodigo',
+            customerName: customerName || 'SemNome',
+          });
+          notify('Troca finalizada e troco registrado como saída de caixa.', 'success');
+        } else {
+          notify('Troca finalizada sem lançar crédito ou troco.', 'success');
+        }
       } else {
         notify('Troca finalizada sem diferenca.', 'success');
       }
@@ -10938,6 +11080,20 @@
     updateCustomerModalActions();
     updateCustomerModalPreview();
     loadCustomerModalAddresses();
+    const selectedCustomerId = normalizeId(
+      state.modalSelectedCliente?._id || state.modalSelectedCliente?.id || ''
+    );
+    if (selectedCustomerId) {
+      fetchCustomerDetailsForModal(state.modalSelectedCliente).then((details) => {
+        if (!details) return;
+        const currentId = normalizeId(
+          state.modalSelectedCliente?._id || state.modalSelectedCliente?.id || ''
+        );
+        if (!currentId || currentId !== selectedCustomerId) return;
+        state.modalSelectedCliente = { ...details };
+        updateCustomerModalPreview();
+      });
+    }
   };
 
   const openCustomerModal = (target = 'sale', query = '') => {
@@ -11040,13 +11196,37 @@
     }
   };
 
-  const handleCustomerResultsClick = (event) => {
+  const fetchCustomerDetailsForModal = async (cliente) => {
+    if (!cliente || typeof cliente !== 'object') return cliente;
+    const customerId = normalizeId(cliente._id || cliente.id || '');
+    if (!customerId) return cliente;
+    if (customerModalDetailsCache.has(customerId)) {
+      return { ...cliente, ...customerModalDetailsCache.get(customerId) };
+    }
+    try {
+      const token = getToken();
+      const details = await fetchWithOptionalAuth(`${API_BASE}/func/clientes/${customerId}`, {
+        token,
+        errorMessage: 'Nao foi possivel carregar os detalhes do cliente.',
+      });
+      if (details && typeof details === 'object') {
+        customerModalDetailsCache.set(customerId, { ...details });
+        return { ...cliente, ...details };
+      }
+    } catch (error) {
+      console.error('Erro ao carregar detalhes do cliente no modal do PDV:', error);
+    }
+    return cliente;
+  };
+
+  const handleCustomerResultsClick = async (event) => {
     const button = event.target.closest('[data-customer-id]');
     if (!button) return;
     const id = button.getAttribute('data-customer-id');
     const cliente = state.customerSearchResults.find((item) => item._id === id);
     if (!cliente) return;
-    setModalSelectedCliente(cliente);
+    const customerWithDetails = await fetchCustomerDetailsForModal(cliente);
+    setModalSelectedCliente(customerWithDetails);
   };
 
   const handleCustomerPetsClick = (event) => {
@@ -13673,6 +13853,29 @@
       elements.finalizeModal.classList.remove('hidden');
       document.body.classList.add('overflow-hidden');
     }
+    const shouldOfferCreditAutomatically =
+      context !== 'orcamento' &&
+      context !== 'receivables' &&
+      Boolean(state.vendaCliente);
+    if (shouldOfferCreditAutomatically) {
+      state.finalizeCreditAutoPrompted = false;
+      state.finalizeCreditPromptResolved = false;
+      setTimeout(async () => {
+        if (state.activeFinalizeContext !== context) return;
+        if (state.finalizeCreditAutoPrompted) return;
+        state.finalizeCreditAutoPrompted = true;
+        try {
+          const total = getSaleTotalLiquido();
+          await tryApplyCustomerCreditPayment({
+            totalValue: total,
+            customer: state.vendaCliente,
+          });
+          updateSaleSummary();
+        } catch (error) {
+          console.error('[PDV][Credito] Falha na oferta automatica de credito ao abrir modal.', error);
+        }
+      }, 0);
+    }
   };
 
   const toggleFinalizeOptions = (methodId) => {
@@ -13946,6 +14149,8 @@
     }
     applyFinalizeModalContext('sale');
     state.activeFinalizeContext = null;
+    state.finalizeCreditAutoPrompted = false;
+    state.finalizeCreditPromptResolved = false;
     state.finalizeOperationId = '';
   };
 
@@ -15953,21 +16158,231 @@
     closeFinalizeModal();
   };
 
+  const tryApplyCustomerCreditPayment = async ({ totalValue, customer }) => {
+  console.error('[PDV][Credito] Iniciando checagem de credito');
+  console.log('[PDV][Credito] totalValue:', totalValue);
+  console.log('[PDV][Credito] customer input:', customer);
+  let resolvedCustomer = customer && typeof customer === 'object' ? { ...customer } : null;
+  const fetchCustomerByQuery = async (query) => {
+    const normalizedQuery = String(query || '').trim();
+    if (!normalizedQuery) return null;
+    const token = getToken();
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const response = await fetch(
+      `${API_BASE}/func/clientes/buscar?q=${encodeURIComponent(normalizedQuery)}&limit=8`,
+      { headers }
+    );
+    if (!response.ok) return null;
+    const payload = await response.json().catch(() => []);
+    const results = Array.isArray(payload) ? payload : [];
+    return results[0] || null;
+  };
+  if (!resolvedCustomer) {
+    const previewCode = sanitizeCustomerCode(elements.customerPreviewCode?.value || '');
+    if (previewCode) {
+      const byCode = await fetchCustomerByCode(previewCode).catch(() => null);
+      if (byCode) resolvedCustomer = { ...byCode };
+    }
+    if (!resolvedCustomer) {
+      const docLabel = String(elements.customerDoc?.textContent || '').replace(/^Documento:\s*/i, '');
+      const docDigits = normalizeDocumentDigits(docLabel);
+      if (docDigits.length === 11 || docDigits.length === 14) {
+        const byDoc = await fetchCustomerByQuery(docDigits).catch(() => null);
+        if (byDoc) resolvedCustomer = { ...byDoc };
+      }
+    }
+    if (!resolvedCustomer) {
+      const nameLabel = String(elements.customerName?.textContent || '').trim();
+      if (nameLabel && !/cliente sem nome/i.test(nameLabel)) {
+        const byName = await fetchCustomerByQuery(nameLabel).catch(() => null);
+        if (byName) resolvedCustomer = { ...byName };
+      }
+    }
+  }
+  if (!resolvedCustomer) {
+    console.warn('[PDV][Credito] Cliente nao resolvido.');
+    
+    return 0;
+  }
+  const readCustomerPendingCredit = (source) => {
+    if (!source || typeof source !== 'object') return 0;
+    const rawValue =
+      source?.financeiro?.valorPendente ??
+      source?.pendencias?.valorPendente ??
+      source?.valorPendente ??
+      0;
+    if (typeof rawValue === 'string') {
+      return safeNumber(parseDecimalInput(rawValue));
+    }
+    return safeNumber(rawValue);
+  };
+
+  let customerId = normalizeId(resolvedCustomer?._id || resolvedCustomer?.id || '');
+  if (customerId && !isValidObjectId(customerId)) {
+    customerId = '';
+  }
+  if (!customerId) {
+    const customerCode = getCustomerCode(resolvedCustomer);
+    if (customerCode) {
+      const customerByCode = await fetchCustomerByCode(customerCode).catch(() => null);
+      if (customerByCode) {
+        resolvedCustomer = { ...resolvedCustomer, ...customerByCode };
+        customerId = normalizeId(resolvedCustomer?._id || resolvedCustomer?.id || '');
+      }
+    }
+  }
+  if (!customerId) {
+    console.warn('[PDV][Credito] Cliente sem _id valido apos fallback.', resolvedCustomer);
+    
+    return 0;
+  }
+
+  let customerPositiveCredit = readCustomerPendingCredit(resolvedCustomer);
+  console.log('[PDV][Credito] credito local detectado:', customerPositiveCredit);
+  try {
+    const token = getToken();
+    const customerDetails = await fetchWithOptionalAuth(`${API_BASE}/func/clientes/${customerId}`, {
+      token,
+      errorMessage: 'Nao foi possivel verificar o credito do cliente.',
+    });
+    customerPositiveCredit = Math.max(customerPositiveCredit, readCustomerPendingCredit(customerDetails));
+    console.log('[PDV][Credito] credito apos fetch detalhes:', customerPositiveCredit);
+  } catch (_) {
+    // Fallback para o valor local
+    console.warn('[PDV][Credito] Falha ao buscar detalhes, usando credito local.');
+  }
+
+  if (!(customerPositiveCredit > 0.009)) {
+    console.log('[PDV][Credito] Sem credito positivo para oferecer.');
+    
+    return 0;
+  }
+  const existingCreditIndex = state.vendaPagamentos.findIndex((payment) =>
+    String(payment?.id || '').startsWith('customer-credit:')
+  );
+  if (existingCreditIndex >= 0) {
+    const existingValue = safeNumber(state.vendaPagamentos[existingCreditIndex]?.valor);
+    console.log('[PDV][Credito] Pagamento de credito ja aplicado. Nao perguntar novamente.');
+    state.finalizeCreditPromptResolved = true;
+    return existingValue > 0 ? existingValue : 0;
+  }
+  if (state.finalizeCreditPromptResolved) {
+    console.log('[PDV][Credito] Decisao de credito ja tomada neste modal. Nao perguntar novamente.');
+    return 0;
+  }
+  const remainingBeforeCredit = Math.max(totalValue - getSalePagoTotal(), 0);
+  const creditToUse = Math.min(customerPositiveCredit, remainingBeforeCredit);
+  console.log('[PDV][Credito] remainingBeforeCredit:', remainingBeforeCredit);
+  console.log('[PDV][Credito] creditToUse:', creditToUse);
+  if (!(creditToUse > 0.009)) {
+    console.log('[PDV][Credito] credito calculado insuficiente para uso.');
+    
+    return 0;
+  }
+
+  const shouldUseCredit = await new Promise((resolve) => {
+    const message =
+      `Cliente possui credito de ${formatCurrency(customerPositiveCredit)}.\n` +
+      `Deseja usar ${formatCurrency(creditToUse)} nesta venda?`;
+    if (typeof window?.showModal === 'function') {
+      window.showModal({
+        title: 'Usar credito do cliente',
+        message,
+        confirmText: 'Usar credito',
+        cancelText: 'Agora nao',
+        onConfirm: () => resolve(true),
+        onCancel: () => resolve(false),
+      });
+      return;
+    }
+    resolve(window.confirm(message));
+  });
+  if (!shouldUseCredit) {
+    console.log('[PDV][Credito] Usuario optou por nao usar credito.');
+    state.finalizeCreditPromptResolved = true;
+    return 0;
+  }
+
+  state.vendaPagamentos.push({
+    uid: createUid(),
+    id: `customer-credit:${customerId}`,
+    label: 'Credito do Cliente',
+    parcelas: 1,
+    valor: creditToUse,
+    type: 'avista',
+    customerCreditPayment: true,
+  });
+  renderSalePaymentsPreview();
+  state.finalizeCreditPromptResolved = true;
+  console.log('[PDV][Credito] Credito aplicado no pagamento.');
+  
+  return creditToUse;
+};
+const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) => {
+    if (!(usedValue > 0.009) || !customer) return;
+    let resolvedCustomer = customer && typeof customer === 'object' ? { ...customer } : null;
+    let customerId = normalizeId(resolvedCustomer?._id || resolvedCustomer?.id || '');
+    if (customerId && !isValidObjectId(customerId)) {
+      customerId = '';
+    }
+    if (!customerId) {
+      const customerCode = getCustomerCode(resolvedCustomer);
+      if (customerCode) {
+        const customerByCode = await fetchCustomerByCode(customerCode).catch(() => null);
+        if (customerByCode) {
+          resolvedCustomer = { ...resolvedCustomer, ...customerByCode };
+          customerId = normalizeId(resolvedCustomer?._id || resolvedCustomer?.id || '');
+        }
+      }
+    }
+    if (!customerId) return;
+    try {
+      const token = getToken();
+      await fetchWithOptionalAuth(
+        `${API_BASE}/func/clientes/${encodeURIComponent(customerId)}/pendencias/ajuste`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            valor: usedValue,
+            operation: 'debito',
+          }),
+          token,
+          errorMessage: warningMessage,
+        }
+      );
+    } catch (error) {
+      notify(error?.message || warningMessage, 'warning');
+    }
+  };
+
   const finalizeSaleFlow = async () => {
+    console.error('[PDV][FinalizeSale] Fluxo de finalizacao iniciado');
+    console.log('[PDV][FinalizeSale] state.vendaCliente:', state.vendaCliente);
     const total = getSaleTotalLiquido();
-    const pago = getSalePagoTotal();
     if (!state.itens.length) {
       notify('Adicione itens para finalizar a venda.', 'warning');
       closeFinalizeModal();
+      
       return;
     }
     if (!state.caixaAberto) {
       notify('Abra o caixa para finalizar a venda.', 'warning');
       closeFinalizeModal();
+      
       return;
     }
+    const usedCustomerCreditValue = await tryApplyCustomerCreditPayment({
+      totalValue: total,
+      customer: state.vendaCliente,
+    });
+    console.log('[PDV][FinalizeSale] usedCustomerCreditValue:', usedCustomerCreditValue);
+    const pago = getSalePagoTotal();
+    console.log('[PDV][FinalizeSale] total:', total, 'pago:', pago);
     if (total > 0 && pago + 0.009 < total) {
       notify('O valor pago é insuficiente para finalizar a venda.', 'warning');
+      console.warn('[PDV][FinalizeSale] Pagamento insuficiente.');
+      
       return;
     }
     const budgetIdToFinalize = state.activeBudgetId || '';
@@ -16047,6 +16462,11 @@
       ? `Venda ${finalizedSaleCode} finalizada com sucesso.`
       : 'Venda finalizada com sucesso.';
     notify(successMessage, 'success');
+    await debitUsedCustomerCredit({
+      customer: state.vendaCliente,
+      usedValue: usedCustomerCreditValue,
+      warningMessage: 'Venda finalizada, mas nao foi possivel baixar o credito utilizado.',
+    });
     await syncAppointmentsAfterSale(appointmentIdsForSale, finalizedSaleCode);
     setActiveSaleAppointments([]);
     state.activeBudgetId = '';
@@ -16086,6 +16506,7 @@
     } else {
       handleConfiguredPrint('venda', { snapshot: saleSnapshot, customer: saleRecord?.customer || null });
     }
+    
   };
 
   const finalizeReceivablesPaymentFlow = async () => {
@@ -16209,7 +16630,6 @@
 
   const finalizeDeliveryFlow = async () => {
     const total = getSaleTotalLiquido();
-    const pago = getSalePagoTotal();
     if (!state.itens.length) {
       notify('Adicione itens para registrar o delivery.', 'warning');
       closeFinalizeModal();
@@ -16227,6 +16647,11 @@
       void openDeliveryAddressModal();
       return;
     }
+    const usedCustomerCreditValue = await tryApplyCustomerCreditPayment({
+      totalValue: total,
+      customer: state.vendaCliente,
+    });
+    const pago = getSalePagoTotal();
     if (total > 0 && pago + 0.009 < total) {
       notify('O valor pago é insuficiente para registrar o delivery.', 'warning');
       return;
@@ -16282,6 +16707,11 @@
       ? `Delivery ${registeredSaleCode} registrado com sucesso.`
       : 'Delivery registrado com sucesso.';
     notify(successMessage, 'success');
+    await debitUsedCustomerCredit({
+      customer: state.vendaCliente,
+      usedValue: usedCustomerCreditValue,
+      warningMessage: 'Delivery registrado, mas nao foi possivel baixar o credito utilizado.',
+    });
     await syncAppointmentsAfterDeliveryRegistration(appointmentIdsForDelivery, registeredSaleCode);
     setActiveSaleAppointments([]);
     state.itens = [];
@@ -16326,11 +16756,6 @@
       return;
     }
     const total = getSaleTotalLiquido();
-    const pago = getSalePagoTotal();
-    if (total > 0 && pago + 0.009 < total) {
-      notify('O valor pago é insuficiente para finalizar o delivery.', 'warning');
-      return;
-    }
     const existingSaleCode =
       order.saleCode ||
       order.receiptSnapshot?.meta?.saleCode ||
@@ -16393,6 +16818,15 @@
           }
         }
       }
+    }
+    const usedCustomerCreditValue = await tryApplyCustomerCreditPayment({
+      totalValue: total,
+      customer: saleCustomer,
+    });
+    const pago = getSalePagoTotal();
+    if (total > 0 && pago + 0.009 < total) {
+      notify('O valor pago é insuficiente para finalizar o delivery.', 'warning');
+      return;
     }
     const saleCode = existingSaleCode || state.currentSaleCode || '';
     const appointmentIdsForDelivery = normalizeAppointmentIdList(
@@ -16470,6 +16904,11 @@
       ? `Delivery ${finalizedSaleCode} finalizado e registrado no caixa.`
       : 'Delivery finalizado e registrado no caixa.';
     notify(successMessage, 'success');
+    await debitUsedCustomerCredit({
+      customer: saleCustomer,
+      usedValue: usedCustomerCreditValue,
+      warningMessage: 'Delivery finalizado, mas nao foi possivel baixar o credito utilizado.',
+    });
     await syncAppointmentsAfterSale(appointmentIdsForDelivery, finalizedSaleCode);
     setSaleCustomer(null, null);
     state.saleSource = '';
@@ -16482,6 +16921,7 @@
   };
 
   const handleFinalizeConfirm = async () => {
+    console.error('[PDV][FinalizeSale] Clique em confirmar finalizacao detectado');
     if (state.finalizeProcessing) {
       return;
     }
@@ -16750,7 +17190,9 @@
       } else if (isReceivablesContext) {
         canFinalize = hasPayments;
       } else {
-        canFinalize = !hasInsufficient;
+        // Permite tentar finalizar mesmo com diferença pendente para que
+        // o fluxo de crédito do cliente seja executado no clique.
+        canFinalize = true;
       }
       const shouldDisable = !canFinalize || isProcessing;
       elements.finalizeConfirm.disabled = shouldDisable;
@@ -16863,7 +17305,7 @@
 
     const lines = [];
     lines.push(`Empresa: ${snapshot.meta.store} | PDV: ${snapshot.meta.pdv}`);
-    lines.push(`Período: ${snapshot.meta.abertura} → ${snapshot.meta.fechamento}`);
+    lines.push(`Período: ${snapshot.meta.abertura} ? ${snapshot.meta.fechamento}`);
     lines.push('');
     const recebimentosClienteFormatted =
       snapshot.resumo?.recebimentosCliente?.formatted ||
@@ -18229,7 +18671,7 @@
     const metaLines = [
       snapshot.meta.store,
       `PDV: ${snapshot.meta.pdv}`,
-      `Período: ${snapshot.meta.abertura} → ${snapshot.meta.fechamento}`,
+      `Período: ${snapshot.meta.abertura} ? ${snapshot.meta.fechamento}`,
     ]
       .filter(Boolean)
       .map((line) => `<span class="receipt__meta-item">${escapeHtml(line)}</span>`)
@@ -23879,8 +24321,12 @@
     if (resolvedId) {
       customer._id = customer._id || resolvedId;
       customer.id = customer.id || resolvedId;
-      customer.codigo = customer.codigo || resolvedId;
-      customer.codigoInterno = customer.codigoInterno || resolvedId;
+      if (!customer.codigo && !customer.codigoCliente && !isValidObjectId(String(resolvedId))) {
+        customer.codigo = resolvedId;
+      }
+      if (!customer.codigoInterno && !isValidObjectId(String(resolvedId))) {
+        customer.codigoInterno = resolvedId;
+      }
     }
     const nameCandidate =
       resolveCustomerName(details) ||
@@ -27881,6 +28327,20 @@
   };
 
   const bindEvents = () => {
+    if (!window.__pdvFinalizeDebugCaptureAttached) {
+      window.__pdvFinalizeDebugCaptureAttached = true;
+      document.addEventListener(
+        'click',
+        (event) => {
+          const target = event.target instanceof Element ? event.target.closest('#pdv-sale-confirm') : null;
+          if (target) {
+            console.error('[PDV][DEBUG] Captura global de clique no botao #pdv-sale-confirm');
+          }
+        },
+        true
+      );
+      console.error('[PDV][DEBUG] Captura global de clique instalada para #pdv-sale-confirm');
+    }
     elements.companySelect?.addEventListener('change', handleCompanyChange);
     elements.pdvSelect?.addEventListener('change', handlePdvChange);
     elements.changeSelectionButton?.addEventListener('click', () => {
@@ -27936,7 +28396,19 @@
     elements.finalizeClose?.addEventListener('click', closeFinalizeModal);
     elements.finalizeBack?.addEventListener('click', closeFinalizeModal);
     elements.finalizeBackdrop?.addEventListener('click', closeFinalizeModal);
-    elements.finalizeConfirm?.addEventListener('click', handleFinalizeConfirm);
+    if (elements.finalizeConfirm) {
+      elements.finalizeConfirm.addEventListener('click', handleFinalizeConfirm);
+      elements.finalizeConfirm.onclick = (event) => {
+        console.error('[PDV][DEBUG] onclick direto em #pdv-sale-confirm');
+        if (event) {
+          event.preventDefault();
+        }
+        handleFinalizeConfirm();
+      };
+      console.error('[PDV][DEBUG] Listeners de confirmacao vinculados em #pdv-sale-confirm');
+    } else {
+      console.error('[PDV][DEBUG] Botao #pdv-sale-confirm nao encontrado durante bindEvents');
+    }
     elements.saleMethods?.addEventListener('click', handleSaleMethodsClick);
     elements.salePaymentsList?.addEventListener('click', handleSalePaymentsListClick);
     elements.saleAdjust?.addEventListener('click', handleSaleAdjust);
@@ -29395,5 +29867,7 @@
     closeIfoodStreamConnection();
   });
 })();
+
+
 
 

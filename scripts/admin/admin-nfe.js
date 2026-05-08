@@ -25,6 +25,16 @@
     reset: document.getElementById('nfe-volume-new'),
   };
   const productModal = document.getElementById('nfe-product-modal');
+  const manualProductLookupModal = document.getElementById('manual-product-lookup-modal');
+  const manualProductLookupCloseTriggers = manualProductLookupModal
+    ? manualProductLookupModal.querySelectorAll('[data-close-manual-product-lookup]')
+    : [];
+  const manualProductLookupBody = manualProductLookupModal?.querySelector('[data-manual-product-lookup-body]') || null;
+  const manualProductLookupEmptyRow = manualProductLookupModal?.querySelector('[data-manual-product-lookup-empty]') || null;
+  const manualProductLookupTermLabel = manualProductLookupModal?.querySelector('[data-manual-product-lookup-term]') || null;
+  const manualProductLookupSearchInput = manualProductLookupModal?.querySelector('[data-manual-product-lookup-search]') || null;
+  const manualProductLookupSubmitButton = manualProductLookupModal?.querySelector('[data-manual-product-lookup-submit]') || null;
+  const manualProductLookupScrollContainer = manualProductLookupBody?.closest('.overflow-y-auto') || null;
   const productModalFields = {
     product: document.getElementById('nfe-modal-product'),
     qty: document.getElementById('nfe-modal-qty'),
@@ -570,6 +580,15 @@
   let cestDropdownOpen = false;
   let modalProductFiscalSnapshot = null;
   let modalProductSnapshot = null;
+  let manualProductLookupAbortController = null;
+  let manualProductLookupSilentInput = false;
+  const MANUAL_LOOKUP_PAGE_SIZE = 20;
+  const manualProductLookupState = {
+    term: '',
+    page: 0,
+    hasMore: false,
+    loading: false,
+  };
   let applyingFiscalRules = false;
   let emitenteModalOpen = false;
   let emitenteModalState = null;
@@ -1726,7 +1745,261 @@
     if (!productModal) return;
     productModal.classList.add('hidden');
     productModal.setAttribute('aria-hidden', 'true');
+    closeManualProductLookupModal();
     document.body.classList.remove('overflow-hidden');
+  }
+
+  function openManualProductLookupModal(initialTerm = '') {
+    if (!manualProductLookupModal) return;
+    manualProductLookupModal.classList.remove('hidden');
+    manualProductLookupModal.setAttribute('aria-hidden', 'false');
+    if (manualProductLookupSearchInput) {
+      manualProductLookupSearchInput.value = normalizeString(initialTerm);
+      requestAnimationFrame(() => {
+        manualProductLookupSearchInput.focus();
+        const end = manualProductLookupSearchInput.value.length;
+        manualProductLookupSearchInput.setSelectionRange(end, end);
+      });
+    }
+  }
+
+  function closeManualProductLookupModal() {
+    if (!manualProductLookupModal) return;
+    manualProductLookupModal.classList.add('hidden');
+    manualProductLookupModal.setAttribute('aria-hidden', 'true');
+    if (manualProductLookupAbortController) {
+      manualProductLookupAbortController.abort();
+      manualProductLookupAbortController = null;
+    }
+    manualProductLookupState.loading = false;
+  }
+
+  function setManualProductLookupEmptyMessage(message) {
+    if (!manualProductLookupBody || !manualProductLookupEmptyRow) return;
+    const cell = manualProductLookupEmptyRow.querySelector('td');
+    if (cell) cell.textContent = message;
+    manualProductLookupBody.querySelectorAll('[data-manual-product-lookup-row]').forEach((row) => row.remove());
+    manualProductLookupEmptyRow.classList.remove('hidden');
+  }
+
+  function resolveLookupNumber(product, fields = []) {
+    if (!product || typeof product !== 'object') return null;
+    for (const field of fields) {
+      const numeric = Number(product[field]);
+      if (Number.isFinite(numeric)) return numeric;
+    }
+    return null;
+  }
+
+  function buildWildcardRegex(rawValue) {
+    const normalized = normalizeKeyword(rawValue || '');
+    if (!normalized) return null;
+    const pattern = normalized
+      .split('*')
+      .map((segment) => String(segment || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      .join('.*');
+    if (!pattern) return null;
+    try {
+      return new RegExp(pattern, 'i');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function resolveLookupServerSearchTerm(rawTerm) {
+    const normalized = normalizeString(rawTerm);
+    if (!normalized.includes('*')) return normalized;
+    const parts = normalized
+      .split('*')
+      .map((part) => normalizeString(part))
+      .filter(Boolean)
+      .sort((a, b) => b.length - a.length);
+    return parts[0] || normalized.replace(/\*/g, '');
+  }
+
+  function productMatchesWildcard(product, regex) {
+    if (!regex) return true;
+    const candidates = [
+      product?.cod,
+      product?.codigo,
+      product?.sku,
+      product?.codbarras,
+      product?.codigoBarras,
+      product?.nome,
+      product?.name,
+      ...(Array.isArray(product?.codigosComplementares) ? product.codigosComplementares : []),
+    ]
+      .map((value) => normalizeKeyword(value))
+      .filter(Boolean);
+    return candidates.some((value) => regex.test(value));
+  }
+
+  function renderManualProductLookupRows(products = [], { append = false } = {}) {
+    if (!manualProductLookupBody || !manualProductLookupEmptyRow) return;
+    if (!append) {
+      manualProductLookupBody.querySelectorAll('[data-manual-product-lookup-row]').forEach((row) => row.remove());
+    }
+    if (!Array.isArray(products) || !products.length) {
+      if (!append) {
+        setManualProductLookupEmptyMessage('Nenhum produto encontrado para os termos informados.');
+      }
+      return;
+    }
+    manualProductLookupEmptyRow.classList.add('hidden');
+    const fragment = document.createDocumentFragment();
+    products.forEach((product) => {
+      const code = normalizeString(product?.cod || product?.codigo || product?.sku || '') || '—';
+      const barcode = normalizeString(product?.codbarras || product?.codigoBarras || '') || '—';
+      const name = normalizeString(product?.nome || product?.name || '') || 'Produto sem nome';
+      const cost = resolveLookupNumber(product, ['custo', 'precoCusto', 'precoCompra', 'valorCusto']);
+      const sale = resolveLookupNumber(product, ['venda', 'precoVenda', 'valorVenda', 'preco']);
+      const stock = resolveLookupNumber(product, ['stock']);
+
+      const row = document.createElement('tr');
+      row.dataset.manualProductLookupRow = 'true';
+      row.className = 'cursor-pointer transition hover:bg-gray-50';
+      row.innerHTML = `
+        <td class="px-3 py-2 text-gray-700">${code}</td>
+        <td class="px-3 py-2 text-gray-700">${barcode}</td>
+        <td class="px-3 py-2 font-medium text-gray-900">${name}</td>
+        <td class="px-3 py-2 text-right text-gray-700">${Number.isFinite(cost) ? `R$ ${formatInputValue(cost)}` : '—'}</td>
+        <td class="px-3 py-2 text-right text-gray-700">${Number.isFinite(sale) ? `R$ ${formatInputValue(sale)}` : '—'}</td>
+        <td class="px-3 py-2 text-right text-gray-700">${Number.isFinite(stock) ? formatInputValue(stock) : '—'}</td>
+      `;
+      row.addEventListener('click', async () => {
+        const prefill = buildProductPrefill(product);
+        const icmsSimplesData = await getIcmsSimplesDataForCompany();
+        applyIcmsSimplesBase(prefill, product, icmsSimplesData);
+        fillProductModal(prefill, product);
+        closeManualProductLookupModal();
+        setTimeout(() => productModalFields.qty?.focus(), 0);
+      });
+      fragment.appendChild(row);
+    });
+    manualProductLookupBody.appendChild(fragment);
+  }
+
+  async function fetchManualLookupProducts(term, { signal, page = 1 } = {}) {
+    const normalizedTerm = normalizeString(term);
+    if (!normalizedTerm) return [];
+    const serverSearchTerm = resolveLookupServerSearchTerm(normalizedTerm);
+    const params = new URLSearchParams({
+      search: serverSearchTerm,
+      page: String(page),
+      limit: String(MANUAL_LOOKUP_PAGE_SIZE),
+      includeHidden: 'true',
+      audience: 'pdv',
+    });
+    const response = await fetch(`${API_BASE}/products?${params.toString()}`, {
+      headers: getAuthHeaders(),
+      signal,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload?.message || `Falha ao buscar produtos (status ${response.status}).`);
+    }
+    const products = Array.isArray(payload?.products)
+      ? payload.products
+      : Array.isArray(payload)
+        ? payload
+        : [];
+    return {
+      products,
+      page: Number(payload?.page) || page,
+      pages: Number(payload?.pages) || null,
+      total: Number(payload?.total) || null,
+    };
+  }
+
+  async function searchManualProductLookup(term, { append = false } = {}) {
+    const normalizedTerm = normalizeString(term);
+    const wildcardRegex = buildWildcardRegex(normalizedTerm);
+    if (!normalizedTerm || normalizedTerm.length < 2) {
+      setManualProductLookupEmptyMessage('Digite ao menos 2 letras para buscar produtos.');
+      return;
+    }
+    if (append && !manualProductLookupState.hasMore) return;
+    if (manualProductLookupState.loading) return;
+    manualProductLookupState.loading = true;
+
+    if (!append) {
+      manualProductLookupState.term = normalizedTerm;
+      manualProductLookupState.page = 0;
+      manualProductLookupState.hasMore = false;
+    }
+
+    if (manualProductLookupAbortController) {
+      manualProductLookupAbortController.abort();
+    }
+    const abortController = new AbortController();
+    manualProductLookupAbortController = abortController;
+    if (!append) {
+      setManualProductLookupEmptyMessage('Buscando produtos...');
+    }
+    try {
+      let currentPage = append ? manualProductLookupState.page + 1 : 1;
+      let collectedMatches = [];
+      let hasMorePages = false;
+      let lastResolvedPage = manualProductLookupState.page;
+
+      // Para busca com coringa, pode acontecer da página atual não ter match local.
+      // Neste caso continuamos buscando próximas páginas até encontrar resultados ou acabar.
+      while (true) {
+        const payload = await fetchManualLookupProducts(normalizedTerm, {
+          signal: abortController.signal,
+          page: currentPage,
+        });
+        const products = Array.isArray(payload?.products)
+          ? payload.products.filter((product) => !product?.inativo)
+          : [];
+        const filteredProducts = products.filter((product) => productMatchesWildcard(product, wildcardRegex));
+        if (filteredProducts.length) {
+          collectedMatches = filteredProducts;
+        }
+
+        const resolvedPage = Number(payload?.page) || currentPage;
+        const totalPages = Number(payload?.pages);
+        hasMorePages = Number.isFinite(totalPages)
+          ? resolvedPage < totalPages
+          : products.length >= MANUAL_LOOKUP_PAGE_SIZE;
+        lastResolvedPage = resolvedPage;
+
+        if (collectedMatches.length || !hasMorePages) {
+          break;
+        }
+        currentPage = resolvedPage + 1;
+      }
+
+      renderManualProductLookupRows(collectedMatches, { append });
+      manualProductLookupState.page = lastResolvedPage;
+      manualProductLookupState.hasMore = hasMorePages;
+    } catch (error) {
+      if (error?.name === 'AbortError') return;
+      if (!append) {
+        setManualProductLookupEmptyMessage('Não foi possível buscar produtos no momento.');
+      }
+    } finally {
+      if (manualProductLookupAbortController === abortController) {
+        manualProductLookupAbortController = null;
+      }
+      manualProductLookupState.loading = false;
+      maybePrefetchManualLookupUntilScrollable();
+    }
+  }
+
+  function maybePrefetchManualLookupUntilScrollable() {
+    if (!manualProductLookupModal || manualProductLookupModal.classList.contains('hidden')) return;
+    if (!manualProductLookupScrollContainer) return;
+    if (!manualProductLookupState.term || !manualProductLookupState.hasMore) return;
+    if (manualProductLookupState.loading) return;
+
+    const hasScrollableContent =
+      manualProductLookupScrollContainer.scrollHeight > manualProductLookupScrollContainer.clientHeight + 8;
+
+    if (hasScrollableContent) return;
+
+    // Se ainda não há conteúdo rolável, carrega mais uma página automaticamente.
+    searchManualProductLookup(manualProductLookupState.term, { append: true });
   }
 
   function setModalInputValue(input, value) {
@@ -3102,18 +3375,25 @@
     const saidaDateTime = dhSaiEntRaw ? formatDateTimeBR(dhSaiEntRaw) : '';
     const saidaDate = saidaDateTime ? saidaDateTime.split(' ')[0] : dSaiEnt || '';
     const saidaTime = saidaDateTime ? saidaDateTime.split(' ')[1] : hSaiEnt || '';
-    const protocolo = prot
-      ? `${xmlGetText(prot, 'nProt')} - ${formatDateTimeBR(xmlGetText(prot, 'dhRecbto'))}`
-      : 'SEM PROTOCOLO';
     const adicionais = xmlGetText(xmlDoc, 'infAdic infCpl') || xmlGetText(xmlDoc, 'infAdic infAdFisco') || '';
     const isHomologacao = tpAmb === '2';
+    const emprestimoMode = isEmprestimoEmissionSelected();
+    const documentoLabel = emprestimoMode ? 'Emprestimo' : 'Transferencia';
+    const documentoUpperLabel = emprestimoMode ? 'EMPRESTIMO' : 'TRANSFERENCIA';
+    const protocoloInterno = `PROTOCOLO INTERNO ${numero || 'S/N'}-${serie || '0'}-${(chave || '').slice(-8) || 'LOCAL'}`;
+    const protocolo = prot
+      ? `${xmlGetText(prot, 'nProt')} - ${formatDateTimeBR(xmlGetText(prot, 'dhRecbto'))}`
+      : protocoloInterno;
     const emitFant = xmlGetText(emit, 'xFant');
     const emitFantHtml = emitFant ? `<div>${emitFant}</div>` : '';
+    const homologMessage = emprestimoMode
+      ? 'MERCADORIA EM REGIME DE EMPRESTIMO - RETORNO PREVISTO CONFORME ACORDO COM DESTINATARIO'
+      : 'NF-e EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL';
     const homologRowFull = isHomologacao
-      ? '<tr><td colspan="4" class="homolog">NF-e EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL</td></tr>'
+      ? `<tr><td colspan="4" class="homolog">${homologMessage}</td></tr>`
       : '';
     const homologRowSimple = isHomologacao
-      ? '<tr><td colspan="3" class="homolog">NF-e EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL</td></tr>'
+      ? `<tr><td colspan="3" class="homolog">${homologMessage}</td></tr>`
       : '';
 
     const emitAddressLine = [
@@ -3137,15 +3417,50 @@
     const destUf = xmlGetText(dest, 'enderDest UF');
     const destCep = formatCep(xmlGetText(dest, 'enderDest CEP'));
     const destFone = xmlGetText(dest, 'fone') || xmlGetText(dest, 'enderDest fone');
+    const xmlDestName = xmlGetText(dest, 'xNome');
+    const xmlDestDoc = xmlGetText(dest, 'CPF') || xmlGetText(dest, 'CNPJ');
+    const isHomologPlaceholderDestName = normalizeKeyword(xmlDestName).includes(
+      normalizeKeyword('NF-e EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL'),
+    );
+    const formDestName = normalizeString(clientFields?.name?.value || '');
+    const formDestDoc = normalizeString(clientFields?.doc?.value || '');
+    const formDestIe = normalizeString(clientFields?.ie?.value || '');
+    const formDestStreet = normalizeString(clientFields?.address?.value || '');
+    const formDestNumber = normalizeString(clientFields?.number?.value || '');
+    const formDestComplement = normalizeString(clientFields?.complement?.value || '');
+    const formDestBairro = normalizeString(clientFields?.neighborhood?.value || '');
+    const formDestMunicipio = normalizeString(clientFields?.city?.value || '');
+    const formDestUf = normalizeString(clientFields?.state?.value || '');
+    const formDestCep = formatCep(clientFields?.zip?.value || '');
+    const formDestFone = normalizeString(clientFields?.phone?.value || '');
+
+    const danfeDestName = emprestimoMode && formDestName
+      ? formDestName
+      : isHomologPlaceholderDestName && formDestName
+      ? formDestName
+      : xmlDestName;
+    const danfeDestDoc = emprestimoMode && formDestDoc ? formDestDoc : xmlDestDoc;
+    const danfeDestIe = emprestimoMode && formDestIe ? formDestIe : xmlGetText(dest, 'IE');
+    const danfeDestStreet = emprestimoMode && formDestStreet ? formDestStreet : destStreet;
+    const danfeDestNumber = emprestimoMode && formDestNumber ? formDestNumber : destNumber;
+    const danfeDestComplement = emprestimoMode && formDestComplement ? formDestComplement : destComplement;
+    const danfeDestBairro = emprestimoMode && formDestBairro ? formDestBairro : destBairro;
+    const danfeDestMunicipio = emprestimoMode && formDestMunicipio ? formDestMunicipio : destMunicipio;
+    const danfeDestUf = emprestimoMode && formDestUf ? formDestUf : destUf;
+    const danfeDestCep = emprestimoMode && formDestCep ? formDestCep : destCep;
+    const danfeDestFone = emprestimoMode && formDestFone ? formDestFone : destFone;
     const destAddress = [
-      destStreet,
-      destNumber,
-      destComplement,
-      destBairro,
-      destMunicipio && destUf ? `${destMunicipio} - ${destUf}` : destMunicipio || destUf,
+      danfeDestStreet,
+      danfeDestNumber,
+      danfeDestComplement,
+      danfeDestBairro,
+      danfeDestMunicipio && danfeDestUf ? `${danfeDestMunicipio} - ${danfeDestUf}` : danfeDestMunicipio || danfeDestUf,
     ]
       .filter(Boolean)
       .join(' - ');
+    const receiptHeadline = emprestimoMode
+      ? `RECEBEMOS DE ${xmlGetText(emit, 'xNome')} AS MERCADORIAS EM REGIME DE EMPRESTIMO CONSTANTES NESTE DOCUMENTO. EMISSAO: ${dhEmi} VALOR TOTAL REFERENCIAL: ${formatBRL(xmlGetText(total, 'vNF'))} DESTINATARIO: ${danfeDestName} - ${destAddress}`
+      : `RECEBEMOS DE ${xmlGetText(emit, 'xNome')} OS PRODUTOS E/OU SERVICOS CONSTANTES DA NOTA FISCAL ELETRONICA INDICADA ABAIXO. EMISSAO: ${dhEmi} VALOR TOTAL: ${formatBRL(xmlGetText(total, 'vNF'))} DESTINATARIO: ${danfeDestName} - ${destAddress}`;
 
     const transportName = xmlGetText(transp, 'transporta xNome');
     const transportDoc = xmlGetText(transp, 'transporta CNPJ') || xmlGetText(transp, 'transporta CPF');
@@ -3414,8 +3729,8 @@
           </td>
           <td class="center">
             <div class="danfe-box">
-              <div class="danfe-title">Transferencia</div>
-              <div class="danfe-subtitle">Documento Auxiliar da Transferencia</div>
+              <div class="danfe-title">${documentoLabel}</div>
+              <div class="danfe-subtitle">Documento Auxiliar de ${documentoLabel}</div>
               <div class="danfe-entry-row">
                 <div class="danfe-entry-text">
                   0 - ENTRADA<br>
@@ -3475,7 +3790,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
-  <title>Transferencia</title>
+  <title>${documentoLabel}</title>
   <style>
     @page { size: A4; margin: 6mm; }
     body { font-family: Arial, Helvetica, sans-serif; font-size: 7.5pt; color: #111; line-height: 1.25; }
@@ -3502,7 +3817,7 @@
 <body>
   <table>
     <tr>
-      <td colspan="3" class="section-title">TRANSFERENCIA</td>
+      <td colspan="3" class="section-title">${documentoUpperLabel}</td>
     </tr>
     <tr>
       <td>
@@ -3511,7 +3826,7 @@
         <div>${emitAddressLine}</div>
       </td>
       <td class="center">
-        <div class="label">Transferencia</div>
+        <div class="label">${documentoLabel}</div>
         <div class="value">N&#186; ${numero}</div>
         <div class="label">Serie</div>
         <div class="value">${serie}</div>
@@ -3525,13 +3840,13 @@
         <div class="barcode-fallback" data-barcode-fallback>${chave}</div>
       </td>
     </tr>
-    <tr>
-      <td colspan="3">
-        <div class="label">Destinatario</div>
-        <div class="value">${xmlGetText(dest, 'xNome')}</div>
-        <div>${destAddress}</div>
-      </td>
-    </tr>
+      <tr>
+        <td colspan="3">
+          <div class="label">Destinatario</div>
+          <div class="value">${danfeDestName}</div>
+          <div>${destAddress}</div>
+        </td>
+      </tr>
     ${homologRowSimple}
     <tr>
       <td colspan="3" class="section-title">DADOS DOS PRODUTOS / SERVICOS</td>
@@ -3581,7 +3896,7 @@
   <table>
     <tr>
       <td>
-        <div class="label">Total Transferencia</div>
+        <div class="label">Total ${documentoLabel}</div>
         <div class="value right">${formatBRL(xmlGetText(total, 'vNF'))}</div>
       </td>
       <td>
@@ -3602,7 +3917,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
-  <title>Transferencia</title>
+  <title>${documentoLabel}</title>
   <style>
     @page { size: A4; margin: 6mm; }
     body { font-family: Arial, Helvetica, sans-serif; font-size: 7.5pt; color: #111; line-height: 1.25; }
@@ -3664,12 +3979,10 @@
       </colgroup>
       <tr>
         <td class="label">
-          RECEBEMOS DE ${xmlGetText(emit, 'xNome')} OS PRODUTOS E/OU SERVICOS CONSTANTES DA NOTA FISCAL
-          ELETRONICA INDICADA ABAIXO. EMISSAO: ${dhEmi} VALOR TOTAL: ${formatBRL(xmlGetText(total, 'vNF'))}
-          DESTINATARIO: ${xmlGetText(dest, 'xNome')} - ${destAddress}
+          ${receiptHeadline}
         </td>
         <td class="center" rowspan="2">
-          <div class="section-title">Transferencia</div>
+          <div class="section-title">${documentoLabel}</div>
           <div class="value">N&#186; ${numero}</div>
           <div class="value">Serie ${serie}</div>
         </td>
@@ -3723,15 +4036,15 @@
       <tr>
         <td>
           <div class="label">Destinatario / Remetente</div>
-          <div class="value">${xmlGetText(dest, 'xNome')}</div>
+          <div class="value">${danfeDestName}</div>
         </td>
         <td>
           <div class="label">CNPJ/CPF</div>
-          <div class="value">${xmlGetText(dest, 'CPF') || xmlGetText(dest, 'CNPJ')}</div>
+          <div class="value">${danfeDestDoc}</div>
         </td>
         <td>
           <div class="label">IE</div>
-          <div class="value">${xmlGetText(dest, 'IE')}</div>
+          <div class="value">${danfeDestIe}</div>
         </td>
         <td>
           <div class="label">Data Emissao</div>
@@ -3741,15 +4054,15 @@
       <tr>
         <td>
           <div class="label">Endereco</div>
-          <div class="value">${[destStreet, destNumber, destComplement].filter(Boolean).join(', ')}</div>
+          <div class="value">${[danfeDestStreet, danfeDestNumber, danfeDestComplement].filter(Boolean).join(', ')}</div>
         </td>
         <td>
           <div class="label">Bairro</div>
-          <div class="value">${destBairro}</div>
+          <div class="value">${danfeDestBairro}</div>
         </td>
         <td>
           <div class="label">CEP</div>
-          <div class="value">${destCep}</div>
+          <div class="value">${danfeDestCep}</div>
         </td>
         <td>
           <div class="label">Data Saida/Entrada</div>
@@ -3759,15 +4072,15 @@
       <tr>
         <td>
           <div class="label">Municipio</div>
-          <div class="value">${destMunicipio}</div>
+          <div class="value">${danfeDestMunicipio}</div>
         </td>
         <td>
           <div class="label">UF</div>
-          <div class="value">${destUf}</div>
+          <div class="value">${danfeDestUf}</div>
         </td>
         <td>
           <div class="label">Fone/Fax</div>
-          <div class="value">${destFone}</div>
+          <div class="value">${danfeDestFone}</div>
         </td>
         <td>
           <div class="label">Hora Saida/Entrada</div>
@@ -3808,7 +4121,7 @@
         <td class="value right">${formatBRL(xmlGetText(total, 'vST'))}</td>
         <td class="label">V. IPI</td>
         <td class="value right">${formatBRL(xmlGetText(total, 'vIPI'))}</td>
-        <td class="label">V. Total Transferencia</td>
+        <td class="label">V. Total ${documentoLabel}</td>
         <td class="value right">${formatBRL(xmlGetText(total, 'vNF'))}</td>
       </tr>
       <tr>
@@ -7722,6 +8035,66 @@
         const code = normalizeString(productModalFields.product?.value || '');
         if (!code) return;
         fillProductModalByCode(code);
+      });
+      productModalFields.product?.addEventListener('input', (event) => {
+        if (manualProductLookupSilentInput) return;
+        const term = String(event?.target?.value || '').trim();
+        const hasLetters = /[A-Za-zÀ-ÿ]/.test(term);
+        if (!hasLetters) {
+          closeManualProductLookupModal();
+          return;
+        }
+        openManualProductLookupModal(term);
+        if (manualProductLookupSearchInput) {
+          manualProductLookupSearchInput.value = term;
+        }
+        if (manualProductLookupTermLabel) {
+          manualProductLookupTermLabel.textContent = `Busca: "${term}"`;
+        }
+      });
+      manualProductLookupCloseTriggers.forEach((trigger) => {
+        if (!(trigger instanceof HTMLElement)) return;
+        trigger.addEventListener('click', (event) => {
+          event.preventDefault();
+          closeManualProductLookupModal();
+        });
+      });
+      if (manualProductLookupSearchInput) {
+        manualProductLookupSearchInput.addEventListener('input', (event) => {
+          const term = String(event?.target?.value || '').trim();
+          if (productModalFields.product) {
+            manualProductLookupSilentInput = true;
+            productModalFields.product.value = term;
+            manualProductLookupSilentInput = false;
+          }
+          if (manualProductLookupTermLabel) {
+            manualProductLookupTermLabel.textContent = term ? `Busca: "${term}"` : 'Nenhuma busca realizada.';
+          }
+        });
+        manualProductLookupSearchInput.addEventListener('keydown', (event) => {
+          if (event.key !== 'Enter') return;
+          event.preventDefault();
+          const term = String(manualProductLookupSearchInput.value || '').trim();
+          searchManualProductLookup(term);
+        });
+      }
+      manualProductLookupSubmitButton?.addEventListener('click', () => {
+        const term = String(manualProductLookupSearchInput?.value || '').trim();
+        searchManualProductLookup(term);
+      });
+      manualProductLookupModal?.addEventListener('click', (event) => {
+        if (event.target === manualProductLookupModal) {
+          closeManualProductLookupModal();
+        }
+      });
+      manualProductLookupScrollContainer?.addEventListener('scroll', () => {
+        if (manualProductLookupModal?.classList.contains('hidden')) return;
+        if (!manualProductLookupState.term || !manualProductLookupState.hasMore) return;
+        const remaining = manualProductLookupScrollContainer.scrollHeight
+          - manualProductLookupScrollContainer.scrollTop
+          - manualProductLookupScrollContainer.clientHeight;
+        if (remaining > 120) return;
+        searchManualProductLookup(manualProductLookupState.term, { append: true });
       });
       const cestToggle = productModal?.querySelector('[data-cest-toggle]');
       cestToggle?.addEventListener('click', (event) => {

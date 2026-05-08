@@ -1552,7 +1552,7 @@
       <div class="flex items-center justify-between border-b border-gray-100 px-4 py-3">
           <div>
             <h3 class="text-base font-semibold text-gray-900">Selecionar Produto</h3>
-            <p class="text-[11px] text-gray-600">Cod | CodBarras | Nome | Custo</p>
+            <p class="text-[11px] text-gray-600">Cod | CodBarras | Nome | Custo | Venda | Estoque</p>
           </div>
           <button
             type="button"
@@ -1591,11 +1591,13 @@
                 <th class="px-3 py-2 text-left font-semibold">CodBarras</th>
                 <th class="px-3 py-2 text-left font-semibold">Nome</th>
                 <th class="px-3 py-2 text-right font-semibold">Custo</th>
+                <th class="px-3 py-2 text-right font-semibold">Venda</th>
+                <th class="px-3 py-2 text-right font-semibold">Estoque</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100 bg-white" data-manual-product-lookup-body>
               <tr data-manual-product-lookup-empty>
-                <td colspan="4" class="px-3 py-4 text-center text-[11px] text-gray-500">Digite letras no campo de procura para buscar produtos.</td>
+                <td colspan="6" class="px-3 py-4 text-center text-[11px] text-gray-500">Digite letras no campo de procura para buscar produtos.</td>
               </tr>
             </tbody>
           </table>
@@ -8037,6 +8039,13 @@
               results.push(normalized);
             }
           };
+          const collectFromArray = (source, fields) => {
+            if (!source || typeof source !== 'object') return;
+            fields.forEach((field) => {
+              if (!Array.isArray(source[field])) return;
+              source[field].forEach((item) => appendBarcode(item));
+            });
+          };
           const collectFromSource = (source, fields) => {
             if (!source || typeof source !== 'object') return;
             fields.forEach((field) => appendBarcode(source[field]));
@@ -8048,11 +8057,13 @@
 
           collectFromSource(product, PRODUCT_BARCODE_PRIMARY_FIELDS);
           collectFromSource(product, PRODUCT_BARCODE_TRIBUTARY_FIELDS);
+          collectFromArray(product, ['codigosComplementares', 'barcodes', 'codigosBarras']);
 
           if (Array.isArray(product.variacoes)) {
             product.variacoes.forEach((variation) => {
               collectFromSource(variation, PRODUCT_BARCODE_PRIMARY_FIELDS);
               collectFromSource(variation, PRODUCT_BARCODE_TRIBUTARY_FIELDS);
+              collectFromArray(variation, ['codigosComplementares', 'barcodes', 'codigosBarras']);
             });
           }
 
@@ -8067,8 +8078,8 @@
         const productMatchesBarcode = (product, barcodeDigits) => {
           const normalized = normalizeBarcodeForComparison(barcodeDigits);
           if (!normalized) return false;
-          const productBarcode = normalizeBarcodeForComparison(product?.codbarras);
-          return Boolean(productBarcode) && productBarcode === normalized;
+          const productBarcodes = getProductBarcodesFromRecord(product);
+          return productBarcodes.includes(normalized);
         };
 
         const getOptionDocument = (option) => {
@@ -16260,6 +16271,8 @@ ${'</ht' + 'ml>'}`;
             const barcode = formatGtinDisplay(getProductBarcodeFromRecord(product));
             const name = getProductNameFromRecord(product) || product?.nome || product?.name || 'Produto sem nome';
             const cost = resolveProductCostValue(product);
+            const sale = resolveProductSaleValue(product);
+            const stock = resolveCurrentStockFromProductRecord(product);
 
             const codeCell = document.createElement('td');
             codeCell.className = 'px-3 py-2 text-gray-700';
@@ -16277,7 +16290,15 @@ ${'</ht' + 'ml>'}`;
             costCell.className = 'px-3 py-2 text-right text-gray-700';
             costCell.textContent = Number.isFinite(cost) ? `R$ ${formatMoneyValue(cost)}` : '—';
 
-            row.append(codeCell, barcodeCell, nameCell, costCell);
+            const saleCell = document.createElement('td');
+            saleCell.className = 'px-3 py-2 text-right text-gray-700';
+            saleCell.textContent = Number.isFinite(sale) ? `R$ ${formatMoneyValue(sale)}` : '—';
+
+            const stockCell = document.createElement('td');
+            stockCell.className = 'px-3 py-2 text-right text-gray-700';
+            stockCell.textContent = Number.isFinite(stock) ? formatQuantity(stock) : '—';
+
+            row.append(codeCell, barcodeCell, nameCell, costCell, saleCell, stockCell);
             row.addEventListener('click', () => {
               selectManualLookupProduct(product);
             });

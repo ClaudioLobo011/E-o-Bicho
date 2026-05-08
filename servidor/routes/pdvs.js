@@ -2133,6 +2133,43 @@ const LIGHTWEIGHT_SESSION_SNAPSHOT_LIMIT = 300;
 const limitSnapshotArray = (entries, limit = LIGHTWEIGHT_SESSION_SNAPSHOT_LIMIT) =>
   Array.isArray(entries) ? entries.slice(0, Math.max(1, Number.parseInt(limit, 10) || 1)) : [];
 
+const PDV_STATE_PERSIST_LIMITS = Object.freeze({
+  history: 1000,
+  completedSales: 300,
+  budgets: 300,
+  deliveryOrders: 300,
+  accountsReceivable: 2000,
+  inventoryMovements: 2000,
+  recentStateMutationKeys: 200,
+});
+
+const clampPdvStatePayloadArrays = (payload = {}) => {
+  if (!payload || typeof payload !== 'object') return payload;
+  const nextPayload = { ...payload };
+  const applyLimit = (key) => {
+    if (!Array.isArray(nextPayload[key])) return;
+    nextPayload[key] = limitSnapshotArray(nextPayload[key], PDV_STATE_PERSIST_LIMITS[key]);
+  };
+  applyLimit('history');
+  applyLimit('completedSales');
+  applyLimit('budgets');
+  applyLimit('deliveryOrders');
+  applyLimit('accountsReceivable');
+  applyLimit('inventoryMovements');
+  applyLimit('recentStateMutationKeys');
+  return nextPayload;
+};
+
+const clampPdvStateSetPayloadArrays = (setPayload = {}) => {
+  if (!setPayload || typeof setPayload !== 'object') return setPayload;
+  const nextSetPayload = { ...setPayload };
+  Object.keys(PDV_STATE_PERSIST_LIMITS).forEach((key) => {
+    if (!Array.isArray(nextSetPayload[key])) return;
+    nextSetPayload[key] = limitSnapshotArray(nextSetPayload[key], PDV_STATE_PERSIST_LIMITS[key]);
+  });
+  return nextSetPayload;
+};
+
 const buildSaleCodeValue = (identifier, sequence) =>
   `${normalizeCodeToken(identifier)}-${String(Math.max(1, Number.parseInt(sequence, 10) || 1)).padStart(
     SALE_CODE_PADDING,
@@ -3244,9 +3281,9 @@ router.get('/:id/customer-sales', requireAuth, async (req, res) => {
 
     const requestedLimit = Number.parseInt(req.query?.limit, 10);
     const limit = Number.isFinite(requestedLimit)
-      ? Math.min(Math.max(requestedLimit, 1), 500)
-      : 200;
-    const scanLimit = Math.max(limit * 5, 500);
+      ? Math.min(Math.max(requestedLimit, 1), 5000)
+      : 1000;
+    const scanLimit = Math.max(limit * 5, 5000);
 
     const normalizedRead = shouldUseNormalizedReadForPdv(pdvId, req.query);
     const strictNormalizedRead = normalizedRead && shouldUseStrictNormalizedReadForPdv(pdvId, req.query);
@@ -4078,6 +4115,88 @@ const areReceivablesEquivalent = (left = [], right = []) => {
 const parsePdvCommandRequest = (body = {}) => {
   const action = normalizeString(body?.action);
   const payload = body && typeof body === 'object' ? body.payload || {} : {};
+  if (action !== 'pdv.caixa.action') return { action, payload };
+
+  const legacyPayload = payload && typeof payload === 'object' ? payload : {};
+  const actionId = normalizeString(legacyPayload?.actionId).toLowerCase();
+  const normalizeLegacyPayments = (payments = []) =>
+    (Array.isArray(payments) ? payments : [])
+      .map((entry) => ({
+        id: normalizeString(entry?.id || entry?.paymentId || entry?.code),
+        label: normalizeString(entry?.label || entry?.name || entry?.nome || entry?.paymentLabel),
+        valor: safeNumber(entry?.valor ?? entry?.value ?? 0, 0),
+        parcelas: Math.max(1, Number.parseInt(entry?.parcelas ?? entry?.installments ?? 1, 10) || 1),
+      }))
+      .filter((entry) => entry.id || entry.label);
+
+  if (actionId === 'abertura') {
+    const openingBalances =
+      legacyPayload?.openingBalances && typeof legacyPayload.openingBalances === 'object'
+        ? legacyPayload.openingBalances
+        : {};
+    const payments = Object.entries(openingBalances).map(([key, value]) => ({
+      id: normalizeString(key),
+      label: normalizeString(key),
+      valor: safeNumber(value, 0),
+      parcelas: 1,
+    }));
+    return {
+      action: PDV_COMMANDS.CAIXA_OPEN,
+      payload: {
+        openedAt: legacyPayload?.createdAt,
+        reason: legacyPayload?.reason,
+        payments,
+      },
+    };
+  }
+
+  if (actionId === 'entrada') {
+    return {
+      action: PDV_COMMANDS.CAIXA_ENTRY,
+      payload: {
+        amount: safeNumber(legacyPayload?.amount ?? legacyPayload?.valor, 0),
+        paymentId: normalizeString(legacyPayload?.paymentId || legacyPayload?.paymentMethod),
+        reason: legacyPayload?.reason,
+        timestamp: legacyPayload?.createdAt || legacyPayload?.timestamp,
+      },
+    };
+  }
+
+  if (actionId === 'saida') {
+    return {
+      action: PDV_COMMANDS.CAIXA_EXIT,
+      payload: {
+        amount: safeNumber(legacyPayload?.amount ?? legacyPayload?.valor, 0),
+        paymentId: normalizeString(legacyPayload?.paymentId || legacyPayload?.paymentMethod),
+        reason: legacyPayload?.reason,
+        timestamp: legacyPayload?.createdAt || legacyPayload?.timestamp,
+      },
+    };
+  }
+
+  if (actionId === 'envio') {
+    return {
+      action: PDV_COMMANDS.CAIXA_SHIPMENT,
+      payload: {
+        amount: safeNumber(legacyPayload?.amount ?? legacyPayload?.valor, 0),
+        paymentId: normalizeString(legacyPayload?.paymentId || legacyPayload?.paymentMethod),
+        reason: legacyPayload?.reason,
+        timestamp: legacyPayload?.createdAt || legacyPayload?.timestamp,
+      },
+    };
+  }
+
+  if (actionId === 'fechamento') {
+    return {
+      action: PDV_COMMANDS.CAIXA_CLOSE,
+      payload: {
+        reason: legacyPayload?.reason,
+        timestamp: legacyPayload?.createdAt || legacyPayload?.timestamp,
+        payments: normalizeLegacyPayments(legacyPayload?.payments || []),
+      },
+    };
+  }
+
   return { action, payload };
 };
 
@@ -5283,6 +5402,7 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
     };
 
     reconcileCashStateFromSales({ existingState, updatePayload });
+    const clampedUpdatePayload = clampPdvStatePayloadArrays(updatePayload);
     perf.mark('sale_finalize.cash_reconciled');
 
     let updatedState = null;
@@ -5290,7 +5410,7 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
       updatedState = await PdvState.findOneAndUpdate(
         { pdv: pdvId },
         {
-          ...updatePayload,
+          ...clampedUpdatePayload,
           pdv: pdvId,
           empresa: existingState?.empresa || pdvDoc?.empresa,
         },
@@ -5299,20 +5419,20 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
     } else {
       const optimizedSet = {
         caixaAberto: true,
-        summary: updatePayload.summary,
-        caixaInfo: updatePayload.caixaInfo,
-        pagamentos: updatePayload.pagamentos,
-        history: updatePayload.history,
-        lastMovement: updatePayload.lastMovement,
-        completedSales: updatePayload.completedSales,
-        inventoryMovements: updatePayload.inventoryMovements,
-        saleCodeIdentifier: updatePayload.saleCodeIdentifier,
-        saleCodeSequence: updatePayload.saleCodeSequence,
-        budgetSequence: updatePayload.budgetSequence,
-        recentStateMutationKeys: updatePayload.recentStateMutationKeys,
+        summary: clampedUpdatePayload.summary,
+        caixaInfo: clampedUpdatePayload.caixaInfo,
+        pagamentos: clampedUpdatePayload.pagamentos,
+        history: clampedUpdatePayload.history,
+        lastMovement: clampedUpdatePayload.lastMovement,
+        completedSales: clampedUpdatePayload.completedSales,
+        inventoryMovements: clampedUpdatePayload.inventoryMovements,
+        saleCodeIdentifier: clampedUpdatePayload.saleCodeIdentifier,
+        saleCodeSequence: clampedUpdatePayload.saleCodeSequence,
+        budgetSequence: clampedUpdatePayload.budgetSequence,
+        recentStateMutationKeys: clampedUpdatePayload.recentStateMutationKeys,
       };
       if (Array.isArray(normalizedReceivables) && normalizedReceivables.length) {
-        optimizedSet.accountsReceivable = updatePayload.accountsReceivable;
+        optimizedSet.accountsReceivable = clampedUpdatePayload.accountsReceivable;
       }
 
       updatedState = await PdvState.findOneAndUpdate(
@@ -6531,33 +6651,35 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
       nextInventoryMovements = combinedMovements;
     }
 
+    const limitedStateSetPayload = clampPdvStateSetPayloadArrays({
+      completedSales: nextSales,
+      deliveryOrders: nextDeliveryOrders,
+      pagamentos: nextPagamentos,
+      summary: nextSummary,
+      history: nextHistory,
+      lastMovement: nextHistory[0] || null,
+      caixaInfo: {
+        ...(existingState?.caixaInfo || {}),
+        previstoPagamentos: nextPrevisto,
+        apuradoPagamentos: nextApurado,
+        fechamentoPrevisto: nextPrevisto.reduce(
+          (sum, payment) => sum + safeNumber(payment?.valor ?? 0, 0),
+          0
+        ),
+      },
+      inventoryMovements: nextInventoryMovements,
+      saleCodeSequence: ensuredCodes.nextSaleSequence,
+      budgetSequence: ensuredCodes.nextBudgetSequence,
+      recentStateMutationKeys: getNextRecentMutationKeys(
+        existingState?.recentStateMutationKeys || [],
+        idempotencyKey
+      ),
+    });
+
     const updatedState = await PdvState.findOneAndUpdate(
       { pdv: pdvId },
       {
-        $set: {
-          completedSales: nextSales,
-          deliveryOrders: nextDeliveryOrders,
-          pagamentos: nextPagamentos,
-          summary: nextSummary,
-          history: nextHistory,
-          lastMovement: nextHistory[0] || null,
-          caixaInfo: {
-            ...(existingState?.caixaInfo || {}),
-            previstoPagamentos: nextPrevisto,
-            apuradoPagamentos: nextApurado,
-            fechamentoPrevisto: nextPrevisto.reduce(
-              (sum, payment) => sum + safeNumber(payment?.valor ?? 0, 0),
-              0
-            ),
-          },
-          inventoryMovements: nextInventoryMovements,
-          saleCodeSequence: ensuredCodes.nextSaleSequence,
-          budgetSequence: ensuredCodes.nextBudgetSequence,
-          recentStateMutationKeys: getNextRecentMutationKeys(
-            existingState?.recentStateMutationKeys || [],
-            idempotencyKey
-          ),
-        },
+        $set: limitedStateSetPayload,
         $setOnInsert: {
           pdv: pdvId,
           empresa: existingState?.empresa || pdvDoc?.empresa,
@@ -6875,14 +6997,16 @@ router.put('/:id/state', requireAuth, async (req, res) => {
         reconcileCashStateFromSales({ existingState, updatePayload });
       }
 
+      const clampedUpdatePayload = clampPdvStatePayloadArrays(updatePayload);
+
       let updatedState;
       try {
         let updateQuery = PdvState.findOneAndUpdate(
           { pdv: pdvId },
           {
-            ...updatePayload,
+            ...clampedUpdatePayload,
             pdv: pdvId,
-            empresa: updatePayload.empresa || pdv.empresa,
+            empresa: clampedUpdatePayload.empresa || pdv.empresa,
           },
           { new: true, upsert: true, setDefaultsOnInsert: true }
         );

@@ -400,6 +400,10 @@ async function buildClientePayload(body = {}, opts = {}) {
 
   if (Object.prototype.hasOwnProperty.call(body, 'limiteCredito')) {
     payload.limiteCredito = parseNumber(body.limiteCredito, currentUser?.limiteCredito || 0);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'valorPendente')) {
+    payload.valorPendente = parseNumber(body.valorPendente, currentUser?.valorPendente || 0);
   } else if (!isUpdate && typeof payload.limiteCredito === 'undefined') {
     payload.limiteCredito = 0;
   }
@@ -1379,6 +1383,7 @@ router.get('/sync/full', authMiddleware, requireStaff, async (req, res) => {
       Math.max(parseInt(String(req.query.limit || '2000'), 10) || 2000, 1),
       10000
     );
+    const chunkCursor = String(req.query.cursor || '').trim();
 
     const collectionsInfo = await db.listCollections({}, { nameOnly: true }).toArray();
     const collectionNames = collectionsInfo
@@ -1409,16 +1414,20 @@ router.get('/sync/full', authMiddleware, requireStaff, async (req, res) => {
           data: [],
         });
       }
+      const cursorQuery = {};
+      if (chunkCursor && mongoose.Types.ObjectId.isValid(chunkCursor)) {
+        cursorQuery._id = { $gt: new mongoose.Types.ObjectId(chunkCursor) };
+      }
       const docs = await db.collection(requestedCollection)
-        .find({})
+        .find(cursorQuery)
         .sort({ _id: 1 })
-        .skip(chunkOffset)
         .limit(chunkLimit)
         .toArray();
       const totalCount = Number(fingerprintInfo.count || 0);
       const loaded = docs.length;
       const nextOffset = chunkOffset + loaded;
-      const hasMore = nextOffset < totalCount;
+      const nextCursor = loaded > 0 ? String(docs[loaded - 1]?._id || '') : '';
+      const hasMore = nextOffset < totalCount && loaded > 0;
       return res.json({
         version: 3,
         mode: 'single-collection',
@@ -1430,6 +1439,7 @@ router.get('/sync/full', authMiddleware, requireStaff, async (req, res) => {
         offset: chunkOffset,
         limit: chunkLimit,
         nextOffset,
+        nextCursor,
         hasMore,
         fingerprint: fingerprintInfo,
         data: docs,
@@ -2027,7 +2037,7 @@ router.put('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: 'ID inválido.' });
     }
-    const current = await User.findById(id).select('role tipoConta nomeCompleto razaoSocial nomeFantasia nomeContato email celular telefone apelido pais cpf cnpj inscricaoEstadual genero dataNascimento rgNumero estadoIE isentoIE empresaPrincipal empresas telefoneSecundario celularSecundario codigoAntigo').lean();
+    const current = await User.findById(id).select('role tipoConta nomeCompleto razaoSocial nomeFantasia nomeContato email celular telefone apelido pais cpf cnpj inscricaoEstadual genero dataNascimento rgNumero estadoIE isentoIE empresaPrincipal empresas telefoneSecundario celularSecundario codigoAntigo valorPendente').lean();
     await ensureClienteEhEditavel(current);
 
     const payload = await buildClientePayload(req.body, { isUpdate: true, currentUser: current });
@@ -2118,6 +2128,51 @@ router.delete('/clientes/:id', authMiddleware, requireStaff, async (req, res) =>
   }
 });
 
+
+router.post('/clientes/:id/pendencias/ajuste', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'ID invalido.' });
+    }
+    const cliente = await User.findById(id).select('role valorPendente limiteCredito');
+    await ensureClienteEhEditavel(cliente);
+    if (!cliente) {
+      return res.status(404).json({ message: 'Cliente nao encontrado.' });
+    }
+
+    const value = parseNumber(req.body?.valor, 0);
+    if (!(value > 0)) {
+      return res.status(400).json({ message: 'Informe um valor valido para o ajuste.' });
+    }
+    const operationRaw = sanitizeString(req.body?.operation || req.body?.operacao || 'credito').toLowerCase();
+    const operation = operationRaw === 'debito' ? 'debito' : 'credito';
+    const signal = operation === 'credito' ? 1 : -1;
+
+    const currentPending = parseNumber(cliente.valorPendente, 0);
+    const nextPending = currentPending + signal * value;
+
+    cliente.valorPendente = nextPending;
+    await cliente.save();
+
+    const limiteCredito = parseNumber(cliente.limiteCredito, 0);
+
+    return res.json({
+      message: 'Pendencia atualizada com sucesso.',
+      pendencias: {
+        valorPendente: nextPending,
+      },
+      financeiro: {
+        limiteCredito,
+        valorPendente: nextPending,
+      },
+      valorPendente: nextPending,
+    });
+  } catch (err) {
+    console.error('POST /func/clientes/:id/pendencias/ajuste', err);
+    return res.status(400).json({ message: err?.message || 'Erro ao ajustar pendencia do cliente.' });
+  }
+});
 router.get('/clientes/:id/enderecos', authMiddleware, requireStaff, async (req, res) => {
   try {
     const { id } = req.params;
@@ -2415,7 +2470,7 @@ router.get('/clientes/buscar', authMiddleware, requireStaff, async (req, res) =>
 
     const users = await User.find({ $or: or })
       .select(
-        '_id nomeCompleto nomeContato razaoSocial email cpf cnpj inscricaoEstadual celular telefone celularSecundario telefoneSecundario tipoConta codigoCliente genero sexo dataNascimento'
+        '_id nomeCompleto nomeContato razaoSocial email cpf cnpj inscricaoEstadual celular telefone celularSecundario telefoneSecundario tipoConta codigoCliente genero sexo dataNascimento valorPendente'
       )
       .limit(limit)
       .lean();
@@ -3192,7 +3247,7 @@ router.get('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
       return res.status(400).json({ message: 'ID inválido.' });
     }
     const u = await User.findById(id)
-      .select('_id role tipoConta nomeCompleto nomeContato razaoSocial nomeFantasia email celular telefone celularSecundario telefoneSecundario cpf cnpj inscricaoEstadual genero dataNascimento rgNumero estadoIE isentoIE apelido pais empresaPrincipal empresas limiteCredito codigoCliente codigoAntigo')
+      .select('_id role tipoConta nomeCompleto nomeContato razaoSocial nomeFantasia email celular telefone celularSecundario telefoneSecundario cpf cnpj inscricaoEstadual genero dataNascimento rgNumero estadoIE isentoIE apelido pais empresaPrincipal empresas limiteCredito valorPendente codigoCliente codigoAntigo')
       .lean();
     if (!u) {
       return res.status(404).json({ message: 'Cliente não encontrado.' });
@@ -3228,6 +3283,7 @@ router.get('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
     }
 
     const limiteCredito = parseNumber(u.limiteCredito, 0);
+    const valorPendente = parseNumber(u.valorPendente, 0);
 
     res.json({
       _id: u._id,
@@ -3262,8 +3318,10 @@ router.get('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
       address,
       enderecos,
       limiteCredito,
+      valorPendente,
       financeiro: {
         limiteCredito,
+        valorPendente,
       },
     });
   } catch (e) {
@@ -3330,3 +3388,5 @@ router.delete('/agendamentos/:id', authMiddleware, requireStaff, async (req, res
 });
 
 module.exports = router;
+
+

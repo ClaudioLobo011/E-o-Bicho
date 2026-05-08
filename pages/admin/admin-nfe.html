@@ -1387,6 +1387,56 @@
       </div>
     </div>
   </div>
+  <div id="manual-product-lookup-modal" class="fixed inset-0 z-[999] hidden bg-black/40 p-3" aria-hidden="true">
+    <div class="absolute inset-0" data-close-manual-product-lookup></div>
+    <div class="relative mx-auto flex w-full max-w-5xl flex-col overflow-hidden rounded-xl bg-white shadow-xl" style="height:min(calc(100vh - 24px), 90vh);max-height:min(calc(100vh - 24px), 90vh);">
+      <div class="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+        <div>
+          <h3 class="text-base font-semibold text-gray-900">Selecionar Produto</h3>
+          <p class="text-[11px] text-gray-600">Cod | CodBarras | Nome | Custo | Venda | Estoque</p>
+        </div>
+        <button type="button" class="inline-flex items-center justify-center rounded-full border border-gray-200 p-2 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700" data-close-manual-product-lookup aria-label="Fechar busca de produto">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="border-b border-gray-100 bg-gray-50 px-4 py-3">
+          <div class="mb-2">
+            <label for="manual-product-lookup-search" class="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-gray-500">Buscar produto</label>
+          <div class="flex gap-2">
+            <div class="relative flex-1">
+              <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
+                <i class="fas fa-search text-[11px]"></i>
+              </span>
+              <input type="search" id="manual-product-lookup-search" data-manual-product-lookup-search class="w-full rounded-lg border border-gray-200 bg-white py-2 pl-10 pr-3 text-[12px] leading-5 text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Digite nome, código ou código de barras">
+            </div>
+            <button type="button" data-manual-product-lookup-submit class="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-[12px] font-semibold text-white transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/30">
+              Pesquisar
+            </button>
+          </div>
+        </div>
+        <p class="text-[11px] text-gray-600" data-manual-product-lookup-term>Nenhuma busca realizada.</p>
+      </div>
+      <div class="flex-1 overflow-y-auto" style="min-height:0;max-height:100%;">
+        <table class="min-w-full divide-y divide-gray-200 text-[12px]">
+          <thead class="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase tracking-wide text-gray-600">
+            <tr>
+              <th class="px-3 py-2 text-left font-semibold">Cod</th>
+              <th class="px-3 py-2 text-left font-semibold">CodBarras</th>
+              <th class="px-3 py-2 text-left font-semibold">Nome</th>
+              <th class="px-3 py-2 text-right font-semibold">Custo</th>
+              <th class="px-3 py-2 text-right font-semibold">Venda</th>
+              <th class="px-3 py-2 text-right font-semibold">Estoque</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100 bg-white" data-manual-product-lookup-body>
+            <tr data-manual-product-lookup-empty>
+              <td colspan="6" class="px-3 py-4 text-center text-[11px] text-gray-500">Digite letras no campo de procura para buscar produtos.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 
   <ul id="nfe-history" class="hidden">
     <li>Nenhuma ação registrada.</li>

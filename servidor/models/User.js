@@ -41,6 +41,7 @@ const userSchema = new Schema({
   telefoneSecundario: { type: String, trim: true },
   empresaPrincipal: { type: Schema.Types.ObjectId, ref: 'Store' },
   limiteCredito: { type: Number, default: 0 },
+  valorPendente: { type: Number, default: 0 },
   empresaContratual: { type: Schema.Types.ObjectId, ref: 'Store', default: null },
 
   // --- Campos Específicos de Pessoa Física ---
@@ -252,3 +253,4 @@ const userSchema = new Schema({
 });
 
 module.exports = mongoose.model('User', userSchema);
+

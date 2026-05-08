@@ -35,6 +35,11 @@
     const skuInput = document.getElementById('cod');
     const nameInput = document.getElementById('nome');
     const barcodeInput = document.getElementById('codbarras');
+    const barcodeMainInput = document.getElementById('spec-codbarras');
+    const barcodeAddButton = document.getElementById('barcode-add-btn');
+    const barcodeListBody = document.getElementById('barcode-list-body');
+    const barcodeListEmpty = document.getElementById('barcode-list-empty');
+    const barcodeAdditionalField = document.getElementById('barcode-additional');
     const detailedDescriptionInput = document.getElementById('descricao');
     const vigenciaInput = document.getElementById('data-vigencia');
     const unitSelect = document.getElementById('unidade');
@@ -1370,6 +1375,7 @@
     let allHierarchicalCategories = []; // Guarda a árvore de categorias
     let allFlatCategories = []; // Lista plana de categorias para consultas rápidas
     let supplierEntries = [];
+    let productBarcodeList = [];
     let allDeposits = [];
     const depositStockMap = new Map();
     let lastSelectedProductUnit = getSelectedProductUnit();
@@ -1883,6 +1889,83 @@
         }
     };
 
+    const normalizeBarcodeValue = (value) => String(value || '').trim();
+
+    const syncLegacyAdditionalBarcodeField = () => {
+        if (!barcodeAdditionalField) return;
+        const additional = productBarcodeList.slice(1);
+        barcodeAdditionalField.value = additional.join('\n');
+    };
+
+    const syncPrimaryBarcodeField = () => {
+        const primaryBarcode = productBarcodeList[0] || '';
+        if (barcodeInput) {
+            barcodeInput.value = primaryBarcode;
+        }
+    };
+
+    const renderProductBarcodeList = () => {
+        if (!barcodeListBody) return;
+        if (barcodeMainInput) barcodeMainInput.value = '';
+        barcodeListBody.innerHTML = '';
+
+        if (!productBarcodeList.length) {
+            if (barcodeListEmpty) barcodeListEmpty.classList.remove('hidden');
+            syncLegacyAdditionalBarcodeField();
+            syncPrimaryBarcodeField();
+            return;
+        }
+
+        if (barcodeListEmpty) barcodeListEmpty.classList.add('hidden');
+        productBarcodeList.forEach((code, index) => {
+            const row = document.createElement('tr');
+
+            const codeCell = document.createElement('td');
+            codeCell.className = 'px-3 py-2 text-xs text-gray-700';
+            codeCell.textContent = code;
+
+            const actionCell = document.createElement('td');
+            actionCell.className = 'px-3 py-2 text-right';
+            const removeButton = document.createElement('button');
+            removeButton.type = 'button';
+            removeButton.className = 'inline-flex items-center gap-1 rounded-md border border-red-200 px-2 py-1 text-[11px] font-semibold text-red-600 transition hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-200';
+            removeButton.innerHTML = '<i class="fas fa-trash"></i> Remover';
+            removeButton.dataset.barcodeIndex = String(index);
+            actionCell.appendChild(removeButton);
+
+            row.append(codeCell, actionCell);
+            barcodeListBody.appendChild(row);
+        });
+
+        syncLegacyAdditionalBarcodeField();
+        syncPrimaryBarcodeField();
+    };
+
+    const setProductBarcodeList = (codes = []) => {
+        const unique = [];
+        const seen = new Set();
+        codes.forEach((rawCode) => {
+            const code = normalizeBarcodeValue(rawCode);
+            if (!code || seen.has(code)) return;
+            seen.add(code);
+            unique.push(code);
+        });
+        productBarcodeList = unique;
+        renderProductBarcodeList();
+    };
+
+    const addBarcodeToProductList = (rawCode) => {
+        const code = normalizeBarcodeValue(rawCode);
+        if (!code) return;
+        if (productBarcodeList.includes(code)) {
+            showToastMessage('Este código de barras já foi adicionado.', 'warning');
+            return;
+        }
+        productBarcodeList.push(code);
+        renderProductBarcodeList();
+        markProductAsModified();
+    };
+
     const buildProductUpdatePayload = (options = {}) => {
         const { ignoreFractionalErrors = false } = options;
         if (!form) {
@@ -1896,10 +1979,9 @@
         };
         const productName = (formData.get('nome') || '').trim();
 
-        const additionalBarcodesRaw = (formData.get('barcode-additional') || '')
-            .split('\n')
-            .map((code) => code.trim())
-            .filter(Boolean);
+        const allBarcodes = Array.isArray(productBarcodeList) ? [...productBarcodeList] : [];
+        const primaryBarcode = allBarcodes[0] || '';
+        const additionalBarcodesRaw = allBarcodes.slice(1);
 
         const depositPayload = [];
         depositStockMap.forEach((entry, depositId) => {
@@ -1945,7 +2027,7 @@
         const updateData = {
             nome: productName,
             cod: (formData.get('cod') || '').trim(),
-            codbarras: (formData.get('codbarras') || '').trim(),
+            codbarras: primaryBarcode || (formData.get('codbarras') || '').trim(),
             descricao: detailedDescriptionInput ? detailedDescriptionInput.value : formData.get('descricao'),
             marca: formData.get('marca'),
             unidade: formData.get('unidade'),
@@ -5602,6 +5684,7 @@
         if (skuInput) skuInput.value = '';
         if (nameInput) nameInput.value = '';
         if (barcodeInput) barcodeInput.value = '';
+        setProductBarcodeList([]);
         if (detailedDescriptionInput) detailedDescriptionInput.value = '';
         if (imageUploadInput) imageUploadInput.value = '';
         const promoPriceInput = form?.querySelector('#promo-preco');
@@ -5881,9 +5964,10 @@
         renderSupplierEntries();
         resetSupplierForm();
         applyDepositsFromProduct(product);
-        if (form.querySelector('#barcode-additional')) {
-            form.querySelector('#barcode-additional').value = Array.isArray(product.codigosComplementares) ? product.codigosComplementares.join('\n') : '';
-        }
+        setProductBarcodeList([
+            product.codbarras,
+            ...(Array.isArray(product.codigosComplementares) ? product.codigosComplementares : []),
+        ]);
         const custoNumber = Number(product.custo);
         const vendaNumber = Number(product.venda);
         const promoPriceInput = form.querySelector('#promo-preco');
@@ -5971,10 +6055,6 @@
         // Apresentação
         const apInput = document.getElementById('spec-apresentacao');
         if (apInput) apInput.value = espec.apresentacao || '';
-        // Código de barras (somente visual)
-        const eanInput = document.getElementById('spec-codbarras');
-        if (eanInput) eanInput.value = product.codbarras || '';
-
         updateMarkupFromValues();
     };
 
@@ -6351,6 +6431,31 @@
 
     skuInput?.addEventListener('blur', handleDuplicateIdentifier('cod'));
     barcodeInput?.addEventListener('blur', handleDuplicateIdentifier('codbarras'));
+
+    barcodeAddButton?.addEventListener('click', () => {
+        addBarcodeToProductList(barcodeMainInput?.value || '');
+        if (barcodeMainInput) {
+            barcodeMainInput.value = '';
+            barcodeMainInput.focus();
+        }
+    });
+    barcodeMainInput?.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        addBarcodeToProductList(barcodeMainInput?.value || '');
+        if (barcodeMainInput) {
+            barcodeMainInput.value = '';
+        }
+    });
+    barcodeListBody?.addEventListener('click', (event) => {
+        const target = event.target instanceof HTMLElement ? event.target.closest('button[data-barcode-index]') : null;
+        if (!target) return;
+        const index = Number(target.dataset.barcodeIndex);
+        if (!Number.isInteger(index) || index < 0 || index >= productBarcodeList.length) return;
+        productBarcodeList.splice(index, 1);
+        renderProductBarcodeList();
+        markProductAsModified();
+    });
 
     clearFormButton?.addEventListener('click', () => {
         productId = null;

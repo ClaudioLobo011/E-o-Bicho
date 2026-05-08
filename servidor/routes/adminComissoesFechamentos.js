@@ -984,10 +984,8 @@ const fetchServicoRecords = async ({
 
   const serviceQuery = {};
   if (Object.keys(serviceDateMatch).length) {
-    serviceQuery.$or = [
-      { scheduledAt: serviceDateMatch },
-      { createdAt: serviceDateMatch },
-    ];
+    // Comissão de serviços deve seguir a data/hora real do atendimento.
+    serviceQuery.scheduledAt = serviceDateMatch;
   }
   if (profissionalId) {
     serviceQuery.$and = (serviceQuery.$and || []).concat({
@@ -1048,7 +1046,7 @@ const buildServiceCommissionRows = ({
       appointment?.petNome ||
       appointment?.nomePet ||
       'Pet';
-    const baseDateRaw = appointment?.scheduledAt || appointment?.createdAt || null;
+    const baseDateRaw = appointment?.scheduledAt || null;
     const baseDate = baseDateRaw ? new Date(baseDateRaw) : null;
     if (baseDate && !Number.isNaN(baseDate.getTime())) {
       if (periodStart && baseDate < periodStart) return;
@@ -2055,10 +2053,7 @@ router.get(
       }
 
       const serviceQuery = {
-        $or: [
-          { scheduledAt: { $gte: periodStart, $lte: periodEnd } },
-          { createdAt: { $gte: periodStart, $lte: periodEnd } },
-        ],
+        scheduledAt: { $gte: periodStart, $lte: periodEnd },
         $and: [
           {
             $or: [
