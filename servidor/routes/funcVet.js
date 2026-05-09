@@ -344,6 +344,7 @@ function formatWaitingAppointment(doc) {
   const services = servicesSource.map((item) => {
     const serviceDoc = item && typeof item.servico === 'object' ? item.servico : null;
     const serviceId = normalizeObjectId(serviceDoc?._id || item?.servico);
+    const serviceItemId = normalizeObjectId(item?._id || item?.itemId || item?.id);
     const valor = Number(
       item?.valor ||
         (serviceDoc && typeof serviceDoc.valor === 'number' ? serviceDoc.valor : 0),
@@ -351,12 +352,25 @@ function formatWaitingAppointment(doc) {
     const categorias = Array.isArray(serviceDoc?.categorias)
       ? serviceDoc.categorias.filter(Boolean)
       : [];
+    const itemProfessionalDoc =
+      item && item.profissional && typeof item.profissional === 'object' ? item.profissional : null;
+    const itemProfessionalId = normalizeObjectId(itemProfessionalDoc?._id || item?.profissional);
+    const itemProfessionalName = itemProfessionalDoc
+      ? (itemProfessionalDoc.nomeCompleto || itemProfessionalDoc.nomeContato || itemProfessionalDoc.razaoSocial || '')
+      : '';
     return {
       _id: serviceId || null,
+      itemId: serviceItemId || null,
       nome: serviceDoc && serviceDoc.nome ? String(serviceDoc.nome) : '—',
       valor,
+      status: String(item?.status || doc?.status || '').trim().toLowerCase() || 'agendado',
+      data: item?.data ? String(item.data).trim() : '',
+      hora: item?.hora ? String(item.hora).trim() : '',
+      observacao: item?.observacao ? String(item.observacao).trim() : '',
       categorias,
       tiposPermitidos: extractAllowedStaffTypes(serviceDoc || {}),
+      profissionalId: itemProfessionalId || null,
+      profissionalNome: itemProfessionalName || '',
     };
   });
 
@@ -479,7 +493,10 @@ function normalizeForCompare(value) {
 function isVetCategory(value) {
   const normalized = normalizeForCompare(value);
   if (!normalized) return false;
-  return normalized.includes('veterinario') || normalized.includes('exame') || normalized.includes('vacina');
+  return normalized.includes('veterinario')
+    || normalized.includes('exame')
+    || normalized.includes('vacina')
+    || normalized.includes('internacao');
 }
 
 function isVetService(serviceDoc = {}) {
@@ -2798,27 +2815,42 @@ router.get('/vet/agendamentos/em-espera', authMiddleware, requireStaff, async (r
 
     const role = String(req.user?.role || '').toLowerCase();
     const isAdminMaster = role === 'admin_master';
+    const currentUserId = normalizeObjectId(req.user?.id || req.user?._id);
+    const requestedProfessionalId = normalizeObjectId(req.query.profissionalId);
+    const effectiveProfessionalId = isAdminMaster
+      ? (requestedProfessionalId || null)
+      : (currentUserId || null);
 
-    let profissionalId = null;
-    if (isAdminMaster) {
-      profissionalId = normalizeObjectId(req.query.profissionalId);
-    } else {
-      profissionalId = normalizeObjectId(req.user?.id || req.user?._id || req.query.profissionalId);
-    }
-
-    const filter = { status: 'em_espera' };
+    const filter = {};
     if (hasSelection) {
       filter.cliente = clienteId;
       filter.pet = petId;
     }
 
-    if (profissionalId) {
-      filter.profissional = profissionalId;
-    } else if (!isAdminMaster) {
-      return res.json([]);
+    const waitingStatusRegex = /^em[\s_-]*espera$/i;
+    const waitingStatusClause = {
+      $or: [
+        { status: 'em_espera' },
+        { status: waitingStatusRegex },
+        { itens: { $elemMatch: { status: 'em_espera' } } },
+        { itens: { $elemMatch: { status: waitingStatusRegex } } },
+      ],
+    };
+
+    filter.$and = [waitingStatusClause];
+
+    if (effectiveProfessionalId) {
+      filter.$and.push({
+        itens: {
+          $elemMatch: {
+            profissional: effectiveProfessionalId,
+            $or: [{ status: 'em_espera' }, { status: waitingStatusRegex }],
+          },
+        },
+      });
     }
 
-    const docs = await Appointment.find(filter)
+    let docs = await Appointment.find(filter)
       .select('_id store cliente pet itens servico profissional scheduledAt valor status observacoes codigoVenda')
       .populate('cliente', 'nomeCompleto nomeContato razaoSocial email')
       .populate('pet', 'nome')
@@ -2833,10 +2865,78 @@ router.get('/vet/agendamentos/em-espera', authMiddleware, requireStaff, async (r
         select: 'nome categorias grupo tiposPermitidos valor',
         populate: { path: 'grupo', select: 'tiposPermitidos' },
       })
+      .populate({
+        path: 'itens.profissional',
+        select: 'nomeCompleto nomeContato razaoSocial',
+      })
       .sort({ scheduledAt: 1 })
       .lean();
 
+    const debugTag = `[vet-espera-debug] user=${req.user?.id || 'unknown'}`;
+    console.log(`${debugTag} query`, {
+      hasSelection,
+      clienteId: clienteId || null,
+      petId: petId || null,
+      role,
+      effectiveProfessionalId: effectiveProfessionalId || null,
+      filter,
+      rawDocs: Array.isArray(docs) ? docs.length : 0,
+    });
+
+    if (!isAdminMaster) {
+      const beforeFilterCount = Array.isArray(docs) ? docs.length : 0;
+      let droppedByProfessional = 0;
+      let droppedByStatus = 0;
+      let droppedByCategory = 0;
+      docs = docs.filter((doc) => {
+        const services = Array.isArray(doc?.itens) ? doc.itens : [];
+        return services.some((item) => {
+          if (effectiveProfessionalId) {
+            const itemProfessionalId = normalizeObjectId(
+              item?.profissional?._id || item?.profissional
+            );
+            if (!itemProfessionalId || itemProfessionalId !== effectiveProfessionalId) {
+              droppedByProfessional += 1;
+              return false;
+            }
+          }
+          const itemStatus = String(item?.status || '').trim().toLowerCase();
+          const isWaitingStatus = itemStatus === 'em_espera' || /^em[\s_-]*espera$/i.test(itemStatus);
+          if (!isWaitingStatus) {
+            droppedByStatus += 1;
+            return false;
+          }
+          const serviceDoc = item && typeof item.servico === 'object' ? item.servico : null;
+          const isVet = isVetService(serviceDoc || {});
+          if (!isVet) droppedByCategory += 1;
+          return isVet;
+        });
+      });
+      console.log(`${debugTag} post-filter`, {
+        beforeFilterCount,
+        afterFilterCount: Array.isArray(docs) ? docs.length : 0,
+        droppedByProfessional,
+        droppedByStatus,
+        droppedByCategory,
+      });
+    }
+
     const payload = Array.isArray(docs) ? docs.map(formatWaitingAppointment).filter(Boolean) : [];
+    console.log(`${debugTag} payload`, {
+      payloadCount: payload.length,
+      sample: payload.slice(0, 3).map((entry) => ({
+        appointmentId: entry?.appointmentId || null,
+        status: entry?.status || null,
+        itens: Array.isArray(entry?.servicos)
+          ? entry.servicos.map((item) => ({
+              nome: item?.nome || null,
+              status: item?.status || null,
+              categorias: item?.categorias || [],
+              profissionalId: item?.profissionalId || null,
+            }))
+          : [],
+      })),
+    });
     return res.json(payload);
   } catch (error) {
     console.error('GET /func/vet/agendamentos/em-espera', error);

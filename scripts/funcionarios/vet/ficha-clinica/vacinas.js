@@ -1,4 +1,4 @@
-// Vacina modal and state handling for the Vet ficha clínica
+﻿// Vacina modal and state handling for the Vet ficha clínica
 import {
   state,
   api,
@@ -14,6 +14,7 @@ import {
   getAgendaStoreId,
   getPetPriceCriteria,
   persistAgendaContext,
+  isAgendaContextPaid,
   isFinalizadoSelection,
   confirmWithModal,
 } from './core.js';
@@ -637,7 +638,7 @@ export function openVacinaModal(options = {}) {
   }
 
   const modal = ensureVacinaModal();
-  const { vacina = null } = options || {};
+  const { vacina = null, service = null } = options || {};
 
   if (modal.form) {
     try { modal.form.reset(); } catch { /* ignore */ }
@@ -648,6 +649,21 @@ export function openVacinaModal(options = {}) {
   setVacinaModalMode('create');
   if (vacina && typeof vacina === 'object') {
     setVacinaModalMode('edit', vacina);
+  } else if (service && typeof service === 'object') {
+    const serviceId = normalizeId(service._id || service.id || service.servicoId || service.servico);
+    const serviceNome = pickFirst(service.nome, service.descricao, service.label);
+    if (serviceId && serviceNome) {
+      vacinaModal.selectedService = {
+        _id: serviceId,
+        nome: serviceNome,
+        valor: Number(service.valor || 0),
+      };
+      if (vacinaModal.fields?.servico) {
+        vacinaModal.fields.servico.value = serviceNome;
+      }
+      hideVacinaSuggestions();
+      updateVacinaPriceSummary();
+    }
   }
 
   vacinaModal.overlay.classList.remove('hidden');
@@ -959,20 +975,28 @@ async function handleVacinaSubmit() {
   setVacinaModalSubmitting(true);
 
   try {
-    const response = await api(`/func/agendamentos/${appointmentId}`, {
-      method: 'PUT',
-      body: JSON.stringify({ servicos: payloadServicos }),
-    });
-    const data = await response.json().catch(() => (response.ok ? {} : {}));
-    if (!response.ok) {
-      const message = typeof data?.message === 'string' ? data.message : 'Erro ao atualizar os serviços do agendamento.';
-      throw new Error(message);
-    }
+    const agendaPaid = isAgendaContextPaid(state.agendaContext);
+    if (!agendaPaid) {
+      const response = await api(`/func/agendamentos/${appointmentId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ servicos: payloadServicos }),
+      });
+      const data = await response.json().catch(() => (response.ok ? {} : {}));
+      if (!response.ok) {
+        const message = typeof data?.message === 'string' ? data.message : 'Erro ao atualizar os serviços do agendamento.';
+        const normalizedMessage = normalizeForCompare(message).replace(/[\s_-]+/g, '');
+        const isPaidConflict = response.status === 403
+          && (normalizedMessage.includes('agendamentojafaturado') || normalizedMessage.includes('faturado'));
+        if (!isPaidConflict) {
+          throw new Error(message);
+        }
+      }
 
-    if (!state.agendaContext) state.agendaContext = {};
-    if (Array.isArray(data?.servicos)) {
-      state.agendaContext.servicos = data.servicos;
-    } else if (isEditing) {
+      if (response.ok) {
+        if (!state.agendaContext) state.agendaContext = {};
+        if (Array.isArray(data?.servicos)) {
+          state.agendaContext.servicos = data.servicos;
+        } else if (isEditing) {
       const targetServiceId = normalizeId(originalRecord?.servicoId || originalRecord?.servico || normalizedServiceId);
       const rawTotal = Number(originalRecord?.valorTotal);
       const fallbackTotal = Number(originalRecord?.valorUnitario || 0) * (Number(originalRecord?.quantidade || 0) || 0);
@@ -992,15 +1016,17 @@ async function handleVacinaSubmit() {
       if (!replacedInContext) {
         nextServices.push({ servicoId: normalizedServiceId, valor: valorTotal });
       }
-      state.agendaContext.servicos = nextServices;
+          state.agendaContext.servicos = nextServices;
+        }
+        if (typeof data?.valor === 'number') {
+          state.agendaContext.valor = Number(data.valor);
+        }
+        if (Array.isArray(state.agendaContext?.servicos)) {
+          state.agendaContext.totalServicos = state.agendaContext.servicos.length;
+        }
+        persistAgendaContext(state.agendaContext);
+      }
     }
-    if (typeof data?.valor === 'number') {
-      state.agendaContext.valor = Number(data.valor);
-    }
-    if (Array.isArray(state.agendaContext?.servicos)) {
-      state.agendaContext.totalServicos = state.agendaContext.servicos.length;
-    }
-    persistAgendaContext(state.agendaContext);
 
     const previousList = Array.isArray(state.vacinas) ? [...state.vacinas] : [];
     if (isEditing) {
@@ -1136,7 +1162,7 @@ export async function deleteVacina(vacina, options = {}) {
     removed = true;
   });
 
-  if (!removed) {
+  if (!removed && !isAgendaContextPaid(state.agendaContext)) {
     const message = 'Não foi possível localizar a vacina no agendamento.';
     if (suppressNotify) {
       throw new Error(message);
@@ -1146,45 +1172,48 @@ export async function deleteVacina(vacina, options = {}) {
   }
 
   try {
-    const response = await api(`/func/agendamentos/${appointmentId}`, {
-      method: 'PUT',
-      body: JSON.stringify({ servicos: remainingServices }),
-    });
-
-    let data = null;
-    if (response.status !== 204) {
-      data = await response.json().catch(() => (response.ok ? {} : {}));
-    }
-
-    if (!response.ok) {
-      const message = typeof data?.message === 'string' ? data.message : 'Erro ao atualizar os serviços do agendamento.';
-      throw new Error(message);
-    }
-
-    if (!state.agendaContext) state.agendaContext = {};
-    if (Array.isArray(data?.servicos)) {
-      state.agendaContext.servicos = data.servicos;
-    } else {
-      let removedFromContext = false;
-      state.agendaContext.servicos = existingServices.filter((svc) => {
-        if (removedFromContext) return true;
-        const sid = normalizeId(svc?._id || svc?.id || svc?.servicoId || svc?.servico);
-        if (!sid || sid !== servicoId) return true;
-        const valorItem = Number(svc?.valor || 0);
-        if (targetValor != null && Math.abs(valorItem - targetValor) > 0.01) {
-          return true;
-        }
-        removedFromContext = true;
-        return false;
+    const agendaPaid = isAgendaContextPaid(state.agendaContext);
+    if (!agendaPaid) {
+      const response = await api(`/func/agendamentos/${appointmentId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ servicos: remainingServices }),
       });
+
+      let data = null;
+      if (response.status !== 204) {
+        data = await response.json().catch(() => (response.ok ? {} : {}));
+      }
+
+      if (!response.ok) {
+        const message = typeof data?.message === 'string' ? data.message : 'Erro ao atualizar os serviços do agendamento.';
+        throw new Error(message);
+      }
+
+      if (!state.agendaContext) state.agendaContext = {};
+      if (Array.isArray(data?.servicos)) {
+        state.agendaContext.servicos = data.servicos;
+      } else {
+        let removedFromContext = false;
+        state.agendaContext.servicos = existingServices.filter((svc) => {
+          if (removedFromContext) return true;
+          const sid = normalizeId(svc?._id || svc?.id || svc?.servicoId || svc?.servico);
+          if (!sid || sid !== servicoId) return true;
+          const valorItem = Number(svc?.valor || 0);
+          if (targetValor != null && Math.abs(valorItem - targetValor) > 0.01) {
+            return true;
+          }
+          removedFromContext = true;
+          return false;
+        });
+      }
+      if (typeof data?.valor === 'number') {
+        state.agendaContext.valor = Number(data.valor);
+      }
+      if (Array.isArray(state.agendaContext?.servicos)) {
+        state.agendaContext.totalServicos = state.agendaContext.servicos.length;
+      }
+      persistAgendaContext(state.agendaContext);
     }
-    if (typeof data?.valor === 'number') {
-      state.agendaContext.valor = Number(data.valor);
-    }
-    if (Array.isArray(state.agendaContext?.servicos)) {
-      state.agendaContext.totalServicos = state.agendaContext.servicos.length;
-    }
-    persistAgendaContext(state.agendaContext);
 
     const nextVacinas = (Array.isArray(state.vacinas) ? state.vacinas : []).filter((item) => {
       const itemId = normalizeId(item?.id || item?._id);

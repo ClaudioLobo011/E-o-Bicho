@@ -191,10 +191,46 @@ const collectProductEntrySummary = (items = []) => {
 const generatePayableSequentialCode = async (session) => {
   const now = new Date();
   const year = now.getUTCFullYear();
-  const yearStart = new Date(Date.UTC(year, 0, 1));
-  const filter = { createdAt: { $gte: yearStart } };
-  const count = await AccountPayable.countDocuments(filter).session(session);
-  const sequential = String(count + 1).padStart(5, '0');
+  const prefix = `CP-${year}-`;
+  const prefixRegex = new RegExp(`^${prefix}(\\d{5,})$`);
+  const latest = await AccountPayable.findOne({
+    code: { $regex: `^${prefix}` },
+  })
+    .select('code')
+    .sort({ createdAt: -1, _id: -1 })
+    .session(session)
+    .lean();
+
+  let nextSequence = 1;
+  const latestCode = cleanString(latest?.code);
+  if (latestCode) {
+    const match = latestCode.match(prefixRegex);
+    if (match && match[1]) {
+      const parsed = Number.parseInt(match[1], 10);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        nextSequence = parsed + 1;
+      }
+    }
+  }
+
+  if (nextSequence === 1) {
+    const allCodes = await AccountPayable.find({
+      code: { $regex: `^${prefix}` },
+    })
+      .select('code')
+      .session(session)
+      .lean();
+    const highest = allCodes.reduce((max, doc) => {
+      const value = cleanString(doc?.code);
+      const match = value.match(prefixRegex);
+      if (!match || !match[1]) return max;
+      const parsed = Number.parseInt(match[1], 10);
+      return Number.isFinite(parsed) && parsed > max ? parsed : max;
+    }, 0);
+    nextSequence = highest + 1;
+  }
+
+  const sequential = String(nextSequence).padStart(5, '0');
   return `CP-${year}-${sequential}`;
 };
 
@@ -1050,29 +1086,44 @@ router.post('/:id/approve', async (req, res) => {
           };
         });
 
-        const payablePayload = {
-          code: await generatePayableSequentialCode(session),
-          company: companyObjectId,
-          partyType: 'Supplier',
-          party: supplier._id,
-          installmentsCount: payableInstallments.length,
-          issueDate,
-          dueDate,
-          totalValue: roundedTotal,
-          bankAccount: payableInstallments[0].bankAccount,
-          accountingAccount: accountingAccount._id,
-          paymentMethod: undefined,
-          carrier: '',
-          bankDocumentNumber: '',
-          interestFeeValue: 0,
-          monthlyInterestPercent: 0,
-          interestPercent: 0,
-          notes: '',
-          installments: payableInstallments,
-        };
-
-        const createdPayable = await AccountPayable.create([payablePayload], { session });
-        accountPayableRecord = createdPayable[0].toObject();
+        let createdPayable = null;
+        let createAttempts = 0;
+        while (!createdPayable && createAttempts < 5) {
+          createAttempts += 1;
+          const payablePayload = {
+            code: await generatePayableSequentialCode(session),
+            company: companyObjectId,
+            partyType: 'Supplier',
+            party: supplier._id,
+            installmentsCount: payableInstallments.length,
+            issueDate,
+            dueDate,
+            totalValue: roundedTotal,
+            bankAccount: payableInstallments[0].bankAccount,
+            accountingAccount: accountingAccount._id,
+            paymentMethod: undefined,
+            carrier: '',
+            bankDocumentNumber: '',
+            interestFeeValue: 0,
+            monthlyInterestPercent: 0,
+            interestPercent: 0,
+            notes: '',
+            installments: payableInstallments,
+          };
+          try {
+            const created = await AccountPayable.create([payablePayload], { session });
+            createdPayable = created[0];
+          } catch (createError) {
+            const isDuplicateCode =
+              createError?.code === 11000 &&
+              (createError?.keyPattern?.code ||
+                String(createError?.message || '').toLowerCase().includes('code_1'));
+            if (!isDuplicateCode || createAttempts >= 5) {
+              throw createError;
+            }
+          }
+        }
+        accountPayableRecord = createdPayable ? createdPayable.toObject() : null;
       }
 
       draft.status = 'approved';

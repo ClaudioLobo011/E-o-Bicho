@@ -829,7 +829,18 @@ function expandAppointmentsForCards(appointments) {
         : (appt.profissionalId ? String(appt.profissionalId) : AGENDA_NO_PREFERENCE_PROF_ID);
       const horaValue = extractServiceHourValue(svc, appt);
       const dataValue = extractServiceDateValue(svc, appt);
-      const key = `${profIdRaw || '__sem_prof__'}|${dataValue || '__sem_data__'}|${horaValue || '__sem_hora__'}`;
+      const svcStatusMeta = statusMeta(svc?.status || svc?.situacao || appt.status || 'agendado');
+      const svcStatus = svcStatusMeta.key || 'agendado';
+      const svcObs = typeof svc?.observacao === 'string'
+        ? svc.observacao.trim()
+        : (typeof svc?.observacoes === 'string' ? svc.observacoes.trim() : '');
+      const key = [
+        profIdRaw || '__sem_prof__',
+        dataValue || '__sem_data__',
+        horaValue || '__sem_hora__',
+        svcStatus || '__sem_status__',
+        svcObs || '__sem_obs__',
+      ].join('|');
       if (!groups.has(key)) {
         groups.set(key, {
           profissionalId: profIdRaw || null,
@@ -854,8 +865,6 @@ function expandAppointmentsForCards(appointments) {
       if (normalizedSvcItemId) bucket.itemIds.push(normalizedSvcItemId);
       if (dataValue && !bucket.data) bucket.data = dataValue;
       if (horaValue && !bucket.hora) bucket.hora = horaValue;
-      const svcStatusMeta = statusMeta(svc?.status || svc?.situacao || appt.status || 'agendado');
-      const svcStatus = svcStatusMeta.key;
       bucket.statusCounts.set(svcStatus, (bucket.statusCounts.get(svcStatus) || 0) + 1);
       const svcName = typeof svc?.nome === 'string' && svc.nome.trim() ? svc.nome.trim() : (appt.servico || '—');
       const itemId = normalizeObjectId([

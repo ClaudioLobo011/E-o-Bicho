@@ -259,11 +259,17 @@ function isStartAtendimentoServiceCandidate(service) {
   if (service?.grupo?.nome) categories.push(service.grupo.nome);
   const hasCategory = categories.some((cat) => {
     const normalized = normalizeForCompare(cat);
-    return normalized.includes('vacina') || normalized.includes('veterinario') || normalized.includes('exame');
+    return normalized.includes('vacina')
+      || normalized.includes('veterinario')
+      || normalized.includes('exame')
+      || normalized.includes('internacao');
   });
   if (hasCategory) return true;
   const nomeNorm = normalizeForCompare(service.nome || service.descricao || '');
-  return nomeNorm.includes('vacina') || nomeNorm.includes('veterin') || nomeNorm.includes('exame');
+  return nomeNorm.includes('vacina')
+    || nomeNorm.includes('veterin')
+    || nomeNorm.includes('exame')
+    || nomeNorm.includes('internacao');
 }
 
 function setIniciarAtendimentoSubmitting(isSubmitting) {
@@ -513,7 +519,7 @@ function ensureIniciarAtendimentoModal() {
 
   const serviceInput = document.createElement('input');
   serviceInput.type = 'text';
-  serviceInput.placeholder = 'Busque por vacina, exame ou consulta veterinária';
+  serviceInput.placeholder = 'Busque por internação, vacina, exame ou serviço veterinário';
   serviceInput.autocomplete = 'off';
   serviceInput.className = 'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300';
   serviceWrap.appendChild(serviceInput);
@@ -963,9 +969,25 @@ export async function colocarAtendimentoEmEspera() {
   setColocarEmEsperaProcessing(true);
 
   try {
+    let serviceItemIds = Array.isArray(state.agendaContext?.activeServiceItemIds)
+      ? state.agendaContext.activeServiceItemIds.map((id) => normalizeId(id)).filter(Boolean)
+      : [];
+    if (!serviceItemIds.length) {
+      const contextServices = Array.isArray(state.agendaContext?.servicos) ? state.agendaContext.servicos : [];
+      const activeByStatus = contextServices
+        .filter((svc) => String(normalizeForCompare(svc?.status || '')).replace(/[\s-]+/g, '_') === 'em_atendimento')
+        .map((svc) => normalizeId(svc?.itemId || svc?._itemId || svc?.agendaItemId || svc?.item))
+        .filter(Boolean);
+      if (activeByStatus.length) {
+        serviceItemIds = [...new Set(activeByStatus)];
+      }
+    }
     const response = await api(`/func/agendamentos/${appointmentId}`, {
       method: 'PUT',
-      body: JSON.stringify({ status: 'em_espera' }),
+      body: JSON.stringify({
+        status: 'em_espera',
+        ...(serviceItemIds.length ? { serviceItemIds } : {}),
+      }),
     });
     const data = await response.json().catch(() => (response.ok ? {} : {}));
     if (!response.ok) {
@@ -980,11 +1002,19 @@ export async function colocarAtendimentoEmEspera() {
     }
 
     state.agendaContext.status = 'em_espera';
+    state.agendaContext.activeServiceItemIds = [];
 
     if (Array.isArray(data?.servicos)) {
       state.agendaContext.servicos = data.servicos;
       state.agendaContext.totalServicos = data.servicos.length;
     } else if (Array.isArray(state.agendaContext.servicos)) {
+      const targetItemIds = new Set(serviceItemIds);
+      state.agendaContext.servicos = state.agendaContext.servicos.map((svc) => {
+        const itemId = normalizeId(svc?.itemId || svc?._itemId || svc?.agendaItemId || svc?.item);
+        const shouldMoveToWaiting = !targetItemIds.size || (itemId && targetItemIds.has(itemId));
+        if (!shouldMoveToWaiting) return svc;
+        return { ...svc, status: 'em_espera' };
+      });
       state.agendaContext.totalServicos = state.agendaContext.servicos.length;
     } else if (state.agendaContext) {
       delete state.agendaContext.totalServicos;
@@ -1004,6 +1034,9 @@ export async function colocarAtendimentoEmEspera() {
     }
 
     persistAgendaContext(state.agendaContext);
+    state.agendaContext = null;
+    persistAgendaContext(null);
+    setActiveMainTab('historico');
 
     await loadWaitingAppointments({ force: true });
     updateConsultaAgendaCard();
@@ -1064,9 +1097,15 @@ export async function finalizarAtendimento() {
   }
 
   try {
+    const serviceItemIds = Array.isArray(state.agendaContext?.activeServiceItemIds)
+      ? state.agendaContext.activeServiceItemIds.map((id) => normalizeId(id)).filter(Boolean)
+      : [];
     const response = await api(`/func/agendamentos/${appointmentId}`, {
       method: 'PUT',
-      body: JSON.stringify({ status: 'finalizado' }),
+      body: JSON.stringify({
+        status: 'finalizado',
+        ...(serviceItemIds.length ? { serviceItemIds } : {}),
+      }),
     });
     const data = await response.json().catch(() => (response.ok ? {} : {}));
     if (!response.ok) {

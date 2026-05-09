@@ -15,6 +15,7 @@ import {
   getAgendaStoreId,
   getPetPriceCriteria,
   persistAgendaContext,
+  isAgendaContextPaid,
   getFileExtension,
   ANEXO_ALLOWED_EXTENSIONS,
   ANEXO_ALLOWED_MIME_TYPES,
@@ -1806,27 +1807,37 @@ async function handleExameSubmit() {
 
     let anexosResult = { arquivos: [], anexoId: null, observacao: '' };
 
-    const response = await api(`/func/agendamentos/${appointmentId}`, {
-      method: 'PUT',
-      body: JSON.stringify({ servicos: payloadServicos }),
-    });
-    const data = await response.json().catch(() => (response.ok ? {} : {}));
-    if (!response.ok) {
-      const message = typeof data?.message === 'string' ? data.message : 'Erro ao atualizar os serviços do agendamento.';
-      throw new Error(message);
-    }
+    const agendaPaid = isAgendaContextPaid(state.agendaContext);
+    if (!agendaPaid) {
+      const response = await api(`/func/agendamentos/${appointmentId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ servicos: payloadServicos }),
+      });
+      const data = await response.json().catch(() => (response.ok ? {} : {}));
+      if (!response.ok) {
+        const message = typeof data?.message === 'string' ? data.message : 'Erro ao atualizar os serviços do agendamento.';
+        const normalizedMessage = normalizeForCompare(message).replace(/[\s_-]+/g, '');
+        const isPaidConflict = response.status === 403
+          && (normalizedMessage.includes('agendamentojafaturado') || normalizedMessage.includes('faturado'));
+        if (!isPaidConflict) {
+          throw new Error(message);
+        }
+      }
 
-    if (!state.agendaContext) state.agendaContext = {};
-    if (Array.isArray(data?.servicos)) {
-      state.agendaContext.servicos = data.servicos;
+      if (response.ok) {
+        if (!state.agendaContext) state.agendaContext = {};
+        if (Array.isArray(data?.servicos)) {
+          state.agendaContext.servicos = data.servicos;
+        }
+        if (typeof data?.valor === 'number') {
+          state.agendaContext.valor = Number(data.valor);
+        }
+        if (Array.isArray(state.agendaContext?.servicos)) {
+          state.agendaContext.totalServicos = state.agendaContext.servicos.length;
+        }
+        persistAgendaContext(state.agendaContext);
+      }
     }
-    if (typeof data?.valor === 'number') {
-      state.agendaContext.valor = Number(data.valor);
-    }
-    if (Array.isArray(state.agendaContext?.servicos)) {
-      state.agendaContext.totalServicos = state.agendaContext.servicos.length;
-    }
-    persistAgendaContext(state.agendaContext);
 
     if (attachmentsEntries.length) {
       try {
@@ -1946,7 +1957,7 @@ export async function deleteExame(exame, options = {}) {
     }
   });
 
-  if (!removed) {
+  if (!removed && !isAgendaContextPaid(state.agendaContext)) {
     const message = 'Não foi possível localizar o serviço do exame no agendamento.';
     if (suppressNotify) {
       throw new Error(message);
@@ -1959,6 +1970,8 @@ export async function deleteExame(exame, options = {}) {
   updateConsultaAgendaCard();
 
   try {
+    const agendaPaid = isAgendaContextPaid(state.agendaContext);
+    if (!agendaPaid) {
     const response = await api(`/func/agendamentos/${appointmentId}`, {
       method: 'PUT',
       body: JSON.stringify({ servicos: remainingServices }),
@@ -1991,6 +2004,7 @@ export async function deleteExame(exame, options = {}) {
       state.agendaContext.totalServicos = state.agendaContext.servicos.length;
     }
     persistAgendaContext(state.agendaContext);
+    }
 
     const nextExames = (Array.isArray(state.exames) ? state.exames : []).filter((item) => {
       const itemId = normalizeId(item?.id || item?._id);
@@ -2144,7 +2158,7 @@ export function openExameModal(options = {}) {
     return;
   }
 
-  const { exame = null } = options || {};
+  const { exame = null, service = null } = options || {};
   const modal = ensureExameModal();
   setExameModalSubmitting(false);
 
@@ -2226,6 +2240,22 @@ export function openExameModal(options = {}) {
     }
 
     focusField = 'observacao';
+  } else if (service && typeof service === 'object') {
+    const serviceId = normalizeId(service._id || service.id || service.servicoId || service.servico);
+    const serviceNome = pickFirst(service.nome, service.descricao, service.label);
+    const serviceValor = Number(service.valor || 0);
+    if (serviceId && serviceNome) {
+      modal.selectedService = {
+        _id: serviceId,
+        nome: serviceNome,
+        valor: Number.isFinite(serviceValor) ? serviceValor : 0,
+      };
+      if (modal.fields?.servico) {
+        modal.fields.servico.value = serviceNome;
+      }
+      updateExamePriceDisplay();
+      focusField = 'observacao';
+    }
   }
 
   updateExameAttachmentsGrid();

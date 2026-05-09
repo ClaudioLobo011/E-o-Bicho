@@ -31,6 +31,24 @@ import { updateCardDisplay, updatePageVisibility, setCardMode } from './ui.js';
 import { loadHistoricoForSelection, setActiveMainTab } from './historico.js';
 import { updateFichaRealTimeSelection } from './real-time.js';
 
+function isAgendaContextActive(context = state.agendaContext) {
+  if (!context || typeof context !== 'object') return false;
+  const normalizeStatus = (value) => String(value || '').toLowerCase().replace(/[\s-]+/g, '_');
+  if (normalizeStatus(context.status) === 'em_atendimento') return true;
+  if (normalizeStatus(context.status) === 'em_espera') return false;
+  if (normalizeStatus(context.status) === 'finalizado') return false;
+  const activeIds = Array.isArray(context.activeServiceItemIds)
+    ? context.activeServiceItemIds.map((id) => normalizeId(id)).filter(Boolean)
+    : [];
+  if (activeIds.length) return true;
+  const services = Array.isArray(context.servicos) ? context.servicos : [];
+  return services.some((svc) => normalizeStatus(svc?.status) === 'em_atendimento');
+}
+
+function shouldPreserveActiveContext(context = state.agendaContext) {
+  return !!(isAgendaContextActive(context) && normalizeId(context?.appointmentId));
+}
+
 function hideSugestoes() {
   if (els.cliSug) {
     els.cliSug.innerHTML = '';
@@ -243,7 +261,11 @@ export async function onSelectCliente(cli, opts = {}) {
   if (state.agendaContext) {
     const contextTutorId = normalizeId(state.agendaContext.tutorId);
     if (!clienteId || !contextTutorId || contextTutorId !== clienteId) {
+      if (shouldPreserveActiveContext(state.agendaContext)) {
+        state.agendaContext.tutorId = clienteId || contextTutorId || state.agendaContext.tutorId;
+      } else {
       state.agendaContext = null;
+      }
     }
   }
   persistAgendaContext(state.agendaContext);
@@ -487,10 +509,16 @@ export function restorePersistedSelection() {
     const contextTutorId = normalizeId(state.agendaContext.tutorId);
     const clienteId = normalizeId(cliente._id);
     if (!contextTutorId || !clienteId || contextTutorId !== clienteId) {
-      state.agendaContext = null;
+      if (shouldPreserveActiveContext(state.agendaContext)) {
+        state.agendaContext.tutorId = clienteId || contextTutorId || state.agendaContext.tutorId;
+      } else {
+        state.agendaContext = null;
+      }
     }
   } else if (state.agendaContext && !cliente) {
-    state.agendaContext = null;
+    if (!shouldPreserveActiveContext(state.agendaContext)) {
+      state.agendaContext = null;
+    }
   }
   if (state.agendaContext) {
     persistAgendaContext(state.agendaContext);

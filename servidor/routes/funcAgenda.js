@@ -1065,9 +1065,7 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
 
     const normalizedServiceItemIds = Array.isArray(serviceItemIds)
       ? serviceItemIds
-          .map(id => {
-            try { return mongoose.Types.ObjectId.isValid(id) ? String(id) : null; } catch (_) { return null; }
-          })
+          .map((id) => String(id || '').trim())
           .filter(Boolean)
       : [];
 
@@ -1122,6 +1120,7 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
       if (!currentItensDoc) {
         return res.status(404).json({ message: 'Agendamento não encontrado.' });
       }
+      let matchedTargetCount = 0;
       const itens = (currentItensDoc.itens || []).map(it => {
         const payload = {
           servico: it.servico,
@@ -1129,7 +1128,9 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
         };
         const currentProf = it.profissional ? String(it.profissional) : null;
         const itemKey = String(it._id);
-        const target = targetServiceItemIds.includes(itemKey);
+        const serviceKey = it?.servico ? String(it.servico) : '';
+        const target = targetServiceItemIds.includes(itemKey) || (!!serviceKey && targetServiceItemIds.includes(serviceKey));
+        if (target) matchedTargetCount += 1;
         const rowUpdate = serviceUpdatesMap.get(itemKey) || null;
         if (currentProf && mongoose.Types.ObjectId.isValid(currentProf)) {
           payload.profissional = currentProf;
@@ -1193,6 +1194,20 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
         if (existingObs) payload.observacao = existingObs;
         return payload;
       });
+      // Fallback defensivo: quando IDs alvo chegam divergentes, garante que ao menos um
+      // item em atendimento volte para espera no fluxo de "colocar em espera".
+      if (
+        hasStatusField
+        && normalizedStatus === 'em_espera'
+        && targetServiceItemIds.length
+        && matchedTargetCount === 0
+      ) {
+        const idx = itens.findIndex((entry) => normalizeServiceStatus(entry?.status, null) === 'em_atendimento');
+        if (idx >= 0) {
+          itens[idx] = { ...itens[idx], status: 'em_espera' };
+          matchedTargetCount = 1;
+        }
+      }
       itensPayload = itens;
     }
 

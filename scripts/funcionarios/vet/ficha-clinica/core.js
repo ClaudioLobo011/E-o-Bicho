@@ -1053,6 +1053,7 @@ export function isVetCategory(value) {
   if (normalized.includes('veterinario')) return true;
   if (normalized.includes('exame')) return true;
   if (normalized.includes('vacina')) return true;
+  if (normalized.includes('internacao')) return true;
   return false;
 }
 

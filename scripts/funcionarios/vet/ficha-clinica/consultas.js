@@ -8,6 +8,7 @@ import {
   normalizeId,
   sanitizeObjectId,
   normalizeForCompare,
+  isVetCategory,
   toIsoOrNull,
   formatDateDisplay,
   formatDateTimeDisplay,
@@ -27,7 +28,9 @@ import {
   isFinalizadoSelection,
   isConsultaLockedForCurrentUser,
   isAdminRole,
+  getCurrentUserId,
   persistAgendaContext,
+  getPersistedState,
   confirmWithModal,
 } from './core.js';
 import { openDocumentPrintWindow } from '../document-utils.js';
@@ -130,7 +133,7 @@ function getCurrentAgendaService() {
     })
     .filter(Boolean);
 
-  const vetServices = normalized.filter((svc) => svc.categorias.some((cat) => normalizeForCompare(cat) === 'veterinario'));
+  const vetServices = normalized.filter((svc) => svc.categorias.some((cat) => isVetCategory(cat)));
   const chosen = vetServices[0] || normalized[0] || null;
   if (chosen) {
     return { id: chosen.id, nome: chosen.nome || '' };
@@ -152,6 +155,26 @@ function findConsultaById(consultaId) {
 }
 
 const waitingAppointmentProcessing = new Set();
+
+function statusMatches(value, target) {
+  const normalizedValue = String(normalizeForCompare(value) || '').replace(/[\s-]+/g, '_');
+  const normalizedTarget = String(normalizeForCompare(target) || '').replace(/[\s-]+/g, '_');
+  return !!normalizedValue && !!normalizedTarget && normalizedValue === normalizedTarget;
+}
+
+function isAgendaContextActive(context = state.agendaContext) {
+  if (statusMatches(context?.status, 'em_atendimento')) return true;
+  if (statusMatches(context?.status, 'em_espera')) return false;
+  if (statusMatches(context?.status, 'finalizado')) return false;
+
+  const activeServiceItemIds = Array.isArray(context?.activeServiceItemIds)
+    ? context.activeServiceItemIds.map((id) => normalizeId(id)).filter(Boolean)
+    : [];
+  if (activeServiceItemIds.length > 0) return true;
+
+  const services = Array.isArray(context?.servicos) ? context.servicos : [];
+  return services.some((svc) => statusMatches(svc?.status, 'em_atendimento'));
+}
 
 function setConsultaModalSubmitting(isSubmitting) {
   consultaModal.isSubmitting = !!isSubmitting;
@@ -184,7 +207,7 @@ export function ensureTutorAndPetSelected() {
       notify('O atendimento já foi finalizado.', 'warning');
       return false;
     }
-    if (contextStatus !== 'em_atendimento') {
+    if (!isAgendaContextActive(state.agendaContext)) {
       notify('Inicie o atendimento para registrar informações.', 'warning');
       return false;
     }
@@ -322,15 +345,31 @@ function normalizeWaitingAppointment(raw) {
   const servicesRaw = Array.isArray(raw.servicos) ? raw.servicos : [];
   const services = servicesRaw.map((svc) => {
     const serviceId = normalizeId(svc?.id || svc?._id || svc?.servicoId || svc?.servico);
+    const itemId = normalizeId(svc?.itemId || svc?.agendaItemId || svc?.item || svc?._itemId);
     const valor = Number(svc?.valor || 0) || 0;
     const categorias = Array.isArray(svc?.categorias) ? svc.categorias.filter(Boolean) : [];
     const tiposPermitidos = Array.isArray(svc?.tiposPermitidos) ? svc.tiposPermitidos.filter(Boolean) : [];
     return {
       _id: serviceId || null,
-      nome: pickFirst(svc?.nome, svc?.descricao, svc?.label) || 'Serviço',
+      itemId: itemId || null,
+      nome: pickFirst(svc?.nome, svc?.descricao, svc?.label) || 'Servi?o',
       valor,
+      status: pickFirst(svc?.status, raw?.status) || 'agendado',
       categorias,
       tiposPermitidos,
+      profissionalId: normalizeId(svc?.profissionalId || svc?.profissional),
+      profissionalNome: pickFirst(svc?.profissionalNome, svc?.profissionalLabel, svc?.profissional) || '',
+      data: pickFirst(svc?.data, svc?.date, svc?.serviceDate, svc?.service_date) || '',
+      hora: pickFirst(svc?.hora, svc?.horario, svc?.serviceHour, svc?.service_hour) || '',
+      observacao: pickFirst(svc?.observacao, svc?.observacoes, svc?.obs) || '',
+      scheduledAt: toIsoOrNull(
+        svc?.scheduledAt
+        || svc?.h
+        || svc?.dataHora
+        || svc?.dateTime
+        || svc?.datetime
+        || null,
+      ),
     };
   });
 
@@ -363,6 +402,107 @@ function normalizeWaitingAppointment(raw) {
     petNome: pickFirst(raw.petNome, raw.petLabel, raw.pet),
     codigoVenda: pickFirst(raw.codigoVenda) || null,
   };
+}
+
+function coerceWaitingDate(value) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function waitingServiceDateKey(service, appointment) {
+  const direct = String(service?.data || service?.date || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(direct)) return direct;
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(direct)) {
+    const [d, m, y] = direct.split('/');
+    return `${y}-${m}-${d}`;
+  }
+  const parsedDirect = coerceWaitingDate(direct);
+  if (parsedDirect) {
+    const y = parsedDirect.getFullYear();
+    const m = String(parsedDirect.getMonth() + 1).padStart(2, '0');
+    const d = String(parsedDirect.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  const parsed = coerceWaitingDate(service?.scheduledAt || service?.h || appointment?.scheduledAt);
+  if (!parsed) return '';
+  const y = parsed.getFullYear();
+  const m = String(parsed.getMonth() + 1).padStart(2, '0');
+  const d = String(parsed.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function waitingServiceHourKey(service, appointment) {
+  const raw = String(service?.hora || service?.horario || '').trim();
+  const hhmm = raw.match(/^(\d{2}):(\d{2})/);
+  if (hhmm) return `${hhmm[1]}:${hhmm[2]}`;
+  const parsed = coerceWaitingDate(service?.scheduledAt || service?.h || appointment?.scheduledAt);
+  if (!parsed) return '';
+  return `${String(parsed.getHours()).padStart(2, '0')}:${String(parsed.getMinutes()).padStart(2, '0')}`;
+}
+
+function waitingComposeScheduledAt(appointment, dateKey, hourKey) {
+  if (dateKey && hourKey) {
+    const candidate = new Date(`${dateKey}T${hourKey}:00`);
+    if (!Number.isNaN(candidate.getTime())) return candidate.toISOString();
+  }
+  if (dateKey) {
+    const candidate = new Date(`${dateKey}T00:00:00`);
+    if (!Number.isNaN(candidate.getTime())) return candidate.toISOString();
+  }
+  return appointment?.scheduledAt || null;
+}
+
+function expandWaitingAppointmentsByGroup(appointments = []) {
+  const list = Array.isArray(appointments) ? appointments : [];
+  const expanded = [];
+
+  list.forEach((appointment) => {
+    const services = Array.isArray(appointment?.servicos) ? appointment.servicos : [];
+    if (!services.length) {
+      expanded.push({ ...appointment, __serviceItemIds: [] });
+      return;
+    }
+
+    const groups = new Map();
+    services.forEach((service) => {
+      const profId = normalizeId(service?.profissionalId || service?.profissional) || '';
+      const status = normalizeForCompare(service?.status || appointment?.status || 'agendado') || 'agendado';
+      const dateKey = waitingServiceDateKey(service, appointment) || '';
+      const hourKey = waitingServiceHourKey(service, appointment) || '';
+      const obs = String(service?.observacao || service?.observacoes || '').trim();
+      const key = [profId || '__sem_prof__', dateKey || '__sem_data__', hourKey || '__sem_hora__', status, obs || '__sem_obs__'].join('|');
+      if (!groups.has(key)) {
+        groups.set(key, {
+          services: [],
+          itemIds: [],
+          dateKey,
+          hourKey,
+          status,
+          observacao: obs,
+        });
+      }
+      const bucket = groups.get(key);
+      bucket.services.push(service);
+      const itemId = normalizeId(service?.itemId || service?.id || service?._id);
+      if (itemId) bucket.itemIds.push(itemId);
+    });
+
+    groups.forEach((bucket) => {
+      const groupedTotal = bucket.services.reduce((sum, svc) => sum + Number(svc?.valor || 0), 0);
+      expanded.push({
+        ...appointment,
+        status: bucket.status || appointment?.status || 'em_espera',
+        scheduledAt: waitingComposeScheduledAt(appointment, bucket.dateKey, bucket.hourKey),
+        observacoes: bucket.observacao || appointment?.observacoes || '',
+        servicos: bucket.services,
+        valor: groupedTotal || Number(appointment?.valor || 0) || 0,
+        __serviceItemIds: bucket.itemIds,
+      });
+    });
+  });
+
+  return expanded;
 }
 
 export async function loadWaitingAppointments(options = {}) {
@@ -411,11 +551,24 @@ export async function loadWaitingAppointments(options = {}) {
     }
 
     const data = Array.isArray(payload) ? payload : [];
-    const normalized = data
-      .map(normalizeWaitingAppointment)
-      .filter(Boolean)
+    const isServiceWaiting = (service, appointment) => {
+      const normalizeStatus = (value) => String(normalizeForCompare(value) || '').replace(/[\s_-]+/g, '');
+      const serviceStatus = normalizeStatus(service?.status);
+      const appointmentStatus = normalizeStatus(appointment?.status);
+      if (serviceStatus === 'finalizado') return false;
+      if (serviceStatus === 'emespera') return true;
+      if (appointmentStatus === 'emespera') return true;
+      if (serviceStatus === 'ematendimento') return false;
+      return false;
+    };
+    const normalized = expandWaitingAppointmentsByGroup(
+      data.map(normalizeWaitingAppointment).filter(Boolean)
+    )
       .map((appointment) => {
-        const vetServices = getVetServices(appointment?.servicos);
+        const services = Array.isArray(appointment?.servicos) ? appointment.servicos : [];
+        const waitingServices = services.filter((service) => isServiceWaiting(service, appointment));
+        const waitingVetServices = getVetServices(waitingServices);
+        const vetServices = waitingVetServices;
         return { ...appointment, vetServices };
       })
       .filter((appointment) => Array.isArray(appointment.vetServices) && appointment.vetServices.length > 0);
@@ -601,10 +754,17 @@ function createWaitingAppointmentItem(appointment) {
   whenEl.textContent = whenText || 'Sem horário definido';
   info.appendChild(whenEl);
 
-  if (appointment.profissionalNome) {
+  const vetProfessionals = Array.from(
+    new Set(
+      vetServices
+        .map((svc) => pickFirst(svc?.profissionalNome))
+        .filter(Boolean)
+    )
+  );
+  if (vetProfessionals.length) {
     const profEl = document.createElement('p');
     profEl.className = 'text-xs text-amber-800';
-    profEl.textContent = `Profissional: ${appointment.profissionalNome}`;
+    profEl.textContent = `Profissional: ${vetProfessionals.join(', ')}`;
     info.appendChild(profEl);
   }
 
@@ -2372,6 +2532,72 @@ function createExameCard(exame) {
   return card;
 }
 
+function createPendingVacinaCard(service) {
+  const card = document.createElement('article');
+  card.className = 'rounded-xl border border-dashed border-emerald-300 bg-emerald-50 p-4 shadow-sm transition hover:border-emerald-400 hover:shadow-md cursor-pointer';
+  card.setAttribute('role', 'button');
+  card.setAttribute('tabindex', '0');
+  card.setAttribute('aria-label', 'Iniciar registro de vacina');
+
+  const title = document.createElement('h3');
+  title.className = 'text-sm font-semibold text-emerald-800';
+  title.textContent = 'Vacina pendente de registro';
+  card.appendChild(title);
+
+  const serviceName = pickFirst(service?.nome, service?.descricao, service?.label) || 'Serviço de vacina';
+  const text = document.createElement('p');
+  text.className = 'mt-1 text-sm text-emerald-700';
+  text.textContent = `Clique para abrir o card da vacina e preencher os dados (${serviceName}).`;
+  card.appendChild(text);
+
+  const open = () => openVacinaModal({ service });
+  card.addEventListener('click', (event) => {
+    event.preventDefault();
+    open();
+  });
+  card.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      open();
+    }
+  });
+
+  return card;
+}
+
+function createPendingExameCard(service) {
+  const card = document.createElement('article');
+  card.className = 'rounded-xl border border-dashed border-rose-300 bg-rose-50 p-4 shadow-sm transition hover:border-rose-400 hover:shadow-md cursor-pointer';
+  card.setAttribute('role', 'button');
+  card.setAttribute('tabindex', '0');
+  card.setAttribute('aria-label', 'Iniciar registro de exame');
+
+  const title = document.createElement('h3');
+  title.className = 'text-sm font-semibold text-rose-800';
+  title.textContent = 'Exame pendente de registro';
+  card.appendChild(title);
+
+  const serviceName = pickFirst(service?.nome, service?.descricao, service?.label) || 'Serviço de exame';
+  const text = document.createElement('p');
+  text.className = 'mt-1 text-sm text-rose-700';
+  text.textContent = `Clique para abrir o card do exame e preencher os dados (${serviceName}).`;
+  card.appendChild(text);
+
+  const open = () => openExameModal({ service });
+  card.addEventListener('click', (event) => {
+    event.preventDefault();
+    open();
+  });
+  card.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      open();
+    }
+  });
+
+  return card;
+}
+
 function createPesoCard(peso, baseline, previous, options = {}) {
   const { isLatest = false } = options || {};
   if (!peso) return null;
@@ -2971,17 +3197,66 @@ function applyWaitingAppointmentToContext(appointment, updatePayload = {}) {
   const petId = normalizeId(state.selectedPetId);
   if (!(appointmentId && clienteId && petId)) return false;
 
-  const responseServices = Array.isArray(updatePayload?.servicos) ? updatePayload.servicos : [];
-  const appointmentServices = Array.isArray(appointment?.servicos) ? appointment.servicos : [];
-  const services = (responseServices.length ? responseServices : appointmentServices).map((svc) => {
+  const activeServiceItemIds = Array.isArray(appointment?.__serviceItemIds)
+    ? appointment.__serviceItemIds.map((id) => normalizeId(id)).filter(Boolean)
+    : [];
+
+  const responseServicesRaw = Array.isArray(updatePayload?.servicos) ? updatePayload.servicos : [];
+  const appointmentServicesRaw = Array.isArray(appointment?.servicos) ? appointment.servicos : [];
+
+  const byActiveIds = (svc) => {
+    if (!activeServiceItemIds.length) return true;
+    const itemId = normalizeId(svc?.itemId || svc?._itemId || svc?.agendaItemId || svc?.item);
+    return itemId ? activeServiceItemIds.includes(itemId) : true;
+  };
+
+  const responseServices = responseServicesRaw.filter(byActiveIds);
+  const appointmentServices = appointmentServicesRaw.filter(byActiveIds);
+
+  const normalizeWaitingService = (svc) => {
     const id = normalizeId(svc?.id || svc?._id || svc?.servicoId || svc?.servico);
+    const itemId = normalizeId(svc?.itemId || svc?._itemId || svc?.agendaItemId || svc?.item);
     const valor = Number(svc?.valor || 0) || 0;
     const categorias = Array.isArray(svc?.categorias) ? svc.categorias.filter(Boolean) : [];
     const tiposPermitidos = Array.isArray(svc?.tiposPermitidos) ? svc.tiposPermitidos.filter(Boolean) : [];
     return {
       _id: id || null,
+      itemId: itemId || null,
       nome: pickFirst(svc?.nome, svc?.descricao, svc?.label) || 'Serviço',
       valor,
+      categorias,
+      tiposPermitidos,
+    };
+  };
+
+  const appointmentServicePool = appointmentServices.map(normalizeWaitingService);
+  const appointmentByItemId = new Map();
+  const appointmentByServiceId = new Map();
+  appointmentServicePool.forEach((svc) => {
+    if (svc.itemId && !appointmentByItemId.has(svc.itemId)) {
+      appointmentByItemId.set(svc.itemId, svc);
+    }
+    if (svc._id && !appointmentByServiceId.has(svc._id)) {
+      appointmentByServiceId.set(svc._id, svc);
+    }
+  });
+
+  const services = (responseServices.length ? responseServices : appointmentServices).map((svc) => {
+    const normalized = normalizeWaitingService(svc);
+    const fallback = normalized.itemId
+      ? appointmentByItemId.get(normalized.itemId)
+      : (normalized._id ? appointmentByServiceId.get(normalized._id) : null);
+    const categorias = normalized.categorias.length
+      ? normalized.categorias
+      : (Array.isArray(fallback?.categorias) ? fallback.categorias : []);
+    const tiposPermitidos = normalized.tiposPermitidos.length
+      ? normalized.tiposPermitidos
+      : (Array.isArray(fallback?.tiposPermitidos) ? fallback.tiposPermitidos : []);
+    return {
+      _id: normalized._id || fallback?._id || null,
+      itemId: normalized.itemId || fallback?.itemId || null,
+      nome: pickFirst(normalized.nome, fallback?.nome) || 'Serviço',
+      valor: Number(normalized.valor || fallback?.valor || 0) || 0,
       categorias,
       tiposPermitidos,
     };
@@ -3000,6 +3275,12 @@ function applyWaitingAppointmentToContext(appointment, updatePayload = {}) {
     .filter(Boolean);
 
   const storeId = normalizeId(appointment?.storeId) || normalizedCandidates[0] || state.agendaContext.storeId || null;
+  const codigoVenda = pickFirst(
+    updatePayload?.codigoVenda,
+    updatePayload?.codigo_venda,
+    appointment?.codigoVenda,
+    state.agendaContext?.codigoVenda,
+  );
 
   state.agendaContext = {
     ...state.agendaContext,
@@ -3018,7 +3299,7 @@ function applyWaitingAppointmentToContext(appointment, updatePayload = {}) {
     observacoes: pickFirst(appointment?.observacoes, state.agendaContext.observacoes),
     servicos: services,
     totalServicos: services.length,
-    profissionalId: normalizeId(
+    profissionalId: currentUserId || normalizeId(
       updatePayload?.profissionalId || updatePayload?.profissional || appointment?.profissionalId,
     ) || state.agendaContext.profissionalId || null,
     profissionalNome: pickFirst(
@@ -3027,6 +3308,9 @@ function applyWaitingAppointmentToContext(appointment, updatePayload = {}) {
       appointment?.profissionalNome,
       state.agendaContext.profissionalNome,
     ),
+    activeServiceItemIds,
+    codigoVenda: codigoVenda || null,
+    pagamentoRegistrado: !!codigoVenda || !!state.agendaContext?.pagamentoRegistrado,
   };
 
   if (storeId) {
@@ -3074,6 +3358,7 @@ async function startWaitingAppointment(appointment, triggerButton) {
   }
 
   try {
+    const currentUserId = normalizeId(getCurrentUserId());
     const selectionReady = await ensureSelectionForWaitingAppointment(appointment);
     if (!selectionReady) {
       throw new Error('Não foi possível preparar o tutor e o pet deste agendamento.');
@@ -3085,9 +3370,16 @@ async function startWaitingAppointment(appointment, triggerButton) {
       triggerButton.textContent = 'Iniciando...';
     }
 
+    const serviceItemIds = Array.isArray(appointment?.__serviceItemIds)
+      ? appointment.__serviceItemIds.map((id) => normalizeId(id)).filter(Boolean)
+      : [];
+
     const response = await api(`/func/agendamentos/${appointmentId}`, {
       method: 'PUT',
-      body: JSON.stringify({ status: 'em_atendimento' }),
+      body: JSON.stringify({
+        status: 'em_atendimento',
+        ...(serviceItemIds.length ? { serviceItemIds } : {}),
+      }),
     });
     const payload = await response.json().catch(() => (response.ok ? {} : {}));
     if (!response.ok) {
@@ -3095,8 +3387,112 @@ async function startWaitingAppointment(appointment, triggerButton) {
       throw new Error(message);
     }
 
-    applyWaitingAppointmentToContext(appointment, payload);
+    const selectedTutorId = normalizeId(state.selectedCliente?._id);
+    const selectedPetId = normalizeId(state.selectedPetId);
+    const appointmentTutorId = normalizeId(appointment?.clienteId);
+    const appointmentPetId = normalizeId(appointment?.petId);
+    const ensuredTutorId = selectedTutorId || appointmentTutorId || normalizeId(state.agendaContext?.tutorId);
+    const ensuredPetId = selectedPetId || appointmentPetId || normalizeId(state.agendaContext?.petId);
+    const ensuredServiceItemIds = Array.isArray(appointment?.__serviceItemIds)
+      ? appointment.__serviceItemIds.map((id) => normalizeId(id)).filter(Boolean)
+      : [];
+    const ensuredServices = Array.isArray(appointment?.vetServices) && appointment.vetServices.length
+      ? appointment.vetServices
+      : (Array.isArray(appointment?.servicos) ? appointment.servicos : []);
+
+    const contextApplied = applyWaitingAppointmentToContext(appointment, payload);
+    if (!state.agendaContext || typeof state.agendaContext !== 'object') {
+      state.agendaContext = {};
+    }
+    state.agendaContext = {
+      ...state.agendaContext,
+      appointmentId,
+      tutorId: ensuredTutorId || null,
+      petId: ensuredPetId || null,
+      status: 'em_atendimento',
+      profissionalId: currentUserId || state.agendaContext.profissionalId || null,
+      activeServiceItemIds: ensuredServiceItemIds,
+      servicos: Array.isArray(state.agendaContext.servicos) && state.agendaContext.servicos.length
+        ? state.agendaContext.servicos
+        : ensuredServices,
+      totalServicos: Array.isArray(state.agendaContext.servicos) && state.agendaContext.servicos.length
+        ? state.agendaContext.servicos.length
+        : ensuredServices.length,
+      codigoVenda: pickFirst(
+        payload?.codigoVenda,
+        payload?.codigo_venda,
+        appointment?.codigoVenda,
+        state.agendaContext?.codigoVenda,
+      ) || null,
+      pagamentoRegistrado: !!pickFirst(
+        payload?.codigoVenda,
+        payload?.codigo_venda,
+        appointment?.codigoVenda,
+        state.agendaContext?.codigoVenda,
+      ) || !!state.agendaContext?.pagamentoRegistrado,
+    };
+    persistAgendaContext(state.agendaContext);
+
+    if (!contextApplied || !isAgendaContextActive(state.agendaContext)) {
+      const fallbackServices = ensuredServices;
+      if (!state.agendaContext || typeof state.agendaContext !== 'object') {
+        state.agendaContext = {};
+      }
+      state.agendaContext = {
+        ...state.agendaContext,
+        appointmentId,
+        tutorId: ensuredTutorId || null,
+        petId: ensuredPetId || null,
+        status: 'em_atendimento',
+        profissionalId: currentUserId || state.agendaContext.profissionalId || null,
+        servicos: fallbackServices,
+        totalServicos: fallbackServices.length,
+        activeServiceItemIds: ensuredServiceItemIds,
+        codigoVenda: pickFirst(
+          payload?.codigoVenda,
+          payload?.codigo_venda,
+          appointment?.codigoVenda,
+          state.agendaContext?.codigoVenda,
+        ) || null,
+        pagamentoRegistrado: !!pickFirst(
+          payload?.codigoVenda,
+          payload?.codigo_venda,
+          appointment?.codigoVenda,
+          state.agendaContext?.codigoVenda,
+        ) || !!state.agendaContext?.pagamentoRegistrado,
+      };
+      persistAgendaContext(state.agendaContext);
+      console.info('[vet-ficha-debug] fallback agendaContext aplicado', {
+        appointmentId,
+        tutorId: state.agendaContext.tutorId,
+        petId: state.agendaContext.petId,
+        status: state.agendaContext.status,
+        totalServicos: state.agendaContext.totalServicos,
+        activeServiceItemIds: state.agendaContext.activeServiceItemIds,
+      });
+    }
     updateFichaRealTimeSelection().catch(() => {});
+    console.info('[vet-ficha-debug] startWaitingAppointment:after', {
+      appointmentId,
+      payloadStatus: payload?.status || null,
+      context: state.agendaContext ? {
+        appointmentId: normalizeId(state.agendaContext?.appointmentId),
+        status: state.agendaContext?.status || null,
+        tutorId: normalizeId(state.agendaContext?.tutorId),
+        petId: normalizeId(state.agendaContext?.petId),
+        activeServiceItemIds: Array.isArray(state.agendaContext?.activeServiceItemIds)
+          ? state.agendaContext.activeServiceItemIds
+          : [],
+        servicosCount: Array.isArray(state.agendaContext?.servicos) ? state.agendaContext.servicos.length : 0,
+      } : null,
+    });
+    console.info('[vet-ficha-debug] context-persist-check', {
+      appointmentId,
+      tutorId: normalizeId(state.agendaContext?.tutorId),
+      petId: normalizeId(state.agendaContext?.petId),
+      status: state.agendaContext?.status || null,
+      active: isAgendaContextActive(state.agendaContext),
+    });
 
     state.waitingAppointments = (state.waitingAppointments || []).filter(
       (item) => normalizeId(item?.appointmentId || item?.id || item?._id) !== appointmentId,
@@ -3177,19 +3573,101 @@ export function updateConsultaAgendaCard() {
   const waitingAppointments = Array.isArray(state.waitingAppointments) ? state.waitingAppointments : [];
   const hasWaitingAppointments = waitingAppointments.length > 0;
   const isLoadingWaitingAppointments = !!state.waitingAppointmentsLoading;
-  const context = state.agendaContext;
+  let context = state.agendaContext;
+  if (!context) {
+    const persisted = getPersistedState();
+    const persistedAgenda = persisted?.agendaContext && typeof persisted.agendaContext === 'object'
+      ? persisted.agendaContext
+      : null;
+    if (persistedAgenda && normalizeId(persistedAgenda?.appointmentId)) {
+      state.agendaContext = persistedAgenda;
+      context = state.agendaContext;
+      console.info('[vet-ficha-debug] rehydrate agendaContext from storage', {
+        appointmentId: normalizeId(context?.appointmentId),
+        tutorId: normalizeId(context?.tutorId),
+        petId: normalizeId(context?.petId),
+        status: context?.status || null,
+      });
+    }
+  }
   const selectedPetId = normalizeId(state.selectedPetId);
   const selectedTutorId = normalizeId(state.selectedCliente?._id);
   const contextPetId = normalizeId(context?.petId);
   const contextTutorId = normalizeId(context?.tutorId);
   const agendaStatus = normalizeForCompare(context?.status);
-  const agendaFinalizado = agendaStatus === 'finalizado';
-  const agendaAtivo = agendaStatus === 'em_atendimento';
+  const agendaAtivo = isAgendaContextActive(context);
+  const agendaFinalizado = statusMatches(context?.status, 'finalizado') && !agendaAtivo;
+  const contextServices = Array.isArray(context?.servicos) ? context.servicos : [];
+  const pendingVacinaService = contextServices.find((svc) => {
+    const cats = Array.isArray(svc?.categorias) ? svc.categorias : [];
+    const allowed = Array.isArray(svc?.tiposPermitidos) ? svc.tiposPermitidos : [];
+    const nameNorm = normalizeForCompare(svc?.nome || '');
+    return (
+      cats.some((cat) => normalizeForCompare(cat) === 'vacina')
+      || allowed.some((cat) => normalizeForCompare(cat) === 'vacina')
+      || nameNorm.includes('vacina')
+    );
+  }) || null;
+  const pendingExameService = contextServices.find((svc) => {
+    const cats = Array.isArray(svc?.categorias) ? svc.categorias : [];
+    const allowed = Array.isArray(svc?.tiposPermitidos) ? svc.tiposPermitidos : [];
+    const nameNorm = normalizeForCompare(svc?.nome || '');
+    return (
+      cats.some((cat) => normalizeForCompare(cat) === 'exame')
+      || allowed.some((cat) => normalizeForCompare(cat) === 'exame')
+      || nameNorm.includes('exame')
+    );
+  }) || null;
 
   let agendaElement = null;
   let hasAgendaContent = false;
 
-  const contextMatches = !!(context && selectedPetId && selectedTutorId && contextPetId && contextTutorId && contextPetId === selectedPetId && contextTutorId === selectedTutorId);
+  const contextMatchesByIds = !!(
+    context
+    && selectedPetId
+    && selectedTutorId
+    && contextPetId
+    && contextTutorId
+    && contextPetId === selectedPetId
+    && contextTutorId === selectedTutorId
+  );
+  const contextMatchesByAppointment = !!(
+    context
+    && normalizeId(context?.appointmentId)
+    && selectedPetId
+    && selectedTutorId
+    && (!contextPetId || contextPetId === selectedPetId)
+    && (!contextTutorId || contextTutorId === selectedTutorId)
+  );
+  const contextMatchesByActiveAppointment = !!(
+    context
+    && agendaAtivo
+    && normalizeId(context?.appointmentId)
+    && selectedPetId
+    && selectedTutorId
+  );
+  const contextMatchesByForcedActive = !!(
+    context
+    && agendaAtivo
+    && normalizeId(context?.appointmentId)
+  );
+  let contextMatches =
+    contextMatchesByIds
+    || contextMatchesByAppointment
+    || contextMatchesByActiveAppointment
+    || contextMatchesByForcedActive;
+
+  // Fallback defensivo: se o atendimento já está ativo e existe appointmentId,
+  // mantém a ficha aberta para o tutor/pet selecionados mesmo sem consulta criada.
+  if (!contextMatches && context && agendaAtivo && normalizeId(context?.appointmentId) && selectedTutorId && selectedPetId) {
+    if (!state.agendaContext || typeof state.agendaContext !== 'object') {
+      state.agendaContext = {};
+    }
+    state.agendaContext.tutorId = selectedTutorId;
+    state.agendaContext.petId = selectedPetId;
+    persistAgendaContext(state.agendaContext);
+    contextMatches = true;
+  }
 
   if (els.reopenAgendamentoBtn) {
     const reopenBtn = els.reopenAgendamentoBtn;
@@ -3472,6 +3950,55 @@ export function updateConsultaAgendaCard() {
     }
   }
 
+  if (!hasAgendaContent && context && agendaAtivo && normalizeId(context?.appointmentId)) {
+    const services = Array.isArray(context?.servicos) ? context.servicos : [];
+    const normalizeList = (list) => list.map((v) => normalizeForCompare(v));
+    const categoryPool = services.flatMap((svc) => {
+      const raw = Array.isArray(svc?.categorias)
+        ? svc.categorias
+        : (svc?.categorias ? [svc.categorias] : []);
+      return normalizeList(raw.filter(Boolean).map((v) => String(v)));
+    });
+    const allowedTypesPool = services.flatMap((svc) => {
+      const raw = Array.isArray(svc?.tiposPermitidos)
+        ? svc.tiposPermitidos
+        : (svc?.tiposPermitidos ? [svc.tiposPermitidos] : []);
+      return normalizeList(raw.filter(Boolean).map((v) => String(v)));
+    });
+    const namesPool = services.map((svc) => normalizeForCompare(svc?.nome || '')).filter(Boolean);
+
+    const hasVacina =
+      categoryPool.includes('vacina')
+      || allowedTypesPool.includes('vacina')
+      || namesPool.some((n) => n.includes('vacina'));
+    const hasExame =
+      categoryPool.includes('exame')
+      || allowedTypesPool.includes('exame')
+      || namesPool.some((n) => n.includes('exame'));
+
+    const starter = document.createElement('div');
+    starter.className = 'rounded-xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm space-y-2';
+
+    const title = document.createElement('h3');
+    title.className = 'text-sm font-semibold text-emerald-800';
+    title.textContent = hasVacina
+      ? 'Atendimento em andamento (Vacina)'
+      : (hasExame ? 'Atendimento em andamento (Exame)' : 'Atendimento em andamento');
+    starter.appendChild(title);
+
+    const msg = document.createElement('p');
+    msg.className = 'text-sm text-emerald-700';
+    msg.textContent = hasVacina
+      ? 'Nenhum registro de vacina ainda. Use o botão "Vacina" para iniciar o lançamento.'
+      : (hasExame
+          ? 'Nenhum registro de exame ainda. Use o botão "Exames" para iniciar o lançamento.'
+          : 'Nenhum registro clínico ainda. Use os botões de ações rápidas para iniciar.');
+    starter.appendChild(msg);
+
+    agendaElement = starter;
+    hasAgendaContent = true;
+  }
+
   const hasAnyContent =
     hasManualConsultas ||
     hasAgendaContent ||
@@ -3498,6 +4025,28 @@ export function updateConsultaAgendaCard() {
   }
 
   if (shouldShowPlaceholder) {
+    console.info('[vet-ficha-debug] placeholder', {
+      selectedTutorId,
+      selectedPetId,
+      agendaStatusRaw: context?.status || null,
+      agendaStatus,
+      agendaAtivo,
+      agendaFinalizado,
+      contextMatches,
+      hasAgendaContent,
+      hasAnyContent,
+      context: context ? {
+        appointmentId: normalizeId(context?.appointmentId),
+        tutorId: normalizeId(context?.tutorId),
+        petId: normalizeId(context?.petId),
+        activeServiceItemIds: Array.isArray(context?.activeServiceItemIds) ? context.activeServiceItemIds : [],
+        servicosCount: Array.isArray(context?.servicos) ? context.servicos.length : 0,
+        servicosStatus: Array.isArray(context?.servicos)
+          ? context.servicos.map((svc) => svc?.status || null)
+          : [],
+      } : null,
+      placeholderText,
+    });
     setAreaClassNames(CONSULTA_PLACEHOLDER_CLASSNAMES);
     area.innerHTML = '';
     const paragraph = document.createElement('p');
@@ -3556,6 +4105,14 @@ export function updateConsultaAgendaCard() {
     });
   }
 
+  if (!hasVacinas && pendingVacinaService && contextMatches && agendaAtivo) {
+    const starterCard = createPendingVacinaCard(pendingVacinaService);
+    if (starterCard) {
+      manualVacinaGrid.appendChild(starterCard);
+      manualVacinaHasContent = true;
+    }
+  }
+
   if (manualVacinaHasContent) {
     scroll.appendChild(manualVacinaGrid);
   }
@@ -3599,6 +4156,9 @@ export function updateConsultaAgendaCard() {
     loadingExames.className = 'rounded-xl border border-dashed border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600';
     loadingExames.textContent = 'Carregando exames...';
     pushRestCard(loadingExames);
+  } else if (pendingExameService && contextMatches && agendaAtivo) {
+    const starterCard = createPendingExameCard(pendingExameService);
+    if (starterCard) pushRestCard(starterCard);
   }
 
   if (hasPesos) {
@@ -3691,3 +4251,4 @@ export function updateConsultaAgendaCard() {
 document.addEventListener('vet-vendas-updated', () => {
   updateConsultaAgendaCard();
 });
+  const currentUserId = normalizeId(getCurrentUserId());
