@@ -86,7 +86,7 @@ const corsOptions = {
   exposedHeaders: ['Content-Disposition'],
 };
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
 app.use(express.static('public'));
 app.use('/api/funcionarios', require('./routes/adminFuncionarios'));
 
@@ -275,3 +275,4 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`ðŸš€ Servidor rodando na porta ${PORT}`));
 startIfoodStatusPoller();
 startIfoodMenuScheduler();
+
