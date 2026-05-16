@@ -82,7 +82,7 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Authorization', 'Content-Type', 'X-Idempotency-Key', 'x-admin-master-active'],
+  allowedHeaders: ['Authorization', 'Content-Type', 'X-Idempotency-Key', 'x-admin-master-active', 'Cache-Control', 'Pragma'],
   exposedHeaders: ['Content-Disposition'],
 };
 app.use(cors(corsOptions));
@@ -275,4 +275,5 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`ðŸš€ Servidor rodando na porta ${PORT}`));
 startIfoodStatusPoller();
 startIfoodMenuScheduler();
+
 
