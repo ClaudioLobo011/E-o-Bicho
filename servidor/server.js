@@ -1,11 +1,11 @@
-// servidor/server.js
+﻿// servidor/server.js
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const dotenv = require('dotenv');
 
-// Carrega variáveis de ambiente antes de importar módulos que dependem delas
+// Carrega variÃ¡veis de ambiente antes de importar mÃ³dulos que dependem delas
 dotenv.config();
 
 const { verifyMailer } = require('./utils/mailer');
@@ -29,6 +29,8 @@ const BODY_PARSER_LIMIT = '10mb';
 const DEFAULT_CORS_ALLOWED_ORIGINS = [
   'https://www.peteobicho.com.br',
   'https://peteobicho.com.br',
+  'https://e-o-bicho.com.br',
+  'https://www.e-o-bicho.com.br',
   'https://e-o-bicho.onrender.com',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
@@ -64,7 +66,7 @@ app.set('emitPdvStateUpdate', ({ pdvId, payload = {} } = {}) => {
 app.use(express.json({
   limit: BODY_PARSER_LIMIT,
   verify: (req, _res, buf) => {
-    // guarda o raw para validação de assinatura (webhooks)
+    // guarda o raw para validaÃ§Ã£o de assinatura (webhooks)
     req.rawBody = buf;
   }
 }));
@@ -80,10 +82,11 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Authorization', 'Content-Type', 'X-Idempotency-Key'],
+  allowedHeaders: ['Authorization', 'Content-Type', 'X-Idempotency-Key', 'x-admin-master-active'],
   exposedHeaders: ['Content-Disposition'],
 };
 app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(express.static('public'));
 app.use('/api/funcionarios', require('./routes/adminFuncionarios'));
 
@@ -148,10 +151,10 @@ const routes = [
   { path: '/webhook/whatsapp', file: './routes/whatsappWebhooks' },
   { path: '/webhooks/mercadopago', file: './routes/mercadoPagoWebhooks' },
   { path: '/webhooks', file: './routes/webhooks' },
-  { path: '/', file: './routes/webhooks' }, // expõe /webhook e /webhooks/marketplaces na raiz para validação iFood
+  { path: '/', file: './routes/webhooks' }, // expÃµe /webhook e /webhooks/marketplaces na raiz para validaÃ§Ã£o iFood
 ];
 
-// Registrar rotas adicionais (Agenda - funcionários)
+// Registrar rotas adicionais (Agenda - funcionÃ¡rios)
 routes.push({ path: '/api/func', file: './routes/funcAgenda' });
 routes.push({ path: '/api/func', file: './routes/funcVet' });
 routes.push({ path: '/api/func', file: './routes/funcComissoes' });
@@ -164,7 +167,7 @@ try {
   const ifoodStream = require('./routes/ifoodOrdersStream');
   app.use('/api/ifood', ifoodStream);
 } catch (_) {
-  console.error('Não foi possível registrar stream do iFood');
+  console.error('NÃ£o foi possÃ­vel registrar stream do iFood');
 }
 
 app.use((err, req, res, next) => {
@@ -177,7 +180,7 @@ app.use((err, req, res, next) => {
     /request aborted/i.test(String(err?.message || ''));
   if (aborted) {
     if (!res.headersSent) {
-      res.status(499).json({ message: 'Requisição cancelada pelo cliente.' });
+      res.status(499).json({ message: 'RequisiÃ§Ã£o cancelada pelo cliente.' });
     }
     return;
   }
@@ -267,8 +270,8 @@ io.on('connection', (socket) => {
   });
 });
 
-// Inicialização do servidor
+// InicializaÃ§Ã£o do servidor
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
+server.listen(PORT, () => console.log(`ðŸš€ Servidor rodando na porta ${PORT}`));
 startIfoodStatusPoller();
 startIfoodMenuScheduler();
