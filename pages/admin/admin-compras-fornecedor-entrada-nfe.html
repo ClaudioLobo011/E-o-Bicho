@@ -10982,6 +10982,8 @@ ${'</ht' + 'ml>'}`;
                 isFractionChild: true,
                 parentEntryId: entryData.id,
                 fractionChildIndex: childIndex,
+                fractionBaseQuantity: Number.isFinite(fractionBaseQuantity) ? fractionBaseQuantity : null,
+                fractionOutputQuantity: Number.isFinite(fractionOutputQuantity) ? fractionOutputQuantity : null,
               };
 
               updateEntryDisplays(childEntryData);
@@ -11111,6 +11113,23 @@ ${'</ht' + 'ml>'}`;
           if (!Array.isArray(priceAdjustmentState.items)) return;
           priceAdjustmentState.items.forEach((entry) => {
             recomputeEntryPricing(entry, { source });
+          });
+        };
+
+        const syncFractionChildrenFromParentCost = (parentEntry) => {
+          if (!parentEntry || parentEntry.isFractionChild) return;
+          if (!Array.isArray(priceAdjustmentState.items) || !priceAdjustmentState.items.length) return;
+          const parentCost = sanitizeCurrencyValue(parentEntry.costNew);
+          if (!Number.isFinite(parentCost) || parentCost < 0) return;
+
+          priceAdjustmentState.items.forEach((entry) => {
+            if (!entry?.isFractionChild || entry.parentEntryId !== parentEntry.id) return;
+            const baseQty = toNumericValue(entry.fractionBaseQuantity);
+            const outputQty = toNumericValue(entry.fractionOutputQuantity);
+            if (!Number.isFinite(baseQty) || baseQty <= 0 || !Number.isFinite(outputQty) || outputQty <= 0) return;
+            const childCost = Math.round((parentCost * (baseQty / outputQty)) * 100) / 100;
+            entry.costNew = childCost;
+            recomputeEntryPricing(entry, { source: 'cost-update' });
           });
         };
 
@@ -11351,6 +11370,7 @@ ${'</ht' + 'ml>'}`;
             }
             entry.costNew = value;
             recomputeEntryPricing(entry, { source: 'cost-update' });
+            syncFractionChildrenFromParentCost(entry);
             costInput.value = entry.displays.costNew;
             renderPriceAdjustmentTable();
           });
@@ -11766,6 +11786,7 @@ ${'</ht' + 'ml>'}`;
               entry.costNew = Math.round(adjusted * 100) / 100;
             }
             recomputeEntryPricing(entry);
+            syncFractionChildrenFromParentCost(entry);
           });
           renderPriceAdjustmentTable();
         };

@@ -4156,6 +4156,13 @@
       }
     }
   }
+  .hover\:border-emerald-400 {
+    &:hover {
+      @media (hover: hover) {
+        border-color: var(--color-emerald-400);
+      }
+    }
+  }
   .hover\:border-gray-200 {
     &:hover {
       @media (hover: hover) {
@@ -4273,6 +4280,13 @@
     &:hover {
       @media (hover: hover) {
         border-color: var(--color-rose-300);
+      }
+    }
+  }
+  .hover\:border-rose-400 {
+    &:hover {
+      @media (hover: hover) {
+        border-color: var(--color-rose-400);
       }
     }
   }
@@ -5916,6 +5930,11 @@
         border-top-width: calc(0px * var(--tw-divide-y-reverse));
         border-bottom-width: calc(0px * calc(1 - var(--tw-divide-y-reverse)));
       }
+    }
+  }
+  .md\:self-end {
+    @media (width >= 48rem) {
+      align-self: flex-end;
     }
   }
   .md\:p-6 {

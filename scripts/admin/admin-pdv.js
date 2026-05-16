@@ -1378,7 +1378,7 @@
   };
 
   const formatMaskedMoneyValue = (value) =>
-    Math.max(0, normalizeCurrencyAmount(value)).toLocaleString('pt-BR', {
+    normalizeCurrencyAmount(value).toLocaleString('pt-BR', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
@@ -1389,7 +1389,7 @@
     if (!normalized) return 0;
     const sanitized = normalized.replace(/\./g, '').replace(',', '.');
     const parsed = Number(sanitized);
-    return Number.isFinite(parsed) && parsed >= 0 ? normalizeCurrencyAmount(parsed) : 0;
+    return Number.isFinite(parsed) ? normalizeCurrencyAmount(parsed) : 0;
   };
 
   const destroyPaymentInputMasks = () => {
@@ -1415,30 +1415,26 @@
       const mask = IMask(input, {
         mask: Number,
         scale: 2,
-        signed: false,
+        signed: true,
         thousandsSeparator: '.',
         padFractionalZeros: true,
         normalizeZeros: true,
         radix: ',',
         mapToRadix: ['.'],
-        min: 0,
       });
-      mask.typedValue = Math.max(
-        0,
-        normalizeCurrencyAmount(
-          (state.caixaAberto && !state.allowApuradoEdit ? renderedPayment?.valor : payment?.valor) ?? 0,
-          0
-        )
+      mask.typedValue = normalizeCurrencyAmount(
+        (state.caixaAberto && !state.allowApuradoEdit ? renderedPayment?.valor : payment?.valor) ?? 0,
+        0
       );
       mask.on('accept', () => {
         if (state.caixaAberto && !state.allowApuradoEdit) {
           const lockedRendered = findRenderedPayment(paymentId);
-          mask.typedValue = Math.max(0, normalizeCurrencyAmount(lockedRendered?.valor, 0));
+          mask.typedValue = normalizeCurrencyAmount(lockedRendered?.valor, 0);
           return;
         }
         const currentPayment = state.pagamentos.find((item) => item.id === paymentId);
         if (!currentPayment) return;
-        currentPayment.valor = Math.max(0, normalizeCurrencyAmount(mask.typedValue, 0));
+        currentPayment.valor = normalizeCurrencyAmount(mask.typedValue, 0);
         updateSummary();
       });
       input.addEventListener('focus', () => {
@@ -2379,10 +2375,17 @@
         return true;
       }
       const entryType = String(entry?.type || '').trim().toLowerCase();
-      if (!paymentType || !entryType || paymentType !== entryType) {
+      // "avista" é ambíguo e pode existir em mais de um meio; para ele,
+      // exigimos match por id/label acima e não por type.
+      if (paymentType === 'avista' || entryType === 'avista') {
         return false;
       }
-      return !['avista', ''].includes(paymentType);
+      const normalizedPaymentType = paymentType;
+      const normalizedEntryType = entryType;
+      if (!normalizedPaymentType || !normalizedEntryType || normalizedPaymentType !== normalizedEntryType) {
+        return false;
+      }
+      return true;
     });
     return normalizeCurrencyAmount(match?.valor);
   };
@@ -2431,7 +2434,7 @@
       const amount = Math.abs(normalizeCurrencyAmount(entry.amount ?? entry.delta ?? 0));
       if (!(amount > 0)) return;
       const signal = id === 'entrada' ? 1 : -1;
-      const label = String(entry.paymentLabel || '').trim();
+      const label = String(entry.paymentLabel || entry.paymentMethodLabel || '').trim();
       if (!label) return;
       const basePayment = resolveBasePayment(label);
       movementSnapshots.push({
@@ -4067,7 +4070,7 @@
     const token = getToken();
     const flowParams = new URLSearchParams({
       normalizedRead: '1',
-      normalizedStrict: '1',
+      normalizedStrict: '0',
     });
     return fetchWithOptionalAuth(
       `${API_BASE}/pdvs/${encodeURIComponent(pdvId)}/state?${flowParams.toString()}`,
@@ -4114,7 +4117,7 @@
     const token = getToken();
     const flowParams = new URLSearchParams({
       normalizedRead: '1',
-      normalizedStrict: '1',
+      normalizedStrict: '0',
     });
     const response = await fetchWithOptionalAuth(
       `${API_BASE}/pdvs/${encodeURIComponent(pdvId)}/commands?${flowParams.toString()}`,
@@ -4155,35 +4158,48 @@
     });
 
     if (persisted.summary && typeof persisted.summary === 'object') {
-      state.summary.abertura = safeNumber(persisted.summary.abertura);
-      state.summary.recebido = safeNumber(persisted.summary.recebido);
-      state.summary.saldo = safeNumber(persisted.summary.saldo);
-      state.summary.recebimentosCliente = safeNumber(
-        persisted.summary.recebimentosCliente ?? state.summary.recebimentosCliente
-      );
+      if (Object.prototype.hasOwnProperty.call(persisted.summary, 'abertura')) {
+        state.summary.abertura = safeNumber(persisted.summary.abertura);
+      }
+      if (Object.prototype.hasOwnProperty.call(persisted.summary, 'recebido')) {
+        state.summary.recebido = safeNumber(persisted.summary.recebido);
+      }
+      if (Object.prototype.hasOwnProperty.call(persisted.summary, 'saldo')) {
+        state.summary.saldo = safeNumber(persisted.summary.saldo);
+      }
+      if (Object.prototype.hasOwnProperty.call(persisted.summary, 'recebimentosCliente')) {
+        state.summary.recebimentosCliente = safeNumber(persisted.summary.recebimentosCliente);
+      }
     }
 
     if (persisted.caixaInfo && typeof persisted.caixaInfo === 'object') {
-      state.caixaInfo = {
-        ...state.caixaInfo,
-        aberturaData: parseDateValue(persisted.caixaInfo.aberturaData),
-        fechamentoData: parseDateValue(persisted.caixaInfo.fechamentoData),
-        fechamentoPrevisto: safeNumber(persisted.caixaInfo.fechamentoPrevisto),
-        fechamentoApurado: safeNumber(persisted.caixaInfo.fechamentoApurado),
-        previstoPagamentos: Array.isArray(persisted.caixaInfo.previstoPagamentos)
-          ? persisted.caixaInfo.previstoPagamentos
-              .map((payment) => normalizePaymentSnapshotForPersist(payment))
-              .filter(Boolean)
-          : [],
-        apuradoPagamentos: Array.isArray(persisted.caixaInfo.apuradoPagamentos)
-          ? persisted.caixaInfo.apuradoPagamentos
-              .map((payment) => normalizePaymentSnapshotForPersist(payment))
-              .filter(Boolean)
-          : [],
-      };
+      const nextCaixaInfo = { ...state.caixaInfo };
+      if (Object.prototype.hasOwnProperty.call(persisted.caixaInfo, 'aberturaData')) {
+        nextCaixaInfo.aberturaData = parseDateValue(persisted.caixaInfo.aberturaData);
+      }
+      if (Object.prototype.hasOwnProperty.call(persisted.caixaInfo, 'fechamentoData')) {
+        nextCaixaInfo.fechamentoData = parseDateValue(persisted.caixaInfo.fechamentoData);
+      }
+      if (Object.prototype.hasOwnProperty.call(persisted.caixaInfo, 'fechamentoPrevisto')) {
+        nextCaixaInfo.fechamentoPrevisto = safeNumber(persisted.caixaInfo.fechamentoPrevisto);
+      }
+      if (Object.prototype.hasOwnProperty.call(persisted.caixaInfo, 'fechamentoApurado')) {
+        nextCaixaInfo.fechamentoApurado = safeNumber(persisted.caixaInfo.fechamentoApurado);
+      }
+      if (Array.isArray(persisted.caixaInfo.previstoPagamentos)) {
+        nextCaixaInfo.previstoPagamentos = persisted.caixaInfo.previstoPagamentos
+          .map((payment) => normalizePaymentSnapshotForPersist(payment))
+          .filter(Boolean);
+      }
+      if (Array.isArray(persisted.caixaInfo.apuradoPagamentos)) {
+        nextCaixaInfo.apuradoPagamentos = persisted.caixaInfo.apuradoPagamentos
+          .map((payment) => normalizePaymentSnapshotForPersist(payment))
+          .filter(Boolean);
+      }
+      state.caixaInfo = nextCaixaInfo;
     }
 
-    if (Array.isArray(persisted.pagamentos)) {
+    if (Array.isArray(persisted.pagamentos) && persisted.pagamentos.length) {
       applyPagamentosData(persisted.pagamentos);
       if (!state.caixaAberto) {
         state.pagamentos = state.pagamentos.map((payment) => ({ ...payment, valor: 0 }));
@@ -4577,6 +4593,19 @@
               return;
             }
             if (payload?.state && typeof payload.state === 'object') {
+              const incomingUpdatedAt = String(payload?.updatedAt || payload?.state?.updatedAt || '').trim();
+              const currentUpdatedAt = String(state.remoteUpdatedAt || '').trim();
+              if (incomingUpdatedAt && currentUpdatedAt) {
+                const incomingTime = new Date(incomingUpdatedAt).getTime();
+                const currentTime = new Date(currentUpdatedAt).getTime();
+                if (
+                  Number.isFinite(incomingTime) &&
+                  Number.isFinite(currentTime) &&
+                  incomingTime <= currentTime
+                ) {
+                  return;
+                }
+              }
               if (stateHasLocalPendingChanges || statePersistInFlight || statePersistPending) {
                 deferredRemotePdvState = payload.state;
                 return;
@@ -26688,7 +26717,7 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
     if (lightweight) params.set('lightweight', 'true');
     if (scope) params.set('scope', scope);
     params.set('normalizedRead', '1');
-    params.set('normalizedStrict', '1');
+    params.set('normalizedStrict', '0');
     const query = params.toString() ? `?${params.toString()}` : '';
     const payload = await fetchWithOptionalAuth(`${API_BASE}/pdvs/${pdvId}${query}`, {
       token,
@@ -27111,7 +27140,7 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
     updateStatusBadge();
     updateTabAvailability();
     initializeSaleCodeForPdv(pdv);
-    const fallbackTab = state.caixaAberto ? 'pdv-tab' : 'caixa-tab';
+    const fallbackTab = 'caixa-tab';
     let targetTab = fallbackTab;
     if (pendingActiveTabPreference) {
       targetTab =
@@ -27121,24 +27150,8 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
     }
     pendingActiveTabPreference = '';
     setActiveTab(targetTab);
-    const needsHydrationOnLoad =
-      !state.completedSales.length ||
-      !state.deliveryOrders.length ||
-      !state.accountsReceivable.length;
-    if (!fullStateHydrationInFlight && needsHydrationOnLoad) {
-      fullStateHydrationInFlight = true;
-      setHistoryHydrationLoading(true);
-      updateSelectionHint('Carregando histórico do PDV...');
-      void refreshCurrentPdvStateFromServer()
-        .catch((hydrationError) => {
-          console.error('Erro ao hidratar histórico completo do PDV após carregamento:', hydrationError);
-        })
-        .finally(() => {
-          fullStateHydrationInFlight = false;
-          setHistoryHydrationLoading(false);
-          updateSelectionHint('PDV carregado com sucesso.');
-        });
-    }
+    // Evita sobrescrever o estado do caixa logo após o carregamento inicial.
+    // A hidratação completa continua disponível ao abrir abas que precisam desse conteúdo.
     state.remoteUpdatedAt = String(
       pdv?.caixaAtualizadoEm ||
         pdv?.state?.updatedAt ||
@@ -27840,7 +27853,7 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
     const payment = renderedPayments.find((item) => item.id === paymentId);
     const mask = paymentInputMasks.get(paymentId);
     if (mask) {
-      mask.typedValue = Math.max(0, safeNumber(payment?.valor, 0));
+      mask.typedValue = safeNumber(payment?.valor, 0);
       return;
     }
     input.value = formatMaskedMoneyValue(payment?.valor || 0);
@@ -27858,7 +27871,7 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
       if (!payment) return;
       const mask = paymentInputMasks.get(paymentId);
       const nextValue = mask
-        ? Math.max(0, normalizeCurrencyAmount(mask.typedValue))
+        ? normalizeCurrencyAmount(mask.typedValue)
         : parseMaskedMoneyValue(input.value);
       payment.valor = nextValue;
     });
@@ -28145,15 +28158,30 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
           return;
         }
         syncRenderedPaymentInputsToState();
+        const openingPayments = clonePayments(state.pagamentos).map((payment) => ({
+          ...payment,
+          valor: Math.max(0, safeNumber(payment?.valor)),
+        }));
+        state.pagamentos = openingPayments;
         commandAction = 'pdv.caixa.open';
         commandPayload = {
           reason: motivo || '',
-          payments: clonePayments(state.pagamentos),
+          payments: clonePayments(openingPayments),
           openedAt: new Date().toISOString(),
         };
       } else if (action.id === 'fechamento') {
         if (!state.caixaAberto) {
           notify('Abra o caixa antes de realizar o fechamento.', 'warning');
+          return;
+        }
+        const negativos = clonePayments(state.pagamentos).filter(
+          (payment) => safeNumber(payment?.valor) < -0.0001
+        );
+        if (negativos.length) {
+          const detalhes = negativos
+            .map((payment) => `${payment?.label || payment?.id || 'Pagamento'} (${formatCurrency(payment?.valor || 0)})`)
+            .join(', ');
+          notify(`Nao e permitido fechar caixa com saldo negativo: ${detalhes}.`, 'warning');
           return;
         }
         commandAction = 'pdv.caixa.close';

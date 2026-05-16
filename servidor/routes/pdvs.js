@@ -1704,11 +1704,23 @@ const buildStateUpdatePayload = ({ body = {}, existingState = {}, empresaId }) =
   const caixaAberto = resolveCaixaAbertoValue(body, existingState);
   const summarySource = body.summary || body.caixa?.resumo || {};
   const caixaSource = body.caixaInfo || body.caixa || {};
-  const pagamentosSource = Array.isArray(body.pagamentos) ? body.pagamentos : body.caixa?.pagamentos;
+  const pagamentosSource = Array.isArray(body.pagamentos)
+    ? body.pagamentos
+    : Array.isArray(body.caixa?.pagamentos)
+    ? body.caixa.pagamentos
+    : existingState.pagamentos || [];
   const historicoSource = Array.isArray(body.history) ? body.history : body.caixa?.historico;
   const vendasSource = Array.isArray(body.completedSales) ? body.completedSales : body.caixa?.vendas;
-  const previstoSource = caixaSource.previstoPagamentos || caixaSource.pagamentosPrevistos;
-  const apuradoSource = caixaSource.apuradoPagamentos || caixaSource.pagamentosApurados;
+  const previstoSource = Array.isArray(caixaSource.previstoPagamentos)
+    ? caixaSource.previstoPagamentos
+    : Array.isArray(caixaSource.pagamentosPrevistos)
+    ? caixaSource.pagamentosPrevistos
+    : existingState.caixaInfo?.previstoPagamentos || [];
+  const apuradoSource = Array.isArray(caixaSource.apuradoPagamentos)
+    ? caixaSource.apuradoPagamentos
+    : Array.isArray(caixaSource.pagamentosApurados)
+    ? caixaSource.pagamentosApurados
+    : existingState.caixaInfo?.apuradoPagamentos || [];
   const lastMovementSource = body.lastMovement || body.caixa?.ultimoLancamento;
   const accountsReceivableSource =
     Array.isArray(body.accountsReceivable)
@@ -4252,12 +4264,18 @@ const resolveCommandTargetPayment = (payments = [], paymentId = '') => {
       payment?.paymentId,
       payment?.code,
       payment?._id,
+      payment?.type,
+      payment?.tipo,
       payment?.raw?._id,
       payment?.raw?.id,
       payment?.raw?.code,
+      payment?.raw?.type,
+      payment?.raw?.tipo,
       payment?.label,
       payment?.name,
       payment?.nome,
+      ...(Array.isArray(payment?.aliases) ? payment.aliases : []),
+      ...(Array.isArray(payment?.raw?.aliases) ? payment.raw.aliases : []),
     ];
     return candidates.some((candidate) => normalizeString(candidate) === normalizedId);
   };
@@ -4867,10 +4885,10 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
     }
 
     const currentValue = safeNumber(targetPayment?.valor ?? 0, 0);
-    const nextValue = Math.max(0, currentValue + delta);
+    const nextValue = currentValue + delta;
     targetPayment.valor = nextValue;
     if (targetPrevisto) {
-      const nextPrevistoValue = Math.max(0, safeNumber(targetPrevisto?.valor ?? 0, 0) + delta);
+      const nextPrevistoValue = safeNumber(targetPrevisto?.valor ?? 0, 0) + delta;
       targetPrevisto.valor = nextPrevistoValue;
     }
 
@@ -6824,7 +6842,15 @@ router.put('/:id/state', requireAuth, async (req, res) => {
     const idempotencyKey = normalizeString(
       req.get('x-idempotency-key') || req.body?._meta?.idempotencyKey || ''
     );
-    const expectedUpdatedAt = normalizeString(req.body?._meta?.expectedUpdatedAt || '');
+    const expectedUpdatedAtFromMeta = normalizeString(req.body?._meta?.expectedUpdatedAt || '');
+    const expectedUpdatedAtFromBody = normalizeString(
+      req.body?.updatedAt ||
+      req.body?.caixaAtualizadoEm ||
+      req.body?.state?.updatedAt ||
+      req.body?.caixa?.updatedAt ||
+      ''
+    );
+    const expectedUpdatedAt = expectedUpdatedAtFromMeta || expectedUpdatedAtFromBody;
     const isLightweightUpdate = Boolean(req.body?._meta?.lightweight);
 
     if (!mongoose.Types.ObjectId.isValid(pdvId)) {
