@@ -1384,6 +1384,21 @@ async function getCollectionSyncFingerprint(db, collectionName) {
   };
 }
 
+const SYNC_COLLECTION_LIMIT_OVERRIDES = new Map([
+  ['pdvcaixasessions', 20],
+  ['whatsappmessagehistoryevents', 20],
+  ['whatsappmessagehistoryevent', 20],
+  ['whatsapplogs', 20],
+]);
+
+function resolveSyncChunkLimit(collectionName, requestedLimit) {
+  const base = Math.min(Math.max(parseInt(String(requestedLimit || '2000'), 10) || 2000, 1), 10000);
+  const key = String(collectionName || '').trim().toLowerCase();
+  const hardCap = SYNC_COLLECTION_LIMIT_OVERRIDES.get(key);
+  if (!hardCap) return base;
+  return Math.min(base, hardCap);
+}
+
 router.get('/sync/full', authMiddleware, requireStaff, async (req, res) => {
   try {
     const db = mongoose.connection?.db;
@@ -1394,10 +1409,7 @@ router.get('/sync/full', authMiddleware, requireStaff, async (req, res) => {
     const manifestOnly = String(req.query.manifest || '').trim() === '1';
     const requestedCollection = String(req.query.collection || '').trim();
     const chunkOffset = Math.max(parseInt(String(req.query.offset || '0'), 10) || 0, 0);
-    const chunkLimit = Math.min(
-      Math.max(parseInt(String(req.query.limit || '2000'), 10) || 2000, 1),
-      10000
-    );
+    const requestedLimit = parseInt(String(req.query.limit || '2000'), 10) || 2000;
     const chunkCursor = String(req.query.cursor || '').trim();
 
     const collectionsInfo = await db.listCollections({}, { nameOnly: true }).toArray();
@@ -1410,6 +1422,7 @@ router.get('/sync/full', authMiddleware, requireStaff, async (req, res) => {
       if (!collectionNames.includes(requestedCollection)) {
         return res.status(404).json({ message: 'Colecao nao encontrada para sincronizacao.' });
       }
+      const chunkLimit = resolveSyncChunkLimit(requestedCollection, requestedLimit);
       const fingerprintInfo = await getCollectionSyncFingerprint(db, requestedCollection);
       const ifNoneFingerprint = String(req.query.ifNoneFingerprint || '').trim();
       if (
@@ -1434,7 +1447,7 @@ router.get('/sync/full', authMiddleware, requireStaff, async (req, res) => {
         cursorQuery._id = { $gt: new mongoose.Types.ObjectId(chunkCursor) };
       }
       const docs = await db.collection(requestedCollection)
-        .find(cursorQuery)
+        .find(cursorQuery, { maxTimeMS: 55_000 })
         .sort({ _id: 1 })
         .limit(chunkLimit)
         .toArray();

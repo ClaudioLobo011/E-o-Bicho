@@ -26,6 +26,28 @@ const buildPdvRoomKey = (pdvId) => {
 };
 
 const BODY_PARSER_LIMIT = '10mb';
+const DEFAULT_CORS_ALLOWED_ORIGINS = [
+  'https://www.peteobicho.com.br',
+  'https://peteobicho.com.br',
+  'https://e-o-bicho.onrender.com',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+];
+
+function buildAllowedOrigins() {
+  const fromEnv = String(process.env.CORS_ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const merged = [...DEFAULT_CORS_ALLOWED_ORIGINS, ...fromEnv];
+  return Array.from(new Set(merged));
+}
+
+function isOriginAllowed(origin, allowedOrigins = []) {
+  if (!origin) return true; // requests sem Origin (server-to-server / desktop) passam
+  if (allowedOrigins.includes(origin)) return true;
+  return /^http:\/\/localhost:\d+$/.test(origin) || /^http:\/\/127\.0\.0\.1:\d+$/.test(origin);
+}
 
 
 // Middleware
@@ -47,9 +69,22 @@ app.use(express.json({
   }
 }));
 app.use(express.urlencoded({ extended: true, limit: BODY_PARSER_LIMIT }));
-app.use(cors({
+const allowedOrigins = buildAllowedOrigins();
+const corsOptions = {
+  origin(origin, callback) {
+    if (isOriginAllowed(origin, allowedOrigins)) {
+      callback(null, true);
+      return;
+    }
+    callback(new Error(`CORS bloqueado para origem: ${origin}`));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Authorization', 'Content-Type', 'X-Idempotency-Key'],
   exposedHeaders: ['Content-Disposition'],
-}));
+};
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(express.static('public'));
 app.use('/api/funcionarios', require('./routes/adminFuncionarios'));
 
