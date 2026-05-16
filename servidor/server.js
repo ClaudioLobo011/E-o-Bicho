@@ -84,7 +84,6 @@ const corsOptions = {
   exposedHeaders: ['Content-Disposition'],
 };
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
 app.use(express.static('public'));
 app.use('/api/funcionarios', require('./routes/adminFuncionarios'));
 
