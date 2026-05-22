@@ -1384,6 +1384,14 @@ async function getCollectionSyncFingerprint(db, collectionName) {
   };
 }
 
+function parseSyncDate(value = '') {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+}
+
 const SYNC_COLLECTION_LIMIT_OVERRIDES = new Map([
   ['pdvcaixasessions', 20],
   ['whatsappmessagehistoryevents', 20],
@@ -1411,6 +1419,8 @@ router.get('/sync/full', authMiddleware, requireStaff, async (req, res) => {
     const chunkOffset = Math.max(parseInt(String(req.query.offset || '0'), 10) || 0, 0);
     const requestedLimit = parseInt(String(req.query.limit || '2000'), 10) || 2000;
     const chunkCursor = String(req.query.cursor || '').trim();
+    const deltaSince = parseSyncDate(req.query.since || '');
+    const deltaMode = String(req.query.delta || '').trim() === '1' && !!deltaSince;
 
     const collectionsInfo = await db.listCollections({}, { nameOnly: true }).toArray();
     const collectionNames = collectionsInfo
@@ -1424,6 +1434,65 @@ router.get('/sync/full', authMiddleware, requireStaff, async (req, res) => {
       }
       const chunkLimit = resolveSyncChunkLimit(requestedCollection, requestedLimit);
       const fingerprintInfo = await getCollectionSyncFingerprint(db, requestedCollection);
+      if (deltaMode) {
+        const basisField = String(fingerprintInfo?.basis || '').trim();
+        const canUseTimestampDelta = String(fingerprintInfo?.strategy || '') === 'timestamp'
+          && basisField
+          && !basisField.startsWith('$');
+        if (!canUseTimestampDelta) {
+          return res.json({
+            version: 3,
+            mode: 'collection-delta',
+            generatedAt: new Date().toISOString(),
+            database: db.databaseName || null,
+            collection: requestedCollection,
+            deltaSupported: false,
+            reason: 'timestamp-basis-unavailable',
+            count: Number(fingerprintInfo.count || 0),
+            fingerprint: fingerprintInfo,
+            data: [],
+          });
+        }
+
+        const sinceIso = deltaSince.toISOString();
+        const deltaQuery = {
+          $or: [
+            { [basisField]: { $gte: deltaSince } },
+            { [basisField]: { $gte: sinceIso } },
+          ],
+        };
+        const deltaCollection = db.collection(requestedCollection);
+        const [changedCount, docs] = await Promise.all([
+          deltaCollection.countDocuments(deltaQuery, { maxTimeMS: 55_000 }),
+          deltaCollection
+            .find(deltaQuery, { maxTimeMS: 55_000 })
+            .sort({ [basisField]: 1, _id: 1 })
+            .skip(chunkOffset)
+            .limit(chunkLimit)
+            .toArray(),
+        ]);
+        const loaded = docs.length;
+        const nextOffset = chunkOffset + loaded;
+        return res.json({
+          version: 3,
+          mode: 'collection-delta',
+          generatedAt: new Date().toISOString(),
+          database: db.databaseName || null,
+          collection: requestedCollection,
+          deltaSupported: true,
+          basis: basisField,
+          since: sinceIso,
+          changedCount,
+          loaded,
+          offset: chunkOffset,
+          limit: chunkLimit,
+          nextOffset,
+          hasMore: nextOffset < changedCount && loaded > 0,
+          count: Number(fingerprintInfo.count || 0),
+          fingerprint: fingerprintInfo,
+          data: docs,
+        });
+      }
       const ifNoneFingerprint = String(req.query.ifNoneFingerprint || '').trim();
       if (
         chunkOffset === 0 &&
