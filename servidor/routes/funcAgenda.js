@@ -13,7 +13,7 @@ const UserAddress = require('../models/UserAddress');
 const Store = require('../models/Store');
 const IdempotencyRecord = require('../models/IdempotencyRecord');
 const bcrypt = require('bcryptjs');
-const { randomBytes } = require('crypto');
+const { createHash, randomBytes } = require('crypto');
 const {
   ensureScopedSequenceAtLeast,
   nextScopedSequence,
@@ -1332,6 +1332,68 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
 async function getCollectionSyncFingerprint(db, collectionName) {
   const collection = db.collection(collectionName);
   const count = await collection.estimatedDocumentCount();
+
+  if (collectionName === 'appointments') {
+    const toDateSignature = (value) => {
+      if (!value) return '';
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toISOString();
+    };
+    const rows = await collection
+      .find({}, {
+        projection: {
+          _id: 1,
+          scheduledAt: 1,
+          updatedAt: 1,
+          status: 1,
+          profissional: 1,
+          itens: 1,
+          valor: 1,
+          pago: 1,
+          codigoVenda: 1,
+        },
+        maxTimeMS: 55_000,
+      })
+      .sort({ _id: 1 })
+      .toArray();
+    const signature = rows.map((doc) => {
+      const itens = Array.isArray(doc?.itens) ? doc.itens : [];
+      const itemSignature = itens.map((item) => [
+        String(item?._id || ''),
+        String(item?.servico || ''),
+        String(item?.profissional || ''),
+        String(item?.data || ''),
+        String(item?.hora || ''),
+        String(item?.status || ''),
+        Number(item?.valor || 0),
+      ].join(':')).join(',');
+      return [
+        String(doc?._id || ''),
+        toDateSignature(doc?.scheduledAt),
+        toDateSignature(doc?.updatedAt),
+        String(doc?.status || ''),
+        String(doc?.profissional || ''),
+        Number(doc?.valor || 0),
+        doc?.pago ? '1' : '0',
+        String(doc?.codigoVenda || ''),
+        itemSignature,
+      ].join('|');
+    }).join('\n');
+    const fingerprint = createHash('sha256').update(signature).digest('base64url');
+    const latestUpdatedAt = rows.reduce((max, doc) => {
+      const dt = new Date(doc?.updatedAt || doc?.scheduledAt || 0);
+      if (Number.isNaN(dt.getTime())) return max;
+      return !max || dt > max ? dt : max;
+    }, null);
+    return {
+      count,
+      basis: 'appointments-signature',
+      maxUpdatedAt: latestUpdatedAt ? latestUpdatedAt.toISOString() : null,
+      fingerprint: `${count}|appointments-signature|${fingerprint}`,
+      strategy: 'always-download',
+    };
+  }
+
   const updatedFieldCandidates = ['updatedAt', 'updated_at', 'criadoEm', 'createdAt', 'created_at'];
 
   for (const fieldName of updatedFieldCandidates) {
