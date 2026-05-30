@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { buildProductSearchData } = require('../utils/productSearch');
 
 // Função auxiliar para remover acentos e normalizar o texto
 const normalizeText = (text) => {
@@ -131,6 +132,8 @@ const productSchema = new mongoose.Schema({
     tipoProduto: { type: String, trim: true, default: '' },
     ncm: { type: String, trim: true, default: '' },
     searchableString: { type: String, select: false },
+    searchTokens: { type: [String], default: [], select: false },
+    searchTokenPrefixes: { type: [String], default: [], select: false },
     isDestaque: { // Para saber se o produto é um destaque ou não
         type: Boolean,
         default: false
@@ -193,8 +196,8 @@ const productSchema = new mongoose.Schema({
     especificacoes: {
         idade: { type: [String], default: [] }, // ex.: Filhotes, Adulto, Sênior
         pet: { type: [String], default: [] },   // ex.: Cachorro, Gato, Pássaros, etc.
-        tipo: { type: String, default: '' },    // ex.: Cães, Gatos, Pássaros, Outros
-        castracao: { type: String, default: '' }, // ex.: Castrado, Não castrado
+        tipo: { type: [String], default: [] },    // ex.: Cães, Gatos, Pássaros, Outros
+        castracao: { type: [String], default: [] }, // ex.: Castrado, Não castrado
         porteRaca: { type: [String], default: [] }, // ex.: Mini, Pequeno, Médio, Grande, Gigante
         apresentacao: { type: String, default: '' }
     },
@@ -209,6 +212,11 @@ const productSchema = new mongoose.Schema({
     timestamps: true
 });
 
+productSchema.index({ searchTokens: 1 });
+productSchema.index({ searchTokenPrefixes: 1 });
+productSchema.index({ codigosComplementares: 1 });
+productSchema.index({ 'fornecedores.codigoProduto': 1 });
+
 // Middleware do Mongoose: é executado ANTES de salvar qualquer produto
 productSchema.pre('save', function(next) {
     if (Array.isArray(this.estoques) && this.estoques.length > 0) {
@@ -218,10 +226,11 @@ productSchema.pre('save', function(next) {
         }, 0);
         this.stock = Number.isFinite(total) ? total : this.stock;
     }
-    // Cria a string de pesquisa normalizada a partir dos campos relevantes
-    this.searchableString = normalizeText(
-        `${this.nome} ${this.cod} ${this.marca} ${this.codbarras}`
-    );
+    // Cria campos de pesquisa normalizados a partir dos campos relevantes.
+    const searchData = buildProductSearchData(this.toObject({ depopulate: true }));
+    this.searchableString = searchData.text || normalizeText(`${this.nome} ${this.cod} ${this.marca} ${this.codbarras}`);
+    this.searchTokens = searchData.tokens;
+    this.searchTokenPrefixes = searchData.prefixes;
     next();
 });
 

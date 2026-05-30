@@ -11,8 +11,8 @@
 /* 2. Define as nossas variáveis de tema diretamente no bloco @theme.
    Isto vai INSTRUIR o Tailwind a criar as classes de utilitário correspondentes. */
 @theme {
-  --color-primary: #7A9A55;
-  --color-secondary: #5F7A41;
+  --color-primary: #5F7A41;
+  --color-secondary: #4B6333;
   --color-accent: #D9534F;
   --color-light: #f8f9fa;
   --color-dark: #343a40;

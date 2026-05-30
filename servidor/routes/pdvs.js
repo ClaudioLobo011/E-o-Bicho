@@ -1376,6 +1376,95 @@ const normalizeHistoryEntryPayload = (entry) => {
   };
 };
 
+const normalizeSaleItemPayload = (item, index = 0) => {
+  if (!item || typeof item !== 'object') return item;
+  const quantidade = safeNumber(
+    item.quantidade ?? item.qtd ?? item.quantity ?? item.qty ?? item.quant ?? 0,
+    0
+  );
+  const valorUnitario = safeNumber(
+    item.valorUnitario ??
+      item.unitPrice ??
+      item.valor ??
+      item.preco ??
+      item.price ??
+      item.unit ??
+      item.unitValue ??
+      item.unitario ??
+      0,
+    0
+  );
+  const totalItem = safeNumber(
+    item.total ??
+      item.subtotal ??
+      item.valorTotal ??
+      item.totalValue ??
+      item.totalPrice ??
+      (valorUnitario * quantidade),
+    valorUnitario * quantidade
+  );
+  const productId = normalizeString(
+    item.productId || item.produtoId || item.produto_id || item.id || item._id || item.productSnapshot?._id || ''
+  );
+  const codigo = normalizeString(
+    item.codigo || item.codigoBarras || item.barcode || item.code || item.codigoInterno || item.codInterno || ''
+  );
+  const nome = normalizeString(
+    item.nome || item.descricao || item.produto || item.product || item.name || item.productSnapshot?.nome || ''
+  );
+  const productSnapshot =
+    item.productSnapshot && typeof item.productSnapshot === 'object'
+      ? { ...item.productSnapshot }
+      : {};
+  if (productId) {
+    productSnapshot._id = productSnapshot._id || productId;
+    productSnapshot.id = productSnapshot.id || productId;
+    productSnapshot.productId = productSnapshot.productId || productId;
+  }
+  if (nome) {
+    productSnapshot.nome = productSnapshot.nome || nome;
+    productSnapshot.descricao = productSnapshot.descricao || nome;
+  }
+  if (codigo) {
+    productSnapshot.codigo = productSnapshot.codigo || codigo;
+    productSnapshot.codigoBarras = productSnapshot.codigoBarras || codigo;
+  }
+  if (valorUnitario > 0) {
+    productSnapshot.venda = safeNumber(productSnapshot.venda ?? valorUnitario, valorUnitario);
+    productSnapshot.valor = safeNumber(productSnapshot.valor ?? valorUnitario, valorUnitario);
+    productSnapshot.preco = safeNumber(productSnapshot.preco ?? valorUnitario, valorUnitario);
+  }
+  return {
+    ...item,
+    id: item.id || productId || `item-${index + 1}`,
+    productId: item.productId || productId,
+    produtoId: item.produtoId || productId,
+    codigo: item.codigo || codigo,
+    codigoBarras: item.codigoBarras || codigo,
+    barcode: item.barcode || codigo,
+    nome: item.nome || nome,
+    descricao: item.descricao || nome,
+    produto: item.produto || nome,
+    quantidade,
+    qtd: safeNumber(item.qtd ?? quantidade, quantidade),
+    quantity: safeNumber(item.quantity ?? quantidade, quantidade),
+    valorUnitario,
+    unitPrice: safeNumber(item.unitPrice ?? valorUnitario, valorUnitario),
+    price: safeNumber(item.price ?? valorUnitario, valorUnitario),
+    preco: safeNumber(item.preco ?? valorUnitario, valorUnitario),
+    valor: safeNumber(item.valor ?? valorUnitario, valorUnitario),
+    valorBase: safeNumber(item.valorBase ?? valorUnitario, valorUnitario),
+    valorSemAjuste: safeNumber(item.valorSemAjuste ?? valorUnitario, valorUnitario),
+    total: totalItem,
+    subtotal: safeNumber(item.subtotal ?? totalItem, totalItem),
+    valorTotal: safeNumber(item.valorTotal ?? totalItem, totalItem),
+    totalValue: safeNumber(item.totalValue ?? totalItem, totalItem),
+    totalPrice: safeNumber(item.totalPrice ?? totalItem, totalItem),
+    subtotalSemAjuste: safeNumber(item.subtotalSemAjuste ?? totalItem, totalItem),
+    productSnapshot,
+  };
+};
+
 const normalizeSaleRecordPayload = (record) => {
   if (!record || typeof record !== 'object') return null;
   const id = normalizeString(record.id || record._id) || `sale-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
@@ -1406,7 +1495,7 @@ const normalizeSaleRecordPayload = (record) => {
       ? paymentTagsFromRecord
       : buildPaymentTagsFromPayments(record.payments);
   const items = Array.isArray(record.items)
-    ? record.items.map((item) => (item && typeof item === 'object' ? { ...item } : item))
+    ? record.items.map((item, index) => normalizeSaleItemPayload(item, index))
     : [];
   const discountValue = safeNumber(record.discountValue ?? record.desconto ?? 0, 0);
   const discountLabel = normalizeString(record.discountLabel);

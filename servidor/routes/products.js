@@ -27,10 +27,46 @@ const {
 } = require('../utils/cloudflareR2');
 const { applyProductImageUrls } = require('../utils/productImageUrl');
 const { logInventoryMovement } = require('../utils/inventoryMovementLogger');
+const { buildProductQueryTokens, buildProductSearchData, normalizeSearchText } = require('../utils/productSearch');
 
 // Usa memoria para evitar escrita temporaria em disco durante o upload.
 const upload = multer({ storage: multer.memoryStorage() });
 
+const normalizeProductSpecList = (value) => {
+    const rawItems = Array.isArray(value)
+        ? value
+        : value === null || value === undefined || value === ''
+            ? []
+            : [value];
+
+    const seen = new Set();
+    const result = [];
+    rawItems.forEach((item) => {
+        const normalized = typeof item === 'string' ? item.trim() : String(item || '').trim();
+        if (!normalized || seen.has(normalized)) return;
+        seen.add(normalized);
+        result.push(normalized);
+    });
+    return result;
+};
+
+const sanitizeProductSpecifications = (specifications) => {
+    if (!specifications || typeof specifications !== 'object') {
+        return {};
+    }
+
+    return {
+        ...specifications,
+        idade: normalizeProductSpecList(specifications.idade),
+        pet: normalizeProductSpecList(specifications.pet),
+        tipo: normalizeProductSpecList(specifications.tipo),
+        castracao: normalizeProductSpecList(specifications.castracao),
+        porteRaca: normalizeProductSpecList(specifications.porteRaca),
+        apresentacao: typeof specifications.apresentacao === 'string'
+            ? specifications.apresentacao.trim()
+            : '',
+    };
+};
 
 const resolveAuthenticatedUser = async (req) => {
     try {
@@ -624,9 +660,7 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
             custo: Number.isFinite(costNumber) && costNumber >= 0 ? costNumber : 0,
             venda: Number.isFinite(saleNumber) && saleNumber >= 0 ? saleNumber : 0,
             categorias: Array.isArray(payload.categorias) ? payload.categorias : [],
-            especificacoes: typeof payload.especificacoes === 'object' && payload.especificacoes !== null
-                ? payload.especificacoes
-                : {},
+            especificacoes: sanitizeProductSpecifications(payload.especificacoes),
             fornecedores,
             estoques,
             stock: estoques.length > 0
@@ -866,6 +900,229 @@ router.get('/by-category', async (req, res) => {
     }
 });
 
+const escapeProductSearchRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const buildProductVisibilityQuery = async ({ includeHidden = 'false', audience = '', req } = {}) => {
+    let allowHiddenProducts = false;
+    if (includeHidden === 'true' || audience === 'pdv' || audience === 'admin') {
+        const authenticated = await resolveAuthenticatedUser(req);
+        allowHiddenProducts = Boolean(authenticated);
+    }
+    return allowHiddenProducts ? {} : { naoMostrarNoSite: { $ne: true } };
+};
+
+const buildExactProductSearchConditions = (term) => {
+    const raw = typeof term === 'string' ? term.trim() : '';
+    if (!raw || raw === '*' || raw.includes('*')) return [];
+    return [
+        { cod: raw },
+        { codbarras: raw },
+        { referencia: raw },
+        { codigosComplementares: raw },
+        { 'fornecedores.codigoProduto': raw },
+    ];
+};
+
+const buildOrderedWildcardProductSearchParts = (rawQuery) => {
+    const normalizedRaw = String(rawQuery || '').trim();
+    if (!normalizedRaw || !normalizedRaw.includes('*') || normalizedRaw === '*') return null;
+    const parts = normalizedRaw
+        .split('*')
+        .map((part) => normalizeSearchText(part))
+        .filter(Boolean);
+    return parts.length ? parts : null;
+};
+
+const getProductPrimarySearchValue = (product) => [
+    product?.nome || product?.descricao,
+    product?.marca,
+].filter(Boolean).map((value) => (
+    typeof value === 'object' ? JSON.stringify(value) : String(value)
+)).join(' ');
+
+
+const getProductWildcardTokens = (product) => {
+    const primaryText = getProductPrimarySearchValue(product)
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/(\d+)[,.](\d+)/g, '$1_$2');
+
+    const matches = primaryText.match(/[a-z0-9_]+/g) || [];
+    return matches.map((token) => {
+        const decimalMatch = token.match(/^(\d+)_(\d+)([a-z]*)$/);
+        return {
+            token: token.replace(/_/g, ''),
+            isDecimal: Boolean(decimalMatch),
+            integerPart: decimalMatch ? decimalMatch[1] : '',
+        };
+    });
+};
+
+const wildcardPartMatchesToken = (part, tokenInfo) => {
+    if (!part || !tokenInfo?.token) return false;
+    if (/^\d+$/.test(part)) {
+        if (tokenInfo.isDecimal && tokenInfo.integerPart === part) return false;
+        return tokenInfo.token.startsWith(part);
+    }
+    return tokenInfo.token.startsWith(part);
+};
+
+const productMatchesOrderedWildcardParts = (product, parts) => {
+    if (!Array.isArray(parts) || parts.length === 0) return false;
+    const tokens = getProductWildcardTokens(product);
+    let startIndex = 0;
+
+    for (const part of parts) {
+        const foundIndex = tokens.findIndex((tokenInfo, index) => (
+            index >= startIndex && wildcardPartMatchesToken(part, tokenInfo)
+        ));
+        if (foundIndex === -1) return false;
+        startIndex = foundIndex + 1;
+    }
+
+    return true;
+};
+
+const productMatchesSearchToken = (searchData, token) => {
+    if (!token) return true;
+    const tokenSet = new Set(searchData.tokens || []);
+    const prefixSet = new Set(searchData.prefixes || []);
+    return tokenSet.has(token) || prefixSet.has(token) || searchData.text.includes(token);
+};
+
+const getProductSearchMatchStats = (product, rawQuery, queryTokens) => {
+    const query = normalizeSearchText(rawQuery);
+    const wildcardParts = buildOrderedWildcardProductSearchParts(rawQuery);
+    const code = normalizeSearchText(product?.cod);
+    const barcode = normalizeSearchText(product?.codbarras);
+    const name = normalizeSearchText(product?.nome || product?.descricao);
+    const searchData = buildProductSearchData(product);
+    const tokenSet = new Set(searchData.tokens || []);
+    const prefixSet = new Set(searchData.prefixes || []);
+
+    let score = 0;
+    let matchedTokens = 0;
+    if (query && (code === query || barcode === query)) score += 10000;
+    if (query && name === query) score += 5000;
+    if (query && name.startsWith(query)) score += 2500;
+    if (wildcardParts && productMatchesOrderedWildcardParts(product, wildcardParts)) score += 1800;
+    else if (query && searchData.text.includes(query)) score += 1000;
+
+    queryTokens.forEach((token) => {
+        if (tokenSet.has(token)) {
+            matchedTokens += 1;
+            score += 140;
+        } else if (prefixSet.has(token)) {
+            matchedTokens += 1;
+            score += 90;
+        } else if (searchData.text.includes(token)) {
+            matchedTokens += 1;
+            score += 45;
+        }
+    });
+
+    return { score, matchedTokens, queryTokenCount: queryTokens.length };
+};
+
+const shouldKeepProductSearchResult = (product, rawQuery, queryTokens) => {
+    if (rawQuery === '*') return true;
+    if (!queryTokens.length) return false;
+
+    const searchData = buildProductSearchData(product);
+    const wildcardParts = buildOrderedWildcardProductSearchParts(rawQuery);
+    if (wildcardParts) {
+        return productMatchesOrderedWildcardParts(product, wildcardParts);
+    }
+
+    return queryTokens.every((token) => productMatchesSearchToken(searchData, token));
+};
+router.get('/search', async (req, res) => {
+    try {
+        const rawQuery = String(req.query.q || req.query.search || '').trim();
+        const includeHidden = String(req.query.includeHidden || 'false');
+        const audience = String(req.query.audience || '');
+        const parsedLimit = Number.parseInt(req.query.limit, 10);
+        const limit = Number.isFinite(parsedLimit) && parsedLimit > 0
+            ? Math.min(parsedLimit, 5000)
+            : 1000;
+
+        const baseQuery = await buildProductVisibilityQuery({ includeHidden, audience, req });
+        const queryTokens = buildProductQueryTokens(rawQuery);
+        const exactConditions = buildExactProductSearchConditions(rawQuery);
+        const productsById = new Map();
+
+        const pushProducts = (items = []) => {
+            items.forEach((product) => {
+                const id = String(product?._id || product?.id || '').trim();
+                if (!id || productsById.has(id)) return;
+                productsById.set(id, product);
+            });
+        };
+
+        if (exactConditions.length) {
+            const exactProducts = await Product.find({ ...baseQuery, $or: exactConditions })
+                .populate('categorias')
+                .limit(Math.min(limit, 50))
+                .lean();
+            pushProducts(exactProducts);
+        }
+
+        if (rawQuery === '*' || queryTokens.length === 0) {
+            const allProducts = await Product.find(baseQuery)
+                .populate('categorias')
+                .sort({ nome: 1 })
+                .limit(limit)
+                .lean();
+            pushProducts(allProducts);
+        } else {
+            const tokenProducts = await Product.find({
+                ...baseQuery,
+                $or: [
+                    { searchTokenPrefixes: { $in: queryTokens } },
+                    { searchTokens: { $in: queryTokens } },
+                ],
+            })
+                .populate('categorias')
+                .limit(Math.max(limit, 5000))
+                .lean();
+            pushProducts(tokenProducts);
+
+            if (productsById.size === 0) {
+                const fallbackQuery = {
+                    ...baseQuery,
+                    $or: queryTokens.map((token) => ({
+                        searchableString: { $regex: escapeProductSearchRegex(token), $options: 'i' },
+                    })),
+                };
+                const fallbackProducts = await Product.find(fallbackQuery)
+                    .populate('categorias')
+                    .limit(Math.max(limit, 5000))
+                    .lean();
+                pushProducts(fallbackProducts);
+            }
+        }
+
+        const products = Array.from(productsById.values())
+            .filter((product) => shouldKeepProductSearchResult(product, rawQuery, queryTokens))
+            .map((product) => {
+                applyProductImageUrls(product);
+                return product;
+            })
+            .sort((a, b) => {
+                const scoreDiff = getProductSearchMatchStats(b, rawQuery, queryTokens).score
+                    - getProductSearchMatchStats(a, rawQuery, queryTokens).score;
+                if (scoreDiff !== 0) return scoreDiff;
+                return String(a?.nome || '').localeCompare(String(b?.nome || ''), 'pt-BR', { sensitivity: 'base', numeric: true });
+            })
+            .slice(0, limit);
+
+        res.json({ products, page: 1, pages: 1, total: products.length });
+    } catch (error) {
+        console.error('Erro na busca rápida de produtos:', error);
+        res.status(500).json({ message: 'Erro ao buscar produtos.' });
+    }
+});
 // GET /api/products (pública, listagem com paginação e busca)
 router.get('/', async (req, res) => {
     try {
@@ -880,10 +1137,22 @@ router.get('/', async (req, res) => {
         const query = allowHiddenProducts ? {} : { naoMostrarNoSite: { $ne: true } };
 
         if (search) {
+            const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             const normalizedSearch = search.toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            query.searchableString = { $regex: normalizedSearch, $options: 'i' };
-        }
+            const searchTerms = normalizedSearch
+                .replace(/\*/g, ' ')
+                .split(/\s+/)
+                .map((term) => term.trim())
+                .filter(Boolean);
 
+            if (searchTerms.length === 1) {
+                query.searchableString = { $regex: escapeRegex(searchTerms[0]), $options: 'i' };
+            } else if (searchTerms.length > 1) {
+                query.$and = searchTerms.map((term) => ({
+                    searchableString: { $regex: escapeRegex(term), $options: 'i' },
+                }));
+            }
+        }
         const limitValue = Number.isFinite(parseInt(limit, 10)) ? parseInt(limit, 10) : 20;
         const pageValue = Number.isFinite(parseInt(page, 10)) ? parseInt(page, 10) : 1;
         const useFastMode = fastMode === 'true';
@@ -1482,7 +1751,7 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
         if (payload.descricao !== undefined) updatePayload.descricao = payload.descricao;
         if (payload.marca !== undefined) updatePayload.marca = payload.marca;
         if (payload.categorias !== undefined) updatePayload.categorias = Array.isArray(payload.categorias) ? payload.categorias : [];
-        if (payload.especificacoes !== undefined) updatePayload.especificacoes = payload.especificacoes;
+        if (payload.especificacoes !== undefined) updatePayload.especificacoes = sanitizeProductSpecifications(payload.especificacoes);
         if (payload.unidade !== undefined) updatePayload.unidade = normalizeString(payload.unidade);
         if (payload.referencia !== undefined) updatePayload.referencia = normalizeString(payload.referencia);
         if (payload.dataCadastro !== undefined) updatePayload.dataCadastro = parseDate(payload.dataCadastro);
@@ -1667,6 +1936,13 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
             }));
         };
 
+        const searchData = buildProductSearchData({
+            ...(existingProduct.toObject ? existingProduct.toObject() : existingProduct),
+            ...updatePayload,
+        });
+        updatePayload.searchableString = searchData.text;
+        updatePayload.searchTokens = searchData.tokens;
+        updatePayload.searchTokenPrefixes = searchData.prefixes;
         const updatedProduct = await Product.findByIdAndUpdate(
             req.params.id,
             updatePayload,

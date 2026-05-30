@@ -82,6 +82,7 @@
     const priceHistoryModalCloseButtons = Array.from(document.querySelectorAll('[data-close-price-history-modal]'));
     const productSearchModal = document.getElementById('product-search-modal');
     const productSearchInput = document.getElementById('product-search-input');
+    const productSearchButton = document.getElementById('product-search-button');
     const productSearchResultsBody = document.getElementById('product-search-results');
     const productSearchCloseButtons = Array.from(document.querySelectorAll('[data-close-product-search-modal]'));
     const productSearchFilterInputs = new Map();
@@ -1417,8 +1418,6 @@
     const PRODUCT_SEARCH_RESULTS_COLUMNS = 5;
     const PRODUCT_SEARCH_DEFAULT_MESSAGE = 'Digite para buscar produtos pelo código ou descrição.';
     let productSearchAbortController = null;
-    let productSearchDebounceId = null;
-    let lastProductSearchTerm = '';
     const letterInputPattern = /\p{L}/u;
     const letterGlobalPattern = /\p{L}+/gu;
     let lastSkuInputValue = skuInput?.value || '';
@@ -1615,25 +1614,15 @@
                 input.checked = Boolean(isChecked);
             });
         };
-        const applyRadioSelection = (inputs, expectedValue, fallbackValue = '') => {
-            if (!inputs.length) return;
-            const normalizedExpected = normalizeTagMatchText(expectedValue || fallbackValue || '');
-            inputs.forEach((input) => {
-                if (!(input instanceof HTMLInputElement)) return;
-                const normalizedValue = normalizeTagMatchText(input.value || '');
-                input.checked = Boolean(normalizedExpected) && normalizedValue === normalizedExpected;
-            });
-        };
-
         // Na ausência de indicadores de idade, usa Adulto como padrão.
         if (ageSet.size === 0) {
             ageSet.add('ADULTO');
         }
         applyCheckboxSelection(ageInputs, ageSet, false);
         // Tipo: se vier gato/cat marca Gatos; senão marca Cães por padrão.
-        applyRadioSelection(tipoInputs, hasCatType ? 'Gatos' : 'Cães', 'Cães');
+        applyCheckboxSelection(tipoInputs, new Set([normalizeTagMatchText(hasCatType ? 'Gatos' : 'Cães')]), false);
         // Castrado: só marca "Castrado" se explicitamente identificado, senão "Não castrado".
-        applyRadioSelection(castracaoInputs, hasCastrado ? 'Castrado' : 'Não castrado', 'Não castrado');
+        applyCheckboxSelection(castracaoInputs, new Set([normalizeTagMatchText(hasCastrado ? 'Castrado' : 'Não castrado')]), false);
         // Para gatos, não usar porte/raça. Para os demais, aplica a lógica padrão de porte.
         if (hasCatType) {
             porteInputs.forEach((input) => {
@@ -1700,8 +1689,8 @@
 
         const ageSet = new Set();
         const porteSet = new Set();
-        let ruleTipo = '';
-        let ruleCastracao = '';
+        const ruleTipoSet = new Set();
+        const ruleCastracaoSet = new Set();
         let ruleMarca = '';
 
         const resolveAgeValues = (value) => {
@@ -1772,11 +1761,11 @@
             }
             if (rule.field === 'tipo') {
                 const parsedTipo = resolveTipo(rule.value);
-                if (parsedTipo) ruleTipo = parsedTipo;
+                if (parsedTipo) ruleTipoSet.add(normalizeTagMatchText(parsedTipo));
                 return;
             }
             if (rule.field === 'castrado') {
-                ruleCastracao = resolveCastracao(rule.value);
+                ruleCastracaoSet.add(normalizeTagMatchText(resolveCastracao(rule.value)));
             }
         });
 
@@ -1787,17 +1776,17 @@
             }
         }
 
-        if (ruleTipo) {
+        if (ruleTipoSet.size > 0) {
             document.querySelectorAll('input[name="spec-tipo"]').forEach((input) => {
                 if (!(input instanceof HTMLInputElement)) return;
-                input.checked = normalizeTagMatchText(input.value) === normalizeTagMatchText(ruleTipo);
+                input.checked = ruleTipoSet.has(normalizeTagMatchText(input.value));
             });
         }
 
-        if (ruleCastracao) {
+        if (ruleCastracaoSet.size > 0) {
             document.querySelectorAll('input[name="spec-castracao"]').forEach((input) => {
                 if (!(input instanceof HTMLInputElement)) return;
-                input.checked = normalizeTagMatchText(input.value) === normalizeTagMatchText(ruleCastracao);
+                input.checked = ruleCastracaoSet.has(normalizeTagMatchText(input.value));
             });
         }
 
@@ -2021,8 +2010,8 @@
 
         const parsedPeso = pesoValue ? Number(pesoValue) : null;
 
-        const selectedProductType = form.querySelector('input[name="spec-tipo"]:checked')?.value || '';
-        const selectedCastracao = form.querySelector('input[name="spec-castracao"]:checked')?.value || '';
+        const selectedProductTypes = Array.from(form.querySelectorAll('input[name="spec-tipo"]:checked')).map((input) => input.value);
+        const selectedCastracoes = Array.from(form.querySelectorAll('input[name="spec-castracao"]:checked')).map((input) => input.value);
 
         const updateData = {
             nome: productName,
@@ -2047,9 +2036,9 @@
             })),
             especificacoes: {
                 idade: Array.from(form.querySelectorAll('input[name="spec-idade"]:checked')).map(i => i.value),
-                pet: selectedProductType ? [selectedProductType] : [],
-                tipo: selectedProductType,
-                castracao: selectedCastracao,
+                pet: selectedProductTypes,
+                tipo: selectedProductTypes,
+                castracao: selectedCastracoes,
                 porteRaca: Array.from(form.querySelectorAll('input[name="spec-porte"]:checked')).map(i => i.value),
                 apresentacao: (document.getElementById('spec-apresentacao')?.value || '').trim()
             },
@@ -3054,6 +3043,31 @@
         return candidates.some((candidate) => regex.test(normalizeSearchText(candidate)));
     };
 
+    const filterProductsBySearchTerm = (products, rawTerm) => {
+        const list = Array.isArray(products) ? products : [];
+        const normalizedTerm = normalizeSearchText(rawTerm || '');
+        if (!normalizedTerm) return list.slice();
+        const hasWildcard = normalizedTerm.includes('*');
+        const regex = hasWildcard ? buildProductSearchFilterRegex(rawTerm) : null;
+        const terms = hasWildcard
+            ? []
+            : normalizedTerm.split(/\s+/).map((term) => term.trim()).filter(Boolean);
+        if (hasWildcard && !regex) return list.slice();
+        if (!hasWildcard && !terms.length) return list.slice();
+        return list.filter((product) => {
+            const candidates = [
+                ...getProductSearchFilterCandidates(product, 'cod'),
+                ...getProductSearchFilterCandidates(product, 'descricao'),
+                ...getProductSearchFilterCandidates(product, 'codbarras'),
+            ];
+            if (hasWildcard) {
+                return candidates.some((candidate) => regex.test(normalizeSearchText(candidate)));
+            }
+            const combined = normalizeSearchText(candidates.join(' '));
+            return terms.every((term) => combined.includes(term));
+        });
+    };
+
     const applyProductSearchFilters = (products) => {
         const list = Array.isArray(products) ? products : [];
         const filters = productSearchTableState.filters || {};
@@ -3355,7 +3369,6 @@
 
     const fetchProductSearchResults = async (term) => {
         const normalizedTerm = typeof term === 'string' ? term.trim() : '';
-        lastProductSearchTerm = normalizedTerm;
         if (!productSearchResultsBody) return;
 
         if (!normalizedTerm) {
@@ -3377,60 +3390,30 @@
         }
 
         try {
-            const pageSize = 500;
-            const products = [];
-            const seenIds = new Set();
+            const params = new URLSearchParams({
+                q: normalizedTerm,
+                includeHidden: 'true',
+                audience: 'admin',
+                limit: '5000',
+            });
+            const response = await fetch(`${API_CONFIG.BASE_URL}/products/search?${params.toString()}`, {
+                headers,
+                signal: activeAbortController.signal,
+            });
 
-            const appendProducts = (payload) => {
-                const pageProducts = Array.isArray(payload?.products)
-                    ? payload.products
-                    : Array.isArray(payload)
-                        ? payload
-                        : [];
-                pageProducts.forEach((product) => {
-                    const id = String(product?._id || product?.id || '').trim();
-                    if (id && seenIds.has(id)) return;
-                    if (id) seenIds.add(id);
-                    products.push(product);
-                });
-            };
-
-            const fetchPage = async (pageNumber) => {
-                const params = new URLSearchParams({
-                    search: normalizedTerm,
-                    page: String(pageNumber),
-                    limit: String(pageSize),
-                    includeHidden: 'true',
-                    audience: 'admin',
-                });
-                const response = await fetch(`${API_CONFIG.BASE_URL}/products?${params.toString()}`, {
-                    headers,
-                    signal: activeAbortController.signal,
-                });
-
-                if (!response.ok) {
-                    const errorMessage = response.status === 401
-                        ? 'Sessão expirada. Faça login novamente para buscar produtos.'
-                        : 'Não foi possível buscar os produtos informados.';
-                    throw new Error(errorMessage);
-                }
-
-                return response.json();
-            };
-
-            const firstPagePayload = await fetchPage(1);
-            appendProducts(firstPagePayload);
-
-            const parsedPages = Number(firstPagePayload?.pages);
-            const totalPages = Number.isFinite(parsedPages) && parsedPages > 0 ? parsedPages : 1;
-
-            if (totalPages > 1) {
-                const remainingPageNumbers = Array.from({ length: totalPages - 1 }, (_, index) => index + 2);
-                const remainingPayloads = await Promise.all(remainingPageNumbers.map((pageNumber) => fetchPage(pageNumber)));
-                remainingPayloads.forEach((payload) => {
-                    appendProducts(payload);
-                });
+            if (!response.ok) {
+                const errorMessage = response.status === 401
+                    ? 'Sessão expirada. Faça login novamente para buscar produtos.'
+                    : 'Não foi possível buscar os produtos informados.';
+                throw new Error(errorMessage);
             }
+
+            const payload = await response.json();
+            const products = Array.isArray(payload?.products)
+                ? payload.products
+                : Array.isArray(payload)
+                    ? payload
+                    : [];
 
             if (activeAbortController.signal.aborted) {
                 return;
@@ -3449,31 +3432,12 @@
             }
         }
     };
-    const requestProductSearchResults = (term) => {
-        const normalizedTerm = typeof term === 'string' ? term.trim() : '';
-        if (normalizedTerm === lastProductSearchTerm) {
-            return;
-        }
-        if (productSearchDebounceId) {
-            clearTimeout(productSearchDebounceId);
-            productSearchDebounceId = null;
-        }
-        productSearchDebounceId = window.setTimeout(() => {
-            productSearchDebounceId = null;
-            fetchProductSearchResults(normalizedTerm);
-        }, 250);
-    };
-
     const openProductSearchModal = ({ initialTerm = '' } = {}) => {
         if (!productSearchModal) return;
 
         if (productSearchAbortController) {
             productSearchAbortController.abort();
             productSearchAbortController = null;
-        }
-        if (productSearchDebounceId) {
-            clearTimeout(productSearchDebounceId);
-            productSearchDebounceId = null;
         }
 
         const normalizedInitial = typeof initialTerm === 'string' ? initialTerm.trim() : '';
@@ -3485,11 +3449,7 @@
             productSearchInput.value = normalizedInitial;
         }
 
-        if (normalizedInitial) {
-            fetchProductSearchResults(normalizedInitial);
-        } else {
-            resetProductSearchResults();
-        }
+        resetProductSearchResults();
 
         window.setTimeout(() => {
             if (productSearchInput) {
@@ -3507,10 +3467,6 @@
             productSearchAbortController.abort();
             productSearchAbortController = null;
         }
-        if (productSearchDebounceId) {
-            clearTimeout(productSearchDebounceId);
-            productSearchDebounceId = null;
-        }
 
         productSearchModal.classList.add('hidden');
         productSearchModal.dataset.modalOpen = 'false';
@@ -3520,7 +3476,6 @@
             productSearchInput.value = '';
         }
         resetProductSearchResults();
-        lastProductSearchTerm = '';
 
         window.setTimeout(() => {
             if (skuInput) {
@@ -6034,19 +5989,31 @@
 
         // --- Especificações ---
         const espec = product.especificacoes || {};
+        const normalizeSpecList = (value) => {
+            if (Array.isArray(value)) {
+                return value.map((item) => String(item || '').trim()).filter(Boolean);
+            }
+            if (typeof value === 'string' && value.trim()) {
+                return [value.trim()];
+            }
+            return [];
+        };
         // Idade
         document.querySelectorAll('input[name="spec-idade"]').forEach(cb => {
             cb.checked = Array.isArray(espec.idade) ? espec.idade.includes(cb.value) : false;
         });
-        // Tipo (usa especificacoes.tipo e fallback para o primeiro valor legado em especificacoes.pet)
-        const legacyPetType = Array.isArray(espec.pet) && espec.pet.length ? espec.pet[0] : '';
-        const selectedType = espec.tipo || legacyPetType || '';
+        // Tipo (usa especificacoes.tipo e fallback legado em especificacoes.pet)
+        const selectedTypes = normalizeSpecList(espec.tipo);
+        if (selectedTypes.length === 0) {
+            selectedTypes.push(...normalizeSpecList(espec.pet));
+        }
         document.querySelectorAll('input[name="spec-tipo"]').forEach(cb => {
-            cb.checked = cb.value === selectedType;
+            cb.checked = selectedTypes.includes(cb.value);
         });
         // Castrado
+        const selectedCastracoes = normalizeSpecList(espec.castracao);
         document.querySelectorAll('input[name="spec-castracao"]').forEach(cb => {
-            cb.checked = cb.value === (espec.castracao || '');
+            cb.checked = selectedCastracoes.includes(cb.value);
         });
         // Porte Raça
         document.querySelectorAll('input[name="spec-porte"]').forEach(cb => {
@@ -6397,15 +6364,15 @@
         resetProductSearchResults();
     }
 
-    productSearchInput?.addEventListener('input', () => {
-        requestProductSearchResults(productSearchInput.value || '');
-    });
-
     productSearchInput?.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') {
             event.preventDefault();
             fetchProductSearchResults(productSearchInput.value || '');
         }
+    });
+
+    productSearchButton?.addEventListener('click', () => {
+        fetchProductSearchResults(productSearchInput?.value || '');
     });
 
     skuInput?.addEventListener('keydown', handleSkuKeydownForProductSearch);
