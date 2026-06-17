@@ -5624,9 +5624,24 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
     const existingSales = Array.isArray(existingState?.completedSales)
       ? existingState.completedSales.map((sale) => ({ ...sale }))
       : [];
-    const saleIndex = existingSales.findIndex(
-      (sale) => normalizeString(sale?.id || sale?._id) === saleId
-    );
+    const saleCodeTarget = normalizeString(
+      payload?.saleCode ||
+      payload?.saleCodeLabel ||
+      payload?.targetSaleCode ||
+      payload?.codigoVenda ||
+      payload?.vendaCodigo ||
+      payload?.code ||
+      payload?.codigo ||
+      ''
+    ).toUpperCase();
+    const saleIndex = existingSales.findIndex((sale) => {
+      const currentId = normalizeString(sale?.id || sale?._id);
+      if (currentId && currentId === saleId) return true;
+      const currentCode = normalizeString(sale?.saleCode || sale?.saleCodeLabel).toUpperCase();
+      if (saleCodeTarget && currentCode && currentCode === saleCodeTarget) return true;
+      if (saleId && currentCode && currentCode === saleId.toUpperCase()) return true;
+      return false;
+    });
     if (saleIndex < 0) {
       const error = new Error('Venda não encontrada para cancelamento.');
       error.statusCode = 404;

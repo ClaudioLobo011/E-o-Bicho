@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin: Relacao de Produtos Vendidos no Periodo - E o Bicho</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="../../src/output.css">
+</head>
+<body class="bg-gray-100">
+  <div id="admin-header-placeholder"></div>
+
+  <main class="container mx-auto px-4 pt-1 pb-10 min-h-screen">
+    <div class="grid grid-cols-1 gap-8">
+      <aside>
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
+
+      <div class="space-y-6">
+        <header class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div class="space-y-2">
+            <nav aria-label="Breadcrumb" class="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+              <span class="inline-flex items-center gap-2 text-primary"><i class="fas fa-warehouse"></i>Retaguarda</span>
+              <i class="fas fa-angle-right text-gray-400"></i>
+              <span class="text-gray-600">Relatorios</span>
+              <i class="fas fa-angle-right text-gray-400"></i>
+              <span class="text-gray-600">Produtos vendidos</span>
+            </nav>
+            <div>
+              <h1 class="text-2xl font-bold text-gray-800">Relacao de Produtos Vendidos no Periodo</h1>
+              <p class="text-sm text-gray-600">Consulte os produtos vendidos por periodo com cliente, telefone, codigo e data da venda.</p>
+            </div>
+          </div>
+          <button id="products-sold-export" type="button" class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">
+            <i class="fas fa-file-export text-primary"></i>
+            Exportar CSV
+          </button>
+        </header>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-5">
+          <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+            <div class="md:col-span-3 space-y-2">
+              <label for="products-sold-start" class="block text-sm font-medium text-gray-700">Data inicial</label>
+              <input type="date" id="products-sold-start" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+            </div>
+            <div class="md:col-span-3 space-y-2">
+              <label for="products-sold-end" class="block text-sm font-medium text-gray-700">Data final</label>
+              <input type="date" id="products-sold-end" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+            </div>
+            <div class="md:col-span-3 space-y-2">
+              <label for="products-sold-store" class="block text-sm font-medium text-gray-700">Loja</label>
+              <select id="products-sold-store" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="">Todas as lojas</option>
+              </select>
+            </div>
+            <div class="md:col-span-3 flex items-end gap-3">
+              <button id="products-sold-apply" type="button" class="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-secondary transition">
+                <i class="fas fa-filter"></i>
+                Aplicar filtros
+              </button>
+              <button id="products-sold-reset" type="button" class="inline-flex items-center justify-center rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition" aria-label="Limpar filtros">
+                <i class="fas fa-rotate-left"></i>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+            <p class="text-sm text-gray-500">Itens vendidos</p>
+            <p id="products-sold-total-items" class="mt-2 text-2xl font-bold text-gray-800">0</p>
+          </article>
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+            <p class="text-sm text-gray-500">Quantidade total</p>
+            <p id="products-sold-total-quantity" class="mt-2 text-2xl font-bold text-gray-800">0</p>
+          </article>
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+            <p class="text-sm text-gray-500">Valor em produtos</p>
+            <p id="products-sold-total-value" class="mt-2 text-2xl font-bold text-gray-800">R$ 0,00</p>
+          </article>
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+            <p class="text-sm text-gray-500">Vendas encontradas</p>
+            <p id="products-sold-sales-count" class="mt-2 text-2xl font-bold text-gray-800">0</p>
+          </article>
+        </section>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+          <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Produtos vendidos</h2>
+              <p id="products-sold-counter" class="text-sm text-gray-600">Nenhum produto carregado.</p>
+            </div>
+            <div class="flex items-center gap-2 text-sm text-gray-600">
+              <span>Exibindo</span>
+              <select id="products-sold-page-size" class="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="50">50 linhas</option>
+                <option value="100">100 linhas</option>
+                <option value="200">200 linhas</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="overflow-hidden rounded-xl border border-gray-100">
+            <div class="overflow-x-auto">
+              <table id="products-sold-table" class="min-w-full divide-y divide-gray-100 text-left text-sm text-gray-700" data-admin-table>
+                <thead class="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+                  <tr>
+                    <th class="px-4 py-3 font-semibold">Produto</th>
+                    <th class="px-4 py-3 font-semibold">Cod. produto</th>
+                    <th class="px-4 py-3 font-semibold text-right">Qtd.</th>
+                    <th class="px-4 py-3 font-semibold text-right">Valor</th>
+                    <th class="px-4 py-3 font-semibold">Cliente</th>
+                    <th class="px-4 py-3 font-semibold">Telefone</th>
+                    <th class="px-4 py-3 font-semibold">Cod. venda</th>
+                    <th class="px-4 py-3 font-semibold">Data da venda</th>
+                    <th class="px-4 py-3 font-semibold">Loja</th>
+                  </tr>
+                </thead>
+                <tbody id="products-sold-table-body" class="divide-y divide-gray-100 bg-white">
+                  <tr>
+                    <td colspan="9" class="px-4 py-6 text-center text-gray-500">Nenhum produto encontrado para o periodo selecionado.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-3 text-sm text-gray-600 md:flex-row md:items-center md:justify-between">
+            <span id="products-sold-page-indicator" class="text-gray-700">Pagina 1 de 1</span>
+            <div class="flex items-center gap-2">
+              <button id="products-sold-prev" type="button" class="rounded-lg border border-gray-200 px-3 py-2 hover:bg-gray-50" aria-label="Pagina anterior"><i class="fas fa-arrow-left"></i></button>
+              <button id="products-sold-next" type="button" class="rounded-lg border border-gray-200 px-3 py-2 hover:bg-gray-50" aria-label="Proxima pagina"><i class="fas fa-arrow-right"></i></button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <div id="admin-footer-placeholder"></div>
+  <div id="modal-placeholder"></div>
+  <div id="confirm-modal-placeholder"></div>
+
+  <script>var basePath = '../../';</script>
+  <script src="../../scripts/core/config.js"></script>
+  <script src="../../scripts/core/ui.js"></script>
+  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/admin/admin.js"></script>
+  <script src="../../scripts/admin/admin-relatorios-produtos-vendidos-periodo.js"></script>
+</body>
+</html>

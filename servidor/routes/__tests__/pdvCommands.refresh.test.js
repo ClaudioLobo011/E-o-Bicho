@@ -1122,6 +1122,58 @@ test.describe('PDV commands endpoint', () => {
     );
   });
 
+  test('cancels sale through pdv.sale.cancel using sale code', async () => {
+    const base = await createFixture({ caixaAberto: false });
+    const app = createApp();
+    const request = supertest(app);
+
+    const open = await request
+      .post(`/pdvs/${base.pdv._id}/commands`)
+      .set('Authorization', 'Bearer token')
+      .set('X-Idempotency-Key', 'test-sale-cancel-code-open-1')
+      .send({
+        action: 'pdv.caixa.open',
+        payload: {
+          payments: [{ id: 'dinheiro', label: 'Dinheiro', type: 'avista', valor: 20 }],
+        },
+      });
+    assert.equal(open.status, 200, open.text);
+
+    const finalize = await request
+      .post(`/pdvs/${base.pdv._id}/commands`)
+      .set('Authorization', 'Bearer token')
+      .set('X-Idempotency-Key', 'test-sale-cancel-code-finalize-1')
+      .send({
+        action: 'pdv.sale.finalize',
+        payload: {
+          saleId: 'sale-cancel-code-001',
+          saleCode: 'PDV999-123456',
+          items: [{ nome: 'Produto Cancelamento Codigo', quantidade: 1, preco: 20 }],
+          payments: [{ id: 'dinheiro', label: 'Dinheiro', type: 'avista', valor: 20 }],
+          totalBruto: 20,
+          totalLiquido: 20,
+        },
+      });
+    assert.equal(finalize.status, 200, finalize.text);
+
+    const saleCode = finalize.body.state.completedSales[0].saleCode;
+    const cancel = await request
+      .post(`/pdvs/${base.pdv._id}/commands`)
+      .set('Authorization', 'Bearer token')
+      .set('X-Idempotency-Key', 'test-sale-cancel-code-1')
+      .send({
+        action: 'pdv.sale.cancel',
+        payload: {
+          saleId: saleCode,
+          saleCode,
+          reason: 'Cliente desistiu',
+        },
+      });
+    assert.equal(cancel.status, 200, cancel.text);
+    assert.equal(cancel.body.state.completedSales[0].status, 'cancelled');
+    assert.equal(cancel.body.state.completedSales[0].cancellationReason, 'Cliente desistiu');
+  });
+
   test('resets fiscal status through pdv.sale.reset_fiscal_status', async () => {
     const base = await createFixture({ caixaAberto: false });
     const app = createApp();

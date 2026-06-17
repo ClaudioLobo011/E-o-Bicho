@@ -636,6 +636,51 @@ const deriveCustomerName = (sale = {}) => {
   );
 };
 
+const deriveCustomerPhone = (sale = {}) => {
+  const customer = sale?.customer || {};
+  const receiptCustomer = sale?.receiptSnapshot?.customer || {};
+  const receiptClient = sale?.receiptSnapshot?.cliente || {};
+  const candidates = [
+    sale.customerPhone,
+    sale.customerContact,
+    sale.telefone,
+    sale.celular,
+    sale.whatsapp,
+    customer.phone,
+    customer.phoneNumber,
+    customer.telefone,
+    customer.celular,
+    customer.whatsapp,
+    customer.mobile,
+    customer.contato?.telefone,
+    customer.contato?.celular,
+    receiptCustomer.phone,
+    receiptCustomer.phoneNumber,
+    receiptCustomer.telefone,
+    receiptCustomer.celular,
+    receiptCustomer.whatsapp,
+    receiptCustomer.mobile,
+    receiptCustomer.contato?.telefone,
+    receiptCustomer.contato?.celular,
+    receiptClient.telefone,
+    receiptClient.celular,
+    receiptClient.celular2,
+    receiptClient.telefone2,
+    receiptClient.whatsapp,
+    receiptClient.phone,
+    receiptClient.mobile,
+    receiptClient.contato?.telefone,
+    receiptClient.contato?.celular,
+  ];
+
+  for (const candidate of candidates) {
+    const value = String(candidate || '').trim();
+    if (value) return value;
+  }
+
+  return '';
+};
+
 const deriveCustomerKey = (sale = {}) => {
   const document =
     normalizeName(sale.customerDocument) ||
@@ -1544,7 +1589,7 @@ const loadProductsIndex = async (sales = []) => {
   }
 
   const products = await Product.find({ _id: { $in: Array.from(productIds) } })
-    .select('nome descricao categoria category categoriaPrincipal categorias')
+    .select('cod codbarras referencia nome descricao categoria category categoriaPrincipal categorias')
     .lean();
 
   const categoryIds = new Set();
@@ -1610,6 +1655,171 @@ const buildTopProducts = async (sales = []) => {
   return Array.from(rankingMap.values())
     .sort((a, b) => b.net - a.net)
     .slice(0, 8);
+};
+
+const hasServiceItemHint = (item = {}) => {
+  return Boolean(
+    item.servico ||
+      item.service ||
+      item.serviceId ||
+      item.service_id ||
+      item.servicoId ||
+      item.servico_id ||
+      String(item.tipoItem || item.itemType || item.kind || '').toLowerCase() === 'servico' ||
+      String(item.type || '').toLowerCase() === 'service'
+  );
+};
+
+const deriveItemProductCode = (item = {}, productRecord = null) => {
+  const candidates = [
+    productRecord?.cod,
+    productRecord?.codbarras,
+    productRecord?.referencia,
+    item.codigoProduto,
+    item.codigoInterno,
+    item.codInterno,
+    item.codigo,
+    item.codigoBarras,
+    item.barcode,
+    item.productCode,
+    item.productBarcode,
+    item.product?.cod,
+    item.product?.codbarras,
+    item.produto?.cod,
+    item.produto?.codbarras,
+    item.productSnapshot?.cod,
+    item.productSnapshot?.codbarras,
+    item.produtoSnapshot?.cod,
+    item.produtoSnapshot?.codbarras,
+  ];
+
+  for (const candidate of candidates) {
+    const value = String(candidate || '').trim();
+    if (value) return value;
+  }
+
+  return '';
+};
+
+const buildSoldProductRows = async (saleRecords = []) => {
+  const sales = saleRecords.map((record) => normalizeSaleRecord(record)).filter(Boolean);
+  const { productMap: productsIndex, categoryMap } = await loadProductsIndex(sales);
+  const rows = [];
+
+  saleRecords.forEach((record) => {
+    const sale = normalizeSaleRecord(record);
+    if (!sale || !isCompletedSale(sale)) return;
+
+    const items = collectSaleItems(sale).filter((item) => {
+      if (!item || typeof item !== 'object') return false;
+      if (isProductSaleItem(item, productsIndex)) return true;
+      return !hasServiceItemHint(item);
+    });
+
+    if (!items.length) return;
+
+    const saleCode = sale.saleCode || sale.saleCodeLabel || 'Sem codigo';
+    const saleRecordId = record?.recordId || sale.id || saleCode;
+    const customerName = deriveCustomerName(sale);
+    const customerPhone = deriveCustomerPhone(sale);
+    const saleDate = sale.createdAt || record?.createdAtFromEntity || null;
+    const storeName = record?.store?.fantasia || record?.store?.apelido || record?.store?.nome || 'Loja nao informada';
+    const pdvName = record?.pdv?.nome || record?.pdv?.codigo || 'PDV';
+
+    items.forEach((item) => {
+      const productId = extractItemProductObjectId(item);
+      const productRecord = productId ? productsIndex.get(productId) : null;
+      const name = normalizeName(productRecord?.nome) || deriveItemName(item);
+      const category = resolveProductCategoryLabel(productRecord, categoryMap) || deriveItemCategory(item);
+      const quantity = deriveItemQuantity(item) || 0;
+      const totalValue = deriveItemTotal(item) || 0;
+      const unitPrice = quantity > 0 ? totalValue / quantity : deriveItemUnitPrice(item) || 0;
+
+      rows.push({
+        productId: productId || '',
+        productCode: deriveItemProductCode(item, productRecord),
+        productName: name,
+        category,
+        quantity,
+        unitPrice,
+        totalValue,
+        customerName,
+        customerPhone,
+        saleCode,
+        saleRecordId: String(saleRecordId || ''),
+        saleDate,
+        store: {
+          id: normalizeStoreId(record?.store?._id || record?.empresa),
+          name: storeName,
+        },
+        pdv: {
+          id: record?.pdv?._id ? String(record.pdv._id) : normalizeStoreId(record?.pdv),
+          name: pdvName,
+        },
+      });
+    });
+  });
+
+  return rows.sort((a, b) => {
+    const dateA = a.saleDate ? new Date(a.saleDate).getTime() : 0;
+    const dateB = b.saleDate ? new Date(b.saleDate).getTime() : 0;
+    return dateB - dateA;
+  });
+};
+
+const normalizeReportFilterText = (value) => {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+};
+
+const formatReportDateTime = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+};
+
+const rowMatchesReportFilter = (value, filter) => {
+  const needle = normalizeReportFilterText(filter);
+  if (!needle) return true;
+  const haystack = normalizeReportFilterText(value);
+  if (!needle.includes('*')) return haystack.includes(needle);
+
+  const pattern = needle
+    .split('*')
+    .map((segment) => segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('.*');
+
+  try {
+    return new RegExp(pattern, 'i').test(haystack);
+  } catch (_error) {
+    return haystack.includes(needle.replace(/\*/g, ''));
+  }
+};
+
+const applySoldProductColumnFilters = (rows = [], filters = {}) => {
+  const activeFilters = Object.entries(filters).filter(([, value]) => normalizeReportFilterText(value));
+  if (!activeFilters.length) return rows;
+
+  return rows.filter((row) => {
+    return activeFilters.every(([key, filter]) => {
+      const valueByKey = {
+        product: `${row.productName || ''} ${row.category || ''}`,
+        productCode: row.productCode,
+        quantity: row.quantity,
+        totalValue: row.totalValue,
+        customer: row.customerName,
+        phone: row.customerPhone,
+        saleCode: row.saleCode,
+        saleDate: `${formatReportDateTime(row.saleDate)} ${row.saleDate || ''}`,
+        store: row.store?.name,
+      };
+      return rowMatchesReportFilter(valueByKey[key], filter);
+    });
+  });
 };
 
 const buildPaymentMethods = (sales = []) => {
@@ -1938,6 +2148,176 @@ router.get(
     } catch (error) {
       console.error('Erro ao listar vendas de PDVs:', error);
       res.status(500).json({ message: 'Erro ao listar vendas de PDVs.' });
+    }
+  }
+);
+
+router.get(
+  '/products-sold',
+  requireAuth,
+  authorizeRoles('admin', 'admin_master', 'funcionario'),
+  async (req, res) => {
+    try {
+      const {
+        start,
+        end,
+        storeId,
+        pdvId,
+        product,
+        productCode,
+        quantity,
+        totalValue,
+        customer,
+        phone,
+        saleCode,
+        saleDate,
+        store,
+      } = req.query;
+      const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+      const pageSize = Math.min(500, Math.max(1, parseInt(req.query.pageSize, 10) || 50));
+
+      const startDate = parseDate(start);
+      const endDate = parseDate(end, true);
+
+      if (startDate && endDate && startDate > endDate) {
+        return res.status(400).json({ message: 'Data inicial nao pode ser maior que a data final.' });
+      }
+
+      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req, req.user?.id);
+      const allowedStoreObjectIds = allowAllStores
+        ? []
+        : allowedStoreIds.map((id) => new mongoose.Types.ObjectId(id));
+
+      const query = {};
+      const storeObjectId = toObjectId(storeId);
+      if (storeObjectId) {
+        if (!allowAllStores) {
+          const allowedSet = new Set(allowedStoreIds);
+          if (!allowedSet.has(String(storeObjectId))) {
+            return res.status(403).json({ message: 'Empresa nao permitida para o usuario.' });
+          }
+        }
+        query.empresa = storeObjectId;
+      } else if (!allowAllStores) {
+        if (!allowedStoreObjectIds.length) {
+          return res.json({
+            products: [],
+            pagination: { total: 0, page, pageSize, totalPages: 1 },
+            metrics: { totalItems: 0, totalQuantity: 0, totalValue: 0, salesCount: 0 },
+          });
+        }
+        query.empresa = { $in: allowedStoreObjectIds };
+      }
+
+      const pdvObjectId = toObjectId(pdvId);
+      if (pdvObjectId) {
+        query.pdv = pdvObjectId;
+      }
+
+      const createdAtFilter = {};
+      if (startDate) createdAtFilter.$gte = startDate;
+      if (endDate) createdAtFilter.$lte = endDate;
+      if (Object.keys(createdAtFilter).length) {
+        query.createdAtFromEntity = createdAtFilter;
+      }
+
+      const docs = await PdvStateSale.find(query)
+        .select(
+          [
+            'empresa',
+            'pdv',
+            'createdAtFromEntity',
+            'payload.id',
+            'payload.saleCode',
+            'payload.saleCodeLabel',
+            'payload.createdAt',
+            'payload.status',
+            'payload.customer',
+            'payload.customerName',
+            'payload.customerPhone',
+            'payload.customerContact',
+            'payload.telefone',
+            'payload.celular',
+            'payload.whatsapp',
+            'payload.discountValue',
+            'payload.receiptSnapshot.customer',
+            'payload.receiptSnapshot.cliente',
+            'payload.receiptSnapshot.totais.descontoValor',
+            'payload.receiptSnapshot.totais.discountValue',
+            'payload.items',
+            'payload.itemsSnapshot',
+            'payload.fiscalItemsSnapshot',
+            'payload.receiptSnapshot.items',
+            'payload.receiptSnapshot.itens',
+            'payload.receiptSnapshot.products',
+            'payload.receiptSnapshot.produtos',
+            'payload.receiptSnapshot.cart',
+          ].join(' ')
+        )
+        .sort({ createdAtFromEntity: -1 })
+        .lean();
+
+      const storeIds = Array.from(new Set(docs.map((doc) => normalizeStoreId(doc.empresa)).filter(Boolean)));
+      const pdvIds = Array.from(new Set(docs.map((doc) => normalizeStoreId(doc.pdv)).filter(Boolean)));
+
+      const [stores, pdvs] = await Promise.all([
+        storeIds.length
+          ? Store.find({ _id: { $in: storeIds } }).select('nome fantasia apelido').lean()
+          : [],
+        pdvIds.length ? Pdv.find({ _id: { $in: pdvIds } }).select('nome codigo').lean() : [],
+      ]);
+
+      const storeMap = new Map(stores.map((store) => [String(store._id), store]));
+      const pdvMap = new Map(pdvs.map((pdv) => [String(pdv._id), pdv]));
+
+      const saleRecords = docs.map((doc) => ({
+        recordId: String(doc._id),
+        completedSales: doc.payload || {},
+        createdAtFromEntity: doc.createdAtFromEntity,
+        empresa: doc.empresa,
+        pdv: pdvMap.get(normalizeStoreId(doc.pdv)) || doc.pdv,
+        store: storeMap.get(normalizeStoreId(doc.empresa)) || doc.empresa,
+      }));
+
+      const rows = applySoldProductColumnFilters(await buildSoldProductRows(saleRecords), {
+        product,
+        productCode,
+        quantity,
+        totalValue,
+        customer,
+        phone,
+        saleCode,
+        saleDate,
+        store,
+      });
+      const total = rows.length;
+      const skip = (page - 1) * pageSize;
+      const products = rows.slice(skip, skip + pageSize);
+      const salesIds = new Set(rows.map((row) => row.saleRecordId || row.saleCode).filter(Boolean));
+
+      const metrics = rows.reduce(
+        (acc, row) => ({
+          totalItems: acc.totalItems + 1,
+          totalQuantity: acc.totalQuantity + (Number.isFinite(row.quantity) ? row.quantity : 0),
+          totalValue: acc.totalValue + (Number.isFinite(row.totalValue) ? row.totalValue : 0),
+          salesCount: acc.salesCount,
+        }),
+        { totalItems: 0, totalQuantity: 0, totalValue: 0, salesCount: salesIds.size }
+      );
+
+      return res.json({
+        products,
+        pagination: {
+          total,
+          page,
+          pageSize,
+          totalPages: Math.max(1, Math.ceil(total / pageSize)),
+        },
+        metrics,
+      });
+    } catch (error) {
+      console.error('Erro ao listar produtos vendidos:', error);
+      return res.status(500).json({ message: 'Erro ao listar produtos vendidos.' });
     }
   }
 );
