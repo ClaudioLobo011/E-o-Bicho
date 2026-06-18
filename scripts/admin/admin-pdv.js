@@ -3502,8 +3502,21 @@
         inventoryProcessedAt = processedAt.toISOString();
       }
     }
+    const hasFiscalEmissionData = Boolean(
+      record.fiscalAccessKey ||
+        record.fiscalXmlUrl ||
+        record.fiscalXmlName ||
+        record.fiscalDriveFileId ||
+        record.fiscalProtocol ||
+        (record.fiscalNumber !== undefined && record.fiscalNumber !== null && record.fiscalNumber !== '')
+    );
     const rawFiscalStatus = record.fiscalStatus ? String(record.fiscalStatus) : '';
-    const normalizedFiscalStatus = rawFiscalStatus === 'emitting' ? 'pending' : rawFiscalStatus;
+    const normalizedFiscalStatus =
+      hasFiscalEmissionData && rawFiscalStatus !== 'emitting'
+        ? 'emitted'
+        : rawFiscalStatus === 'emitting'
+        ? 'pending'
+        : rawFiscalStatus;
     const normalizedReceivables = Array.isArray(record.receivables)
       ? record.receivables
           .map((entry) => {
@@ -3976,6 +3989,61 @@
       return applyDeliveryCourier(merged, shouldApplyOverlayCourier ? overlayCourier : baseCourier);
     };
 
+    const hasFiscalEmissionData = (record) =>
+      Boolean(
+        record &&
+          typeof record === 'object' &&
+          (record.fiscalStatus === 'emitted' ||
+            record.fiscalAccessKey ||
+            record.fiscalXmlUrl ||
+            record.fiscalXmlName ||
+            record.fiscalDriveFileId ||
+            record.fiscalProtocol ||
+            (record.fiscalNumber !== undefined && record.fiscalNumber !== null && record.fiscalNumber !== ''))
+      );
+
+    const mergeSaleRecordConflict = (currentRecord, incomingRecord) => {
+      const current = currentRecord && typeof currentRecord === 'object' ? currentRecord : {};
+      const incoming = incomingRecord && typeof incomingRecord === 'object' ? incomingRecord : {};
+      const merged = { ...current, ...incoming };
+      const fiscalSource = hasFiscalEmissionData(incoming)
+        ? incoming
+        : hasFiscalEmissionData(current)
+        ? current
+        : null;
+      if (!fiscalSource) return merged;
+      [
+        'fiscalStatus',
+        'fiscalEmittedAt',
+        'fiscalEmittedAtLabel',
+        'fiscalDriveFileId',
+        'fiscalXmlUrl',
+        'fiscalXmlName',
+        'fiscalXmlContent',
+        'fiscalQrCodeData',
+        'fiscalQrCodeImage',
+        'fiscalEnvironment',
+        'fiscalSerie',
+        'fiscalNumber',
+        'fiscalAccessKey',
+        'fiscalDigestValue',
+        'fiscalSignature',
+        'fiscalProtocol',
+        'fiscalReceiptNumber',
+        'fiscalSefazStatus',
+        'fiscalSefazMessage',
+        'fiscalSefazProcessedAt',
+        'fiscalSefazProcessedAtLabel',
+        'fiscalItemsSnapshot',
+      ].forEach((key) => {
+        if (fiscalSource[key] !== undefined && fiscalSource[key] !== null && fiscalSource[key] !== '') {
+          merged[key] = fiscalSource[key];
+        }
+      });
+      merged.fiscalStatus = 'emitted';
+      return merged;
+    };
+
     const getKey = (record) => {
       if (!record || typeof record !== 'object') return '';
       const createdAt = String(record.createdAt || '').trim();
@@ -4041,6 +4109,8 @@
       if (source === 'local') {
         if (kind === 'delivery') {
           merged[found] = mergeDeliveryRecordConflict(merged[found], record);
+        } else if (kind === 'sale') {
+          merged[found] = mergeSaleRecordConflict(merged[found], record);
         } else {
           merged[found] = record;
         }
@@ -27033,8 +27103,20 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
             totalValue,
           };
         });
+        const saleHasFiscalEmissionData = Boolean(
+          sale.fiscalAccessKey ||
+            sale.fiscalXmlUrl ||
+            sale.fiscalXmlName ||
+            sale.fiscalDriveFileId ||
+            sale.fiscalProtocol ||
+            (sale.fiscalNumber !== undefined && sale.fiscalNumber !== null && sale.fiscalNumber !== '')
+        );
         const normalizedFiscalStatus =
-          sale.fiscalStatus === 'emitting' || !sale.fiscalStatus ? 'pending' : sale.fiscalStatus;
+          saleHasFiscalEmissionData && sale.fiscalStatus !== 'emitting'
+            ? 'emitted'
+            : sale.fiscalStatus === 'emitting' || !sale.fiscalStatus
+            ? 'pending'
+            : sale.fiscalStatus;
         const normalizedReceivables = Array.isArray(sale.receivables)
           ? sale.receivables.map((entry) => {
               const normalized = normalizeReceivableForPersist(entry);

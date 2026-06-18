@@ -1528,7 +1528,6 @@ const normalizeSaleRecordPayload = (record) => {
   const total = totalLiquido || safeNumber(record.total ?? record.totalAmount ?? record.valorTotal ?? 0, 0);
   const createdAt = safeDate(record.createdAt) || new Date();
   const createdAtLabel = normalizeString(record.createdAtLabel);
-  const fiscalStatus = normalizeString(record.fiscalStatus);
   const fiscalEmittedAt = safeDate(record.fiscalEmittedAt);
   const fiscalEmittedAtLabel = normalizeString(record.fiscalEmittedAtLabel);
   const fiscalDriveFileId = normalizeString(record.fiscalDriveFileId);
@@ -1556,6 +1555,21 @@ const normalizeSaleRecordPayload = (record) => {
   const fiscalNumber = Number.isFinite(fiscalNumberParsed)
     ? Math.trunc(fiscalNumberParsed)
     : null;
+  const fiscalStatusRaw = normalizeString(record.fiscalStatus);
+  const hasFiscalEmissionData = Boolean(
+    fiscalAccessKey ||
+      fiscalXmlUrl ||
+      fiscalXmlName ||
+      fiscalDriveFileId ||
+      fiscalProtocol ||
+      (fiscalNumber !== null && fiscalNumber !== undefined)
+  );
+  const fiscalStatus =
+    hasFiscalEmissionData && fiscalStatusRaw !== 'emitting'
+      ? 'emitted'
+      : fiscalStatusRaw === 'emitting'
+      ? 'pending'
+      : fiscalStatusRaw;
   const status = normalizeString(record.status) || 'completed';
   const cancellationReason = normalizeString(record.cancellationReason);
   const cancellationAt = safeDate(record.cancellationAt);
