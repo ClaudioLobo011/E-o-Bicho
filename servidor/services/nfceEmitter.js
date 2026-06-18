@@ -1244,19 +1244,12 @@ const collectFiscalItemCandidates = (sale = {}) => {
 const resolveFiscalRuleCode = (fiscal = {}) =>
   String(fiscal?.fiscalRuleCode || fiscal?.regraFiscalCodigo || fiscal?.ruleCode || '').trim();
 
-const fiscalSignature = (fiscal = {}) => {
-  const normalized = normalizeFiscalData(fiscal || {});
-  delete normalized.fiscalRuleCode;
-  delete normalized.fiscalRuleName;
-  delete normalized.atualizadoEm;
-  delete normalized.atualizadoPor;
-  return JSON.stringify(normalized);
-};
-
 const resolveFiscalRuleForProduct = async ({ product, storeObject, ruleCache }) => {
   const storeId = firstValidObjectId(storeObject?._id, storeObject?.id, storeObject);
   const currentFiscal = getFiscalDataForStore(product, storeObject);
-  if (!storeId) return currentFiscal || {};
+  if (!storeId) {
+    throw new Error('Empresa do PDV nao identificada para buscar a regra fiscal do produto.');
+  }
 
   const cacheKey = String(storeId);
   let storeRules = ruleCache.get(cacheKey);
@@ -1266,6 +1259,16 @@ const resolveFiscalRuleForProduct = async ({ product, storeObject, ruleCache }) 
   }
 
   const ruleCode = resolveFiscalRuleCode(currentFiscal);
+  if (!ruleCode) {
+    const productLabel = product?.cod || product?.nome
+      ? `${product?.cod ? `codigo ${product.cod}` : ''}${product?.cod && product?.nome ? ' - ' : ''}${product?.nome || ''}`
+      : 'produto';
+    throw new Error(
+      `O ${productLabel} nao possui regra fiscal vinculada para a empresa do PDV. ` +
+      'Abra o cadastro do produto e selecione uma regra em Informacoes fiscais.'
+    );
+  }
+
   if (ruleCode) {
     const matchedByCode = storeRules.find((rule) => String(rule?.code) === String(Number(ruleCode)));
     if (!matchedByCode) {
@@ -1273,10 +1276,6 @@ const resolveFiscalRuleForProduct = async ({ product, storeObject, ruleCache }) 
     }
     return matchedByCode.fiscal || {};
   }
-
-  const currentSignature = fiscalSignature(currentFiscal);
-  const matchedByFiscal = storeRules.find((rule) => fiscalSignature(rule?.fiscal || {}) === currentSignature);
-  return matchedByFiscal?.fiscal || currentFiscal || {};
 };
 
 const resolveEmitterCrt = (regime) => {
@@ -2279,5 +2278,6 @@ module.exports = {
     resolveGtinForXml,
     resolveEmitterCrt,
     resolveFiscalRuleCode,
+    resolveFiscalRuleForProduct,
   },
 };

@@ -76,6 +76,48 @@ describe('nfceEmitter itens fiscais do PDV', () => {
     assert.equal(_test.resolveFiscalRuleCode({ ruleCode: '4' }), '4');
   });
 
+  test('bloqueia fiscal antigo sem regra vinculada no produto', async () => {
+    const storeId = '68af208d8fb601d67fa31562';
+    const ruleCache = new Map([[storeId, [{ code: 1, fiscal: { cst: '00', csosn: '' } }]]]);
+
+    await assert.rejects(
+      () => _test.resolveFiscalRuleForProduct({
+        product: {
+          _id: '691b529d97dcb439161b6d55',
+          cod: '4730',
+          nome: 'Produto antigo',
+          fiscalPorEmpresa: {
+            [storeId]: { cst: '00', csosn: '102' },
+          },
+        },
+        storeObject: { _id: storeId },
+        ruleCache,
+      }),
+      /nao possui regra fiscal vinculada/
+    );
+  });
+
+  test('busca dados fiscais somente pela regra vinculada ao produto', async () => {
+    const storeId = '68af208d8fb601d67fa31562';
+    const expectedFiscal = { cst: '60', csosn: '', cfop: { nfce: { dentroEstado: '5405' } } };
+    const ruleCache = new Map([[storeId, [{ code: 2, fiscal: expectedFiscal }]]]);
+
+    const resolved = await _test.resolveFiscalRuleForProduct({
+      product: {
+        _id: '691b529d97dcb439161b6d55',
+        cod: '4730',
+        nome: 'Produto com regra',
+        fiscalPorEmpresa: {
+          [storeId]: { fiscalRuleCode: '2', cst: '00', csosn: '102' },
+        },
+      },
+      storeObject: { _id: storeId },
+      ruleCache,
+    });
+
+    assert.deepEqual(resolved, expectedFiscal);
+  });
+
   test('usa SEM GTIN quando codigo de barras nao e GTIN valido', () => {
     assert.equal(_test.resolveGtinForXml('33'), 'SEM GTIN');
     assert.equal(_test.resolveGtinForXml('ABC'), 'SEM GTIN');

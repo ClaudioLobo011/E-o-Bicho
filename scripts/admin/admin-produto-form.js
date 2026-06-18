@@ -864,66 +864,6 @@
         return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
     };
 
-    const buildComparableFiscalSnapshot = (fiscal = {}) => ({
-        origem: fiscal?.origem || '0',
-        csosn: fiscal?.csosn || '',
-        cst: fiscal?.cst || '',
-        cest: fiscal?.cest || '',
-        status: {
-            nfe: fiscal?.status?.nfe || 'pendente',
-            nfce: fiscal?.status?.nfce || 'pendente',
-        },
-        cfop: {
-            nfe: {
-                entrada: fiscal?.cfop?.nfe?.entrada || '',
-                dentroEstado: fiscal?.cfop?.nfe?.dentroEstado || '',
-                foraEstado: fiscal?.cfop?.nfe?.foraEstado || '',
-                transferencia: fiscal?.cfop?.nfe?.transferencia || '',
-                devolucao: fiscal?.cfop?.nfe?.devolucao || '',
-                industrializacao: fiscal?.cfop?.nfe?.industrializacao || '',
-            },
-            nfce: {
-                entrada: fiscal?.cfop?.nfce?.entrada || '',
-                dentroEstado: fiscal?.cfop?.nfce?.dentroEstado || '',
-                foraEstado: fiscal?.cfop?.nfce?.foraEstado || '',
-                transferencia: fiscal?.cfop?.nfce?.transferencia || '',
-                devolucao: fiscal?.cfop?.nfce?.devolucao || '',
-                industrializacao: fiscal?.cfop?.nfce?.industrializacao || '',
-            },
-        },
-        pis: {
-            codigo: fiscal?.pis?.codigo || '',
-            cst: fiscal?.pis?.cst || '',
-            aliquota: parseNullableNumber(fiscal?.pis?.aliquota ?? null),
-            tipoCalculo: fiscal?.pis?.tipoCalculo || 'percentual',
-        },
-        cofins: {
-            codigo: fiscal?.cofins?.codigo || '',
-            cst: fiscal?.cofins?.cst || '',
-            aliquota: parseNullableNumber(fiscal?.cofins?.aliquota ?? null),
-            tipoCalculo: fiscal?.cofins?.tipoCalculo || 'percentual',
-        },
-        ipi: {
-            cst: fiscal?.ipi?.cst || '',
-            codigoEnquadramento: fiscal?.ipi?.codigoEnquadramento || '',
-            aliquota: parseNullableNumber(fiscal?.ipi?.aliquota ?? null),
-            tipoCalculo: fiscal?.ipi?.tipoCalculo || 'percentual',
-        },
-        fcp: {
-            indicador: fiscal?.fcp?.indicador || '0',
-            aliquota: parseNullableNumber(fiscal?.fcp?.aliquota ?? null),
-            aplica: Boolean(fiscal?.fcp?.aplica),
-        },
-    });
-
-    const buildFiscalSignature = (fiscal = {}) => JSON.stringify(buildComparableFiscalSnapshot(fiscal));
-
-    const findMatchingRuleForFiscal = (rules = [], fiscal = {}) => {
-        if (!Array.isArray(rules) || !rules.length) return null;
-        const fiscalSignature = buildFiscalSignature(fiscal);
-        return rules.find((rule) => buildFiscalSignature(rule?.fiscal || {}) === fiscalSignature) || null;
-    };
-
     const getRuleLabel = (rule) => {
         if (!rule) return '';
         const code = normalizeRuleCode(rule.code);
@@ -1007,14 +947,6 @@
         if (storedRuleCode) {
             fiscalRuleSelectionByStore.set(storeId, storedRuleCode);
             return storedRuleCode;
-        }
-        const matchedRule = findMatchingRuleForFiscal(rules, fiscalSnapshot);
-        if (matchedRule) {
-            const matchedCode = normalizeRuleCode(matchedRule.code);
-            if (matchedCode) {
-                fiscalRuleSelectionByStore.set(storeId, matchedCode);
-                return matchedCode;
-            }
         }
         return null;
     };
