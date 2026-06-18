@@ -1617,6 +1617,8 @@ const sanitizeFiscalStatus = (value, existing = 'pendente') => {
 };
 
 const sanitizeFiscalData = (rawFiscal = {}, existingFiscal = {}, updatedBy = '') => ({
+    fiscalRuleCode: sanitizeFiscalString(rawFiscal?.fiscalRuleCode ?? rawFiscal?.regraFiscalCodigo, existingFiscal?.fiscalRuleCode || ''),
+    fiscalRuleName: sanitizeFiscalString(rawFiscal?.fiscalRuleName ?? rawFiscal?.regraFiscalNome, existingFiscal?.fiscalRuleName || ''),
     origem: sanitizeFiscalString(rawFiscal?.origem, existingFiscal?.origem || '0') || '0',
     cest: sanitizeFiscalString(rawFiscal?.cest, existingFiscal?.cest || ''),
     csosn: sanitizeFiscalString(rawFiscal?.csosn, existingFiscal?.csosn || ''),

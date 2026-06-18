@@ -186,6 +186,20 @@
       return false;
     };
 
+    const formatRegimeTributario = (value) => {
+      const normalized = String(value || '').trim().toLowerCase();
+      const labels = {
+        simples: 'Simples Nacional',
+        simples_excesso_sublimite: 'Simples Nacional - excesso de sublimite',
+        mei: 'MEI',
+        lucro_presumido: 'Lucro Presumido',
+        lucro_real: 'Lucro Real',
+        lucro_arbitrado: 'Lucro Arbitrado',
+        normal: 'Regime Normal',
+      };
+      return labels[normalized] || '—';
+    };
+
     const isStoreAllowed = (storeId) =>
       state.stores.some((store) => normalizeId(store?._id) === normalizeId(storeId));
 
@@ -232,9 +246,7 @@
       return;
     }
 
-    const regime = store.regimeTributario
-      ? store.regimeTributario.charAt(0).toUpperCase() + store.regimeTributario.slice(1)
-      : '—';
+    const regime = formatRegimeTributario(store.regimeTributario);
     const availability = ambientesPermitidos.map((env) => ({
       env,
       available: storeSupportsEnvironment(store, env),

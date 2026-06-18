@@ -1543,10 +1543,11 @@ const normalizeSaleRecordPayload = (record) => {
   const fiscalDigestValue = normalizeString(record.fiscalDigestValue);
   const fiscalSignature = normalizeString(record.fiscalSignature);
   const fiscalProtocol = normalizeString(record.fiscalProtocol);
-  const fiscalItemsSnapshot = Array.isArray(record.fiscalItemsSnapshot || record.fiscalItems)
-    ? (record.fiscalItemsSnapshot || record.fiscalItems).map((item) =>
-        item && typeof item === 'object' ? { ...item } : item
-      )
+  const fiscalItemsSource = Array.isArray(record.fiscalItemsSnapshot || record.fiscalItems)
+    ? (record.fiscalItemsSnapshot || record.fiscalItems)
+    : items;
+  const fiscalItemsSnapshot = Array.isArray(fiscalItemsSource)
+    ? fiscalItemsSource.map((item) => (item && typeof item === 'object' ? { ...item } : item))
     : [];
   const fiscalNumberParsed =
     record.fiscalNumber === undefined || record.fiscalNumber === null

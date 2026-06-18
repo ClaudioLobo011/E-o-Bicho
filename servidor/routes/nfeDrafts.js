@@ -198,6 +198,25 @@ const validatePagCobrConsistency = ({ hasCobr, paymentEntries }) => {
   }
 };
 
+const resolveEmitterCrt = (regime) => {
+  const normalized = cleanString(regime).toLowerCase();
+  if (normalized === '1' || normalized === 'simples') return '1';
+  if (normalized === '2' || normalized === 'simples_excesso_sublimite') return '2';
+  if (
+    normalized === '3' ||
+    normalized === 'normal' ||
+    normalized === 'lucro_presumido' ||
+    normalized === 'lucro_real' ||
+    normalized === 'lucro_arbitrado'
+  ) {
+    return '3';
+  }
+  if (normalized === '4' || normalized === 'mei') return '4';
+  throw new Error('Regime tributario da empresa invalido ou nao informado para emissao de NF-e.');
+};
+
+const isSimplesCrt = (crt) => crt === '1' || crt === '4';
+
 const buildPaymentEntries = ({ payments = {}, duplicatesTotal = 0 }) => {
   const aggregate = new Map();
   const addEntry = ({ tPag, vPag, indPag, label }) => {
@@ -884,7 +903,7 @@ const buildNfeXml = ({ draft, store, serie, environment }) => {
   const emitName = sanitize(store?.razaoSocial || store?.nome || '');
   const emitFantasia = sanitize(store?.nomeFantasia || store?.nome || '');
   const emitIe = sanitize(store?.inscricaoEstadual || '');
-  const emitCrt = store?.regimeTributario === 'simples' ? '1' : store?.regimeTributario === 'mei' ? '1' : '3';
+  const emitCrt = resolveEmitterCrt(store?.regimeTributario);
   const emitAddress = {
     xLgr: sanitize(store?.logradouro || store?.endereco || ''),
     nro: digitsOnly(store?.numero || '') || 'S/N',
@@ -1053,7 +1072,7 @@ const buildNfeXml = ({ draft, store, serie, environment }) => {
     const uCom = sanitize(item.unidadeComercial || 'UN');
     const uTrib = sanitize(item.unidadeTributavel || uCom);
     const cst = digitsOnly(item.cst || '') || '00';
-    const isSimples = emitCrt === '1' || emitCrt === '4';
+    const isSimples = isSimplesCrt(emitCrt);
     const csosn = isSimples ? (String(cst).length === 3 ? String(cst) : '102') : null;
     lines.push(`    <det nItem="${nItem}">`);
     lines.push('      <prod>');
@@ -1133,7 +1152,7 @@ const buildNfeXml = ({ draft, store, serie, environment }) => {
     lines.push('    </det>');
   });
 
-  const isSimplesEmitter = emitCrt === '1' || emitCrt === '4';
+  const isSimplesEmitter = isSimplesCrt(emitCrt);
   const itemsIcmsBase = items.reduce((sum, item) => {
     const value = toNumber(item.baseIcms);
     return Number.isFinite(value) ? sum + value : sum;

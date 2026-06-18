@@ -7,7 +7,15 @@ const horarioDiaSchema = new mongoose.Schema({
     fechada: { type: Boolean, default: false }
 }, { _id: false });
 
-const regimeTributarioEnum = ['simples', 'mei', 'normal'];
+const regimeTributarioEnum = [
+    'simples',
+    'simples_excesso_sublimite',
+    'mei',
+    'lucro_presumido',
+    'lucro_real',
+    'lucro_arbitrado',
+    'normal',
+];
 
 const storeSchema = new mongoose.Schema({
     codigo: { type: String, trim: true, unique: true, sparse: true },

@@ -5,11 +5,13 @@ const { DOMParser, XMLSerializer } = require('@xmldom/xmldom');
 const xpath = require('xpath');
 const { SignedXml } = require('xml-crypto');
 const Product = require('../models/Product');
+const FiscalDefaultRule = require('../models/FiscalDefaultRule');
 const municipalitiesDataset = require('../data/ibge-municipios.json');
 const {
   computeMissingFields,
   describeMissingFields,
   getFiscalDataForStore,
+  normalizeFiscalData,
 } = require('./fiscalRuleEngine');
 const { transmitNfceToSefaz, SefazTransmissionError } = require('./sefazTransmitter');
 const { decryptBuffer, decryptText } = require('../utils/certificates');
@@ -54,6 +56,33 @@ const sanitizeDigits = (value, { fallback = '' } = {}) => {
   if (!value) return fallback;
   const digits = String(value).replace(/\D+/g, '');
   return digits || fallback;
+};
+
+const isValidGtin = (value) => {
+  const digits = sanitizeDigits(value, { fallback: '' });
+  if (!['8', '12', '13', '14'].includes(String(digits.length))) {
+    return false;
+  }
+  const checkDigit = Number(digits.at(-1));
+  const body = digits.slice(0, -1);
+  let weight = 3;
+  let sum = 0;
+  for (let index = body.length - 1; index >= 0; index -= 1) {
+    sum += Number(body[index]) * weight;
+    weight = weight === 3 ? 1 : 3;
+  }
+  const expected = (10 - (sum % 10)) % 10;
+  return expected === checkDigit;
+};
+
+const resolveGtinForXml = (...values) => {
+  for (const value of values) {
+    const digits = sanitizeDigits(value, { fallback: '' });
+    if (digits && isValidGtin(digits)) {
+      return digits;
+    }
+  }
+  return 'SEM GTIN';
 };
 
 const normalizeMunicipalityNameForLookup = (value, uf) => {
@@ -385,6 +414,197 @@ const buildTaxGroup = ({ lines, tag, data = {}, baseValue = 0, quantity = 0 }) =
 
   lines.push(`        </${upperTag}>`);
   return { amount: summaryAmount };
+};
+
+const getFiscalNumber = (source = {}, keys = [], fallback = 0) => {
+  for (const key of keys) {
+    const path = String(key).split('.');
+    let value = source;
+    for (const part of path) {
+      value = value && typeof value === 'object' ? value[part] : undefined;
+    }
+    if (value !== undefined && value !== null && value !== '') {
+      return safeNumber(value, fallback);
+    }
+  }
+  return fallback;
+};
+
+const pushIcmsStValues = (lines, fiscalData = {}) => {
+  lines.push(`            <modBCST>${onlyDigits(fiscalData?.icms?.modBCST || fiscalData?.modBCST) || '4'}</modBCST>`);
+  lines.push(`            <pMVAST>${toDecimal(getFiscalNumber(fiscalData, ['icms.pMVAST', 'pMVAST']))}</pMVAST>`);
+  lines.push(`            <pRedBCST>${toDecimal(getFiscalNumber(fiscalData, ['icms.pRedBCST', 'pRedBCST']))}</pRedBCST>`);
+  lines.push(`            <vBCST>${toDecimal(getFiscalNumber(fiscalData, ['icms.vBCST', 'vBCST']))}</vBCST>`);
+  lines.push(`            <pICMSST>${toDecimal(getFiscalNumber(fiscalData, ['icms.pICMSST', 'pICMSST']))}</pICMSST>`);
+  lines.push(`            <vICMSST>${toDecimal(getFiscalNumber(fiscalData, ['icms.vICMSST', 'vICMSST']))}</vICMSST>`);
+};
+
+const pushIcmsRetainedValues = (lines, fiscalData = {}) => {
+  lines.push(`            <vBCSTRet>${toDecimal(getFiscalNumber(fiscalData, ['icms.vBCSTRet', 'vBCSTRet']))}</vBCSTRet>`);
+  lines.push(`            <pST>${toDecimal(getFiscalNumber(fiscalData, ['icms.pST', 'pST']))}</pST>`);
+  lines.push(`            <vICMSSubstituto>${toDecimal(getFiscalNumber(fiscalData, ['icms.vICMSSubstituto', 'vICMSSubstituto']))}</vICMSSubstituto>`);
+  lines.push(`            <vICMSSTRet>${toDecimal(getFiscalNumber(fiscalData, ['icms.vICMSSTRet', 'vICMSSTRet']))}</vICMSSTRet>`);
+};
+
+const pushIcmsCreditValues = (lines, fiscalData = {}) => {
+  lines.push(`            <pCredSN>${toDecimal(getFiscalNumber(fiscalData, ['icms.pCredSN', 'pCredSN']))}</pCredSN>`);
+  lines.push(`            <vCredICMSSN>${toDecimal(getFiscalNumber(fiscalData, ['icms.vCredICMSSN', 'vCredICMSSN']))}</vCredICMSSN>`);
+};
+
+const pushIcmsOwnValues = (lines, fiscalData = {}, baseValue = 0, { includeReduction = false, reductionAfterBase = false } = {}) => {
+  const pICMS = getFiscalNumber(fiscalData, ['icms.pICMS', 'icms.aliquota', 'pICMS', 'aliquota']);
+  const vICMS = getFiscalNumber(fiscalData, ['icms.vICMS', 'vICMS'], (safeNumber(baseValue) * pICMS) / 100);
+  lines.push(`            <modBC>${onlyDigits(fiscalData?.icms?.modBC || fiscalData?.modBC) || '3'}</modBC>`);
+  if (includeReduction && !reductionAfterBase) {
+    lines.push(`            <pRedBC>${toDecimal(getFiscalNumber(fiscalData, ['icms.pRedBC', 'pRedBC']))}</pRedBC>`);
+  }
+  lines.push(`            <vBC>${toDecimal(baseValue)}</vBC>`);
+  if (includeReduction && reductionAfterBase) {
+    lines.push(`            <pRedBC>${toDecimal(getFiscalNumber(fiscalData, ['icms.pRedBC', 'pRedBC']))}</pRedBC>`);
+  }
+  lines.push(`            <pICMS>${toDecimal(pICMS)}</pICMS>`);
+  lines.push(`            <vICMS>${toDecimal(vICMS)}</vICMS>`);
+  return { base: safeNumber(baseValue), value: safeNumber(vICMS) };
+};
+
+const SUPPORTED_CST_ICMS = new Set(['00', '10', '20', '30', '40', '41', '50', '51', '60', '70', '90']);
+const SUPPORTED_CSOSN_ICMS = new Set(['101', '102', '103', '201', '202', '203', '300', '400', '500', '900']);
+
+const buildIcmsGroup = ({ lines, fiscalData = {}, itemTotal = 0 }) => {
+  const orig = onlyDigits(fiscalData?.origem).slice(0, 1) || '0';
+  const rawCsosnDigits = onlyDigits(fiscalData?.csosn);
+  const rawCstDigits = onlyDigits(fiscalData?.cst);
+  const csosnDigits = rawCsosnDigits ? rawCsosnDigits.padStart(3, '0').slice(-3) : '';
+  const cstDigits = rawCstDigits ? rawCstDigits.padStart(2, '0').slice(-2) : '00';
+  const baseValue = safeNumber(itemTotal, 0);
+  let summary = { base: 0, value: 0, stBase: 0, stValue: 0 };
+
+  if (csosnDigits && !SUPPORTED_CSOSN_ICMS.has(csosnDigits)) {
+    throw new Error(`CSOSN ${csosnDigits} nao suportado para emissao de NFC-e.`);
+  }
+  if (!csosnDigits && !SUPPORTED_CST_ICMS.has(cstDigits)) {
+    throw new Error(`CST ${cstDigits} nao suportado para emissao de NFC-e.`);
+  }
+
+  lines.push('        <ICMS>');
+
+  if (csosnDigits) {
+    if (csosnDigits === '101') {
+      lines.push('          <ICMSSN101>');
+      lines.push(`            <orig>${orig}</orig>`);
+      lines.push('            <CSOSN>101</CSOSN>');
+      pushIcmsCreditValues(lines, fiscalData);
+      lines.push('          </ICMSSN101>');
+    } else if (['102', '103', '300', '400'].includes(csosnDigits)) {
+      lines.push('          <ICMSSN102>');
+      lines.push(`            <orig>${orig}</orig>`);
+      lines.push(`            <CSOSN>${csosnDigits}</CSOSN>`);
+      lines.push('          </ICMSSN102>');
+    } else if (csosnDigits === '201') {
+      lines.push('          <ICMSSN201>');
+      lines.push(`            <orig>${orig}</orig>`);
+      lines.push('            <CSOSN>201</CSOSN>');
+      pushIcmsStValues(lines, fiscalData);
+      pushIcmsCreditValues(lines, fiscalData);
+      lines.push('          </ICMSSN201>');
+    } else if (['202', '203'].includes(csosnDigits)) {
+      lines.push('          <ICMSSN202>');
+      lines.push(`            <orig>${orig}</orig>`);
+      lines.push(`            <CSOSN>${csosnDigits}</CSOSN>`);
+      pushIcmsStValues(lines, fiscalData);
+      lines.push('          </ICMSSN202>');
+    } else if (csosnDigits === '500') {
+      lines.push('          <ICMSSN500>');
+      lines.push(`            <orig>${orig}</orig>`);
+      lines.push(`            <CSOSN>${csosnDigits}</CSOSN>`);
+      pushIcmsRetainedValues(lines, fiscalData);
+      lines.push('          </ICMSSN500>');
+    } else {
+      lines.push('          <ICMSSN900>');
+      lines.push(`            <orig>${orig}</orig>`);
+      lines.push('            <CSOSN>900</CSOSN>');
+      summary = { ...summary, ...pushIcmsOwnValues(lines, fiscalData, baseValue, { includeReduction: true }) };
+      pushIcmsStValues(lines, fiscalData);
+      pushIcmsCreditValues(lines, fiscalData);
+      lines.push('          </ICMSSN900>');
+    }
+    lines.push('        </ICMS>');
+    return summary;
+  }
+
+  if (cstDigits === '10') {
+    lines.push('          <ICMS10>');
+    lines.push(`            <orig>${orig}</orig>`);
+    lines.push('            <CST>10</CST>');
+    summary = { ...summary, ...pushIcmsOwnValues(lines, fiscalData, baseValue) };
+    pushIcmsStValues(lines, fiscalData);
+    lines.push('          </ICMS10>');
+  } else if (cstDigits === '20') {
+    lines.push('          <ICMS20>');
+    lines.push(`            <orig>${orig}</orig>`);
+    lines.push('            <CST>20</CST>');
+    summary = { ...summary, ...pushIcmsOwnValues(lines, fiscalData, baseValue, { includeReduction: true }) };
+    lines.push('          </ICMS20>');
+  } else if (cstDigits === '30') {
+    lines.push('          <ICMS30>');
+    lines.push(`            <orig>${orig}</orig>`);
+    lines.push('            <CST>30</CST>');
+    pushIcmsStValues(lines, fiscalData);
+    lines.push('          </ICMS30>');
+  } else if (['40', '41', '50'].includes(cstDigits)) {
+    lines.push('          <ICMS40>');
+    lines.push(`            <orig>${orig}</orig>`);
+    lines.push(`            <CST>${cstDigits}</CST>`);
+    lines.push('          </ICMS40>');
+  } else if (cstDigits === '51') {
+    const pICMS = getFiscalNumber(fiscalData, ['icms.pICMS', 'icms.aliquota', 'pICMS', 'aliquota']);
+    const vICMSOp = getFiscalNumber(fiscalData, ['icms.vICMSOp', 'vICMSOp'], (baseValue * pICMS) / 100);
+    const pDif = getFiscalNumber(fiscalData, ['icms.pDif', 'pDif']);
+    const vICMSDif = getFiscalNumber(fiscalData, ['icms.vICMSDif', 'vICMSDif'], (vICMSOp * pDif) / 100);
+    const vICMS = getFiscalNumber(fiscalData, ['icms.vICMS', 'vICMS'], Math.max(vICMSOp - vICMSDif, 0));
+    lines.push('          <ICMS51>');
+    lines.push(`            <orig>${orig}</orig>`);
+    lines.push('            <CST>51</CST>');
+    lines.push(`            <modBC>${onlyDigits(fiscalData?.icms?.modBC || fiscalData?.modBC) || '3'}</modBC>`);
+    lines.push(`            <pRedBC>${toDecimal(getFiscalNumber(fiscalData, ['icms.pRedBC', 'pRedBC']))}</pRedBC>`);
+    lines.push(`            <vBC>${toDecimal(baseValue)}</vBC>`);
+    lines.push(`            <pICMS>${toDecimal(pICMS)}</pICMS>`);
+    lines.push(`            <vICMSOp>${toDecimal(vICMSOp)}</vICMSOp>`);
+    lines.push(`            <pDif>${toDecimal(pDif)}</pDif>`);
+    lines.push(`            <vICMSDif>${toDecimal(vICMSDif)}</vICMSDif>`);
+    lines.push(`            <vICMS>${toDecimal(vICMS)}</vICMS>`);
+    lines.push('          </ICMS51>');
+    summary = { ...summary, base: baseValue, value: vICMS };
+  } else if (cstDigits === '60') {
+    lines.push('          <ICMS60>');
+    lines.push(`            <orig>${orig}</orig>`);
+    lines.push('            <CST>60</CST>');
+    pushIcmsRetainedValues(lines, fiscalData);
+    lines.push('          </ICMS60>');
+  } else if (cstDigits === '70') {
+    lines.push('          <ICMS70>');
+    lines.push(`            <orig>${orig}</orig>`);
+    lines.push('            <CST>70</CST>');
+    summary = { ...summary, ...pushIcmsOwnValues(lines, fiscalData, baseValue, { includeReduction: true }) };
+    pushIcmsStValues(lines, fiscalData);
+    lines.push('          </ICMS70>');
+  } else if (cstDigits === '90') {
+    lines.push('          <ICMS90>');
+    lines.push(`            <orig>${orig}</orig>`);
+    lines.push('            <CST>90</CST>');
+    summary = { ...summary, ...pushIcmsOwnValues(lines, fiscalData, baseValue, { includeReduction: true, reductionAfterBase: true }) };
+    pushIcmsStValues(lines, fiscalData);
+    lines.push('          </ICMS90>');
+  } else {
+    lines.push('          <ICMS00>');
+    lines.push(`            <orig>${orig}</orig>`);
+    lines.push('            <CST>00</CST>');
+    summary = { ...summary, ...pushIcmsOwnValues(lines, fiscalData, baseValue) };
+    lines.push('          </ICMS00>');
+  }
+
+  lines.push('        </ICMS>');
+  return summary;
 };
 
 const formatDateTimeWithOffset = (date) => {
@@ -913,9 +1133,21 @@ const normalizeFiscalItem = (item = {}) => {
   const quantity = safeNumber(item.quantity ?? item.quantidade ?? item.qtd ?? 0, 0);
   const unitPrice = safeNumber(item.unitPrice ?? item.valor ?? item.preco ?? item.valorUnitario ?? 0, 0);
   const total = safeNumber(item.totalPrice ?? item.subtotal ?? unitPrice * quantity, 0);
-  const productId = item.productId || item.id || item._id || item.productSnapshot?._id || null;
+  const itemType = String(item.tipoItem || item.itemType || item.kind || item.type || '').trim().toLowerCase();
+  const productId = firstValidObjectId(
+    item.productSnapshot?._id,
+    item.productSnapshot?.id,
+    item.productSnapshot?.productId,
+    item.productId,
+    item.produtoId,
+    item.produto_id,
+    item.id,
+    item._id
+  );
   return {
-    productId: productId ? String(productId) : null,
+    productId,
+    itemType,
+    type: itemType,
     quantity,
     unitPrice,
     total,
@@ -973,6 +1205,97 @@ const buildInfAdicObservations = ({ pdv, sale, environmentLabel }) => {
   return observations;
 };
 
+const isValidObjectIdString = (value) => mongoose.Types.ObjectId.isValid(String(value || '').trim());
+
+const firstValidObjectId = (...values) => {
+  for (const value of values) {
+    const normalized = String(value || '').trim();
+    if (normalized && isValidObjectIdString(normalized)) {
+      return normalized;
+    }
+    const parts = normalized.split(/[:|,\s]+/).filter(Boolean);
+    const matchedPart = parts.find((part) => isValidObjectIdString(part));
+    if (matchedPart) {
+      return matchedPart;
+    }
+  }
+  return null;
+};
+
+const collectFiscalItemCandidates = (sale = {}) => {
+  const snapshot = sale?.receiptSnapshot || {};
+  const candidates = [
+    sale.fiscalItemsSnapshot,
+    sale.fiscalItems,
+    sale.itemsSnapshot,
+    sale.itemsSnapshot?.items,
+    sale.itemsSnapshot?.itens,
+    sale.items,
+    snapshot?.items,
+    snapshot?.itens,
+    snapshot?.produtos,
+    snapshot?.cart?.items,
+    snapshot?.cart?.itens,
+    snapshot?.cart?.produtos,
+  ];
+  return candidates.find((list) => Array.isArray(list) && list.length) || [];
+};
+
+const resolveFiscalRuleCode = (fiscal = {}) =>
+  String(fiscal?.fiscalRuleCode || fiscal?.regraFiscalCodigo || fiscal?.ruleCode || '').trim();
+
+const fiscalSignature = (fiscal = {}) => {
+  const normalized = normalizeFiscalData(fiscal || {});
+  delete normalized.fiscalRuleCode;
+  delete normalized.fiscalRuleName;
+  delete normalized.atualizadoEm;
+  delete normalized.atualizadoPor;
+  return JSON.stringify(normalized);
+};
+
+const resolveFiscalRuleForProduct = async ({ product, storeObject, ruleCache }) => {
+  const storeId = firstValidObjectId(storeObject?._id, storeObject?.id, storeObject);
+  const currentFiscal = getFiscalDataForStore(product, storeObject);
+  if (!storeId) return currentFiscal || {};
+
+  const cacheKey = String(storeId);
+  let storeRules = ruleCache.get(cacheKey);
+  if (!storeRules) {
+    storeRules = await FiscalDefaultRule.find({ empresa: storeId }).sort({ code: 1 }).lean();
+    ruleCache.set(cacheKey, storeRules);
+  }
+
+  const ruleCode = resolveFiscalRuleCode(currentFiscal);
+  if (ruleCode) {
+    const matchedByCode = storeRules.find((rule) => String(rule?.code) === String(Number(ruleCode)));
+    if (!matchedByCode) {
+      throw new Error(`Regra fiscal ${ruleCode} nao encontrada para a empresa do PDV.`);
+    }
+    return matchedByCode.fiscal || {};
+  }
+
+  const currentSignature = fiscalSignature(currentFiscal);
+  const matchedByFiscal = storeRules.find((rule) => fiscalSignature(rule?.fiscal || {}) === currentSignature);
+  return matchedByFiscal?.fiscal || currentFiscal || {};
+};
+
+const resolveEmitterCrt = (regime) => {
+  const normalized = String(regime || '').trim().toLowerCase();
+  if (normalized === '1' || normalized === 'simples') return '1';
+  if (normalized === '2' || normalized === 'simples_excesso_sublimite') return '2';
+  if (
+    normalized === '3' ||
+    normalized === 'normal' ||
+    normalized === 'lucro_presumido' ||
+    normalized === 'lucro_real' ||
+    normalized === 'lucro_arbitrado'
+  ) {
+    return '3';
+  }
+  if (normalized === '4' || normalized === 'mei') return '4';
+  throw new Error('Regime tributario da empresa invalido ou nao informado para emissao de NFC-e.');
+};
+
 const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, serie, numero }) => {
   if (!sale || typeof sale !== 'object') {
     throw new Error('Venda inválida para emissão fiscal.');
@@ -980,12 +1303,10 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   const snapshot = sale.receiptSnapshot || {};
   const saleCodeForFile = normalizeStringSafe(sale?.saleCode) || normalizeStringSafe(sale?.id);
   let xmlFileBaseName = saleCodeForFile ? `NFCe-${saleCodeForFile}` : '';
-  const fiscalItemsRaw = Array.isArray(sale.fiscalItemsSnapshot)
-    ? sale.fiscalItemsSnapshot
-    : Array.isArray(sale.itemsSnapshot)
-    ? sale.itemsSnapshot
-    : [];
-  const fiscalItems = fiscalItemsRaw.map((item) => normalizeFiscalItem(item));
+  const fiscalItemsRaw = collectFiscalItemCandidates(sale);
+  const fiscalItems = fiscalItemsRaw
+    .map((item) => normalizeFiscalItem(item))
+    .filter((item) => !['servico', 'serviço'].includes(item.itemType) && item.type !== 'service');
   if (!fiscalItems.length) {
     throw new Error('Itens da venda não estão disponíveis para emissão fiscal.');
   }
@@ -997,7 +1318,10 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     throw new Error('UF da empresa não está configurada para transmissão fiscal.');
   }
   const regime = storeObject?.regimeTributario || storeObject?.regime || '';
+  const emitterCrt = resolveEmitterCrt(regime);
   const missingByProduct = [];
+  const fiscalRuleCache = new Map();
+  const fiscalDataByProductId = new Map();
 
   for (const item of fiscalItems) {
     const product = item.productId ? productsMap.get(String(item.productId)) : null;
@@ -1008,7 +1332,8 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
       });
       continue;
     }
-    const fiscalData = getFiscalDataForStore(product, storeObject);
+    const fiscalData = await resolveFiscalRuleForProduct({ product, storeObject, ruleCache: fiscalRuleCache });
+    fiscalDataByProductId.set(String(product._id), fiscalData);
     const missing = computeMissingFields(fiscalData, { regime });
     const issues = [
       ...describeMissingFields(missing.comum || []),
@@ -1219,7 +1544,7 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   infNfeLines.push('        <xPais>Brasil</xPais>');
   infNfeLines.push('      </enderEmit>');
   infNfeLines.push(`      <IE>${sanitizeDigits(storeObject?.inscricaoEstadual, { fallback: '' })}</IE>`);
-  infNfeLines.push('      <CRT>1</CRT>');
+  infNfeLines.push(`      <CRT>${emitterCrt}</CRT>`);
   infNfeLines.push('    </emit>');
 
   const delivery = snapshot?.delivery && typeof snapshot.delivery === 'object' ? snapshot.delivery : null;
@@ -1538,21 +1863,27 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
 
   let totalPis = 0;
   let totalCofins = 0;
+  let totalIcmsBase = 0;
+  let totalIcmsValue = 0;
 
   fiscalItems.forEach((item, index) => {
     const product = item.productId ? productsMap.get(String(item.productId)) : null;
-    const fiscalData = product ? getFiscalDataForStore(product, storeObject) : {};
+    const fiscalData = product ? fiscalDataByProductId.get(String(product._id)) || {} : {};
     const cfop =
       fiscalData?.cfop?.nfce?.dentroEstado ||
       fiscalData?.cfop?.nfce?.foraEstado ||
       fiscalData?.cfop?.nfe?.dentroEstado ||
       '5102';
     const ncm = sanitizeDigits(product?.ncm || item.productSnapshot?.ncm, { fallback: '00000000' });
-    const cEAN = sanitizeDigits(item.barcode, { fallback: 'SEM GTIN' });
+    const cEAN = resolveGtinForXml(
+      product?.codigoBarras,
+      product?.codigoBarra,
+      product?.barcode,
+      product?.ean,
+      product?.gtin,
+      item.barcode
+    );
     const cEANTrib = cEAN === 'SEM GTIN' ? 'SEM GTIN' : cEAN;
-    const orig = fiscalData?.origem || '0';
-    const csosn = fiscalData?.csosn || '';
-    const cst = fiscalData?.cst || '';
     infNfeLines.push(`    <det nItem="${index + 1}">`);
     infNfeLines.push('      <prod>');
     const productCode = item.internalCode || item.productId || String(index + 1).padStart(4, '0');
@@ -1564,8 +1895,9 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
         : item.name;
     infNfeLines.push(`        <xProd>${sanitize(productDescription)}</xProd>`);
     infNfeLines.push(`        <NCM>${ncm.padStart(8, '0')}</NCM>`);
-    if (fiscalData?.cest) {
-      infNfeLines.push(`        <CEST>${fiscalData.cest}</CEST>`);
+    const cest = sanitizeDigits(fiscalData?.cest, { fallback: '' });
+    if (cest.length === 7) {
+      infNfeLines.push(`        <CEST>${cest}</CEST>`);
     }
     infNfeLines.push(`        <CFOP>${cfop}</CFOP>`);
     infNfeLines.push(`        <uCom>${sanitize(item.unit)}</uCom>`);
@@ -1579,23 +1911,9 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     infNfeLines.push('        <indTot>1</indTot>');
     infNfeLines.push('      </prod>');
     infNfeLines.push('      <imposto>');
-    infNfeLines.push('        <ICMS>');
-    if (csosn) {
-      infNfeLines.push('          <ICMSSN102>');
-      infNfeLines.push(`            <orig>${orig}</orig>`);
-      infNfeLines.push(`            <CSOSN>${csosn}</CSOSN>`);
-      infNfeLines.push('          </ICMSSN102>');
-    } else {
-      infNfeLines.push('          <ICMS00>');
-      infNfeLines.push(`            <orig>${orig}</orig>`);
-      infNfeLines.push(`            <CST>${cst || '00'}</CST>`);
-      infNfeLines.push('            <modBC>3</modBC>');
-      infNfeLines.push(`            <vBC>${toDecimal(item.total)}</vBC>`);
-      infNfeLines.push('            <pICMS>0.00</pICMS>');
-      infNfeLines.push('            <vICMS>0.00</vICMS>');
-      infNfeLines.push('          </ICMS00>');
-    }
-    infNfeLines.push('        </ICMS>');
+    const icmsSummary = buildIcmsGroup({ lines: infNfeLines, fiscalData, itemTotal: item.total }) || {};
+    totalIcmsBase += safeNumber(icmsSummary.base, 0);
+    totalIcmsValue += safeNumber(icmsSummary.value, 0);
     const pisSummary = buildTaxGroup({
       lines: infNfeLines,
       tag: 'PIS',
@@ -1618,8 +1936,8 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
 
   infNfeLines.push('    <total>');
   infNfeLines.push('      <ICMSTot>');
-  infNfeLines.push('        <vBC>0.00</vBC>');
-  infNfeLines.push('        <vICMS>0.00</vICMS>');
+  infNfeLines.push(`        <vBC>${toDecimal(totalIcmsBase)}</vBC>`);
+  infNfeLines.push(`        <vICMS>${toDecimal(totalIcmsValue)}</vICMS>`);
   infNfeLines.push('        <vICMSDeson>0.00</vICMSDeson>');
   infNfeLines.push('        <vFCPUFDest>0.00</vFCPUFDest>');
   infNfeLines.push('        <vICMSUFDest>0.00</vICMSUFDest>');
@@ -1954,4 +2272,12 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
 
 module.exports = {
   emitPdvSaleFiscal,
+  _test: {
+    collectFiscalItemCandidates,
+    buildIcmsGroup,
+    normalizeFiscalItem,
+    resolveGtinForXml,
+    resolveEmitterCrt,
+    resolveFiscalRuleCode,
+  },
 };

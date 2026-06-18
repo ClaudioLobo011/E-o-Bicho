@@ -325,6 +325,15 @@
     };
 
     const collectFiscalData = () => ({
+        fiscalRuleCode: activeFiscalCompanyKey && activeFiscalCompanyKey !== FISCAL_GENERAL_KEY
+            ? normalizeRuleCode(fiscalRuleSelectionByStore.get(activeFiscalCompanyKey) || '')
+            : '',
+        fiscalRuleName: activeFiscalCompanyKey && activeFiscalCompanyKey !== FISCAL_GENERAL_KEY
+            ? getRuleLabel(
+                (fiscalRulesByStore.get(activeFiscalCompanyKey) || [])
+                    .find((rule) => normalizeRuleCode(rule?.code) === normalizeRuleCode(fiscalRuleSelectionByStore.get(activeFiscalCompanyKey) || ''))
+              )
+            : '',
         origem: fiscalInputs.origem?.value || '0',
         csosn: fiscalInputs.csosn?.value?.trim() || '',
         cst: fiscalInputs.cst?.value?.trim() || '',
@@ -381,6 +390,8 @@
     const cloneFiscalObject = (fiscal = {}) => JSON.parse(JSON.stringify(fiscal || {}));
 
     const getDefaultFiscalSnapshot = () => ({
+        fiscalRuleCode: '',
+        fiscalRuleName: '',
         origem: '0',
         csosn: '',
         cst: '',
@@ -992,6 +1003,11 @@
             return fiscalRuleSelectionByStore.get(storeId);
         }
         const fiscalSnapshot = fiscalByCompany.get(storeId) || getDefaultFiscalSnapshot();
+        const storedRuleCode = normalizeRuleCode(fiscalSnapshot?.fiscalRuleCode || fiscalSnapshot?.regraFiscalCodigo || '');
+        if (storedRuleCode) {
+            fiscalRuleSelectionByStore.set(storeId, storedRuleCode);
+            return storedRuleCode;
+        }
         const matchedRule = findMatchingRuleForFiscal(rules, fiscalSnapshot);
         if (matchedRule) {
             const matchedCode = normalizeRuleCode(matchedRule.code);
@@ -1142,7 +1158,11 @@
         const selectedRule = rules.find((rule) => normalizeRuleCode(rule?.code) === selectedCode);
         if (!selectedRule) return;
         fiscalRuleSelectionByStore.set(storeId, selectedCode);
-        fiscalByCompany.set(storeId, cloneFiscalObject(selectedRule.fiscal || {}));
+        fiscalByCompany.set(storeId, {
+            ...cloneFiscalObject(selectedRule.fiscal || {}),
+            fiscalRuleCode: selectedCode,
+            fiscalRuleName: getRuleLabel(selectedRule),
+        });
     };
 
     const updateFiscalRuleSelectForStore = async (storeId, selectEl, storeName, row) => {
@@ -1235,8 +1255,13 @@
             return;
         }
         fiscalRuleSelectionByStore.set(activeFiscalCompanyKey, selectedCode);
-        fiscalByCompany.set(activeFiscalCompanyKey, cloneFiscalObject(selectedRule.fiscal || {}));
-        populateFiscalFields(selectedRule.fiscal || {});
+        const selectedFiscal = {
+            ...cloneFiscalObject(selectedRule.fiscal || {}),
+            fiscalRuleCode: selectedCode,
+            fiscalRuleName: getRuleLabel(selectedRule),
+        };
+        fiscalByCompany.set(activeFiscalCompanyKey, selectedFiscal);
+        populateFiscalFields(selectedFiscal);
         updateFiscalCompanySummary();
     };
 

@@ -36,7 +36,15 @@ const uploadCertificate = multer({
 const execFileAsync = promisify(execFile);
 const fsPromises = fs.promises;
 
-const allowedRegimes = new Set(['simples', 'mei', 'normal']);
+const allowedRegimes = new Set([
+    'simples',
+    'simples_excesso_sublimite',
+    'mei',
+    'lucro_presumido',
+    'lucro_real',
+    'lucro_arbitrado',
+    'normal',
+]);
 const weekDays = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
 
 const trimString = (value) => (typeof value === 'string' ? value.trim() : '');

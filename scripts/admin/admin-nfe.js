@@ -4743,8 +4743,12 @@
 
   function formatRegime(value) {
     const normalized = String(value || '').toLowerCase();
-    if (normalized === 'mei') return 'MEI';
     if (normalized === 'simples') return 'Simples Nacional';
+    if (normalized === 'simples_excesso_sublimite') return 'Simples Nacional - excesso de sublimite';
+    if (normalized === 'mei') return 'MEI';
+    if (normalized === 'lucro_presumido') return 'Lucro Presumido';
+    if (normalized === 'lucro_real') return 'Lucro Real';
+    if (normalized === 'lucro_arbitrado') return 'Lucro Arbitrado';
     if (normalized === 'normal') return 'Regime Normal';
     return value || '';
   }

@@ -97,6 +97,8 @@ const normalizeStatus = (status = {}) => {
 };
 
 const normalizeFiscalData = (fiscal = {}) => ({
+  fiscalRuleCode: toStringSafe(fiscal.fiscalRuleCode || fiscal.regraFiscalCodigo),
+  fiscalRuleName: toStringSafe(fiscal.fiscalRuleName || fiscal.regraFiscalNome),
   origem: toStringSafe(fiscal.origem, '0') || '0',
   cest: toStringSafe(fiscal.cest),
   csosn: toStringSafe(fiscal.csosn),
@@ -122,6 +124,19 @@ const getValueByPath = (obj, path) => {
 };
 
 const hasValue = (value) => value !== undefined && value !== null && value !== '';
+const NORMAL_CRT_REGIMES = new Set([
+  'normal',
+  'simples_excesso_sublimite',
+  'lucro_presumido',
+  'lucro_real',
+  'lucro_arbitrado',
+]);
+
+const normalizeRegimeForRules = (regime) => {
+  const normalized = toLower(regime);
+  if (NORMAL_CRT_REGIMES.has(normalized)) return 'normal';
+  return normalized;
+};
 
 const REQUIRED_COMMON_FIELDS = ['origem', 'pis.codigo', 'pis.cst', 'cofins.codigo', 'cofins.cst', 'ipi.cst', 'ipi.codigoEnquadramento'];
 const REQUIRED_NUMERIC_FIELDS = ['pis.aliquota', 'cofins.aliquota', 'ipi.aliquota'];
@@ -226,7 +241,7 @@ const computeMissingFields = (fiscal, { regime } = {}) => {
   });
 
   const normalizedRegime = toLower(regime);
-  if (normalizedRegime === 'normal') {
+  if (NORMAL_CRT_REGIMES.has(normalizedRegime)) {
     if (!hasValue(normalized.cst)) missingCommon.push('cst');
   } else {
     if (!hasValue(normalized.csosn)) missingCommon.push('csosn');
@@ -280,8 +295,9 @@ const determineStatusFromMissing = (missing, modalidade) => {
 const buildSuggestion = (product, store = {}, context = {}) => {
   const base = clone(defaults);
   const storeRegime = toLower(store.regimeTributario);
-  if (regimeRules[storeRegime]) {
-    deepMerge(base, regimeRules[storeRegime]);
+  const regimeRuleKey = normalizeRegimeForRules(storeRegime);
+  if (regimeRules[regimeRuleKey]) {
+    deepMerge(base, regimeRules[regimeRuleKey]);
   }
 
   const productType = product?.tipoProduto;

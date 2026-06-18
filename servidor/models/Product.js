@@ -29,6 +29,8 @@ const fiscalCfopSchema = new mongoose.Schema({
 }, { _id: false });
 
 const fiscalSchema = new mongoose.Schema({
+    fiscalRuleCode: { type: String, trim: true, default: '' },
+    fiscalRuleName: { type: String, trim: true, default: '' },
     origem: { type: String, trim: true, default: '0' },
     cest: { type: String, trim: true, default: '' },
     csosn: { type: String, trim: true, default: '' },
