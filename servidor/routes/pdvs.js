@@ -3884,6 +3884,13 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
 
     state.markModified('completedSales');
     await state.save();
+    if (PDV_NORMALIZED_DUAL_WRITE_ENABLED && shouldUseNormalizedReadForPdv(pdvId)) {
+      try {
+        await syncPdvStateNormalizedMirror({ pdvDoc: pdv, updatedState: state });
+      } catch (normalizedSyncError) {
+        console.error('Erro ao sincronizar venda fiscal emitida no espelho normalizado:', normalizedSyncError);
+      }
+    }
 
     const numeroField = numeroInicialNfce ? 'numeroNfceAtual' : 'numeroNfeAtual';
     await Pdv.updateOne({ _id: pdvId }, { $set: { [numeroField]: proximoNumeroFiscal } });
@@ -4173,6 +4180,7 @@ const PDV_COMMANDS = Object.freeze({
   CAIXA_CLIENT_RECEIPT: 'pdv.caixa.client_receipt',
   SALE_FINALIZE: 'pdv.sale.finalize',
   SALE_SYNC_RECEIVABLES: 'pdv.sale.sync_receivables',
+  SALE_SYNC_FISCAL_STATUS: 'pdv.sale.sync_fiscal_status',
   SALE_RESET_FISCAL_STATUS: 'pdv.sale.reset_fiscal_status',
   BUDGET_SAVE: 'pdv.budget.save',
   BUDGET_FINALIZE: 'pdv.budget.finalize',
@@ -4694,6 +4702,18 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
       }
     }
     return { state: serialized, shouldEmit: false };
+  }
+
+  if (action === PDV_COMMANDS.SALE_SYNC_FISCAL_STATUS) {
+    const state = await PdvState.findOne({ pdv: pdvId });
+    if (state && PDV_NORMALIZED_DUAL_WRITE_ENABLED && shouldUseNormalizedReadForPdv(pdvId)) {
+      try {
+        await syncPdvStateNormalizedMirror({ pdvDoc, updatedState: state });
+      } catch (normalizedSyncError) {
+        console.error('Erro ao sincronizar status fiscal das vendas no espelho normalizado:', normalizedSyncError);
+      }
+    }
+    return { state: serializeStateForResponse(state), shouldEmit: false };
   }
 
   if (action === PDV_COMMANDS.CAIXA_OPEN) {

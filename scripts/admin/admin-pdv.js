@@ -298,6 +298,8 @@
     deliveryFilters: { start: getTodayIsoDate(), end: getTodayIsoDate() },
     salesFilters: { start: getTodayIsoDate(), end: getTodayIsoDate() },
     historyHydrationLoading: false,
+    salesFiscalStatusSyncInFlight: false,
+    salesFiscalStatusSyncKey: '',
     budgets: [],
     selectedBudgetId: '',
     activeBudgetId: '',
@@ -23079,6 +23081,39 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
     }
   };
 
+  const scheduleSalesFiscalStatusSync = (sales = []) => {
+    if (!Array.isArray(sales) || !sales.length) return;
+    if (!state.selectedPdv || state.salesFiscalStatusSyncInFlight) return;
+    const pendingSales = sales.filter((sale) => {
+      if (!sale || sale.status === 'cancelled') return false;
+      if (sale.fiscalStatus === 'emitted' || sale.fiscalStatus === 'emitting') return false;
+      return Boolean(sale.id || sale.saleCode || sale.saleCodeLabel);
+    });
+    if (!pendingSales.length) return;
+    const syncKey = pendingSales
+      .map((sale) => `${sale.id || ''}:${sale.saleCode || sale.saleCodeLabel || ''}:${sale.fiscalStatus || ''}`)
+      .join('|');
+    if (!syncKey || state.salesFiscalStatusSyncKey === syncKey) return;
+    state.salesFiscalStatusSyncKey = syncKey;
+    state.salesFiscalStatusSyncInFlight = true;
+    window.setTimeout(async () => {
+      try {
+        const persisted = await sendPdvCommandRequest('pdv.sale.sync_fiscal_status', {
+          sales: pendingSales.map((sale) => ({
+            id: sale.id || '',
+            saleCode: sale.saleCode || sale.saleCodeLabel || '',
+          })),
+        });
+        applyPersistedStateResponse(persisted);
+      } catch (error) {
+        console.error('Erro ao sincronizar status fiscal das vendas:', error);
+        state.salesFiscalStatusSyncKey = '';
+      } finally {
+        state.salesFiscalStatusSyncInFlight = false;
+      }
+    }, 80);
+  };
+
   const renderSalesList = () => {
     if (!elements.salesList || !elements.salesEmpty) return;
     renderSalesFilters();
@@ -23100,6 +23135,7 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
     if (!hasSales) {
       return;
     }
+    scheduleSalesFiscalStatusSync(sales);
     const fragment = document.createDocumentFragment();
     sales.forEach((sale) => {
       const saleId = sale.id;
