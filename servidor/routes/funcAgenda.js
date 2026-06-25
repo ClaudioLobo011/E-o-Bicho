@@ -13,7 +13,7 @@ const UserAddress = require('../models/UserAddress');
 const Store = require('../models/Store');
 const IdempotencyRecord = require('../models/IdempotencyRecord');
 const bcrypt = require('bcryptjs');
-const { createHash, randomBytes } = require('crypto');
+const { randomBytes } = require('crypto');
 const {
   ensureScopedSequenceAtLeast,
   nextScopedSequence,
@@ -1329,18 +1329,6 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
 });
 
 // ---------- SYNC (FULL SNAPSHOT) ----------
-const SYNC_COLLECTION_INDEXES = new Map([
-  ['pdvs', [{ updatedAt: -1 }, { _id: 1 }]],
-  ['pdvcaixasessions', [{ stateUpdatedAt: -1 }, { updatedAt: -1 }, { _id: 1 }]],
-  ['pdvstate_archives', [{ updatedAt: -1 }, { _id: 1 }]],
-  ['pdvstatedeliveryorders', [{ sourceUpdatedAt: -1 }, { updatedAt: -1 }, { _id: 1 }]],
-  ['pdvstatehistoryevents', [{ sourceUpdatedAt: -1 }, { updatedAt: -1 }, { _id: 1 }]],
-  ['pdvstateinventorymovements', [{ sourceUpdatedAt: -1 }, { updatedAt: -1 }, { _id: 1 }]],
-  ['pdvstatereceivables', [{ sourceUpdatedAt: -1 }, { updatedAt: -1 }, { _id: 1 }]],
-  ['pdvstatesales', [{ sourceUpdatedAt: -1 }, { updatedAt: -1 }, { _id: 1 }]],
-  ['pdvstates_normalized', [{ updatedAt: -1 }, { _id: 1 }]],
-]);
-
 const SYNC_COLLECTION_FINGERPRINT_FIELDS = new Map([
   ['pdvcaixasessions', ['stateUpdatedAt', 'updatedAt', 'aberturaData', 'createdAt', '_id']],
   ['pdvstatedeliveryorders', ['sourceUpdatedAt', 'updatedAt', 'createdAtFromEntity', 'createdAt', '_id']],
@@ -1359,98 +1347,13 @@ const SYNC_COLLECTION_PROJECTIONS = new Map([
   }],
 ]);
 
-let syncCollectionIndexesPromise = null;
-
 function getSyncCollectionProjection(collectionName) {
   return SYNC_COLLECTION_PROJECTIONS.get(String(collectionName || '').trim().toLowerCase()) || null;
-}
-
-async function ensureSyncCollectionIndexes(db) {
-  if (syncCollectionIndexesPromise) return syncCollectionIndexesPromise;
-  syncCollectionIndexesPromise = (async () => {
-    for (const [collectionName, indexes] of SYNC_COLLECTION_INDEXES.entries()) {
-      const collection = db.collection(collectionName);
-      for (const indexSpec of indexes) {
-        try {
-          // eslint-disable-next-line no-await-in-loop
-          await collection.createIndex(indexSpec, { background: true });
-        } catch (error) {
-          console.warn('[sync/full] Falha ao garantir indice', {
-            collection: collectionName,
-            index: indexSpec,
-            message: error?.message || String(error),
-          });
-        }
-      }
-    }
-  })();
-  return syncCollectionIndexesPromise;
 }
 
 async function getCollectionSyncFingerprint(db, collectionName) {
   const collection = db.collection(collectionName);
   const count = await collection.estimatedDocumentCount();
-
-  if (collectionName === 'appointments') {
-    const toDateSignature = (value) => {
-      if (!value) return '';
-      const parsed = new Date(value);
-      return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toISOString();
-    };
-    const rows = await collection
-      .find({}, {
-        projection: {
-          _id: 1,
-          scheduledAt: 1,
-          updatedAt: 1,
-          status: 1,
-          profissional: 1,
-          itens: 1,
-          valor: 1,
-          pago: 1,
-          codigoVenda: 1,
-        },
-        maxTimeMS: 55_000,
-      })
-      .sort({ _id: 1 })
-      .toArray();
-    const signature = rows.map((doc) => {
-      const itens = Array.isArray(doc?.itens) ? doc.itens : [];
-      const itemSignature = itens.map((item) => [
-        String(item?._id || ''),
-        String(item?.servico || ''),
-        String(item?.profissional || ''),
-        String(item?.data || ''),
-        String(item?.hora || ''),
-        String(item?.status || ''),
-        Number(item?.valor || 0),
-      ].join(':')).join(',');
-      return [
-        String(doc?._id || ''),
-        toDateSignature(doc?.scheduledAt),
-        toDateSignature(doc?.updatedAt),
-        String(doc?.status || ''),
-        String(doc?.profissional || ''),
-        Number(doc?.valor || 0),
-        doc?.pago ? '1' : '0',
-        String(doc?.codigoVenda || ''),
-        itemSignature,
-      ].join('|');
-    }).join('\n');
-    const fingerprint = createHash('sha256').update(signature).digest('base64url');
-    const latestUpdatedAt = rows.reduce((max, doc) => {
-      const dt = new Date(doc?.updatedAt || doc?.scheduledAt || 0);
-      if (Number.isNaN(dt.getTime())) return max;
-      return !max || dt > max ? dt : max;
-    }, null);
-    return {
-      count,
-      basis: 'appointments-signature',
-      maxUpdatedAt: latestUpdatedAt ? latestUpdatedAt.toISOString() : null,
-      fingerprint: `${count}|appointments-signature|${fingerprint}`,
-      strategy: 'always-download',
-    };
-  }
 
   const collectionKey = String(collectionName || '').trim().toLowerCase();
   const updatedFieldCandidates = SYNC_COLLECTION_FINGERPRINT_FIELDS.get(collectionKey)
@@ -1550,7 +1453,6 @@ router.get('/sync/full', authMiddleware, requireStaff, async (req, res) => {
       .map((entry) => String(entry?.name || '').trim())
       .filter((name) => name && !name.startsWith('system.'))
       .sort((a, b) => a.localeCompare(b, 'pt-BR'));
-    await ensureSyncCollectionIndexes(db);
 
     if (requestedCollection) {
       if (!collectionNames.includes(requestedCollection)) {
@@ -1687,27 +1589,10 @@ router.get('/sync/full', authMiddleware, requireStaff, async (req, res) => {
       });
     }
 
-    const counts = {};
-    const fingerprints = {};
-    const data = {};
-    for (const collectionName of collectionNames) {
-      const fingerprintInfo = await getCollectionSyncFingerprint(db, collectionName);
-      const docs = await db.collection(collectionName).find({}).toArray();
-      data[collectionName] = docs;
-      counts[collectionName] = docs.length;
-      fingerprints[collectionName] = fingerprintInfo;
-    }
-
-    return res.json({
+    return res.status(400).json({
+      message: 'Sincronizacao completa monolitica desativada. Use manifest=1 e baixe por collection em lotes.',
+      mode: 'chunked-required',
       version: 3,
-      mode: 'full-database',
-      scope: 'global',
-      generatedAt: new Date().toISOString(),
-      database: db.databaseName || null,
-      collections: collectionNames,
-      counts,
-      fingerprints,
-      data,
     });
   } catch (error) {
     console.error('GET /func/sync/full', error);
