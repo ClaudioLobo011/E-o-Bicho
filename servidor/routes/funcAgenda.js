@@ -1329,6 +1329,64 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
 });
 
 // ---------- SYNC (FULL SNAPSHOT) ----------
+const SYNC_COLLECTION_INDEXES = new Map([
+  ['pdvs', [{ updatedAt: -1 }, { _id: 1 }]],
+  ['pdvcaixasessions', [{ stateUpdatedAt: -1 }, { updatedAt: -1 }, { _id: 1 }]],
+  ['pdvstate_archives', [{ updatedAt: -1 }, { _id: 1 }]],
+  ['pdvstatedeliveryorders', [{ sourceUpdatedAt: -1 }, { updatedAt: -1 }, { _id: 1 }]],
+  ['pdvstatehistoryevents', [{ sourceUpdatedAt: -1 }, { updatedAt: -1 }, { _id: 1 }]],
+  ['pdvstateinventorymovements', [{ sourceUpdatedAt: -1 }, { updatedAt: -1 }, { _id: 1 }]],
+  ['pdvstatereceivables', [{ sourceUpdatedAt: -1 }, { updatedAt: -1 }, { _id: 1 }]],
+  ['pdvstatesales', [{ sourceUpdatedAt: -1 }, { updatedAt: -1 }, { _id: 1 }]],
+  ['pdvstates_normalized', [{ updatedAt: -1 }, { _id: 1 }]],
+]);
+
+const SYNC_COLLECTION_FINGERPRINT_FIELDS = new Map([
+  ['pdvcaixasessions', ['stateUpdatedAt', 'updatedAt', 'aberturaData', 'createdAt', '_id']],
+  ['pdvstatedeliveryorders', ['sourceUpdatedAt', 'updatedAt', 'createdAtFromEntity', 'createdAt', '_id']],
+  ['pdvstatehistoryevents', ['sourceUpdatedAt', 'updatedAt', 'createdAtFromEntity', 'createdAt', '_id']],
+  ['pdvstateinventorymovements', ['sourceUpdatedAt', 'updatedAt', 'createdAt', '_id']],
+  ['pdvstatereceivables', ['sourceUpdatedAt', 'updatedAt', 'createdAt', '_id']],
+  ['pdvstatesales', ['sourceUpdatedAt', 'updatedAt', 'createdAtFromEntity', 'createdAt', '_id']],
+  ['pdvs', ['updatedAt', 'createdAt', '_id']],
+]);
+
+const SYNC_COLLECTION_PROJECTIONS = new Map([
+  ['pdvcaixasessions', {
+    historySnapshot: 0,
+    completedSalesSnapshot: 0,
+    pagamentosSnapshot: 0,
+  }],
+]);
+
+let syncCollectionIndexesPromise = null;
+
+function getSyncCollectionProjection(collectionName) {
+  return SYNC_COLLECTION_PROJECTIONS.get(String(collectionName || '').trim().toLowerCase()) || null;
+}
+
+async function ensureSyncCollectionIndexes(db) {
+  if (syncCollectionIndexesPromise) return syncCollectionIndexesPromise;
+  syncCollectionIndexesPromise = (async () => {
+    for (const [collectionName, indexes] of SYNC_COLLECTION_INDEXES.entries()) {
+      const collection = db.collection(collectionName);
+      for (const indexSpec of indexes) {
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          await collection.createIndex(indexSpec, { background: true });
+        } catch (error) {
+          console.warn('[sync/full] Falha ao garantir indice', {
+            collection: collectionName,
+            index: indexSpec,
+            message: error?.message || String(error),
+          });
+        }
+      }
+    }
+  })();
+  return syncCollectionIndexesPromise;
+}
+
 async function getCollectionSyncFingerprint(db, collectionName) {
   const collection = db.collection(collectionName);
   const count = await collection.estimatedDocumentCount();
@@ -1394,9 +1452,12 @@ async function getCollectionSyncFingerprint(db, collectionName) {
     };
   }
 
-  const updatedFieldCandidates = ['updatedAt', 'updated_at', 'criadoEm', 'createdAt', 'created_at'];
+  const collectionKey = String(collectionName || '').trim().toLowerCase();
+  const updatedFieldCandidates = SYNC_COLLECTION_FINGERPRINT_FIELDS.get(collectionKey)
+    || ['updatedAt', 'updated_at', 'criadoEm', 'createdAt', 'created_at', '_id'];
 
   for (const fieldName of updatedFieldCandidates) {
+    if (fieldName === '_id') break;
     const latestDoc = await collection
       .find({ [fieldName]: { $exists: true, $ne: null } })
       .project({ [fieldName]: 1 })
@@ -1489,6 +1550,7 @@ router.get('/sync/full', authMiddleware, requireStaff, async (req, res) => {
       .map((entry) => String(entry?.name || '').trim())
       .filter((name) => name && !name.startsWith('system.'))
       .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    await ensureSyncCollectionIndexes(db);
 
     if (requestedCollection) {
       if (!collectionNames.includes(requestedCollection)) {
@@ -1524,10 +1586,11 @@ router.get('/sync/full', authMiddleware, requireStaff, async (req, res) => {
           ],
         };
         const deltaCollection = db.collection(requestedCollection);
+        const projection = getSyncCollectionProjection(requestedCollection);
         const [changedCount, docs] = await Promise.all([
           deltaCollection.countDocuments(deltaQuery),
           deltaCollection
-            .find(deltaQuery)
+            .find(deltaQuery, projection ? { projection } : undefined)
             .sort({ [basisField]: 1, _id: 1 })
             .skip(chunkOffset)
             .limit(chunkLimit)
@@ -1577,11 +1640,12 @@ router.get('/sync/full', authMiddleware, requireStaff, async (req, res) => {
       if (chunkCursor && mongoose.Types.ObjectId.isValid(chunkCursor)) {
         cursorQuery._id = { $gt: new mongoose.Types.ObjectId(chunkCursor) };
       }
-      const docs = await db.collection(requestedCollection)
-        .find(cursorQuery)
+      const projection = getSyncCollectionProjection(requestedCollection);
+      const query = db.collection(requestedCollection)
+        .find(cursorQuery, projection ? { projection } : undefined)
         .sort({ _id: 1 })
-        .limit(chunkLimit)
-        .toArray();
+        .limit(chunkLimit);
+      const docs = await query.toArray();
       const totalCount = Number(fingerprintInfo.count || 0);
       const loaded = docs.length;
       const nextOffset = chunkOffset + loaded;

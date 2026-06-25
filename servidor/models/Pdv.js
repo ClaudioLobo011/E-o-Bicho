@@ -153,4 +153,7 @@ const pdvSchema = new mongoose.Schema(
   }
 );
 
+pdvSchema.index({ updatedAt: -1 });
+pdvSchema.index({ empresa: 1, updatedAt: -1 });
+
 module.exports = mongoose.model('Pdv', pdvSchema);
