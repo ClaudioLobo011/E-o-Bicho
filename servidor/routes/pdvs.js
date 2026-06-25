@@ -1340,6 +1340,49 @@ const normalizePaymentSnapshotPayload = (snapshot) => {
   };
 };
 
+const normalizePaymentComparable = (value = '') =>
+  normalizeString(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+
+const paymentSnapshotMergeKey = (payment = {}) => {
+  const normalized = normalizePaymentSnapshotPayload(payment);
+  if (!normalized) return '';
+  const labelKey = normalizePaymentComparable(normalized.label);
+  if (labelKey) return `label:${labelKey}`;
+  const typeKey = normalizePaymentComparable(normalized.type);
+  if (typeKey) return `type:${typeKey}`;
+  const idKey = normalizePaymentComparable(normalized.id);
+  return idKey ? `id:${idKey}` : '';
+};
+
+const mergePaymentSnapshotList = (payments = []) => {
+  const merged = new Map();
+  (Array.isArray(payments) ? payments : []).forEach((payment) => {
+    const normalized = normalizePaymentSnapshotPayload(payment);
+    if (!normalized) return;
+    const key = paymentSnapshotMergeKey(normalized);
+    if (!key) return;
+    if (!merged.has(key)) {
+      merged.set(key, { ...normalized });
+      return;
+    }
+    const current = merged.get(key);
+    current.valor = safeNumber(current.valor, 0) + safeNumber(normalized.valor, 0);
+    if (!normalizeString(current.id) && normalizeString(normalized.id)) current.id = normalized.id;
+    if (!normalizeString(current.label) && normalizeString(normalized.label)) current.label = normalized.label;
+    if (!normalizeString(current.type) && normalizeString(normalized.type)) current.type = normalized.type;
+    current.aliases = Array.from(new Set([
+      ...(Array.isArray(current.aliases) ? current.aliases : []),
+      ...(Array.isArray(normalized.aliases) ? normalized.aliases : []),
+    ]));
+  });
+  return Array.from(merged.values());
+};
+
 const normalizeHistoryEntryPayload = (entry) => {
   if (!entry || typeof entry !== 'object') return null;
   const id = normalizeString(entry.id || entry._id);
@@ -1580,6 +1623,8 @@ const normalizeSaleRecordPayload = (record) => {
     ? record.cashContributions
     : Array.isArray(record.caixaContributions)
     ? record.caixaContributions
+    : Array.isArray(record.payments)
+    ? record.payments
     : Array.isArray(record.receiptSnapshot?.pagamentos?.items)
     ? record.receiptSnapshot.pagamentos.items
     : [];
@@ -2387,10 +2432,7 @@ const normalizeReceivableRecordPayload = (entry) => {
 };
 
 const clonePaymentSnapshots = (payments = []) =>
-  (Array.isArray(payments) ? payments : [])
-    .map((entry) => normalizePaymentSnapshotPayload(entry))
-    .filter(Boolean)
-    .map((entry) => ({ ...entry }));
+  mergePaymentSnapshotList(payments).map((entry) => ({ ...entry }));
 
 const filterHistoryForCurrentCycle = (historyEntries, cycleStart) => {
   if (!Array.isArray(historyEntries)) return [];
@@ -2438,7 +2480,11 @@ const reconcileCashStateFromSales = ({ existingState, updatePayload }) => {
       const paymentId = normalizeString(entry.paymentId || entry.id);
       const paymentLabel = normalizeString(entry.paymentLabel || entry.label) || 'Pagamento';
       const paymentType = normalizeString(entry.paymentType || entry.type).toLowerCase() || 'avista';
-      const key = paymentId || `${paymentLabel}:${paymentType}`;
+      const key = paymentSnapshotMergeKey({
+        id: paymentId,
+        label: paymentLabel,
+        type: paymentType,
+      });
       if (!paymentMap.has(key)) {
         paymentMap.set(key, {
           id: paymentId || paymentLabel,
@@ -2557,6 +2603,44 @@ const mergeRecordsByKey = (existingRecords, incomingRecords, kind = 'generic') =
     return applyDeliveryCourier(merged, shouldApplyOverlayCourier ? overlayCourier : baseCourier);
   };
 
+  const getSalePaymentStrength = (record) => {
+    if (!record || typeof record !== 'object') return 0;
+    const cashTotal = (Array.isArray(record.cashContributions) ? record.cashContributions : []).reduce(
+      (sum, entry) => sum + safeNumber(entry?.amount ?? entry?.valor ?? entry?.total ?? 0, 0),
+      0
+    );
+    const tagCount = Array.isArray(record.paymentTags)
+      ? record.paymentTags.filter((tag) => normalizeString(tag)).length
+      : 0;
+    const paymentCount = Array.isArray(record.payments)
+      ? record.payments.filter((payment) => safeNumber(payment?.valor ?? payment?.amount ?? 0, 0) > 0).length
+      : 0;
+    return (cashTotal > 0 ? 1000 : 0) + tagCount * 10 + paymentCount;
+  };
+
+  const mergeSaleRecordConflict = (existingRecord, incomingRecord) => {
+    const existing = existingRecord && typeof existingRecord === 'object' ? existingRecord : {};
+    const incoming = incomingRecord && typeof incomingRecord === 'object' ? incomingRecord : {};
+    const merged = { ...existing, ...incoming };
+    const existingPaymentStrength = getSalePaymentStrength(existing);
+    const incomingPaymentStrength = getSalePaymentStrength(incoming);
+    const paymentSource = existingPaymentStrength > incomingPaymentStrength ? existing : incoming;
+    if (Array.isArray(paymentSource.paymentTags) && paymentSource.paymentTags.length) {
+      merged.paymentTags = paymentSource.paymentTags.map((tag) => normalizeString(tag)).filter(Boolean);
+    }
+    if (Array.isArray(paymentSource.cashContributions) && paymentSource.cashContributions.length) {
+      merged.cashContributions = paymentSource.cashContributions.map((entry) =>
+        entry && typeof entry === 'object' ? { ...entry } : entry
+      );
+    }
+    if (Array.isArray(paymentSource.payments) && paymentSource.payments.length) {
+      merged.payments = paymentSource.payments.map((entry) =>
+        entry && typeof entry === 'object' ? { ...entry } : entry
+      );
+    }
+    return merged;
+  };
+
   const merged = [];
   const keyIndex = new Map();
   const append = (record, source) => {
@@ -2575,6 +2659,8 @@ const mergeRecordsByKey = (existingRecords, incomingRecords, kind = 'generic') =
     if (source === 'incoming') {
       if (kind === 'delivery') {
         merged[foundIndex] = mergeDeliveryRecordConflict(merged[foundIndex], record);
+      } else if (kind === 'sale') {
+        merged[foundIndex] = mergeSaleRecordConflict(merged[foundIndex], record);
       } else {
         merged[foundIndex] = record;
       }
@@ -4325,9 +4411,7 @@ const parsePdvCommandRequest = (body = {}) => {
 };
 
 const normalizeCommandPayments = (payments = []) =>
-  (Array.isArray(payments) ? payments : [])
-    .map((entry) => normalizePaymentSnapshotPayload(entry))
-    .filter(Boolean);
+  mergePaymentSnapshotList(payments);
 
 const buildPaymentTagsFromPayments = (payments = []) =>
   Array.from(
@@ -4364,7 +4448,7 @@ const cloneCommandPayments = (payments = []) =>
   (Array.isArray(payments) ? payments : []).map((entry) => ({ ...entry }));
 
 const resolveCommandTargetPayment = (payments = [], paymentId = '') => {
-  const normalizedId = normalizeString(paymentId);
+  const normalizedId = normalizePaymentComparable(paymentId);
   const list = Array.isArray(payments) ? payments : [];
   if (!list.length) return null;
 
@@ -4389,7 +4473,7 @@ const resolveCommandTargetPayment = (payments = [], paymentId = '') => {
       ...(Array.isArray(payment?.aliases) ? payment.aliases : []),
       ...(Array.isArray(payment?.raw?.aliases) ? payment.raw.aliases : []),
     ];
-    return candidates.some((candidate) => normalizeString(candidate) === normalizedId);
+    return candidates.some((candidate) => normalizePaymentComparable(candidate) === normalizedId);
   };
 
   return list.find(matches) || null;
@@ -6557,6 +6641,7 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
         customerName,
         customerDocument,
         items,
+        paymentTags: buildPaymentTagsFromPayments(payments),
         discountValue,
         additionValue,
         total: totalLiquido,
@@ -6673,34 +6758,20 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
     const targetSaleRecordId = normalizeString(
       payload?.saleRecordId || targetOrder?.saleRecordId || incomingSaleId
     );
-    const saleIndex = nextSales.findIndex(
-      (sale) => normalizeString(sale?.id || sale?._id) === targetSaleRecordId
-    );
+    const targetSaleCode = normalizeString(
+      payload?.saleCode || targetOrder?.saleCode || payload?.saleCodeLabel || ''
+    ).toUpperCase();
+    const saleIndex = nextSales.findIndex((sale) => {
+      const saleId = normalizeString(sale?.id || sale?._id);
+      if (targetSaleRecordId && saleId && saleId === targetSaleRecordId) return true;
+      const saleCode = normalizeString(sale?.saleCode || sale?.saleCodeLabel).toUpperCase();
+      return Boolean(targetSaleCode && saleCode && saleCode === targetSaleCode);
+    });
 
     const contributions = buildSaleContributionsFromPayments(payments);
     const paymentLabel = payments
       .map((payment) => `${payment.label || 'Pagamento'}: ${safeNumber(payment.valor, 0).toFixed(2)}`)
       .join(' | ');
-    contributions.forEach((entry) => {
-      const payment =
-        resolveCommandTargetPayment(nextPagamentos, entry.paymentId) ||
-        resolveCommandTargetPayment(nextPagamentos, entry.paymentLabel);
-      if (payment) {
-        payment.valor = safeNumber(payment.valor, 0) + safeNumber(entry.amount, 0);
-      }
-      const previsto =
-        resolveCommandTargetPayment(nextPrevisto, entry.paymentId) ||
-        resolveCommandTargetPayment(nextPrevisto, entry.paymentLabel);
-      if (previsto) {
-        previsto.valor = safeNumber(previsto.valor, 0) + safeNumber(entry.amount, 0);
-      }
-    });
-    nextSummary.recebido = safeNumber(nextSummary.recebido, 0) + totalLiquido;
-    nextSummary.saldo =
-      safeNumber(nextSummary.abertura, 0) +
-      safeNumber(nextSummary.recebido, 0) +
-      safeNumber(nextSummary.recebimentosCliente, 0);
-
     const historyEntry = buildSaleHistoryEntry({
       saleCode: normalizeString(targetOrder?.saleCode || payload?.saleCode || ''),
       totalLiquido,
@@ -6739,9 +6810,12 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
       existingBudgets,
     });
     nextSales = ensuredCodes.sales;
-    const saleForOrder = nextSales.find(
-      (sale) => normalizeString(sale?.id || sale?._id) === normalizeString(targetSaleRecordId)
-    );
+    const saleForOrder = nextSales.find((sale) => {
+      const saleId = normalizeString(sale?.id || sale?._id);
+      if (targetSaleRecordId && saleId && saleId === normalizeString(targetSaleRecordId)) return true;
+      const saleCode = normalizeString(sale?.saleCode || sale?.saleCodeLabel).toUpperCase();
+      return Boolean(targetSaleCode && saleCode && saleCode === targetSaleCode);
+    });
 
     targetOrder.saleRecordId = normalizeString(saleForOrder?.id || targetOrder?.saleRecordId || '');
     targetOrder.saleCode = normalizeString(
@@ -6808,7 +6882,7 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
       nextInventoryMovements = combinedMovements;
     }
 
-    const limitedStateSetPayload = clampPdvStateSetPayloadArrays({
+    const deliveryFinalizeUpdatePayload = {
       completedSales: nextSales,
       deliveryOrders: nextDeliveryOrders,
       pagamentos: nextPagamentos,
@@ -6831,7 +6905,12 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
         existingState?.recentStateMutationKeys || [],
         idempotencyKey
       ),
-    });
+      caixaAberto: true,
+    };
+
+    reconcileCashStateFromSales({ existingState, updatePayload: deliveryFinalizeUpdatePayload });
+    const { caixaAberto: _ignoredCaixaAberto, ...deliveryFinalizeSetPayload } = deliveryFinalizeUpdatePayload;
+    const limitedStateSetPayload = clampPdvStateSetPayloadArrays(deliveryFinalizeSetPayload);
 
     const updatedState = await PdvState.findOneAndUpdate(
       { pdv: pdvId },

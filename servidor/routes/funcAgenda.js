@@ -1455,10 +1455,10 @@ function parseSyncDate(value = '') {
 }
 
 const SYNC_COLLECTION_LIMIT_OVERRIDES = new Map([
-  ['pdvcaixasessions', 20],
-  ['whatsappmessagehistoryevents', 20],
-  ['whatsappmessagehistoryevent', 20],
-  ['whatsapplogs', 20],
+  ['pdvcaixasessions', 500],
+  ['whatsappmessagehistoryevents', 500],
+  ['whatsappmessagehistoryevent', 500],
+  ['whatsapplogs', 500],
 ]);
 
 function resolveSyncChunkLimit(collectionName, requestedLimit) {
@@ -1525,9 +1525,9 @@ router.get('/sync/full', authMiddleware, requireStaff, async (req, res) => {
         };
         const deltaCollection = db.collection(requestedCollection);
         const [changedCount, docs] = await Promise.all([
-          deltaCollection.countDocuments(deltaQuery, { maxTimeMS: 55_000 }),
+          deltaCollection.countDocuments(deltaQuery),
           deltaCollection
-            .find(deltaQuery, { maxTimeMS: 55_000 })
+            .find(deltaQuery)
             .sort({ [basisField]: 1, _id: 1 })
             .skip(chunkOffset)
             .limit(chunkLimit)
@@ -1578,7 +1578,7 @@ router.get('/sync/full', authMiddleware, requireStaff, async (req, res) => {
         cursorQuery._id = { $gt: new mongoose.Types.ObjectId(chunkCursor) };
       }
       const docs = await db.collection(requestedCollection)
-        .find(cursorQuery, { maxTimeMS: 55_000 })
+        .find(cursorQuery)
         .sort({ _id: 1 })
         .limit(chunkLimit)
         .toArray();

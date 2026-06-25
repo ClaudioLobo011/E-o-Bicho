@@ -907,6 +907,7 @@ test.describe('PDV commands endpoint', () => {
     assert.equal(register.body.state.deliveryOrders.length, 1);
     assert.equal(register.body.state.deliveryOrders[0].status, 'emSeparacao');
     assert.equal(register.body.state.completedSales.length, 1);
+    assert.deepEqual(register.body.state.completedSales[0].paymentTags, ['Dinheiro']);
     assert.equal(register.body.state.summary.recebido, 0);
 
     const finalize = await request
@@ -927,8 +928,32 @@ test.describe('PDV commands endpoint', () => {
     assert.equal(finalize.status, 200, finalize.text);
     assert.equal(finalize.body.state.deliveryOrders[0].status, 'finalizado');
     assert.ok(finalize.body.state.deliveryOrders[0].finalizedAt);
+    assert.deepEqual(finalize.body.state.completedSales[0].paymentTags, ['Dinheiro']);
+    assert.equal(finalize.body.state.completedSales[0].cashContributions[0].paymentLabel, 'Dinheiro');
     assert.equal(finalize.body.state.summary.recebido, 25);
     assert.equal(finalize.body.state.history[0].id, 'venda');
+
+    const refreshed = await request
+      .get(`/pdvs/${base.pdv._id}?lightweight=1`)
+      .set('Authorization', 'Bearer token');
+    assert.equal(refreshed.status, 200, refreshed.text);
+    assert.deepEqual(refreshed.body.completedSales[0].paymentTags, ['Dinheiro']);
+    assert.equal(refreshed.body.completedSales[0].cashContributions[0].paymentLabel, 'Dinheiro');
+
+    const stalePayload = {
+      ...register.body.state,
+      _meta: { expectedUpdatedAt: finalize.body.state.updatedAt },
+    };
+    const stalePersist = await request
+      .put(`/pdvs/${base.pdv._id}/state`)
+      .set('Authorization', 'Bearer token')
+      .set('X-Idempotency-Key', 'test-delivery-stale-state-after-finalize-1')
+      .send(stalePayload);
+    assert.equal(stalePersist.status, 200, stalePersist.text);
+    assert.equal(stalePersist.body.deliveryOrders[0].status, 'finalizado');
+    assert.deepEqual(stalePersist.body.completedSales[0].paymentTags, ['Dinheiro']);
+    assert.equal(stalePersist.body.completedSales[0].cashContributions[0].paymentLabel, 'Dinheiro');
+    assert.equal(stalePersist.body.summary.recebido, 25);
   });
 
   test('respects idempotency for pdv.delivery.finalize', async () => {

@@ -2243,6 +2243,49 @@
   const clonePayments = (payments) =>
     Array.isArray(payments) ? payments.map((item) => ({ ...item })) : [];
 
+  const normalizePaymentComparable = (value = '') =>
+    String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+
+  const getPaymentMergeKey = (payment = {}) => {
+    const label = normalizePaymentComparable(
+      payment?.label || payment?.nome || payment?.name || payment?.descricao || ''
+    );
+    if (label) return `label:${label}`;
+    const type = normalizePaymentComparable(payment?.type || payment?.tipo || payment?.raw?.tipo || '');
+    if (type) return `type:${type}`;
+    const id = normalizePaymentComparable(payment?.id || payment?._id || payment?.raw?._id || '');
+    return id ? `id:${id}` : '';
+  };
+
+  const mergePaymentListByMethod = (payments = []) => {
+    const merged = new Map();
+    (Array.isArray(payments) ? payments : []).forEach((payment) => {
+      const normalized = normalizePaymentSnapshotForPersist(payment);
+      if (!normalized) return;
+      const key = getPaymentMergeKey(normalized);
+      if (!key) return;
+      if (!merged.has(key)) {
+        merged.set(key, { ...normalized });
+        return;
+      }
+      const current = merged.get(key);
+      current.valor = normalizeCurrencyAmount(current.valor) + normalizeCurrencyAmount(normalized.valor);
+      if (!current.id && normalized.id) current.id = normalized.id;
+      if (!current.label && normalized.label) current.label = normalized.label;
+      if (!current.type && normalized.type) current.type = normalized.type;
+      current.aliases = Array.from(new Set([
+        ...(Array.isArray(current.aliases) ? current.aliases : []),
+        ...(Array.isArray(normalized.aliases) ? normalized.aliases : []),
+      ]));
+    });
+    return Array.from(merged.values());
+  };
+
   const sumPayments = (payments) =>
     Array.isArray(payments)
       ? normalizeCurrencyAmount(
@@ -2258,13 +2301,7 @@
     ];
 
     const resolveSnapshotKey = (payment) => {
-      const id = String(payment?.id || '').trim();
-      if (id) return `id:${id}`;
-      const label = String(payment?.label || '').trim().toLowerCase();
-      if (label) return `label:${label}`;
-      const type = String(payment?.type || '').trim().toLowerCase();
-      if (type) return `type:${type}`;
-      return '';
+      return getPaymentMergeKey(payment);
     };
 
     const resolveBasePayment = (payment) => {
@@ -2565,7 +2602,7 @@
       .join(' | ');
 
   const createPaymentItems = (payments, { hideZero = true } = {}) => {
-    const items = (Array.isArray(payments) ? payments : []).map((payment) => {
+    const items = mergePaymentListByMethod(payments).map((payment) => {
       const label =
         payment?.label ||
         payment?.nome ||
@@ -2660,11 +2697,11 @@
         const amount = normalizeCurrencyAmount(entry.amount);
         if (!(amount > 0)) return;
         const basePayment = resolveBasePayment(entry);
-        const key =
-          String(entry.paymentId || '').trim() ||
-          String(basePayment?.id || '').trim() ||
-          String(entry.paymentLabel || '').trim().toLowerCase() ||
-          String(entry.paymentType || '').trim().toLowerCase();
+        const key = getPaymentMergeKey({
+          id: entry.paymentId || basePayment?.id || '',
+          label: entry.paymentLabel || basePayment?.label || '',
+          type: entry.paymentType || basePayment?.type || '',
+        });
         if (!key) return;
         if (!totals.has(key)) {
           totals.set(key, {
@@ -2704,8 +2741,8 @@
       rows.push(normalized);
     };
 
-    normalizedPayments.forEach((payment) => pushRow(payment));
-    paymentCatalog.forEach((payment) => {
+    mergePaymentListByMethod(normalizedPayments).forEach((payment) => pushRow(payment));
+    mergePaymentListByMethod(paymentCatalog).forEach((payment) => {
       const normalized = normalizePaymentSnapshotForPersist(payment);
       if (!normalized) return;
       pushRow({ ...normalized, valor: 0 });
@@ -2723,9 +2760,7 @@
     const fechamentoLabel = toDateLabel(state.caixaInfo.fechamentoData);
 
     const aberturaValor = safeNumber(state.summary.abertura);
-    const recebidoValor = safeNumber(state.summary.recebido);
     const recebimentosClienteValor = safeNumber(state.summary.recebimentosCliente);
-    const saldoValor = recebidoValor + recebimentosClienteValor;
 
     const previstoSemCanceladas = Array.isArray(state.caixaInfo.previstoPagamentos)
       ? buildCaixaPrevistoPagamentosWithoutCancelledSales(state.caixaInfo.previstoPagamentos)
@@ -2742,6 +2777,8 @@
       hideZero: false,
     });
     const recebimentosTotal = sumPayments(recebimentosFonte);
+    const recebidoValor = recebimentosTotal;
+    const saldoValor = aberturaValor + recebidoValor + recebimentosClienteValor;
 
     const previstoFonteBase = state.caixaAberto
       ? buildFechamentoPrevistoPaymentsByMethod()
@@ -4008,6 +4045,34 @@
       const current = currentRecord && typeof currentRecord === 'object' ? currentRecord : {};
       const incoming = incomingRecord && typeof incomingRecord === 'object' ? incomingRecord : {};
       const merged = { ...current, ...incoming };
+      const getPaymentStrength = (record) => {
+        if (!record || typeof record !== 'object') return 0;
+        const cashTotal = (Array.isArray(record.cashContributions) ? record.cashContributions : []).reduce(
+          (sum, entry) => sum + safeNumber(entry?.amount ?? entry?.valor ?? entry?.total ?? 0),
+          0
+        );
+        const tagCount = Array.isArray(record.paymentTags)
+          ? record.paymentTags.filter((tag) => String(tag || '').trim()).length
+          : 0;
+        const paymentCount = Array.isArray(record.payments)
+          ? record.payments.filter((payment) => safeNumber(payment?.valor ?? payment?.amount ?? 0) > 0).length
+          : 0;
+        return (cashTotal > 0 ? 1000 : 0) + tagCount * 10 + paymentCount;
+      };
+      const paymentSource = getPaymentStrength(current) > getPaymentStrength(incoming) ? current : incoming;
+      if (Array.isArray(paymentSource.paymentTags) && paymentSource.paymentTags.length) {
+        merged.paymentTags = paymentSource.paymentTags.map((tag) => String(tag || '').trim()).filter(Boolean);
+      }
+      if (Array.isArray(paymentSource.cashContributions) && paymentSource.cashContributions.length) {
+        merged.cashContributions = paymentSource.cashContributions.map((entry) =>
+          entry && typeof entry === 'object' ? { ...entry } : entry
+        );
+      }
+      if (Array.isArray(paymentSource.payments) && paymentSource.payments.length) {
+        merged.payments = paymentSource.payments.map((entry) =>
+          entry && typeof entry === 'object' ? { ...entry } : entry
+        );
+      }
       const fiscalSource = hasFiscalEmissionData(incoming)
         ? incoming
         : hasFiscalEmissionData(current)
@@ -4305,9 +4370,14 @@
     }
 
     if (Array.isArray(persisted.deliveryOrders)) {
-      state.deliveryOrders = persisted.deliveryOrders
+      const incomingDeliveryOrders = persisted.deliveryOrders
         .map((order) => normalizeDeliveryOrderForPersist(order))
         .filter(Boolean);
+      state.deliveryOrders = mergeRecordsByKey(
+        incomingDeliveryOrders,
+        state.deliveryOrders || [],
+        'delivery'
+      );
     }
 
     if (Array.isArray(persisted.accountsReceivable)) {
@@ -4317,9 +4387,14 @@
     }
 
     if (Array.isArray(persisted.completedSales)) {
-      state.completedSales = persisted.completedSales
+      const incomingCompletedSales = persisted.completedSales
         .map((sale) => normalizeSaleRecordForPersist(sale))
         .filter(Boolean);
+      state.completedSales = mergeRecordsByKey(
+        incomingCompletedSales,
+        state.completedSales || [],
+        'sale'
+      );
       renderSalesList();
     }
 
@@ -26977,12 +27052,8 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
           summarySource.fechamentoApurado ||
           0
       ),
-      previstoPagamentos: previstoPagamentosData
-        .map((payment) => normalizePaymentSnapshotForPersist(payment))
-        .filter(Boolean),
-      apuradoPagamentos: apuradoPagamentosData
-        .map((payment) => normalizePaymentSnapshotForPersist(payment))
-        .filter(Boolean),
+      previstoPagamentos: mergePaymentListByMethod(previstoPagamentosData),
+      apuradoPagamentos: mergePaymentListByMethod(apuradoPagamentosData),
     };
     const financeConfig = pdv?.configuracoesFinanceiro || {};
     state.financeSettings = {
@@ -27205,6 +27276,42 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
     state.deliveryOrders = deliveryOrdersFonte
       .map((order) => normalizeDeliveryOrderForPersist(order))
       .filter(Boolean);
+    const finalizedDeliveryByKey = new Map();
+    state.deliveryOrders.forEach((order) => {
+      if (!order || String(order.status || '').trim() !== 'finalizado') return;
+      const orderPayments = mergePaymentListByMethod(order.payments || []);
+      if (!orderPayments.length) return;
+      const saleRecordId = normalizeId(order.saleRecordId || '');
+      const saleCode = String(order.saleCode || '').trim().toUpperCase();
+      if (saleRecordId) finalizedDeliveryByKey.set(`id:${saleRecordId}`, { order, payments: orderPayments });
+      if (saleCode) finalizedDeliveryByKey.set(`code:${saleCode}`, { order, payments: orderPayments });
+    });
+    if (finalizedDeliveryByKey.size) {
+      state.completedSales = state.completedSales.map((sale) => {
+        const saleId = normalizeId(sale.id || sale._id || '');
+        const saleCode = String(sale.saleCode || sale.saleCodeLabel || '').trim().toUpperCase();
+        const match = (saleId && finalizedDeliveryByKey.get(`id:${saleId}`))
+          || (saleCode && finalizedDeliveryByKey.get(`code:${saleCode}`))
+          || null;
+        if (!match) return sale;
+        const payments = match.payments;
+        const cashContributions = payments.map((payment) => ({
+          paymentId: String(payment.id || payment.label || '').trim(),
+          paymentLabel: String(payment.label || payment.id || 'Pagamento').trim(),
+          amount: safeNumber(payment.valor, 0),
+        })).filter((entry) => entry.amount > 0);
+        if (!cashContributions.length) return sale;
+        return {
+          ...sale,
+          type: 'delivery',
+          typeLabel: sale.typeLabel || 'Delivery',
+          paymentTags: payments.map((payment) => String(payment.label || payment.id || 'Pagamento').trim()).filter(Boolean),
+          cashContributions,
+          total: safeNumber(match.order.total ?? sale.total, sale.total),
+          totalLiquido: safeNumber(match.order.total ?? sale.totalLiquido ?? sale.total, sale.totalLiquido),
+        };
+      });
+    }
     // Garante que os cards de delivery tenham lista de entregadores logo após hidratar o PDV.
     void loadDeliveryCouriersForActiveCompany();
     const removedCancelledDeliveryOrders = pruneCancelledDeliveryOrders();
