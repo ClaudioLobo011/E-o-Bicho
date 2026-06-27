@@ -7099,22 +7099,49 @@ router.post('/:id/commands', requireAuth, async (req, res) => {
       }
     }
 
-    if (commandResult?.shouldEmit) {
-      const emitPdvStateUpdate =
-        req.app && typeof req.app.get === 'function' ? req.app.get('emitPdvStateUpdate') : null;
-      if (typeof emitPdvStateUpdate === 'function') {
-        emitPdvStateUpdate({
-          pdvId,
-          payload: {
-            updatedAt: state.updatedAt || new Date().toISOString(),
-            state,
-          },
-        });
-      }
+    const emitPdvStateUpdate =
+      req.app && typeof req.app.get === 'function' ? req.app.get('emitPdvStateUpdate') : null;
+    const shouldEmitState =
+      Boolean(commandResult?.shouldEmit) && typeof emitPdvStateUpdate === 'function';
+    const shouldDeferStateEmit =
+      shouldEmitState && action === PDV_COMMANDS.SALE_FINALIZE;
+    const emitStateUpdate = () =>
+      emitPdvStateUpdate({
+        pdvId,
+        payload: {
+          updatedAt: state.updatedAt || new Date().toISOString(),
+          state,
+        },
+      });
+    if (shouldEmitState && !shouldDeferStateEmit) {
+      emitStateUpdate();
     }
-    routePerf.mark('emit_processed', { emitted: Boolean(commandResult?.shouldEmit) });
+    routePerf.mark('emit_processed', {
+      emitted: shouldEmitState,
+      deferred: shouldDeferStateEmit,
+    });
     routePerf.flush('ok', { shouldEmit: Boolean(commandResult?.shouldEmit) });
 
+    if (shouldDeferStateEmit) {
+      res.once('finish', () => {
+        setImmediate(() => {
+          const socketPerf = createPdvPerfTracer({
+            scope: 'pdv.socket',
+            pdvId,
+            action,
+            requestId: correlationId,
+          });
+          socketPerf.mark('start');
+          try {
+            emitStateUpdate();
+            socketPerf.flush('ok');
+          } catch (socketError) {
+            console.error('Erro ao emitir atualização assíncrona do estado do PDV:', socketError);
+            socketPerf.flush('error');
+          }
+        });
+      });
+    }
     return res.json({
       ok: true,
       action,

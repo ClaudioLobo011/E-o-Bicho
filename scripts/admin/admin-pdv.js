@@ -16697,6 +16697,7 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
     updateSaleSummary();
     closeFinalizeModal();
     state.skipInventoryForNextSale = false;
+    perf?.mark('frontend.venda_liberada');
     const preferences = state.printPreferences || {};
     const mode = normalizePrintMode(preferences.venda, 'PM');
     const shouldEmitFiscal = resolvePrintVariant(mode) === 'fiscal';
