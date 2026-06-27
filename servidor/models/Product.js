@@ -218,6 +218,12 @@ productSchema.index({ searchTokens: 1 });
 productSchema.index({ searchTokenPrefixes: 1 });
 productSchema.index({ codigosComplementares: 1 });
 productSchema.index({ 'fornecedores.codigoProduto': 1 });
+// Usado pelo PDV para localizar, em uma única consulta, os produtos fracionados
+// afetados pelos itens da venda.
+productSchema.index(
+    { 'fracionado.itens.produto': 1 },
+    { partialFilterExpression: { 'fracionado.ativo': true } }
+);
 
 // Middleware do Mongoose: é executado ANTES de salvar qualquer produto
 productSchema.pre('save', function(next) {

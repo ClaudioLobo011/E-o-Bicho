@@ -922,6 +922,7 @@ const updateProductStockForDeposit = async ({
   cascadeFractional = true,
   visited,
   movementContext,
+  fractionalParentChildIds,
 }) => {
   const numericQuantity = Number(quantity);
   if (!Number.isFinite(numericQuantity) || numericQuantity === 0) {
@@ -1046,6 +1047,7 @@ const updateProductStockForDeposit = async ({
           cascadeFractional: true,
           visited: visitSet,
           movementContext,
+          fractionalParentChildIds,
         });
         if (childResult?.operations?.length) {
           operations.push(...childResult.operations);
@@ -1067,18 +1069,29 @@ const updateProductStockForDeposit = async ({
     }
   }
 
-  try {
-    await refreshParentFractionalStocks(product._id);
-  } catch (error) {
-    console.error('Erro ao atualizar produtos pais fracionados vinculados no PDV.', {
-      productId: product._id.toString(),
-    }, error);
+  const shouldRefreshFractionalParents =
+    !(fractionalParentChildIds instanceof Set) ||
+    fractionalParentChildIds.has(product._id.toString());
+  if (shouldRefreshFractionalParents) {
+    try {
+      await refreshParentFractionalStocks(product._id);
+    } catch (error) {
+      console.error('Erro ao atualizar produtos pais fracionados vinculados no PDV.', {
+        productId: product._id.toString(),
+      }, error);
+    }
   }
 
   return { updated: true, operations };
 };
 
-const applyInventoryMovementsToSales = async ({ sales, depositId, existingMovements = [], movementContext = {} }) => {
+const applyInventoryMovementsToSales = async ({
+  sales,
+  depositId,
+  existingMovements = [],
+  movementContext = {},
+  perfMark,
+}) => {
   const result = {
     sales: Array.isArray(sales) ? sales : [],
     movements: [],
@@ -1104,6 +1117,40 @@ const applyInventoryMovementsToSales = async ({ sales, depositId, existingMoveme
     }
   }
 
+  const directProductIds = Array.from(
+    new Set(
+      result.sales.flatMap((sale) =>
+        Array.from(collectSaleProductQuantities(sale).keys())
+          .map((productId) => resolveProductObjectId(productId))
+          .filter(Boolean)
+          .map((productId) => productId.toString())
+      )
+    )
+  );
+  const fractionalParentChildIds = new Set();
+  if (directProductIds.length) {
+    const fractionalParents = await Product.find({
+      'fracionado.ativo': true,
+      'fracionado.itens.produto': { $in: directProductIds },
+    })
+      .select('fracionado.itens.produto')
+      .lean({ autopopulate: false });
+    fractionalParents.forEach((parent) => {
+      (Array.isArray(parent?.fracionado?.itens) ? parent.fracionado.itens : []).forEach((item) => {
+        const childId = resolveProductObjectId(item?.produto);
+        if (childId && directProductIds.includes(childId.toString())) {
+          fractionalParentChildIds.add(childId.toString());
+        }
+      });
+    });
+  }
+  if (typeof perfMark === 'function') {
+    perfMark('mongo_estoque_relacoes_fracionadas', {
+      produtos: directProductIds.length,
+      produtosComPaiFracionado: fractionalParentChildIds.size,
+    });
+  }
+
   for (const sale of result.sales) {
     if (!sale || typeof sale !== 'object') continue;
     const saleId = sale.id || sale._id || '';
@@ -1124,6 +1171,7 @@ const applyInventoryMovementsToSales = async ({ sales, depositId, existingMoveme
               depositId: movementDeposit,
               quantity: -quantity,
               cascadeFractional: false,
+              fractionalParentChildIds,
               movementContext: {
                 ...movementContext,
                 movementDate: new Date(),
@@ -1170,6 +1218,7 @@ const applyInventoryMovementsToSales = async ({ sales, depositId, existingMoveme
         depositId: depositObjectId,
         quantity: numericQuantity,
         cascadeFractional: true,
+        fractionalParentChildIds,
         movementContext: {
           ...movementContext,
           movementDate: new Date(),
@@ -1213,6 +1262,11 @@ const applyInventoryMovementsToSales = async ({ sales, depositId, existingMoveme
     }
   }
 
+  if (typeof perfMark === 'function') {
+    perfMark('mongo_estoque_atualizado', {
+      movimentos: result.movements.length,
+    });
+  }
   return result;
 };
 
@@ -3745,6 +3799,13 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
   let emissionDate = null;
   let saleCodeForName = '';
   let state = null;
+  const fiscalPerf = createPdvPerfTracer({
+    scope: 'POST /:id/sales/:saleId/fiscal',
+    pdvId: req.params?.id || '',
+    action: PDV_COMMANDS.SALE_FINALIZE,
+    requestId: normalizeString(req.get('x-correlation-id')) || crypto.randomUUID(),
+  });
+  fiscalPerf.mark('start');
 
   try {
     const pdvId = req.params.id;
@@ -3817,6 +3878,7 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
     }
 
     state = await PdvState.findOne({ pdv: pdvId });
+    fiscalPerf.mark('mongo_validacoes_fiscais');
 
     if (!state) {
       return res
@@ -3901,6 +3963,7 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
       serie: serieNfce,
       numero: proximoNumeroFiscal,
     });
+    fiscalPerf.mark('sefaz_emissao');
 
     const transmission = emissionResult.transmission || null;
 
@@ -3924,6 +3987,7 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
       key: r2Key,
       contentType: 'application/xml',
     });
+    fiscalPerf.mark('r2_upload');
 
     sale.fiscalStatus = 'emitted';
     sale.fiscalEmittedAt = emissionDate;
@@ -3980,6 +4044,8 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
 
     const numeroField = numeroInicialNfce ? 'numeroNfceAtual' : 'numeroNfeAtual';
     await Pdv.updateOne({ _id: pdvId }, { $set: { [numeroField]: proximoNumeroFiscal } });
+    fiscalPerf.mark('mongo_persistencia_fiscal');
+    fiscalPerf.flush('ok');
 
     res.json({
       id: sale.id,
@@ -4006,6 +4072,7 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
       fiscalSefazProcessedAtLabel: sale.fiscalSefazProcessedAtLabel,
     });
   } catch (error) {
+    fiscalPerf.flush('error');
     console.error('Erro ao emitir nota fiscal do PDV:', error);
 
     if (state && sale) {
@@ -4728,7 +4795,9 @@ const buildNextOpeningPaymentsFromClose = (payments = []) =>
     valor: isCashPaymentSnapshot(payment) ? Math.max(0, safeNumber(payment.valor, 0)) : 0,
   }));
 
-const PDV_PERF_LOGS_ENABLED = false;
+// Instrumentação temporária e autocontida do fechamento de venda.
+// Para remover depois do diagnóstico, procure por "[PDV_PERF]".
+const PDV_PERF_LOGS_ENABLED = true;
 const PDV_SALE_FINALIZE_LEGACY_WRITE =
   normalizeString(process.env.PDV_SALE_FINALIZE_LEGACY_WRITE || '0') === '1';
 const PDV_SALE_FINALIZE_PROCESS_ALL_SALES =
@@ -4737,39 +4806,48 @@ const PDV_SALE_FINALIZE_PROCESS_ALL_SALES =
 const createPdvPerfTracer = ({ scope = 'pdv', pdvId = '', action = '', requestId = '' } = {}) => {
   const startedAt = Date.now();
   let lastMark = startedAt;
-  const prefix = `[PDV PERF] [${scope}] pdv=${pdvId || '-'} action=${action || '-'} req=${requestId || '-'}`;
+  const enabled = PDV_PERF_LOGS_ENABLED && action === PDV_COMMANDS.SALE_FINALIZE;
+  const correlationId = normalizeString(requestId) || crypto.randomUUID();
   const mark = (step, extra) => {
-    if (!PDV_PERF_LOGS_ENABLED) return;
+    if (!enabled) return;
     const now = Date.now();
     const stepMs = now - lastMark;
-    const totalMs = now - startedAt;
     lastMark = now;
-    if (extra && typeof extra === 'object') {
-      console.info(`${prefix} step=${step} stepMs=${stepMs} totalMs=${totalMs}`, extra);
-      return;
-    }
-    console.info(`${prefix} step=${step} stepMs=${stepMs} totalMs=${totalMs}`);
+    const detail =
+      extra && typeof extra === 'object' && Object.keys(extra).length
+        ? ` detalhe=${JSON.stringify(extra)}`
+        : '';
+    console.info(
+      `[PDV_PERF] correlationId=${correlationId} etapa="${scope}.${step}" duracaoMs=${stepMs}${detail}`
+    );
   };
   const flush = (status = 'ok', extra) => {
-    if (!PDV_PERF_LOGS_ENABLED) return;
+    if (!enabled) return;
     const now = Date.now();
     const totalMs = now - startedAt;
-    if (extra && typeof extra === 'object') {
-      console.info(`${prefix} done=${status} totalMs=${totalMs}`, extra);
-      return;
-    }
-    console.info(`${prefix} done=${status} totalMs=${totalMs}`);
+    console.info(
+      `[PDV_PERF] correlationId=${correlationId} etapa="${scope}.${status}" duracaoMs=${totalMs}`
+    );
+    console.info(`[PDV_PERF] correlationId=${correlationId} totalMs=${totalMs}`);
   };
   return { mark, flush };
 };
 
-const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, user }) => {
+const runPdvCommand = async ({
+  action,
+  payload,
+  pdvId,
+  pdvDoc,
+  idempotencyKey,
+  correlationId,
+  user,
+}) => {
   const shouldTraceCommand = action === PDV_COMMANDS.SALE_FINALIZE;
   const perf = createPdvPerfTracer({
     scope: 'runPdvCommand',
     pdvId,
     action,
-    requestId: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    requestId: correlationId,
   });
   if (shouldTraceCommand) perf.mark('start');
   if (action === PDV_COMMANDS.REFRESH_STATE) {
@@ -5530,6 +5608,7 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
           userName: normalizeString(user?.nomeCompleto || user?.apelido || user?.name || ''),
           userEmail: normalizeString(user?.email || ''),
         },
+        perfMark: perf.mark,
       });
       const processedSalesById = new Map(
         (Array.isArray(inventoryResult.sales) ? inventoryResult.sales : [])
@@ -6945,11 +7024,15 @@ const runPdvCommand = async ({ action, payload, pdvId, pdvDoc, idempotencyKey, u
 };
 
 router.post('/:id/commands', requireAuth, async (req, res) => {
+  const correlationId =
+    normalizeString(req.get('x-correlation-id')) ||
+    normalizeString(req.get('x-idempotency-key')) ||
+    crypto.randomUUID();
   const routePerf = createPdvPerfTracer({
     scope: 'POST /:id/commands',
     pdvId: req.params?.id || '',
     action: normalizeString(req.body?.action || ''),
-    requestId: normalizeString(req.get('x-idempotency-key')) || `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    requestId: correlationId,
   });
   routePerf.mark('start');
   try {
@@ -6973,13 +7056,16 @@ router.post('/:id/commands', requireAuth, async (req, res) => {
     }
 
     const idempotencyKey = normalizeString(req.get('x-idempotency-key'));
+    routePerf.mark('fila_entrada');
     const commandResult = await enqueuePdvStateWrite(pdvId, async () => {
+      routePerf.mark('fila_espera_concluida');
       return runPdvCommand({
         action,
         payload,
         pdvId,
         pdvDoc: pdv,
         idempotencyKey,
+        correlationId,
         user: req.user || {},
       });
     });

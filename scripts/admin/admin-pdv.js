@@ -845,6 +845,26 @@
     return `${Date.now()}-${Math.random().toString(16).slice(2, 12)}`;
   };
 
+  // Instrumentação temporária do fechamento de venda.
+  // Para remover depois do diagnóstico, procure por "[PDV_PERF]".
+  const createPdvPerfTracker = (correlationId) => {
+    const startedAt = performance.now();
+    let lastMark = startedAt;
+    const mark = (etapa) => {
+      const now = performance.now();
+      const durationMs = Math.round(now - lastMark);
+      lastMark = now;
+      console.info(
+        `[PDV_PERF] correlationId=${correlationId} etapa="${etapa}" duracaoMs=${durationMs}`
+      );
+    };
+    const flush = () => {
+      const totalMs = Math.round(performance.now() - startedAt);
+      console.info(`[PDV_PERF] correlationId=${correlationId} totalMs=${totalMs}`);
+    };
+    return { mark, flush };
+  };
+
   const notify = (message, type = 'info') => {
     if (typeof window?.showToast === 'function') {
       window.showToast(message, type);
@@ -4248,6 +4268,8 @@
     })();
     const forcedIdempotencyKey =
       options && typeof options === 'object' ? String(options.idempotencyKey || '').trim() : '';
+    const correlationId =
+      options && typeof options === 'object' ? String(options.correlationId || '').trim() : '';
     const requestNonce = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     const idempotencyKey =
       forcedIdempotencyKey || `pdv-command:${pdvId}:${action}:${hash}:${requestNonce}`;
@@ -4264,6 +4286,7 @@
       headers: {
         'Content-Type': 'application/json',
         'X-Idempotency-Key': idempotencyKey,
+        ...(correlationId ? { 'X-Correlation-Id': correlationId } : {}),
       },
       body: JSON.stringify({
         action: String(action || '').trim(),
@@ -16031,9 +16054,9 @@
     const lockReasonMessage =
       'Lançamento gerado automaticamente pelo PDV. Edite apenas pelo PDV.';
 
-    let requestIndex = 0;
-    for (const request of backendRequests) {
-      requestIndex += 1;
+    // Cada forma de pagamento gera uma conta independente. Executá-las em
+    // paralelo elimina round-trips sequenciais sem concorrer na mesma conta.
+    await Promise.all(backendRequests.map(async (request, requestIndex) => {
       try {
         const installmentsData = Array.isArray(request.installments)
           ? request.installments.map((installment) => ({
@@ -16043,7 +16066,7 @@
               value: safeNumber(installment.value ?? installment.valor ?? installment.amount ?? 0),
             }))
           : [];
-        const documentNumberParts = [pdvCode || 'PDV', saleCode || saleId, requestIndex];
+        const documentNumberParts = [pdvCode || 'PDV', saleCode || saleId, requestIndex + 1];
         const documentNumber = documentNumberParts.filter(Boolean).join('-');
         const payload = {
           company: companyId,
@@ -16137,14 +16160,17 @@
         console.error('Erro ao sincronizar contas a receber da venda:', error);
         notify(error.message || 'Não foi possível registrar as contas a receber da venda.', 'error');
       }
-    }
+    }));
 
     commitReceivablesToState();
     // Não bloqueia o fechamento da venda com a sincronização do snapshot no estado do PDV.
     void persistReceivablesOnServer();
   };
 
-  const emitFiscalForSale = async (saleId, { notifyOnSuccess = true } = {}) => {
+  const emitFiscalForSale = async (
+    saleId,
+    { notifyOnSuccess = true, correlationId = '' } = {}
+  ) => {
     const sale = findCompletedSaleById(saleId);
     if (!sale || sale.fiscalStatus === 'emitted' || sale.fiscalStatus === 'emitting') {
       return { success: false, reason: 'unavailable' };
@@ -16186,6 +16212,9 @@
       const headers = { 'Content-Type': 'application/json' };
       if (token) {
         headers.Authorization = `Bearer ${token}`;
+      }
+      if (correlationId) {
+        headers['X-Correlation-Id'] = correlationId;
       }
       updateFiscalEmissionStepIndicators('transmitindo');
       const response = await fetch(
@@ -16337,7 +16366,6 @@
   const tryApplyCustomerCreditPayment = async ({ totalValue, customer }) => {
   console.error('[PDV][Credito] Iniciando checagem de credito');
   console.log('[PDV][Credito] totalValue:', totalValue);
-  console.log('[PDV][Credito] customer input:', customer);
   let resolvedCustomer = customer && typeof customer === 'object' ? { ...customer } : null;
   const fetchCustomerByQuery = async (query) => {
     const normalizedQuery = String(query || '').trim();
@@ -16408,7 +16436,7 @@
     }
   }
   if (!customerId) {
-    console.warn('[PDV][Credito] Cliente sem _id valido apos fallback.', resolvedCustomer);
+    console.warn('[PDV][Credito] Cliente sem _id valido apos fallback.');
     
     return 0;
   }
@@ -16532,9 +16560,8 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
     }
   };
 
-  const finalizeSaleFlow = async () => {
+  const finalizeSaleFlow = async ({ correlationId, perf } = {}) => {
     console.error('[PDV][FinalizeSale] Fluxo de finalizacao iniciado');
-    console.log('[PDV][FinalizeSale] state.vendaCliente:', state.vendaCliente);
     const total = getSaleTotalLiquido();
     if (!state.itens.length) {
       notify('Adicione itens para finalizar a venda.', 'warning');
@@ -16552,6 +16579,7 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
       totalValue: total,
       customer: state.vendaCliente,
     });
+    perf?.mark('frontend.validacao_credito_cliente');
     console.log('[PDV][FinalizeSale] usedCustomerCreditValue:', usedCustomerCreditValue);
     const pago = getSalePagoTotal();
     console.log('[PDV][FinalizeSale] total:', total, 'pago:', pago);
@@ -16582,6 +16610,7 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
       appointmentId: primaryAppointmentIdForSale,
       appointmentIds: appointmentIdsForSale,
     });
+    perf?.mark('frontend.preparacao_payload');
     const persistedState = await sendPdvCommandRequest('pdv.sale.finalize', {
       saleId: commandSaleId,
       saleCode,
@@ -16606,7 +16635,9 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
       appointmentIds: appointmentIdsForSale,
     }, {
       idempotencyKey: `pdv-sale-finalize:${normalizeId(state.selectedPdv)}:${commandSaleId}`,
+      correlationId,
     });
+    perf?.mark('frontend.api_principal');
     applyPersistedStateResponse(persistedState);
     const saleRecord =
       findCompletedSaleById(commandSaleId) ||
@@ -16625,6 +16656,7 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
         }
       );
     }
+    perf?.mark('frontend.contas_a_receber');
     if (budgetToFinalize) {
       const budgetState = await sendPdvCommandRequest('pdv.budget.finalize', {
         budgetId: budgetToFinalize.id,
@@ -16633,6 +16665,7 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
       applyPersistedStateResponse(budgetState);
       state.selectedBudgetId = budgetToFinalize.id || '';
     }
+    perf?.mark('frontend.orcamento');
     const finalizedSaleCode = saleRecord?.saleCode || saleCode;
     const successMessage = finalizedSaleCode
       ? `Venda ${finalizedSaleCode} finalizada com sucesso.`
@@ -16643,7 +16676,9 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
       usedValue: usedCustomerCreditValue,
       warningMessage: 'Venda finalizada, mas nao foi possivel baixar o credito utilizado.',
     });
+    perf?.mark('frontend.baixa_credito_cliente');
     await syncAppointmentsAfterSale(appointmentIdsForSale, finalizedSaleCode);
+    perf?.mark('frontend.sincronizacao_agendamentos');
     setActiveSaleAppointments([]);
     state.activeBudgetId = '';
     state.pendingBudgetValidityDays = null;
@@ -16666,7 +16701,7 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
     const mode = normalizePrintMode(preferences.venda, 'PM');
     const shouldEmitFiscal = resolvePrintVariant(mode) === 'fiscal';
     if (shouldEmitFiscal && saleRecord) {
-      const emissionResult = await emitFiscalForSale(saleRecord.id);
+      const emissionResult = await emitFiscalForSale(saleRecord.id, { correlationId });
       const updatedSale = findCompletedSaleById(saleRecord.id) || saleRecord;
       if (emissionResult?.success) {
         handleConfiguredPrint('venda', {
@@ -16682,6 +16717,7 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
     } else {
       handleConfiguredPrint('venda', { snapshot: saleSnapshot, customer: saleRecord?.customer || null });
     }
+    perf?.mark(shouldEmitFiscal ? 'frontend.fiscal_e_impressao' : 'frontend.impressao');
     
   };
 
@@ -17102,6 +17138,10 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
       return;
     }
     setFinalizeProcessing(true);
+    const isSaleFinalize = state.activeFinalizeContext === 'sale';
+    const correlationId = isSaleFinalize ? createUid() : '';
+    const perf = isSaleFinalize ? createPdvPerfTracker(correlationId) : null;
+    perf?.mark('frontend.inicio');
     try {
       if (state.activeFinalizeContext === 'delivery') {
         await finalizeDeliveryFlow();
@@ -17119,14 +17159,16 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
         await finalizeBudgetFlow();
         return;
       }
-      await finalizeSaleFlow();
+      await finalizeSaleFlow({ correlationId, perf });
     } catch (error) {
+      perf?.mark('frontend.erro');
       console.error('Erro ao confirmar finalização', error);
       const message =
         (error && typeof error.message === 'string' && error.message) ||
         'Não foi possível concluir a operação.';
       notify(message, 'error');
     } finally {
+      perf?.flush();
       setFinalizeProcessing(false);
     }
   };
@@ -25283,9 +25325,7 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
   const syncAppointmentsAfterSale = async (appointmentIds, saleCode) => {
     const ids = normalizeAppointmentIdList(appointmentIds);
     if (!ids.length) return;
-    for (const appointmentId of ids) {
-      await syncAppointmentAfterSale(appointmentId, saleCode);
-    }
+    await Promise.all(ids.map((appointmentId) => syncAppointmentAfterSale(appointmentId, saleCode)));
   };
   const syncAppointmentAfterDeliveryRegistration = async (appointmentId, saleCode) => {
     const normalized = normalizeId(appointmentId);
