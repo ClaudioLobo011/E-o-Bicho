@@ -1,6 +1,11 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const MercadoPagoWebhookLog = require('../models/MercadoPagoWebhookLog');
+const WebOrder = require('../models/WebOrder');
+const {
+  fetchMercadoPagoPayment,
+  validateMercadoPagoWebhookSignature,
+} = require('../services/mercadoPagoVerification');
 
 const router = express.Router();
 
@@ -24,8 +29,6 @@ const getParsedBody = (req) => {
 const pickHeaders = (headers = {}) => ({
   'x-request-id': sanitizeString(headers['x-request-id']),
   'x-idempotency-key': sanitizeString(headers['x-idempotency-key']),
-  'x-signature': sanitizeString(headers['x-signature']),
-  'x-mp-signature': sanitizeString(headers['x-mp-signature']),
   'user-agent': sanitizeString(headers['user-agent']),
 });
 
@@ -52,6 +55,20 @@ async function handleMercadoPagoWebhook(req, res) {
     const liveMode = Boolean(payload.live_mode || payload.liveMode);
     const eventId = sanitizeString(req.headers['x-request-id'] || req.headers['x-idempotency-key'] || '');
     const storeId = resolveStoreId(req);
+    if (req.method === 'POST') {
+      const signature = validateMercadoPagoWebhookSignature({
+        signatureHeader: req.headers['x-signature'],
+        requestId: sanitizeString(req.headers['x-request-id']),
+        dataId: sanitizeString(req.query?.['data.id'] || dataId),
+      });
+      if (!signature.ok) {
+        return res.status(401).json({
+          ok: false,
+          code: 'INVALID_WEBHOOK_SIGNATURE',
+          reason: signature.reason,
+        });
+      }
+    }
 
     console.log('[webhook:mercadopago][received]', {
       method: req.method,
@@ -75,7 +92,40 @@ async function handleMercadoPagoWebhook(req, res) {
         payload,
       });
     } catch (dbError) {
-      console.error('Erro ao salvar webhook Mercado Pago:', dbError);
+      if (Number(dbError?.code) !== 11000) {
+        console.error('Erro ao salvar webhook Mercado Pago:', dbError);
+      }
+    }
+
+    if (req.method === 'POST' && topic === 'payment' && dataId) {
+      const payment = await fetchMercadoPagoPayment(dataId);
+      const paymentStatus = sanitizeString(payment?.status).toLowerCase();
+      const order = await WebOrder.findOne({
+        $or: [
+          { 'payment.id': String(dataId) },
+          ...(payment?.external_reference
+            ? [{ externalReference: String(payment.external_reference) }]
+            : []),
+        ],
+      });
+      if (order) {
+        order.payment.status = paymentStatus;
+        order.payment.statusDetail = sanitizeString(payment?.status_detail);
+        order.payment.amount = Number(payment?.transaction_amount || order.total || 0);
+        if (paymentStatus === 'approved') {
+          order.status = order.inventoryReservation?.status === 'reserved'
+            ? 'PAGO_RESERVADO'
+            : 'PAGO_SEM_RESERVA';
+        } else if (['cancelled', 'rejected', 'refunded', 'charged_back'].includes(paymentStatus)) {
+          order.status = paymentStatus.toUpperCase();
+        }
+        order.history.push({
+          date: new Date(),
+          user: 'Mercado Pago Webhook',
+          description: `Pagamento atualizado para ${paymentStatus}.`,
+        });
+        await order.save();
+      }
     }
 
     return res.status(200).json({ ok: true });

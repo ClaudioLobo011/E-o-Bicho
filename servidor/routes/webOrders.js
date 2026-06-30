@@ -7,7 +7,10 @@ const User = require('../models/User');
 const Store = require('../models/Store');
 const UserAddress = require('../models/UserAddress');
 const WebOrder = require('../models/WebOrder');
+const Product = require('../models/Product');
+const Deposit = require('../models/Deposit');
 const { applyProductImageUrls } = require('../utils/productImageUrl');
+const { verifyMercadoPagoPayment } = require('../services/mercadoPagoVerification');
 
 const router = express.Router();
 
@@ -203,30 +206,68 @@ router.post('/web', requireAuth, async (req, res) => {
       deliveryCost: Number.isFinite(deliveryCost) ? deliveryCost : 0,
       total: cartSnapshot.total + (Number.isFinite(deliveryCost) ? deliveryCost : 0),
     };
+    const gateway = sanitizeString(paymentPayload?.gateway || 'mercadopago').toLowerCase();
+    const localTestPayment =
+      gateway === 'local'
+      && process.env.NODE_ENV !== 'production'
+      && String(process.env.ALLOW_LOCAL_TEST_PAYMENTS || '').toLowerCase() === 'true';
+    let verifiedPayment = null;
+    if (localTestPayment) {
+      verifiedPayment = {
+        id: paymentId || `local-${crypto.randomUUID()}`,
+        status: 'approved',
+        status_detail: 'local-test',
+        transaction_amount: totals.total,
+        payment_type_id: normalizePaymentMethod(paymentPayload?.method),
+      };
+    } else {
+      if (!paymentId) {
+        return res.status(400).json({ message: 'Identificador de pagamento obrigatorio.' });
+      }
+      const verification = await verifyMercadoPagoPayment({
+        paymentId,
+        expectedAmount: totals.total,
+        externalReference: sanitizeString(req.body?.externalReference || ''),
+      });
+      if (!verification.ok) {
+        return res.status(402).json({
+          message: 'Pagamento nao confirmado pelo provedor.',
+          code: verification.reason,
+        });
+      }
+      verifiedPayment = verification.payment;
+    }
 
     const orderCode = buildOrderCode();
     const orderNumber = Date.now() + Math.floor(Math.random() * 1000);
 
-    const order = await WebOrder.create({
+    const createOrderAndReserve = async () => {
+      const deposit = await Deposit.findOne({ empresa: store._id }).sort({ createdAt: 1 });
+      if (!deposit) {
+        const error = new Error('Nenhum deposito configurado para a loja.');
+        error.statusCode = 409;
+        throw error;
+      }
+      const order = await WebOrder.create({
       number: orderNumber,
       code: orderCode,
       origin: 'ECOMMERCE',
-      status: sanitizeString(req.body?.status || 'PAGO'),
+      status: 'PAGO_RESERVADO',
       store: {
         id: store._id,
         name: sanitizeString(store?.nome || store?.nomeFantasia || store?.razaoSocial || ''),
       },
       customer: resolveCustomerSnapshot(user, addressSnapshot),
       payment: {
-        method: normalizePaymentMethod(paymentPayload?.method),
-        status: sanitizeString(paymentPayload?.status),
-        statusDetail: sanitizeString(paymentPayload?.statusDetail),
-        id: paymentId,
-        orderId: sanitizeString(paymentPayload?.orderId),
-        amount: Number(paymentPayload?.amount || totals.total || 0),
-        fees: Number(paymentPayload?.fees || 0),
-        gateway: sanitizeString(paymentPayload?.gateway || 'mercadopago'),
-        confirmedAt: paymentPayload?.confirmedAt ? new Date(paymentPayload.confirmedAt) : new Date(),
+        method: normalizePaymentMethod(verifiedPayment?.payment_type_id || paymentPayload?.method),
+        status: sanitizeString(verifiedPayment?.status || 'approved'),
+        statusDetail: sanitizeString(verifiedPayment?.status_detail),
+        id: sanitizeString(verifiedPayment?.id || paymentId),
+        orderId: sanitizeString(verifiedPayment?.order?.id || paymentPayload?.orderId),
+        amount: Number(verifiedPayment?.transaction_amount || totals.total || 0),
+        fees: Number(verifiedPayment?.fee_details?.reduce?.((sum, row) => sum + Number(row?.amount || 0), 0) || 0),
+        gateway,
+        confirmedAt: new Date(),
       },
       fiscal: {
         status: 'pendente',
@@ -240,6 +281,11 @@ router.post('/web', requireAuth, async (req, res) => {
       items: cartSnapshot.items,
       notes: sanitizeString(req.body?.notes),
       externalReference: sanitizeString(req.body?.externalReference || paymentId),
+      inventoryReservation: {
+        depositId: deposit._id,
+        status: 'reserved',
+        reservedAt: new Date(),
+      },
       history: [
         {
           date: new Date(),
@@ -247,7 +293,42 @@ router.post('/web', requireAuth, async (req, res) => {
           description: 'Pedido criado e pagamento confirmado.',
         },
       ],
-    });
+      });
+      for (const item of cartSnapshot.items) {
+        const quantity = Number(item?.quantity || 0);
+        if (!item?.productId || !Number.isFinite(quantity) || quantity <= 0) continue;
+        const updated = await Product.updateOne(
+          {
+            _id: item.productId,
+            estoques: {
+              $elemMatch: {
+                deposito: deposit._id,
+                quantidade: { $gte: quantity },
+              },
+            },
+          },
+          {
+            $inc: { 'estoques.$.quantidade': -quantity },
+            $set: { updatedAt: new Date() },
+          }
+        );
+        if (Number(updated?.modifiedCount || 0) !== 1) {
+          const error = new Error(`Estoque insuficiente para o produto ${item.productId}.`);
+          error.statusCode = 409;
+          throw error;
+        }
+      }
+      return order;
+    };
+    const transactionsEnabled =
+      String(process.env.MONGO_TRANSACTIONS_ENABLED || 'true').toLowerCase() !== 'false'
+      && typeof mongoose.connection?.transaction === 'function';
+    if (!transactionsEnabled) {
+      const error = new Error('Pedidos online exigem transacoes MongoDB habilitadas.');
+      error.statusCode = 503;
+      throw error;
+    }
+    const order = await mongoose.connection.transaction(createOrderAndReserve);
 
     const io = req.app?.get('socketio');
     if (io) {
@@ -263,7 +344,9 @@ router.post('/web', requireAuth, async (req, res) => {
     return res.json({ orderId: order._id, code: order.code, status: order.status });
   } catch (error) {
     console.error('web-orders:create', error);
-    return res.status(500).json({ message: 'Erro ao criar pedido.' });
+    return res.status(Number(error?.statusCode || 500)).json({
+      message: error?.message || 'Erro ao criar pedido.',
+    });
   }
 });
 

@@ -14,4 +14,9 @@ const mercadoPagoWebhookLogSchema = new mongoose.Schema({
   timestamps: true,
 });
 
+mercadoPagoWebhookLogSchema.index(
+  { eventId: 1 },
+  { unique: true, partialFilterExpression: { eventId: { $gt: '' } } }
+);
+
 module.exports = mongoose.model('MercadoPagoWebhookLog', mercadoPagoWebhookLogSchema);

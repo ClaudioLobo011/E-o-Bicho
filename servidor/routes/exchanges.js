@@ -145,6 +145,26 @@ const buildSourceSales = (sourceSales) => {
     .filter(Boolean);
 };
 
+const mergeSourceSales = (...lists) => {
+  const merged = [];
+  lists.forEach((list) => {
+    buildSourceSales(list).forEach((entry) => {
+      const key = `${String(entry?.saleId || '').trim()}|${String(entry?.saleCode || '').trim()}`;
+      if (merged.some((current) => `${String(current?.saleId || '').trim()}|${String(current?.saleCode || '').trim()}` === key)) {
+        return;
+      }
+      merged.push(entry);
+    });
+  });
+  return merged;
+};
+
+const normalizeExchangeInventoryMode = (rawValue) => {
+  const value = sanitizeString(rawValue).toLowerCase();
+  if (value === 'return_only' || value === 'returned_only') return 'return_only';
+  return 'full';
+};
+
 const getNextExchangeNumber = async () => {
   const lastExchange = await Exchange.findOne({}, { number: 1 }).sort({ number: -1 }).lean();
   const lastNumber = Number(lastExchange?.number) || 0;
@@ -462,6 +482,7 @@ router.post('/:id/finalize', requireAuth, authorizeRoles(...allowedRoles), async
       body.differenceValue !== undefined && body.differenceValue !== null
         ? parseDecimal(body.differenceValue)
         : returnedTotal - takenTotal;
+    const inventoryMode = normalizeExchangeInventoryMode(body.inventoryMode || body.stockMode);
 
     if (!returnedItems.length && !takenItems.length) {
       return res.status(400).json({ message: 'Inclua ao menos um item para finalizar a troca.' });
@@ -477,14 +498,16 @@ router.post('/:id/finalize', requireAuth, authorizeRoles(...allowedRoles), async
       if (!resolved) continue;
       movements.push({ ...resolved, delta: resolved.quantity });
     }
-    for (const item of takenItems) {
-      const resolved = await resolveExchangeMovementItem({
-        item,
-        companyId,
-        defaultDepositId,
-      });
-      if (!resolved) continue;
-      movements.push({ ...resolved, delta: -resolved.quantity });
+    if (inventoryMode !== 'return_only') {
+      for (const item of takenItems) {
+        const resolved = await resolveExchangeMovementItem({
+          item,
+          companyId,
+          defaultDepositId,
+        });
+        if (!resolved) continue;
+        movements.push({ ...resolved, delta: -resolved.quantity });
+      }
     }
 
     if (!movements.length) {
@@ -503,6 +526,9 @@ router.post('/:id/finalize', requireAuth, authorizeRoles(...allowedRoles), async
     exchange.takenItems = takenItems;
     exchange.totals = { returned: returnedTotal, taken: takenTotal };
     exchange.differenceValue = differenceValue;
+    if (Array.isArray(body.sourceSales)) {
+      exchange.sourceSales = mergeSourceSales(exchange.sourceSales, body.sourceSales);
+    }
     exchange.inventoryProcessed = true;
     exchange.inventoryProcessedAt = new Date();
     exchange.finalizedAt = exchange.inventoryProcessedAt;

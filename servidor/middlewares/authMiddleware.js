@@ -15,7 +15,9 @@ async function authMiddleware(req, res, next) {
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        const user = await User.findById(decoded.id).select('email role').lean();
+        const user = await User.findById(decoded.id)
+            .select('email role empresaPrincipal empresaContratual empresas')
+            .lean();
         if (!user) {
             return res.status(401).json({ message: 'Usuario nao encontrado' });
         }
@@ -26,7 +28,12 @@ async function authMiddleware(req, res, next) {
             email: user.email,
             role: effectiveRole,
             originalRole: user.role,
-            adminMasterModeActive
+            adminMasterModeActive,
+            storeIds: Array.from(new Set([
+                user.empresaPrincipal,
+                user.empresaContratual,
+                ...(Array.isArray(user.empresas) ? user.empresas : []),
+            ].filter(Boolean).map((value) => String(value))))
         };
         next();
     } catch (error) {

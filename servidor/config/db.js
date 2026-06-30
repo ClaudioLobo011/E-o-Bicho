@@ -1,5 +1,7 @@
 const mongoose = require('mongoose');
 
+mongoose.set('transactionAsyncLocalStorage', true);
+
 // Criamos uma função assíncrona para conectar à base de dados
 const connectDB = async () => {
   try {

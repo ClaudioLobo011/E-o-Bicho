@@ -17,6 +17,7 @@ const PdvStateReceivable = require('../models/PdvStateReceivable');
 const PdvStateDeliveryOrder = require('../models/PdvStateDeliveryOrder');
 const PdvStateHistoryEvent = require('../models/PdvStateHistoryEvent');
 const PdvStateInventoryMovement = require('../models/PdvStateInventoryMovement');
+const IdempotencyRecord = require('../models/IdempotencyRecord');
 const Product = require('../models/Product');
 const crypto = require('crypto');
 const {
@@ -39,7 +40,17 @@ const {
   pdvSaleSequenceKey,
   pdvBudgetSequenceKey,
 } = require('../utils/sequences');
-const pdvStateWriteQueues = new Map();
+const { createSerialTaskQueue } = require('../utils/serialTaskQueue');
+const PDV_IDEMPOTENCY_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+const PDV_STATE_WRITE_QUEUE_STALE_MS = Math.max(
+  30_000,
+  Number.parseInt(process.env.PDV_STATE_WRITE_QUEUE_STALE_MS, 10) || 90_000
+);
+const pdvStateWriteQueue = createSerialTaskQueue({
+  staleAfterMs: PDV_STATE_WRITE_QUEUE_STALE_MS,
+  label: 'pdv-state-write',
+  logger: console,
+});
 
 const ambientesPermitidos = ['homologacao', 'producao'];
 const ambientesSet = new Set(ambientesPermitidos);
@@ -81,6 +92,42 @@ const normalizeString = (value) => {
   if (value === undefined || value === null) return '';
   return String(value).trim();
 };
+
+// Mantemos esse fluxo desligado por padrão porque a transação com ALS do Mongoose
+// travou finalizações de venda no ambiente local de sincronização do PDV.
+const PDV_COMMAND_TRANSACTIONS_ENABLED =
+  normalizeString(process.env.PDV_COMMAND_TRANSACTIONS_ENABLED || '0') === '1';
+
+function buildPdvIdempotencyScope(pdvId = '', action = '') {
+  return `pdv-command:${normalizeString(pdvId)}:${normalizeString(action).toLowerCase()}`;
+}
+
+function buildCompactPdvCommandResponse({
+  action = '',
+  idempotencyKey = '',
+  payload = {},
+  commandResult = {},
+  replayed = false,
+} = {}) {
+  const state = commandResult?.state && typeof commandResult.state === 'object'
+    ? commandResult.state
+    : {};
+  const requestedSaleId = normalizeString(payload?.saleId || payload?.id || '');
+  const sales = Array.isArray(state?.completedSales) ? state.completedSales : [];
+  const sale = sales.find((entry) => (
+    normalizeString(entry?.id || entry?._id || entry?.saleId) === requestedSaleId
+  )) || null;
+  return {
+    ok: true,
+    action,
+    eventId: idempotencyKey,
+    replayed,
+    saleId: normalizeString(sale?.id || sale?._id || sale?.saleId || requestedSaleId),
+    saleCode: normalizeString(sale?.saleCode || sale?.saleCodeLabel || payload?.saleCode || ''),
+    status: normalizeString(sale?.status || 'completed'),
+    serverUpdatedAt: state?.updatedAt || new Date().toISOString(),
+  };
+}
 
 const PDV_NORMALIZED_DUAL_WRITE_ENABLED = (() => {
   return normalizeString(process.env.PDV_NORMALIZED_DUAL_WRITE || '0') !== '0';
@@ -2270,19 +2317,9 @@ const parseTrailingSequence = (value) => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 };
 
-const enqueuePdvStateWrite = async (pdvId, task) => {
+const enqueuePdvStateWrite = async (pdvId, task, meta = {}) => {
   const queueKey = normalizeString(pdvId);
-  const previous = pdvStateWriteQueues.get(queueKey) || Promise.resolve();
-  const current = previous
-    .catch(() => {})
-    .then(task)
-    .finally(() => {
-      if (pdvStateWriteQueues.get(queueKey) === current) {
-        pdvStateWriteQueues.delete(queueKey);
-      }
-    });
-  pdvStateWriteQueues.set(queueKey, current);
-  return current;
+  return pdvStateWriteQueue.enqueue(queueKey, task, meta);
 };
 
 const LIGHTWEIGHT_STATE_PROJECTION = [
@@ -7056,19 +7093,123 @@ router.post('/:id/commands', requireAuth, async (req, res) => {
     }
 
     const idempotencyKey = normalizeString(req.get('x-idempotency-key'));
+    const compactRequested = String(req.query?.compact || '').trim() === '1';
+    const idempotencyEnabled =
+      action === PDV_COMMANDS.SALE_FINALIZE
+      && Boolean(idempotencyKey)
+      && mongoose.connection?.readyState === 1;
+    const idempotencyScope = buildPdvIdempotencyScope(pdvId, action);
+    if (idempotencyEnabled) {
+      const existingEvent = await IdempotencyRecord.findOne({
+        scope: idempotencyScope,
+        key: idempotencyKey,
+      }).lean();
+      if (existingEvent) {
+        if (Number(existingEvent.status) === 202) {
+          return res.status(425).json({
+            ok: false,
+            code: 'EVENT_IN_PROGRESS',
+            message: 'Evento ainda esta em processamento. Tente novamente.',
+            eventId: idempotencyKey,
+          });
+        }
+        return res.status(Number(existingEvent.status || 200)).json({
+          ...(existingEvent.body && typeof existingEvent.body === 'object' ? existingEvent.body : {}),
+          replayed: true,
+        });
+      }
+    }
     routePerf.mark('fila_entrada');
-    const commandResult = await enqueuePdvStateWrite(pdvId, async () => {
-      routePerf.mark('fila_espera_concluida');
-      return runPdvCommand({
+    let compactResponse = null;
+    let commandResult = null;
+    try {
+      commandResult = await enqueuePdvStateWrite(pdvId, async () => {
+        routePerf.mark('fila_espera_concluida');
+        const executeCommand = async () => {
+          if (idempotencyEnabled) {
+            await IdempotencyRecord.create({
+              scope: idempotencyScope,
+              key: idempotencyKey,
+              status: 202,
+              body: { ok: false, status: 'processing', eventId: idempotencyKey },
+              expiresAt: new Date(Date.now() + PDV_IDEMPOTENCY_TTL_MS),
+            });
+          }
+          const result = await runPdvCommand({
+            action,
+            payload,
+            pdvId,
+            pdvDoc: pdv,
+            idempotencyKey,
+            correlationId,
+            user: req.user || {},
+          });
+          compactResponse = buildCompactPdvCommandResponse({
+            action,
+            idempotencyKey,
+            payload,
+            commandResult: result,
+          });
+          if (idempotencyEnabled) {
+            await IdempotencyRecord.updateOne(
+              { scope: idempotencyScope, key: idempotencyKey },
+              {
+                $set: {
+                  status: 200,
+                  body: compactResponse,
+                  expiresAt: new Date(Date.now() + PDV_IDEMPOTENCY_TTL_MS),
+                },
+              }
+            );
+          }
+          return result;
+        };
+
+        const transactionsEnabled =
+          idempotencyEnabled
+          && PDV_COMMAND_TRANSACTIONS_ENABLED
+          && typeof mongoose.connection?.transaction === 'function';
+        if (transactionsEnabled) {
+          return mongoose.connection.transaction(executeCommand);
+        }
+        try {
+          return await executeCommand();
+        } catch (error) {
+          if (idempotencyEnabled) {
+            await IdempotencyRecord.deleteOne({
+              scope: idempotencyScope,
+              key: idempotencyKey,
+              status: 202,
+            }).catch(() => {});
+          }
+          throw error;
+        }
+      }, {
         action,
-        payload,
-        pdvId,
-        pdvDoc: pdv,
+        requestId: correlationId,
         idempotencyKey,
-        correlationId,
-        user: req.user || {},
       });
-    });
+    } catch (error) {
+      if (idempotencyEnabled && Number(error?.code) === 11000) {
+        const replay = await IdempotencyRecord.findOne({
+          scope: idempotencyScope,
+          key: idempotencyKey,
+        }).lean();
+        if (replay && Number(replay.status) !== 202) {
+          return res.status(Number(replay.status || 200)).json({
+            ...(replay.body && typeof replay.body === 'object' ? replay.body : {}),
+            replayed: true,
+          });
+        }
+        return res.status(425).json({
+          ok: false,
+          code: 'EVENT_IN_PROGRESS',
+          message: 'Evento ainda esta em processamento. Tente novamente.',
+          eventId: idempotencyKey,
+        });
+      }
+      throw error;
+    }
     routePerf.mark('command_executed');
     let state = commandResult?.state || serializeStateForResponse(null);
     const strictNormalizedForPdv = shouldUseStrictNormalizedReadForPdv(pdvId, req.query);
@@ -7142,12 +7283,19 @@ router.post('/:id/commands', requireAuth, async (req, res) => {
         });
       });
     }
-    return res.json({
-      ok: true,
-      action,
-      state,
-      meta: buildPdvCommandMeta(req),
-    });
+    return res.json(compactRequested && action === PDV_COMMANDS.SALE_FINALIZE
+      ? (compactResponse || buildCompactPdvCommandResponse({
+          action,
+          idempotencyKey,
+          payload,
+          commandResult,
+        }))
+      : {
+          ok: true,
+          action,
+          state,
+          meta: buildPdvCommandMeta(req),
+        });
   } catch (error) {
     const statusCode = Number.isInteger(error?.statusCode) ? error.statusCode : 500;
     const message =
@@ -7460,6 +7608,10 @@ router.put('/:id/state', requireAuth, async (req, res) => {
       });
 
       return;
+    }, {
+      action: 'pdv.state.put',
+      requestId: idempotencyKey || expectedUpdatedAt || '',
+      idempotencyKey,
     });
   } catch (error) {
     console.error('Erro ao salvar estado do PDV:', error);

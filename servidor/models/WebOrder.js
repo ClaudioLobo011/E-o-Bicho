@@ -115,9 +115,21 @@ const WebOrderSchema = new Schema(
     items: { type: [WebOrderItemSchema], default: [] },
     notes: { type: String, trim: true, default: '' },
     externalReference: { type: String, trim: true, default: '' },
+    inventoryReservation: {
+      depositId: { type: Schema.Types.ObjectId, ref: 'Deposit', default: null },
+      status: { type: String, trim: true, default: 'none' },
+      reservedAt: { type: Date, default: null },
+    },
     history: { type: [WebOrderHistorySchema], default: [] },
   },
   { timestamps: true }
 );
+
+WebOrderSchema.index(
+  { 'payment.id': 1 },
+  { unique: true, partialFilterExpression: { 'payment.id': { $gt: '' } } }
+);
+WebOrderSchema.index({ 'store.id': 1, status: 1, createdAt: -1 });
+WebOrderSchema.index({ 'customer.id': 1, createdAt: -1 });
 
 module.exports = mongoose.model('WebOrder', WebOrderSchema);

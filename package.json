@@ -3,6 +3,8 @@
   "version": "1.0.1",
   "private": true,
   "scripts": {
+    "backend:local": "node servidor/scripts/start-local.js",
+    "backend:start": "node servidor/server.js",
     "predev": "node scripts/check-tailwind.js",
     "dev": "npx @tailwindcss/cli -i ./src/input.css -o ./src/output.css --watch",
     "prebuild": "node scripts/check-tailwind.js",

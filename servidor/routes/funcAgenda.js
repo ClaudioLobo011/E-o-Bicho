@@ -23,6 +23,7 @@ const {
 const requireStaff = authorizeRoles('funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master');
 const MAX_CODIGO_CLIENTE_SEQUENCIAL = 999999999;
 const IDEMPOTENCY_SCOPE_CLIENTE_CREATE = 'func:clientes:create';
+const IDEMPOTENCY_SCOPE_APPOINTMENT_CREATE = 'func:appointments:create';
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
 
 function normalizeIdempotencyKey(value = '') {
@@ -937,6 +938,10 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
       profissionalId, scheduledAt, valor, pago, status, servicos, observacoes, codigoVenda,
       serviceItemIds, serviceHour, serviceScheduledAt, serviceItemUpdates,
     } = req.body || {};
+    const expectedVersionRaw = req.body?.expectedVersion ?? req.get('if-match');
+    const expectedVersion = Number.isFinite(Number(expectedVersionRaw))
+      ? Math.max(1, Math.floor(Number(expectedVersionRaw)))
+      : null;
 
     const hasStatusField = Object.prototype.hasOwnProperty.call(req.body || {}, 'status');
     const hasProfessionalField = Object.prototype.hasOwnProperty.call(req.body || {}, 'profissionalId');
@@ -1262,8 +1267,16 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
       }
     } catch (_) {}
 
-    const full = await Appointment.findByIdAndUpdate(id, { $set: set }, { new: true })
-      .select('_id store cliente pet servico itens profissional scheduledAt valor pago codigoVenda status observacoes')
+    const updateFilter = {
+      _id: id,
+      ...(expectedVersion ? { version: expectedVersion } : {}),
+    };
+    const full = await Appointment.findOneAndUpdate(
+      updateFilter,
+      { $set: set, $inc: { version: 1 } },
+      { new: true }
+    )
+      .select('_id store cliente pet servico itens profissional scheduledAt valor pago codigoVenda status observacoes version updatedAt')
       .populate('pet', 'nome')
       .populate({
         path: 'servico',
@@ -1283,6 +1296,19 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
       .lean();
 
     if (!full) {
+      if (expectedVersion) {
+        const current = await Appointment.findById(id)
+          .select('_id version updatedAt store cliente pet itens profissional scheduledAt valor pago codigoVenda status observacoes')
+          .lean();
+        if (current) {
+          return res.status(409).json({
+            code: 'APPOINTMENT_VERSION_CONFLICT',
+            message: 'O agendamento foi alterado por outro usuario.',
+            expectedVersion,
+            current,
+          });
+        }
+      }
       return res.status(404).json({ message: 'Agendamento não encontrado.' });
     }
 
@@ -1310,6 +1336,8 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
 
     return res.json({
       _id: full._id,
+      version: Number(full.version || 1),
+      updatedAt: full.updatedAt || null,
       h: new Date(full.scheduledAt).toISOString(),
       valor: valorTotal,
       pago: !!full.pago,
@@ -1329,6 +1357,25 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
 });
 
 // ---------- SYNC (FULL SNAPSHOT) ----------
+const DESKTOP_SYNC_ALLOWED_COLLECTIONS = new Set([
+  'appointments',
+  'categories',
+  'deposits',
+  'paymentmethods',
+  'pdvcaixasessions',
+  'pdvs',
+  'pdvstatedeliveryorders',
+  'pdvstateinventorymovements',
+  'pdvstatereceivables',
+  'pdvstatesales',
+  'pets',
+  'products',
+  'services',
+  'stores',
+  'users',
+  'weborders',
+]);
+
 const SYNC_COLLECTION_FINGERPRINT_FIELDS = new Map([
   ['pdvcaixasessions', ['stateUpdatedAt', 'updatedAt', 'aberturaData', 'createdAt', '_id']],
   ['pdvstatedeliveryorders', ['sourceUpdatedAt', 'updatedAt', 'createdAtFromEntity', 'createdAt', '_id']],
@@ -1340,6 +1387,56 @@ const SYNC_COLLECTION_FINGERPRINT_FIELDS = new Map([
 ]);
 
 const SYNC_COLLECTION_PROJECTIONS = new Map([
+  ['products', {
+    _id: 1,
+    cod: 1,
+    codbarras: 1,
+    nome: 1,
+    venda: 1,
+    precoClube: 1,
+    stock: 1,
+    estoques: 1,
+    ativo: 1,
+    unidade: 1,
+    fracionado: 1,
+    imagens: { $slice: 1 },
+    updatedAt: 1,
+    createdAt: 1,
+  }],
+  ['users', {
+    _id: 1,
+    tipoConta: 1,
+    codigoCliente: 1,
+    nomeCompleto: 1,
+    nomeContato: 1,
+    razaoSocial: 1,
+    apelido: 1,
+    email: 1,
+    telefone: 1,
+    celular: 1,
+    cpf: 1,
+    cnpj: 1,
+    role: 1,
+    grupos: 1,
+    empresas: 1,
+    empresaPrincipal: 1,
+    ativo: 1,
+    updatedAt: 1,
+    createdAt: 1,
+  }],
+  ['stores', {
+    _id: 1,
+    nome: 1,
+    nomeFantasia: 1,
+    razaoSocial: 1,
+    cnpj: 1,
+    telefone: 1,
+    email: 1,
+    endereco: 1,
+    ativo: 1,
+    updatedAt: 1,
+    createdAt: 1,
+  }],
   ['pdvcaixasessions', {
     historySnapshot: 0,
     completedSalesSnapshot: 0,
@@ -1351,9 +1448,40 @@ function getSyncCollectionProjection(collectionName) {
   return SYNC_COLLECTION_PROJECTIONS.get(String(collectionName || '').trim().toLowerCase()) || null;
 }
 
-async function getCollectionSyncFingerprint(db, collectionName) {
+function getDesktopSyncCollectionFilter(collectionName, user = {}) {
+  const key = String(collectionName || '').trim().toLowerCase();
+  const privilegedRoles = new Set(['admin', 'admin_master', 'franqueador']);
+  if (privilegedRoles.has(String(user?.role || '').trim().toLowerCase())) return {};
+  const storeIds = (Array.isArray(user?.storeIds) ? user.storeIds : [])
+    .filter((value) => mongoose.Types.ObjectId.isValid(value))
+    .map((value) => new mongoose.Types.ObjectId(value));
+  const storeBoundFilters = {
+    appointments: { store: { $in: storeIds } },
+    deposits: { empresa: { $in: storeIds } },
+    pdvs: { empresa: { $in: storeIds } },
+    pdvcaixasessions: { empresa: { $in: storeIds } },
+    pdvstatedeliveryorders: { empresa: { $in: storeIds } },
+    pdvstateinventorymovements: { empresa: { $in: storeIds } },
+    pdvstatereceivables: { empresa: { $in: storeIds } },
+    pdvstatesales: { empresa: { $in: storeIds } },
+    stores: { _id: { $in: storeIds } },
+    weborders: { 'store.id': { $in: storeIds } },
+  };
+  if (!Object.prototype.hasOwnProperty.call(storeBoundFilters, key)) return {};
+  if (!storeIds.length) return { _id: { $exists: false } };
+  return storeBoundFilters[key];
+}
+
+function mergeSyncFilters(...filters) {
+  const valid = filters.filter((filter) => filter && typeof filter === 'object' && Object.keys(filter).length);
+  if (!valid.length) return {};
+  if (valid.length === 1) return valid[0];
+  return { $and: valid };
+}
+
+async function getCollectionSyncFingerprint(db, collectionName, baseFilter = {}) {
   const collection = db.collection(collectionName);
-  const count = await collection.estimatedDocumentCount();
+  const count = await collection.countDocuments(baseFilter);
 
   const collectionKey = String(collectionName || '').trim().toLowerCase();
   const updatedFieldCandidates = SYNC_COLLECTION_FINGERPRINT_FIELDS.get(collectionKey)
@@ -1362,7 +1490,7 @@ async function getCollectionSyncFingerprint(db, collectionName) {
   for (const fieldName of updatedFieldCandidates) {
     if (fieldName === '_id') break;
     const latestDoc = await collection
-      .find({ [fieldName]: { $exists: true, $ne: null } })
+      .find(mergeSyncFilters(baseFilter, { [fieldName]: { $exists: true, $ne: null } }))
       .project({ [fieldName]: 1 })
       .sort({ [fieldName]: -1 })
       .limit(1)
@@ -1384,7 +1512,7 @@ async function getCollectionSyncFingerprint(db, collectionName) {
   }
 
   const latestById = await collection
-    .find({ _id: { $exists: true, $ne: null } })
+    .find(mergeSyncFilters(baseFilter, { _id: { $exists: true, $ne: null } }))
     .project({ _id: 1 })
     .sort({ _id: -1 })
     .limit(1)
@@ -1418,6 +1546,35 @@ function parseSyncDate(value = '') {
   return parsed;
 }
 
+function encodeDeltaCursor(document = {}, basisField = '') {
+  const value = document?.[basisField];
+  const id = document?._id;
+  if (value === undefined || value === null || !id) return '';
+  const payload = {
+    type: value instanceof Date ? 'date' : 'value',
+    value: value instanceof Date ? value.toISOString() : value,
+    id: String(id),
+  };
+  return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+}
+
+function decodeDeltaCursor(value = '') {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'));
+    if (!parsed?.id || !mongoose.Types.ObjectId.isValid(parsed.id)) return null;
+    const cursorValue = parsed.type === 'date' ? new Date(parsed.value) : parsed.value;
+    if (parsed.type === 'date' && Number.isNaN(cursorValue.getTime())) return null;
+    return {
+      value: cursorValue,
+      id: new mongoose.Types.ObjectId(parsed.id),
+    };
+  } catch {
+    return null;
+  }
+}
+
 const SYNC_COLLECTION_LIMIT_OVERRIDES = new Map([
   ['pdvcaixasessions', 500],
   ['whatsappmessagehistoryevents', 500],
@@ -1445,6 +1602,7 @@ router.get('/sync/full', authMiddleware, requireStaff, async (req, res) => {
     const chunkOffset = Math.max(parseInt(String(req.query.offset || '0'), 10) || 0, 0);
     const requestedLimit = parseInt(String(req.query.limit || '2000'), 10) || 2000;
     const chunkCursor = String(req.query.cursor || '').trim();
+    const deltaCursor = decodeDeltaCursor(req.query.deltaCursor || '');
     const deltaSince = parseSyncDate(req.query.since || '');
     const deltaMode = String(req.query.delta || '').trim() === '1' && !!deltaSince;
 
@@ -1452,6 +1610,7 @@ router.get('/sync/full', authMiddleware, requireStaff, async (req, res) => {
     const collectionNames = collectionsInfo
       .map((entry) => String(entry?.name || '').trim())
       .filter((name) => name && !name.startsWith('system.'))
+      .filter((name) => DESKTOP_SYNC_ALLOWED_COLLECTIONS.has(name.toLowerCase()))
       .sort((a, b) => a.localeCompare(b, 'pt-BR'));
 
     if (requestedCollection) {
@@ -1459,7 +1618,8 @@ router.get('/sync/full', authMiddleware, requireStaff, async (req, res) => {
         return res.status(404).json({ message: 'Colecao nao encontrada para sincronizacao.' });
       }
       const chunkLimit = resolveSyncChunkLimit(requestedCollection, requestedLimit);
-      const fingerprintInfo = await getCollectionSyncFingerprint(db, requestedCollection);
+      const baseFilter = getDesktopSyncCollectionFilter(requestedCollection, req.user);
+      const fingerprintInfo = await getCollectionSyncFingerprint(db, requestedCollection, baseFilter);
       if (deltaMode) {
         const basisField = String(fingerprintInfo?.basis || '').trim();
         const canUseTimestampDelta = String(fingerprintInfo?.strategy || '') === 'timestamp'
@@ -1481,25 +1641,37 @@ router.get('/sync/full', authMiddleware, requireStaff, async (req, res) => {
         }
 
         const sinceIso = deltaSince.toISOString();
-        const deltaQuery = {
+        const deltaChangeFilter = {
           $or: [
             { [basisField]: { $gte: deltaSince } },
             { [basisField]: { $gte: sinceIso } },
           ],
         };
+        const baseDeltaQuery = mergeSyncFilters(baseFilter, deltaChangeFilter);
+        const cursorFilter = deltaCursor
+          ? {
+              $or: [
+                { [basisField]: { $gt: deltaCursor.value } },
+                { [basisField]: deltaCursor.value, _id: { $gt: deltaCursor.id } },
+              ],
+            }
+          : {};
+        const deltaQuery = mergeSyncFilters(baseDeltaQuery, cursorFilter);
         const deltaCollection = db.collection(requestedCollection);
         const projection = getSyncCollectionProjection(requestedCollection);
         const [changedCount, docs] = await Promise.all([
-          deltaCollection.countDocuments(deltaQuery),
+          deltaCollection.countDocuments(baseDeltaQuery),
           deltaCollection
             .find(deltaQuery, projection ? { projection } : undefined)
             .sort({ [basisField]: 1, _id: 1 })
-            .skip(chunkOffset)
             .limit(chunkLimit)
             .toArray(),
         ]);
         const loaded = docs.length;
         const nextOffset = chunkOffset + loaded;
+        const nextDeltaCursor = loaded > 0
+          ? encodeDeltaCursor(docs[loaded - 1], basisField)
+          : '';
         return res.json({
           version: 3,
           mode: 'collection-delta',
@@ -1514,7 +1686,8 @@ router.get('/sync/full', authMiddleware, requireStaff, async (req, res) => {
           offset: chunkOffset,
           limit: chunkLimit,
           nextOffset,
-          hasMore: nextOffset < changedCount && loaded > 0,
+          hasMore: loaded === chunkLimit,
+          nextDeltaCursor,
           count: Number(fingerprintInfo.count || 0),
           fingerprint: fingerprintInfo,
           data: docs,
@@ -1538,9 +1711,11 @@ router.get('/sync/full', authMiddleware, requireStaff, async (req, res) => {
           data: [],
         });
       }
-      const cursorQuery = {};
+      let cursorQuery = baseFilter;
       if (chunkCursor && mongoose.Types.ObjectId.isValid(chunkCursor)) {
-        cursorQuery._id = { $gt: new mongoose.Types.ObjectId(chunkCursor) };
+        cursorQuery = mergeSyncFilters(baseFilter, {
+          _id: { $gt: new mongoose.Types.ObjectId(chunkCursor) },
+        });
       }
       const projection = getSyncCollectionProjection(requestedCollection);
       const query = db.collection(requestedCollection)
@@ -1574,7 +1749,11 @@ router.get('/sync/full', authMiddleware, requireStaff, async (req, res) => {
     if (manifestOnly) {
       const fingerprints = {};
       for (const collectionName of collectionNames) {
-        fingerprints[collectionName] = await getCollectionSyncFingerprint(db, collectionName);
+        fingerprints[collectionName] = await getCollectionSyncFingerprint(
+          db,
+          collectionName,
+          getDesktopSyncCollectionFilter(collectionName, req.user)
+        );
       }
       return res.json({
         version: 3,
@@ -3058,6 +3237,8 @@ router.get('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
 
       return {
         _id: a._id,
+        version: Number(a.version || 1),
+        updatedAt: a.updatedAt || null,
         storeId: a.store?._id || a.store || null,
         clienteId: clienteInfo?._id || a.cliente?._id || null,
         clienteNome,
@@ -3188,6 +3369,8 @@ router.get('/agendamentos/range', authMiddleware, requireStaff, async (req, res)
         : formatProfessionalName(a.profissional) || null;
       return {
         _id: a._id,
+        version: Number(a.version || 1),
+        updatedAt: a.updatedAt || null,
         pet: a.pet ? a.pet.nome : null,
         petId: a.pet?._id || null,
         servico: servicosList.map(s => s.nome).join(', '),
@@ -3222,6 +3405,31 @@ router.get('/agendamentos/range', authMiddleware, requireStaff, async (req, res)
 // body: { storeId, clienteId, petId, servicoId, profissionalId, scheduledAt, valor, pago }
 router.post('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
   try {
+    const idempotencyKey = normalizeIdempotencyKey(req.get('x-idempotency-key'));
+    if (idempotencyKey) {
+      const cached = await readIdempotencyRecord(
+        IDEMPOTENCY_SCOPE_APPOINTMENT_CREATE,
+        idempotencyKey
+      );
+      if (cached) {
+        return res.status(Number(cached.status || 201)).json(cached.body || {});
+      }
+      const existingAppointment = await Appointment.findOne({
+        clientMutationId: idempotencyKey,
+      }).select('_id version updatedAt scheduledAt status valor pago').lean();
+      if (existingAppointment) {
+        return res.status(201).json({
+          _id: existingAppointment._id,
+          version: Number(existingAppointment.version || 1),
+          updatedAt: existingAppointment.updatedAt || null,
+          h: existingAppointment.scheduledAt,
+          status: existingAppointment.status,
+          valor: existingAppointment.valor,
+          pago: !!existingAppointment.pago,
+          replayed: true,
+        });
+      }
+    }
     const { storeId, clienteId, petId, servicoId, profissionalId, scheduledAt, valor, pago, status, servicos, observacoes } = req.body || {};
     if (!storeId || !clienteId || !petId || !scheduledAt) {
       return res.status(400).json({ message: 'Campos obrigatórios ausentes.' });
@@ -3293,11 +3501,12 @@ router.post('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
       pago: !!pago,
       status: statusFinal,
       observacoes: (typeof observacoes === 'string' ? observacoes : ''),
-      createdBy: req.user?._id
+      createdBy: req.user?.id,
+      clientMutationId: idempotencyKey || null,
     });
 
     const full = await Appointment.findById(appt._id)
-      .select('_id store cliente pet servico itens profissional scheduledAt valor pago status observacoes')
+      .select('_id store cliente pet servico itens profissional scheduledAt valor pago status observacoes version updatedAt')
       .populate('pet', 'nome')
       .populate('servico', 'nome')
       .populate('itens.servico', 'nome categorias grupo')
@@ -3327,8 +3536,10 @@ router.post('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
     const valorTotal = servicosList.reduce((sum, svc) => sum + Number(svc.valor || 0), 0) || Number(full.valor || 0) || 0;
     const primaryProfName = servicosList.find(s => s.profissionalId)?.profissionalNome || formatProfessionalName(full.profissional) || '—';
 
-    res.status(201).json({
+    const responseBody = {
       _id: full._id,
+      version: Number(full.version || 1),
+      updatedAt: full.updatedAt || null,
       h: new Date(full.scheduledAt).toISOString(),
       valor: valorTotal,
       pago: !!full.pago,
@@ -3339,7 +3550,14 @@ router.post('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
       observacoes: full.observacoes || '',
       profissional: primaryProfName || '—',
       profissionalId: full.profissional?._id || servicosList.find(s => s.profissionalId)?.profissionalId || null
-    });
+    };
+    if (idempotencyKey) {
+      await writeIdempotencyRecord(IDEMPOTENCY_SCOPE_APPOINTMENT_CREATE, idempotencyKey, {
+        status: 201,
+        body: responseBody,
+      });
+    }
+    res.status(201).json(responseBody);
   } catch (e) {
     console.error('POST /func/agendamentos', e);
     res.status(500).json({ message: 'Erro ao salvar' });
@@ -3485,10 +3703,21 @@ router.delete('/agendamentos/:id', authMiddleware, requireStaff, async (req, res
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'ID inválido.' });
 
-    const del = await Appointment.findByIdAndDelete(id).lean();
+    const del = await Appointment.findOneAndUpdate(
+      { _id: id, deletedAt: null },
+      { $set: { deletedAt: new Date() }, $inc: { version: 1 } },
+      { new: true }
+    ).lean();
     if (!del) return res.status(404).json({ message: 'Agendamento não encontrado.' });
 
-    return res.json({ ok: true });
+    return res.json({
+      ok: true,
+      tombstone: {
+        _id: del._id,
+        deletedAt: del.deletedAt,
+        version: del.version,
+      },
+    });
   } catch (e) {
     console.error('DELETE /func/agendamentos/:id', e);
     res.status(500).json({ message: 'Erro ao excluir agendamento' });

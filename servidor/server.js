@@ -13,9 +13,6 @@ const connectDB = require('./config/db');
 const { startIfoodStatusPoller } = require('./services/ifoodStatusPoller');
 const { startIfoodMenuScheduler } = require('./services/ifoodMenuScheduler');
 
-connectDB();
-verifyMailer();
-
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*', methods: ['GET', 'POST'] } });
@@ -269,10 +266,34 @@ io.on('connection', (socket) => {
   });
 });
 
-// InicializaÃ§Ã£o do servidor
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`ðŸš€ Servidor rodando na porta ${PORT}`));
-startIfoodStatusPoller();
-startIfoodMenuScheduler();
+async function startServer() {
+  await connectDB();
+  if (String(process.env.SKIP_MAIL_VERIFY || '').toLowerCase() !== 'true') {
+    void verifyMailer();
+  }
+  const port = Number(process.env.PORT || 3000);
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, () => {
+      server.off('error', reject);
+      console.log(`Servidor rodando em http://localhost:${port}`);
+      resolve();
+    });
+  });
+  if (String(process.env.DISABLE_EXTERNAL_WORKERS || '').toLowerCase() !== 'true') {
+    startIfoodStatusPoller();
+    startIfoodMenuScheduler();
+  }
+  return { app, server, port };
+}
+
+if (require.main === module) {
+  startServer().catch((error) => {
+    console.error('Falha ao iniciar servidor:', error);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { app, server, startServer };
 
 

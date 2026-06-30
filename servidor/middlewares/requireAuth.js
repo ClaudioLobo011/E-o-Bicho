@@ -25,7 +25,12 @@ module.exports = async function requireAuth(req, res, next) {
       email: user.email,
       role: effectiveRole,
       originalRole: user.role,
-      adminMasterModeActive
+      adminMasterModeActive,
+      storeIds: Array.from(new Set([
+        user.empresaPrincipal,
+        user.empresaContratual,
+        ...(Array.isArray(user.empresas) ? user.empresas : []),
+      ].filter(Boolean).map((value) => String(value))))
     };
 
     next();

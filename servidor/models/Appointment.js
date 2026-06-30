@@ -32,9 +32,26 @@ const AppointmentSchema = new Schema({
   },
   observacoes: { type: String },
   createdBy: { type: Schema.Types.ObjectId, ref: 'User' },
+  clientMutationId: { type: String, trim: true, default: null },
+  version: { type: Number, default: 1, min: 1 },
+  deletedAt: { type: Date, default: null, index: true },
 }, { timestamps: true });
 
 AppointmentSchema.index({ store: 1, scheduledAt: 1 });
 AppointmentSchema.index({ profissional: 1, scheduledAt: 1 });
+AppointmentSchema.index({ store: 1, updatedAt: 1, _id: 1 });
+AppointmentSchema.index({ store: 1, 'itens.data': 1 });
+AppointmentSchema.index(
+  { clientMutationId: 1 },
+  { unique: true, partialFilterExpression: { clientMutationId: { $type: 'string' } } }
+);
+
+AppointmentSchema.pre(/^find/, function excludeSoftDeleted(next) {
+  const query = this.getQuery();
+  if (!Object.prototype.hasOwnProperty.call(query, 'deletedAt')) {
+    this.where({ deletedAt: null });
+  }
+  next();
+});
 
 module.exports = mongoose.model('Appointment', AppointmentSchema);
