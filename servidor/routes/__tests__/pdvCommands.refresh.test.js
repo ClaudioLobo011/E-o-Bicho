@@ -1077,7 +1077,8 @@ test.describe('PDV commands endpoint', () => {
     assert.equal(cancel.body.state.completedSales[0].status, 'cancelled');
     assert.equal(cancel.body.state.completedSales[0].cancellationReason, 'Cliente desistiu');
     assert.equal(cancel.body.state.history[0].id, 'cancelamento-venda');
-    assert.equal(cancel.body.state.pagamentos[0].valor, 0);
+    assert.equal(cancel.body.state.pagamentos[0].valor, 50);
+    assert.equal(cancel.body.state.caixaInfo.fechamentoPrevisto, 50);
   });
 
   test('respects idempotency for pdv.sale.cancel', async () => {

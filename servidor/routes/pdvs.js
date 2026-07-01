@@ -2590,9 +2590,30 @@ const reconcileCashStateFromSales = ({ existingState, updatePayload }) => {
     });
   });
 
-  const mergedPayments = Array.from(paymentMap.values())
+  const salesPayments = Array.from(paymentMap.values())
     .map((entry) => normalizePaymentSnapshotPayload(entry))
     .filter(Boolean);
+  const reconciliationState = {
+    ...(existingState && typeof existingState === 'object' ? existingState : {}),
+    ...(updatePayload && typeof updatePayload === 'object' ? updatePayload : {}),
+    summary: {
+      ...(existingState?.summary || {}),
+      ...(updatePayload?.summary || {}),
+    },
+    caixaInfo: {
+      ...(existingState?.caixaInfo || {}),
+      ...(updatePayload?.caixaInfo || {}),
+    },
+    history: Array.isArray(updatePayload?.history)
+      ? updatePayload.history
+      : (Array.isArray(existingState?.history) ? existingState.history : []),
+    completedSales: sales,
+    pagamentos: Array.isArray(existingState?.pagamentos)
+      ? existingState.pagamentos
+      : salesPayments,
+  };
+  const expectedPayments = buildExpectedClosePaymentsByMethod(reconciliationState);
+  const mergedPayments = expectedPayments.length ? expectedPayments : salesPayments;
   const abertura = safeNumber(updatePayload?.summary?.abertura ?? existingState?.summary?.abertura ?? 0, 0);
   const recebimentosCliente = safeNumber(
     updatePayload?.summary?.recebimentosCliente ?? existingState?.summary?.recebimentosCliente ?? 0,
@@ -2609,7 +2630,7 @@ const reconcileCashStateFromSales = ({ existingState, updatePayload }) => {
     abertura,
     recebido: receivedTotal,
     recebimentosCliente,
-    saldo: abertura + receivedTotal + recebimentosCliente,
+    saldo: fechamentoPrevisto + recebimentosCliente,
   };
   updatePayload.caixaInfo = {
     ...updatePayload.caixaInfo,
@@ -4990,12 +5011,9 @@ const runPdvCommand = async ({
         caixaInfo: {
           aberturaData: openingDate,
           fechamentoData: null,
-          fechamentoPrevisto: 0,
+          fechamentoPrevisto: openingTotal,
           fechamentoApurado: 0,
-          previstoPagamentos: normalizedPayments.map((payment) => ({
-            ...payment,
-            valor: 0,
-          })),
+          previstoPagamentos: normalizedPayments.map((payment) => ({ ...payment })),
           apuradoPagamentos: [],
         },
         pagamentos: normalizedPayments,
