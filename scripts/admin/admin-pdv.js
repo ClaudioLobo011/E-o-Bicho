@@ -1632,6 +1632,9 @@
 
   const parseDecimalInput = (value) => {
     if (value == null) return 0;
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : 0;
+    }
     const raw = String(value).trim();
     if (!raw) return 0;
     const normalized = raw.replace(/\./g, '').replace(',', '.').replace(/[^\d.-]/g, '');
