@@ -55,6 +55,74 @@ const resolveFractionalChildRatio = (baseQuantity, fractionQuantity) => {
   return 0;
 };
 
+const addObjectIdToSet = (targetSet, value) => {
+  if (!(targetSet instanceof Set)) return;
+  const objectId = resolveProductObjectId(value);
+  if (!objectId) return;
+  targetSet.add(objectId.toString());
+};
+
+const queueDeferredFractionalRefresh = (queue, key, productId) => {
+  if (!queue || typeof queue !== 'object') return false;
+  if (!(queue[key] instanceof Set)) {
+    queue[key] = new Set();
+  }
+  addObjectIdToSet(queue[key], productId);
+  return true;
+};
+
+const normalizeObjectIdSet = (values) => {
+  if (!values) return [];
+  const input = values instanceof Set ? Array.from(values) : Array.isArray(values) ? values : [];
+  const uniqueIds = new Set();
+  input.forEach((value) => addObjectIdToSet(uniqueIds, value));
+  return Array.from(uniqueIds);
+};
+
+const findParentFractionalProductIds = async (childProductIds, { session } = {}) => {
+  const normalizedChildIds = normalizeObjectIdSet(childProductIds);
+  if (!normalizedChildIds.length) return [];
+
+  const parents = await Product.find({
+    'fracionado.ativo': true,
+    'fracionado.itens.produto': {
+      $in: normalizedChildIds.map((id) => new mongoose.Types.ObjectId(id)),
+    },
+  })
+    .select('_id')
+    .lean({ autopopulate: false })
+    .session(session);
+
+  return normalizeObjectIdSet(parents.map((parent) => parent?._id));
+};
+
+const flushDeferredFractionalStockRefreshes = async (queue, { session } = {}) => {
+  if (!queue || typeof queue !== 'object') {
+    return { recalculated: 0, parentRecalculated: 0 };
+  }
+
+  const recalculatedIds = new Set();
+  let recalculated = 0;
+  let parentRecalculated = 0;
+
+  const directProductIds = normalizeObjectIdSet(queue.productIds);
+  for (const productId of directProductIds) {
+    await recalculateFractionalStockForProduct(productId, { session });
+    recalculatedIds.add(productId);
+    recalculated += 1;
+  }
+
+  const parentIds = await findParentFractionalProductIds(queue.childProductIds, { session });
+  for (const parentId of parentIds) {
+    if (recalculatedIds.has(parentId)) continue;
+    await recalculateFractionalStockForProduct(parentId, { session });
+    recalculatedIds.add(parentId);
+    parentRecalculated += 1;
+  }
+
+  return { recalculated, parentRecalculated };
+};
+
 const adjustProductStockForDeposit = async ({
   productId,
   depositId,
@@ -63,6 +131,7 @@ const adjustProductStockForDeposit = async ({
   cascadeFractional = true,
   visited,
   movementContext,
+  deferredFractionalRefresh,
 }) => {
   const delta = Number(quantity);
   if (!Number.isFinite(delta) || delta === 0) {
@@ -144,12 +213,12 @@ const adjustProductStockForDeposit = async ({
   }
 
   if (!entry) {
-    entry = {
+    product.estoques.push({
       deposito: depositObjectId,
       quantidade: 0,
       unidade: product.unidade || 'UN',
-    };
-    product.estoques.push(entry);
+    });
+    entry = findEntry();
   }
 
   const computeNextQuantity = () => {
@@ -208,56 +277,64 @@ const adjustProductStockForDeposit = async ({
   if (cascadeFractional && !alreadyVisited) {
     const fractionalConfig = product.fracionado || {};
     const fractionalItems = Array.isArray(fractionalConfig.itens) ? fractionalConfig.itens : [];
+    const hasActiveFractionalItems = Boolean(fractionalConfig.ativo) && fractionalItems.length > 0;
 
-    for (const item of fractionalItems) {
-      const baseQuantity = Number(item?.quantidadeOrigem);
-      const fractionQuantity = Number(item?.quantidadeFracionada);
-      if (!Number.isFinite(baseQuantity) || baseQuantity <= 0) continue;
-      if (!Number.isFinite(fractionQuantity) || fractionQuantity <= 0) continue;
+    if (hasActiveFractionalItems) {
+      for (const item of fractionalItems) {
+        const baseQuantity = Number(item?.quantidadeOrigem);
+        const fractionQuantity = Number(item?.quantidadeFracionada);
+        if (!Number.isFinite(baseQuantity) || baseQuantity <= 0) continue;
+        if (!Number.isFinite(fractionQuantity) || fractionQuantity <= 0) continue;
 
-      const childObjectId = resolveProductObjectId(item?.produto);
-      if (!childObjectId) continue;
+        const childObjectId = resolveProductObjectId(item?.produto);
+        if (!childObjectId) continue;
 
-      const ratio = resolveFractionalChildRatio(baseQuantity, fractionQuantity);
-      const childDelta = delta * ratio;
-      if (!Number.isFinite(childDelta) || childDelta === 0) continue;
+        const ratio = resolveFractionalChildRatio(baseQuantity, fractionQuantity);
+        const childDelta = delta * ratio;
+        if (!Number.isFinite(childDelta) || childDelta === 0) continue;
+
+        try {
+          const childResult = await adjustProductStockForDeposit({
+            productId: childObjectId,
+            depositId: depositObjectId,
+            quantity: childDelta,
+            session,
+            cascadeFractional: true,
+            visited: visitSet,
+            movementContext,
+            deferredFractionalRefresh,
+          });
+          if (Array.isArray(childResult?.operations) && childResult.operations.length) {
+            operations.push(...childResult.operations);
+          } else {
+            operations.push({ product: childObjectId, quantity: childDelta });
+          }
+        } catch (error) {
+          console.error('Erro ao ajustar estoque de produto fracionado vinculado.', {
+            parentProductId: product._id.toString(),
+            childProductId: String(childObjectId),
+            depositId: depositKey,
+          }, error);
+          throw error;
+        }
+      }
 
       try {
-        const childResult = await adjustProductStockForDeposit({
-          productId: childObjectId,
-          depositId: depositObjectId,
-          quantity: childDelta,
-          session,
-          cascadeFractional: true,
-          visited: visitSet,
-          movementContext,
-        });
-        if (Array.isArray(childResult?.operations) && childResult.operations.length) {
-          operations.push(...childResult.operations);
-        } else {
-          operations.push({ product: childObjectId, quantity: childDelta });
+        if (!queueDeferredFractionalRefresh(deferredFractionalRefresh, 'productIds', product._id)) {
+          await recalculateFractionalStockForProduct(product._id, { session });
         }
       } catch (error) {
-        console.error('Erro ao ajustar estoque de produto fracionado vinculado.', {
-          parentProductId: product._id.toString(),
-          childProductId: String(childObjectId),
-          depositId: depositKey,
+        console.error('Erro ao recalcular estoque fracionado do produto.', {
+          productId: product._id.toString(),
         }, error);
-        throw error;
       }
-    }
-
-    try {
-      await recalculateFractionalStockForProduct(product._id, { session });
-    } catch (error) {
-      console.error('Erro ao recalcular estoque fracionado do produto.', {
-        productId: product._id.toString(),
-      }, error);
     }
   }
 
   try {
-    await refreshParentFractionalStocks(product._id, { session });
+    if (!queueDeferredFractionalRefresh(deferredFractionalRefresh, 'childProductIds', product._id)) {
+      await refreshParentFractionalStocks(product._id, { session });
+    }
   } catch (error) {
     console.error('Erro ao atualizar produtos pais fracionados.', {
       productId: product._id.toString(),
@@ -272,5 +349,6 @@ module.exports = {
   resolveProductObjectId,
   adjustProductStockForDeposit,
   resolveFractionalChildRatio,
+  flushDeferredFractionalStockRefreshes,
 };
 

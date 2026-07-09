@@ -10,7 +10,10 @@ const AccountPayable = require('../models/AccountPayable');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 const { collectDistributedDocuments } = require('../services/dfeDistribution');
-const { adjustProductStockForDeposit } = require('../utils/inventoryStock');
+const {
+  adjustProductStockForDeposit,
+  flushDeferredFractionalStockRefreshes,
+} = require('../utils/inventoryStock');
 
 const router = express.Router();
 
@@ -1025,6 +1028,10 @@ router.post('/:id/approve', async (req, res) => {
       let stockMovementProducts = 0;
       let stockMovementOperations = 0;
       let stockMovementQuantityTotal = 0;
+      const deferredFractionalRefresh = {
+        productIds: new Set(),
+        childProductIds: new Set(),
+      };
       for (const [productId, quantity] of productQuantities.entries()) {
         if (!Number.isFinite(quantity) || quantity <= 0) continue;
         const movementResult = await adjustProductStockForDeposit({
@@ -1033,6 +1040,7 @@ router.post('/:id/approve', async (req, res) => {
           quantity,
           session,
           cascadeFractional: true,
+          deferredFractionalRefresh,
           movementContext: {
             movementDate: new Date(),
             operation: 'entrada',
@@ -1064,6 +1072,8 @@ router.post('/:id/approve', async (req, res) => {
           stockMovementOperations += 1;
         }
       }
+
+      await flushDeferredFractionalStockRefreshes(deferredFractionalRefresh, { session });
 
       if (stockMovementProducts !== productQuantities.size) {
         throw buildHttpError(
@@ -1259,6 +1269,10 @@ router.delete('/:id', async (req, res) => {
         let reversedProducts = 0;
         let reversedOperations = 0;
         let reversedQuantityTotal = 0;
+        const deferredFractionalRefresh = {
+          productIds: new Set(),
+          childProductIds: new Set(),
+        };
 
         for (const [productId, quantity] of productQuantities.entries()) {
           if (!Number.isFinite(quantity) || quantity <= 0) continue;
@@ -1268,6 +1282,7 @@ router.delete('/:id', async (req, res) => {
             quantity: -quantity,
             session,
             cascadeFractional: true,
+            deferredFractionalRefresh,
             movementContext: {
               movementDate: new Date(),
               operation: 'saida',
@@ -1299,6 +1314,8 @@ router.delete('/:id', async (req, res) => {
             reversedOperations += 1;
           }
         }
+
+        await flushDeferredFractionalStockRefreshes(deferredFractionalRefresh, { session });
 
         if (reversedProducts !== productQuantities.size) {
           throw buildHttpError(

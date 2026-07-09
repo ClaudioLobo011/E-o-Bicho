@@ -8,7 +8,11 @@ const Store = require('../../models/Store');
 const Deposit = require('../../models/Deposit');
 const User = require('../../models/User');
 const InventoryAdjustment = require('../../models/InventoryAdjustment');
-const { adjustProductStockForDeposit } = require('../../utils/inventoryStock');
+const InventoryMovementLog = require('../../models/InventoryMovementLog');
+const {
+  adjustProductStockForDeposit,
+  flushDeferredFractionalStockRefreshes,
+} = require('../../utils/inventoryStock');
 
 let mongo;
 
@@ -29,6 +33,10 @@ test.describe('Movimentação com produtos fracionados', () => {
 
   test.beforeEach(async () => {
     await mongoose.connection.db.dropDatabase();
+    await Promise.all([
+      InventoryAdjustment.init(),
+      InventoryMovementLog.init(),
+    ]);
   });
 
   async function setupBaseDocuments() {
@@ -184,5 +192,76 @@ test.describe('Movimentação com produtos fracionados', () => {
     const childStock = updatedChild.estoques.find((entry) => entry.deposito.toString() === deposit._id.toString());
 
     assert.equal(childStock.quantidade, 4, 'filho deve receber 4 unidades independentemente da ordem');
+  });
+
+  test('recalculo fracionado diferido mantem estoque correto', async () => {
+    const { deposit, parent, child } = await setupBaseDocuments();
+
+    const session = await mongoose.startSession();
+    const deferredFractionalRefresh = {
+      productIds: new Set(),
+      childProductIds: new Set(),
+    };
+
+    await session.withTransaction(async () => {
+      await adjustProductStockForDeposit({
+        productId: parent._id,
+        depositId: deposit._id,
+        quantity: 1,
+        session,
+        cascadeFractional: true,
+        deferredFractionalRefresh,
+      });
+
+      await adjustProductStockForDeposit({
+        productId: child._id,
+        depositId: deposit._id,
+        quantity: 1,
+        session,
+        cascadeFractional: true,
+        deferredFractionalRefresh,
+      });
+
+      assert.equal(deferredFractionalRefresh.productIds.size, 1);
+      await flushDeferredFractionalStockRefreshes(deferredFractionalRefresh, { session });
+    });
+    await session.endSession();
+
+    const updatedChild = await Product.findById(child._id).lean();
+    const updatedParent = await Product.findById(parent._id).lean();
+
+    const childStock = updatedChild.estoques.find((entry) => entry.deposito.toString() === deposit._id.toString());
+    const parentStock = updatedParent.estoques.find((entry) => entry.deposito.toString() === deposit._id.toString());
+
+    assert.equal(childStock.quantidade, 4, 'filho deve receber 4 unidades com recalculo diferido');
+    assert.equal(parentStock.quantidade, 1, 'pai deve ser recalculado uma unica vez ao final');
+  });
+
+  test('entrada cria linha de estoque no deposito com quantidade movimentada', async () => {
+    const { deposit } = await setupBaseDocuments();
+    const product = await Product.create({
+      cod: 'NO-STOCK',
+      codbarras: '9990000000001',
+      nome: 'Produto sem estoque inicial',
+      custo: 5,
+      venda: 8,
+      unidade: 'UN',
+      estoques: [],
+    });
+
+    await adjustProductStockForDeposit({
+      productId: product._id,
+      depositId: deposit._id,
+      quantity: 7,
+      cascadeFractional: false,
+    });
+
+    const updatedProduct = await Product.findById(product._id).lean();
+    const stockEntry = updatedProduct.estoques.find(
+      (entry) => entry.deposito.toString() === deposit._id.toString()
+    );
+
+    assert.equal(stockEntry.quantidade, 7);
+    assert.equal(updatedProduct.stock, 7);
   });
 });
