@@ -9,6 +9,7 @@ const User = require('../models/User');
 const Pet = require('../models/Pet');
 const Service = require('../models/Service');
 const Appointment = require('../models/Appointment');
+const WhatsappAppointmentSlotLock = require('../models/WhatsappAppointmentSlotLock');
 const UserAddress = require('../models/UserAddress');
 const Store = require('../models/Store');
 const IdempotencyRecord = require('../models/IdempotencyRecord');
@@ -19,6 +20,10 @@ const {
   nextScopedSequence,
   customerSequenceKey,
 } = require('../utils/sequences');
+const {
+  cancelPostServiceSurvey,
+  schedulePostServiceSurvey,
+} = require('../services/whatsappPostServiceSurveyService');
 
 const requireStaff = authorizeRoles('funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master');
 const MAX_CODIGO_CLIENTE_SEQUENCIAL = 999999999;
@@ -955,6 +960,12 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
         return res.status(400).json({ message: 'Status inválido.' });
       }
     }
+    const appointmentBefore = await Appointment.findById(id)
+      .select('_id store cliente pet status deletedAt')
+      .lean();
+    if (!appointmentBefore) {
+      return res.status(404).json({ message: 'Agendamento não encontrado.' });
+    }
 
     if (hasStoreField && storeId && mongoose.Types.ObjectId.isValid(storeId)) {
       const role = req.user?.role || 'cliente';
@@ -1312,6 +1323,19 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
       return res.status(404).json({ message: 'Agendamento não encontrado.' });
     }
 
+    const schedulingChanged = Boolean(
+      scheduledAt
+      || hasProfessionalField
+      || servicoId
+      || Array.isArray(servicos)
+      || serviceHour
+      || serviceScheduledAt
+      || (Array.isArray(serviceItemUpdates) && serviceItemUpdates.length)
+    );
+    if (schedulingChanged) {
+      await WhatsappAppointmentSlotLock.deleteMany({ appointment: full._id });
+    }
+
     let servicosList = (full.itens || []).map(mapServiceItemResponse).filter(Boolean);
     if (!servicosList.length && full.servico) {
       servicosList = [{
@@ -1333,6 +1357,27 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
     }
     const servicosStr = servicosList.map(s => s.nome).join(', ');
     const valorTotal = servicosList.reduce((sum, svc) => sum + Number(svc.valor || 0), 0) || Number(full.valor || 0) || 0;
+
+    try {
+      const wasFinalized = appointmentBefore.status === 'finalizado';
+      const isFinalized = full.status === 'finalizado';
+      if (!wasFinalized && isFinalized) {
+        await schedulePostServiceSurvey({
+          appointmentId: full._id,
+          completedAt: new Date(),
+          userId: req.user?.id,
+          source: 'appointment_finalized',
+        });
+      } else if (wasFinalized && !isFinalized) {
+        await cancelPostServiceSurvey({
+          appointmentId: full._id,
+          reason: 'appointment_reopened',
+        });
+      }
+    } catch (surveyError) {
+      // A pesquisa não pode impedir a operação principal da agenda.
+      console.error('Falha ao processar pesquisa pós-atendimento do WhatsApp:', surveyError);
+    }
 
     return res.json({
       _id: full._id,
@@ -3709,6 +3754,7 @@ router.delete('/agendamentos/:id', authMiddleware, requireStaff, async (req, res
       { new: true }
     ).lean();
     if (!del) return res.status(404).json({ message: 'Agendamento não encontrado.' });
+    await WhatsappAppointmentSlotLock.deleteMany({ appointment: del._id });
 
     return res.json({
       ok: true,

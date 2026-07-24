@@ -4,6 +4,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const jwt = require('jsonwebtoken');
 
 // Carrega variÃ¡veis de ambiente antes de importar mÃ³dulos que dependem delas
 dotenv.config();
@@ -12,10 +13,19 @@ const { verifyMailer } = require('./utils/mailer');
 const connectDB = require('./config/db');
 const { startIfoodStatusPoller } = require('./services/ifoodStatusPoller');
 const { startIfoodMenuScheduler } = require('./services/ifoodMenuScheduler');
+const {
+  startWhatsappAutomationWorker,
+} = require('./services/whatsappAutomationWorker');
+const User = require('./models/User');
+const WhatsappIntegration = require('./models/WhatsappIntegration');
+const {
+  canAccessStore,
+  normalizePhoneNumberId,
+} = require('./services/whatsappAccessService');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: '*', methods: ['GET', 'POST'] } });
+let whatsappAutomationWorker = null;
 const buildPdvRoomKey = (pdvId) => {
   const id = typeof pdvId === 'string' ? pdvId.trim() : '';
   if (!/^[a-fA-F0-9]{24}$/.test(id)) return null;
@@ -23,6 +33,7 @@ const buildPdvRoomKey = (pdvId) => {
 };
 
 const BODY_PARSER_LIMIT = '10mb';
+const WHATSAPP_WEBHOOK_BODY_LIMIT = '25mb';
 const DEFAULT_CORS_ALLOWED_ORIGINS = [
   'https://www.peteobicho.com.br',
   'https://peteobicho.com.br',
@@ -49,25 +60,6 @@ function isOriginAllowed(origin, allowedOrigins = []) {
 }
 
 
-// Middleware
-app.set('socketio', io);
-app.set('emitPdvStateUpdate', ({ pdvId, payload = {} } = {}) => {
-  const room = buildPdvRoomKey(pdvId);
-  if (!room) return;
-  io.to(room).emit('pdv:state-updated', {
-    pdvId,
-    timestamp: Date.now(),
-    ...payload,
-  });
-});
-app.use(express.json({
-  limit: BODY_PARSER_LIMIT,
-  verify: (req, _res, buf) => {
-    // guarda o raw para validaÃ§Ã£o de assinatura (webhooks)
-    req.rawBody = buf;
-  }
-}));
-app.use(express.urlencoded({ extended: true, limit: BODY_PARSER_LIMIT }));
 const allowedOrigins = buildAllowedOrigins();
 const corsOptions = {
   origin(origin, callback) {
@@ -81,6 +73,41 @@ const corsOptions = {
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   exposedHeaders: ['Content-Disposition', 'X-Auth-Reason'],
 };
+const io = new Server(server, {
+  cors: {
+    origin: corsOptions.origin,
+    credentials: true,
+    methods: ['GET', 'POST'],
+  },
+});
+
+// Middleware
+app.set('socketio', io);
+app.set('emitPdvStateUpdate', ({ pdvId, payload = {} } = {}) => {
+  const room = buildPdvRoomKey(pdvId);
+  if (!room) return;
+  io.to(room).emit('pdv:state-updated', {
+    pdvId,
+    timestamp: Date.now(),
+    ...payload,
+  });
+});
+// O histórico inicial da coexistência pode ultrapassar o limite comum da API.
+// A assinatura continua sendo validada sobre os bytes originais em whatsappWebhooks.
+app.use(['/webhooks/whatsapp', '/webhook/whatsapp'], express.json({
+  limit: WHATSAPP_WEBHOOK_BODY_LIMIT,
+  verify: (req, _res, buf) => {
+    req.rawBody = buf;
+  }
+}));
+app.use(express.json({
+  limit: BODY_PARSER_LIMIT,
+  verify: (req, _res, buf) => {
+    // guarda o raw para validaÃ§Ã£o de assinatura (webhooks)
+    req.rawBody = buf;
+  }
+}));
+app.use(express.urlencoded({ extended: true, limit: BODY_PARSER_LIMIT }));
 app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
 app.use(express.static('public'));
@@ -201,6 +228,100 @@ function buildWhatsappRoomKey(storeId, phoneNumberId) {
   return `whatsapp:store:${store}:number:${phone}`;
 }
 
+function extractWhatsappSocketToken(socket) {
+  const handshakeToken = String(socket.handshake?.auth?.token || '').trim();
+  if (handshakeToken) return handshakeToken.replace(/^Bearer\s+/i, '');
+  const authorization = String(socket.handshake?.headers?.authorization || '').trim();
+  return authorization.replace(/^Bearer\s+/i, '');
+}
+
+function isSocketAdminMasterModeActive(socket) {
+  const value = socket.handshake?.auth?.adminMasterModeActive;
+  if (value === false) return false;
+  const normalized = String(value ?? 'true').trim().toLowerCase();
+  return !['0', 'false', 'off', 'no', 'nao', 'não'].includes(normalized);
+}
+
+async function authenticateWhatsappSocket(socket) {
+  if (socket.data?.whatsappUser) return socket.data.whatsappUser;
+  const token = extractWhatsappSocketToken(socket);
+  if (!token) {
+    const error = new Error('Token não fornecido.');
+    error.code = 'WHATSAPP_SOCKET_UNAUTHORIZED';
+    throw error;
+  }
+
+  const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  const user = await User.findById(decoded.id)
+    .select('_id email role empresaPrincipal empresaContratual empresas')
+    .lean();
+  if (!user) {
+    const error = new Error('Usuário não encontrado.');
+    error.code = 'WHATSAPP_SOCKET_UNAUTHORIZED';
+    throw error;
+  }
+
+  const adminMasterModeActive = isSocketAdminMasterModeActive(socket);
+  const originalRole = String(user.role || '');
+  const whatsappUser = {
+    id: String(user._id),
+    email: user.email || '',
+    originalRole,
+    role:
+      originalRole === 'admin_master' && !adminMasterModeActive
+        ? 'admin'
+        : originalRole,
+    adminMasterModeActive,
+    storeIds: Array.from(new Set([
+      user.empresaPrincipal,
+      user.empresaContratual,
+      ...(Array.isArray(user.empresas) ? user.empresas : []),
+    ].filter(Boolean).map((value) => String(value)))),
+  };
+  socket.data.whatsappUser = whatsappUser;
+  return whatsappUser;
+}
+
+async function authorizeWhatsappSocketRoom(socket, payload = {}) {
+  const storeId = String(payload.storeId || '').trim();
+  const phoneNumberId = normalizePhoneNumberId(payload.phoneNumberId);
+  const room = buildWhatsappRoomKey(storeId, phoneNumberId);
+  if (!room) {
+    const error = new Error('Ambiente do WhatsApp inválido.');
+    error.code = 'WHATSAPP_SOCKET_INVALID_ROOM';
+    throw error;
+  }
+
+  const user = await authenticateWhatsappSocket(socket);
+  if (!canAccessStore(user, storeId)) {
+    const error = new Error('Você não possui acesso ao WhatsApp desta loja.');
+    error.code = 'WHATSAPP_SOCKET_FORBIDDEN';
+    throw error;
+  }
+
+  const numberExists = await WhatsappIntegration.exists({
+    store: storeId,
+    phoneNumbers: { $elemMatch: { phoneNumberId } },
+  });
+  if (!numberExists) {
+    const error = new Error('O número não pertence ao ambiente desta loja.');
+    error.code = 'WHATSAPP_SOCKET_FORBIDDEN';
+    throw error;
+  }
+
+  return { room, storeId, phoneNumberId, user };
+}
+
+function respondToSocketEvent(socket, callback, payload) {
+  if (typeof callback === 'function') {
+    callback(payload);
+    return;
+  }
+  if (payload?.ok === false) {
+    socket.emit('whatsapp:access-denied', payload);
+  }
+}
+
 io.on('connection', (socket) => {
   const joinedRooms = new Set();
   const joinedWhatsappRooms = new Set();
@@ -231,18 +352,40 @@ io.on('connection', (socket) => {
     socket.to(room).emit('vet:ficha:update', message);
   });
 
-  socket.on('whatsapp:join', (payload = {}) => {
-    const room = buildWhatsappRoomKey(payload.storeId, payload.phoneNumberId);
-    if (!room) return;
-    socket.join(room);
-    joinedWhatsappRooms.add(room);
+  socket.on('whatsapp:join', async (payload = {}, callback) => {
+    try {
+      const context = await authorizeWhatsappSocketRoom(socket, payload);
+      await Promise.all(
+        Array.from(joinedWhatsappRooms).map(async (joinedRoom) => {
+          await socket.leave(joinedRoom);
+          joinedWhatsappRooms.delete(joinedRoom);
+        })
+      );
+      await socket.join(context.room);
+      joinedWhatsappRooms.add(context.room);
+      respondToSocketEvent(socket, callback, {
+        ok: true,
+        storeId: context.storeId,
+        phoneNumberId: context.phoneNumberId,
+      });
+    } catch (error) {
+      respondToSocketEvent(socket, callback, {
+        ok: false,
+        code: error?.code || 'WHATSAPP_SOCKET_UNAUTHORIZED',
+        message: 'Não foi possível entrar neste ambiente do WhatsApp.',
+      });
+    }
   });
 
-  socket.on('whatsapp:leave', (payload = {}) => {
+  socket.on('whatsapp:leave', async (payload = {}, callback) => {
     const room = buildWhatsappRoomKey(payload.storeId, payload.phoneNumberId);
-    if (!room) return;
-    socket.leave(room);
+    if (!room || !joinedWhatsappRooms.has(room)) {
+      respondToSocketEvent(socket, callback, { ok: false, code: 'WHATSAPP_SOCKET_INVALID_ROOM' });
+      return;
+    }
+    await socket.leave(room);
     joinedWhatsappRooms.delete(room);
+    respondToSocketEvent(socket, callback, { ok: true });
   });
 
   socket.on('pdv:join', (payload = {}) => {
@@ -283,6 +426,9 @@ async function startServer() {
   if (String(process.env.DISABLE_EXTERNAL_WORKERS || '').toLowerCase() !== 'true') {
     startIfoodStatusPoller();
     startIfoodMenuScheduler();
+  }
+  if (!whatsappAutomationWorker) {
+    whatsappAutomationWorker = startWhatsappAutomationWorker({ io });
   }
   return { app, server, port };
 }

@@ -777,6 +777,60 @@ document.addEventListener('DOMContentLoaded', () => {
     myProfileButton: document.getElementById('web-whatsapp-my-profile'),
     newConversationButton: document.getElementById('web-whatsapp-new-conversation'),
     connectionBadge: document.getElementById('web-whatsapp-connection-badge'),
+    automationBadge: document.getElementById('web-whatsapp-automation-badge'),
+    hoursBadge: document.getElementById('web-whatsapp-hours-badge'),
+    serviceControls: document.getElementById('web-whatsapp-service-controls'),
+    serviceState: document.getElementById('web-whatsapp-service-state'),
+    serviceDeadline: document.getElementById('web-whatsapp-service-deadline'),
+    appointmentFlowState: document.getElementById('web-whatsapp-appointment-flow-state'),
+    takeoverButton: document.getElementById('web-whatsapp-takeover'),
+    releaseButton: document.getElementById('web-whatsapp-release'),
+    pauseButton: document.getElementById('web-whatsapp-pause'),
+    closeConversationButton: document.getElementById('web-whatsapp-close-conversation'),
+    consentState: document.getElementById('web-whatsapp-consent-state'),
+    consentAction: document.getElementById('web-whatsapp-consent-action'),
+    automationSettings: document.getElementById('web-whatsapp-automation-settings'),
+    automationModal: document.getElementById('web-whatsapp-automation-modal'),
+    automationClose: document.getElementById('web-whatsapp-automation-close'),
+    automationCancel: document.getElementById('web-whatsapp-automation-cancel'),
+    automationForm: document.getElementById('web-whatsapp-automation-form'),
+    automationEnabled: document.getElementById('web-whatsapp-automation-enabled'),
+    afterHoursImmediate: document.getElementById('web-whatsapp-after-hours-immediate'),
+    humanGrace: document.getElementById('web-whatsapp-human-grace'),
+    botName: document.getElementById('web-whatsapp-bot-name'),
+    welcomeMessage: document.getElementById('web-whatsapp-welcome-message'),
+    afterHoursMessage: document.getElementById('web-whatsapp-after-hours-message'),
+    automationHoursSummary: document.getElementById('web-whatsapp-automation-hours-summary'),
+    automationSave: document.getElementById('web-whatsapp-automation-save'),
+    appointmentEnabled: document.getElementById('web-whatsapp-appointment-enabled'),
+    appointmentFlowVeterinary: document.getElementById('web-whatsapp-appointment-flow-veterinary'),
+    appointmentFlowGrooming: document.getElementById('web-whatsapp-appointment-flow-grooming'),
+    appointmentMinLead: document.getElementById('web-whatsapp-appointment-min-lead'),
+    appointmentSlotInterval: document.getElementById('web-whatsapp-appointment-slot-interval'),
+    appointmentSearchDays: document.getElementById('web-whatsapp-appointment-search-days'),
+    appointmentMaxOptions: document.getElementById('web-whatsapp-appointment-max-options'),
+    appointmentStats: document.getElementById('web-whatsapp-appointment-stats'),
+    surveyEnabled: document.getElementById('web-whatsapp-survey-enabled'),
+    surveyRequireOptIn: document.getElementById('web-whatsapp-survey-require-optin'),
+    surveyDelay: document.getElementById('web-whatsapp-survey-delay'),
+    surveyLowRating: document.getElementById('web-whatsapp-survey-low-rating'),
+    surveyQuestion: document.getElementById('web-whatsapp-survey-question'),
+    surveyTemplateName: document.getElementById('web-whatsapp-survey-template-name'),
+    surveyTemplateLanguage: document.getElementById('web-whatsapp-survey-template-language'),
+    surveyTemplateApproved: document.getElementById('web-whatsapp-survey-template-approved'),
+    surveyStats: document.getElementById('web-whatsapp-survey-stats'),
+    pilotBadge: document.getElementById('web-whatsapp-pilot-badge'),
+    pilotSummary: document.getElementById('web-whatsapp-pilot-summary'),
+    pilotList: document.getElementById('web-whatsapp-pilot-list'),
+    pilotRefresh: document.getElementById('web-whatsapp-pilot-refresh'),
+    pilotRunSummary: document.getElementById('web-whatsapp-pilot-run-summary'),
+    pilotRolloutSummary: document.getElementById('web-whatsapp-pilot-rollout-summary'),
+    pilotRunBadge: document.getElementById('web-whatsapp-pilot-run-badge'),
+    pilotRunProgress: document.getElementById('web-whatsapp-pilot-run-progress'),
+    pilotRunList: document.getElementById('web-whatsapp-pilot-run-list'),
+    pilotStart: document.getElementById('web-whatsapp-pilot-start'),
+    pilotComplete: document.getElementById('web-whatsapp-pilot-complete'),
+    pilotCancel: document.getElementById('web-whatsapp-pilot-cancel'),
     petsModal: document.getElementById('web-whatsapp-pets-modal'),
     petsModalClose: document.getElementById('web-whatsapp-pets-close'),
     petsModalTitle: document.getElementById('web-whatsapp-pets-title'),
@@ -851,6 +905,19 @@ document.addEventListener('DOMContentLoaded', () => {
     selectedNumberId: '',
     selectedNumber: null,
     numbersByCompany: {},
+    canConfigure: false,
+    automationConfig: null,
+    workingHours: null,
+    pilotReadiness: null,
+    pilotReadinessLoading: false,
+    pilotRun: null,
+    pilotRollout: null,
+    pilotRunSaving: false,
+    automationSaving: false,
+    conversationActionPending: false,
+    surveyStats: null,
+    appointmentStats: null,
+    contactPreferenceSaving: false,
     contacts: [],
     selectedContactId: '',
     messages: [],
@@ -943,6 +1010,11 @@ document.addEventListener('DOMContentLoaded', () => {
       ...(json ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     };
+  };
+
+  const isAdminMasterModeActive = () => {
+    const stored = localStorage.getItem('eobicho-admin-master-active');
+    return stored === null || stored === '1';
   };
 
   const trimValue = (value) => (typeof value === 'string' ? value.trim() : '');
@@ -1625,6 +1697,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let socketPromise = null;
   let socketScriptPromise = null;
   let socketRoom = null;
+  let socketRoomRequestId = 0;
   let realtimePollInFlight = false;
 
   const getServerBaseUrl = () => {
@@ -1706,6 +1779,10 @@ document.addEventListener('DOMContentLoaded', () => {
           pending.status = payload.status || pending.status || 'Enviado';
           if (messageText) pending.message = messageText;
           pending.createdAt = createdAt;
+          if (payload.actorType) pending.actorType = payload.actorType;
+          if (payload.actorUser) pending.actorUser = payload.actorUser;
+          if (payload.messageType) pending.messageType = payload.messageType;
+          if (payload.source) pending.source = payload.source;
           if (payload.media) {
             pending.media = pending.media ? { ...pending.media, ...payload.media } : payload.media;
           }
@@ -1783,6 +1860,10 @@ document.addEventListener('DOMContentLoaded', () => {
               destination: resolvedContactId,
               messageId,
               createdAt,
+              actorType: payload.actorType || '',
+              actorUser: payload.actorUser || '',
+              messageType: payload.messageType || '',
+              source: payload.source || '',
               media: payload.media || null,
               contacts: Array.isArray(payload.contacts) ? payload.contacts : null,
             })
@@ -1853,11 +1934,15 @@ document.addEventListener('DOMContentLoaded', () => {
           message: messageText,
           origin: resolvedContactId,
           destination: payload.destination || '',
-          messageId,
-          createdAt,
-          media: payload.media || null,
-          contacts: Array.isArray(payload.contacts) ? payload.contacts : null,
-        })
+            messageId,
+            createdAt,
+            actorType: payload.actorType || 'customer',
+            actorUser: payload.actorUser || '',
+            messageType: payload.messageType || '',
+            source: payload.source || '',
+            media: payload.media || null,
+            contacts: Array.isArray(payload.contacts) ? payload.contacts : null,
+          })
       );
       renderMessages();
       clearSelectedUnread(createdAt);
@@ -1865,8 +1950,47 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
+  const handleRealtimeConversation = (payload) => {
+    if (!payload || typeof payload !== 'object') return;
+    if (String(payload.storeId || '') !== state.selectedCompanyId) return;
+    if (String(payload.phoneNumberId || '') !== state.selectedNumberId) return;
+    const contactId = digitsOnly(payload.waId || '');
+    if (!contactId) return;
+    const matchedContact = state.contacts.find((entry) => isPhoneMatch(entry.waId, contactId));
+    if (matchedContact) {
+      matchedContact.conversationState = normalizeConversationState(payload);
+    } else {
+      state.contacts.unshift({
+        waId: contactId,
+        name: '',
+        phoneNumberId: payload.phoneNumberId || state.selectedNumberId,
+        lastMessage: '',
+        lastMessageAt: payload.lastMessageAt || null,
+        lastDirection: '',
+        lastMessageId: '',
+        unreadCount: Number(payload.unreadCount) || 0,
+        lastReadAt: null,
+        conversationState: normalizeConversationState(payload),
+      });
+      void hydrateContactIdentity(contactId);
+    }
+    if (payload.workingHours) {
+      state.workingHours = payload.workingHours;
+      renderAutomationIndicators();
+    }
+    if (payload.survey) {
+      void loadSurveyStats();
+    }
+    if (payload.appointmentFlow) {
+      void loadAppointmentStats();
+    }
+    renderConversations();
+    updateChatHeader();
+  };
+
   const syncSocketRoom = () => {
     if (!socket || !socket.connected) return;
+    const requestId = ++socketRoomRequestId;
     const storeId = state.selectedCompanyId;
     const phoneNumberId = state.selectedNumberId;
     const nextRoom = storeId && phoneNumberId ? { storeId, phoneNumberId } : null;
@@ -1877,8 +2001,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (nextRoom && (!socketRoom || socketRoom.storeId !== nextRoom.storeId || socketRoom.phoneNumberId !== nextRoom.phoneNumberId)) {
-      socket.emit('whatsapp:join', nextRoom);
-      socketRoom = nextRoom;
+      socket.emit('whatsapp:join', nextRoom, (result = {}) => {
+        if (requestId !== socketRoomRequestId) return;
+        if (
+          state.selectedCompanyId !== nextRoom.storeId
+          || state.selectedNumberId !== nextRoom.phoneNumberId
+        ) return;
+        if (result.ok) {
+          socketRoom = nextRoom;
+          return;
+        }
+        setSocketConnected(false);
+        notify(result.message || 'Acesso negado ao ambiente do WhatsApp.', 'error');
+      });
     }
   };
 
@@ -1943,6 +2078,10 @@ document.addEventListener('DOMContentLoaded', () => {
             transports: ['websocket', 'polling'],
             autoConnect: true,
             reconnection: true,
+            auth: {
+              token: getToken(),
+              adminMasterModeActive: isAdminMasterModeActive(),
+            },
           });
 
           setSocketConnected(socket.connected);
@@ -1965,7 +2104,18 @@ document.addEventListener('DOMContentLoaded', () => {
             setSocketConnected(false);
           });
 
+          socket.on('whatsapp:access-denied', (result = {}) => {
+            setSocketConnected(false);
+            notify(result.message || 'Acesso negado ao ambiente do WhatsApp.', 'error');
+          });
+
           socket.on('whatsapp:message', handleRealtimeMessage);
+          socket.on('whatsapp:conversation', handleRealtimeConversation);
+          socket.on('whatsapp:survey', (payload = {}) => {
+            if (String(payload.storeId || '') !== state.selectedCompanyId) return;
+            if (String(payload.phoneNumberId || '') !== state.selectedNumberId) return;
+            void loadSurveyStats();
+          });
           return socket;
         })
         .catch((error) => {
@@ -2042,6 +2192,37 @@ document.addEventListener('DOMContentLoaded', () => {
     status: number.status || '',
   });
 
+  const normalizeConversationState = (value) => {
+    if (!value || typeof value !== 'object') return null;
+    return {
+      id: value.id || '',
+      status: value.status || 'WAITING_HUMAN',
+      serviceMode: value.serviceMode || 'waiting',
+      assignedTo: value.assignedTo || '',
+      lastInboundMessageId: value.lastInboundMessageId || '',
+      lastInboundAt: value.lastInboundAt || null,
+      lastHumanAt: value.lastHumanAt || null,
+      lastHumanSource: value.lastHumanSource || '',
+      lastBotAt: value.lastBotAt || null,
+      lastMessageAt: value.lastMessageAt || null,
+      lastActorType: value.lastActorType || '',
+      botEligibleAt: value.botEligibleAt || null,
+      automationPausedUntil: value.automationPausedUntil || null,
+      automationPauseReason: value.automationPauseReason || '',
+      customerServiceWindowExpiresAt: value.customerServiceWindowExpiresAt || null,
+      intent: value.intent || '',
+      flow: value.flow || '',
+      flowState: value.flowState || '',
+      appointmentFlow: value.appointmentFlow && typeof value.appointmentFlow === 'object'
+        ? { ...value.appointmentFlow }
+        : null,
+      priority: Number(value.priority) || 0,
+      labels: Array.isArray(value.labels) ? value.labels : [],
+      version: Number(value.version) || 0,
+      closedAt: value.closedAt || null,
+    };
+  };
+
   const normalizeConversation = (contact = {}) => ({
     waId: digitsOnly(contact.waId || contact.id || '') || '',
     name: contact.name || '',
@@ -2054,6 +2235,8 @@ document.addEventListener('DOMContentLoaded', () => {
     unreadCount: normalizeUnreadCount(contact.unreadCount),
     lastReadAt: contact.lastReadAt || null,
     isKnownUser: Boolean(contact.isKnownUser),
+    conversationState: normalizeConversationState(contact.conversationState),
+    contactPreference: contact.contactPreference || null,
   });
 
   const normalizeMessage = (message = {}) => ({
@@ -2065,6 +2248,10 @@ document.addEventListener('DOMContentLoaded', () => {
     destination: message.destination || '',
     messageId: trimValue(message.messageId || ''),
     createdAt: message.createdAt || '',
+    actorType: message.actorType || '',
+    actorUser: message.actorUser || '',
+    messageType: message.messageType || '',
+    source: message.source || '',
     media: message.media || null,
     contacts: Array.isArray(message.contacts) ? message.contacts : null,
   });
@@ -2094,6 +2281,189 @@ document.addEventListener('DOMContentLoaded', () => {
     badge.classList.add('bg-rose-50', 'text-rose-700');
     indicator?.classList.add('text-rose-600');
     if (label) label.textContent = 'Desconectado';
+  };
+
+  const SERVICE_STATE_META = {
+    WAITING_HUMAN: {
+      label: 'Aguardando humano',
+      classes: 'bg-amber-50 text-amber-700 border-amber-200',
+    },
+    BOT_ACTIVE: {
+      label: 'Robô atendendo',
+      classes: 'bg-violet-50 text-violet-700 border-violet-200',
+    },
+    HUMAN_ACTIVE: {
+      label: 'Humano atendendo',
+      classes: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    },
+    NEEDS_HUMAN: {
+      label: 'Precisa de ajuda',
+      classes: 'bg-rose-50 text-rose-700 border-rose-200',
+    },
+    PAUSED: {
+      label: 'Automação pausada',
+      classes: 'bg-gray-100 text-gray-700 border-gray-200',
+    },
+    CLOSED: {
+      label: 'Encerrada',
+      classes: 'bg-gray-100 text-gray-500 border-gray-200',
+    },
+  };
+
+  const getServiceMeta = (status) =>
+    SERVICE_STATE_META[status] || SERVICE_STATE_META.WAITING_HUMAN;
+
+  const renderAutomationIndicators = () => {
+    if (elements.automationBadge) {
+      const text = elements.automationBadge.querySelector('[data-automation-text]');
+      elements.automationBadge.className =
+        'inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold';
+      if (state.automationConfig?.enabled && !state.automationConfig?.paused) {
+        elements.automationBadge.classList.add('bg-violet-50', 'text-violet-700');
+        if (text) text.textContent = 'Robô ativo';
+      } else if (state.automationConfig?.paused) {
+        elements.automationBadge.classList.add('bg-amber-50', 'text-amber-700');
+        if (text) text.textContent = 'Robô pausado';
+      } else {
+        elements.automationBadge.classList.add('bg-gray-100', 'text-gray-600');
+        if (text) text.textContent = 'Robô desativado';
+      }
+    }
+    if (elements.hoursBadge) {
+      const text = elements.hoursBadge.querySelector('[data-hours-text]');
+      elements.hoursBadge.className =
+        'inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold';
+      if (!state.workingHours) {
+        elements.hoursBadge.classList.add('bg-gray-100', 'text-gray-600');
+        if (text) text.textContent = 'Expediente desconhecido';
+      } else if (state.workingHours.isOpen) {
+        elements.hoursBadge.classList.add('bg-emerald-50', 'text-emerald-700');
+        if (text) text.textContent = 'Dentro do expediente';
+      } else {
+        elements.hoursBadge.classList.add('bg-slate-100', 'text-slate-700');
+        if (text) text.textContent = 'Fora do expediente';
+      }
+    }
+    if (elements.automationSettings) {
+      elements.automationSettings.disabled = !state.selectedNumberId;
+      elements.automationSettings.classList.toggle('opacity-50', !state.selectedNumberId);
+    }
+  };
+
+  const getSelectedContact = () =>
+    state.contacts.find((entry) => entry.waId === state.selectedContactId) || null;
+
+  const renderContactPreference = (contact) => {
+    const status = contact?.contactPreference?.status || 'unknown';
+    const meta = {
+      unknown: {
+        label: 'Permissão desconhecida',
+        action: 'Registrar permissão',
+        classes: 'border-gray-200 bg-white text-gray-500',
+      },
+      opted_in: {
+        label: 'Envios autorizados',
+        action: 'Registrar opt-out',
+        classes: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+      },
+      opted_out: {
+        label: 'Contato em opt-out',
+        action: 'Reativar com autorização',
+        classes: 'border-rose-200 bg-rose-50 text-rose-700',
+      },
+    }[status];
+    if (elements.consentState) {
+      elements.consentState.textContent = meta.label;
+      elements.consentState.className =
+        `inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${meta.classes}`;
+    }
+    if (elements.consentAction) {
+      elements.consentAction.textContent = meta.action;
+      elements.consentAction.disabled = !contact || state.contactPreferenceSaving;
+      elements.consentAction.classList.toggle(
+        'opacity-50',
+        !contact || state.contactPreferenceSaving
+      );
+    }
+  };
+
+  const renderServiceControls = () => {
+    const contact = getSelectedContact();
+    const conversation = contact?.conversationState;
+    elements.serviceControls?.classList.toggle('hidden', !contact);
+    elements.serviceControls?.classList.toggle('flex', Boolean(contact));
+    renderContactPreference(contact);
+    if (!contact) return;
+    const meta = getServiceMeta(conversation?.status);
+    if (elements.serviceState) {
+      elements.serviceState.textContent = conversation ? meta.label : 'Sem estado operacional';
+      elements.serviceState.className =
+        `inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${meta.classes}`;
+    }
+    const appointmentFlow = conversation?.appointmentFlow;
+    if (elements.appointmentFlowState) {
+      const showFlow = Boolean(
+        appointmentFlow
+        && conversation?.flow === 'appointment_booking'
+        && appointmentFlow.status
+      );
+      elements.appointmentFlowState.classList.toggle('hidden', !showFlow);
+      if (showFlow) {
+        const label = appointmentFlow.status === 'completed'
+          ? 'Agendamento confirmado'
+          : appointmentFlow.status === 'handoff'
+            ? 'Agendamento encaminhado'
+            : appointmentFlow.stepLabel || 'Agendamento em andamento';
+        elements.appointmentFlowState.textContent = label;
+        elements.appointmentFlowState.title = [
+          appointmentFlow.serviceName,
+          appointmentFlow.petName,
+          appointmentFlow.selectedDate && appointmentFlow.selectedTime
+            ? `${appointmentFlow.selectedDate} ${appointmentFlow.selectedTime}`
+            : '',
+        ].filter(Boolean).join(' · ');
+      }
+    }
+    const pending = state.conversationActionPending;
+    const status = conversation?.status || '';
+    if (elements.takeoverButton) {
+      elements.takeoverButton.disabled = pending || status === 'HUMAN_ACTIVE';
+      elements.takeoverButton.classList.toggle('hidden', status === 'HUMAN_ACTIVE');
+    }
+    if (elements.releaseButton) {
+      const show = ['HUMAN_ACTIVE', 'PAUSED', 'CLOSED'].includes(status);
+      elements.releaseButton.disabled = pending || !show;
+      elements.releaseButton.classList.toggle('hidden', !show);
+    }
+    if (elements.pauseButton) {
+      elements.pauseButton.disabled = pending || status === 'PAUSED' || status === 'CLOSED';
+      elements.pauseButton.classList.toggle('hidden', status === 'PAUSED' || status === 'CLOSED');
+    }
+    if (elements.closeConversationButton) {
+      elements.closeConversationButton.disabled = pending || status === 'CLOSED';
+      elements.closeConversationButton.classList.toggle('hidden', status === 'CLOSED');
+    }
+    const deadline = conversation?.botEligibleAt
+      ? new Date(conversation.botEligibleAt).getTime()
+      : 0;
+    if (elements.serviceDeadline) {
+      if (status === 'WAITING_HUMAN' && deadline) {
+        const remaining = Math.max(0, deadline - Date.now());
+        const minutes = Math.floor(remaining / 60000);
+        const seconds = Math.floor((remaining % 60000) / 1000);
+        elements.serviceDeadline.textContent =
+          `Robô elegível em ${minutes}:${String(seconds).padStart(2, '0')}`;
+      } else if (status === 'HUMAN_ACTIVE') {
+        elements.serviceDeadline.textContent = conversation?.assignedTo
+          ? 'Atendimento assumido'
+          : 'Atendimento humano';
+      } else if (status === 'PAUSED') {
+        elements.serviceDeadline.textContent =
+          conversation?.automationPauseReason || 'Pausa manual';
+      } else {
+        elements.serviceDeadline.textContent = '';
+      }
+    }
   };
 
   const getContactLabel = (contact) => {
@@ -4014,12 +4384,943 @@ document.addEventListener('DOMContentLoaded', () => {
 
     elements.numberSelect.disabled = false;
     const fallback = connected[0]?.phoneNumberId || '';
-    const currentValue = state.selectedNumberId && connected.some((n) => n.phoneNumberId === state.selectedNumberId)
+    const requestedNumberId = new URLSearchParams(window.location.search)
+      .get('phoneNumberId') || '';
+    const currentValue = state.selectedNumberId && connected.some(
+      (number) => number.phoneNumberId === state.selectedNumberId
+    )
       ? state.selectedNumberId
-      : fallback;
+      : connected.some((number) => number.phoneNumberId === requestedNumberId)
+        ? requestedNumberId
+        : fallback;
     elements.numberSelect.value = currentValue;
     state.selectedNumberId = currentValue;
     updateSelectedNumber();
+  };
+
+  const automationEndpoint = () => {
+    if (!API_BASE || !state.selectedCompanyId || !state.selectedNumberId) return '';
+    return `${API_BASE}/integrations/whatsapp/${state.selectedCompanyId}/numbers/${state.selectedNumberId}/automation`;
+  };
+
+  const pilotReadinessEndpoint = () => {
+    const endpoint = automationEndpoint();
+    return endpoint ? endpoint.replace(/\/automation$/, '/pilot-readiness') : '';
+  };
+
+  const readinessMeta = (status) => ({
+    blocked: {
+      label: 'Bloqueado',
+      badge: 'border-rose-200 bg-rose-50 text-rose-700',
+      icon: 'fa-circle-xmark text-rose-500',
+    },
+    warning: {
+      label: 'Com alertas',
+      badge: 'border-amber-200 bg-amber-50 text-amber-700',
+      icon: 'fa-triangle-exclamation text-amber-500',
+    },
+    ready: {
+      label: 'Pronto',
+      badge: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+      icon: 'fa-circle-check text-emerald-500',
+    },
+  }[status] || {
+    label: 'Não avaliado',
+    badge: 'border-gray-200 bg-white text-gray-600',
+    icon: 'fa-circle-question text-gray-400',
+  });
+
+  const renderPilotReadiness = () => {
+    if (!elements.pilotBadge || !elements.pilotSummary || !elements.pilotList) return;
+    const readiness = state.pilotReadiness;
+    if (state.pilotReadinessLoading) {
+      elements.pilotBadge.textContent = 'Avaliando...';
+      elements.pilotBadge.className =
+        'inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700';
+      elements.pilotSummary.textContent = 'Conferindo este ambiente...';
+      elements.pilotList.innerHTML = '';
+      if (elements.pilotRefresh) {
+        elements.pilotRefresh.disabled = true;
+        elements.pilotRefresh.classList.add('opacity-50');
+      }
+      return;
+    }
+    if (elements.pilotRefresh) {
+      elements.pilotRefresh.disabled = false;
+      elements.pilotRefresh.classList.remove('opacity-50');
+    }
+    if (!readiness?.summary) {
+      const meta = readinessMeta('');
+      elements.pilotBadge.textContent = meta.label;
+      elements.pilotBadge.className =
+        `inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${meta.badge}`;
+      elements.pilotSummary.textContent = 'A prontidão ainda não foi avaliada.';
+      elements.pilotList.innerHTML = '';
+      return;
+    }
+
+    const meta = readinessMeta(readiness.summary.status);
+    elements.pilotBadge.textContent = meta.label;
+    elements.pilotBadge.className =
+      `inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${meta.badge}`;
+    elements.pilotSummary.textContent = readiness.summary.blockers
+      ? `${readiness.summary.blockers} item(ns) obrigatório(s) impedem a ativação.`
+      : readiness.summary.warnings
+        ? `Sem bloqueios; revise ${readiness.summary.warnings} alerta(s) antes de confirmar.`
+        : 'Todos os itens do piloto estão prontos.';
+
+    const checks = Array.isArray(readiness.checks) ? readiness.checks : [];
+    elements.pilotList.innerHTML = checks.map((check) => {
+      const item = check.status === 'blocker'
+        ? {
+          icon: 'fa-circle-xmark text-rose-500',
+          box: 'border-rose-100 bg-rose-50/80',
+          badge: 'bg-rose-100 text-rose-700',
+          label: 'Obrigatório',
+        }
+        : check.status === 'warning'
+          ? {
+            icon: 'fa-triangle-exclamation text-amber-500',
+            box: 'border-amber-100 bg-amber-50/80',
+            badge: 'bg-amber-100 text-amber-700',
+            label: 'Atenção',
+          }
+          : {
+            icon: 'fa-circle-check text-emerald-500',
+            box: 'border-emerald-100 bg-white',
+            badge: 'bg-emerald-100 text-emerald-700',
+            label: 'Concluído',
+          };
+      const action = check.action?.href
+        ? `<a href="${escapeHtml(check.action.href)}" class="mt-1 inline-flex text-[11px] font-semibold text-primary hover:underline">${escapeHtml(check.action.label || 'Corrigir')} <i class="fas fa-arrow-right ml-1"></i></a>`
+        : '';
+      return `
+        <div class="rounded-xl border px-3 py-2 ${item.box}">
+          <div class="flex items-start gap-2">
+            <i class="fas ${item.icon} mt-0.5"></i>
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <p class="text-xs font-semibold text-gray-800">${escapeHtml(check.label || '')}</p>
+                <span class="rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${item.badge}">${item.label}</span>
+              </div>
+              <p class="mt-0.5 text-[11px] text-gray-600">${escapeHtml(check.message || '')}</p>
+              ${action}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  };
+
+  const loadPilotReadiness = async (options = {}) => {
+    const endpoint = pilotReadinessEndpoint();
+    if (!endpoint) {
+      state.pilotReadiness = null;
+      renderPilotReadiness();
+      return null;
+    }
+    state.pilotReadinessLoading = true;
+    renderPilotReadiness();
+    try {
+      const hasConfiguration = Boolean(options.configuration);
+      const resp = await fetch(endpoint, {
+        method: hasConfiguration ? 'POST' : 'GET',
+        headers: hasConfiguration ? authHeaders() : authHeaders(false),
+        ...(hasConfiguration
+          ? { body: JSON.stringify({ configuration: options.configuration }) }
+          : {}),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.message || 'Erro ao avaliar o piloto.');
+      state.pilotReadiness = data.readiness || null;
+      return state.pilotReadiness;
+    } catch (error) {
+      console.error('web-whatsapp:pilot-readiness', error);
+      if (!options.silent) {
+        notify(error.message || 'Não foi possível avaliar o piloto.', 'error');
+      }
+      return null;
+    } finally {
+      state.pilotReadinessLoading = false;
+      renderPilotReadiness();
+    }
+  };
+
+  const pilotExecutionEndpoint = () => {
+    const endpoint = automationEndpoint();
+    return endpoint ? endpoint.replace(/\/automation$/, '/pilot') : '';
+  };
+
+  const pilotRunMeta = (status) => ({
+    in_progress: {
+      label: 'Em homologação',
+      badge: 'border-indigo-200 bg-indigo-100 text-indigo-800',
+    },
+    passed: {
+      label: 'Piloto aprovado',
+      badge: 'border-emerald-200 bg-emerald-100 text-emerald-800',
+    },
+    cancelled: {
+      label: 'Execução cancelada',
+      badge: 'border-rose-200 bg-rose-100 text-rose-800',
+    },
+  }[status] || {
+    label: 'Não iniciado',
+    badge: 'border-gray-200 bg-white text-gray-600',
+  });
+
+  const renderPilotExecution = () => {
+    if (
+      !elements.pilotRunSummary
+      || !elements.pilotRunBadge
+      || !elements.pilotRunList
+    ) return;
+    const run = state.pilotRun;
+    const rollout = state.pilotRollout || {};
+    const meta = pilotRunMeta(run?.status);
+    const progress = run?.progress || {
+      total: 0,
+      passed: 0,
+      failed: 0,
+      pending: 0,
+      percent: 0,
+    };
+    elements.pilotRunBadge.textContent = meta.label;
+    elements.pilotRunBadge.className =
+      `inline-flex self-start rounded-full border px-2.5 py-1 text-xs font-semibold ${meta.badge}`;
+    elements.pilotRunProgress.style.width = `${Math.max(
+      0,
+      Math.min(100, Number(progress.percent) || 0)
+    )}%`;
+    elements.pilotRunSummary.textContent = run
+      ? run.status === 'passed'
+        ? `Tentativa ${run.attempt} aprovada com ${progress.passed} cenário(s).`
+        : run.status === 'cancelled'
+          ? `Tentativa ${run.attempt} cancelada. Uma nova execução pode ser iniciada.`
+          : `Tentativa ${run.attempt}: ${progress.passed}/${progress.total} cenários aprovados, ${progress.failed} com falha.`
+      : 'Nenhuma execução iniciada para este número.';
+    if (elements.pilotRolloutSummary) {
+      elements.pilotRolloutSummary.textContent = rollout.baselineApproved
+        ? 'O piloto-base foi aprovado. A expansão continua exigindo prontidão em cada novo ambiente.'
+        : rollout.expansionBlockedByAnotherPilot
+          ? 'Outro ambiente está em homologação; este número não pode ser ativado até a conclusão ou o cancelamento.'
+          : run?.status === 'in_progress'
+            ? 'Este é o ambiente piloto atual. Outros números permanecem bloqueados para expansão.'
+            : 'A expansão permanece controlada até a aprovação do primeiro piloto.';
+    }
+
+    const canEdit = state.canConfigure && run?.status === 'in_progress'
+      && !state.pilotRunSaving;
+    const scenarios = Array.isArray(run?.scenarios) ? run.scenarios : [];
+    elements.pilotRunList.innerHTML = scenarios.map((entry) => {
+      const statusMeta = entry.status === 'passed'
+        ? {
+          label: 'Aprovado',
+          icon: 'fa-circle-check text-emerald-500',
+          box: 'border-emerald-100 bg-white',
+        }
+        : entry.status === 'failed'
+          ? {
+            label: 'Falhou',
+            icon: 'fa-circle-xmark text-rose-500',
+            box: 'border-rose-100 bg-rose-50/70',
+          }
+          : {
+            label: 'Pendente',
+            icon: 'fa-clock text-amber-500',
+            box: 'border-indigo-100 bg-white',
+          };
+      if (!canEdit) {
+        return `
+          <article class="rounded-xl border p-3 ${statusMeta.box}">
+            <div class="flex items-start gap-2">
+              <i class="fas ${statusMeta.icon} mt-0.5"></i>
+              <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <p class="text-xs font-bold text-gray-800">${escapeHtml(entry.label || '')}</p>
+                  <span class="text-[10px] font-semibold text-gray-500">${statusMeta.label}</span>
+                </div>
+                <p class="mt-1 text-[11px] text-gray-600">${escapeHtml(entry.description || '')}</p>
+                ${entry.evidenceNote
+                  ? `<p class="mt-2 rounded-lg bg-gray-50 px-2 py-1.5 text-[11px] text-gray-700"><strong>Evidência:</strong> ${escapeHtml(entry.evidenceNote)}</p>`
+                  : ''}
+              </div>
+            </div>
+          </article>
+        `;
+      }
+      return `
+        <article class="rounded-xl border p-3 ${statusMeta.box}" data-pilot-scenario="${escapeHtml(entry.key)}">
+          <div class="flex items-start gap-2">
+            <i class="fas ${statusMeta.icon} mt-1"></i>
+            <div class="min-w-0 flex-1 space-y-2">
+              <div>
+                <p class="text-xs font-bold text-gray-800">${escapeHtml(entry.label || '')}</p>
+                <p class="mt-0.5 text-[11px] text-gray-600">${escapeHtml(entry.description || '')}</p>
+              </div>
+              <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <select data-pilot-field data-pilot-status class="rounded-lg border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-primary focus:ring-primary">
+                  <option value="pending" ${entry.status === 'pending' ? 'selected' : ''}>Pendente</option>
+                  <option value="passed" ${entry.status === 'passed' ? 'selected' : ''}>Aprovado</option>
+                  <option value="failed" ${entry.status === 'failed' ? 'selected' : ''}>Falhou</option>
+                </select>
+                <select data-pilot-field data-pilot-reference-type class="rounded-lg border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-primary focus:ring-primary">
+                  <option value="manual" ${entry.referenceType === 'manual' ? 'selected' : ''}>Evidência manual</option>
+                  <option value="message" ${entry.referenceType === 'message' ? 'selected' : ''}>Mensagem</option>
+                  <option value="appointment" ${entry.referenceType === 'appointment' ? 'selected' : ''}>Agendamento</option>
+                  <option value="survey" ${entry.referenceType === 'survey' ? 'selected' : ''}>Pesquisa</option>
+                </select>
+                <input data-pilot-field data-pilot-reference-id type="text" value="${escapeHtml(entry.referenceId || '')}" placeholder="ID ou referência opcional" class="rounded-lg border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-primary focus:ring-primary">
+              </div>
+              <textarea data-pilot-field data-pilot-evidence rows="2" placeholder="Descreva o que foi observado neste teste" class="w-full resize-none rounded-lg border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-primary focus:ring-primary">${escapeHtml(entry.evidenceNote || '')}</textarea>
+              <button type="button" data-pilot-save class="rounded-lg bg-gray-900 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-gray-800">Salvar resultado</button>
+            </div>
+          </div>
+        </article>
+      `;
+    }).join('');
+
+    const canStart = state.canConfigure
+      && state.automationConfig?.enabled === true
+      && run?.status !== 'in_progress'
+      && !state.pilotRunSaving
+      && !rollout.expansionBlockedByAnotherPilot;
+    elements.pilotStart.classList.toggle('hidden', !canStart);
+    elements.pilotStart.disabled = !canStart;
+    elements.pilotStart.textContent = run ? 'Iniciar nova homologação' : 'Iniciar homologação';
+    const canComplete = canEdit
+      && progress.total > 0
+      && progress.passed === progress.total
+      && progress.pending === 0
+      && progress.failed === 0;
+    elements.pilotComplete.classList.toggle('hidden', run?.status !== 'in_progress');
+    elements.pilotComplete.disabled = !canComplete;
+    elements.pilotComplete.classList.toggle('opacity-50', !canComplete);
+    elements.pilotCancel.classList.toggle('hidden', run?.status !== 'in_progress');
+    elements.pilotCancel.disabled = !canEdit;
+    elements.pilotCancel.classList.toggle('opacity-50', !canEdit);
+  };
+
+  const loadPilotExecution = async (options = {}) => {
+    const endpoint = pilotExecutionEndpoint();
+    if (!endpoint) {
+      state.pilotRun = null;
+      state.pilotRollout = null;
+      renderPilotExecution();
+      return null;
+    }
+    try {
+      const resp = await fetch(endpoint, { headers: authHeaders(false) });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.message || 'Erro ao carregar homologação.');
+      state.pilotRun = data.pilotRun || null;
+      state.pilotRollout = data.rollout || null;
+      renderPilotExecution();
+      return state.pilotRun;
+    } catch (error) {
+      console.error('web-whatsapp:pilot-run-load', error);
+      if (!options.silent) {
+        notify(error.message || 'Não foi possível carregar a homologação.', 'error');
+      }
+      return null;
+    }
+  };
+
+  const startPilotExecution = async () => {
+    const endpoint = pilotExecutionEndpoint();
+    if (!endpoint || !state.canConfigure || state.pilotRunSaving) return;
+    state.pilotRunSaving = true;
+    renderPilotExecution();
+    try {
+      const resp = await fetch(`${endpoint}/start`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: '{}',
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.message || 'Erro ao iniciar homologação.');
+      state.pilotRun = data.pilotRun || null;
+      state.pilotRollout = data.rollout || state.pilotRollout;
+      notify(
+        data.reused ? 'Homologação em andamento carregada.' : 'Homologação iniciada.',
+        'success'
+      );
+    } catch (error) {
+      console.error('web-whatsapp:pilot-run-start', error);
+      notify(error.message || 'Não foi possível iniciar a homologação.', 'error');
+    } finally {
+      state.pilotRunSaving = false;
+      renderPilotExecution();
+    }
+  };
+
+  const savePilotScenario = async (button) => {
+    const endpoint = pilotExecutionEndpoint();
+    const article = button?.closest('[data-pilot-scenario]');
+    const scenarioKey = article?.dataset.pilotScenario || '';
+    if (
+      !endpoint
+      || !state.pilotRun?.id
+      || !scenarioKey
+      || !state.canConfigure
+      || state.pilotRunSaving
+    ) return;
+    const payload = {
+      status: article.querySelector('[data-pilot-status]')?.value || 'pending',
+      evidenceNote: trimValue(
+        article.querySelector('[data-pilot-evidence]')?.value
+      ),
+      referenceType:
+        article.querySelector('[data-pilot-reference-type]')?.value || 'manual',
+      referenceId: trimValue(
+        article.querySelector('[data-pilot-reference-id]')?.value
+      ),
+    };
+    state.pilotRunSaving = true;
+    renderPilotExecution();
+    try {
+      const resp = await fetch(
+        `${endpoint}/${encodeURIComponent(state.pilotRun.id)}`
+        + `/scenarios/${encodeURIComponent(scenarioKey)}`,
+        {
+          method: 'PATCH',
+          headers: authHeaders(),
+          body: JSON.stringify(payload),
+        }
+      );
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.message || 'Erro ao salvar cenário.');
+      state.pilotRun = data.pilotRun || state.pilotRun;
+      notify('Resultado do cenário salvo.', 'success');
+    } catch (error) {
+      console.error('web-whatsapp:pilot-scenario-save', error);
+      notify(error.message || 'Não foi possível salvar o cenário.', 'error');
+    } finally {
+      state.pilotRunSaving = false;
+      renderPilotExecution();
+    }
+  };
+
+  const completePilotExecution = async () => {
+    const endpoint = pilotExecutionEndpoint();
+    if (!endpoint || !state.pilotRun?.id || state.pilotRunSaving) return;
+    const notes = window.prompt(
+      'Observação final da homologação:',
+      'Todos os cenários obrigatórios foram executados e aprovados.'
+    );
+    if (notes === null) return;
+    if (!window.confirm(
+      'Aprovar formalmente este piloto e liberar a expansão controlada para outros ambientes?'
+    )) return;
+    state.pilotRunSaving = true;
+    renderPilotExecution();
+    try {
+      const resp = await fetch(
+        `${endpoint}/${encodeURIComponent(state.pilotRun.id)}/complete`,
+        {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ completionNotes: trimValue(notes) }),
+        }
+      );
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.message || 'Erro ao aprovar piloto.');
+      state.pilotRun = data.pilotRun || state.pilotRun;
+      state.pilotRollout = data.rollout || state.pilotRollout;
+      state.pilotReadiness = data.readiness || state.pilotReadiness;
+      renderPilotReadiness();
+      notify('Piloto aprovado. A expansão controlada foi liberada.', 'success');
+    } catch (error) {
+      console.error('web-whatsapp:pilot-run-complete', error);
+      notify(error.message || 'Não foi possível aprovar o piloto.', 'error');
+    } finally {
+      state.pilotRunSaving = false;
+      renderPilotExecution();
+    }
+  };
+
+  const cancelPilotExecution = async () => {
+    const endpoint = pilotExecutionEndpoint();
+    if (!endpoint || !state.pilotRun?.id || state.pilotRunSaving) return;
+    const reason = window.prompt('Informe o motivo do cancelamento desta execução:');
+    if (reason === null) return;
+    state.pilotRunSaving = true;
+    renderPilotExecution();
+    try {
+      const resp = await fetch(
+        `${endpoint}/${encodeURIComponent(state.pilotRun.id)}/cancel`,
+        {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ reason: trimValue(reason) }),
+        }
+      );
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.message || 'Erro ao cancelar piloto.');
+      state.pilotRun = data.pilotRun || state.pilotRun;
+      state.pilotRollout = data.rollout || state.pilotRollout;
+      notify('Execução do piloto cancelada.', 'success');
+    } catch (error) {
+      console.error('web-whatsapp:pilot-run-cancel', error);
+      notify(error.message || 'Não foi possível cancelar o piloto.', 'error');
+    } finally {
+      state.pilotRunSaving = false;
+      renderPilotExecution();
+    }
+  };
+
+  const formatOperatingHoursSummary = () => {
+    const hours = state.workingHours;
+    if (!hours) return 'Expediente ainda não consultado.';
+    if (hours.scheduleConfigured === false) {
+      return 'Horário da loja não configurado: o funcionário permanece com prioridade.';
+    }
+    const period = hours.open && hours.close ? ` (${hours.open} às ${hours.close})` : '';
+    if (hours.isOpen) return `Loja dentro do expediente${period}.`;
+    return `Loja fora do expediente${period}.`;
+  };
+
+  const setAutomationForm = () => {
+    const config = state.automationConfig || {};
+    if (elements.automationEnabled) elements.automationEnabled.checked = Boolean(config.enabled);
+    if (elements.afterHoursImmediate) {
+      elements.afterHoursImmediate.checked = config.afterHoursImmediate !== false;
+    }
+    if (elements.humanGrace) elements.humanGrace.value = String(Number(config.humanGraceMinutes) || 5);
+    if (elements.botName) elements.botName.value = config.botName || 'Assistente virtual';
+    if (elements.welcomeMessage) elements.welcomeMessage.value = config.welcomeMessage || '';
+    if (elements.afterHoursMessage) elements.afterHoursMessage.value = config.afterHoursMessage || '';
+    if (elements.appointmentEnabled) {
+      elements.appointmentEnabled.checked = Boolean(config.appointmentEnabled);
+    }
+    const enabledFlows = Array.isArray(config.enabledFlows)
+      ? config.enabledFlows
+      : ['veterinary_appointment', 'grooming_appointment'];
+    if (elements.appointmentFlowVeterinary) {
+      elements.appointmentFlowVeterinary.checked =
+        enabledFlows.includes('veterinary_appointment');
+    }
+    if (elements.appointmentFlowGrooming) {
+      elements.appointmentFlowGrooming.checked =
+        enabledFlows.includes('grooming_appointment');
+    }
+    if (elements.appointmentMinLead) {
+      elements.appointmentMinLead.value = String(
+        Number.isFinite(Number(config.appointmentMinLeadMinutes))
+          ? Number(config.appointmentMinLeadMinutes)
+          : 60
+      );
+    }
+    if (elements.appointmentSlotInterval) {
+      elements.appointmentSlotInterval.value =
+        String(Number(config.appointmentSlotIntervalMinutes) || 30);
+    }
+    if (elements.appointmentSearchDays) {
+      elements.appointmentSearchDays.value =
+        String(Number(config.appointmentSearchDays) || 14);
+    }
+    if (elements.appointmentMaxOptions) {
+      elements.appointmentMaxOptions.value =
+        String(Number(config.appointmentMaxOptions) || 3);
+    }
+    if (elements.surveyEnabled) elements.surveyEnabled.checked = Boolean(config.surveyEnabled);
+    if (elements.surveyRequireOptIn) {
+      elements.surveyRequireOptIn.checked = config.surveyRequireOptIn !== false;
+    }
+    if (elements.surveyDelay) {
+      elements.surveyDelay.value = String(Number(config.surveyDelayMinutes) || 0);
+    }
+    if (elements.surveyLowRating) {
+      elements.surveyLowRating.value = String(Number(config.surveyLowRatingThreshold) || 3);
+    }
+    if (elements.surveyQuestion) elements.surveyQuestion.value = config.surveyQuestion || '';
+    if (elements.surveyTemplateName) {
+      elements.surveyTemplateName.value = config.surveyTemplateName || '';
+    }
+    if (elements.surveyTemplateLanguage) {
+      elements.surveyTemplateLanguage.value = config.surveyTemplateLanguage || 'pt_BR';
+    }
+    if (elements.surveyTemplateApproved) {
+      elements.surveyTemplateApproved.checked = Boolean(config.surveyTemplateApproved);
+    }
+    if (elements.automationHoursSummary) {
+      elements.automationHoursSummary.textContent = formatOperatingHoursSummary();
+    }
+    const fields = elements.automationForm?.querySelectorAll('input, textarea, select') || [];
+    fields.forEach((field) => {
+      if (field.hasAttribute('data-pilot-field')) return;
+      field.disabled = !state.canConfigure || state.automationSaving;
+    });
+    if (elements.automationSave) {
+      elements.automationSave.disabled = !state.canConfigure || state.automationSaving;
+      elements.automationSave.classList.toggle('opacity-50', !state.canConfigure || state.automationSaving);
+      elements.automationSave.textContent = state.automationSaving
+        ? 'Salvando...'
+        : state.canConfigure
+          ? 'Salvar automação'
+          : 'Somente administradores';
+    }
+    renderPilotExecution();
+  };
+
+  const renderSurveyStats = () => {
+    if (!elements.surveyStats) return;
+    const stats = state.surveyStats;
+    if (!stats) {
+      elements.surveyStats.textContent = 'Nenhuma pesquisa registrada neste número.';
+      return;
+    }
+    const counts = stats.byStatus || {};
+    const sent = Number(counts.sent) || 0;
+    const answered = (Number(counts.responded) || 0) + (Number(counts.escalated) || 0);
+    const low = Number(counts.escalated) || 0;
+    const average = Number.isFinite(Number(stats.averageRating))
+      ? ` · média ${Number(stats.averageRating).toFixed(1)}`
+      : '';
+    elements.surveyStats.textContent =
+      `${sent} aguardando resposta · ${answered} respondidas · ${low} encaminhadas${average}`;
+  };
+
+  const renderAppointmentStats = () => {
+    if (!elements.appointmentStats) return;
+    const stats = state.appointmentStats;
+    if (!stats) {
+      elements.appointmentStats.textContent =
+        'Nenhum fluxo de agendamento registrado neste número.';
+      return;
+    }
+    elements.appointmentStats.textContent = [
+      `${Number(stats.active) || 0} em andamento`,
+      `${Number(stats.completed) || 0} confirmados`,
+      `${Number(stats.handoff) || 0} encaminhados`,
+    ].join(' · ');
+  };
+
+  const loadAppointmentStats = async () => {
+    const endpoint = automationEndpoint();
+    if (!endpoint) {
+      state.appointmentStats = null;
+      renderAppointmentStats();
+      return;
+    }
+    try {
+      const resp = await fetch(
+        `${endpoint.replace(/\/automation$/, '')}/appointments/stats`,
+        { headers: authHeaders(false) }
+      );
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        throw new Error(data?.message || 'Erro ao carregar agendamentos.');
+      }
+      state.appointmentStats = data.stats || null;
+    } catch (error) {
+      console.error('web-whatsapp:appointment-stats', error);
+      state.appointmentStats = null;
+    }
+    renderAppointmentStats();
+  };
+
+  const loadSurveyStats = async () => {
+    const endpoint = automationEndpoint();
+    if (!endpoint) {
+      state.surveyStats = null;
+      renderSurveyStats();
+      return;
+    }
+    try {
+      const resp = await fetch(`${endpoint.replace(/\/automation$/, '')}/surveys/stats`, {
+        headers: authHeaders(false),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.message || 'Erro ao carregar pesquisas.');
+      state.surveyStats = data.stats || null;
+    } catch (error) {
+      console.error('web-whatsapp:survey-stats', error);
+      state.surveyStats = null;
+    }
+    renderSurveyStats();
+  };
+
+  const loadAutomationConfig = async (options = {}) => {
+    const endpoint = automationEndpoint();
+    if (!endpoint) {
+      state.automationConfig = null;
+      state.workingHours = null;
+      state.appointmentStats = null;
+      renderAppointmentStats();
+      renderAutomationIndicators();
+      return false;
+    }
+    try {
+      const resp = await fetch(endpoint, { headers: authHeaders(false) });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.message || 'Erro ao carregar automação.');
+      state.automationConfig = data.configuration || null;
+      state.workingHours = data.workingHours || null;
+      renderAutomationIndicators();
+      setAutomationForm();
+      void loadSurveyStats();
+      void loadAppointmentStats();
+      return true;
+    } catch (error) {
+      console.error('web-whatsapp:automation-load', error);
+      if (!options.silent) {
+        notify(error.message || 'Não foi possível carregar a automação.', 'error');
+      }
+      return false;
+    }
+  };
+
+  const openAutomationModal = async () => {
+    if (!state.selectedNumberId) {
+      notify('Selecione um número conectado.', 'warning');
+      return;
+    }
+    await loadAutomationConfig({ silent: true });
+    await Promise.all([
+      loadPilotReadiness({ silent: true }),
+      loadPilotExecution({ silent: true }),
+    ]);
+    setAutomationForm();
+    elements.automationModal?.classList.remove('hidden');
+    elements.automationModal?.classList.add('flex');
+  };
+
+  const closeAutomationModal = () => {
+    elements.automationModal?.classList.add('hidden');
+    elements.automationModal?.classList.remove('flex');
+  };
+
+  const saveAutomationConfig = async () => {
+    const endpoint = automationEndpoint();
+    if (!endpoint || !state.canConfigure || state.automationSaving) return;
+    const grace = Math.min(120, Math.max(1, Number(elements.humanGrace?.value) || 5));
+    const payload = {
+      enabled: Boolean(elements.automationEnabled?.checked),
+      afterHoursImmediate: Boolean(elements.afterHoursImmediate?.checked),
+      humanGraceMinutes: grace,
+      botName: trimValue(elements.botName?.value) || 'Assistente virtual',
+      welcomeMessage: trimValue(elements.welcomeMessage?.value),
+      afterHoursMessage: trimValue(elements.afterHoursMessage?.value),
+      appointmentEnabled: Boolean(elements.appointmentEnabled?.checked),
+      enabledFlows: [
+        ...(elements.appointmentFlowVeterinary?.checked
+          ? ['veterinary_appointment']
+          : []),
+        ...(elements.appointmentFlowGrooming?.checked
+          ? ['grooming_appointment']
+          : []),
+      ],
+      appointmentMinLeadMinutes: Math.min(
+        10080,
+        Math.max(0, Number(elements.appointmentMinLead?.value) || 0)
+      ),
+      appointmentSlotIntervalMinutes:
+        Number(elements.appointmentSlotInterval?.value) || 30,
+      appointmentSearchDays: Math.min(
+        30,
+        Math.max(1, Number(elements.appointmentSearchDays?.value) || 14)
+      ),
+      appointmentMaxOptions: Math.min(
+        5,
+        Math.max(1, Number(elements.appointmentMaxOptions?.value) || 3)
+      ),
+      surveyEnabled: Boolean(elements.surveyEnabled?.checked),
+      surveyRequireOptIn: Boolean(elements.surveyRequireOptIn?.checked),
+      surveyDelayMinutes: Math.min(
+        10080,
+        Math.max(0, Number(elements.surveyDelay?.value) || 0)
+      ),
+      surveyLowRatingThreshold: Math.min(
+        5,
+        Math.max(1, Number(elements.surveyLowRating?.value) || 3)
+      ),
+      surveyQuestion: trimValue(elements.surveyQuestion?.value),
+      surveyTemplateName: trimValue(elements.surveyTemplateName?.value),
+      surveyTemplateLanguage:
+        trimValue(elements.surveyTemplateLanguage?.value) || 'pt_BR',
+      surveyTemplateApproved: Boolean(elements.surveyTemplateApproved?.checked),
+    };
+    state.automationSaving = true;
+    setAutomationForm();
+    try {
+      const activating = payload.enabled && state.automationConfig?.enabled !== true;
+      if (activating) {
+        const readiness = await loadPilotReadiness({
+          configuration: payload,
+          silent: false,
+        });
+        if (!readiness?.summary) return;
+        if (!readiness.summary.canActivate) {
+          notify(
+            `Piloto bloqueado por ${readiness.summary.blockers} item(ns) obrigatório(s).`,
+            'error'
+          );
+          return;
+        }
+        const storeName = state.companies.find(
+          (company) => company.id === state.selectedCompanyId
+        )?.name || 'esta loja';
+        const numberLabel = state.selectedNumber?.phoneNumber
+          || state.selectedNumber?.displayName
+          || state.selectedNumberId;
+        const warningText = readiness.summary.warnings
+          ? ` Existem ${readiness.summary.warnings} alerta(s) não bloqueantes.`
+          : '';
+        const confirmed = window.confirm(
+          `Confirmo que revisei o checklist e desejo ativar o piloto somente em ${storeName}, no número ${numberLabel}.${warningText}`
+        );
+        if (!confirmed) return;
+        payload.pilotAcknowledged = true;
+        payload.pilotReadinessFingerprint = readiness.fingerprint;
+      }
+      const resp = await fetch(endpoint, {
+        method: 'PUT',
+        headers: authHeaders(),
+        body: JSON.stringify(payload),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        if (data?.readiness) {
+          state.pilotReadiness = data.readiness;
+          renderPilotReadiness();
+        }
+        throw new Error(data?.message || 'Erro ao salvar automação.');
+      }
+      state.automationConfig = data.configuration || state.automationConfig;
+      state.workingHours = data.workingHours || state.workingHours;
+      state.pilotRun = data.pilotRun || state.pilotRun;
+      renderAutomationIndicators();
+      await Promise.all([
+        loadSurveyStats(),
+        loadAppointmentStats(),
+        loadPilotReadiness({ silent: true }),
+        loadPilotExecution({ silent: true }),
+      ]);
+      closeAutomationModal();
+      notify('Automação atualizada para esta loja e número.', 'success');
+    } catch (error) {
+      console.error('web-whatsapp:automation-save', error);
+      notify(error.message || 'Não foi possível salvar a automação.', 'error');
+    } finally {
+      state.automationSaving = false;
+      setAutomationForm();
+    }
+  };
+
+  const runConversationAction = async (action, payload = {}) => {
+    if (
+      !API_BASE
+      || !state.selectedCompanyId
+      || !state.selectedNumberId
+      || !state.selectedContactId
+      || state.conversationActionPending
+    ) return;
+    state.conversationActionPending = true;
+    renderServiceControls();
+    try {
+      const endpoint =
+        `${API_BASE}/integrations/whatsapp/${state.selectedCompanyId}`
+        + `/numbers/${state.selectedNumberId}/conversations/${state.selectedContactId}/${action}`;
+      const resp = await fetch(endpoint, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify(payload),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.message || 'Erro ao alterar atendimento.');
+      const contact = getSelectedContact();
+      if (contact) contact.conversationState = normalizeConversationState(data.conversation);
+      renderConversations();
+      updateChatHeader();
+      const labels = {
+        takeover: 'Atendimento assumido pela equipe.',
+        release: 'Conversa liberada para a regra automática.',
+        pause: 'Automação pausada nesta conversa.',
+        close: 'Conversa encerrada.',
+      };
+      notify(labels[action] || 'Atendimento atualizado.', 'success');
+    } catch (error) {
+      console.error(`web-whatsapp:conversation-${action}`, error);
+      notify(error.message || 'Não foi possível alterar o atendimento.', 'error');
+    } finally {
+      state.conversationActionPending = false;
+      renderServiceControls();
+    }
+  };
+
+  const contactPreferenceEndpoint = () => {
+    if (
+      !API_BASE
+      || !state.selectedCompanyId
+      || !state.selectedNumberId
+      || !state.selectedContactId
+    ) return '';
+    return (
+      `${API_BASE}/integrations/whatsapp/${state.selectedCompanyId}`
+      + `/numbers/${state.selectedNumberId}/contacts/${state.selectedContactId}/preference`
+    );
+  };
+
+  const loadContactPreference = async () => {
+    const endpoint = contactPreferenceEndpoint();
+    const contactId = state.selectedContactId;
+    if (!endpoint || !contactId) {
+      renderContactPreference(null);
+      return;
+    }
+    try {
+      const resp = await fetch(endpoint, { headers: authHeaders(false) });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.message || 'Erro ao carregar permissão.');
+      if (state.selectedContactId !== contactId) return;
+      const contact = getSelectedContact();
+      if (contact) contact.contactPreference = data.preference || { status: 'unknown' };
+      renderContactPreference(contact);
+    } catch (error) {
+      console.error('web-whatsapp:contact-preference', error);
+    }
+  };
+
+  const updateContactPreference = async () => {
+    const endpoint = contactPreferenceEndpoint();
+    const contact = getSelectedContact();
+    if (!endpoint || !contact || state.contactPreferenceSaving) return;
+    const current = contact.contactPreference?.status || 'unknown';
+    const next = current === 'opted_in' ? 'opted_out' : 'opted_in';
+    const confirmation = next === 'opted_out'
+      ? 'Registrar que este cliente não deseja receber mensagens iniciadas pela loja?'
+      : 'Confirma que o cliente autorizou mensagens iniciadas pela loja neste WhatsApp?';
+    if (!window.confirm(confirmation)) return;
+    state.contactPreferenceSaving = true;
+    renderContactPreference(contact);
+    try {
+      const resp = await fetch(endpoint, {
+        method: 'PUT',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          status: next,
+          proof: next === 'opted_in'
+            ? 'Autorização confirmada manualmente pela equipe'
+            : 'Opt-out registrado manualmente pela equipe',
+        }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.message || 'Erro ao salvar permissão.');
+      contact.contactPreference = data.preference || { status: next };
+      notify(
+        next === 'opted_in'
+          ? 'Permissão de envio registrada.'
+          : 'Opt-out registrado e pesquisas pendentes canceladas.',
+        'success'
+      );
+    } catch (error) {
+      console.error('web-whatsapp:contact-preference-save', error);
+      notify(error.message || 'Não foi possível salvar a permissão.', 'error');
+    } finally {
+      state.contactPreferenceSaving = false;
+      renderContactPreference(contact);
+    }
   };
 
   const loadNumbersForCompany = async (companyId) => {
@@ -4034,7 +5335,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     try {
-      const resp = await fetch(`${API_BASE}/integrations/whatsapp/${companyId}`, {
+      const resp = await fetch(`${API_BASE}/integrations/whatsapp/${companyId}/environment`, {
         headers: authHeaders(false),
       });
       const data = await resp.json().catch(() => ({}));
@@ -4044,6 +5345,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const numbers = Array.isArray(data?.phoneNumbers) ? data.phoneNumbers : [];
       state.numbersByCompany[companyId] = numbers.map(normalizeNumber);
+      state.canConfigure = data?.permissions?.canConfigure === true;
     } catch (error) {
       console.error('web-whatsapp:numbers', error);
       state.numbersByCompany[companyId] = [];
@@ -4053,6 +5355,7 @@ document.addEventListener('DOMContentLoaded', () => {
     populateNumberSelect();
     await ensureSocket();
     syncSocketRoom();
+    await loadAutomationConfig({ silent: true });
   };
 
   const loadCompanies = async () => {
@@ -4074,7 +5377,12 @@ document.addEventListener('DOMContentLoaded', () => {
         name: store.nome || store.razaoSocial || 'Empresa sem nome',
       }));
 
-      state.selectedCompanyId = state.companies[0]?.id || '';
+      const requestedStoreId = new URLSearchParams(window.location.search).get('storeId') || '';
+      state.selectedCompanyId = state.companies.some(
+        (company) => company.id === requestedStoreId
+      )
+        ? requestedStoreId
+        : state.companies[0]?.id || '';
       populateCompanySelect();
       if (elements.companySelect && state.selectedCompanyId) {
         elements.companySelect.value = state.selectedCompanyId;
@@ -4184,10 +5492,21 @@ document.addEventListener('DOMContentLoaded', () => {
       previewText.textContent = contact.lastMessage || 'Sem mensagens';
       preview.appendChild(previewText);
 
+      const service = contact.conversationState;
+      let serviceBadge = null;
+      if (service) {
+        const serviceMeta = getServiceMeta(service.status);
+        serviceBadge = document.createElement('span');
+        serviceBadge.className =
+          `mt-1 inline-flex rounded-full border px-2 py-0.5 text-[9px] font-semibold ${serviceMeta.classes}`;
+        serviceBadge.textContent = serviceMeta.label;
+      }
+
       header.appendChild(nameWrap);
       header.appendChild(meta);
       info.appendChild(header);
       info.appendChild(preview);
+      if (serviceBadge) info.appendChild(serviceBadge);
       wrapper.appendChild(avatar);
       wrapper.appendChild(info);
       button.appendChild(wrapper);
@@ -4223,6 +5542,7 @@ document.addEventListener('DOMContentLoaded', () => {
       renderProfilePanel();
       closeProfilePanel();
       setChatChromeVisible(false);
+      renderServiceControls();
       return;
     }
     setChatChromeVisible(true);
@@ -4231,6 +5551,7 @@ document.addEventListener('DOMContentLoaded', () => {
     elements.chatStatus.textContent = contact.lastMessageAt
       ? `Ultima mensagem ${formatListTime(contact.lastMessageAt)}`
       : 'Sem mensagens';
+    renderServiceControls();
     renderProfilePanel();
   };
 
@@ -4607,6 +5928,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     renderConversations();
     updateChatHeader();
+    void loadContactPreference();
     void hydrateContactIdentity(waId, name);
     await loadMessages();
     setSendState();
@@ -4744,6 +6066,23 @@ document.addEventListener('DOMContentLoaded', () => {
       if (isContact) {
         bubble.classList.remove('p-3');
         bubble.classList.add('p-2');
+      }
+
+      const actorLabels = {
+        bot: 'Assistente virtual',
+        human_mobile: 'Equipe · WhatsApp no celular',
+        human_web: 'Equipe · Sistema',
+        coexistence_history: 'Histórico sincronizado',
+        system: 'Sistema',
+      };
+      const actorLabel = isOutgoing ? actorLabels[message.actorType] : '';
+      if (actorLabel) {
+        const actor = document.createElement('p');
+        actor.className = isDocument
+          ? 'px-3 pt-2 text-[10px] font-semibold text-gray-500'
+          : 'mb-1 text-[10px] font-semibold text-gray-500';
+        actor.textContent = actorLabel;
+        bubble.appendChild(actor);
       }
 
       const meta = document.createElement('div');
@@ -5137,6 +6476,13 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       const conversations = Array.isArray(data?.conversations) ? data.conversations : [];
       state.contacts = conversations.map(normalizeConversation);
+      if (data?.automation?.configuration) {
+        state.automationConfig = data.automation.configuration;
+      }
+      if (data?.automation?.workingHours) {
+        state.workingHours = data.automation.workingHours;
+      }
+      renderAutomationIndicators();
       loaded = true;
     } catch (error) {
       console.error('web-whatsapp:conversations', error);
@@ -6307,10 +7653,26 @@ document.addEventListener('DOMContentLoaded', () => {
   const bindEvents = () => {
     elements.companySelect?.addEventListener('change', async (event) => {
       state.selectedCompanyId = event.target.value;
+      const nextUrl = new URL(window.location.href);
+      if (state.selectedCompanyId) {
+        nextUrl.searchParams.set('storeId', state.selectedCompanyId);
+      } else {
+        nextUrl.searchParams.delete('storeId');
+      }
+      nextUrl.searchParams.delete('phoneNumberId');
+      window.history.replaceState({}, '', nextUrl);
       state.selectedNumberId = '';
       state.selectedContactId = '';
       state.contacts = [];
       state.messages = [];
+      state.automationConfig = null;
+      state.workingHours = null;
+      state.pilotReadiness = null;
+      state.pilotRun = null;
+      state.pilotRollout = null;
+      state.surveyStats = null;
+      state.appointmentStats = null;
+      state.canConfigure = false;
       rebuildMessageIds();
       state.customerLookupCache.clear();
       state.customerPetsCache.clear();
@@ -6328,9 +7690,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     elements.numberSelect?.addEventListener('change', async (event) => {
       state.selectedNumberId = event.target.value;
+      const nextUrl = new URL(window.location.href);
+      if (state.selectedNumberId) {
+        nextUrl.searchParams.set('phoneNumberId', state.selectedNumberId);
+      } else {
+        nextUrl.searchParams.delete('phoneNumberId');
+      }
+      window.history.replaceState({}, '', nextUrl);
       state.selectedContactId = '';
       state.contacts = [];
       state.messages = [];
+      state.surveyStats = null;
+      state.appointmentStats = null;
+      state.pilotReadiness = null;
+      state.pilotRun = null;
+      state.pilotRollout = null;
       rebuildMessageIds();
       state.customerLookupCache.clear();
       state.customerPetsCache.clear();
@@ -6344,6 +7718,7 @@ document.addEventListener('DOMContentLoaded', () => {
       updateSelectedNumber();
       await ensureSocket();
       syncSocketRoom();
+      await loadAutomationConfig({ silent: true });
       await loadConversations();
       setSendState();
     });
@@ -6365,6 +7740,7 @@ document.addEventListener('DOMContentLoaded', () => {
       closeCustomerModals();
       clearSelectedUnread();
       updateChatHeader();
+      void loadContactPreference();
       renderConversations();
       void hydrateContactIdentity(waId);
       await loadMessages();
@@ -6446,6 +7822,67 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!file) return;
       void uploadBusinessProfilePicture(file);
       event.target.value = '';
+    });
+
+    elements.automationSettings?.addEventListener('click', () => {
+      void openAutomationModal();
+    });
+    elements.automationClose?.addEventListener('click', closeAutomationModal);
+    elements.automationCancel?.addEventListener('click', closeAutomationModal);
+    elements.automationModal?.addEventListener('click', (event) => {
+      if (event.target === elements.automationModal) closeAutomationModal();
+    });
+    elements.automationForm?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      void saveAutomationConfig();
+    });
+    elements.pilotRefresh?.addEventListener('click', () => {
+      void loadPilotReadiness({ silent: false });
+    });
+    elements.pilotStart?.addEventListener('click', () => {
+      void startPilotExecution();
+    });
+    elements.pilotComplete?.addEventListener('click', () => {
+      void completePilotExecution();
+    });
+    elements.pilotCancel?.addEventListener('click', () => {
+      void cancelPilotExecution();
+    });
+    elements.pilotRunList?.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-pilot-save]');
+      if (button) void savePilotScenario(button);
+    });
+    [elements.surveyTemplateName, elements.surveyTemplateLanguage].forEach((field) => {
+      field?.addEventListener('input', () => {
+        if (elements.surveyTemplateApproved) {
+          elements.surveyTemplateApproved.checked = false;
+        }
+      });
+    });
+    elements.takeoverButton?.addEventListener('click', () => {
+      void runConversationAction('takeover');
+    });
+    elements.releaseButton?.addEventListener('click', () => {
+      void runConversationAction('release');
+    });
+    elements.pauseButton?.addEventListener('click', () => {
+      const rawMinutes = window.prompt(
+        'Por quantos minutos deseja pausar a automação nesta conversa? Use 0 para pausar sem prazo.',
+        '60'
+      );
+      if (rawMinutes === null) return;
+      const pauseMinutes = Math.max(0, Math.min(10080, Number(rawMinutes) || 0));
+      void runConversationAction('pause', {
+        pauseMinutes,
+        reason: 'Pausa manual pela equipe',
+      });
+    });
+    elements.closeConversationButton?.addEventListener('click', () => {
+      if (!window.confirm('Deseja encerrar este atendimento?')) return;
+      void runConversationAction('close');
+    });
+    elements.consentAction?.addEventListener('click', () => {
+      void updateContactPreference();
     });
 
     elements.input?.addEventListener('input', setSendState);
@@ -6613,6 +8050,7 @@ document.addEventListener('DOMContentLoaded', () => {
         closeNewConversationModal();
         closeShareContactsModal();
         closeContactsModal();
+        closeAutomationModal();
       }
     });
   };
@@ -6621,5 +8059,7 @@ document.addEventListener('DOMContentLoaded', () => {
   bindEvents();
   setSendState();
   updateRecordingControls();
+  renderAutomationIndicators();
+  window.setInterval(renderServiceControls, 1000);
   loadCompanies().then(loadConversations);
 });

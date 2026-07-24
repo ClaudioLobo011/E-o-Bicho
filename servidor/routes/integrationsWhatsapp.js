@@ -22,18 +22,33 @@ const WhatsappLog = require('../models/WhatsappLog');
 const WhatsappMessageHistoryEvent = require('../models/WhatsappMessageHistoryEvent');
 const WhatsappContact = require('../models/WhatsappContact');
 const User = require('../models/User');
+const whatsappCoexistenceRouter = require('./whatsappCoexistence');
+const whatsappAutomationRouter = require('./whatsappAutomation');
 const { encryptText, decryptText } = require('../utils/certificates');
 const { isR2Configured, uploadBufferToR2, getObjectFromR2 } = require('../utils/cloudflareR2');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
+const {
+  requireWhatsappStoreAccess,
+  requireWhatsappAdminAccess,
+  requireWhatsappNumberAccess,
+} = require('../middlewares/whatsappAccess');
+const { isWhatsappAdmin } = require('../services/whatsappAccessService');
+const {
+  enrichConversationSummaries,
+  getAutomationSnapshot,
+} = require('../services/whatsappConversationService');
+const {
+  markWhatsappHumanReply,
+} = require('../middlewares/whatsappConversationActivity');
 
 const SECRET_SELECT = '+appSecretEncrypted +accessTokenEncrypted +verifyTokenEncrypted';
 const LOG_LIMIT_DEFAULT = 50;
 const LOG_LIMIT_MAX = 200;
 const MESSAGE_HISTORY_LIMIT_DEFAULT = 25;
 const MESSAGE_HISTORY_LIMIT_MAX = 100;
-const GRAPH_BASE_URL = process.env.WHATSAPP_GRAPH_BASE_URL || 'https://graph.facebook.com/v20.0';
-const GRAPH_WEBHOOK_VERSION = process.env.WHATSAPP_GRAPH_WEBHOOK_VERSION || 'v24.0';
+const GRAPH_BASE_URL = process.env.WHATSAPP_GRAPH_BASE_URL || 'https://graph.facebook.com/v25.0';
+const GRAPH_WEBHOOK_VERSION = process.env.WHATSAPP_GRAPH_WEBHOOK_VERSION || 'v25.0';
 const GRAPH_WEBHOOK_BASE_URL = `https://graph.facebook.com/${GRAPH_WEBHOOK_VERSION}`;
 const GRAPH_CONTACTS_BASE_URL = process.env.WHATSAPP_CONTACTS_GRAPH_URL || GRAPH_WEBHOOK_BASE_URL;
 const SEND_TIMEOUT_MS = Number.parseInt(process.env.WHATSAPP_SEND_TIMEOUT_MS, 10) || 15000;
@@ -130,34 +145,6 @@ const imageUpload = multer({
 
 const sanitizeString = (value) => (typeof value === 'string' ? value.trim() : '');
 const digitsOnly = (value) => String(value || '').replace(/\D+/g, '');
-const normalizePin = (value) => {
-  const digits = digitsOnly(value);
-  return digits.length === 6 ? digits : '';
-};
-const LOCALIZATION_REGIONS = new Set([
-  'APAC',
-  'AU',
-  'ID',
-  'IN',
-  'JP',
-  'SG',
-  'KR',
-  'DE',
-  'CH',
-  'GB',
-  'LATAM',
-  'BR',
-  'EMEA',
-  'BH',
-  'ZA',
-  'AE',
-  'NORAM',
-  'CA',
-]);
-const normalizeLocalizationRegion = (value) => {
-  const normalized = sanitizeString(value).toUpperCase();
-  return LOCALIZATION_REGIONS.has(normalized) ? normalized : '';
-};
 
 const decryptField = (encrypted, stored) => {
   if (!stored || !encrypted) return '';
@@ -172,19 +159,87 @@ const buildResponse = (doc) => {
   return {
     storeId: String(doc.store),
     appId: doc.appId || '',
+    configId: doc.embeddedSignupConfigId || '',
     wabaId: doc.wabaId || '',
-    appSecret: decryptField(doc.appSecretEncrypted, doc.appSecretStored),
-    accessToken: decryptField(doc.accessTokenEncrypted, doc.accessTokenStored),
-    verifyToken: decryptField(doc.verifyTokenEncrypted, doc.verifyTokenStored),
+    businessId: doc.businessId || '',
+    graphApiVersion: doc.graphApiVersion || 'v25.0',
+    connectionMode: doc.connectionMode || '',
+    onboardingStatus: doc.onboardingStatus || 'not_configured',
+    credentials: {
+      appSecretStored: Boolean(doc.appSecretStored),
+      accessTokenStored: Boolean(doc.accessTokenStored),
+      verifyTokenStored: Boolean(doc.verifyTokenStored),
+    },
     phoneNumbers: Array.isArray(doc.phoneNumbers)
       ? doc.phoneNumbers.map((number) => ({
           id: number._id ? String(number._id) : undefined,
           phoneNumberId: number.phoneNumberId || '',
           phoneNumber: number.phoneNumber || '',
           displayName: number.displayName || '',
-          pin: number.pin || '',
           status: number.status || 'Pendente',
           provider: number.provider || 'Meta Cloud API',
+          connectionMode: number.connectionMode || '',
+          isOnBizApp: Boolean(number.isOnBizApp),
+          platformType: number.platformType || '',
+          qualityRating: number.qualityRating || '',
+          contactsSyncStatus: number.contactsSyncStatus || '',
+          historySyncStatus: number.historySyncStatus || '',
+          historySyncProgress: Number(number.historySyncProgress) || 0,
+          lastSyncAt: number.lastSyncAt ? number.lastSyncAt.toISOString() : null,
+        }))
+      : [],
+  };
+};
+
+const buildEnvironmentResponse = (req, integration) => {
+  const store = req.whatsappContext?.store || {};
+  const safeIntegration = integration || {};
+  return {
+    tenantKey: String(req.whatsappContext?.storeId || ''),
+    store: {
+      id: String(store._id || req.whatsappContext?.storeId || ''),
+      name: store.nomeFantasia || store.nome || store.razaoSocial || 'Loja',
+      cnpj: store.cnpj || '',
+    },
+    permissions: {
+      canView: true,
+      canReply: true,
+      canConfigure: isWhatsappAdmin(req.user),
+    },
+    integration: {
+      configured: Boolean(integration),
+      appId: safeIntegration.appId || '',
+      wabaId: safeIntegration.wabaId || '',
+      businessId: safeIntegration.businessId || '',
+      graphApiVersion: safeIntegration.graphApiVersion || 'v25.0',
+      connectionMode: safeIntegration.connectionMode || '',
+      onboardingStatus: safeIntegration.onboardingStatus || 'not_configured',
+      onboardingEvent: safeIntegration.onboardingEvent || '',
+      onboardedAt: safeIntegration.onboardedAt || null,
+      syncDeadlineAt: safeIntegration.syncDeadlineAt || null,
+      lastHealthCheckAt: safeIntegration.lastHealthCheckAt || null,
+      lastError: safeIntegration.lastError || null,
+      credentials: {
+        appSecretStored: Boolean(safeIntegration.appSecretStored),
+        accessTokenStored: Boolean(safeIntegration.accessTokenStored),
+        verifyTokenStored: Boolean(safeIntegration.verifyTokenStored),
+      },
+    },
+    phoneNumbers: Array.isArray(safeIntegration.phoneNumbers)
+      ? safeIntegration.phoneNumbers.map((number) => ({
+          id: number._id ? String(number._id) : undefined,
+          phoneNumberId: number.phoneNumberId || '',
+          phoneNumber: number.phoneNumber || '',
+          displayName: number.displayName || '',
+          status: number.status || 'Pendente',
+          provider: number.provider || 'Meta Cloud API',
+          connectionMode: number.connectionMode || '',
+          isOnBizApp: Boolean(number.isOnBizApp),
+          platformType: number.platformType || '',
+          qualityRating: number.qualityRating || '',
+          contactsSyncStatus: number.contactsSyncStatus || '',
+          historySyncStatus: number.historySyncStatus || '',
+          historySyncProgress: Number(number.historySyncProgress) || 0,
           lastSyncAt: number.lastSyncAt ? number.lastSyncAt.toISOString() : null,
         }))
       : [],
@@ -216,7 +271,6 @@ const mapPhoneNumbers = (numbers) => {
         phoneNumberId,
         phoneNumber: sanitizeString(entry.phoneNumber),
         displayName: sanitizeString(entry.displayName),
-        pin: normalizePin(entry.pin),
         status: normalizeStatus(entry.status),
         provider: normalizeProvider(entry.provider),
         lastSyncAt: normalizeDate(entry.lastSyncAt),
@@ -297,8 +351,8 @@ const resolveNumberMeta = (integration, payload = {}) => {
     matched = numbers.find((entry) => String(entry?.phoneNumber || '') === payloadPhoneNumber);
   }
 
-  const resolvedPhoneNumberId = sanitizeString(matched?.phoneNumberId) || payloadPhoneNumberId;
-  const resolvedPhoneNumber = sanitizeString(matched?.phoneNumber) || payloadPhoneNumber;
+  const resolvedPhoneNumberId = sanitizeString(matched?.phoneNumberId);
+  const resolvedPhoneNumber = sanitizeString(matched?.phoneNumber);
   const displayName = sanitizeString(matched?.displayName);
   const customLabel = sanitizeString(payload.numberLabel);
   const numberLabel = customLabel || buildNumberLabel(displayName, resolvedPhoneNumber, resolvedPhoneNumberId);
@@ -371,6 +425,9 @@ const mapLogResponse = (log) => ({
   status: log?.status || '',
   direction: log?.direction || '',
   source: log?.source || '',
+  actorType: log?.actorType || '',
+  actorUser: log?.actorUser ? String(log.actorUser) : '',
+  messageType: log?.messageType || '',
   media: buildMediaResponse(log),
   contacts: buildContactsResponse(log),
 });
@@ -581,20 +638,28 @@ const mapMessageResponse = (log) => ({
   destination: log?.destination || '',
   messageId: log?.messageId || '',
   createdAt: log?.createdAt ? log.createdAt.toISOString() : null,
+  actorType: log?.actorType || '',
+  actorUser: log?.actorUser ? String(log.actorUser) : '',
+  messageType: log?.messageType || '',
+  source: log?.source || '',
   media: buildMediaResponse(log),
   contacts: buildContactsResponse(log),
 });
 
 const resolvePhoneNumberIdFromQuery = (integration, query = {}) => {
   const phoneNumberId = sanitizeString(query.phoneNumberId);
-  if (phoneNumberId) return phoneNumberId;
+  const numbers = Array.isArray(integration?.phoneNumbers) ? integration.phoneNumbers : [];
+  if (phoneNumberId) {
+    const matched = numbers.find(
+      (entry) => sanitizeString(entry?.phoneNumberId) === phoneNumberId
+    );
+    return sanitizeString(matched?.phoneNumberId);
+  }
   const numberId = sanitizeString(query.numberId);
   if (!numberId) return '';
   if (!mongoose.Types.ObjectId.isValid(numberId)) {
-    const numeric = digitsOnly(numberId);
-    return numeric || '';
+    return '';
   }
-  const numbers = Array.isArray(integration?.phoneNumbers) ? integration.phoneNumbers : [];
   const matched = numbers.find((entry) => entry?._id && String(entry._id) === numberId);
   return sanitizeString(matched?.phoneNumberId);
 };
@@ -1206,6 +1271,25 @@ const convertAudioBufferToOgg = async (buffer, inputExt) => {
   });
 };
 
+// Toda rota operacional do WhatsApp passa primeiro pelo contexto autenticado da loja.
+// O storeId informado pelo navegador nunca é suficiente para conceder acesso.
+router.use('/:storeId', requireAuth, requireWhatsappStoreAccess);
+
+router.get('/:storeId/environment', async (req, res) => {
+  try {
+    const integration = await WhatsappIntegration.findOne({
+      store: req.whatsappContext.storeId,
+    }).lean();
+    return res.json(buildEnvironmentResponse(req, integration));
+  } catch (error) {
+    console.error('Erro ao carregar ambiente do WhatsApp:', error);
+    return res.status(500).json({ message: 'Erro ao carregar ambiente do WhatsApp.' });
+  }
+});
+
+router.use('/:storeId/coexistence', whatsappCoexistenceRouter);
+router.use('/:storeId/numbers/:phoneNumberId', whatsappAutomationRouter);
+
 router.get('/:storeId/logs', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
   try {
     const { storeId } = req.params;
@@ -1234,7 +1318,12 @@ router.get('/:storeId/logs', requireAuth, authorizeRoles('admin', 'admin_master'
   }
 });
 
-router.post('/:storeId/logs', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
+router.post(
+  '/:storeId/logs',
+  requireAuth,
+  authorizeRoles('admin', 'admin_master'),
+  requireWhatsappNumberAccess(),
+  async (req, res) => {
   try {
     const { storeId } = req.params;
     if (!mongoose.Types.ObjectId.isValid(storeId)) {
@@ -1505,7 +1594,12 @@ router.post('/:storeId/media/:mediaId/store', requireAuth, authorizeRoles('admin
   }
 });
 
-router.get('/:storeId/business-profile', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
+router.get(
+  '/:storeId/business-profile',
+  requireAuth,
+  authorizeRoles('admin', 'admin_master'),
+  requireWhatsappNumberAccess(),
+  async (req, res) => {
   try {
     const { storeId } = req.params;
     if (!mongoose.Types.ObjectId.isValid(storeId)) {
@@ -1564,7 +1658,12 @@ router.get('/:storeId/business-profile', requireAuth, authorizeRoles('admin', 'a
   }
 });
 
-router.post('/:storeId/business-profile', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
+router.post(
+  '/:storeId/business-profile',
+  requireAuth,
+  authorizeRoles('admin', 'admin_master'),
+  requireWhatsappNumberAccess(),
+  async (req, res) => {
   try {
     const { storeId } = req.params;
     if (!mongoose.Types.ObjectId.isValid(storeId)) {
@@ -1623,7 +1722,13 @@ router.post('/:storeId/business-profile', requireAuth, authorizeRoles('admin', '
   }
 });
 
-router.post('/:storeId/business-profile/picture', requireAuth, authorizeRoles('admin', 'admin_master'), upload.single('file'), async (req, res) => {
+router.post(
+  '/:storeId/business-profile/picture',
+  requireAuth,
+  authorizeRoles('admin', 'admin_master'),
+  upload.single('file'),
+  requireWhatsappNumberAccess(),
+  async (req, res) => {
   try {
     const { storeId } = req.params;
     if (!mongoose.Types.ObjectId.isValid(storeId)) {
@@ -1726,7 +1831,12 @@ router.post('/:storeId/business-profile/picture', requireAuth, authorizeRoles('a
   }
 });
 
-router.get('/:storeId/conversations', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
+router.get(
+  '/:storeId/conversations',
+  requireAuth,
+  authorizeRoles('admin', 'admin_master'),
+  requireWhatsappNumberAccess(),
+  async (req, res) => {
   try {
     const { storeId } = req.params;
     if (!mongoose.Types.ObjectId.isValid(storeId)) {
@@ -1762,7 +1872,13 @@ router.get('/:storeId/conversations', requireAuth, authorizeRoles('admin', 'admi
       const mapped = contacts.map(mapConversationResponse);
       const merged = mergeConversations(mapped);
       const enriched = await applyUserNamesToConversations(merged);
-      return res.json({ conversations: enriched });
+      const withStates = await enrichConversationSummaries({
+        storeId,
+        phoneNumberId,
+        conversations: enriched,
+      });
+      const automation = await getAutomationSnapshot({ storeId, phoneNumberId });
+      return res.json({ conversations: withStates, automation });
     }
 
     const logs = await WhatsappLog.aggregate([
@@ -1818,14 +1934,25 @@ router.get('/:storeId/conversations', requireAuth, authorizeRoles('admin', 'admi
 
     conversations = mergeConversations(conversations);
     const enriched = await applyUserNamesToConversations(conversations);
-    return res.json({ conversations: enriched });
+    const withStates = await enrichConversationSummaries({
+      storeId,
+      phoneNumberId,
+      conversations: enriched,
+    });
+    const automation = await getAutomationSnapshot({ storeId, phoneNumberId });
+    return res.json({ conversations: withStates, automation });
   } catch (error) {
     console.error('Erro ao buscar conversas do WhatsApp:', error);
     return res.status(500).json({ message: 'Erro ao buscar conversas do WhatsApp.' });
   }
 });
 
-router.get('/:storeId/contacts/whatsapp', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
+router.get(
+  '/:storeId/contacts/whatsapp',
+  requireAuth,
+  authorizeRoles('admin', 'admin_master'),
+  requireWhatsappNumberAccess(),
+  async (req, res) => {
   try {
     const { storeId } = req.params;
     if (!mongoose.Types.ObjectId.isValid(storeId)) {
@@ -1985,7 +2112,12 @@ router.get('/:storeId/contacts/whatsapp', requireAuth, authorizeRoles('admin', '
   }
 });
 
-router.get('/:storeId/conversations/:waId/messages', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
+router.get(
+  '/:storeId/conversations/:waId/messages',
+  requireAuth,
+  authorizeRoles('admin', 'admin_master'),
+  requireWhatsappNumberAccess(),
+  async (req, res) => {
   try {
     const { storeId, waId } = req.params;
     if (!mongoose.Types.ObjectId.isValid(storeId)) {
@@ -2046,7 +2178,12 @@ router.get('/:storeId/conversations/:waId/messages', requireAuth, authorizeRoles
   }
 });
 
-router.delete('/:storeId/conversations/:waId', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
+router.delete(
+  '/:storeId/conversations/:waId',
+  requireAuth,
+  authorizeRoles('admin', 'admin_master'),
+  requireWhatsappNumberAccess(),
+  async (req, res) => {
   try {
     const { storeId, waId } = req.params;
     if (!mongoose.Types.ObjectId.isValid(storeId)) {
@@ -2106,7 +2243,12 @@ router.delete('/:storeId/conversations/:waId', requireAuth, authorizeRoles('admi
   }
 });
 
-router.post('/:storeId/mark-read', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
+router.post(
+  '/:storeId/mark-read',
+  requireAuth,
+  authorizeRoles('admin', 'admin_master'),
+  requireWhatsappNumberAccess(),
+  async (req, res) => {
   try {
     const { storeId } = req.params;
     if (!mongoose.Types.ObjectId.isValid(storeId)) {
@@ -2187,7 +2329,14 @@ router.post('/:storeId/mark-read', requireAuth, authorizeRoles('admin', 'admin_m
   }
 });
 
-router.post('/:storeId/send-audio', requireAuth, authorizeRoles('admin', 'admin_master'), audioUpload.single('file'), async (req, res) => {
+router.post(
+  '/:storeId/send-audio',
+  requireAuth,
+  authorizeRoles('admin', 'admin_master'),
+  audioUpload.single('file'),
+  requireWhatsappNumberAccess(),
+  markWhatsappHumanReply,
+  async (req, res) => {
   try {
     const { storeId } = req.params;
     if (!mongoose.Types.ObjectId.isValid(storeId)) {
@@ -2341,6 +2490,8 @@ router.post('/:storeId/send-audio', requireAuth, authorizeRoles('admin', 'admin_
         message: label,
         messageId,
         source: 'web',
+        actorType: 'human_web',
+        actorUser: req.user?.id || null,
         meta: response.ok
           ? {
               graphStatus: response.status,
@@ -2387,6 +2538,10 @@ router.post('/:storeId/send-audio', requireAuth, authorizeRoles('admin', 'admin_
         destination,
         clientId,
         createdAt: log?.createdAt ? log.createdAt.toISOString() : new Date().toISOString(),
+        actorType: 'human_web',
+        actorUser: req.user?.id || '',
+        messageType: 'audio',
+        source: 'web',
       });
 
       if (numberMeta.phoneNumberId) {
@@ -2422,7 +2577,14 @@ router.post('/:storeId/send-audio', requireAuth, authorizeRoles('admin', 'admin_
   }
 });
 
-router.post('/:storeId/send-image', requireAuth, authorizeRoles('admin', 'admin_master'), imageUpload.single('file'), async (req, res) => {
+router.post(
+  '/:storeId/send-image',
+  requireAuth,
+  authorizeRoles('admin', 'admin_master'),
+  imageUpload.single('file'),
+  requireWhatsappNumberAccess(),
+  markWhatsappHumanReply,
+  async (req, res) => {
   try {
     const { storeId } = req.params;
     if (!mongoose.Types.ObjectId.isValid(storeId)) {
@@ -2575,6 +2737,8 @@ router.post('/:storeId/send-image', requireAuth, authorizeRoles('admin', 'admin_
         message: label,
         messageId,
         source: 'web',
+        actorType: 'human_web',
+        actorUser: req.user?.id || null,
         meta: response.ok
           ? {
               graphStatus: response.status,
@@ -2623,6 +2787,10 @@ router.post('/:storeId/send-image', requireAuth, authorizeRoles('admin', 'admin_
         destination,
         clientId,
         createdAt: log?.createdAt ? log.createdAt.toISOString() : new Date().toISOString(),
+        actorType: 'human_web',
+        actorUser: req.user?.id || '',
+        messageType: 'image',
+        source: 'web',
       });
 
       if (numberMeta.phoneNumberId) {
@@ -2662,7 +2830,14 @@ router.post('/:storeId/send-image', requireAuth, authorizeRoles('admin', 'admin_
   }
 });
 
-router.post('/:storeId/send-document', requireAuth, authorizeRoles('admin', 'admin_master'), documentUpload.single('file'), async (req, res) => {
+router.post(
+  '/:storeId/send-document',
+  requireAuth,
+  authorizeRoles('admin', 'admin_master'),
+  documentUpload.single('file'),
+  requireWhatsappNumberAccess(),
+  markWhatsappHumanReply,
+  async (req, res) => {
   try {
     const { storeId } = req.params;
     if (!mongoose.Types.ObjectId.isValid(storeId)) {
@@ -2814,6 +2989,8 @@ router.post('/:storeId/send-document', requireAuth, authorizeRoles('admin', 'adm
         message: label,
         messageId,
         source: 'web',
+        actorType: 'human_web',
+        actorUser: req.user?.id || null,
         meta: response.ok
           ? {
               graphStatus: response.status,
@@ -2862,6 +3039,10 @@ router.post('/:storeId/send-document', requireAuth, authorizeRoles('admin', 'adm
         destination,
         clientId,
         createdAt: log?.createdAt ? log.createdAt.toISOString() : new Date().toISOString(),
+        actorType: 'human_web',
+        actorUser: req.user?.id || '',
+        messageType: 'document',
+        source: 'web',
       });
 
       if (numberMeta.phoneNumberId) {
@@ -2901,7 +3082,13 @@ router.post('/:storeId/send-document', requireAuth, authorizeRoles('admin', 'adm
   }
 });
 
-router.post('/:storeId/send-contacts', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
+router.post(
+  '/:storeId/send-contacts',
+  requireAuth,
+  authorizeRoles('admin', 'admin_master'),
+  requireWhatsappNumberAccess(),
+  markWhatsappHumanReply,
+  async (req, res) => {
   try {
     const { storeId } = req.params;
     if (!mongoose.Types.ObjectId.isValid(storeId)) {
@@ -3035,6 +3222,8 @@ router.post('/:storeId/send-contacts', requireAuth, authorizeRoles('admin', 'adm
       message: messageLabel,
       messageId,
       source: 'web',
+      actorType: 'human_web',
+      actorUser: req.user?.id || null,
       meta: response.ok
         ? { graphStatus: response.status, contacts: contactsPayload }
         : { graphStatus: response.status, graphError: errorMessage, contacts: contactsPayload },
@@ -3063,6 +3252,10 @@ router.post('/:storeId/send-contacts', requireAuth, authorizeRoles('admin', 'adm
       origin: numberMeta.phoneNumber,
       destination,
       createdAt: log?.createdAt ? log.createdAt.toISOString() : new Date().toISOString(),
+      actorType: 'human_web',
+      actorUser: req.user?.id || '',
+      messageType: 'contacts',
+      source: 'web',
     });
 
     if (numberMeta.phoneNumberId) {
@@ -3101,7 +3294,13 @@ router.post('/:storeId/send-contacts', requireAuth, authorizeRoles('admin', 'adm
   }
 });
 
-router.post('/:storeId/send-message', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
+router.post(
+  '/:storeId/send-message',
+  requireAuth,
+  authorizeRoles('admin', 'admin_master'),
+  requireWhatsappNumberAccess(),
+  markWhatsappHumanReply,
+  async (req, res) => {
   try {
     const { storeId } = req.params;
     if (!mongoose.Types.ObjectId.isValid(storeId)) {
@@ -3164,6 +3363,8 @@ router.post('/:storeId/send-message', requireAuth, authorizeRoles('admin', 'admi
       message,
       messageId,
       source: 'web',
+      actorType: 'human_web',
+      actorUser: req.user?.id || null,
       meta: response.ok
         ? { graphStatus: response.status }
         : { graphStatus: response.status, graphError: errorMessage },
@@ -3191,6 +3392,10 @@ router.post('/:storeId/send-message', requireAuth, authorizeRoles('admin', 'admi
       origin: numberMeta.phoneNumber,
       destination,
       createdAt: log?.createdAt ? log.createdAt.toISOString() : new Date().toISOString(),
+      actorType: 'human_web',
+      actorUser: req.user?.id || '',
+      messageType: 'text',
+      source: 'web',
     });
 
     if (numberMeta.phoneNumberId) {
@@ -3223,7 +3428,12 @@ router.post('/:storeId/send-message', requireAuth, authorizeRoles('admin', 'admi
   }
 });
 
-router.post('/:storeId/send-test', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
+router.post(
+  '/:storeId/send-test',
+  requireAuth,
+  authorizeRoles('admin', 'admin_master'),
+  requireWhatsappNumberAccess(),
+  async (req, res) => {
   try {
     const { storeId } = req.params;
     if (!mongoose.Types.ObjectId.isValid(storeId)) {
@@ -3327,7 +3537,12 @@ router.post('/:storeId/send-test', requireAuth, authorizeRoles('admin', 'admin_m
   }
 });
 
-router.post('/:storeId/webhook/verify', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
+router.post(
+  '/:storeId/webhook/verify',
+  requireAuth,
+  authorizeRoles('admin', 'admin_master'),
+  requireWhatsappAdminAccess,
+  async (req, res) => {
   try {
     const { storeId } = req.params;
     if (!mongoose.Types.ObjectId.isValid(storeId)) {
@@ -3416,109 +3631,16 @@ router.post('/:storeId/webhook/verify', requireAuth, authorizeRoles('admin', 'ad
   }
 });
 
-router.post('/:storeId/register-number', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
-  try {
-    const { storeId } = req.params;
-    if (!mongoose.Types.ObjectId.isValid(storeId)) {
-      return res.status(400).json({ message: 'Identificador de loja invalido.' });
-    }
-
-    const storeExists = await Store.exists({ _id: storeId });
-    if (!storeExists) {
-      return res.status(404).json({ message: 'Loja nao encontrada.' });
-    }
-
-    const payload = req.body || {};
-    const numberId = sanitizeString(payload.numberId);
-    const phoneNumberIdInput = sanitizeString(payload.phoneNumberId);
-    const dataLocalizationRegion = normalizeLocalizationRegion(
-      payload.data_localization_region || payload.dataLocalizationRegion
-    );
-
-    if ((payload.data_localization_region || payload.dataLocalizationRegion) && !dataLocalizationRegion) {
-      return res.status(400).json({ message: 'data_localization_region invalido.' });
-    }
-
-    const integration = await findIntegration(storeId);
-    if (!integration) {
-      return res.status(404).json({ message: 'Integracao do WhatsApp nao configurada.' });
-    }
-
-    const accessToken = decryptField(integration.accessTokenEncrypted, integration.accessTokenStored);
-    if (!accessToken) {
-      return res.status(400).json({ message: 'Token de acesso nao informado.' });
-    }
-
-    const numbers = Array.isArray(integration.phoneNumbers) ? integration.phoneNumbers : [];
-    let number = null;
-    if (numberId && mongoose.Types.ObjectId.isValid(numberId)) {
-      number = numbers.find((entry) => entry?._id && String(entry._id) === numberId);
-    }
-
-    if (!number && phoneNumberIdInput) {
-      number = numbers.find((entry) => String(entry?.phoneNumberId || '') === phoneNumberIdInput);
-    }
-
-    const phoneNumberId = sanitizeString(number?.phoneNumberId || phoneNumberIdInput);
-    if (!phoneNumberId) {
-      return res.status(400).json({ message: 'Phone Number ID nao informado.' });
-    }
-
-    const pin = normalizePin(payload.pin || number?.pin);
-    if (!pin) {
-      return res.status(400).json({ message: 'PIN de 6 digitos nao informado.' });
-    }
-
-    const requestBody = {
-      messaging_product: 'whatsapp',
-      pin,
-    };
-
-    if (dataLocalizationRegion) {
-      requestBody.data_localization_region = dataLocalizationRegion;
-    }
-
-    const { response, payload: graphPayload } = await sendWhatsappText({
-      url: `${GRAPH_BASE_URL}/${phoneNumberId}/register`,
-      accessToken,
-      body: requestBody,
-    });
-
-    if (!response.ok) {
-      const errorMessage = extractGraphError(graphPayload);
-      const details = extractGraphErrorDetails(graphPayload);
-      console.error('Erro ao registrar numero WhatsApp (Graph API):', {
-        status: response.status,
-        payload: graphPayload,
-      });
-      const detailSuffix = details
-        ? ` (code ${details.code ?? '-'}, subcode ${details.subcode ?? '-'}, trace ${details.fbtrace_id ?? '-'})`
-        : '';
-      return res.status(response.status || 502).json({
-        message: `${errorMessage || 'Falha ao registrar numero.'}${detailSuffix}`,
-        error: details,
-      });
-    }
-
-    if (integration._id) {
-      await WhatsappIntegration.updateOne(
-        { _id: integration._id, 'phoneNumbers.phoneNumberId': phoneNumberId },
-        {
-          $set: {
-            'phoneNumbers.$.lastSyncAt': new Date(),
-            'phoneNumbers.$.status': 'Conectado',
-            'phoneNumbers.$.pin': pin,
-          },
-        }
-      );
-    }
-
-    return res.json({ message: 'Numero registrado com sucesso.', phoneNumberId });
-  } catch (error) {
-    console.error('Erro ao registrar numero WhatsApp:', error);
-    return res.status(500).json({ message: 'Erro ao registrar numero do WhatsApp.' });
-  }
-});
+router.post(
+  '/:storeId/register-number',
+  requireAuth,
+  authorizeRoles('admin', 'admin_master'),
+  requireWhatsappAdminAccess,
+  (_req, res) => res.status(410).json({
+    message: 'O registro manual foi desativado. Este número será conectado pelo fluxo de Coexistência.',
+    code: 'WHATSAPP_MANUAL_REGISTRATION_DISABLED',
+  })
+);
 
 router.get('/:storeId/message-history/:messageHistoryId/events', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
   try {
@@ -3637,7 +3759,12 @@ router.get('/:storeId/message-history/:messageHistoryId/events/local', requireAu
   }
 });
 
-router.get('/:storeId', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
+router.get(
+  '/:storeId',
+  requireAuth,
+  authorizeRoles('admin', 'admin_master'),
+  requireWhatsappAdminAccess,
+  async (req, res) => {
   try {
     const { storeId } = req.params;
     if (!mongoose.Types.ObjectId.isValid(storeId)) {
@@ -3658,7 +3785,12 @@ router.get('/:storeId', requireAuth, authorizeRoles('admin', 'admin_master'), as
   }
 });
 
-router.put('/:storeId', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
+router.put(
+  '/:storeId',
+  requireAuth,
+  authorizeRoles('admin', 'admin_master'),
+  requireWhatsappAdminAccess,
+  async (req, res) => {
   try {
     const { storeId } = req.params;
     if (!mongoose.Types.ObjectId.isValid(storeId)) {
@@ -3671,34 +3803,29 @@ router.put('/:storeId', requireAuth, authorizeRoles('admin', 'admin_master'), as
     }
 
     const payload = req.body || {};
+    const coexistenceManagedFields = ['wabaId', 'accessToken', 'phoneNumbers'];
+    const attemptedManagedField = coexistenceManagedFields.find(
+      (field) => Object.prototype.hasOwnProperty.call(payload, field)
+    );
+    if (attemptedManagedField) {
+      return res.status(410).json({
+        message: 'WABA, token de acesso e números agora são vinculados somente pelo fluxo oficial de Coexistência.',
+        code: 'WHATSAPP_COEXISTENCE_MANAGED_FIELD',
+      });
+    }
     const integration = await findIntegration(storeId) || new WhatsappIntegration({ store: storeId });
 
     if (Object.prototype.hasOwnProperty.call(payload, 'appId')) {
       integration.appId = sanitizeString(payload.appId);
     }
-    if (Object.prototype.hasOwnProperty.call(payload, 'wabaId')) {
-      integration.wabaId = sanitizeString(payload.wabaId);
-    }
-
     if (Object.prototype.hasOwnProperty.call(payload, 'appSecret')) {
       const value = sanitizeString(payload.appSecret);
       if (value) {
         integration.appSecretEncrypted = encryptText(value);
         integration.appSecretStored = true;
-      } else {
+      } else if (payload.clearAppSecret === true) {
         integration.appSecretEncrypted = null;
         integration.appSecretStored = false;
-      }
-    }
-
-    if (Object.prototype.hasOwnProperty.call(payload, 'accessToken')) {
-      const value = sanitizeString(payload.accessToken);
-      if (value) {
-        integration.accessTokenEncrypted = encryptText(value);
-        integration.accessTokenStored = true;
-      } else {
-        integration.accessTokenEncrypted = null;
-        integration.accessTokenStored = false;
       }
     }
 
@@ -3707,14 +3834,10 @@ router.put('/:storeId', requireAuth, authorizeRoles('admin', 'admin_master'), as
       if (value) {
         integration.verifyTokenEncrypted = encryptText(value);
         integration.verifyTokenStored = true;
-      } else {
+      } else if (payload.clearVerifyToken === true) {
         integration.verifyTokenEncrypted = null;
         integration.verifyTokenStored = false;
       }
-    }
-
-    if (Object.prototype.hasOwnProperty.call(payload, 'phoneNumbers')) {
-      integration.phoneNumbers = mapPhoneNumbers(payload.phoneNumbers);
     }
 
     await integration.save();

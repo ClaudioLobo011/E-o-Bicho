@@ -4,15 +4,30 @@ const path = require('path');
 const WhatsappIntegration = require('../models/WhatsappIntegration');
 const WhatsappLog = require('../models/WhatsappLog');
 const WhatsappContact = require('../models/WhatsappContact');
+const WhatsappServiceSurvey = require('../models/WhatsappServiceSurvey');
 const { decryptText } = require('../utils/certificates');
 const { isR2Configured, uploadBufferToR2 } = require('../utils/cloudflareR2');
+const {
+  processCoexistenceWebhookChanges,
+} = require('../services/whatsappCoexistenceWebhookService');
+const {
+  handleInboundMessage,
+} = require('../services/whatsappConversationService');
+const {
+  applySurveyConversationOutcome,
+  handleSurveyInboundResponse,
+} = require('../services/whatsappPostServiceSurveyService');
+const {
+  processAppointmentInbound,
+} = require('../services/whatsappAppointmentFlowService');
 
 const router = express.Router();
 
-const GRAPH_BASE_URL = process.env.WHATSAPP_GRAPH_BASE_URL || 'https://graph.facebook.com/v20.0';
+const GRAPH_BASE_URL = process.env.WHATSAPP_GRAPH_BASE_URL || 'https://graph.facebook.com/v25.0';
 const AUTO_READ_ON_RECEIVE = false;
 
-router.use(express.raw({ type: '*/*', limit: '2mb' }));
+// A sincronização inicial da coexistência pode enviar lotes grandes de histórico.
+router.use(express.raw({ type: '*/*', limit: '25mb' }));
 
 const trimValue = (value) => (typeof value === 'string' ? value.trim() : '');
 const digitsOnly = (value) => String(value || '').replace(/\D+/g, '');
@@ -485,6 +500,10 @@ const decryptField = (encrypted, stored) => {
 
 const findIntegrationByVerifyToken = async (token) => {
   if (!token) return null;
+  const environmentToken = trimValue(process.env.WHATSAPP_META_VERIFY_TOKEN);
+  if (environmentToken && environmentToken === token) {
+    return { configuredByEnvironment: true };
+  }
   const docs = await WhatsappIntegration.find({
     verifyTokenStored: true,
   }).select('+verifyTokenEncrypted').lean();
@@ -603,7 +622,10 @@ router.post('/', async (req, res) => {
       return res.status(404).json({ message: 'Integracao nao encontrada para este WABA.' });
     }
 
-    const appSecret = decryptField(integration.appSecretEncrypted, integration.appSecretStored);
+    const appSecret = decryptField(
+      integration.appSecretEncrypted,
+      integration.appSecretStored
+    ) || trimValue(process.env.WHATSAPP_META_APP_SECRET);
     if (!appSecret) {
       console.warn('Webhook WhatsApp: App Secret nao configurado.', { wabaId });
       return res.status(400).json({ message: 'App Secret nao configurado.' });
@@ -615,6 +637,12 @@ router.post('/', async (req, res) => {
     }
 
     const accessToken = decryptField(integration.accessTokenEncrypted, integration.accessTokenStored);
+    const coexistenceResult = await processCoexistenceWebhookChanges({
+      entries,
+      integration,
+      wabaId,
+      io: req.app?.get('socketio'),
+    });
 
     const logs = [];
     const statusUpserts = [];
@@ -624,9 +652,11 @@ router.post('/', async (req, res) => {
     const readReceipts = new Set();
     const contactUpdates = new Map();
     const statusContactOps = [];
+    const surveyStatusOps = [];
     const touchedNumbers = new Set();
     const mediaTasks = [];
     const mediaByMessageId = new Map();
+    const conversationActivities = [];
     const now = new Date();
     let incomingLogsCount = 0;
     let statusesCount = 0;
@@ -717,6 +747,11 @@ router.post('/', async (req, res) => {
               messageId,
               messageTimestamp,
               source: 'webhook',
+              actorType: 'customer',
+              messageType: messageType || 'text',
+              conversationWindowExpiresAt: new Date(
+                (messageTimestamp || now).getTime() + (24 * 60 * 60 * 1000)
+              ),
               meta: {
                 wabaId,
                 messageType,
@@ -745,6 +780,9 @@ router.post('/', async (req, res) => {
                       message: baseLog.message,
                       messageTimestamp: baseLog.messageTimestamp,
                       source: baseLog.source,
+                      actorType: baseLog.actorType,
+                      messageType: baseLog.messageType,
+                      conversationWindowExpiresAt: baseLog.conversationWindowExpiresAt,
                       meta: baseLog.meta,
                       updatedAt: now,
                     },
@@ -762,6 +800,16 @@ router.post('/', async (req, res) => {
               logs.push(baseLog);
             }
             incomingLogsCount += 1;
+            if (origin && numberMeta.phoneNumberId && !hasErrors) {
+              conversationActivities.push({
+                storeId: integration.store,
+                phoneNumberId: numberMeta.phoneNumberId,
+                waId: origin,
+                messageId,
+                messageAt: messageTimestamp || now,
+                message: body || '',
+              });
+            }
 
             if (AUTO_READ_ON_RECEIVE && messageId && numberMeta.phoneNumberId && accessToken) {
               readReceipts.add(`${numberMeta.phoneNumberId}:${messageId}`);
@@ -780,6 +828,9 @@ router.post('/', async (req, res) => {
                 origin,
                 destination: numberMeta.phoneNumber,
                 createdAt: (messageTimestamp || now).toISOString(),
+                actorType: 'customer',
+                messageType: baseLog.messageType,
+                source: baseLog.source,
                 contacts: contactPayload.length > 0 ? contactPayload : undefined,
                 media: mediaPayload || undefined,
               });
@@ -860,6 +911,17 @@ router.post('/', async (req, res) => {
                   upsert: true,
                 },
               });
+              surveyStatusOps.push({
+                updateOne: {
+                  filter: { store: integration.store, messageId },
+                  update: {
+                    $set: {
+                      deliveryStatus: statusInfo.status,
+                      updatedAt: now,
+                    },
+                  },
+                },
+              });
               if (numberMeta.phoneNumberId) {
                 realtimeEvents.push({
                   storeId: String(integration.store),
@@ -917,7 +979,7 @@ router.post('/', async (req, res) => {
       });
     });
 
-    if (incomingLogsCount === 0) {
+    if (incomingLogsCount === 0 && coexistenceResult.processed === 0) {
       const summaryMeta = {
         wabaId,
         entries: entries.length,
@@ -945,6 +1007,9 @@ router.post('/', async (req, res) => {
 
     if (statusUpserts.length > 0) {
       await WhatsappLog.bulkWrite(statusUpserts);
+    }
+    if (surveyStatusOps.length > 0) {
+      await WhatsappServiceSurvey.bulkWrite(surveyStatusOps, { ordered: false });
     }
 
     if (incomingUpserts.length > 0) {
@@ -1034,6 +1099,34 @@ router.post('/', async (req, res) => {
 
     if (statusContactOps.length > 0) {
       await WhatsappContact.bulkWrite(statusContactOps, { ordered: false });
+    }
+
+    if (conversationActivities.length > 0) {
+      const io = req.app?.get('socketio');
+      const transitions = await Promise.allSettled(
+        conversationActivities.map(async (activity) => {
+          const surveyResult = await handleSurveyInboundResponse(activity);
+          const transition = await handleInboundMessage({
+            ...activity,
+            suppressAutomation: surveyResult.handled,
+            io,
+          });
+          if (!surveyResult.handled) {
+            await processAppointmentInbound({
+              ...activity,
+              transition,
+              io,
+            });
+          }
+          await applySurveyConversationOutcome({ result: surveyResult, io });
+          return transition;
+        })
+      );
+      transitions.forEach((result) => {
+        if (result.status === 'rejected') {
+          console.error('Erro ao atualizar estado da conversa WhatsApp:', result.reason);
+        }
+      });
     }
 
     if (mediaByMessageId.size > 0) {

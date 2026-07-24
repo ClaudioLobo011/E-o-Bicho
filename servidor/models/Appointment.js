@@ -32,6 +32,23 @@ const AppointmentSchema = new Schema({
   },
   observacoes: { type: String },
   createdBy: { type: Schema.Types.ObjectId, ref: 'User' },
+  source: {
+    type: String,
+    enum: ['manual', 'whatsapp_automation'],
+    default: 'manual',
+    index: true,
+  },
+  sourceReference: { type: String, trim: true, default: '' },
+  whatsappConversation: {
+    type: Schema.Types.ObjectId,
+    ref: 'WhatsappConversation',
+    default: null,
+  },
+  whatsappFlow: {
+    type: Schema.Types.ObjectId,
+    ref: 'WhatsappAppointmentFlow',
+    default: null,
+  },
   clientMutationId: { type: String, trim: true, default: null },
   version: { type: Number, default: 1, min: 1 },
   deletedAt: { type: Date, default: null, index: true },
