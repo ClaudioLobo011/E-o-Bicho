@@ -46,6 +46,11 @@ const accountReceivableSchema = new Schema(
     forecast: { type: Boolean, default: false },
     uncollectible: { type: Boolean, default: false },
     protest: { type: Boolean, default: false },
+    locked: { type: Boolean, default: false },
+    lockReason: { type: String, trim: true, default: '' },
+    origin: { type: String, trim: true, default: '' },
+    originReference: { type: String, trim: true },
+    metadata: { type: Schema.Types.Mixed, default: {} },
     installments: { type: [installmentSchema], default: [] },
   },
   {
@@ -55,5 +60,6 @@ const accountReceivableSchema = new Schema(
 
 accountReceivableSchema.index({ company: 1, createdAt: -1 });
 accountReceivableSchema.index({ customer: 1, dueDate: 1 });
+accountReceivableSchema.index({ originReference: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('AccountReceivable', accountReceivableSchema);

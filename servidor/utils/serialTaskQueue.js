@@ -97,11 +97,18 @@ function createSerialTaskQueue({
       .catch(() => {})
       .then(runTask);
 
-    queue.tail = current.finally(() => {
-      if (queue.tail === current && queue.activeToken === null) {
+    // A fila precisa engolir a rejeição somente na cadeia interna. O chamador
+    // continua recebendo `current` rejeitada, mas não fica uma segunda Promise
+    // rejeitada sem observador criada por finally().
+    const tail = current.then(
+      () => undefined,
+      () => undefined
+    ).finally(() => {
+      if (queue.tail === tail && queue.activeToken === null) {
         queues.delete(queue.key);
       }
     });
+    queue.tail = tail;
 
     return current;
   };

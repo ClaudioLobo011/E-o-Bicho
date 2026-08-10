@@ -220,7 +220,7 @@ const userSchema = new Schema({
 
   grupos: {
     type: [String],
-    enum: ['gerente','vendedor','esteticista','veterinario'],
+    enum: ['gerente','vendedor','entregador','esteticista','veterinario'],
     default: []
   },
   userGroup: {

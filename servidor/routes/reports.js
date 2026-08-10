@@ -392,8 +392,6 @@ const deriveItemTotalCost = (item = {}) => {
 
 const deriveSaleCost = (sale = {}) => {
   const items = collectSaleItems(sale);
-  if (!items.length) return null;
-
   let foundItemCost = false;
 
   const totalFromItems = items.reduce((acc, item) => {
@@ -415,6 +413,8 @@ const deriveSaleCost = (sale = {}) => {
 
   if (foundItemCost) return totalFromItems;
 
+  // Consultas resumidas podem trazer somente o custo consolidado da venda.
+  // Nao descarte esses campos quando os itens nao estiverem na projecao.
   const totals = sale?.receiptSnapshot?.totais || sale?.totais || {};
   const candidates = [
     sale.cost,
@@ -1131,6 +1131,21 @@ const BILLING_SALE_SELECT =
     'payload.receiptSnapshot.meta',
     'payload.receiptSnapshot.pagamentos',
     'payload.receiptSnapshot.payments',
+    'payload.items.quantity',
+    'payload.items.quantidade',
+    'payload.items.qtd',
+    'payload.items.cost',
+    'payload.items.unitCost',
+    'payload.items.precoCusto',
+    'payload.items.custo',
+    'payload.items.totalCost',
+    'payload.items.custoTotal',
+    'payload.items.precoCustoTotal',
+    'payload.items.productSnapshot.custo',
+    'payload.items.productSnapshot.custoCalculado',
+    'payload.items.productSnapshot.precoCusto',
+    'payload.items.productSnapshot.custoTotal',
+    'payload.items.productSnapshot.precoCustoTotal',
   ].join(' ');
 
 const BILLING_ITEMS_SELECT = [
@@ -1174,6 +1189,42 @@ const BILLING_ITEMS_SELECT = [
   'payload.items.produtoSnapshot.categoria',
 ].join(' ');
 
+const fetchLegacySalesForPeriod = async (baseMatch, saleMatch, startDate, endDate) => {
+  const legacySaleMatch = { ...(saleMatch || {}) };
+  const createdAtFilter = {};
+  const explicitCreatedAt = legacySaleMatch['completedSales.createdAt'];
+  if (explicitCreatedAt && typeof explicitCreatedAt === 'object') {
+    if (explicitCreatedAt.$gte) createdAtFilter.$gte = explicitCreatedAt.$gte;
+    if (explicitCreatedAt.$lte) createdAtFilter.$lte = explicitCreatedAt.$lte;
+  }
+  if (startDate) createdAtFilter.$gte = startDate;
+  if (endDate) createdAtFilter.$lte = endDate;
+  if (Object.keys(createdAtFilter).length) legacySaleMatch['completedSales.createdAt'] = createdAtFilter;
+  else delete legacySaleMatch['completedSales.createdAt'];
+  return PdvState.aggregate([
+    { $match: baseMatch || {} },
+    { $unwind: '$completedSales' },
+    ...(Object.keys(legacySaleMatch).length ? [{ $match: legacySaleMatch }] : []),
+    { $project: { completedSales: 1, empresa: 1, pdv: 1 } },
+  ]);
+};
+
+const mergeSalesRecords = (normalized = [], legacy = []) => {
+  const merged = new Map();
+  [...legacy, ...normalized].forEach((record) => {
+    const sale = record?.completedSales || {};
+    const identity = String(sale.id || sale._id || sale.saleCode || sale.saleCodeLabel || '').trim();
+    const pdv = String(record?.pdv || '');
+    const key = identity ? `${pdv}:${identity}` : `${pdv}:${JSON.stringify(sale)}`;
+    merged.set(key, record);
+  });
+  return Array.from(merged.values()).sort((left, right) => {
+    const leftDate = new Date(left?.completedSales?.createdAt || 0).getTime();
+    const rightDate = new Date(right?.completedSales?.createdAt || 0).getTime();
+    return rightDate - leftDate;
+  });
+};
+
 const fetchSalesForPeriod = async (baseMatch, saleMatch, startDate, endDate) => {
   const query = {};
 
@@ -1206,15 +1257,16 @@ const fetchSalesForPeriod = async (baseMatch, saleMatch, startDate, endDate) => 
     query['payload.type'] = saleMatch['completedSales.type'];
   }
 
-  const docs = await PdvStateSale.find(query)
-    .select(BILLING_SALE_SELECT)
-    .sort({ createdAtFromEntity: -1 })
-    .lean();
-  return docs.map((entry) => ({
+  const [docs, legacy] = await Promise.all([
+    PdvStateSale.find(query).select(BILLING_SALE_SELECT).sort({ createdAtFromEntity: -1 }).lean(),
+    fetchLegacySalesForPeriod(baseMatch, saleMatch, startDate, endDate),
+  ]);
+  const normalized = docs.map((entry) => ({
     completedSales: entry?.payload || {},
     empresa: entry?.empresa || null,
     pdv: entry?.pdv || null,
   }));
+  return mergeSalesRecords(normalized, legacy);
 };
 
 const fetchSalesItemsForPeriod = async (baseMatch, startDate, endDate) => {
@@ -1234,8 +1286,16 @@ const fetchSalesItemsForPeriod = async (baseMatch, startDate, endDate) => {
     query.createdAtFromEntity = createdAtFilter;
   }
 
-  const docs = await PdvStateSale.find(query).select(BILLING_ITEMS_SELECT).lean();
-  return docs.map((entry) => ({ completedSales: entry?.payload || {} }));
+  const [docs, legacy] = await Promise.all([
+    PdvStateSale.find(query).select(BILLING_ITEMS_SELECT).lean(),
+    fetchLegacySalesForPeriod(baseMatch, {}, startDate, endDate),
+  ]);
+  const normalized = docs.map((entry) => ({
+    completedSales: entry?.payload || {},
+    empresa: entry?.empresa || null,
+    pdv: entry?.pdv || null,
+  }));
+  return mergeSalesRecords(normalized, legacy);
 };
 
 const normalizeSaleRecord = (record) => record?.completedSales || record?.sale || record || {};

@@ -73,7 +73,7 @@ const API_CONFIG = (() => {
     const isLocalhost = isLocalHost(hostname);
 
     if (isLocalhost) {
-      if (window.location.port === '3000') {
+      if (window.location.port === '3000' || window.location.port === '3100') {
         return window.location.origin;
       }
       return LOCAL_SERVER_URL;

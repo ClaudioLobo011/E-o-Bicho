@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "backend:local": "node servidor/scripts/start-local.js",
+    "frontend:local": "node scripts/start-static-local.js",
     "backend:start": "node servidor/server.js",
     "predev": "node scripts/check-tailwind.js",
     "dev": "npx @tailwindcss/cli -i ./src/input.css -o ./src/output.css --watch",

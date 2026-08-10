@@ -129,6 +129,7 @@ const routes = [
   { path: '/api/banners', file: './routes/banners' },
   { path: '/api/pets', file: './routes/pets' },
   { path: '/api/pdvs', file: './routes/pdvs' },
+  { path: '/api/desktop', file: './routes/pdvDesktop' },
   { path: '/api/reports', file: './routes/reports' },
   { path: '/api/deposits', file: './routes/deposits' },
   { path: '/api/transfers', file: './routes/transfers' },

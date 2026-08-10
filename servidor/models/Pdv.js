@@ -3,7 +3,10 @@ const mongoose = require('mongoose');
 const ambientesPermitidos = ['homologacao', 'producao'];
 const opcoesImpressao = ['sim', 'nao', 'perguntar'];
 const perfisDesconto = ['funcionario', 'gerente', 'admin'];
-const tiposEmissao = ['matricial', 'fiscal', 'ambos'];
+const tiposEmissao = ['matricial', 'fiscal'];
+const tiposUso = ['web', 'executavel'];
+const modosTerminais = ['exclusivo', 'espelhado'];
+const statusDesktop = ['web', 'configurando', 'ativo', 'suspenso', 'reversao_pendente'];
 const largurasPapel = ['80mm', '58mm'];
 const tiposImpressora = ['bematech', 'elgin'];
 
@@ -54,6 +57,25 @@ const fiscalSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const desktopSchema = new mongoose.Schema(
+  {
+    status: { type: String, enum: statusDesktop, default: 'web' },
+    hostId: { type: mongoose.Schema.Types.ObjectId, ref: 'PdvDesktopHost', default: null },
+    hostName: { type: String, trim: true, default: '' },
+    hostMachineId: { type: String, trim: true, default: '' },
+    localDbReady: { type: Boolean, default: false },
+    initialSyncCompletedAt: { type: Date, default: null },
+    lastHeartbeatAt: { type: Date, default: null },
+    pendingEvents: { type: Number, min: 0, default: 0 },
+    pendingFiscal: { type: Number, min: 0, default: 0 },
+    conversionAt: { type: Date, default: null },
+    conversionBy: { type: String, trim: true, default: '' },
+    allowedTerminalIds: { type: [{ type: String, trim: true }], default: [] },
+    codeRangeSize: { type: Number, min: 100, max: 100000, default: 10000 },
+  },
+  { _id: false }
+);
+
 const estoqueSchema = new mongoose.Schema(
   {
     depositoPadrao: { type: mongoose.Schema.Types.ObjectId, ref: 'Deposit', default: null },
@@ -76,6 +98,8 @@ const pdvSchema = new mongoose.Schema(
     nome: { type: String, required: true, trim: true },
     apelido: { type: String, trim: true },
     ativo: { type: Boolean, default: true },
+    tipoUso: { type: String, enum: tiposUso, default: 'web', index: true },
+    modoTerminais: { type: String, enum: modosTerminais, default: 'exclusivo' },
     empresa: { type: mongoose.Schema.Types.ObjectId, ref: 'Store', required: true },
     serieNfe: { type: String, trim: true },
     serieNfce: { type: String, trim: true },
@@ -125,15 +149,15 @@ const pdvSchema = new mongoose.Schema(
     },
     ambientesHabilitados: {
       type: [{ type: String, enum: ambientesPermitidos }],
-      default: ['homologacao'],
+      default: [],
       validate: {
         validator(value) {
-          return Array.isArray(value) && value.length > 0;
+          return Array.isArray(value);
         },
-        message: 'Informe ao menos um ambiente habilitado.',
+        message: 'Os ambientes habilitados devem ser uma lista.',
       },
     },
-    ambientePadrao: { type: String, enum: ambientesPermitidos, default: 'homologacao' },
+    ambientePadrao: { type: String, enum: [...ambientesPermitidos, ''], default: '' },
     sincronizacaoAutomatica: { type: Boolean, default: true },
     permitirModoOffline: { type: Boolean, default: false },
     mostrarParaFuncionarios: { type: Boolean, default: true },
@@ -147,6 +171,7 @@ const pdvSchema = new mongoose.Schema(
     configuracoesFiscal: { type: fiscalSchema, default: () => ({}) },
     configuracoesEstoque: { type: estoqueSchema, default: () => ({}) },
     configuracoesFinanceiro: { type: financeiroSchema, default: () => ({}) },
+    desktop: { type: desktopSchema, default: () => ({}) },
   },
   {
     timestamps: true,
@@ -155,5 +180,13 @@ const pdvSchema = new mongoose.Schema(
 
 pdvSchema.index({ updatedAt: -1 });
 pdvSchema.index({ empresa: 1, updatedAt: -1 });
+pdvSchema.index({ empresa: 1, tipoUso: 1, ativo: 1 });
+
+pdvSchema.pre('validate', function normalizeLegacyEmissionMode(next) {
+  if (this.configuracoesFiscal?.tipoEmissaoPadrao === 'ambos') {
+    this.configuracoesFiscal.tipoEmissaoPadrao = 'fiscal';
+  }
+  next();
+});
 
 module.exports = mongoose.model('Pdv', pdvSchema);

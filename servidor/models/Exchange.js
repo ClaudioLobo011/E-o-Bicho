@@ -22,6 +22,12 @@ const ExchangeItemSchema = new mongoose.Schema(
 
 const ExchangeSchema = new mongoose.Schema(
   {
+    desktopExchangeId: { type: String, trim: true, default: '', index: true },
+    desktopEventIds: { type: [String], default: [] },
+    desktopCode: { type: String, trim: true, default: '' },
+    desktopOutcome: { type: String, trim: true, default: '' },
+    generatedSaleId: { type: String, trim: true, default: '' },
+    generatedSaleCode: { type: String, trim: true, default: '' },
     number: { type: Number, required: true, unique: true, index: true },
     code: { type: String, required: true, trim: true },
     date: { type: Date, required: true },
@@ -47,6 +53,10 @@ const ExchangeSchema = new mongoose.Schema(
       taken: { type: Number, default: 0 },
     },
     differenceValue: { type: Number, default: 0 },
+    financialOutcome: { type: String, trim: true, default: '' },
+    financialAmount: { type: Number, default: 0 },
+    financialPaymentLabel: { type: String, trim: true, default: '' },
+    financialProcessedAt: { type: Date, default: null },
     sourceSales: {
       type: [
         {

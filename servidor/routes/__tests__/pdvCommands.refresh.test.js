@@ -147,6 +147,18 @@ test.describe('PDV commands endpoint', () => {
     assert.equal(response.body.meta.idempotencyKey, 'test-command-refresh-1');
   });
 
+  test('blocks Web commands after PDV conversion to Executável', async () => {
+    const base = await createFixture();
+    await Pdv.updateOne({ _id: base.pdv._id }, { $set: { tipoUso: 'executavel', 'desktop.status': 'ativo' } });
+    const response = await supertest(createApp())
+      .post(`/pdvs/${base.pdv._id}/commands`)
+      .set('Authorization', 'Bearer token')
+      .set('X-Idempotency-Key', 'desktop-exclusive-1')
+      .send({ action: 'pdv.refresh_state' });
+    assert.equal(response.status, 409, response.text);
+    assert.equal(response.body.code, 'PDV_DESKTOP_ONLY');
+  });
+
   test('updates print preferences through pdv.settings.print_preferences', async () => {
     const base = await createFixture();
     const app = createApp();
@@ -768,13 +780,14 @@ test.describe('PDV commands endpoint', () => {
           payments: [{ id: 'dinheiro', label: 'Dinheiro', valor: 30 }],
           total: 30,
           status: 'aberto',
-          customer: { nome: 'Cliente Budget' },
         },
       });
     assert.equal(save.status, 200, save.text);
     assert.equal(save.body.state.budgets.length, 1);
     assert.equal(save.body.state.budgets[0].status, 'aberto');
     assert.ok(String(save.body.state.budgets[0].code || '').length > 0);
+    assert.equal(save.body.state.budgets[0].customer, null);
+    assert.match(save.body.state.budgets[0].code, /^ORC-\d{6}$/);
 
     const finalize = await request
       .post(`/pdvs/${base.pdv._id}/commands`)

@@ -318,6 +318,12 @@ router.get('/by-code/:code', requireAuth, authorizeRoles(...allowedRoles), async
         })),
         totals: exchange.totals || { returned: 0, taken: 0 },
         differenceValue: exchange.differenceValue || 0,
+        financialOutcome: exchange.financialOutcome || '',
+        financialAmount: exchange.financialAmount || 0,
+        financialPaymentLabel: exchange.financialPaymentLabel || '',
+        financialProcessedAt: exchange.financialProcessedAt || null,
+        inventoryProcessed: Boolean(exchange.inventoryProcessed),
+        finalizedAt: exchange.finalizedAt || null,
         sourceSales: Array.isArray(exchange.sourceSales) ? exchange.sourceSales : [],
       },
     });
@@ -557,6 +563,54 @@ router.post('/:id/finalize', requireAuth, authorizeRoles(...allowedRoles), async
         : 'Erro ao finalizar troca.';
     console.error('Erro ao finalizar troca:', error);
     return res.status(statusCode).json({ message, details: error?.details });
+  }
+});
+
+router.patch('/:id/outcome', requireAuth, authorizeRoles(...allowedRoles), async (req, res) => {
+  try {
+    const exchangeId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(exchangeId)) {
+      return res.status(400).json({ message: 'Identificador da troca invalido.' });
+    }
+    const exchange = await Exchange.findById(exchangeId);
+    if (!exchange) {
+      return res.status(404).json({ message: 'Troca nao encontrada.' });
+    }
+    if (!exchange.inventoryProcessed) {
+      return res.status(409).json({ message: 'Finalize a troca antes de registrar o resultado financeiro.' });
+    }
+
+    const allowedOutcomes = new Set([
+      'credit',
+      'cash',
+      'none',
+      'customer_payment_pending',
+      'customer_payment',
+    ]);
+    const outcome = sanitizeString(req.body?.outcome).toLowerCase();
+    if (!allowedOutcomes.has(outcome)) {
+      return res.status(400).json({ message: 'Resultado financeiro da troca invalido.' });
+    }
+
+    exchange.financialOutcome = outcome;
+    exchange.financialAmount = Math.max(0, parseDecimal(req.body?.amount));
+    exchange.financialPaymentLabel = sanitizeString(req.body?.paymentLabel);
+    exchange.financialProcessedAt = new Date();
+    await exchange.save();
+
+    return res.json({
+      exchange: {
+        id: exchange._id,
+        code: exchange.code,
+        financialOutcome: exchange.financialOutcome,
+        financialAmount: exchange.financialAmount,
+        financialPaymentLabel: exchange.financialPaymentLabel,
+        financialProcessedAt: exchange.financialProcessedAt,
+      },
+    });
+  } catch (error) {
+    console.error('Erro ao registrar resultado financeiro da troca:', error);
+    return res.status(500).json({ message: 'Erro ao registrar resultado financeiro da troca.' });
   }
 });
 

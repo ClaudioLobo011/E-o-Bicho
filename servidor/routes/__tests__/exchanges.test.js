@@ -212,4 +212,49 @@ test.describe('Exchange finalize endpoint', () => {
     assert.equal(Number(returnedProduct.estoques[0].quantidade), 6);
     assert.equal(Number(takenProduct.estoques[0].quantidade), 6);
   });
+
+  test('registra e recupera o resultado financeiro usado no comprovante', async () => {
+    const base = await createFixture();
+    const app = createApp();
+    const request = supertest(app);
+
+    const finalizeResponse = await request
+      .post(`/exchanges/${base.exchange._id}/finalize`)
+      .set('Authorization', 'Bearer token')
+      .send({
+        pdvId: String(base.pdv._id),
+        companyId: String(base.company._id),
+        inventoryMode: 'return_only',
+      });
+    assert.equal(finalizeResponse.status, 200, finalizeResponse.text);
+
+    const outcomeResponse = await request
+      .patch(`/exchanges/${base.exchange._id}/outcome`)
+      .set('Authorization', 'Bearer token')
+      .send({ outcome: 'cash', amount: 7, paymentLabel: 'Dinheiro' });
+    assert.equal(outcomeResponse.status, 200, outcomeResponse.text);
+    assert.equal(outcomeResponse.body.exchange.financialOutcome, 'cash');
+    assert.equal(outcomeResponse.body.exchange.financialAmount, 7);
+    assert.equal(outcomeResponse.body.exchange.financialPaymentLabel, 'Dinheiro');
+
+    const lookupResponse = await request
+      .get(`/exchanges/by-code/${base.exchange.code}`)
+      .set('Authorization', 'Bearer token');
+    assert.equal(lookupResponse.status, 200, lookupResponse.text);
+    assert.equal(lookupResponse.body.exchange.inventoryProcessed, true);
+    assert.equal(lookupResponse.body.exchange.financialOutcome, 'cash');
+    assert.equal(lookupResponse.body.exchange.financialAmount, 7);
+    assert.equal(lookupResponse.body.exchange.financialPaymentLabel, 'Dinheiro');
+  });
+
+  test('nao registra resultado financeiro antes da finalizacao', async () => {
+    const base = await createFixture();
+    const app = createApp();
+    const response = await supertest(app)
+      .patch(`/exchanges/${base.exchange._id}/outcome`)
+      .set('Authorization', 'Bearer token')
+      .send({ outcome: 'credit', amount: 5 });
+
+    assert.equal(response.status, 409, response.text);
+  });
 });

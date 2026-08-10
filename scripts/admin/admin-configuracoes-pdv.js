@@ -584,7 +584,9 @@
   };
 
   const fetchPdvs = async (storeId) => {
-    const query = storeId ? `?empresa=${encodeURIComponent(storeId)}` : '';
+    const query = storeId
+      ? `?empresa=${encodeURIComponent(storeId)}&includeDesktop=1`
+      : '?includeDesktop=1';
     const token = getToken();
     const response = await fetch(`${API_BASE}/pdvs${query}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},

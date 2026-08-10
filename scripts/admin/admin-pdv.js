@@ -327,6 +327,10 @@
       saleId: '',
       exchangeId: '',
       sourceSales: [],
+      financialOutcome: '',
+      financialAmount: 0,
+      financialPaymentLabel: '',
+      inventoryProcessed: false,
     },
     exchangeHistory: {
       open: false,
@@ -1921,6 +1925,7 @@
     if (type === 'fechamento') return settings.caixa || null;
     if (type === 'venda') return settings.venda || null;
     if (type === 'orcamento') return settings.orcamento || null;
+    if (type === 'troca') return settings.venda || null;
     if (type === 'contas') return settings.contas || null;
     return null;
   };
@@ -9547,6 +9552,10 @@
   const applyExchangeRecord = (exchange) => {
     if (!exchange || typeof exchange !== 'object') return;
     state.exchangeModal.exchangeId = exchange.id || exchange._id || '';
+    state.exchangeModal.financialOutcome = exchange.financialOutcome || '';
+    state.exchangeModal.financialAmount = safeNumber(exchange.financialAmount);
+    state.exchangeModal.financialPaymentLabel = exchange.financialPaymentLabel || '';
+    state.exchangeModal.inventoryProcessed = Boolean(exchange.inventoryProcessed || exchange.finalizedAt);
     if (elements.exchangeCode) {
       elements.exchangeCode.value = exchange.code || exchange.number || '';
     }
@@ -9995,6 +10004,107 @@
     updateSummary();
     updateStatusBadge();
     renderPayments();
+    return { paymentLabel: payment.label || payment.nome || 'Dinheiro' };
+  };
+
+  const persistExchangeFinancialOutcome = async ({ outcome, amount, paymentLabel = '' }) => {
+    if (!state.exchangeModal.exchangeId) return false;
+    try {
+      const token = getToken();
+      const response = await fetchWithOptionalAuth(
+        `${API_BASE}/exchanges/${encodeURIComponent(state.exchangeModal.exchangeId)}/outcome`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ outcome, amount, paymentLabel }),
+          token,
+          errorMessage: 'Nao foi possivel registrar o resultado financeiro da troca.',
+        }
+      );
+      state.exchangeModal.financialOutcome = response?.exchange?.financialOutcome || outcome;
+      state.exchangeModal.financialAmount = safeNumber(response?.exchange?.financialAmount ?? amount);
+      state.exchangeModal.financialPaymentLabel =
+        response?.exchange?.financialPaymentLabel || paymentLabel || '';
+      return true;
+    } catch (error) {
+      console.error('Erro ao registrar resultado financeiro da troca:', error);
+      notify(
+        'A troca foi concluida, mas o resultado financeiro nao ficou registrado no comprovante.',
+        'warning'
+      );
+      return false;
+    }
+  };
+
+  const buildExchangePrintData = () => {
+    const returnedItems = collectExchangeItemsFromTable(elements.exchangeReturnBody, 'return');
+    const takenItems = collectExchangeItemsFromTable(elements.exchangeTakeBody, 'take');
+    if (!returnedItems.length && !takenItems.length) return null;
+    const returnedTotal = returnedItems.reduce((sum, item) => sum + safeNumber(item.totalValue), 0);
+    const takenTotal = takenItems.reduce((sum, item) => sum + safeNumber(item.totalValue), 0);
+    const differenceValue = Math.round((returnedTotal - takenTotal) * 100) / 100;
+    const rawDate = elements.exchangeDate?.value || '';
+    const dateLabel = /^\d{4}-\d{2}-\d{2}$/.test(rawDate)
+      ? rawDate.split('-').reverse().join('/')
+      : toDateLabel(rawDate || new Date().toISOString());
+    return {
+      code: elements.exchangeCode?.value || 'Rascunho',
+      dateLabel,
+      type: elements.exchangeType?.value || 'troca',
+      store: getStoreLabel(),
+      pdv: getPdvLabel(),
+      operator: getLoggedUserName(),
+      seller: {
+        code: elements.exchangeSeller?.value || '',
+        name: elements.exchangeSellerName?.value || '',
+      },
+      customer: {
+        code: elements.exchangeClient?.value || '',
+        name: elements.exchangeClientName?.value || '',
+      },
+      notes: elements.exchangeNotes?.value || '',
+      returnedItems,
+      takenItems,
+      returnedTotal,
+      takenTotal,
+      differenceValue,
+      sourceSales: Array.isArray(state.exchangeModal.sourceSales)
+        ? state.exchangeModal.sourceSales
+        : [],
+      inventoryProcessed: Boolean(state.exchangeModal.inventoryProcessed),
+      financialOutcome: state.exchangeModal.financialOutcome || '',
+      financialAmount: safeNumber(state.exchangeModal.financialAmount),
+      financialPaymentLabel: state.exchangeModal.financialPaymentLabel || '',
+    };
+  };
+
+  const handleExchangePrint = async () => {
+    let data = buildExchangePrintData();
+    if (!data) {
+      notify('Adicione ao menos um produto para imprimir a troca.', 'warning');
+      return;
+    }
+    if (!state.exchangeModal.exchangeId) {
+      const saved = await handleExchangeSave();
+      if (!saved) return;
+      data = buildExchangePrintData();
+    }
+    const title = `Comprovante de troca ${data.code}`;
+    const bodyHtml = buildExchangeReceiptMarkup(data);
+    const documentHtml = createReceiptDocument({ title, variant: 'matricial', body: bodyHtml });
+    const printerConfig = resolvePrinterConfigForType('troca');
+    if (printerConfig?.nome) {
+      dispatchPrintToConfiguredPrinters({
+        printerConfig,
+        htmlDocument: documentHtml,
+        title,
+        logPrefix: 'troca',
+      });
+      return;
+    }
+    if (!printHtmlDocument(documentHtml, { logPrefix: 'troca' })) {
+      notify('Nao foi possivel abrir a impressao da troca.', 'error');
+    }
   };
 
   const handleExchangeFinish = async () => {
@@ -10026,7 +10136,13 @@
         takenItems,
         differenceValue: roundedDifference,
       });
+      state.exchangeModal.inventoryProcessed = true;
       if (roundedDifference < 0) {
+        await persistExchangeFinancialOutcome({
+          outcome: 'customer_payment_pending',
+          amount: Math.abs(roundedDifference),
+          paymentLabel: 'Venda complementar',
+        });
         const customerCode = elements.exchangeClient?.value || '';
         const customer = customerCode ? await fetchCustomerByCode(customerCode) : null;
         if (customer) {
@@ -10067,21 +10183,36 @@
             throw new Error('Selecione um cliente valido para gerar crédito na troca.');
           }
           await applyExchangeCreditToCustomer({ customer, amount: roundedDifference });
+          await persistExchangeFinancialOutcome({
+            outcome: 'credit',
+            amount: roundedDifference,
+            paymentLabel: 'Credito do cliente',
+          });
           notify(
             `Troca finalizada. Credito gerado para o cliente em ${formatCurrency(roundedDifference)}.`,
             'success'
           );
         } else if (action === 'troco') {
-          await registerExchangeChangeCashOut({
+          const cashResult = await registerExchangeChangeCashOut({
             amount: roundedDifference,
             customerCode: customerCode || 'SemCodigo',
             customerName: customerName || 'SemNome',
           });
+          await persistExchangeFinancialOutcome({
+            outcome: 'cash',
+            amount: roundedDifference,
+            paymentLabel: cashResult?.paymentLabel || 'Dinheiro',
+          });
           notify('Troca finalizada e troco registrado como saída de caixa.', 'success');
         } else {
+          await persistExchangeFinancialOutcome({
+            outcome: 'none',
+            amount: roundedDifference,
+          });
           notify('Troca finalizada sem lançar crédito ou troco.', 'success');
         }
       } else {
+        await persistExchangeFinancialOutcome({ outcome: 'none', amount: 0 });
         notify('Troca finalizada sem diferenca.', 'success');
       }
     } catch (error) {
@@ -15132,10 +15263,6 @@
       notify('Adicione itens para salvar o orçamento.', 'warning');
       return;
     }
-    if (!state.vendaCliente) {
-      notify('Vincule um cliente para salvar o orçamento.', 'warning');
-      return;
-    }
     openBudgetModal();
   };
 
@@ -16294,11 +16421,6 @@
   const finalizeBudgetFlow = async () => {
     if (!state.itens.length) {
       notify('Adicione itens para salvar o orçamento.', 'warning');
-      closeFinalizeModal();
-      return;
-    }
-    if (!state.vendaCliente) {
-      notify('Vincule um cliente para salvar o orçamento.', 'warning');
       closeFinalizeModal();
       return;
     }
@@ -20267,6 +20389,101 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
       </main>`;
   };
 
+  const buildExchangeReceiptMarkup = (exchange) => {
+    if (!exchange || typeof exchange !== 'object') {
+      return '<main class="receipt"><p class="receipt-empty">Troca indisponivel para impressao.</p></main>';
+    }
+    const renderItems = (items, emptyLabel) => {
+      if (!Array.isArray(items) || !items.length) {
+        return `<tr><td colspan="5" class="receipt-table__muted">${escapeHtml(emptyLabel)}</td></tr>`;
+      }
+      return items
+        .map(
+          (item) => `<tr>
+            <td>${escapeHtml(item.code || '-')}</td>
+            <td>${escapeHtml(item.description || 'Produto')}</td>
+            <td>${escapeHtml(formatDecimalValue(item.quantity, 3))}</td>
+            <td>${escapeHtml(formatCurrency(item.unitValue))}</td>
+            <td>${escapeHtml(formatCurrency(item.totalValue))}</td>
+          </tr>`
+        )
+        .join('');
+    };
+    const outcomeLabels = {
+      credit: 'Credito gerado para o cliente',
+      cash: 'Troco registrado no caixa',
+      none: safeNumber(exchange.differenceValue) === 0
+        ? 'Troca sem diferenca financeira'
+        : 'Finalizada sem lancamento financeiro',
+      customer_payment_pending: 'Pagamento do cliente pendente na venda complementar',
+      customer_payment: 'Diferenca recebida do cliente',
+    };
+    const outcomeLabel = outcomeLabels[exchange.financialOutcome] ||
+      (exchange.inventoryProcessed ? 'Resultado financeiro nao informado' : 'Troca em andamento');
+    const difference = safeNumber(exchange.differenceValue);
+    const differenceLabel = difference > 0
+      ? 'A favor do cliente'
+      : difference < 0
+      ? 'A pagar pelo cliente'
+      : 'Sem diferenca';
+    const sourceSales = (Array.isArray(exchange.sourceSales) ? exchange.sourceSales : [])
+      .map((entry) => entry.saleCode || entry.saleCodeLabel || entry.code || '')
+      .filter(Boolean)
+      .join(', ');
+    const customerLabel = [exchange.customer?.code, exchange.customer?.name].filter(Boolean).join(' - ');
+    const sellerLabel = [exchange.seller?.code, exchange.seller?.name].filter(Boolean).join(' - ');
+    const financialDetail = [
+      outcomeLabel,
+      exchange.financialAmount > 0 ? formatCurrency(exchange.financialAmount) : '',
+      exchange.financialPaymentLabel || '',
+    ].filter(Boolean).join(' - ');
+    const metaLines = [
+      exchange.store ? `Loja: ${exchange.store}` : '',
+      exchange.pdv ? `PDV: ${exchange.pdv}` : '',
+      `Troca: ${exchange.code || '-'}`,
+      exchange.dateLabel ? `Data: ${exchange.dateLabel}` : '',
+      exchange.operator ? `Operador: ${exchange.operator}` : '',
+    ]
+      .filter(Boolean)
+      .map((line) => `<span class="receipt__meta-item">${escapeHtml(line)}</span>`)
+      .join('');
+    return `
+      <main class="receipt">
+        <header class="receipt__header">
+          <h1 class="receipt__title">Comprovante de Troca</h1>
+          <span class="receipt__badge">${escapeHtml(exchange.inventoryProcessed ? 'Finalizada' : 'Em andamento')}</span>
+        </header>
+        <section class="receipt__meta">${metaLines}</section>
+        <section class="receipt__section">
+          <h2 class="receipt__section-title">Identificacao</h2>
+          <ul class="receipt-list">
+            <li class="receipt-row"><span class="receipt-row__label">Cliente</span><span class="receipt-row__value">${escapeHtml(customerLabel || 'Nao informado')}</span></li>
+            <li class="receipt-row"><span class="receipt-row__label">Vendedor</span><span class="receipt-row__value">${escapeHtml(sellerLabel || 'Nao informado')}</span></li>
+            <li class="receipt-row"><span class="receipt-row__label">Venda original</span><span class="receipt-row__value">${escapeHtml(sourceSales || 'Nao vinculada')}</span></li>
+          </ul>
+        </section>
+        <section class="receipt__section">
+          <h2 class="receipt__section-title">Produtos devolvidos</h2>
+          <table class="receipt-table"><thead><tr><th>Codigo</th><th>Produto</th><th>Qtd.</th><th>Unit.</th><th>Total</th></tr></thead><tbody>${renderItems(exchange.returnedItems, 'Nenhum produto devolvido.')}</tbody></table>
+        </section>
+        <section class="receipt__section">
+          <h2 class="receipt__section-title">Produtos levados</h2>
+          <table class="receipt-table"><thead><tr><th>Codigo</th><th>Produto</th><th>Qtd.</th><th>Unit.</th><th>Total</th></tr></thead><tbody>${renderItems(exchange.takenItems, 'Nenhum produto levado.')}</tbody></table>
+        </section>
+        <section class="receipt__section">
+          <h2 class="receipt__section-title">Resultado</h2>
+          <ul class="receipt-list">
+            <li class="receipt-row"><span class="receipt-row__label">Total devolvido</span><span class="receipt-row__value">${escapeHtml(formatCurrency(exchange.returnedTotal))}</span></li>
+            <li class="receipt-row"><span class="receipt-row__label">Total levado</span><span class="receipt-row__value">${escapeHtml(formatCurrency(exchange.takenTotal))}</span></li>
+            <li class="receipt-row receipt-row--total"><span class="receipt-row__label">${escapeHtml(differenceLabel)}</span><span class="receipt-row__value">${escapeHtml(formatCurrency(Math.abs(difference)))}</span></li>
+            <li class="receipt-row"><span class="receipt-row__label">Conclusao</span><span class="receipt-row__value">${escapeHtml(financialDetail)}</span></li>
+          </ul>
+        </section>
+        ${exchange.notes ? `<section class="receipt__section"><h2 class="receipt__section-title">Observacoes</h2><p>${escapeHtml(exchange.notes)}</p></section>` : ''}
+        <footer class="receipt__footer"><p>Documento nao fiscal.</p></footer>
+      </main>`;
+  };
+
   const buildReceiptLogoPlaceholder = () => ({
     enabled: false,
     label: 'Em desenvolvimento',
@@ -23437,14 +23654,14 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
   };
 
   const getBudgetCustomerLabel = (budget) => {
-    if (!budget) return 'Cliente não informado';
+    if (!budget) return 'Consumidor final';
     const customer = budget.customer || {};
     return (
       customer.nome ||
       customer.nomeFantasia ||
       customer.razaoSocial ||
       customer.fantasia ||
-      'Cliente não informado'
+      'Consumidor final'
     );
   };
 
@@ -26020,6 +26237,10 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
 
   const resetExchangeModal = () => {
     state.exchangeModal.exchangeId = '';
+    state.exchangeModal.financialOutcome = '';
+    state.exchangeModal.financialAmount = 0;
+    state.exchangeModal.financialPaymentLabel = '';
+    state.exchangeModal.inventoryProcessed = false;
     if (elements.exchangeCode) elements.exchangeCode.value = '';
     if (elements.exchangeDate && !elements.exchangeDate.value) {
       elements.exchangeDate.value = getTodayIsoDate();
@@ -26060,6 +26281,10 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
   const clearExchangeFormFields = () => {
     state.exchangeModal.exchangeId = '';
     state.exchangeModal.sourceSales = [];
+    state.exchangeModal.financialOutcome = '';
+    state.exchangeModal.financialAmount = 0;
+    state.exchangeModal.financialPaymentLabel = '';
+    state.exchangeModal.inventoryProcessed = false;
     if (elements.exchangeCode) elements.exchangeCode.value = '';
     if (elements.exchangeDate) elements.exchangeDate.value = getTodayIsoDate();
     if (elements.exchangeType) elements.exchangeType.value = 'troca';
@@ -28830,7 +29055,7 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
     elements.exchangeSave?.addEventListener('click', handleExchangeSave);
     elements.exchangeDelete?.addEventListener('click', handleExchangeDelete);
     elements.exchangeFinish?.addEventListener('click', handleExchangeFinish);
-    elements.exchangePrint?.addEventListener('click', () => notify('Em desenvolvimento', 'info'));
+    elements.exchangePrint?.addEventListener('click', handleExchangePrint);
     elements.exchangeType?.addEventListener('change', handleExchangeTypeChange);
     elements.exchangeCode?.addEventListener('keydown', (event) => {
       if (event.key !== 'Enter') return;

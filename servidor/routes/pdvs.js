@@ -8,6 +8,7 @@ router.use((req, res, next) => {
   next();
 });
 const Pdv = require('../models/Pdv');
+const PdvCodeRange = require('../models/PdvCodeRange');
 const Store = require('../models/Store');
 const Deposit = require('../models/Deposit');
 const PdvState = require('../models/PdvStateNormalized');
@@ -30,7 +31,9 @@ const AccountingAccount = require('../models/AccountingAccount');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 const { uploadBufferToR2, isR2Configured } = require('../utils/cloudflareR2');
-const { emitPdvSaleFiscal } = require('../services/nfceEmitter');
+const { emitPdvSaleFiscal, extractCertificatePair } = require('../services/nfceEmitter');
+const { transmitNfceToSefaz } = require('../services/sefazTransmitter');
+const { decryptBuffer, decryptText } = require('../utils/certificates');
 const { buildFiscalR2Key } = require('../utils/fiscalDrivePath');
 const { buildFiscalXmlFileName } = require('../utils/fiscalXmlFileName');
 const {
@@ -58,7 +61,7 @@ const opcoesImpressao = ['sim', 'nao', 'perguntar'];
 const opcoesImpressaoSet = new Set(opcoesImpressao);
 const perfisDesconto = ['funcionario', 'gerente', 'admin'];
 const perfisDescontoSet = new Set(perfisDesconto);
-const tiposEmissao = ['matricial', 'fiscal', 'ambos'];
+const tiposEmissao = ['matricial', 'fiscal'];
 const tiposEmissaoSet = new Set(tiposEmissao);
 const tiposImpressora = ['bematech', 'elgin'];
 const tiposImpressoraSet = new Set(tiposImpressora);
@@ -1750,6 +1753,11 @@ const normalizeSaleRecordPayload = (record) => {
         .map((entry) => normalizeReceivableRecordPayload(entry))
         .filter(Boolean)
     : [];
+  const appointmentIds = Array.from(new Set(
+    (Array.isArray(record.appointmentIds) ? record.appointmentIds : [record.appointmentId])
+      .map((value) => normalizeString(value))
+      .filter(Boolean)
+  ));
   return {
     id,
     type,
@@ -1798,6 +1806,8 @@ const normalizeSaleRecordPayload = (record) => {
     inventoryProcessedAt,
     cashContributions,
     receivables,
+    appointmentId: appointmentIds[0] || '',
+    appointmentIds,
   };
 };
 
@@ -2218,9 +2228,12 @@ const buildPdvPayload = ({ body, store }) => {
     allowZero: true,
   });
   const observacoes = normalizeString(body.observacoes);
+  const tipoOperacao = normalizeString(body.tipoOperacao || 'fiscal').toLowerCase();
   const ambientesHabilitados = normalizeAmbientes(body.ambientesHabilitados);
   const ambientePadrao = normalizeString(body.ambientePadrao).toLowerCase();
   const ativo = parseBoolean(body.ativo !== undefined ? body.ativo : true);
+  const tipoUso = normalizeString(body.tipoUso || 'web').toLowerCase();
+  const modoTerminais = normalizeString(body.modoTerminais || 'exclusivo').toLowerCase();
   const sincronizacaoAutomatica = parseBoolean(body.sincronizacaoAutomatica !== undefined ? body.sincronizacaoAutomatica : true);
   const permitirModoOffline = parseBoolean(body.permitirModoOffline);
   const mostrarParaFuncionarios = parseBoolean(
@@ -2235,15 +2248,25 @@ const buildPdvPayload = ({ body, store }) => {
     throw new Error('O limite de emissÃµes offline deve ser maior ou igual a zero.');
   }
 
-  if (!ambientesHabilitados.length) {
+  if (!['web', 'executavel'].includes(tipoUso)) {
+    throw createValidationError('O tipo do PDV deve ser Web ou Executável.');
+  }
+  if (!['exclusivo', 'espelhado'].includes(modoTerminais)) {
+    throw createValidationError('O modo de terminais deve ser Exclusivo ou Espelhado.');
+  }
+  if (!['fiscal', 'matricial'].includes(tipoOperacao)) {
+    throw createValidationError('A operação do PDV deve ser Fiscal ou Matricial.');
+  }
+
+  if (tipoOperacao === 'fiscal' && !ambientesHabilitados.length) {
     throw new Error('Informe ao menos um ambiente fiscal habilitado.');
   }
 
-  if (!ambientePadrao) {
+  if (ambientesHabilitados.length && !ambientePadrao) {
     throw new Error('Informe o ambiente padrÃ£o de emissÃ£o.');
   }
 
-  if (!ambientesHabilitados.includes(ambientePadrao)) {
+  if (ambientePadrao && !ambientesHabilitados.includes(ambientePadrao)) {
     throw new Error('O ambiente padrÃ£o precisa estar entre os ambientes habilitados.');
   }
 
@@ -2275,6 +2298,8 @@ const buildPdvPayload = ({ body, store }) => {
     nome,
     apelido,
     ativo,
+    tipoUso,
+    modoTerminais,
     serieNfe,
     serieNfce,
     numeroNfeInicial,
@@ -2505,6 +2530,10 @@ const normalizeReceivableRecordPayload = (entry) => {
       `${normalizeString(entry.saleId)}:${Number.isFinite(parcelNumber) && parcelNumber >= 1 ? parcelNumber : 1}`,
     parcelNumber: Number.isFinite(parcelNumber) && parcelNumber >= 1 ? parcelNumber : 1,
     value: safeNumber(entry.value ?? entry.valor ?? entry.amount ?? 0, 0),
+    originalValue: safeNumber(entry.originalValue ?? entry.originalAmount ?? entry.value ?? entry.valor ?? entry.amount ?? 0, 0),
+    paidValue: safeNumber(entry.paidValue ?? 0, 0),
+    status: normalizeString(entry.status) || 'open',
+    paidDate: safeDate(entry.paidDate ?? null),
     formattedValue: normalizeString(entry.formattedValue),
     dueDate: dueDate || null,
     dueDateLabel: normalizeString(entry.dueDateLabel),
@@ -3464,7 +3493,7 @@ const syncPdvCaixaSessionHistory = async ({ pdvDoc, existingState, updatedState 
     }
   }
 
-  if (PDV_NORMALIZED_DUAL_WRITE_ENABLED && shouldUseNormalizedReadForPdv(pdvId)) {
+  if (PDV_NORMALIZED_DUAL_WRITE_ENABLED) {
     void syncPdvStateNormalizedMirror({ pdvDoc, updatedState }).catch((mirrorError) => {
       console.error('Erro ao sincronizar espelho normalizado do estado do PDV:', mirrorError);
     });
@@ -3475,6 +3504,12 @@ router.get('/', requireAuth, authorizeRoles('admin'), async (req, res) => {
   try {
     const { empresa } = req.query;
     const query = {};
+    const includeDesktop = ['1', 'true', 'yes', 'on'].includes(
+      String(req.query?.includeDesktop || '').trim().toLowerCase()
+    );
+    if (!includeDesktop) {
+      query.tipoUso = { $ne: 'executavel' };
+    }
     if (empresa) {
       query.empresa = empresa;
     }
@@ -3781,6 +3816,15 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
       ...payload,
       codigo,
       empresa: empresaId,
+      configuracoesFiscal: {
+        tipoEmissaoPadrao: req.body?.tipoOperacao === 'matricial' ? 'matricial' : 'fiscal',
+      },
+      configuracoesImpressao: {
+        sempreImprimir: ['sim', 'nao', 'perguntar'].includes(req.body?.politicaImpressao)
+          ? req.body.politicaImpressao
+          : 'perguntar',
+      },
+      desktop: { status: payload.tipoUso === 'executavel' ? 'configurando' : 'web' },
       criadoPor,
       atualizadoPor: criadoPor,
     });
@@ -3811,11 +3855,23 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
       return res.status(400).json({ message: 'Empresa informada nÃ£o foi encontrada.' });
     }
 
+    const existingPdv = await Pdv.findById(pdvId).lean();
+    if (!existingPdv) {
+      return res.status(404).json({ message: 'PDV não encontrado.' });
+    }
+
     let payload;
     try {
       payload = buildPdvPayload({ body: req.body, store });
     } catch (validationError) {
       return res.status(400).json({ message: validationError.message });
+    }
+
+    if ((existingPdv.tipoUso || 'web') !== payload.tipoUso) {
+      return res.status(409).json({
+        message: 'Use a ação de conversão ou reversão para alterar o tipo do PDV.',
+        code: 'PDV_TYPE_TRANSITION_REQUIRES_WORKFLOW',
+      });
     }
 
     const codigo = normalizeString(req.body.codigo);
@@ -3837,6 +3893,16 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
         codigo,
         empresa: empresaId,
         atualizadoPor,
+        configuracoesFiscal: {
+          ...(existingPdv.configuracoesFiscal || {}),
+          tipoEmissaoPadrao: req.body?.tipoOperacao === 'matricial' ? 'matricial' : 'fiscal',
+        },
+        configuracoesImpressao: {
+          ...(existingPdv.configuracoesImpressao || {}),
+          sempreImprimir: ['sim', 'nao', 'perguntar'].includes(req.body?.politicaImpressao)
+            ? req.body.politicaImpressao
+            : (existingPdv.configuracoesImpressao?.sempreImprimir || 'perguntar'),
+        },
       },
       { new: true, runValidators: true }
     ).populate('empresa');
@@ -3852,7 +3918,7 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
   }
 });
 
-router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
+const emitSaleFiscalHandler = async (req, res) => {
   let sale = null;
   let emissionDate = null;
   let saleCodeForName = '';
@@ -3944,8 +4010,12 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
         .json({ message: 'Nenhuma venda registrada foi encontrada para este PDV.' });
     }
 
+    const requestedSaleCode = normalizeString(req.body?.saleCode);
     sale = Array.isArray(state.completedSales)
-      ? state.completedSales.find((entry) => entry && entry.id === saleId)
+      ? state.completedSales.find((entry) => entry && (
+        normalizeString(entry.id || entry._id) === saleId
+        || (req.desktopHost && requestedSaleCode && normalizeString(entry.saleCode || entry.codigoVenda) === requestedSaleCode)
+      ))
       : null;
 
     if (!sale) {
@@ -3959,6 +4029,7 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
     }
 
     if (sale.fiscalStatus === 'emitted' && (sale.fiscalDriveFileId || sale.fiscalXmlUrl)) {
+      if (req.body?.accessKey && req.body.accessKey === sale.fiscalAccessKey) return res.json(sale);
       return res.status(409).json({ message: 'Esta venda jÃ¡ possui XML emitido.' });
     }
 
@@ -4005,22 +4076,44 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
       ultimoNumeroEmitido !== null && ultimoNumeroEmitido >= numeroInicial - 1
         ? ultimoNumeroEmitido
         : numeroInicial - 1;
-    const proximoNumeroFiscal = baseSequencia + 1;
+    const preSignedXml = normalizeString(req.body?.signedXml);
+    const requestedFiscalNumber = Number(req.body?.fiscalNumber);
+    const proximoNumeroFiscal = preSignedXml && Number.isInteger(requestedFiscalNumber) && requestedFiscalNumber > 0
+      ? requestedFiscalNumber
+      : baseSequencia + 1;
+
+    if (preSignedXml) {
+      const requestedSeries = normalizeString(req.body?.fiscalSeries);
+      if (requestedSeries !== serieNfce) return res.status(409).json({ message: 'A sÃ©rie do XML offline nÃ£o pertence a este PDV.' });
+      const reserved = await PdvCodeRange.findOne({ pdv: pdv._id, host: req.desktopHost?._id, kind: 'nfce', start: { $lte: proximoNumeroFiscal }, end: { $gte: proximoNumeroFiscal }, status: { $ne: 'revoked' } }).lean();
+      if (!reserved) return res.status(409).json({ message: 'O nÃºmero da NFC-e offline nÃ£o pertence a uma faixa reservada para esta mÃ¡quina.' });
+    }
 
     emissionDate = new Date();
     const storeForXml =
       empresa && typeof empresa.toObject === 'function'
         ? empresa.toObject()
         : empresa || {};
-    const emissionResult = await emitPdvSaleFiscal({
-      sale,
-      pdv,
-      store: storeForXml,
-      emissionDate,
-      environment: ambiente,
-      serie: serieNfce,
-      numero: proximoNumeroFiscal,
-    });
+    let emissionResult;
+    if (preSignedXml) {
+      const { privateKeyPem, certificatePem, certificateChain } = extractCertificatePair(
+        decryptBuffer(empresa.certificadoArquivoCriptografado),
+        decryptText(empresa.certificadoSenhaCriptografada)
+      );
+      const transmission = await transmitNfceToSefaz({
+        xml: preSignedXml, uf: storeForXml.uf, environment: ambiente,
+        certificate: certificatePem, certificateChain, privateKey: privateKeyPem,
+        lotId: `${proximoNumeroFiscal}${Date.now()}`,
+      });
+      emissionResult = {
+        xml: preSignedXml, accessKey: normalizeString(req.body?.accessKey), digestValue: normalizeString(req.body?.digestValue),
+        signatureValue: normalizeString(req.body?.signatureValue), qrCodePayload: normalizeString(req.body?.qrCodePayload), transmission,
+      };
+    } else {
+      emissionResult = await emitPdvSaleFiscal({
+        sale, pdv, store: storeForXml, emissionDate, environment: ambiente, serie: serieNfce, numero: proximoNumeroFiscal,
+      });
+    }
     fiscalPerf.mark('sefaz_emissao');
 
     const transmission = emissionResult.transmission || null;
@@ -4101,7 +4194,7 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
     }
 
     const numeroField = numeroInicialNfce ? 'numeroNfceAtual' : 'numeroNfeAtual';
-    await Pdv.updateOne({ _id: pdvId }, { $set: { [numeroField]: proximoNumeroFiscal } });
+    if (!preSignedXml) await Pdv.updateOne({ _id: pdvId }, { $set: { [numeroField]: proximoNumeroFiscal } });
     fiscalPerf.mark('mongo_persistencia_fiscal');
     fiscalPerf.flush('ok');
 
@@ -4237,7 +4330,9 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
     }
     res.status(500).json({ message });
   }
-});
+};
+
+router.post('/:id/sales/:saleId/fiscal', requireAuth, emitSaleFiscalHandler);
 
 router.put('/:id/configuracoes', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
   try {
@@ -4632,6 +4727,7 @@ const buildCaixaMovementHistoryEntry = ({
 const buildSaleContributionsFromPayments = (payments = []) =>
   (Array.isArray(payments) ? payments : [])
     .map((payment) => {
+      if (normalizeString(payment?.type).toLowerCase() === 'crediario') return null;
       const amount = safeNumber(payment?.valor ?? 0, 0);
       if (!(amount > 0)) return null;
       return {
@@ -5362,7 +5458,7 @@ const runPdvCommand = async ({
     const userMeta = getCommandHistoryUserMeta(user || {});
     const historyEntry = normalizeHistoryEntryPayload({
       id: 'recebimento-cliente',
-      label: 'Recebimentos de Cliente',
+      label: 'Recebimentos de Clientes',
       amount: Math.abs(safeNumber(total, 0)),
       delta: Math.abs(safeNumber(total, 0)),
       motivo: normalizeString(payload?.reason || payload?.motivo || ''),
@@ -5562,6 +5658,8 @@ const runPdvCommand = async ({
       status: 'completed',
       cashContributions,
       receivables: normalizedReceivables,
+      appointmentId: normalizeString(payload?.appointmentId),
+      appointmentIds: Array.isArray(payload?.appointmentIds) ? payload.appointmentIds : [],
     });
     if (!incomingSale) {
       const error = new Error('Não foi possível montar a venda para persistência.');
@@ -5964,9 +6062,10 @@ const runPdvCommand = async ({
       };
     });
 
+    const cashSaleTotal = contributions.reduce((sum, entry) => sum + safeNumber(entry?.amount, 0), 0);
     const nextSummary = {
       abertura: safeNumber(existingState?.summary?.abertura, 0),
-      recebido: Math.max(0, safeNumber(existingState?.summary?.recebido, 0) - Math.abs(saleTotal)),
+      recebido: Math.max(0, safeNumber(existingState?.summary?.recebido, 0) - Math.abs(cashSaleTotal)),
       recebimentosCliente: safeNumber(existingState?.summary?.recebimentosCliente, 0),
       saldo: 0,
     };
@@ -7103,6 +7202,12 @@ router.post('/:id/commands', requireAuth, async (req, res) => {
       routePerf.flush('not_found', { message: 'PDV não encontrado.' });
       return res.status(404).json({ message: 'PDV não encontrado.' });
     }
+    if (pdv.tipoUso === 'executavel') {
+      return res.status(409).json({
+        message: 'Este PDV é exclusivo do aplicativo Executável.',
+        code: 'PDV_DESKTOP_ONLY',
+      });
+    }
 
     const { action, payload } = parsePdvCommandRequest(req.body || {});
     if (!action) {
@@ -7358,6 +7463,12 @@ router.put('/:id/state', requireAuth, async (req, res) => {
 
     if (!pdv) {
       return res.status(404).json({ message: 'PDV nÃ£o encontrado.' });
+    }
+    if (pdv.tipoUso === 'executavel') {
+      return res.status(409).json({
+        message: 'Este PDV é exclusivo do aplicativo Executável.',
+        code: 'PDV_DESKTOP_ONLY',
+      });
     }
 
     return enqueuePdvStateWrite(pdvId, async () => {
@@ -7649,5 +7760,9 @@ router.delete('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), asyn
   }
 });
 
+router.runPdvCommand = runPdvCommand;
+router.enqueuePdvStateWrite = enqueuePdvStateWrite;
+router.emitSaleFiscalHandler = emitSaleFiscalHandler;
+router.syncPdvStateNormalizedMirror = syncPdvStateNormalizedMirror;
 module.exports = router;
 

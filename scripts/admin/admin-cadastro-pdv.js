@@ -35,6 +35,15 @@
     envDefaultHomologacao: '#pdv-env-default-homologacao',
     envDefaultProducao: '#pdv-env-default-producao',
     syncAuto: '#pdv-sync-auto',
+    usageType: '#pdv-usage-type',
+    operationType: '#pdv-operation-type',
+    terminalMode: '#pdv-terminal-mode',
+    printPolicy: '#pdv-print-policy',
+    desktopStatusCard: '#pdv-desktop-status-card',
+    desktopStatus: '#pdv-desktop-status',
+    pairHost: '#pdv-pair-host',
+    copyDesktop: '#pdv-copy-desktop',
+    convertDesktop: '#pdv-convert-desktop',
     lastSync: '#pdv-last-sync',
     offline: '#pdv-offline',
     offlineLimit: '#pdv-offline-limit',
@@ -548,6 +557,11 @@
       updateActiveToggleLabel();
     }
     if (elements.syncAuto) elements.syncAuto.checked = true;
+    if (elements.usageType) { elements.usageType.value = 'web'; elements.usageType.disabled = false; }
+    if (elements.operationType) elements.operationType.value = 'fiscal';
+    if (elements.terminalMode) elements.terminalMode.value = 'exclusivo';
+    if (elements.printPolicy) elements.printPolicy.value = 'perguntar';
+    elements.desktopStatusCard?.classList.add('hidden');
     if (elements.offline) elements.offline.checked = false;
     if (elements.offlineLimit) {
       elements.offlineLimit.value = '';
@@ -569,6 +583,20 @@
     if (elements.code) elements.code.value = pdv.codigo || '';
     if (elements.name) elements.name.value = pdv.nome || '';
     if (elements.alias) elements.alias.value = pdv.apelido || '';
+    if (elements.usageType) { elements.usageType.value = pdv.tipoUso || 'web'; elements.usageType.disabled = true; }
+    if (elements.operationType) elements.operationType.value = pdv.configuracoesFiscal?.tipoEmissaoPadrao === 'matricial' ? 'matricial' : 'fiscal';
+    if (elements.terminalMode) elements.terminalMode.value = pdv.modoTerminais || 'exclusivo';
+    if (elements.printPolicy) elements.printPolicy.value = pdv.configuracoesImpressao?.sempreImprimir || 'perguntar';
+    elements.desktopStatusCard?.classList.remove('hidden');
+    if (elements.desktopStatus) {
+      const last = pdv.desktop?.lastHeartbeatAt ? ` • último contato ${formatDateTime(pdv.desktop.lastHeartbeatAt)}` : '';
+      elements.desktopStatus.textContent = `${pdv.desktop?.status || (pdv.tipoUso === 'executavel' ? 'configurando' : 'web')}${last}`;
+    }
+    if (elements.convertDesktop) {
+      const activeDesktop = pdv.tipoUso === 'executavel' && pdv.desktop?.status === 'ativo';
+      elements.convertDesktop.classList.toggle('hidden', activeDesktop);
+      elements.convertDesktop.textContent = pdv.tipoUso === 'executavel' ? 'Ativar Executável' : 'Converter para Executável';
+    }
     if (elements.active) {
       elements.active.checked = Boolean(pdv.ativo);
       updateActiveToggleLabel();
@@ -727,14 +755,16 @@
         return null;
     }
 
+    const tipoOperacao = elements.operationType?.value || 'fiscal';
+    const exigeConfiguracaoFiscal = tipoOperacao === 'fiscal';
     const ambientesHabilitados = getEnabledEnvironments();
-    if (!ambientesHabilitados.length) {
+    if (exigeConfiguracaoFiscal && !ambientesHabilitados.length) {
       notify('Habilite ao menos um ambiente fiscal para o PDV.', 'warning');
       return null;
     }
 
     const ambientePadrao = getSelectedDefaultEnvironment();
-    if (!ambientePadrao) {
+    if (ambientesHabilitados.length && !ambientePadrao) {
       notify('Defina o ambiente padrão de emissão.', 'warning');
       return null;
     }
@@ -746,7 +776,7 @@
       }
     }
 
-    if (!storeSupportsEnvironment(store, ambientePadrao)) {
+    if (ambientePadrao && !storeSupportsEnvironment(store, ambientePadrao)) {
       notify('O ambiente padrão selecionado não está disponível para a empresa.', 'warning');
       return null;
     }
@@ -821,6 +851,10 @@
       nome,
       apelido: elements.alias?.value.trim() || '',
       ativo: Boolean(elements.active?.checked),
+      tipoUso: elements.usageType?.value || 'web',
+      modoTerminais: elements.terminalMode?.value || 'exclusivo',
+      tipoOperacao,
+      politicaImpressao: elements.printPolicy?.value || 'perguntar',
       empresa: empresaId,
       serieNfe: elements.nfeSeries?.value.trim() || '',
       serieNfce: elements.nfceSeries?.value.trim() || '',
@@ -888,7 +922,7 @@
 
     const fetchPdvs = async () => {
       const token = getToken();
-      const response = await fetch(`${API_BASE}/pdvs`, {
+      const response = await fetch(`${API_BASE}/pdvs?includeDesktop=1`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
     if (!response.ok) {
@@ -967,6 +1001,60 @@
       throw new Error(message);
     }
     return response.json();
+  };
+
+  const generatePairingCode = async () => {
+    if (!state.editingId) return;
+    const token = getToken();
+    const response = await fetch(`${API_BASE}/desktop/pdvs/${state.editingId}/pairing-code`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) throw new Error(await parseErrorResponse(response, 'Falha ao gerar pareamento.'));
+    const payload = await response.json();
+    notify(`Código de pareamento: ${payload.pairingCode} (válido por 15 minutos)`, 'success');
+  };
+
+  const convertCurrentPdv = async () => {
+    if (!state.editingId) return;
+    const token = getToken();
+    const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+    const checkResponse = await fetch(`${API_BASE}/desktop/pdvs/${state.editingId}/conversion-check`, { headers });
+    const checklist = await checkResponse.json();
+    if (!checkResponse.ok || !checklist.ok) {
+      const failures = (checklist.checks || []).filter((item) => !item.ok).map((item) => item.message).join(' ');
+      throw new Error(failures || checklist.message || 'O PDV ainda não pode ser convertido.');
+    }
+    const response = await fetch(`${API_BASE}/desktop/pdvs/${state.editingId}/convert`, {
+      method: 'POST', headers, body: JSON.stringify({
+        modoTerminais: elements.terminalMode?.value || 'exclusivo',
+        tipoEmissao: elements.operationType?.value || 'fiscal',
+      }),
+    });
+    if (!response.ok) throw new Error(await parseErrorResponse(response, 'Falha ao converter PDV.'));
+    await fetchPdvs();
+    const converted = state.pdvs.find((item) => normalizeId(item._id) === state.editingId);
+    if (converted) startEditFlow(converted);
+    notify('PDV convertido para Executável com segurança.', 'success');
+  };
+
+  const copyCurrentPdvToDesktop = async () => {
+    if (!state.editingId) return;
+    const codigo = window.prompt('Código do novo PDV Executável:');
+    if (!codigo) return;
+    const nome = window.prompt('Nome do novo PDV Executável:');
+    if (!nome) return;
+    const response = await fetch(`${API_BASE}/desktop/pdvs/${state.editingId}/copy-settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify({ codigo: codigo.trim(), nome: nome.trim() }),
+    });
+    if (!response.ok) throw new Error(await parseErrorResponse(response, 'Falha ao copiar configurações.'));
+    const payload = await response.json();
+    await fetchPdvs();
+    const copy = state.pdvs.find((item) => normalizeId(item._id) === normalizeId(payload.pdv?._id));
+    if (copy) startEditFlow(copy);
+    notify('Novo PDV Executável criado. Configure a série fiscal e faça o pareamento.', 'success');
   };
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -1059,6 +1147,16 @@
         syncEnvironmentAvailability({ preserveSelection: false, preferredDefault: 'homologacao' });
       });
     }
+
+    elements.pairHost?.addEventListener('click', () => {
+      generatePairingCode().catch((error) => notify(error.message, 'error'));
+    });
+    elements.copyDesktop?.addEventListener('click', () => {
+      copyCurrentPdvToDesktop().catch((error) => notify(error.message, 'error'));
+    });
+    elements.convertDesktop?.addEventListener('click', () => {
+      convertCurrentPdv().catch((error) => notify(error.message, 'error'));
+    });
 
     if (elements.pdvList) {
       elements.pdvList.addEventListener('click', (event) => {

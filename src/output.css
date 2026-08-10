@@ -2065,6 +2065,9 @@
   .border-amber-500 {
     border-color: var(--color-amber-500);
   }
+  .border-blue-100 {
+    border-color: var(--color-blue-100);
+  }
   .border-blue-200 {
     border-color: var(--color-blue-200);
   }
@@ -2352,6 +2355,9 @@
   }
   .bg-blue-500 {
     background-color: var(--color-blue-500);
+  }
+  .bg-blue-700 {
+    background-color: var(--color-blue-700);
   }
   .bg-cyan-50 {
     background-color: var(--color-cyan-50);

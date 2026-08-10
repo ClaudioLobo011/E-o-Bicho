@@ -65,6 +65,10 @@ const transportSchema = new mongoose.Schema({
 }, { _id: false });
 
 const transferSchema = new mongoose.Schema({
+    desktopTransferId: { type: String, trim: true, index: true, sparse: true },
+    desktopEventIds: { type: [String], default: [] },
+    desktopHost: { type: mongoose.Schema.Types.ObjectId, ref: 'PdvDesktopHost', default: null },
+    desktopPdv: { type: mongoose.Schema.Types.ObjectId, ref: 'Pdv', default: null },
     number: {
         type: Number,
         unique: true,
@@ -132,5 +136,7 @@ const transferSchema = new mongoose.Schema({
 }, {
     timestamps: true,
 });
+
+transferSchema.index({ desktopPdv: 1, desktopTransferId: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('Transfer', transferSchema);

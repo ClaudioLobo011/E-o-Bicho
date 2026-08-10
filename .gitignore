@@ -22,3 +22,11 @@ servidor/reports/
 tmp/
 outputs/
 outputs/pedido_1472/
+
+# Arquivos auxiliares usados somente para gerar relatórios fora do site
+.codex-tmp/
+.codex-work/
+_tmp_*.js
+servidor/tmp_*.js
+servidor/tmp_*.js.bak
+tmp_node_exchange/

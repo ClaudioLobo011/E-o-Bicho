@@ -1394,7 +1394,7 @@
     }
     try {
       const token = getToken();
-      const response = await fetch(`${API_BASE}/pdvs?empresa=${encodeURIComponent(companyId)}`, {
+      const response = await fetch(`${API_BASE}/pdvs?empresa=${encodeURIComponent(companyId)}&includeDesktop=1`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!response.ok) {

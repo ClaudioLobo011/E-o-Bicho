@@ -2271,6 +2271,7 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
 
 module.exports = {
   emitPdvSaleFiscal,
+  extractCertificatePair,
   _test: {
     collectFiscalItemCandidates,
     buildIcmsGroup,
