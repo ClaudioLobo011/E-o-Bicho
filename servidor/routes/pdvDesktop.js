@@ -1011,7 +1011,7 @@ router.get('/bootstrap', authenticateHost, async (req, res) => {
     pdv,
     state: state || null,
     paymentMethods,
-    updateFeedUrl: clean(process.env.PDV_DESKTOP_UPDATE_URL) || 'https://www.peteobicho.com.br/public/updates/pdv',
+    updateFeedUrl: clean(process.env.PDV_DESKTOP_UPDATE_URL) || 'https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/main/public/updates/pdv',
   });
 });
 
