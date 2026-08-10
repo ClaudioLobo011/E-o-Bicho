@@ -1005,7 +1005,14 @@ router.get('/bootstrap', authenticateHost, async (req, res) => {
   if (!pdv || !['web', 'executavel'].includes(pdv.tipoUso) || pdv.desktop?.status === 'suspenso') {
     return res.status(409).json({ message: 'PDV não está disponível para preparação do Executável.' });
   }
-  return res.json({ version: 1, generatedAt: new Date().toISOString(), pdv, state: state || null, paymentMethods, updateFeedUrl: clean(process.env.PDV_DESKTOP_UPDATE_URL) });
+  return res.json({
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    pdv,
+    state: state || null,
+    paymentMethods,
+    updateFeedUrl: clean(process.env.PDV_DESKTOP_UPDATE_URL) || 'https://www.peteobicho.com.br/public/updates/pdv',
+  });
 });
 
 router.get('/sales/history', authenticateHost, async (req, res) => {
