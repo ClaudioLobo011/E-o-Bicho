@@ -1008,6 +1008,18 @@ router.get('/bootstrap', authenticateHost, async (req, res) => {
   return res.json({ version: 1, generatedAt: new Date().toISOString(), pdv, state: state || null, paymentMethods, updateFeedUrl: clean(process.env.PDV_DESKTOP_UPDATE_URL) });
 });
 
+router.get('/sales/history', authenticateHost, async (req, res) => {
+  const limit = Math.min(Math.max(Number(req.query?.limit || 500), 50), 500);
+  const cursor = clean(req.query?.cursor);
+  if (cursor && !mongoose.Types.ObjectId.isValid(cursor)) return res.status(400).json({ message: 'Cursor do histórico inválido.' });
+  const query = { pdv: req.desktopHost.pdv };
+  if (cursor) query._id = { $lt: new mongoose.Types.ObjectId(cursor) };
+  const documents = await PdvStateSale.find(query).sort({ _id: -1 }).select('payload').limit(limit + 1).lean();
+  const hasMore = documents.length > limit;
+  const page = hasMore ? documents.slice(0, limit) : documents;
+  return res.json({ sales: page.map((entry) => entry.payload).filter(Boolean), nextCursor: hasMore ? String(page[page.length - 1]._id) : '' });
+});
+
 router.get('/catalog/products', authenticateHost, async (req, res) => {
   const host = req.desktopHost;
   const pdv = await Pdv.findById(host.pdv).select('empresa configuracoesEstoque desktop tipoUso').lean();

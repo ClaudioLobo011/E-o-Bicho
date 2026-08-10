@@ -106,6 +106,10 @@ test.describe('integração do PDV Desktop', () => {
     assert.deepEqual(cloudState.completedSales[0].appointmentIds, [String(appointment._id)]);
     assert.equal(String(cloudState.completedSales[0].items[0].productId), String(base.product._id));
     assert.equal(Number(cloudState.completedSales[0].items[0].unitCost), 10);
+    const salesHistory = await request.get('/desktop/sales/history?limit=50').set(headers);
+    assert.equal(salesHistory.status, 200, salesHistory.text);
+    assert.equal(salesHistory.body.sales.length, 1);
+    assert.equal(salesHistory.body.sales[0].id, 'local-sale-1');
     const billedAppointment = await Appointment.findById(appointment._id).lean();
     assert.equal(billedAppointment.pago, true);
     assert.equal(billedAppointment.status, 'finalizado');
