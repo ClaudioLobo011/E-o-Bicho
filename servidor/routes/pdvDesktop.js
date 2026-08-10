@@ -1011,7 +1011,9 @@ router.get('/bootstrap', authenticateHost, async (req, res) => {
     pdv,
     state: state || null,
     paymentMethods,
-    updateFeedUrl: clean(process.env.PDV_DESKTOP_UPDATE_URL) || 'https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/main/public/updates/pdv',
+    // Versões anteriores à 0.8.5 não protegiam a pasta dados durante o NSIS.
+    // O feed seguro passou a ser embutido no aplicativo a partir da 0.8.5.
+    updateFeedUrl: '',
   });
 });
 
