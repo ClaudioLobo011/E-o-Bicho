@@ -27,6 +27,7 @@ require('../models/Service');
 const pdvDomain = require('./pdvs');
 const { adjustProductStockForDeposit, toObjectIdOrNull } = require('../utils/inventoryStock');
 const { decryptBuffer, decryptText } = require('../utils/certificates');
+const { deriveAppointmentStatus } = require('../services/appointmentStatus');
 
 const router = express.Router();
 const adminOnly = [requireAuth, authorizeRoles('admin', 'admin_master')];
@@ -183,6 +184,7 @@ function appointmentForDesktop(appointment) {
       notes: item?.observacao || '',
     };
   });
+  const status = deriveAppointmentStatus(appointment);
   return {
     id: String(appointment._id),
     storeId: clean(appointment.store),
@@ -197,7 +199,7 @@ function appointmentForDesktop(appointment) {
     services,
     scheduledAt: appointment.scheduledAt,
     total: Number(appointment.valor || services.reduce((sum, item) => sum + Number(item.unitPrice || 0), 0)),
-    status: appointment.status || 'agendado',
+    status,
     paid: Boolean(appointment.pago),
     saleCode: appointment.codigoVenda || '',
     notes: appointment.observacoes || '',

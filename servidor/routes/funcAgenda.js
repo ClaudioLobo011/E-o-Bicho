@@ -24,6 +24,7 @@ const {
   cancelPostServiceSurvey,
   schedulePostServiceSurvey,
 } = require('../services/whatsappPostServiceSurveyService');
+const { deriveAppointmentStatus } = require('../services/appointmentStatus');
 
 const requireStaff = authorizeRoles('funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master');
 const MAX_CODIGO_CLIENTE_SEQUENCIAL = 999999999;
@@ -1239,6 +1240,7 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
       } else {
         set.valor = 0;
       }
+      set.status = deriveAppointmentStatus({ status: appointmentBefore.status, itens: set.itens });
     }
 
     if (hasStatusField && normalizedStatus) {
