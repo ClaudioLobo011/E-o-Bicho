@@ -15,7 +15,7 @@ namespace PdvLocalAgent
 {
     public class Program
     {
-        private static readonly string Version = "1.1.4";
+        private static readonly string Version = "1.1.5";
         private static readonly JavaScriptSerializer Serializer = new JavaScriptSerializer();
         private static AgentConfig Config;
         private static Logger Log;
@@ -224,6 +224,31 @@ namespace PdvLocalAgent
 
                     Jobs[job.Id] = job;
                     SendJson(response, 200, new { ok = true, queued = true, jobId = job.Id });
+                    return;
+                }
+
+                if (request.HttpMethod == "POST" && path == "/preview-json")
+                {
+                    var body = ReadBody(request, Config.maxBodyBytes);
+                    var payload = Serializer.Deserialize<PrintRequest>(body);
+                    if (payload == null || payload.document == null)
+                    {
+                        SendJson(response, 400, new { ok = false, error = "invalid-payload" });
+                        return;
+                    }
+                    payload.document.paperWidth = NormalizePaperWidth(payload.document.paperWidth);
+                    if (string.IsNullOrWhiteSpace(payload.document.paperWidth))
+                    {
+                        payload.document.paperWidth = NormalizePaperWidth(Config.paperWidth);
+                    }
+                    var renderer = new ReceiptRenderer(payload.document.paperWidth, CodePage);
+                    byte[] png = renderer.RenderPreviewPng(payload.document);
+                    SendJson(response, 200, new
+                    {
+                        ok = true,
+                        mimeType = "image/png",
+                        image = "data:image/png;base64," + Convert.ToBase64String(png)
+                    });
                     return;
                 }
 
@@ -756,6 +781,12 @@ try {
     public class ReceiptMeta
     {
         public string store { get; set; }
+        public string legalName { get; set; }
+        public string address { get; set; }
+        public string cnpj { get; set; }
+        public string stateRegistration { get; set; }
+        public string municipalRegistration { get; set; }
+        public string phone { get; set; }
         public string pdv { get; set; }
         public string saleCode { get; set; }
         public string operatorName { get; set; }
@@ -839,6 +870,10 @@ try {
         public string bairro { get; set; }
         public string cidade { get; set; }
         public string uf { get; set; }
+        public string type { get; set; }
+        public string scheduledAt { get; set; }
+        public string courier { get; set; }
+        public string notes { get; set; }
     }
 
     public class ReceiptValue
@@ -964,9 +999,9 @@ try {
                 RenderDanfeNfce(doc, true);
                 return Finish();
             }
-            if (type == "venda" && (variant == "matricial" || variant.Contains("matricial")))
+            if ((type == "venda" || type == "delivery") && (variant == "matricial" || variant.Contains("matricial")))
             {
-                RenderDanfeNfce(doc, false);
+                RenderMatricialCoupon(doc);
                 return Finish();
             }
             if (type == "fechamento")
@@ -983,6 +1018,16 @@ try {
             }
 
             return Finish();
+        }
+
+        public byte[] RenderPreviewPng(ReceiptDocument doc)
+        {
+            using (var bitmap = RasterReceiptBuilder.Build(doc, Width <= 32 ? 384 : 576))
+            using (var stream = new MemoryStream())
+            {
+                bitmap.Save(stream, System.Drawing.Imaging.ImageFormat.Png);
+                return stream.ToArray();
+            }
         }
 
         private void Initialize()
@@ -1159,6 +1204,136 @@ try {
             PrintMetaPair("Operador", operatorName, "Data", date);
 
             RenderSaleBody(doc);
+        }
+
+        private void RenderMatricialCoupon(ReceiptDocument doc)
+        {
+            using (var bitmap = RasterReceiptBuilder.Build(doc, Width <= 32 ? 384 : 576))
+            {
+                PrintRasterImage(bitmap);
+            }
+        }
+
+        private void RenderMatricialCouponText(ReceiptDocument doc)
+        {
+            var meta = doc.meta;
+            var totals = doc.totals;
+            int rightWidth = Width >= 60 ? 14 : (Width >= 48 ? 12 : 10);
+            string storeName = meta != null ? meta.store : string.Empty;
+            string legalName = meta != null ? meta.legalName : string.Empty;
+            string address = meta != null ? meta.address : string.Empty;
+            string cnpj = meta != null ? meta.cnpj : string.Empty;
+            string stateRegistration = meta != null ? meta.stateRegistration : string.Empty;
+            string municipalRegistration = meta != null ? meta.municipalRegistration : string.Empty;
+            string saleCode = meta != null ? meta.saleCode : string.Empty;
+            string pdv = meta != null ? meta.pdv : string.Empty;
+            string operatorName = meta != null ? (meta.@operator ?? meta.operatorName) : string.Empty;
+            string date = meta != null ? meta.date : string.Empty;
+
+            if (!string.IsNullOrWhiteSpace(storeName))
+            {
+                AddLineCentered(storeName.ToUpperInvariant(), true, 2, 2);
+            }
+            if (!string.IsNullOrWhiteSpace(legalName) &&
+                !string.Equals(storeName, legalName, StringComparison.OrdinalIgnoreCase))
+            {
+                AddLineCentered(legalName, false);
+            }
+            if (!string.IsNullOrWhiteSpace(address))
+            {
+                foreach (var line in WrapText(address, Width)) AddLineCentered(line, false);
+            }
+            var registrations = new List<string>();
+            if (!string.IsNullOrWhiteSpace(cnpj)) registrations.Add("CNPJ: " + cnpj);
+            if (!string.IsNullOrWhiteSpace(stateRegistration)) registrations.Add("IE: " + stateRegistration);
+            if (!string.IsNullOrWhiteSpace(municipalRegistration)) registrations.Add("IM: " + municipalRegistration);
+            if (registrations.Count > 0)
+            {
+                foreach (var line in WrapText(string.Join("  ", registrations), Width)) AddLineCentered(line, false);
+            }
+
+            AddSeparator('-');
+            AddLineCentered("EXTRATO " + (string.IsNullOrWhiteSpace(saleCode) ? "VENDA" : saleCode), true);
+            AddLineCentered("CUPOM NAO FISCAL", true);
+            AddSeparator('-');
+
+            PrintDanfeItems(doc.items);
+            AddSeparator('-');
+            AddLine(FormatColumnsCustom("Total bruto", totals != null ? totals.subtotal : string.Empty, rightWidth));
+            if (totals != null && totals.discountValue > 0)
+            {
+                AddLine(FormatColumnsCustom("Desconto", totals.discount, rightWidth));
+            }
+            if (totals != null && totals.additionValue > 0)
+            {
+                AddLine(FormatColumnsCustom("Acrescimo", totals.addition, rightWidth));
+            }
+            SetBold(true);
+            AddLine(FormatColumnsCustom("TOTAL R$", totals != null ? StripCurrencyPrefix(totals.total) : string.Empty, rightWidth));
+            SetBold(false);
+
+            if (doc.payments != null)
+            {
+                foreach (var payment in doc.payments)
+                {
+                    if (payment == null) continue;
+                    AddLine(FormatColumnsCustom(payment.label ?? "Pagamento", payment.value ?? string.Empty, rightWidth));
+                }
+            }
+            if (totals != null && totals.changeValue > 0)
+            {
+                AddLine(FormatColumnsCustom("Troco", totals.change, rightWidth));
+            }
+
+            if (doc.customer != null &&
+                (!string.IsNullOrWhiteSpace(doc.customer.document) ||
+                 (!string.IsNullOrWhiteSpace(doc.customer.name) &&
+                  !string.Equals(doc.customer.name, "Consumidor final", StringComparison.OrdinalIgnoreCase))))
+            {
+                AddSeparator('-');
+                PrintMetaLine("Cliente", doc.customer.name);
+                PrintMetaLine("Documento", doc.customer.document);
+            }
+
+            AddSeparator('-');
+            PrintMetaLine("PDV", pdv);
+            PrintMetaLine("Operador", operatorName);
+            AddLineCentered(date, false);
+            if (!string.IsNullOrWhiteSpace(saleCode))
+            {
+                AddLineCentered(saleCode, true);
+                PrintCode128(saleCode);
+            }
+            if (HasQr(doc.qrCode))
+            {
+                PrintQrCodeDanfe(doc.qrCode);
+            }
+            AddLineCentered("DOCUMENTO SEM VALOR FISCAL", false);
+        }
+
+        private string StripCurrencyPrefix(string value)
+        {
+            string text = (value ?? string.Empty).Trim();
+            return text.StartsWith("R$", StringComparison.OrdinalIgnoreCase)
+                ? text.Substring(2).Trim()
+                : text;
+        }
+
+        private void PrintCode128(string value)
+        {
+            string text = (value ?? string.Empty).Trim();
+            if (text.Length == 0) return;
+            if (text.Length > 80) text = text.Substring(0, 80);
+            byte[] data = Encoding.GetBytes("{B" + text);
+            if (data.Length > 255) return;
+            SetAlign(TextAlign.Center);
+            AppendBytes(new byte[] { 0x1D, 0x48, 0x00 });
+            AppendBytes(new byte[] { 0x1D, 0x68, 0x38 });
+            AppendBytes(new byte[] { 0x1D, 0x77, 0x02 });
+            AppendBytes(new byte[] { 0x1D, 0x6B, 0x49, (byte)data.Length });
+            AppendBytes(data);
+            FeedLines(1);
+            SetAlign(TextAlign.Left);
         }
 
         private void RenderDanfeNfce(ReceiptDocument doc, bool isFiscal)
@@ -2441,6 +2616,328 @@ try {
             return lines;
         }
     }
+    public static class RasterReceiptBuilder
+    {
+        private static readonly Dictionary<char, string> Code39Patterns = new Dictionary<char, string>
+        {
+            {'0', "nnnwwnwnn"}, {'1', "wnnwnnnnw"}, {'2', "nnwwnnnnw"}, {'3', "wnwwnnnnn"},
+            {'4', "nnnwwnnnw"}, {'5', "wnnwwnnnn"}, {'6', "nnwwwnnnn"}, {'7', "nnnwnnwnw"},
+            {'8', "wnnwnnwnn"}, {'9', "nnwwnnwnn"}, {'A', "wnnnnwnnw"}, {'B', "nnwnnwnnw"},
+            {'C', "wnwnnwnnn"}, {'D', "nnnnwwnnw"}, {'E', "wnnnwwnnn"}, {'F', "nnwnwwnnn"},
+            {'G', "nnnnnwwnw"}, {'H', "wnnnnwwnn"}, {'I', "nnwnnwwnn"}, {'J', "nnnnwwwnn"},
+            {'K', "wnnnnnnww"}, {'L', "nnwnnnnww"}, {'M', "wnwnnnnwn"}, {'N', "nnnnwnnww"},
+            {'O', "wnnnwnnwn"}, {'P', "nnwnwnnwn"}, {'Q', "nnnnnnwww"}, {'R', "wnnnnnwwn"},
+            {'S', "nnwnnnwwn"}, {'T', "nnnnwnwwn"}, {'U', "wwnnnnnnw"}, {'V', "nwwnnnnnw"},
+            {'W', "wwwnnnnnn"}, {'X', "nwnnwnnnw"}, {'Y', "wwnnwnnnn"}, {'Z', "nwwnwnnnn"},
+            {'-', "nwnnnnwnw"}, {'.', "wwnnnnwnn"}, {' ', "nwwnnnwnn"}, {'$', "nwnwnwnnn"},
+            {'/', "nwnwnnnwn"}, {'+', "nwnnnwnwn"}, {'%', "nnnwnwnwn"}, {'*', "nwnnwnwnn"}
+        };
+
+        public static Bitmap Build(ReceiptDocument doc, int pixelWidth)
+        {
+            pixelWidth = pixelWidth <= 384 ? 384 : 576;
+            int estimatedItems = doc != null && doc.items != null ? doc.items.Count : 0;
+            bool isDelivery = doc != null && string.Equals(doc.type, "delivery", StringComparison.OrdinalIgnoreCase);
+            int canvasHeight = Math.Max(1800, 1500 + (estimatedItems * 150) + (isDelivery ? 600 : 0));
+            var canvas = new Bitmap(pixelWidth, canvasHeight, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+            float y = 22f;
+            int margin = pixelWidth <= 384 ? 16 : 22;
+            float contentWidth = pixelWidth - (margin * 2);
+
+            using (var graphics = Graphics.FromImage(canvas))
+            using (var black = new SolidBrush(Color.Black))
+            using (var storeFont = new Font("Arial", pixelWidth <= 384 ? 25f : 30f, FontStyle.Bold, GraphicsUnit.Pixel))
+            using (var legalFont = new Font("Arial", pixelWidth <= 384 ? 14f : 16f, FontStyle.Regular, GraphicsUnit.Pixel))
+            using (var bodyFont = new Font("Arial", pixelWidth <= 384 ? 14f : 16f, FontStyle.Regular, GraphicsUnit.Pixel))
+            using (var bodyBold = new Font("Arial", pixelWidth <= 384 ? 14f : 16f, FontStyle.Bold, GraphicsUnit.Pixel))
+            using (var titleFont = new Font("Arial", pixelWidth <= 384 ? 18f : 21f, FontStyle.Bold, GraphicsUnit.Pixel))
+            using (var totalFont = new Font("Arial", pixelWidth <= 384 ? 19f : 23f, FontStyle.Bold, GraphicsUnit.Pixel))
+            using (var itemFont = new Font("Arial", pixelWidth <= 384 ? 12f : 14f, FontStyle.Regular, GraphicsUnit.Pixel))
+            using (var itemBold = new Font("Arial", pixelWidth <= 384 ? 11f : 13f, FontStyle.Bold, GraphicsUnit.Pixel))
+            using (var smallFont = new Font("Arial", pixelWidth <= 384 ? 11f : 13f, FontStyle.Regular, GraphicsUnit.Pixel))
+            using (var smallBold = new Font("Arial", pixelWidth <= 384 ? 11f : 13f, FontStyle.Bold, GraphicsUnit.Pixel))
+            using (var dashed = new Pen(Color.Black, 1f))
+            {
+                graphics.Clear(Color.White);
+                graphics.PageUnit = GraphicsUnit.Pixel;
+                graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.None;
+                graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
+                graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+                graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.SingleBitPerPixelGridFit;
+                dashed.DashStyle = System.Drawing.Drawing2D.DashStyle.Dash;
+
+                ReceiptMeta meta = doc != null ? doc.meta : null;
+                ReceiptTotals totals = doc != null ? doc.totals : null;
+                string store = meta != null ? meta.store : string.Empty;
+                string legal = meta != null ? meta.legalName : string.Empty;
+                string address = meta != null ? meta.address : string.Empty;
+                string saleCode = meta != null ? meta.saleCode : string.Empty;
+                string pdv = meta != null ? meta.pdv : string.Empty;
+                string operatorName = meta != null ? (meta.@operator ?? meta.operatorName) : string.Empty;
+                string date = meta != null ? meta.date : string.Empty;
+
+                y = DrawCentered(graphics, (store ?? "E o Bicho").ToUpperInvariant(), FitFont(graphics, store ?? "E o Bicho", storeFont, contentWidth), black, margin, y, contentWidth, 3f);
+                if (!string.IsNullOrWhiteSpace(legal) && !string.Equals(store, legal, StringComparison.OrdinalIgnoreCase))
+                    y = DrawCentered(graphics, legal.ToUpperInvariant(), legalFont, black, margin, y, contentWidth, 2f);
+                if (!string.IsNullOrWhiteSpace(address))
+                    y = DrawCentered(graphics, address, bodyFont, black, margin, y, contentWidth, 2f);
+
+                var registrations = new List<string>();
+                if (meta != null && !string.IsNullOrWhiteSpace(meta.cnpj)) registrations.Add("CNPJ: " + meta.cnpj);
+                if (meta != null && !string.IsNullOrWhiteSpace(meta.stateRegistration)) registrations.Add("IE: " + meta.stateRegistration);
+                if (meta != null && !string.IsNullOrWhiteSpace(meta.municipalRegistration)) registrations.Add("IM: " + meta.municipalRegistration);
+                if (registrations.Count > 0)
+                    y = DrawCentered(graphics, string.Join("   ", registrations.ToArray()), bodyFont, black, margin, y, contentWidth, 2f);
+                if (meta != null && !string.IsNullOrWhiteSpace(meta.phone))
+                    y = DrawCentered(graphics, "Telefone: " + meta.phone, smallFont, black, margin, y, contentWidth, 2f);
+
+                y += 7f;
+                DrawSeparator(graphics, dashed, margin, y, contentWidth); y += 13f;
+                y = DrawCentered(graphics, "EXTRATO " + (string.IsNullOrWhiteSpace(saleCode) ? (isDelivery ? "DELIVERY" : "VENDA") : saleCode), titleFont, black, margin, y, contentWidth, 2f);
+                y = DrawCentered(graphics, isDelivery ? "COMANDA DE DELIVERY" : "CUPOM NÃO FISCAL", titleFont, black, margin, y, contentWidth, 3f);
+                y += 5f;
+                DrawSeparator(graphics, dashed, margin, y, contentWidth); y += 13f;
+
+                float[] widths = new float[] { .105f, .365f, .09f, .075f, .18f, .185f };
+                string[] headers = new string[] { "CÓD.", "DESCRIÇÃO", "QTD.", "UN", "VL.UN", "VL.ITEM" };
+                DrawTableRow(graphics, headers, itemBold, black, margin, y, contentWidth, widths, 22f, true);
+                y += 25f;
+                DrawSeparator(graphics, dashed, margin, y, contentWidth); y += 10f;
+
+                if (doc != null && doc.items != null)
+                {
+                    foreach (ReceiptItem item in doc.items)
+                    {
+                        if (item == null) continue;
+                        string[] cells = new string[] { item.code ?? string.Empty, item.name ?? string.Empty, item.quantity ?? string.Empty, "UN", StripCurrency(item.unitPrice), StripCurrency(item.total) };
+                        float descWidth = contentWidth * widths[1] - 5f;
+                        float measured = MeasureWrappedHeight(graphics, cells[1], itemFont, descWidth);
+                        float rowHeight = Math.Max(28f, measured + 8f);
+                        DrawTableRow(graphics, cells, itemFont, black, margin, y, contentWidth, widths, rowHeight, false);
+                        y += rowHeight;
+                    }
+                }
+
+                y += 3f; DrawSeparator(graphics, dashed, margin, y, contentWidth); y += 12f;
+                y = DrawValueRow(graphics, "Total bruto", totals != null ? totals.subtotal : string.Empty, bodyFont, black, margin, y, contentWidth, 3f);
+                if (totals != null && totals.discountValue > 0)
+                    y = DrawValueRow(graphics, "Desconto", totals.discount, bodyFont, black, margin, y, contentWidth, 3f);
+                if (totals != null && totals.additionValue > 0)
+                    y = DrawValueRow(graphics, "Acréscimo", totals.addition, bodyFont, black, margin, y, contentWidth, 3f);
+                y = DrawValueRow(graphics, "TOTAL", totals != null ? totals.total : string.Empty, totalFont, black, margin, y, contentWidth, 4f);
+                if (doc != null && doc.payments != null)
+                {
+                    foreach (ReceiptPayment payment in doc.payments)
+                    {
+                        if (payment == null) continue;
+                        y = DrawValueRow(graphics, payment.label ?? "Pagamento", payment.value ?? string.Empty, bodyFont, black, margin, y, contentWidth, 3f);
+                    }
+                }
+                if (totals != null && totals.changeValue > 0)
+                    y = DrawValueRow(graphics, "Troco", totals.change, bodyFont, black, margin, y, contentWidth, 3f);
+
+                if (isDelivery)
+                {
+                    ReceiptCustomer deliveryCustomer = doc.customer;
+                    ReceiptDelivery deliveryInfo = doc.delivery;
+                    y += 5f;
+                    DrawSeparator(graphics, dashed, margin, y, contentWidth); y += 13f;
+                    y = DrawCentered(graphics, "DADOS PARA ENTREGA", bodyBold, black, margin, y, contentWidth, 4f);
+                    if (deliveryCustomer != null)
+                    {
+                        y = DrawLeft(graphics, "Cliente: " + (deliveryCustomer.name ?? string.Empty), bodyBold, black, margin, y, contentWidth, 2f);
+                        if (!string.IsNullOrWhiteSpace(deliveryCustomer.document)) y = DrawLeft(graphics, "Documento: " + deliveryCustomer.document, smallFont, black, margin, y, contentWidth, 2f);
+                        var phoneEntries = BuildCustomerPhoneLines(deliveryCustomer);
+                        foreach (string phoneLine in phoneEntries) y = DrawLeft(graphics, phoneLine, smallFont, black, margin, y, contentWidth, 2f);
+                        if (!string.IsNullOrWhiteSpace(deliveryCustomer.address)) y = DrawLeft(graphics, "Endereço: " + deliveryCustomer.address, bodyBold, black, margin, y, contentWidth, 3f);
+                    }
+                    if (deliveryInfo != null)
+                    {
+                        if (!string.IsNullOrWhiteSpace(deliveryInfo.type)) y = DrawLeft(graphics, "Tipo: " + deliveryInfo.type, smallFont, black, margin, y, contentWidth, 2f);
+                        if (!string.IsNullOrWhiteSpace(deliveryInfo.scheduledAt)) y = DrawLeft(graphics, "Previsão: " + deliveryInfo.scheduledAt, smallFont, black, margin, y, contentWidth, 2f);
+                        if (!string.IsNullOrWhiteSpace(deliveryInfo.courier)) y = DrawLeft(graphics, "Entregador: " + deliveryInfo.courier, smallFont, black, margin, y, contentWidth, 2f);
+                        if (!string.IsNullOrWhiteSpace(deliveryInfo.notes)) y = DrawLeft(graphics, "Observações: " + deliveryInfo.notes, smallFont, black, margin, y, contentWidth, 2f);
+                    }
+                }
+
+                ReceiptCustomer customer = doc != null ? doc.customer : null;
+                bool showCustomer = customer != null && (!string.IsNullOrWhiteSpace(customer.document) || (!string.IsNullOrWhiteSpace(customer.name) && !string.Equals(customer.name, "Consumidor final", StringComparison.OrdinalIgnoreCase)));
+                if (showCustomer && !isDelivery)
+                {
+                    y += 4f; DrawSeparator(graphics, dashed, margin, y, contentWidth); y += 12f;
+                    y = DrawLeft(graphics, "Cliente: " + (customer.name ?? string.Empty), smallFont, black, margin, y, contentWidth, 2f);
+                    if (!string.IsNullOrWhiteSpace(customer.document)) y = DrawLeft(graphics, "Documento: " + customer.document, smallFont, black, margin, y, contentWidth, 2f);
+                }
+
+                y += 4f; DrawSeparator(graphics, dashed, margin, y, contentWidth); y += 12f;
+                if (!string.IsNullOrWhiteSpace(pdv)) y = DrawLeft(graphics, "PDV: " + pdv, smallFont, black, margin, y, contentWidth, 2f);
+                if (!string.IsNullOrWhiteSpace(operatorName)) y = DrawLeft(graphics, "Operador: " + operatorName, smallFont, black, margin, y, contentWidth, 2f);
+                if (!string.IsNullOrWhiteSpace(date)) y = DrawCentered(graphics, date, smallFont, black, margin, y, contentWidth, 2f);
+                if (!string.IsNullOrWhiteSpace(saleCode))
+                {
+                    y = DrawCentered(graphics, saleCode, smallBold, black, margin, y + 2f, contentWidth, 2f);
+                    y = DrawCode39(graphics, saleCode, black, margin, y + 3f, contentWidth, pixelWidth <= 384 ? 50f : 62f);
+                }
+                y = DrawCentered(graphics, isDelivery ? "COMANDA DE ENTREGA - SEM VALOR FISCAL" : "DOCUMENTO SEM VALOR FISCAL", smallBold, black, margin, y + 8f, contentWidth, 2f);
+
+                int finalHeight = Math.Min(canvas.Height, Math.Max(240, (int)Math.Ceiling(y + 24f)));
+                var result = new Bitmap(pixelWidth, finalHeight, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+                using (var finalGraphics = Graphics.FromImage(result))
+                {
+                    finalGraphics.Clear(Color.White);
+                    finalGraphics.DrawImageUnscaled(canvas, 0, 0);
+                }
+                canvas.Dispose();
+                return result;
+            }
+        }
+
+        private static List<string> BuildCustomerPhoneLines(ReceiptCustomer customer)
+        {
+            var lines = new List<string>();
+            if (customer == null) return lines;
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            string[] labels = new string[] { "Contato", "Celular", "Telefone", "Celular 2", "Telefone 2" };
+            string[] values = new string[] { customer.contact, customer.celular, customer.telefone, customer.celular2, customer.telefone2 };
+            for (int index = 0; index < values.Length; index++)
+            {
+                string value = (values[index] ?? string.Empty).Trim();
+                if (value.Length == 0) continue;
+                var normalized = new StringBuilder();
+                foreach (char character in value) if (char.IsDigit(character)) normalized.Append(character);
+                string key = normalized.Length > 0 ? normalized.ToString() : value;
+                if (!seen.Add(key)) continue;
+                lines.Add(labels[index] + ": " + value);
+            }
+            return lines;
+        }
+
+        private static Font FitFont(Graphics graphics, string text, Font source, float width)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return source;
+            float size = source.Size;
+            while (size > 18f)
+            {
+                using (var probe = new Font(source.FontFamily, size, source.Style, GraphicsUnit.Pixel))
+                {
+                    if (graphics.MeasureString(text.ToUpperInvariant(), probe).Width <= width) break;
+                }
+                size -= 1f;
+            }
+            if (Math.Abs(size - source.Size) < .1f) return source;
+            return new Font(source.FontFamily, size, source.Style, GraphicsUnit.Pixel);
+        }
+
+        private static float DrawCentered(Graphics g, string text, Font font, Brush brush, float x, float y, float width, float gap)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return y;
+            using (var format = new StringFormat())
+            {
+                format.Alignment = StringAlignment.Center;
+                format.LineAlignment = StringAlignment.Near;
+                format.Trimming = StringTrimming.Word;
+                SizeF measured = g.MeasureString(text, font, new SizeF(width, 1000f), format);
+                g.DrawString(text, font, brush, new RectangleF(x, y, width, measured.Height + 3f), format);
+                return y + measured.Height + gap;
+            }
+        }
+
+        private static float DrawLeft(Graphics g, string text, Font font, Brush brush, float x, float y, float width, float gap)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return y;
+            using (var format = new StringFormat())
+            {
+                format.Alignment = StringAlignment.Near;
+                format.Trimming = StringTrimming.Word;
+                SizeF measured = g.MeasureString(text, font, new SizeF(width, 1000f), format);
+                g.DrawString(text, font, brush, new RectangleF(x, y, width, measured.Height + 3f), format);
+                return y + measured.Height + gap;
+            }
+        }
+
+        private static float DrawValueRow(Graphics g, string label, string value, Font font, Brush brush, float x, float y, float width, float gap)
+        {
+            using (var left = new StringFormat())
+            using (var right = new StringFormat())
+            {
+                left.Alignment = StringAlignment.Near;
+                right.Alignment = StringAlignment.Far;
+                float height = g.MeasureString("Ag", font).Height;
+                g.DrawString(label ?? string.Empty, font, brush, new RectangleF(x, y, width * .58f, height + 3f), left);
+                g.DrawString(value ?? string.Empty, font, brush, new RectangleF(x + width * .55f, y, width * .45f, height + 3f), right);
+                return y + height + gap;
+            }
+        }
+
+        private static void DrawSeparator(Graphics g, Pen pen, float x, float y, float width)
+        {
+            g.DrawLine(pen, x, y, x + width, y);
+        }
+
+        private static float MeasureWrappedHeight(Graphics g, string text, Font font, float width)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return g.MeasureString("Ag", font).Height;
+            using (var format = new StringFormat())
+            {
+                format.Trimming = StringTrimming.Word;
+                return g.MeasureString(text, font, new SizeF(Math.Max(10f, width), 1000f), format).Height;
+            }
+        }
+
+        private static void DrawTableRow(Graphics g, string[] cells, Font font, Brush brush, float x, float y, float totalWidth, float[] widths, float height, bool header)
+        {
+            float cursor = x;
+            for (int i = 0; i < cells.Length && i < widths.Length; i++)
+            {
+                float cellWidth = totalWidth * widths[i];
+                using (var format = new StringFormat())
+                {
+                    format.LineAlignment = StringAlignment.Near;
+                    format.Trimming = StringTrimming.Word;
+                    format.Alignment = i >= 2 && i != 3 ? StringAlignment.Far : (i == 3 ? StringAlignment.Center : StringAlignment.Near);
+                    g.DrawString(cells[i] ?? string.Empty, font, brush, new RectangleF(cursor + 1f, y, Math.Max(2f, cellWidth - 3f), height), format);
+                }
+                cursor += cellWidth;
+            }
+        }
+
+        private static string StripCurrency(string value)
+        {
+            string text = (value ?? string.Empty).Trim();
+            return text.StartsWith("R$", StringComparison.OrdinalIgnoreCase) ? text.Substring(2).Trim() : text;
+        }
+
+        private static float DrawCode39(Graphics g, string raw, Brush brush, float x, float y, float maxWidth, float height)
+        {
+            string value = "*" + (raw ?? string.Empty).Trim().ToUpperInvariant() + "*";
+            var patterns = new List<string>();
+            int units = 0;
+            foreach (char ch in value)
+            {
+                string pattern;
+                if (!Code39Patterns.TryGetValue(ch, out pattern)) continue;
+                patterns.Add(pattern);
+                foreach (char part in pattern) units += part == 'w' ? 3 : 1;
+                units += 1;
+            }
+            if (patterns.Count == 0 || units <= 0) return y;
+            float unit = Math.Max(1f, (float)Math.Floor(maxWidth / units));
+            float barcodeWidth = units * unit;
+            float cursor = x + ((maxWidth - barcodeWidth) / 2f);
+            foreach (string pattern in patterns)
+            {
+                for (int i = 0; i < pattern.Length; i++)
+                {
+                    float partWidth = (pattern[i] == 'w' ? 3f : 1f) * unit;
+                    if ((i % 2) == 0) g.FillRectangle(brush, cursor, y, partWidth, height);
+                    cursor += partWidth;
+                }
+                cursor += unit;
+            }
+            return y + height;
+        }
+    }
+
     public enum TextAlign : byte
     {
         Left = 0,
