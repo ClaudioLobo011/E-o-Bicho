@@ -1,8 +1,8 @@
-version: 0.8.9
+version: 0.8.10
 files:
-  - url: E-o-Bicho-PDV-0.8.9-Instalador.exe
-    sha512: aJIOF6oRpiD1V2cdvTGjNZCLF5mWcP7Nkit9KaYxd6Mk6Ru7Qhi6AIm1v1TuO4QJBlJVvMx9bLhosaaP4cpBag==
-    size: 100781814
-path: E-o-Bicho-PDV-0.8.9-Instalador.exe
-sha512: aJIOF6oRpiD1V2cdvTGjNZCLF5mWcP7Nkit9KaYxd6Mk6Ru7Qhi6AIm1v1TuO4QJBlJVvMx9bLhosaaP4cpBag==
-releaseDate: '2026-08-11T00:45:09.499Z'
+  - url: E-o-Bicho-PDV-0.8.10-Instalador.exe
+    sha512: qZZ89lXdqRclSV2kcN6LpCNOfer6nXU+cmAEVwkeqhJMSZvPvxg+80yenJVbLbCk73rotf0mdp5h+2xa0RCbWg==
+    size: 100778899
+path: E-o-Bicho-PDV-0.8.10-Instalador.exe
+sha512: qZZ89lXdqRclSV2kcN6LpCNOfer6nXU+cmAEVwkeqhJMSZvPvxg+80yenJVbLbCk73rotf0mdp5h+2xa0RCbWg==
+releaseDate: '2026-08-11T18:16:03.802Z'
