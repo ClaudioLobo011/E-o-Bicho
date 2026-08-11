@@ -1062,22 +1062,25 @@ router.get('/catalog/products', authenticateHost, async (req, res) => {
 
 router.get('/directory/snapshot', authenticateHost, async (req, res) => {
   const host = req.desktopHost;
-  const users = await User.find({
-    $or: [
-      { empresaPrincipal: host.empresa },
-      { empresaContratual: host.empresa },
-      { empresas: host.empresa },
-    ],
-  })
-    .select('_id codigoCliente nomeCompleto nomeContato razaoSocial email cpf cnpj inscricaoEstadual celular telefone celularSecundario telefoneSecundario tipoConta genero dataNascimento criadoEm observacao observacoes role grupos empresas empresaPrincipal empresaContratual limiteCredito valorPendente')
-    .limit(50000)
-    .lean();
-  const userIds = users.map((user) => user._id);
+  const userFields = '_id codigoCliente nomeCompleto nomeContato razaoSocial email cpf cnpj inscricaoEstadual celular telefone celularSecundario telefoneSecundario tipoConta genero dataNascimento criadoEm observacao observacoes role grupos empresas empresaPrincipal empresaContratual limiteCredito valorPendente';
+  const [customersUsers, users] = await Promise.all([
+    // O cadastro de clientes é compartilhado entre todas as lojas.
+    User.find({ $or: [{ role: 'cliente' }, { codigoCliente: { $exists: true, $ne: null } }] }).select(userFields).limit(50000).lean(),
+    // Funcionários, vendedores e entregadores continuam restritos à loja atual.
+    User.find({
+      $or: [
+        { empresaPrincipal: host.empresa },
+        { empresaContratual: host.empresa },
+        { empresas: host.empresa },
+      ],
+    }).select(userFields).limit(50000).lean(),
+  ]);
+  const customerIds = customersUsers.map((user) => user._id);
   const [pets, addresses, stores, deposits] = await Promise.all([
-    Pet.find({ owner: { $in: userIds }, obito: { $ne: true } })
+    Pet.find({ owner: { $in: customerIds }, obito: { $ne: true } })
       .select('_id owner codigoPet codAntigoPet nome tipo raca porte sexo dataNascimento microchip pelagemCor rga peso castrado updatedAt')
       .lean(),
-    UserAddress.find({ user: { $in: userIds } })
+    UserAddress.find({ user: { $in: customerIds } })
       .select('_id user apelido cep logradouro numero complemento bairro cidade uf isDefault updatedAt')
       .sort({ isDefault: -1, updatedAt: -1, _id: -1 })
       .lean(),
@@ -1102,7 +1105,7 @@ router.get('/directory/snapshot', authenticateHost, async (req, res) => {
     });
   });
   const nameOf = (user) => clean(user.nomeCompleto || user.nomeContato || user.razaoSocial || user.email);
-  const customers = users.map((user) => ({
+  const customers = customersUsers.map((user) => ({
     id: String(user._id),
     code: user.codigoCliente ? String(user.codigoCliente) : '',
     name: nameOf(user),
@@ -1169,19 +1172,12 @@ router.get('/customers/:customerId/sales-history', authenticateHost, async (req,
   if (!mongoose.Types.ObjectId.isValid(customerId)) {
     return res.status(400).json({ message: 'Identificador de cliente inválido.' });
   }
-  const customer = await User.findOne({
-    _id: customerId,
-    $or: [
-      { empresaPrincipal: req.desktopHost.empresa },
-      { empresaContratual: req.desktopHost.empresa },
-      { empresas: req.desktopHost.empresa },
-    ],
-  }).select('_id nomeCompleto nomeContato razaoSocial cpf cnpj').lean();
+  const customer = await User.findOne({ _id: customerId, $or: [{ role: 'cliente' }, { codigoCliente: { $exists: true, $ne: null } }] })
+    .select('_id nomeCompleto nomeContato razaoSocial cpf cnpj').lean();
   if (!customer) return res.status(404).json({ message: 'Cliente não encontrado nesta empresa.' });
 
   const [normalized, states] = await Promise.all([
     PdvStateSale.find({
-      empresa: req.desktopHost.empresa,
       $or: [
         { 'payload.customerId': customerId },
         { 'payload.customer.id': customerId },
@@ -1190,7 +1186,7 @@ router.get('/customers/:customerId/sales-history', authenticateHost, async (req,
         { 'payload.snapshotCustomer._id': customerId },
       ],
     }).sort({ createdAtFromEntity: -1, _id: -1 }).select('payload').lean(),
-    PdvState.find({ empresa: req.desktopHost.empresa }).select('completedSales').lean(),
+    PdvState.find({}).select('completedSales').lean(),
   ]);
   const normalizedSales = normalized.map((entry) => entry.payload).filter((sale) => desktopSaleCustomerMatches(sale, customer));
   const legacySales = states.flatMap((state) => Array.isArray(state.completedSales) ? state.completedSales : [])

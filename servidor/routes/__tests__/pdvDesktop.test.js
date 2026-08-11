@@ -59,6 +59,11 @@ test.describe('integração do PDV Desktop', () => {
     await UserAddress.create({ user: customer._id, cep: '20000000', logradouro: 'Rua Desktop', numero: '10', cidade: 'Rio de Janeiro', uf: 'RJ', isDefault: true });
     await User.create({ tipoConta: 'pessoa_fisica', email: `desktop-seller-${suffix}@example.com`, senha: 'hash', celular: `218${suffix}`, nomeCompleto: 'Vendedor Desktop', role: 'funcionario', grupos: ['vendedor'], empresas: [base.company._id], codigoCliente: 987654 });
     const courier = await User.create({ tipoConta: 'pessoa_fisica', email: `desktop-courier-${suffix}@example.com`, senha: 'hash', celular: `216${suffix}`, nomeCompleto: 'Entregador Desktop', role: 'funcionario', grupos: ['entregador'], empresas: [base.company._id], codigoCliente: 123456 });
+    const otherCompany = await Store.create({ codigo: `OUTRA-${Date.now()}`, nome: 'Outra Loja', nomeFantasia: 'Outra Loja', cnpj: `9${Date.now()}`.slice(-14) });
+    const sharedCustomer = await User.create({ tipoConta: 'pessoa_fisica', email: `desktop-shared-${suffix}@example.com`, senha: 'hash', celular: `217${suffix}`, nomeCompleto: 'Cliente de Outra Loja', cpf: `987${suffix}`, role: 'cliente', empresaPrincipal: otherCompany._id });
+    const sharedPet = await Pet.create({ owner: sharedCustomer._id, nome: 'Pet Compartilhado', tipo: 'cachorro', raca: 'vira-lata', sexo: 'macho', dataNascimento: new Date('2023-01-01T00:00:00Z') });
+    await UserAddress.create({ user: sharedCustomer._id, cep: '21000000', logradouro: 'Rua Compartilhada', numero: '20', cidade: 'Rio de Janeiro', uf: 'RJ', isDefault: true });
+    await User.create({ tipoConta: 'pessoa_fisica', email: `desktop-other-seller-${suffix}@example.com`, senha: 'hash', celular: `215${suffix}`, nomeCompleto: 'Vendedor de Outra Loja', role: 'funcionario', grupos: ['vendedor'], empresas: [otherCompany._id], codigoCliente: 654321 });
     const request = supertest(app());
     const pairing = await request.post(`/desktop/pdvs/${base.pdv._id}/pairing-code`).set('Authorization', 'Bearer test').send();
     assert.equal(pairing.status, 200, pairing.text);
@@ -80,8 +85,11 @@ test.describe('integração do PDV Desktop', () => {
     const directory = await request.get('/desktop/directory/snapshot').set(headers);
     assert.equal(directory.status, 200, directory.text);
     assert.equal(directory.body.customers.find((entry) => entry.name === 'Cliente Desktop').address.street, 'Rua Desktop');
+    assert.equal(directory.body.customers.find((entry) => entry.name === 'Cliente de Outra Loja').address.street, 'Rua Compartilhada');
     assert.equal(directory.body.pets.find((entry) => entry.name === 'Bidu').ownerId, String(customer._id));
+    assert.equal(directory.body.pets.find((entry) => entry.name === 'Pet Compartilhado').ownerId, String(sharedCustomer._id));
     assert.equal(directory.body.sellers.find((entry) => entry.name === 'Vendedor Desktop').code, '987654');
+    assert.equal(directory.body.sellers.some((entry) => entry.name === 'Vendedor de Outra Loja'), false);
     assert.equal(directory.body.couriers.find((entry) => entry.name === 'Entregador Desktop').code, '123456');
     const appointments = await request.get(`/desktop/appointments?start=${encodeURIComponent(new Date(Date.now() - 86400000).toISOString())}&end=${encodeURIComponent(new Date(Date.now() + 86400000).toISOString())}`).set(headers);
     assert.equal(appointments.status, 200, appointments.text);

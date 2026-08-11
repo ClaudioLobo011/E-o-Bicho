@@ -6854,17 +6854,6 @@ const runPdvCommand = async ({
     }
 
     if (action === PDV_COMMANDS.DELIVERY_REGISTER) {
-      if (!items.length) {
-        const error = new Error('Adicione itens para registrar o delivery.');
-        error.statusCode = 400;
-        throw error;
-      }
-      if (!(totalLiquido > 0)) {
-        const error = new Error('Informe o valor total do delivery.');
-        error.statusCode = 400;
-        throw error;
-      }
-
       const saleRecord = normalizeSaleRecordPayload({
         id: incomingSaleId || `sale-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
         type: 'delivery',

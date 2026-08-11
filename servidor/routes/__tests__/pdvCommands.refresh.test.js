@@ -882,6 +882,36 @@ test.describe('PDV commands endpoint', () => {
     assert.equal(remove.body.state.budgets.length, 0);
   });
 
+  test('registers delivery with customer and planned payment before products are added', async () => {
+    const base = await createFixture({ caixaAberto: false });
+    const request = supertest(createApp());
+    const open = await request
+      .post(`/pdvs/${base.pdv._id}/commands`)
+      .set('Authorization', 'Bearer token')
+      .set('X-Idempotency-Key', 'test-delivery-customer-first-open')
+      .send({ action: 'pdv.caixa.open', payload: { payments: [{ id: 'dinheiro', label: 'Dinheiro', type: 'avista', valor: 1 }] } });
+    assert.equal(open.status, 200, open.text);
+
+    const register = await request
+      .post(`/pdvs/${base.pdv._id}/commands`)
+      .set('Authorization', 'Bearer token')
+      .set('X-Idempotency-Key', 'test-delivery-customer-first-register')
+      .send({
+        action: 'pdv.delivery.register',
+        payload: {
+          orderId: 'delivery-customer-first', saleId: 'sale-delivery-customer-first',
+          customerName: 'Cliente Primeiro', items: [],
+          payments: [{ id: 'pix', label: 'Pix', type: 'avista', valor: 0 }],
+          total: 0, address: { logradouro: 'Rua Teste', numero: '10' },
+        },
+      });
+    assert.equal(register.status, 200, register.text);
+    assert.equal(register.body.state.deliveryOrders[0].status, 'registrado');
+    assert.equal(register.body.state.deliveryOrders[0].items.length, 0);
+    assert.deepEqual(register.body.state.completedSales[0].paymentTags, ['Pix']);
+    assert.equal(register.body.state.summary.recebido, 0);
+  });
+
   test('registers and finalizes delivery through commands', async () => {
     const base = await createFixture({ caixaAberto: false });
     const app = createApp();
