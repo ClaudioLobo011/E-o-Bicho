@@ -1,0 +1,35 @@
+PACOTE PORTATIL - SERVIDOR E O BICHO
+===================================
+
+Este pacote foi preparado para Windows 10/11 x64.
+Ele ja inclui a API, Node.js, dependencias e Cloudflared.
+
+NA MAQUINA NOVA
+
+1. Copie esta pasta inteira do pendrive para a maquina.
+2. Abra ABRIR-E-INSTALAR.cmd.
+3. Autorize a janela de Administrador.
+4. O instalador copia tudo para C:\EoBichoServer e faz um teste seguro.
+5. Nao ative ainda se a maquina antiga continua sendo o servidor.
+
+NA HORA DE TRANSFERIR A OPERACAO
+
+1. Na maquina antiga, pare a API e o servico Cloudflared ou desligue a maquina.
+2. Na maquina nova, abra ATIVAR-NESTA-MAQUINA.cmd.
+3. Digite ATIVAR quando solicitado.
+4. Abra VERIFICAR-SERVIDOR.cmd e confirme que banco e API estao prontos.
+
+PARA VOLTAR PARA A MAQUINA ANTIGA
+
+1. Abra DESATIVAR-NESTA-MAQUINA.cmd na maquina nova.
+2. Religue/ative a maquina antiga.
+3. Confirme o funcionamento do site e dos webhooks.
+
+IMPORTANTE
+
+- Esta pasta contem credenciais de producao e o acesso ao tunnel Cloudflare.
+- Guarde o pendrive em local seguro. Nao envie a pasta por e-mail ou WhatsApp.
+- Nao deixe as duas maquinas ativas ao mesmo tempo por longos periodos.
+- MongoDB Atlas, Vercel, R2 e o dominio nao precisam ser reconfigurados.
+- O endereco do site continua sendo api.peteobicho.com.br.
+

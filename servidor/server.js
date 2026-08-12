@@ -5,6 +5,8 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
+const serverPackage = require('./package.json');
 
 // Carrega variÃ¡veis de ambiente antes de importar mÃ³dulos que dependem delas
 dotenv.config();
@@ -111,6 +113,27 @@ app.use(express.urlencoded({ extended: true, limit: BODY_PARSER_LIMIT }));
 app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
 app.use(express.static('public'));
+
+// Endpoints operacionais sem dados de negocio ou segredos. O tunnel e o
+// supervisor do Windows usam estas rotas para distinguir processo ativo de
+// API realmente pronta para atender requisicoes.
+app.get('/healthz', (_req, res) => {
+  res.status(200).json({
+    ok: true,
+    service: 'e-o-bicho-api',
+    version: serverPackage.version,
+  });
+});
+
+app.get('/readyz', (_req, res) => {
+  const databaseReady = mongoose.connection.readyState === 1;
+  res.status(databaseReady ? 200 : 503).json({
+    ok: databaseReady,
+    service: 'e-o-bicho-api',
+    database: databaseReady ? 'ready' : 'not-ready',
+  });
+});
+
 app.use('/api/funcionarios', require('./routes/adminFuncionarios'));
 
 
@@ -424,12 +447,15 @@ async function startServer() {
       resolve();
     });
   });
-  if (String(process.env.DISABLE_EXTERNAL_WORKERS || '').toLowerCase() !== 'true') {
+  const externalWorkersDisabled = String(
+    process.env.DISABLE_EXTERNAL_WORKERS || ''
+  ).toLowerCase() === 'true';
+  if (!externalWorkersDisabled) {
     startIfoodStatusPoller();
     startIfoodMenuScheduler();
-  }
-  if (!whatsappAutomationWorker) {
-    whatsappAutomationWorker = startWhatsappAutomationWorker({ io });
+    if (!whatsappAutomationWorker) {
+      whatsappAutomationWorker = startWhatsappAutomationWorker({ io });
+    }
   }
   return { app, server, port };
 }

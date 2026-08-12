@@ -1,0 +1,107 @@
+{
+  "capturedAt": "2026-08-12T12:27:00-03:00",
+  "productionCommit": "a6890fa9891813b2e9891825dce0156535a0ace0",
+  "render": {
+    "serviceName": "E-o-Bicho",
+    "serviceId": "srv-d4ia2475r7bs73b8vq1g",
+    "serviceUrl": "https://e-o-bicho.onrender.com",
+    "runtime": "Node",
+    "plan": "Standard: 1 CPU, 2 GB",
+    "region": "Oregon (US West)",
+    "repository": "ClaudioLobo011/E-o-Bicho",
+    "branch": "main",
+    "rootDirectory": "servidor",
+    "buildCommand": "npm install; npm run build",
+    "preDeployCommand": "",
+    "startCommand": "npm start",
+    "autoDeploy": "On Commit",
+    "healthCheckPath": "",
+    "customDomains": [],
+    "environmentKeys": [
+      "CERTIFICATE_SECRET_KEY",
+      "GOOGLE_DRIVE_CLIENT_ID",
+      "GOOGLE_DRIVE_CLIENT_SECRET",
+      "GOOGLE_DRIVE_FOLDER_ID",
+      "GOOGLE_DRIVE_REFRESH_TOKEN",
+      "IFOOD_API_BASE",
+      "IFOOD_ITEMS_PATH",
+      "IFOOD_ITEMS_RESET",
+      "IFOOD_OAUTH_PATH",
+      "IFOOD_ORDER_ACK_PATH",
+      "IFOOD_ORDER_BASE",
+      "IFOOD_ORDER_DETAIL_PATH",
+      "IFOOD_ORDER_POLL_PATH",
+      "IFOOD_STATUS_PATH",
+      "JWT_SECRET",
+      "MONGO_URI",
+      "R2_ACCESS_KEY_ID",
+      "R2_ACCOUNT_ID",
+      "R2_BUCKET",
+      "R2_PUBLIC_BASE_URL",
+      "R2_REGION",
+      "R2_SECRET_ACCESS_KEY",
+      "ZOHO_FROM_EMAIL",
+      "ZOHO_FROM_NAME",
+      "ZOHO_SMTP_HOST",
+      "ZOHO_SMTP_PASS",
+      "ZOHO_SMTP_PORT",
+      "ZOHO_SMTP_SECURE",
+      "ZOHO_SMTP_USER"
+    ]
+  },
+  "windows": {
+    "hostname": "Clobo",
+    "apiPort": 3000,
+    "nodeVersion": "v22.18.0",
+    "npmVersion": "11.6.2",
+    "cloudflaredVersion": "2025.11.1",
+    "cloudflaredService": "Cloudflared",
+    "cloudflaredStartType": "Automatic",
+    "apiAutostartBeforePreparation": false,
+    "apiProcessStartTime": "2026-08-10T19:01:21-03:00",
+    "apiProcessLoadedCommit": "unknown; process predates the captured production commit"
+  },
+  "cloudflare": {
+    "zone": "peteobicho.com.br",
+    "tunnelName": "ifood-webhook",
+    "tunnelId": "0e56e86e-7b20-431c-86bf-d655ffeed042",
+    "tunnelStatus": "Healthy",
+    "tunnelOrigin": "http://localhost:3000",
+    "currentPublishedRoutes": [
+      "callback.peteobicho.com.br/",
+      "callback.peteobicho.com.br/webhooks",
+      "callback.peteobicho.com.br/webhooks/marketplaces",
+      "callback.peteobicho.com.br/webhooks/whatsapp",
+      "callback.peteobicho.com.br/webhooks/mercadopago"
+    ],
+    "futureApiHostname": "api.peteobicho.com.br",
+    "futureApiHostnameConfigured": false,
+    "r2Bucket": "imagens",
+    "r2Hostname": "cdn.peteobicho.com.br"
+  },
+  "vercel": {
+    "team": "e-o-bichos-projects",
+    "project": "e-o-bicho-site",
+    "plan": "Hobby",
+    "productionDomains": [
+      "www.peteobicho.com.br",
+      "e-o-bicho-site.vercel.app"
+    ],
+    "redirects": [
+      "peteobicho.com.br -> 307 www.peteobicho.com.br"
+    ],
+    "apiOriginSource": "scripts/core/config.js"
+  },
+  "mongodbAtlas": {
+    "project": "Project 0",
+    "primaryCluster": "EoBicho",
+    "primaryStatus": "ready",
+    "primaryTier": "M10",
+    "primaryRegion": "AWS sa-east-1 Sao Paulo",
+    "primaryTopology": "Replica Set - 3 nodes",
+    "backups": "Inactive",
+    "networkAccess": "0.0.0.0/0 active",
+    "secondaryCluster": "TesteEoBicho paused"
+  },
+  "secretsIncluded": false
+}

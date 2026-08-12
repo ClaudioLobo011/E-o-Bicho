@@ -1,5 +1,5 @@
 const API_CONFIG = (() => {
-  const DEFAULT_RENDER_SERVER_URL = 'https://e-o-bicho.onrender.com';
+  const DEFAULT_PRODUCTION_SERVER_URL = 'https://api.peteobicho.com.br';
   const LOCAL_SERVER_URL = 'http://localhost:3000';
   const STATIC_DEV_PORTS = new Set(['5500', '5501']);
 
@@ -55,7 +55,7 @@ const API_CONFIG = (() => {
 
   const resolveServerUrl = () => {
     if (typeof window === 'undefined') {
-      return DEFAULT_RENDER_SERVER_URL;
+      return DEFAULT_PRODUCTION_SERVER_URL;
     }
 
     const localOverride = normalizeUrl(getLocalOverride());
@@ -79,12 +79,12 @@ const API_CONFIG = (() => {
       return LOCAL_SERVER_URL;
     }
 
-    // Em produção sempre usamos o servidor da Render para evitar requisições
-    // indevidas para o localhost (que causam bloqueios de CORS).
-    return DEFAULT_RENDER_SERVER_URL;
+    // Em producao, o dominio estavel aponta para o servidor Windows por meio
+    // do Cloudflare Tunnel. O hostname permanece igual em futuras trocas de PC.
+    return DEFAULT_PRODUCTION_SERVER_URL;
   };
 
-  const serverUrl = normalizeUrl(resolveServerUrl()) || DEFAULT_RENDER_SERVER_URL;
+  const serverUrl = normalizeUrl(resolveServerUrl()) || DEFAULT_PRODUCTION_SERVER_URL;
 
   return {
     SERVER_URL: serverUrl,
