@@ -476,28 +476,32 @@ async function materializeDesktopEvent(event, pdv, host) {
         { celular: phone },
         ...(document.length === 11 ? [{ cpf: document }] : []),
         ...(document.length === 14 ? [{ cnpj: document }] : []),
-      ] }).lean();
-      if (duplicate) throw new Error('Já existe um cliente com este telefone ou documento.');
-      const last = await User.findOne({ codigoCliente: { $type: 'number' } }).sort({ codigoCliente: -1 }).select('codigoCliente').lean();
-      const password = await bcrypt.hash(crypto.randomBytes(18).toString('base64url'), 10);
-      customer = await User.create({
-        _id: customerId,
-        tipoConta: document.length === 14 ? 'pessoa_juridica' : 'pessoa_fisica',
-        email: clean(source.email) || `cadastro.desktop+${customerId}@eobicho.local`,
-        senha: password,
-        celular: phone,
-        telefone: clean(source.secondaryPhone),
-        codigoCliente: Number(last?.codigoCliente || 0) + 1,
-        nomeCompleto: document.length === 14 ? undefined : clean(source.name),
-        razaoSocial: document.length === 14 ? clean(source.name) : undefined,
-        cpf: document.length === 11 ? document : undefined,
-        cnpj: document.length === 14 ? document : undefined,
-        genero: clean(source.gender),
-        dataNascimento: source.birthDate || undefined,
-        role: 'cliente',
-        empresaPrincipal: host.empresa,
-        empresas: [host.empresa],
-      });
+      ] });
+      if (duplicate) {
+        customer = duplicate;
+        await User.updateOne({ _id: duplicate._id }, { $addToSet: { empresas: host.empresa } });
+      } else {
+        const last = await User.findOne({ codigoCliente: { $type: 'number' } }).sort({ codigoCliente: -1 }).select('codigoCliente').lean();
+        const password = await bcrypt.hash(crypto.randomBytes(18).toString('base64url'), 10);
+        customer = await User.create({
+          _id: customerId,
+          tipoConta: document.length === 14 ? 'pessoa_juridica' : 'pessoa_fisica',
+          email: clean(source.email) || `cadastro.desktop+${customerId}@eobicho.local`,
+          senha: password,
+          celular: phone,
+          telefone: clean(source.secondaryPhone),
+          codigoCliente: Number(last?.codigoCliente || 0) + 1,
+          nomeCompleto: document.length === 14 ? undefined : clean(source.name),
+          razaoSocial: document.length === 14 ? clean(source.name) : undefined,
+          cpf: document.length === 11 ? document : undefined,
+          cnpj: document.length === 14 ? document : undefined,
+          genero: clean(source.gender),
+          dataNascimento: source.birthDate || undefined,
+          role: 'cliente',
+          empresaPrincipal: host.empresa,
+          empresas: [host.empresa],
+        });
+      }
     }
     const address = source.address && typeof source.address === 'object' ? source.address : {};
     if (clean(address.zipCode || address.cep) || clean(address.street || address.logradouro)) {

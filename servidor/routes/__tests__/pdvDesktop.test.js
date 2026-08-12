@@ -97,6 +97,23 @@ test.describe('integração do PDV Desktop', () => {
     assert.equal(appointments.body.appointments[0].customerName, 'Cliente Desktop');
     assert.equal(appointments.body.appointments[0].petName, 'Bidu');
     await Pdv.updateOne({ _id: base.pdv._id }, { $set: { tipoUso: 'executavel', 'desktop.status': 'ativo' } });
+    const duplicateCustomerEvent = {
+      eventId: 'customer-existing-1',
+      type: 'customer.created',
+      occurredAt: new Date().toISOString(),
+      payload: {
+        customerId: String(new mongoose.Types.ObjectId()),
+        name: 'Cliente Desktop Repetido',
+        phone: customer.celular,
+        document: customer.cpf,
+      },
+    };
+    const duplicateCustomerResponse = await request.post('/desktop/events/batch').set(headers).send({ events: [duplicateCustomerEvent] });
+    assert.equal(duplicateCustomerResponse.body.results[0].accepted, true, duplicateCustomerResponse.text);
+    assert.equal(duplicateCustomerResponse.body.results[0].status, 'processed');
+    assert.equal(await User.countDocuments({ celular: customer.celular }), 1);
+    const linkedCustomer = await User.findById(customer._id).lean();
+    assert.ok(linkedCustomer.empresas.map(String).includes(String(base.company._id)));
     const events = [
       { eventId: 'cash-1', type: 'cash.opened', occurredAt: new Date().toISOString(), payload: { openingAmount: 50 } },
       { eventId: 'event-1', type: 'sale.completed', occurredAt: new Date().toISOString(), payload: { id: 'local-sale-1', saleCode: `${base.pdv.codigo.replace(/[^A-Za-z0-9]/g, '')}-000001`, appointmentId: String(appointment._id), appointmentIds: [String(appointment._id)], grossTotal: 20, netTotal: 20, items: [{ productId: String(new mongoose.Types.ObjectId()), code: base.product.cod, name: base.product.nome, quantity: 1, unitPrice: 20 }], payments: [{ paymentMethodId: String(base.payment._id), amount: 20 }] } },
