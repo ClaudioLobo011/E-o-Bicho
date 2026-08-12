@@ -185,6 +185,14 @@ test.describe('integração do PDV Desktop', () => {
     const finalState = await PdvState.findOne({ pdv: base.pdv._id }).lean();
     assert.equal(finalState.completedSales.find((entry) => entry.id === 'local-sale-1').status, 'cancelled');
     assert.equal(finalState.caixaAberto, false);
+    const redundantClose = await request.post('/desktop/events/batch').set(headers).send({ events: [
+      { eventId: 'cash-close-after-web-1', type: 'cash.closed', occurredAt: new Date().toISOString(), payload: { cashSessionId: 'desktop-stale-session', countedPayments: [{ paymentMethodId: String(base.payment._id), amount: 55 }], reason: 'Caixa já fechado no Web' } },
+    ] });
+    assert.equal(redundantClose.status, 200, redundantClose.text);
+    assert.deepEqual(redundantClose.body.results.map((item) => item.status), ['processed']);
+    const redundantCloseRecord = await PdvDesktopEvent.findOne({ pdv: base.pdv._id, eventId: 'cash-close-after-web-1' }).lean();
+    assert.equal(redundantCloseRecord.status, 'processed');
+    assert.equal(redundantCloseRecord.error, '');
     const revertedAppointment = await Appointment.findById(appointment._id).lean();
     assert.equal(revertedAppointment.pago, false);
     assert.equal(revertedAppointment.status, 'em_atendimento');

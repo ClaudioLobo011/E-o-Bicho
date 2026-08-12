@@ -615,6 +615,13 @@ async function materializeDesktopEvent(event, pdv, host) {
       timestamp: source.createdAt || event.occurredAt,
     };
   } else if (event.type === 'cash.closed') {
+    const currentState = await PdvState.findOne({ pdv: pdv._id }).select('caixaAberto caixaInfo').lean();
+    if (currentState && !currentState.caixaAberto) {
+      // O caixa pode ter sido fechado no PDV Web enquanto o desktop ainda
+      // conservava o estado offline anterior. O objetivo do evento já foi
+      // alcançado na nuvem; tratá-lo como sucesso evita uma pendência eterna.
+      return true;
+    }
     action = 'pdv.caixa.close';
     payload = {
       payments: await hydratePayments(source.countedPayments || []),
