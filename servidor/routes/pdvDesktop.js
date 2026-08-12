@@ -460,6 +460,7 @@ async function materializeDesktopEvent(event, pdv, host) {
     'exchange.finalized',
     'transfer.requested',
     'customer.created',
+    'appointment.status.updated',
   ];
   if (!supportedTypes.includes(event.type)) return false;
   if (event.type === 'customer.created') {
@@ -517,6 +518,16 @@ async function materializeDesktopEvent(event, pdv, host) {
     return true;
   }
   const source = event.payload && typeof event.payload === 'object' ? event.payload : {};
+  if (event.type === 'appointment.status.updated') {
+    const appointmentIds = Array.from(new Set((Array.isArray(source.appointmentIds) ? source.appointmentIds : [])
+      .map(clean).filter(mongoose.Types.ObjectId.isValid)));
+    if (!appointmentIds.length || clean(source.status).toLowerCase() !== 'finalizado') throw new Error('Atualização de atendimento inválida.');
+    await Appointment.updateMany(
+      { _id: { $in: appointmentIds }, store: host.empresa, pago: { $ne: true } },
+      { $set: { status: 'finalizado', 'itens.$[].status': 'finalizado' } }
+    );
+    return true;
+  }
   let action;
   let payload;
   const hydratePayments = async (entries = []) => {
@@ -781,9 +792,14 @@ async function materializeDesktopEvent(event, pdv, host) {
         .map(clean).filter(mongoose.Types.ObjectId.isValid)
     ));
     if (appointmentIds.length) {
+      const appointmentUpdate = { pago: true, codigoVenda: source.saleCode || '' };
+      if (source.finalizeAppointments !== false) {
+        appointmentUpdate.status = 'finalizado';
+        appointmentUpdate['itens.$[].status'] = 'finalizado';
+      }
       await Appointment.updateMany(
         { _id: { $in: appointmentIds }, store: host.empresa },
-        { $set: { pago: true, codigoVenda: source.saleCode || '', status: 'finalizado' } }
+        { $set: appointmentUpdate }
       );
     }
   }
@@ -793,10 +809,15 @@ async function materializeDesktopEvent(event, pdv, host) {
         .map(clean).filter(mongoose.Types.ObjectId.isValid)
     ));
     if (appointmentIds.length) {
-      await Appointment.updateMany(
-        { _id: { $in: appointmentIds }, store: host.empresa, codigoVenda: source.saleCode || '' },
-        { $set: { pago: false, codigoVenda: '', status: 'em_atendimento' } }
-      );
+      const originalStatuses = source.appointmentOriginalStatuses && typeof source.appointmentOriginalStatuses === 'object'
+        ? source.appointmentOriginalStatuses : {};
+      await Promise.all(appointmentIds.map((appointmentId) => {
+        const status = clean(originalStatuses[String(appointmentId)] || 'em_atendimento').toLowerCase();
+        return Appointment.updateOne(
+          { _id: appointmentId, store: host.empresa, codigoVenda: source.saleCode || '' },
+          { $set: { pago: false, codigoVenda: '', status, 'itens.$[].status': status } }
+        );
+      }));
     }
   }
   if (event.type === 'receivable.received' && source.saleId && source.receivableId) {
