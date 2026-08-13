@@ -15,7 +15,7 @@ namespace PdvLocalAgent
 {
     public class Program
     {
-        private static readonly string Version = "1.1.5";
+        private static readonly string Version = "1.1.6";
         private static readonly JavaScriptSerializer Serializer = new JavaScriptSerializer();
         private static AgentConfig Config;
         private static Logger Log;
@@ -802,6 +802,8 @@ try {
         public string protocol { get; set; }
         public string environment { get; set; }
         public string consultaUrl { get; set; }
+        public bool contingency { get; set; }
+        public string contingencyDeadline { get; set; }
     }
 
     public class ReceiptItem
@@ -996,7 +998,7 @@ try {
             var variant = (doc.variant ?? string.Empty).Trim().ToLowerInvariant();
             if (type == "nfce" || type == "danfe" || variant.Contains("nfce") || variant.Contains("danfe"))
             {
-                RenderDanfeNfce(doc, true);
+                RenderMatricialFiscalCoupon(doc);
                 return Finish();
             }
             if ((type == "venda" || type == "delivery") && (variant == "matricial" || variant.Contains("matricial")))
@@ -1212,6 +1214,25 @@ try {
             {
                 PrintRasterImage(bitmap);
             }
+        }
+
+        private void RenderMatricialFiscalCoupon(ReceiptDocument doc)
+        {
+            using (var bitmap = RasterReceiptBuilder.Build(doc, Width <= 32 ? 384 : 576))
+            {
+                PrintRasterImage(bitmap);
+            }
+            if (HasQr(doc.qrCode) && !HasUsableQrImage(doc.qrCode))
+            {
+                FeedLines(1);
+                AddLineCentered("CONSULTE A NFC-e PELO QR CODE", true);
+                PrintQrCodeDanfe(doc.qrCode);
+            }
+        }
+
+        private bool HasUsableQrImage(ReceiptQrCode qrCode)
+        {
+            return qrCode != null && TryDecodeBase64(qrCode.image) != null;
         }
 
         private void RenderMatricialCouponText(ReceiptDocument doc)
@@ -2637,8 +2658,11 @@ try {
         {
             pixelWidth = pixelWidth <= 384 ? 384 : 576;
             int estimatedItems = doc != null && doc.items != null ? doc.items.Count : 0;
-            bool isDelivery = doc != null && string.Equals(doc.type, "delivery", StringComparison.OrdinalIgnoreCase);
-            int canvasHeight = Math.Max(1800, 1500 + (estimatedItems * 150) + (isDelivery ? 600 : 0));
+            string documentType = doc != null ? (doc.type ?? string.Empty) : string.Empty;
+            string documentVariant = doc != null ? (doc.variant ?? string.Empty) : string.Empty;
+            bool isFiscal = string.Equals(documentType, "nfce", StringComparison.OrdinalIgnoreCase) || string.Equals(documentType, "danfe", StringComparison.OrdinalIgnoreCase) || documentVariant.IndexOf("fiscal", StringComparison.OrdinalIgnoreCase) >= 0 || documentVariant.IndexOf("danfe", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isDelivery = doc != null && (string.Equals(documentType, "delivery", StringComparison.OrdinalIgnoreCase) || doc.delivery != null);
+            int canvasHeight = Math.Max(1800, 1500 + (estimatedItems * 150) + (isDelivery ? 600 : 0) + (isFiscal ? 450 : 0));
             var canvas = new Bitmap(pixelWidth, canvasHeight, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
             float y = 22f;
             int margin = pixelWidth <= 384 ? 16 : 22;
@@ -2694,7 +2718,7 @@ try {
                 y += 7f;
                 DrawSeparator(graphics, dashed, margin, y, contentWidth); y += 13f;
                 y = DrawCentered(graphics, "EXTRATO " + (string.IsNullOrWhiteSpace(saleCode) ? (isDelivery ? "DELIVERY" : "VENDA") : saleCode), titleFont, black, margin, y, contentWidth, 2f);
-                y = DrawCentered(graphics, isDelivery ? "COMANDA DE DELIVERY" : "CUPOM NÃO FISCAL", titleFont, black, margin, y, contentWidth, 3f);
+                y = DrawCentered(graphics, isFiscal ? "DANFE NFC-e" : isDelivery ? "COMANDA DE DELIVERY" : "CUPOM NÃO FISCAL", titleFont, black, margin, y, contentWidth, 3f);
                 y += 5f;
                 DrawSeparator(graphics, dashed, margin, y, contentWidth); y += 13f;
 
@@ -2765,8 +2789,12 @@ try {
                 if (showCustomer && !isDelivery)
                 {
                     y += 4f; DrawSeparator(graphics, dashed, margin, y, contentWidth); y += 12f;
-                    y = DrawLeft(graphics, "Cliente: " + (customer.name ?? string.Empty), smallFont, black, margin, y, contentWidth, 2f);
+                    y = DrawCentered(graphics, "DADOS DO CLIENTE", bodyBold, black, margin, y, contentWidth, 4f);
+                    y = DrawLeft(graphics, "Cliente: " + (customer.name ?? string.Empty), bodyBold, black, margin, y, contentWidth, 2f);
                     if (!string.IsNullOrWhiteSpace(customer.document)) y = DrawLeft(graphics, "Documento: " + customer.document, smallFont, black, margin, y, contentWidth, 2f);
+                    var phoneEntries = BuildCustomerPhoneLines(customer);
+                    foreach (string phoneLine in phoneEntries) y = DrawLeft(graphics, phoneLine, smallFont, black, margin, y, contentWidth, 2f);
+                    if (!string.IsNullOrWhiteSpace(customer.address)) y = DrawLeft(graphics, "Endereço: " + customer.address, bodyBold, black, margin, y, contentWidth, 3f);
                 }
 
                 y += 4f; DrawSeparator(graphics, dashed, margin, y, contentWidth); y += 12f;
@@ -2778,7 +2806,33 @@ try {
                     y = DrawCentered(graphics, saleCode, smallBold, black, margin, y + 2f, contentWidth, 2f);
                     y = DrawCode39(graphics, saleCode, black, margin, y + 3f, contentWidth, pixelWidth <= 384 ? 50f : 62f);
                 }
-                y = DrawCentered(graphics, isDelivery ? "COMANDA DE ENTREGA - SEM VALOR FISCAL" : "DOCUMENTO SEM VALOR FISCAL", smallBold, black, margin, y + 8f, contentWidth, 2f);
+                if (isFiscal)
+                {
+                    y += 7f; DrawSeparator(graphics, dashed, margin, y, contentWidth); y += 12f;
+                    y = DrawCentered(graphics, "DOCUMENTO AUXILIAR DA NOTA FISCAL DE CONSUMIDOR ELETRÔNICA", smallBold, black, margin, y, contentWidth, 3f);
+                    if (meta != null && (!string.IsNullOrWhiteSpace(meta.fiscalNumber) || !string.IsNullOrWhiteSpace(meta.fiscalSerie)))
+                        y = DrawCentered(graphics, "NFC-e nº " + (meta.fiscalNumber ?? string.Empty) + "  Série " + (meta.fiscalSerie ?? string.Empty), bodyBold, black, margin, y, contentWidth, 3f);
+                    if (meta != null && !string.IsNullOrWhiteSpace(meta.accessKey))
+                    {
+                        y = DrawCentered(graphics, "CHAVE DE ACESSO", smallBold, black, margin, y, contentWidth, 2f);
+                        y = DrawCentered(graphics, GroupAccessKey(meta.accessKey), smallFont, black, margin, y, contentWidth, 3f);
+                    }
+                    if (meta != null && !string.IsNullOrWhiteSpace(meta.protocol))
+                        y = DrawCentered(graphics, "Protocolo de autorização: " + meta.protocol, smallFont, black, margin, y, contentWidth, 3f);
+                    if (meta != null && meta.contingency)
+                        y = DrawCentered(graphics, "EMITIDA EM CONTINGÊNCIA - PENDENTE DE AUTORIZAÇÃO", smallBold, black, margin, y, contentWidth, 3f);
+                    if (meta != null && !string.IsNullOrWhiteSpace(meta.environment) && (meta.environment == "2" || meta.environment.IndexOf("homolog", StringComparison.OrdinalIgnoreCase) >= 0))
+                        y = DrawCentered(graphics, "EMITIDA EM AMBIENTE DE HOMOLOGAÇÃO - SEM VALOR FISCAL", smallBold, black, margin, y, contentWidth, 3f);
+                    if (doc != null && doc.qrCode != null && !string.IsNullOrWhiteSpace(doc.qrCode.image))
+                    {
+                        y = DrawCentered(graphics, "CONSULTE A NFC-e PELO QR CODE", smallBold, black, margin, y + 5f, contentWidth, 3f);
+                        y = DrawQrImage(graphics, doc.qrCode.image, margin, y + 4f, contentWidth);
+                    }
+                }
+                else
+                {
+                    y = DrawCentered(graphics, isDelivery ? "COMANDA DE ENTREGA - SEM VALOR FISCAL" : "DOCUMENTO SEM VALOR FISCAL", smallBold, black, margin, y + 8f, contentWidth, 2f);
+                }
 
                 int finalHeight = Math.Min(canvas.Height, Math.Max(240, (int)Math.Ceiling(y + 24f)));
                 var result = new Bitmap(pixelWidth, finalHeight, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
@@ -2810,6 +2864,43 @@ try {
                 lines.Add(labels[index] + ": " + value);
             }
             return lines;
+        }
+
+        private static string GroupAccessKey(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+            var source = new StringBuilder();
+            foreach (char character in value) if (char.IsLetterOrDigit(character)) source.Append(character);
+            var grouped = new StringBuilder();
+            for (int index = 0; index < source.Length; index++)
+            {
+                if (index > 0 && index % 4 == 0) grouped.Append(' ');
+                grouped.Append(source[index]);
+            }
+            return grouped.ToString();
+        }
+
+        private static float DrawQrImage(Graphics graphics, string value, float x, float y, float maxWidth)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return y;
+            string source = value.Trim();
+            int comma = source.IndexOf(',');
+            if (source.StartsWith("data:", StringComparison.OrdinalIgnoreCase) && comma >= 0) source = source.Substring(comma + 1);
+            try
+            {
+                byte[] bytes = Convert.FromBase64String(source);
+                using (var stream = new MemoryStream(bytes))
+                using (var bitmap = new Bitmap(stream))
+                {
+                    float size = Math.Min(maxWidth * .58f, 280f);
+                    graphics.DrawImage(bitmap, x + ((maxWidth - size) / 2f), y, size, size);
+                    return y + size + 5f;
+                }
+            }
+            catch
+            {
+                return y;
+            }
         }
 
         private static Font FitFont(Graphics graphics, string text, Font source, float width)
