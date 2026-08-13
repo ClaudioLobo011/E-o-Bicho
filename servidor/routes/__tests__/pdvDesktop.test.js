@@ -97,6 +97,29 @@ test.describe('integração do PDV Desktop', () => {
     assert.equal(appointments.body.appointments[0].customerName, 'Cliente Desktop');
     assert.equal(appointments.body.appointments[0].petName, 'Bidu');
     await Pdv.updateOne({ _id: base.pdv._id }, { $set: { tipoUso: 'executavel', 'desktop.status': 'ativo' } });
+    const agendaServiceId = new mongoose.Types.ObjectId();
+    const appointmentCreateEvent = {
+      eventId: 'appointment-create-1', type: 'appointment.created', occurredAt: new Date().toISOString(),
+      payload: { clientMutationId: 'appointment-create-1', customerId: String(customer._id), petId: String(pet._id), scheduledAt: new Date(Date.now() + 7200000).toISOString(), status: 'agendado', notes: 'Criado offline', services: [{ serviceId: String(agendaServiceId), name: 'Banho', unitPrice: 35, status: 'agendado' }] },
+    };
+    const appointmentCreateResponse = await request.post('/desktop/events/batch').set(headers).send({ events: [appointmentCreateEvent] });
+    assert.equal(appointmentCreateResponse.body.results[0].status, 'processed', appointmentCreateResponse.text);
+    const locallyCreatedAppointment = await Appointment.findOne({ clientMutationId: 'appointment-create-1' }).lean();
+    assert.equal(locallyCreatedAppointment.observacoes, 'Criado offline');
+    assert.equal(locallyCreatedAppointment.version, 1);
+    const appointmentUpdateEvent = {
+      eventId: 'appointment-update-1', type: 'appointment.updated', occurredAt: new Date().toISOString(),
+      payload: { ...appointmentCreateEvent.payload, appointmentId: String(locallyCreatedAppointment._id), expectedVersion: 1, status: 'em_espera', notes: 'Atualizado offline' },
+    };
+    const appointmentUpdateResponse = await request.post('/desktop/events/batch').set(headers).send({ events: [appointmentUpdateEvent] });
+    assert.equal(appointmentUpdateResponse.body.results[0].status, 'processed', appointmentUpdateResponse.text);
+    const locallyUpdatedAppointment = await Appointment.findById(locallyCreatedAppointment._id).lean();
+    assert.equal(locallyUpdatedAppointment.status, 'em_espera');
+    assert.equal(locallyUpdatedAppointment.version, 2);
+    const conflictingEvent = { ...appointmentUpdateEvent, eventId: 'appointment-update-conflict', payload: { ...appointmentUpdateEvent.payload, expectedVersion: 1 } };
+    const conflictResponse = await request.post('/desktop/events/batch').set(headers).send({ events: [conflictingEvent] });
+    assert.equal(conflictResponse.body.results[0].accepted, false);
+    assert.equal(conflictResponse.body.results[0].code, 'APPOINTMENT_VERSION_CONFLICT');
     const duplicateCustomerEvent = {
       eventId: 'customer-existing-1',
       type: 'customer.created',
@@ -114,6 +137,28 @@ test.describe('integração do PDV Desktop', () => {
     assert.equal(await User.countDocuments({ celular: customer.celular }), 1);
     const linkedCustomer = await User.findById(customer._id).lean();
     assert.ok(linkedCustomer.empresas.map(String).includes(String(base.company._id)));
+    const duplicateLocalCustomerId = duplicateCustomerEvent.payload.customerId;
+    const duplicatePetId = String(new mongoose.Types.ObjectId());
+    const duplicatePetEvent = {
+      eventId: 'pet-existing-customer-1',
+      type: 'pet.created',
+      occurredAt: new Date().toISOString(),
+      payload: { petId: duplicatePetId, customerId: duplicateLocalCustomerId, name: 'Pet do cliente repetido', type: 'cachorro', breed: 'Poodle Grande', size: 'grande', sex: 'M', birthDate: '2026-08-01' },
+    };
+    const duplicatePetResponse = await request.post('/desktop/events/batch').set(headers).send({ events: [duplicatePetEvent] });
+    assert.equal(duplicatePetResponse.body.results[0].status, 'processed', duplicatePetResponse.text);
+    const duplicatePet = await Pet.findById(duplicatePetId).lean();
+    assert.equal(String(duplicatePet.owner), String(customer._id));
+    const duplicateAppointmentEvent = {
+      eventId: 'appointment-existing-customer-1',
+      type: 'appointment.created',
+      occurredAt: new Date().toISOString(),
+      payload: { clientMutationId: 'appointment-existing-customer-1', customerId: duplicateLocalCustomerId, petId: duplicatePetId, scheduledAt: new Date(Date.now() + 10800000).toISOString(), status: 'agendado', services: [{ serviceId: String(agendaServiceId), name: 'Consulta', unitPrice: 40, status: 'agendado' }] },
+    };
+    const duplicateAppointmentResponse = await request.post('/desktop/events/batch').set(headers).send({ events: [duplicateAppointmentEvent] });
+    assert.equal(duplicateAppointmentResponse.body.results[0].status, 'processed', duplicateAppointmentResponse.text);
+    const duplicateAppointment = await Appointment.findOne({ clientMutationId: 'appointment-existing-customer-1' }).lean();
+    assert.equal(String(duplicateAppointment.cliente), String(customer._id));
     const events = [
       { eventId: 'cash-1', type: 'cash.opened', occurredAt: new Date().toISOString(), payload: { openingAmount: 50 } },
       { eventId: 'event-1', type: 'sale.completed', occurredAt: new Date().toISOString(), payload: { id: 'local-sale-1', saleCode: `${base.pdv.codigo.replace(/[^A-Za-z0-9]/g, '')}-000001`, appointmentId: String(appointment._id), appointmentIds: [String(appointment._id)], grossTotal: 20, netTotal: 20, items: [{ productId: String(new mongoose.Types.ObjectId()), code: base.product.cod, name: base.product.nome, quantity: 1, unitPrice: 20 }], payments: [{ paymentMethodId: String(base.payment._id), amount: 20 }] } },

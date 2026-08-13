@@ -23,7 +23,7 @@ const Transfer = require('../models/Transfer');
 const FiscalDefaultRule = require('../models/FiscalDefaultRule');
 const Store = require('../models/Store');
 const Deposit = require('../models/Deposit');
-require('../models/Service');
+const Service = require('../models/Service');
 const pdvDomain = require('./pdvs');
 const { adjustProductStockForDeposit, toObjectIdOrNull } = require('../utils/inventoryStock');
 const { decryptBuffer, decryptText } = require('../utils/certificates');
@@ -203,6 +203,8 @@ function appointmentForDesktop(appointment) {
     paid: Boolean(appointment.pago),
     saleCode: appointment.codigoVenda || '',
     notes: appointment.observacoes || '',
+    version: Number(appointment.version || 1),
+    clientMutationId: appointment.clientMutationId || '',
     updatedAt: appointment.updatedAt || appointment.createdAt,
   };
 }
@@ -440,6 +442,95 @@ async function materializeDesktopTransferEvent(event, pdv, host) {
   throw new Error('Não foi possível gerar o número da transferência na nuvem.');
 }
 
+const DESKTOP_APPOINTMENT_STATUSES = new Set(['agendado', 'em_espera', 'em_atendimento', 'finalizado']);
+
+async function resolveDesktopCustomerId(customerId, host) {
+  const requestedId = clean(customerId);
+  if (!mongoose.Types.ObjectId.isValid(requestedId)) return requestedId;
+  if (await User.exists({ _id: requestedId })) return requestedId;
+  const registration = await PdvDesktopEvent.findOne({
+    pdv: host.pdv,
+    type: 'customer.created',
+    status: 'processed',
+    $or: [{ 'payload.customerId': requestedId }, { 'payload.id': requestedId }],
+  }).sort({ createdAt: -1 }).lean();
+  const source = registration?.payload && typeof registration.payload === 'object' ? registration.payload : {};
+  const document = clean(source.document).replace(/\D/g, '');
+  const phone = clean(source.phone).replace(/\D/g, '');
+  const matches = [
+    ...(phone ? [{ celular: phone }] : []),
+    ...(document.length === 11 ? [{ cpf: document }] : []),
+    ...(document.length === 14 ? [{ cnpj: document }] : []),
+  ];
+  if (!matches.length) return requestedId;
+  const canonical = await User.findOne({ $or: matches }).select('_id').lean();
+  return canonical?._id ? String(canonical._id) : requestedId;
+}
+
+async function desktopAppointmentPayload(source, host) {
+  const customerId = await resolveDesktopCustomerId(source.customerId, host);
+  const petId = clean(source.petId);
+  const scheduledAt = new Date(source.scheduledAt || '');
+  if (!mongoose.Types.ObjectId.isValid(customerId) || !mongoose.Types.ObjectId.isValid(petId)) throw new Error('Cliente ou pet inválido no agendamento.');
+  if (Number.isNaN(scheduledAt.getTime())) throw new Error('Data e hora inválidas no agendamento.');
+  const pet = await Pet.findOne({ _id: petId, owner: customerId }).select('_id').lean();
+  if (!pet) throw new Error('O pet não pertence ao cliente selecionado.');
+  const status = clean(source.status).toLowerCase() || 'agendado';
+  if (!DESKTOP_APPOINTMENT_STATUSES.has(status)) throw new Error('Status de agendamento inválido.');
+  const services = Array.isArray(source.services) ? source.services : [];
+  if (!services.length) throw new Error('O agendamento precisa ter ao menos um serviço.');
+  const itens = services.map((item) => {
+    const serviceId = clean(item.serviceId || item.id);
+    const professionalId = clean(item.professionalId);
+    if (!mongoose.Types.ObjectId.isValid(serviceId)) throw new Error('Serviço inválido no agendamento.');
+    if (professionalId && !mongoose.Types.ObjectId.isValid(professionalId)) throw new Error('Profissional inválido no agendamento.');
+    const entry = {
+      servico: serviceId, valor: Math.max(0, Number(item.unitPrice ?? item.price ?? 0)), status: DESKTOP_APPOINTMENT_STATUSES.has(clean(item.status).toLowerCase()) ? clean(item.status).toLowerCase() : status,
+      data: clean(item.date) || scheduledAt.toISOString().slice(0, 10), hora: clean(item.time), observacao: clean(item.notes),
+    };
+    if (professionalId) entry.profissional = professionalId;
+    return entry;
+  });
+  const primaryProfessional = itens.find((item) => item.profissional)?.profissional || null;
+  return {
+    store: host.empresa, cliente: customerId, pet: petId, servico: itens[0].servico, itens,
+    profissional: primaryProfessional, scheduledAt, valor: itens.reduce((sum, item) => sum + Number(item.valor || 0), 0),
+    status, observacoes: clean(source.notes),
+  };
+}
+
+async function materializeDesktopAppointmentEvent(event, host) {
+  const source = event.payload && typeof event.payload === 'object' ? event.payload : {};
+  const mutationId = clean(source.clientMutationId || event.eventId);
+  const appointmentId = clean(source.appointmentId);
+  let appointment = mongoose.Types.ObjectId.isValid(appointmentId) ? await Appointment.findById(appointmentId) : null;
+  if (!appointment && mutationId) appointment = await Appointment.findOne({ clientMutationId: mutationId });
+  if (event.type === 'appointment.created') {
+    if (appointment) return appointment;
+    const values = await desktopAppointmentPayload(source, host);
+    const actorId = clean(source.operator?.id);
+    return Appointment.create({ ...values, createdBy: mongoose.Types.ObjectId.isValid(actorId) ? actorId : undefined, source: 'manual', clientMutationId: mutationId, version: 1 });
+  }
+  if (!appointment) throw new Error('Agendamento não encontrado para sincronização.');
+  if (String(appointment.store) !== String(host.empresa)) throw new Error('Agendamento pertence a outra empresa.');
+  const expectedVersion = Math.max(1, Number(source.expectedVersion || 1));
+  if (Number(appointment.version || 1) !== expectedVersion) {
+    const conflict = new Error('O agendamento foi alterado por outro usuário. Atualize a agenda antes de tentar novamente.');
+    conflict.code = 'APPOINTMENT_VERSION_CONFLICT';
+    throw conflict;
+  }
+  if (event.type === 'appointment.deleted') {
+    if (appointment.pago || appointment.codigoVenda) throw new Error('Agendamento faturado não pode ser excluído pela Agenda.');
+    appointment.deletedAt = new Date(); appointment.version = expectedVersion + 1;
+    await appointment.save();
+    return appointment;
+  }
+  const values = await desktopAppointmentPayload(source, host);
+  Object.assign(appointment, values, { version: expectedVersion + 1 });
+  await appointment.save();
+  return appointment;
+}
+
 async function materializeDesktopEvent(event, pdv, host) {
   const supportedTypes = [
     'cash.opened',
@@ -460,9 +551,17 @@ async function materializeDesktopEvent(event, pdv, host) {
     'exchange.finalized',
     'transfer.requested',
     'customer.created',
+    'pet.created',
     'appointment.status.updated',
+    'appointment.created',
+    'appointment.updated',
+    'appointment.deleted',
   ];
   if (!supportedTypes.includes(event.type)) return false;
+  if (['appointment.created', 'appointment.updated', 'appointment.deleted'].includes(event.type)) {
+    await materializeDesktopAppointmentEvent(event, host);
+    return true;
+  }
   if (event.type === 'customer.created') {
     const source = event.payload && typeof event.payload === 'object' ? event.payload : {};
     const customerId = clean(source.customerId || source.id);
@@ -511,6 +610,35 @@ async function materializeDesktopEvent(event, pdv, host) {
         { upsert: true, new: true, setDefaultsOnInsert: true }
       );
     }
+    return true;
+  }
+  if (event.type === 'pet.created') {
+    const source = event.payload && typeof event.payload === 'object' ? event.payload : {};
+    const petId = clean(source.petId || source.id);
+    const customerId = await resolveDesktopCustomerId(source.customerId || source.ownerId, host);
+    if (!mongoose.Types.ObjectId.isValid(petId)) throw new Error('Identificador local do pet inválido.');
+    if (!mongoose.Types.ObjectId.isValid(customerId)) throw new Error('Identificador local do responsável inválido.');
+    if (await Pet.exists({ _id: petId })) return true;
+    if (!await User.exists({ _id: customerId })) throw new Error('Responsável do pet ainda não foi sincronizado.');
+    const lastPet = await Pet.findOne({ codigoPet: { $type: 'number' } }).sort({ codigoPet: -1 }).select('codigoPet').lean();
+    await Pet.create({
+      _id: petId,
+      owner: customerId,
+      codigoPet: Number(lastPet?.codigoPet || 0) + 1,
+      codAntigoPet: clean(source.oldCode || source.codAntigoPet),
+      nome: clean(source.name || source.nome),
+      tipo: clean(source.type || source.tipo).toLowerCase(),
+      raca: clean(source.breed || source.raca),
+      porte: clean(source.size || source.porte).toLowerCase(),
+      sexo: clean(source.sex || source.sexo).toUpperCase(),
+      dataNascimento: source.birthDate || source.dataNascimento,
+      microchip: clean(source.microchip),
+      pelagemCor: clean(source.coatColor || source.pelagemCor),
+      rga: clean(source.rga),
+      peso: clean(source.weight || source.peso),
+      obito: Boolean(source.deceased ?? source.obito),
+      castrado: Boolean(source.neutered ?? source.castrado),
+    });
     return true;
   }
   if (event.type === 'exchange.registered' || event.type === 'exchange.finalized') {
@@ -1108,7 +1236,7 @@ router.get('/directory/snapshot', authenticateHost, async (req, res) => {
     }).select(userFields).limit(50000).lean(),
   ]);
   const customerIds = customersUsers.map((user) => user._id);
-  const [pets, addresses, stores, deposits] = await Promise.all([
+  const [pets, addresses, stores, deposits, services] = await Promise.all([
     Pet.find({ owner: { $in: customerIds }, obito: { $ne: true } })
       .select('_id owner codigoPet codAntigoPet nome tipo raca porte sexo dataNascimento microchip pelagemCor rga peso castrado updatedAt')
       .lean(),
@@ -1118,6 +1246,8 @@ router.get('/directory/snapshot', authenticateHost, async (req, res) => {
       .lean(),
     Store.find({ _id: host.empresa }).select('_id codigo nome nomeFantasia uf').lean(),
     Deposit.find({ empresa: host.empresa }).select('_id codigo nome empresa').sort({ nome: 1 }).lean(),
+    Service.find({ ativo: { $ne: false } }).select('_id nome valor duracaoMinutos grupo categorias porte updatedAt')
+      .populate({ path: 'grupo', select: 'nome tiposPermitidos' }).sort({ nome: 1 }).lean(),
   ]);
   const addressByUser = new Map();
   const companyState = clean(stores[0]?.uf).toUpperCase();
@@ -1182,6 +1312,11 @@ router.get('/directory/snapshot', authenticateHost, async (req, res) => {
     name: nameOf(user),
     document: user.cpf || user.cnpj || '',
   }));
+  const professionals = users.filter((user) => Array.isArray(user.grupos) && user.grupos.some((group) => ['esteticista', 'veterinario'].includes(group)))
+    .map((user) => ({
+      id: String(user._id), name: nameOf(user),
+      type: user.grupos.includes('veterinario') ? 'veterinario' : 'esteticista', groups: user.grupos || [],
+    })).filter((entry) => entry.name);
   return res.json({
     version: 1,
     generatedAt: new Date().toISOString(),
@@ -1193,6 +1328,12 @@ router.get('/directory/snapshot', authenticateHost, async (req, res) => {
     })),
     sellers,
     couriers,
+    professionals,
+    services: services.map((service) => ({
+      id: String(service._id), name: service.nome || '', price: Number(service.valor || 0), durationMinutes: Number(service.duracaoMinutos || 0),
+      allowedStaffTypes: Array.isArray(service.grupo?.tiposPermitidos) ? service.grupo.tiposPermitidos : [],
+      categories: Array.isArray(service.categorias) ? service.categorias : [], sizes: Array.isArray(service.porte) ? service.porte : [],
+    })),
     stores: stores.map((store) => ({ id: String(store._id), code: store.codigo || '', name: store.nomeFantasia || store.nome || '' })),
     deposits: deposits.map((deposit) => ({ id: String(deposit._id), code: deposit.codigo || '', name: deposit.nome || '', companyId: String(deposit.empresa) })),
     responsibles: users.map((user) => ({ id: String(user._id), code: user.codigoCliente ? String(user.codigoCliente) : '', name: nameOf(user) })).filter((entry) => entry.name),
@@ -1469,7 +1610,7 @@ router.post('/events/batch', authenticateHost, async (req, res) => {
       results.push({ eventId, accepted: true, replayed, status: record.status });
     } catch (error) {
       await PdvDesktopEvent.updateOne({ pdv: host.pdv, eventId }, { $set: { status: 'failed', error: error?.message || 'Falha ao processar evento.' } }).catch(() => {});
-      results.push({ eventId, accepted: false, error: error?.message || 'Falha ao registrar evento.' });
+      results.push({ eventId, accepted: false, code: error?.code || 'DESKTOP_EVENT_FAILED', error: error?.message || 'Falha ao registrar evento.' });
     }
   }
   return res.json({ results });
