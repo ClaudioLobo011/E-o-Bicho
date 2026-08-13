@@ -39,6 +39,7 @@ const WHATSAPP_WEBHOOK_BODY_LIMIT = '25mb';
 const DEFAULT_CORS_ALLOWED_ORIGINS = [
   'https://www.peteobicho.com.br',
   'https://peteobicho.com.br',
+  'https://e-o-bicho-site.vercel.app',
   'https://e-o-bicho.com.br',
   'https://www.e-o-bicho.com.br',
   'https://e-o-bicho.onrender.com',

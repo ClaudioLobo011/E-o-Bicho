@@ -1,6 +1,17 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": ".",
+  "headers": [
+    {
+      "source": "/scripts/core/config.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, max-age=0, must-revalidate"
+        }
+      ]
+    }
+  ],
   "builds": [
     { "src": "index.html", "use": "@vercel/static" },
     { "src": "pages/**", "use": "@vercel/static" },

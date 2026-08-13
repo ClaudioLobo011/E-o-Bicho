@@ -1,5 +1,6 @@
 const API_CONFIG = (() => {
   const DEFAULT_PRODUCTION_SERVER_URL = 'https://api.peteobicho.com.br';
+  const LEGACY_RENDER_SERVER_URL = 'https://e-o-bicho.onrender.com';
   const LOCAL_SERVER_URL = 'http://localhost:3000';
   const STATIC_DEV_PORTS = new Set(['5500', '5501']);
 
@@ -58,6 +59,24 @@ const API_CONFIG = (() => {
       return DEFAULT_PRODUCTION_SERVER_URL;
     }
 
+    const hostname = window.location.hostname;
+    const isLocalhost = isLocalHost(hostname);
+
+    // Fora do ambiente local, o dominio publico e a unica fonte valida. Isso
+    // impede que navegadores antigos continuem presos a Render por cache ou
+    // por um override salvo antes da migracao.
+    if (!isLocalhost) {
+      const storedOverride = normalizeUrl(getLocalOverride());
+      if (storedOverride === LEGACY_RENDER_SERVER_URL) {
+        try {
+          localStorage.removeItem('apiServerOverride');
+        } catch (_err) {
+          // Ignora ambientes onde o storage nao esta disponivel.
+        }
+      }
+      return DEFAULT_PRODUCTION_SERVER_URL;
+    }
+
     const localOverride = normalizeUrl(getLocalOverride());
     const safeLocalOverride = isStaticDevServer(localOverride) ? '' : localOverride;
     if (localOverride && !safeLocalOverride) {
@@ -68,9 +87,6 @@ const API_CONFIG = (() => {
     if (manualOverride) {
       return manualOverride;
     }
-
-    const hostname = window.location.hostname;
-    const isLocalhost = isLocalHost(hostname);
 
     if (isLocalhost) {
       if (window.location.port === '3000' || window.location.port === '3100') {
