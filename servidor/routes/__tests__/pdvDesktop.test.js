@@ -120,6 +120,28 @@ test.describe('integração do PDV Desktop', () => {
     assert.equal(recurringAppointments.body.appointments[0].paid, true);
     assert.match(recurringAppointments.body.appointments[0].id, /:occurrence:/);
     await Pdv.updateOne({ _id: base.pdv._id }, { $set: { tipoUso: 'executavel', 'desktop.status': 'ativo' } });
+    const statusRecurringAppointment = await Appointment.create({
+      store: base.company._id,
+      cliente: customer._id,
+      pet: pet._id,
+      scheduledAt: new Date('2026-08-01T12:00:00.000Z'),
+      valor: 80,
+      status: 'agendado',
+      itens: [
+        { servico: recurringServiceId, valor: 30, data: '2026-08-01', hora: '09:00', status: 'agendado' },
+        { servico: recurringServiceId, valor: 50, data: '2026-08-15', hora: '09:00', status: 'agendado' },
+      ],
+    });
+    const recurringFinalizationResponse = await request.post('/desktop/events/batch').set(headers).send({ events: [{
+      eventId: 'recurring-status-finalized', type: 'appointment.status.updated', occurredAt: new Date().toISOString(),
+      payload: { appointmentIds: [`${statusRecurringAppointment._id}:occurrence:2026-08-15T12:00:00.000Z`], status: 'finalizado' },
+    }] });
+    assert.equal(recurringFinalizationResponse.body.results[0].status, 'processed', recurringFinalizationResponse.text);
+    const recurringFinalized = await Appointment.findById(statusRecurringAppointment._id).lean();
+    assert.equal(recurringFinalized.itens.find((item) => item.data === '2026-08-01').status, 'agendado');
+    assert.equal(recurringFinalized.itens.find((item) => item.data === '2026-08-15').status, 'finalizado');
+    assert.equal(recurringFinalized.status, 'em_atendimento');
+    await Appointment.deleteOne({ _id: statusRecurringAppointment._id });
     const recurringStatusResponse = await request.post('/desktop/events/batch').set(headers).send({ events: [{
       eventId: 'recurring-paid-status', type: 'appointment.updated', occurredAt: new Date().toISOString(),
       payload: {

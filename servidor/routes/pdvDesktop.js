@@ -33,6 +33,14 @@ const router = express.Router();
 const adminOnly = [requireAuth, authorizeRoles('admin', 'admin_master')];
 const hash = (value) => crypto.createHash('sha256').update(String(value || '')).digest('hex');
 const clean = (value) => String(value || '').trim();
+const desktopAppointmentReference = (value) => {
+  const reference = clean(value);
+  const marker = ':occurrence:';
+  const markerIndex = reference.indexOf(marker);
+  return markerIndex < 0
+    ? { appointmentId: reference, occurrenceKey: '' }
+    : { appointmentId: reference.slice(0, markerIndex), occurrenceKey: reference.slice(markerIndex + marker.length) };
+};
 const desktopEventActor = (source, host) => ({
   id: clean(source?.operator?.id) || String(host._id),
   name: clean(source?.operator?.name) || host.name || 'PDV Desktop',
@@ -735,13 +743,25 @@ async function materializeDesktopEvent(event, pdv, host) {
   }
   const source = event.payload && typeof event.payload === 'object' ? event.payload : {};
   if (event.type === 'appointment.status.updated') {
-    const appointmentIds = Array.from(new Set((Array.isArray(source.appointmentIds) ? source.appointmentIds : [])
-      .map(clean).filter(mongoose.Types.ObjectId.isValid)));
-    if (!appointmentIds.length || clean(source.status).toLowerCase() !== 'finalizado') throw new Error('Atualização de atendimento inválida.');
-    await Appointment.updateMany(
-      { _id: { $in: appointmentIds }, store: host.empresa, pago: { $ne: true } },
-      { $set: { status: 'finalizado', 'itens.$[].status': 'finalizado' } }
-    );
+    const references = Array.from(new Map((Array.isArray(source.appointmentIds) ? source.appointmentIds : [])
+      .map(desktopAppointmentReference)
+      .filter((entry) => mongoose.Types.ObjectId.isValid(entry.appointmentId))
+      .map((entry) => [`${entry.appointmentId}:${entry.occurrenceKey}`, entry])).values());
+    if (!references.length || clean(source.status).toLowerCase() !== 'finalizado') throw new Error('Atualização de atendimento inválida.');
+    for (const reference of references) {
+      const appointment = await Appointment.findOne({ _id: reference.appointmentId, store: host.empresa, pago: { $ne: true } });
+      if (!appointment) continue;
+      if (!reference.occurrenceKey) {
+        appointment.status = 'finalizado';
+        (appointment.itens || []).forEach((item) => { item.status = 'finalizado'; });
+      } else {
+        const occurrenceItems = (appointment.itens || []).filter((item) => desktopAppointmentItemDate(item, appointment.scheduledAt)?.toISOString() === reference.occurrenceKey);
+        if (!occurrenceItems.length) continue;
+        occurrenceItems.forEach((item) => { item.status = 'finalizado'; });
+        appointment.status = deriveAppointmentStatus(appointment);
+      }
+      await appointment.save();
+    }
     return true;
   }
   let action;
