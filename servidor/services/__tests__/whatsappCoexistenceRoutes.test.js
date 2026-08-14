@@ -287,3 +287,27 @@ test('webhooks de coexistência espelham mensagem do celular e atualizam a sincr
   assert.equal(updated.phoneNumbers[0].status, 'Desconectado');
   assert.equal(await WhatsappWebhookEvent.countDocuments({ store: store._id }), 3);
 });
+
+test('somente administrador remove numero local e limpa o vinculo quando era o ultimo', async () => {
+  const phoneNumberId = '109876543210';
+
+  const forbidden = await request(app)
+    .delete(`/api/integrations/whatsapp/${store._id}/coexistence/numbers/${phoneNumberId}`)
+    .set('Authorization', `Bearer ${employeeToken}`);
+  assert.equal(forbidden.status, 403);
+
+  const removed = await request(app)
+    .delete(`/api/integrations/whatsapp/${store._id}/coexistence/numbers/${phoneNumberId}`)
+    .set('Authorization', `Bearer ${adminToken}`);
+  assert.equal(removed.status, 200);
+  assert.equal(removed.body.removedPhoneNumberId, phoneNumberId);
+  assert.equal(removed.body.setup.phoneNumbers.length, 0);
+  assert.equal(removed.body.setup.onboardingStatus, 'ready');
+  assert.equal(removed.body.setup.wabaId, '');
+  assert.equal(removed.body.setup.credentials.accessTokenStored, false);
+
+  const integration = await WhatsappIntegration.findOne({ store: store._id });
+  assert.equal(integration.phoneNumbers.length, 0);
+  assert.equal(integration.wabaId, '');
+  assert.equal(integration.accessTokenStored, false);
+});

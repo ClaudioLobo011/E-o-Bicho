@@ -204,6 +204,57 @@ router.put('/setup', async (req, res) => {
   }
 });
 
+router.delete('/numbers/:phoneNumberId', async (req, res) => {
+  try {
+    const storeId = req.whatsappContext.storeId;
+    const phoneNumberId = clean(req.params.phoneNumberId);
+    if (!phoneNumberId) {
+      return res.status(400).json({ message: 'Phone Number ID nao informado.' });
+    }
+
+    const integration = await WhatsappIntegration.findOne({ store: storeId })
+      .select(selectIntegrationSecrets());
+    if (!integration) {
+      return res.status(404).json({ message: 'Integracao do WhatsApp nao configurada.' });
+    }
+
+    const number = integration.phoneNumbers.find(
+      (entry) => clean(entry.phoneNumberId) === phoneNumberId
+    );
+    if (!number) {
+      return res.status(404).json({ message: 'Numero do WhatsApp nao encontrado nesta loja.' });
+    }
+
+    integration.phoneNumbers.pull(number._id);
+    if (!integration.phoneNumbers.length) {
+      integration.wabaId = '';
+      integration.businessId = '';
+      integration.accessTokenEncrypted = null;
+      integration.accessTokenStored = false;
+      integration.webhookSubscribedAt = null;
+      integration.onboardedAt = null;
+      integration.syncDeadlineAt = null;
+      integration.lastHealthCheckAt = null;
+      integration.lastError = null;
+      integration.onboardingEvent = '';
+      integration.connectionMode = 'coexistence';
+      integration.onboardingStatus = resolveConfig(integration).ready
+        ? 'ready'
+        : 'not_configured';
+    }
+
+    await integration.save();
+    return res.json({
+      message: 'Numero removido deste ambiente. Os ativos da Meta nao foram alterados.',
+      removedPhoneNumberId: phoneNumberId,
+      setup: buildSetupResponse(integration),
+    });
+  } catch (error) {
+    console.error('Erro ao remover numero local da integracao WhatsApp:', error);
+    return res.status(500).json({ message: 'Erro ao remover numero deste ambiente.' });
+  }
+});
+
 router.post('/session', async (req, res) => {
   try {
     const storeId = req.whatsappContext.storeId;

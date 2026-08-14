@@ -451,6 +451,12 @@ document.addEventListener('DOMContentLoaded', () => {
           <div class="text-left sm:text-right">
             <p class="text-xs font-semibold text-gray-600">${escapeHtml(number.provider || 'Meta Cloud API')}</p>
             <p class="mt-1 text-[11px] text-gray-400">${escapeHtml(formatDate(number.lastSyncAt))}</p>
+            ${canConfigure() && number.phoneNumberId ? `
+              <button type="button" class="mt-2 inline-flex items-center gap-1 rounded-lg border border-red-200 px-2.5 py-1.5 text-[11px] font-semibold text-red-600 transition hover:bg-red-50" data-action="remove-number" data-phone-number-id="${escapeHtml(number.phoneNumberId)}">
+                <i class="fas fa-trash-alt"></i>
+                <span>Remover</span>
+              </button>
+            ` : ''}
           </div>
         </div>
         <div class="mt-4 grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
@@ -543,6 +549,24 @@ document.addEventListener('DOMContentLoaded', () => {
       notify(error.message, 'error');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function removeAuthorizedNumber(phoneNumberId) {
+    if (!canConfigure() || !state.selectedStoreId || !phoneNumberId) return;
+    setBusy(true, 'Removendo o numero antigo somente deste ambiente...');
+    try {
+      const result = await requestJson(
+        `/integrations/whatsapp/${encodeURIComponent(state.selectedStoreId)}`
+        + `/coexistence/numbers/${encodeURIComponent(phoneNumberId)}`,
+        { method: 'DELETE' }
+      );
+      notify(result.message || 'Numero removido deste ambiente.', 'success');
+      await loadStoreData(state.selectedStoreId);
+    } catch (error) {
+      notify(error.message, 'error');
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -781,6 +805,23 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   elements.refreshButton.addEventListener('click', () => {
     void loadStoreData(state.selectedStoreId);
+  });
+  elements.numbersList.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-action="remove-number"]');
+    if (!button) return;
+    if (button.dataset.confirmed !== 'true') {
+      elements.numbersList.querySelectorAll('[data-action="remove-number"][data-confirmed="true"]')
+        .forEach((current) => {
+          current.dataset.confirmed = 'false';
+          current.classList.remove('border-red-600', 'bg-red-600', 'text-white');
+          current.querySelector('span').textContent = 'Remover';
+        });
+      button.dataset.confirmed = 'true';
+      button.classList.add('border-red-600', 'bg-red-600', 'text-white');
+      button.querySelector('span').textContent = 'Confirmar remocao';
+      return;
+    }
+    void removeAuthorizedNumber(button.dataset.phoneNumberId || '');
   });
   elements.setupForm.addEventListener('submit', (event) => {
     void saveSetup(event);
