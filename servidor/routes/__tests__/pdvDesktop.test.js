@@ -151,6 +151,20 @@ test.describe('integração do PDV Desktop', () => {
     const movedOccurrences = await request.get('/desktop/appointments?start=2026-08-15T03%3A00%3A00.000Z&end=2026-08-16T03%3A00%3A00.000Z').set(headers);
     assert.equal(movedOccurrences.body.appointments.length, 1);
     assert.equal(movedOccurrences.body.appointments[0].scheduledAt, '2026-08-15T13:30:00.000Z');
+    const staleOccurrenceMove = await request.post('/desktop/events/batch').set(headers).send({ events: [{
+      eventId: 'recurring-stale-occurrence', type: 'appointment.updated', occurredAt: new Date().toISOString(),
+      payload: {
+        appointmentId: String(recurringAppointment._id), sourceAppointmentId: String(recurringAppointment._id),
+        sourceOccurrenceKey: '2026-08-15T12:00:00.000Z', expectedVersion: 3,
+        customerId: String(customer._id), petId: String(pet._id), scheduledAt: '2026-08-15T14:00:00.000Z',
+        status: 'em_espera', services: [{ serviceId: String(recurringServiceId), unitPrice: 50, date: '2026-08-15', time: '11:00', status: 'em_espera' }],
+      },
+    }] });
+    assert.equal(staleOccurrenceMove.body.results[0].accepted, false);
+    assert.equal(staleOccurrenceMove.body.results[0].code, 'APPOINTMENT_VERSION_CONFLICT');
+    const recurringAfterStaleMove = await Appointment.findById(recurringAppointment._id).lean();
+    assert.equal(recurringAfterStaleMove.version, 3);
+    assert.equal(recurringAfterStaleMove.itens.length, 2);
     const agendaServiceId = new mongoose.Types.ObjectId();
     const appointmentCreateEvent = {
       eventId: 'appointment-create-1', type: 'appointment.created', occurredAt: new Date().toISOString(),

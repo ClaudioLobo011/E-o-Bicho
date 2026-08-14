@@ -566,6 +566,12 @@ async function materializeDesktopAppointmentEvent(event, host) {
     if (appointment.pago || appointment.codigoVenda) throw new Error('Agendamento faturado não pode ser excluído pela Agenda.');
     const occurrenceKey = clean(source.sourceOccurrenceKey);
     if (occurrenceKey) {
+      const occurrenceItems = (appointment.itens || []).filter((item) => desktopAppointmentItemDate(item, appointment.scheduledAt)?.toISOString() === occurrenceKey);
+      if (!occurrenceItems.length) {
+        const conflict = new Error('Esta ocorrência já foi movida. Atualize a agenda antes de tentar novamente.');
+        conflict.code = 'APPOINTMENT_VERSION_CONFLICT';
+        throw conflict;
+      }
       const remaining = (appointment.itens || []).filter((item) => desktopAppointmentItemDate(item, appointment.scheduledAt)?.toISOString() !== occurrenceKey);
       if (remaining.length) {
         appointment.itens = remaining;
@@ -584,6 +590,12 @@ async function materializeDesktopAppointmentEvent(event, host) {
   const values = await desktopAppointmentPayload(source, host);
   const occurrenceKey = clean(source.sourceOccurrenceKey);
   if (occurrenceKey) {
+    const occurrenceItems = (appointment.itens || []).filter((item) => desktopAppointmentItemDate(item, appointment.scheduledAt)?.toISOString() === occurrenceKey);
+    if (!occurrenceItems.length) {
+      const conflict = new Error('Esta ocorrência já foi movida. Atualize a agenda antes de tentar novamente.');
+      conflict.code = 'APPOINTMENT_VERSION_CONFLICT';
+      throw conflict;
+    }
     const remaining = (appointment.itens || []).filter((item) => desktopAppointmentItemDate(item, appointment.scheduledAt)?.toISOString() !== occurrenceKey);
     appointment.itens = [...remaining, ...values.itens];
     appointment.servico = appointment.itens[0]?.servico || values.servico;
