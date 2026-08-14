@@ -206,7 +206,7 @@ function appointmentForDesktop(appointment, occurrence = null) {
       notes: item?.observacao || '',
     };
   });
-  const status = deriveAppointmentStatus(appointment);
+  const status = deriveAppointmentStatus({ ...appointment, itens: sourceItems });
   return {
     id: occurrence?.id || String(appointment._id),
     sourceAppointmentId: String(appointment._id),
