@@ -96,6 +96,22 @@ test.describe('integração do PDV Desktop', () => {
     assert.equal(appointments.body.appointments.length, 1);
     assert.equal(appointments.body.appointments[0].customerName, 'Cliente Desktop');
     assert.equal(appointments.body.appointments[0].petName, 'Bidu');
+    const recurringServiceId = new mongoose.Types.ObjectId();
+    await Appointment.create({
+      store: base.company._id,
+      cliente: customer._id,
+      pet: pet._id,
+      scheduledAt: new Date('2026-08-01T12:00:00.000Z'),
+      valor: 50,
+      status: 'agendado',
+      itens: [{ servico: recurringServiceId, valor: 50, data: '2026-08-15', hora: '09:00', status: 'agendado' }],
+    });
+    const recurringAppointments = await request.get('/desktop/appointments?start=2026-08-15T03%3A00%3A00.000Z&end=2026-08-16T03%3A00%3A00.000Z').set(headers);
+    assert.equal(recurringAppointments.status, 200, recurringAppointments.text);
+    assert.equal(recurringAppointments.body.appointments.length, 1);
+    assert.equal(recurringAppointments.body.appointments[0].scheduledAt, '2026-08-15T12:00:00.000Z');
+    assert.equal(recurringAppointments.body.appointments[0].total, 50);
+    assert.match(recurringAppointments.body.appointments[0].id, /:occurrence:/);
     await Pdv.updateOne({ _id: base.pdv._id }, { $set: { tipoUso: 'executavel', 'desktop.status': 'ativo' } });
     const agendaServiceId = new mongoose.Types.ObjectId();
     const appointmentCreateEvent = {

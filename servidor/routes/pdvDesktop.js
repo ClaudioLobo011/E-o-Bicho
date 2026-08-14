@@ -163,11 +163,33 @@ function productForDesktop(product, pdv, empresaId, fiscalRules = new Map()) {
   };
 }
 
-function appointmentForDesktop(appointment) {
+function desktopAppointmentItemDate(item, fallback) {
+  const date = clean(item?.data);
+  const time = clean(item?.hora);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date) && /^\d{2}:\d{2}(?::\d{2})?$/.test(time)) {
+    const parsed = new Date(`${date}T${time.length === 5 ? `${time}:00` : time}-03:00`);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    const fallbackDate = new Date(fallback || '');
+    const localTime = Number.isNaN(fallbackDate.getTime())
+      ? '00:00:00'
+      : new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(fallbackDate);
+    const parsed = new Date(`${date}T${localTime}-03:00`);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  const timeAsDate = new Date(time || '');
+  if (!Number.isNaN(timeAsDate.getTime())) return timeAsDate;
+  const fallbackDate = new Date(fallback || '');
+  return Number.isNaN(fallbackDate.getTime()) ? null : fallbackDate;
+}
+
+function appointmentForDesktop(appointment, occurrence = null) {
   const customer = appointment?.cliente && typeof appointment.cliente === 'object' ? appointment.cliente : null;
   const pet = appointment?.pet && typeof appointment.pet === 'object' ? appointment.pet : null;
   const professional = appointment?.profissional && typeof appointment.profissional === 'object' ? appointment.profissional : null;
-  const services = (Array.isArray(appointment?.itens) ? appointment.itens : []).map((item, index) => {
+  const sourceItems = occurrence?.items || (Array.isArray(appointment?.itens) ? appointment.itens : []);
+  const services = sourceItems.map((item, index) => {
     const service = item?.servico && typeof item.servico === 'object' ? item.servico : null;
     const itemProfessional = item?.profissional && typeof item.profissional === 'object' ? item.profissional : null;
     return {
@@ -186,7 +208,9 @@ function appointmentForDesktop(appointment) {
   });
   const status = deriveAppointmentStatus(appointment);
   return {
-    id: String(appointment._id),
+    id: occurrence?.id || String(appointment._id),
+    sourceAppointmentId: String(appointment._id),
+    sourceOccurrenceKey: occurrence?.key || '',
     storeId: clean(appointment.store),
     customerId: clean(customer?._id || appointment.cliente),
     customerName: userName(customer),
@@ -197,8 +221,8 @@ function appointmentForDesktop(appointment) {
     professionalId: clean(professional?._id || appointment.profissional),
     professionalName: userName(professional),
     services,
-    scheduledAt: appointment.scheduledAt,
-    total: Number(appointment.valor || services.reduce((sum, item) => sum + Number(item.unitPrice || 0), 0)),
+    scheduledAt: occurrence?.scheduledAt || appointment.scheduledAt,
+    total: Number(occurrence ? services.reduce((sum, item) => sum + Number(item.unitPrice || 0), 0) : (appointment.valor || services.reduce((sum, item) => sum + Number(item.unitPrice || 0), 0))),
     status,
     paid: Boolean(appointment.pago),
     saleCode: appointment.codigoVenda || '',
@@ -207,6 +231,25 @@ function appointmentForDesktop(appointment) {
     clientMutationId: appointment.clientMutationId || '',
     updatedAt: appointment.updatedAt || appointment.createdAt,
   };
+}
+
+function appointmentOccurrencesForDesktop(appointment, start, end) {
+  const items = Array.isArray(appointment?.itens) ? appointment.itens : [];
+  if (!items.length) return [appointmentForDesktop(appointment)];
+  const groups = new Map();
+  items.forEach((item) => {
+    const scheduledAt = desktopAppointmentItemDate(item, appointment.scheduledAt);
+    if (!scheduledAt || scheduledAt < start || scheduledAt >= end) return;
+    const key = scheduledAt.toISOString();
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  });
+  return [...groups.entries()].map(([key, occurrenceItems]) => appointmentForDesktop(appointment, {
+    id: `${appointment._id}:occurrence:${key}`,
+    key,
+    scheduledAt: key,
+    items: occurrenceItems,
+  }));
 }
 
 function snapshotChecksum(snapshot, stateSnapshot) {
@@ -502,7 +545,7 @@ async function desktopAppointmentPayload(source, host) {
 async function materializeDesktopAppointmentEvent(event, host) {
   const source = event.payload && typeof event.payload === 'object' ? event.payload : {};
   const mutationId = clean(source.clientMutationId || event.eventId);
-  const appointmentId = clean(source.appointmentId);
+  const appointmentId = clean(source.sourceAppointmentId || source.appointmentId);
   let appointment = mongoose.Types.ObjectId.isValid(appointmentId) ? await Appointment.findById(appointmentId) : null;
   if (!appointment && mutationId) appointment = await Appointment.findOne({ clientMutationId: mutationId });
   if (event.type === 'appointment.created') {
@@ -521,11 +564,40 @@ async function materializeDesktopAppointmentEvent(event, host) {
   }
   if (event.type === 'appointment.deleted') {
     if (appointment.pago || appointment.codigoVenda) throw new Error('Agendamento faturado não pode ser excluído pela Agenda.');
+    const occurrenceKey = clean(source.sourceOccurrenceKey);
+    if (occurrenceKey) {
+      const remaining = (appointment.itens || []).filter((item) => desktopAppointmentItemDate(item, appointment.scheduledAt)?.toISOString() !== occurrenceKey);
+      if (remaining.length) {
+        appointment.itens = remaining;
+        appointment.servico = remaining[0].servico;
+        appointment.profissional = remaining.find((item) => item.profissional)?.profissional || null;
+        appointment.valor = remaining.reduce((sum, item) => sum + Number(item.valor || 0), 0);
+        appointment.version = expectedVersion + 1;
+        await appointment.save();
+        return appointment;
+      }
+    }
     appointment.deletedAt = new Date(); appointment.version = expectedVersion + 1;
     await appointment.save();
     return appointment;
   }
   const values = await desktopAppointmentPayload(source, host);
+  const occurrenceKey = clean(source.sourceOccurrenceKey);
+  if (occurrenceKey) {
+    const remaining = (appointment.itens || []).filter((item) => desktopAppointmentItemDate(item, appointment.scheduledAt)?.toISOString() !== occurrenceKey);
+    appointment.itens = [...remaining, ...values.itens];
+    appointment.servico = appointment.itens[0]?.servico || values.servico;
+    appointment.profissional = appointment.itens.find((item) => item.profissional)?.profissional || null;
+    appointment.valor = appointment.itens.reduce((sum, item) => sum + Number(item.valor || 0), 0);
+    if (!remaining.length) {
+      appointment.scheduledAt = values.scheduledAt;
+      appointment.status = values.status;
+      appointment.observacoes = values.observacoes;
+    }
+    appointment.version = expectedVersion + 1;
+    await appointment.save();
+    return appointment;
+  }
   Object.assign(appointment, values, { version: expectedVersion + 1 });
   await appointment.save();
   return appointment;
@@ -1433,7 +1505,16 @@ router.get('/appointments', authenticateHost, async (req, res) => {
   if (end.getTime() - start.getTime() > 370 * 86400000) {
     return res.status(400).json({ message: 'Consulte no máximo 370 dias da agenda por sincronização.' });
   }
-  const filter = { store: req.desktopHost.empresa, scheduledAt: { $gte: start, $lt: end } };
+  const startDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(start);
+  const inclusiveEnd = new Date(end.getTime() - 1);
+  const endDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(inclusiveEnd);
+  const filter = {
+    store: req.desktopHost.empresa,
+    $or: [
+      { scheduledAt: { $gte: start, $lt: end } },
+      { 'itens.data': { $gte: startDate, $lte: endDate } },
+    ],
+  };
   const status = clean(req.query.status).toLowerCase();
   if (status && status !== 'all') filter.status = status;
   if (String(req.query.includePaid || '1') === '0') {
@@ -1450,7 +1531,7 @@ router.get('/appointments', authenticateHost, async (req, res) => {
     .populate('itens.servico', 'nome valor duracaoMinutos')
     .populate('itens.profissional', 'nomeCompleto nomeContato razaoSocial email')
     .lean();
-  return res.json({ appointments: appointments.map(appointmentForDesktop), generatedAt: new Date().toISOString(), start, end });
+  return res.json({ appointments: appointments.flatMap((appointment) => appointmentOccurrencesForDesktop(appointment, start, end)), generatedAt: new Date().toISOString(), start, end });
 });
 
 router.get('/deliveries', authenticateHost, async (req, res) => {
