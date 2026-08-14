@@ -97,12 +97,14 @@ test.describe('integração do PDV Desktop', () => {
     assert.equal(appointments.body.appointments[0].customerName, 'Cliente Desktop');
     assert.equal(appointments.body.appointments[0].petName, 'Bidu');
     const recurringServiceId = new mongoose.Types.ObjectId();
-    await Appointment.create({
+    const recurringAppointment = await Appointment.create({
       store: base.company._id,
       cliente: customer._id,
       pet: pet._id,
       scheduledAt: new Date('2026-08-01T12:00:00.000Z'),
       valor: 90,
+      pago: true,
+      codigoVenda: 'VENDA-RECORRENTE',
       status: 'agendado',
       itens: [
         { servico: recurringServiceId, valor: 40, data: '2026-08-01', hora: '09:00', status: 'finalizado' },
@@ -115,8 +117,23 @@ test.describe('integração do PDV Desktop', () => {
     assert.equal(recurringAppointments.body.appointments[0].scheduledAt, '2026-08-15T12:00:00.000Z');
     assert.equal(recurringAppointments.body.appointments[0].total, 50);
     assert.equal(recurringAppointments.body.appointments[0].status, 'agendado');
+    assert.equal(recurringAppointments.body.appointments[0].paid, true);
     assert.match(recurringAppointments.body.appointments[0].id, /:occurrence:/);
     await Pdv.updateOne({ _id: base.pdv._id }, { $set: { tipoUso: 'executavel', 'desktop.status': 'ativo' } });
+    const recurringStatusResponse = await request.post('/desktop/events/batch').set(headers).send({ events: [{
+      eventId: 'recurring-paid-status', type: 'appointment.updated', occurredAt: new Date().toISOString(),
+      payload: {
+        appointmentId: String(recurringAppointment._id), sourceAppointmentId: String(recurringAppointment._id),
+        sourceOccurrenceKey: '2026-08-15T12:00:00.000Z', expectedVersion: 1,
+        customerId: String(customer._id), petId: String(pet._id), scheduledAt: '2026-08-15T12:00:00.000Z',
+        status: 'em_espera', services: [{ serviceId: String(recurringServiceId), unitPrice: 50, date: '2026-08-15', time: '09:00', status: 'em_espera' }],
+      },
+    }] });
+    assert.equal(recurringStatusResponse.body.results[0].status, 'processed', recurringStatusResponse.text);
+    const recurringUpdated = await Appointment.findById(recurringAppointment._id).lean();
+    assert.equal(recurringUpdated.pago, true);
+    assert.equal(recurringUpdated.itens.find((item) => item.data === '2026-08-01').status, 'finalizado');
+    assert.equal(recurringUpdated.itens.find((item) => item.data === '2026-08-15').status, 'em_espera');
     const agendaServiceId = new mongoose.Types.ObjectId();
     const appointmentCreateEvent = {
       eventId: 'appointment-create-1', type: 'appointment.created', occurredAt: new Date().toISOString(),
