@@ -249,9 +249,21 @@ test.describe('integração do PDV Desktop', () => {
     assert.equal(duplicateAppointmentResponse.body.results[0].status, 'processed', duplicateAppointmentResponse.text);
     const duplicateAppointment = await Appointment.findOne({ clientMutationId: 'appointment-existing-customer-1' }).lean();
     assert.equal(String(duplicateAppointment.cliente), String(customer._id));
+    const billingRecurringAppointment = await Appointment.create({
+      store: base.company._id,
+      cliente: customer._id,
+      pet: pet._id,
+      scheduledAt: new Date('2026-08-01T12:00:00.000Z'),
+      valor: 80,
+      status: 'agendado',
+      itens: [
+        { servico: recurringServiceId, valor: 30, data: '2026-08-01', hora: '09:00', status: 'agendado' },
+        { servico: recurringServiceId, valor: 50, data: '2026-08-15', hora: '09:00', status: 'agendado' },
+      ],
+    });
     const events = [
       { eventId: 'cash-1', type: 'cash.opened', occurredAt: new Date().toISOString(), payload: { openingAmount: 50 } },
-      { eventId: 'event-1', type: 'sale.completed', occurredAt: new Date().toISOString(), payload: { id: 'local-sale-1', saleCode: `${base.pdv.codigo.replace(/[^A-Za-z0-9]/g, '')}-000001`, appointmentId: String(appointment._id), appointmentIds: [String(appointment._id)], grossTotal: 20, netTotal: 20, items: [{ productId: String(new mongoose.Types.ObjectId()), code: base.product.cod, name: base.product.nome, quantity: 1, unitPrice: 20 }], payments: [{ paymentMethodId: String(base.payment._id), amount: 20 }] } },
+      { eventId: 'event-1', type: 'sale.completed', occurredAt: new Date().toISOString(), payload: { id: 'local-sale-1', saleCode: `${base.pdv.codigo.replace(/[^A-Za-z0-9]/g, '')}-000001`, appointmentId: String(appointment._id), appointmentIds: [String(appointment._id), `${billingRecurringAppointment._id}:occurrence:2026-08-15T12:00:00.000Z`], grossTotal: 20, netTotal: 20, items: [{ productId: String(new mongoose.Types.ObjectId()), code: base.product.cod, name: base.product.nome, quantity: 1, unitPrice: 20 }], payments: [{ paymentMethodId: String(base.payment._id), amount: 20 }] } },
     ];
     const first = await request.post('/desktop/events/batch').set(headers).send({ events });
     const replay = await request.post('/desktop/events/batch').set(headers).send({ events: [events[1]] });
@@ -263,7 +275,7 @@ test.describe('integração do PDV Desktop', () => {
     assert.equal(cloudState.completedSales.length, 1);
     assert.equal(cloudState.completedSales[0].id, 'local-sale-1');
     assert.equal(cloudState.completedSales[0].appointmentId, String(appointment._id));
-    assert.deepEqual(cloudState.completedSales[0].appointmentIds, [String(appointment._id)]);
+    assert.deepEqual(cloudState.completedSales[0].appointmentIds, [String(appointment._id), `${billingRecurringAppointment._id}:occurrence:2026-08-15T12:00:00.000Z`]);
     assert.equal(String(cloudState.completedSales[0].items[0].productId), String(base.product._id));
     assert.equal(Number(cloudState.completedSales[0].items[0].unitCost), 10);
     const salesHistory = await request.get('/desktop/sales/history?limit=50').set(headers);
@@ -274,6 +286,12 @@ test.describe('integração do PDV Desktop', () => {
     assert.equal(billedAppointment.pago, true);
     assert.equal(billedAppointment.status, 'finalizado');
     assert.equal(billedAppointment.codigoVenda, events[1].payload.saleCode);
+    const billedRecurring = await Appointment.findById(billingRecurringAppointment._id).lean();
+    assert.equal(billedRecurring.pago, true);
+    assert.equal(billedRecurring.codigoVenda, events[1].payload.saleCode);
+    assert.equal(billedRecurring.itens.find((item) => item.data === '2026-08-01').status, 'agendado');
+    assert.equal(billedRecurring.itens.find((item) => item.data === '2026-08-15').status, 'finalizado');
+    await Appointment.deleteOne({ _id: billingRecurringAppointment._id });
 
     const budgetEvents = [
       { eventId: 'budget-1', type: 'budget.saved', occurredAt: new Date().toISOString(), payload: { id: 'local-budget-1', budgetCode: 'ORC-000321', customerId: '', customerName: 'Consumidor final', netTotal: 20, grossTotal: 20, validityDays: 15, items: [{ productId: String(base.product._id), code: base.product.cod, name: base.product.nome, quantity: 1, unitPrice: 20 }] } },

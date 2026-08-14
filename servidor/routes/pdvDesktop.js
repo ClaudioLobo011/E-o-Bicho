@@ -38,8 +38,8 @@ const desktopAppointmentReference = (value) => {
   const marker = ':occurrence:';
   const markerIndex = reference.indexOf(marker);
   return markerIndex < 0
-    ? { appointmentId: reference, occurrenceKey: '' }
-    : { appointmentId: reference.slice(0, markerIndex), occurrenceKey: reference.slice(markerIndex + marker.length) };
+    ? { reference, appointmentId: reference, occurrenceKey: '' }
+    : { reference, appointmentId: reference.slice(0, markerIndex), occurrenceKey: reference.slice(markerIndex + marker.length) };
 };
 const desktopEventActor = (source, host) => ({
   id: clean(source?.operator?.id) || String(host._id),
@@ -1030,37 +1030,61 @@ async function materializeDesktopEvent(event, pdv, host) {
   }), { action, requestId: event.eventId, idempotencyKey: event.eventId });
   if (['sale.completed', 'delivery.finalized'].includes(event.type)) {
     await syncDesktopSaleReceivables(source, pdv, host);
-    const appointmentIds = Array.from(new Set(
+    const appointmentReferences = Array.from(new Set(
       (Array.isArray(source.appointmentIds) ? source.appointmentIds : [source.appointmentId])
-        .map(clean).filter(mongoose.Types.ObjectId.isValid)
-    ));
-    if (appointmentIds.length) {
-      const appointmentUpdate = { pago: true, codigoVenda: source.saleCode || '' };
+        .map(clean).filter(Boolean)
+    )).map(desktopAppointmentReference)
+      .filter((reference) => mongoose.Types.ObjectId.isValid(reference.appointmentId));
+    for (const reference of appointmentReferences) {
+      const appointment = await Appointment.findOne({ _id: reference.appointmentId, store: host.empresa });
+      if (!appointment) continue;
+      appointment.pago = true;
+      appointment.codigoVenda = source.saleCode || '';
       if (source.finalizeAppointments !== false) {
-        appointmentUpdate.status = 'finalizado';
-        appointmentUpdate['itens.$[].status'] = 'finalizado';
+        if (reference.occurrenceKey) {
+          for (const item of appointment.itens || []) {
+            if (desktopAppointmentItemDate(item, appointment.scheduledAt)?.toISOString() === reference.occurrenceKey) item.status = 'finalizado';
+          }
+          appointment.status = deriveAppointmentStatus(appointment);
+          appointment.markModified('itens');
+        } else {
+          appointment.status = 'finalizado';
+          for (const item of appointment.itens || []) item.status = 'finalizado';
+          appointment.markModified('itens');
+        }
       }
-      await Appointment.updateMany(
-        { _id: { $in: appointmentIds }, store: host.empresa },
-        { $set: appointmentUpdate }
-      );
+      await appointment.save();
     }
   }
   if (event.type === 'sale.cancelled') {
-    const appointmentIds = Array.from(new Set(
+    const appointmentReferences = Array.from(new Set(
       (Array.isArray(source.appointmentIds) ? source.appointmentIds : [source.appointmentId])
-        .map(clean).filter(mongoose.Types.ObjectId.isValid)
-    ));
-    if (appointmentIds.length) {
-      const originalStatuses = source.appointmentOriginalStatuses && typeof source.appointmentOriginalStatuses === 'object'
-        ? source.appointmentOriginalStatuses : {};
-      await Promise.all(appointmentIds.map((appointmentId) => {
-        const status = clean(originalStatuses[String(appointmentId)] || 'em_atendimento').toLowerCase();
-        return Appointment.updateOne(
-          { _id: appointmentId, store: host.empresa, codigoVenda: source.saleCode || '' },
-          { $set: { pago: false, codigoVenda: '', status, 'itens.$[].status': status } }
-        );
-      }));
+        .map(clean).filter(Boolean)
+    )).map(desktopAppointmentReference)
+      .filter((reference) => mongoose.Types.ObjectId.isValid(reference.appointmentId));
+    const originalStatuses = source.appointmentOriginalStatuses && typeof source.appointmentOriginalStatuses === 'object'
+      ? source.appointmentOriginalStatuses : {};
+    for (const reference of appointmentReferences) {
+      const appointment = await Appointment.findOne({
+        _id: reference.appointmentId,
+        store: host.empresa,
+        codigoVenda: source.saleCode || '',
+      });
+      if (!appointment) continue;
+      const status = clean(originalStatuses[reference.reference] || originalStatuses[reference.appointmentId] || 'em_atendimento').toLowerCase();
+      appointment.pago = false;
+      appointment.codigoVenda = '';
+      if (reference.occurrenceKey) {
+        for (const item of appointment.itens || []) {
+          if (desktopAppointmentItemDate(item, appointment.scheduledAt)?.toISOString() === reference.occurrenceKey) item.status = status;
+        }
+        appointment.status = deriveAppointmentStatus(appointment);
+      } else {
+        appointment.status = status;
+        for (const item of appointment.itens || []) item.status = status;
+      }
+      appointment.markModified('itens');
+      await appointment.save();
     }
   }
   if (event.type === 'receivable.received' && source.saleId && source.receivableId) {
