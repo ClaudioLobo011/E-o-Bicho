@@ -10,6 +10,11 @@ const { resolveOperatingHours } = require('./whatsappOperatingHoursService');
 const {
   cancelActiveAppointmentFlows,
 } = require('./whatsappAppointmentFlowService');
+const {
+  isAffirmativeReply,
+  isDirectSellerRequest,
+  isNegativeReply,
+} = require('./whatsappSellerHandoffService');
 
 const clean = (value) => (typeof value === 'string' ? value.trim() : '');
 const digitsOnly = (value) => String(value || '').replace(/\D+/g, '');
@@ -259,6 +264,7 @@ const handleInboundMessage = async ({
   messageId,
   messageAt = new Date(),
   receivedAt = new Date(),
+  message = '',
   suppressAutomation = false,
   io,
 }) => {
@@ -278,6 +284,11 @@ const handleInboundMessage = async ({
     phoneNumberId: phone,
     waId: customer,
   }).lean();
+  const awaitingSellerConfirmation = current?.flow === 'seller_handoff_offer'
+    && current?.flowState === 'awaiting_confirmation';
+  const sellerRequested = isDirectSellerRequest(message)
+    || (awaitingSellerConfirmation && isAffirmativeReply(message));
+  const sellerOfferDeclined = awaitingSellerConfirmation && isNegativeReply(message);
   const manualChatActivation = safeConfig.manualChatActivation === true;
   const chatActivated = !manualChatActivation || current?.automationOptIn === true;
   const timedPauseActive = current?.status === 'PAUSED'
@@ -290,19 +301,22 @@ const handleInboundMessage = async ({
     && !pauseActive
   );
   const graceMs = Math.max(1, Number(safeConfig.humanGraceMinutes) || 5) * 60 * 1000;
-  const immediate = (manualChatActivation && chatActivated)
+  const immediate = sellerRequested
+    || (manualChatActivation && chatActivated)
     || (!hours.isOpen && safeConfig.afterHoursImmediate !== false);
   const botEligibleAt = automationEnabled
     ? new Date(messageAt.getTime() + (immediate ? 0 : graceMs))
     : null;
-  const nextStatus = pauseActive
+  const nextStatus = sellerRequested && !automationEnabled
+    ? 'NEEDS_HUMAN'
+    : pauseActive
     ? 'PAUSED'
     : immediate && automationEnabled
       ? 'BOT_ACTIVE'
       : 'WAITING_HUMAN';
   const serviceWindowExpiresAt = new Date(messageAt.getTime() + (24 * 60 * 60 * 1000));
 
-  const conversation = await upsertConversation(
+  let conversation = await upsertConversation(
     { store: storeId, phoneNumberId: phone, waId: customer },
     {
       $set: {
@@ -315,7 +329,21 @@ const handleInboundMessage = async ({
         botEligibleAt,
         customerServiceWindowExpiresAt: serviceWindowExpiresAt,
         closedAt: null,
-        ...(!chatActivated ? {
+        ...(sellerRequested ? {
+          intent: 'seller_handoff',
+          flow: 'seller_handoff',
+          flowState: automationEnabled ? 'confirming' : 'waiting_seller',
+          flowData: {
+            requestedAt: messageAt,
+            trigger: isDirectSellerRequest(message) ? 'direct_request' : 'accepted_offer',
+          },
+          priority: Math.max(10, Number(current?.priority) || 0),
+        } : sellerOfferDeclined ? {
+          flow: '',
+          flowState: '',
+          flowData: null,
+        } : {}),
+        ...(!chatActivated && !sellerRequested ? {
           automationPauseReason: 'Aguardando ativação manual da IA',
           automationPausedUntil: null,
         } : {}),
@@ -329,13 +357,33 @@ const handleInboundMessage = async ({
     }
   );
 
+  if (sellerRequested) {
+    conversation = await WhatsappConversation.findByIdAndUpdate(
+      conversation._id,
+      {
+        $addToSet: {
+          labels: { $each: ['vendedor_solicitado', 'precisa_atendimento_humano'] },
+        },
+      },
+      { new: true }
+    );
+  }
+
   await cancelConversationJobs(conversation._id, 'Nova mensagem do cliente');
+  if (sellerRequested) {
+    await cancelActiveAppointmentFlows({
+      conversationId: conversation._id,
+      reason: 'seller_handoff_requested',
+    });
+  }
   if (automationEnabled && !pauseActive) {
     await createGraceJob({
       conversation,
       runAt: botEligibleAt,
       expectedInboundMessageId: clean(messageId),
-      reason: hours.isOpen ? 'human_grace' : 'after_hours',
+      reason: sellerRequested
+        ? 'seller_handoff_confirmed'
+        : hours.isOpen ? 'human_grace' : 'after_hours',
     });
   }
   emitConversationState(io, conversation, { workingHours: hours });

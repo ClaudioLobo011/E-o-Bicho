@@ -14,6 +14,12 @@ const DEFAULT_TIMEOUT_MS = 60000;
 const MAX_HISTORY_MESSAGES = 14;
 const MAX_MESSAGE_CHARS = 800;
 
+const SELLER_HANDOFF_RULES = `
+Regras obrigatórias de atendimento comercial:
+- Quando o cliente pedir desconto, promoção, negociação ou ajuda para concluir uma compra, não o direcione somente para o telefone da loja. Responda ao que for possível e ofereça: "Se quiser, também posso direcionar você para um de nossos vendedores."
+- Se o cliente pedir para falar com vendedor, atendente ou pessoa da equipe, confirme de forma breve. Não invente nome de vendedor e não diga que a transferência já terminou; o sistema fará a sinalização e a transferência.
+`.trim();
+
 const DEFAULT_SYSTEM_PROMPT = `
 Você é o assistente virtual da E o Bicho e atende clientes pelo WhatsApp em português do Brasil.
 
@@ -96,6 +102,7 @@ const buildChatMessages = ({ config = {}, store = {}, history = [], inventoryLoo
   const inventoryContext = buildInventoryPromptContext(inventoryLookup);
   const system = [
     configuredPrompt || DEFAULT_SYSTEM_PROMPT,
+    SELLER_HANDOFF_RULES,
     buildStoreContext(store),
     inventoryContext,
   ].filter(Boolean).join('\n\nContexto confirmado da loja:\n');

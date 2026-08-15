@@ -498,3 +498,113 @@ test('chat liberado usa a IA local com prompt separado antes de enviar ao WhatsA
   assert.equal(reply.meta.aiGenerated, true);
   assert.match(reply.message, /valor precisa ser confirmado/i);
 });
+
+test('oferece vendedor e, após aceite, sinaliza o site e o WhatsApp do celular', async () => {
+  await WhatsappAutomationJob.updateMany(
+    { status: 'pending' },
+    { $set: { status: 'cancelled', cancelledAt: new Date() } }
+  );
+  const waId = '5511777770042';
+  const phoneNumberId = '209876543210';
+  const storePhone = '5511999999998';
+  const firstMessageId = 'wamid.seller-discount';
+  await WhatsappLog.create({
+    store: storeB._id,
+    phoneNumberId,
+    direction: 'incoming',
+    status: 'Recebido',
+    origin: waId,
+    destination: storePhone,
+    message: 'Consegue um desconto para mim?',
+    messageId: firstMessageId,
+    messageType: 'text',
+    actorType: 'customer',
+  });
+  await handleInboundMessage({
+    storeId: storeB._id,
+    phoneNumberId,
+    waId,
+    messageId: firstMessageId,
+    message: 'Consegue um desconto para mim?',
+    messageAt: new Date(),
+  });
+  await transitionConversation({
+    storeId: storeB._id,
+    phoneNumberId,
+    waId,
+    action: 'release',
+    userId: new mongoose.Types.ObjectId(),
+  });
+
+  const originalFetch = global.fetch;
+  const originalKey = process.env.EOBICHO_LOCAL_AI_API_KEY;
+  process.env.EOBICHO_LOCAL_AI_API_KEY = 'test-local-key';
+  let outgoingCounter = 0;
+  global.fetch = async (url) => {
+    const parsed = new URL(String(url));
+    if (parsed.hostname === '127.0.0.1') {
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: 'Os descontos precisam ser confirmados pela equipe.' } }],
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    outgoingCounter += 1;
+    return new Response(JSON.stringify({
+      messages: [{ id: `wamid.seller-reply-${outgoingCounter}` }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+
+  try {
+    assert.equal(await runAutomationCycle({ workerId: 'seller-offer-worker', maxJobs: 1 }), 1);
+    const offer = await WhatsappLog.findOne({ messageId: 'wamid.seller-reply-1' }).lean();
+    assert.match(offer.message, /direcionar você para um de nossos vendedores/i);
+    let conversation = await WhatsappConversation.findOne({
+      store: storeB._id,
+      phoneNumberId,
+      waId,
+    }).lean();
+    assert.equal(conversation.flow, 'seller_handoff_offer');
+    assert.equal(conversation.flowState, 'awaiting_confirmation');
+
+    const acceptanceMessageId = 'wamid.seller-acceptance';
+    await WhatsappLog.create({
+      store: storeB._id,
+      phoneNumberId,
+      direction: 'incoming',
+      status: 'Recebido',
+      origin: waId,
+      destination: storePhone,
+      message: 'Sim, pode me direcionar',
+      messageId: acceptanceMessageId,
+      messageType: 'text',
+      actorType: 'customer',
+    });
+    const acceptance = await handleInboundMessage({
+      storeId: storeB._id,
+      phoneNumberId,
+      waId,
+      messageId: acceptanceMessageId,
+      message: 'Sim, pode me direcionar',
+      messageAt: new Date(Date.now() + 1000),
+    });
+    assert.ok(acceptance.conversation.labels.includes('vendedor_solicitado'));
+    assert.equal(acceptance.conversation.flow, 'seller_handoff');
+
+    assert.equal(await runAutomationCycle({ workerId: 'seller-handoff-worker', maxJobs: 1 }), 1);
+    const marker = await WhatsappLog.findOne({ messageId: 'wamid.seller-reply-2' }).lean();
+    assert.equal(marker.source, 'automation_seller_handoff');
+    assert.match(marker.message, /VENDEDOR SOLICITADO/);
+    conversation = await WhatsappConversation.findOne({
+      store: storeB._id,
+      phoneNumberId,
+      waId,
+    }).lean();
+    assert.equal(conversation.status, 'NEEDS_HUMAN');
+    assert.equal(conversation.automationOptIn, false);
+    assert.equal(conversation.flowState, 'waiting_seller');
+    assert.ok(conversation.labels.includes('precisa_atendimento_humano'));
+  } finally {
+    global.fetch = originalFetch;
+    if (originalKey === undefined) delete process.env.EOBICHO_LOCAL_AI_API_KEY;
+    else process.env.EOBICHO_LOCAL_AI_API_KEY = originalKey;
+  }
+});

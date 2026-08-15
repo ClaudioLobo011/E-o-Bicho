@@ -781,6 +781,7 @@ document.addEventListener('DOMContentLoaded', () => {
     hoursBadge: document.getElementById('web-whatsapp-hours-badge'),
     serviceControls: document.getElementById('web-whatsapp-service-controls'),
     serviceState: document.getElementById('web-whatsapp-service-state'),
+    sellerHandoffState: document.getElementById('web-whatsapp-seller-handoff-state'),
     serviceDeadline: document.getElementById('web-whatsapp-service-deadline'),
     appointmentFlowState: document.getElementById('web-whatsapp-appointment-flow-state'),
     takeoverButton: document.getElementById('web-whatsapp-takeover'),
@@ -2413,6 +2414,10 @@ document.addEventListener('DOMContentLoaded', () => {
       elements.serviceState.className =
         `inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${meta.classes}`;
     }
+    if (elements.sellerHandoffState) {
+      const showSellerHandoff = conversation?.labels?.includes('vendedor_solicitado');
+      elements.sellerHandoffState.classList.toggle('hidden', !showSellerHandoff);
+    }
     const appointmentFlow = conversation?.appointmentFlow;
     if (elements.appointmentFlowState) {
       const showFlow = Boolean(
@@ -2473,6 +2478,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const seconds = Math.floor((remaining % 60000) / 1000);
         elements.serviceDeadline.textContent =
           `Robô elegível em ${minutes}:${String(seconds).padStart(2, '0')}`;
+      } else if (conversation?.labels?.includes('vendedor_solicitado')) {
+        elements.serviceDeadline.textContent = 'Aguardando um vendedor continuar por aqui';
       } else if (status === 'HUMAN_ACTIVE') {
         elements.serviceDeadline.textContent = conversation?.assignedTo
           ? 'Atendimento assumido'

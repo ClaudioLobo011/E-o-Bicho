@@ -18,6 +18,11 @@ const {
 const {
   generateWhatsappAiReply,
 } = require('./whatsappLocalAiService');
+const {
+  SELLER_HANDOFF_MESSAGE,
+  ensureSellerOffer,
+  isSellerOfferTopic,
+} = require('./whatsappSellerHandoffService');
 
 const GRAPH_VERSION = process.env.WHATSAPP_GRAPH_API_VERSION || 'v25.0';
 const GRAPH_ORIGIN = process.env.WHATSAPP_GRAPH_ORIGIN || 'https://graph.facebook.com';
@@ -399,9 +404,22 @@ const executeHumanGraceJob = async ({ job, io }) => {
   }
 
   const reason = clean(job.payload?.reason);
+  const sellerHandoffConfirmed = reason === 'seller_handoff_confirmed';
+  const latestInboundLog = expectedInboundMessageId
+    ? await WhatsappLog.findOne({
+      store: job.store,
+      phoneNumberId: job.phoneNumberId,
+      messageId: expectedInboundMessageId,
+      direction: 'incoming',
+    }).select('message').lean()
+    : null;
+  const sellerOfferExpected = !sellerHandoffConfirmed
+    && isSellerOfferTopic(latestInboundLog?.message);
   let message = '';
   let generatedByAi = false;
-  if (config.aiEnabled === true) {
+  if (sellerHandoffConfirmed) {
+    message = SELLER_HANDOFF_MESSAGE;
+  } else if (config.aiEnabled === true) {
     try {
       message = await generateWhatsappAiReply({
         storeId: job.store,
@@ -436,6 +454,9 @@ const executeHumanGraceJob = async ({ job, io }) => {
       ? clean(config.afterHoursMessage)
       : clean(config.welcomeMessage);
   }
+  if (sellerOfferExpected) {
+    message = ensureSellerOffer(message);
+  }
   if (!message) {
     await completeJob(job, 'Mensagem automática não configurada');
     emitConversationState(io, conversation);
@@ -455,6 +476,9 @@ const executeHumanGraceJob = async ({ job, io }) => {
     (entry) => entry.phoneNumberId === job.phoneNumberId
   );
   const idempotencyKey = `automation-job:${job._id}`;
+  const messageSource = sellerHandoffConfirmed
+    ? 'automation_seller_handoff'
+    : generatedByAi ? 'automation_ai' : 'automation';
   const log = await WhatsappLog.findOneAndUpdate(
     { store: job.store, phoneNumberId: job.phoneNumberId, idempotencyKey },
     {
@@ -468,7 +492,7 @@ const executeHumanGraceJob = async ({ job, io }) => {
         message,
         messageId: result.messageId,
         messageTimestamp: now,
-        source: generatedByAi ? 'automation_ai' : 'automation',
+        source: messageSource,
         actorType: 'bot',
         messageType: 'text',
         correlationId: clean(job.payload?.correlationId),
@@ -477,6 +501,8 @@ const executeHumanGraceJob = async ({ job, io }) => {
           automationJobId: String(job._id),
           reason,
           aiGenerated: generatedByAi,
+          sellerHandoff: sellerHandoffConfirmed,
+          sellerOffer: sellerOfferExpected,
           ...(generatedByAi ? { aiModel: clean(config.aiModel) || 'zoe-local' } : {}),
         },
         updatedAt: now,
@@ -522,7 +548,31 @@ const executeHumanGraceJob = async ({ job, io }) => {
           lastBotAt: now,
           lastMessageAt: now,
           lastActorType: 'bot',
+          ...(sellerHandoffConfirmed ? {
+            status: 'NEEDS_HUMAN',
+            serviceMode: 'waiting',
+            botEligibleAt: null,
+            automationOptIn: false,
+            automationOptInAt: null,
+            automationOptInBy: null,
+            automationPauseReason: 'Vendedor solicitado pelo cliente',
+            flow: 'seller_handoff',
+            flowState: 'waiting_seller',
+            priority: Math.max(10, Number(conversation.priority) || 0),
+          } : sellerOfferExpected ? {
+            flow: 'seller_handoff_offer',
+            flowState: 'awaiting_confirmation',
+            flowData: {
+              offeredAt: now,
+              sourceMessageId: expectedInboundMessageId,
+            },
+          } : {}),
         },
+        ...(sellerHandoffConfirmed ? {
+          $addToSet: {
+            labels: { $each: ['vendedor_solicitado', 'precisa_atendimento_humano'] },
+          },
+        } : {}),
         $inc: { version: 1 },
       }
     ),
@@ -544,7 +594,7 @@ const executeHumanGraceJob = async ({ job, io }) => {
       destination: job.waId,
       createdAt: log?.createdAt?.toISOString?.() || now.toISOString(),
       actorType: 'bot',
-      source: generatedByAi ? 'automation_ai' : 'automation',
+      source: messageSource,
     });
   }
   emitConversationState(io, updatedConversation);
