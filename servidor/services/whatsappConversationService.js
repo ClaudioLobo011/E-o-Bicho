@@ -349,12 +349,14 @@ const handleHumanReply = async ({
   userId,
   source = 'human_web',
   at = new Date(),
+  receivedAt = new Date(),
   io,
   requestMeta,
 }) => {
   const customer = digitsOnly(waId);
   const phone = clean(phoneNumberId);
   if (!storeId || !phone || !customer) return null;
+  at = normalizeInboundMessageAt(at, receivedAt);
   const previous = await WhatsappConversation.findOne({
     store: storeId,
     phoneNumberId: phone,

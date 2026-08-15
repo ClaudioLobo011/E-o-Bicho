@@ -373,6 +373,51 @@ test('modo manual nao agenda resposta no futuro quando o relogio da Meta esta ad
   assert.equal(pending.runAt.getTime(), receivedAt.getTime());
 });
 
+test('resposta humana do celular com relogio futuro nao bloqueia a proxima mensagem do cliente', async () => {
+  const receivedAt = new Date();
+  const waId = '5511777770098';
+  await handleInboundMessage({
+    storeId: storeB._id,
+    phoneNumberId: '209876543210',
+    waId,
+    messageId: 'wamid.mobile-skew-initial',
+    messageAt: receivedAt,
+    receivedAt,
+  });
+  const human = await handleHumanReply({
+    storeId: storeB._id,
+    phoneNumberId: '209876543210',
+    waId,
+    source: 'human_mobile',
+    at: new Date(receivedAt.getTime() + (6 * 60 * 1000)),
+    receivedAt,
+  });
+  assert.equal(human.lastHumanAt.getTime(), receivedAt.getTime());
+
+  await transitionConversation({
+    storeId: storeB._id,
+    phoneNumberId: '209876543210',
+    waId,
+    action: 'release',
+    userId: new mongoose.Types.ObjectId(),
+  });
+  const nextReceivedAt = new Date(receivedAt.getTime() + 1000);
+  const next = await handleInboundMessage({
+    storeId: storeB._id,
+    phoneNumberId: '209876543210',
+    waId,
+    messageId: 'wamid.mobile-skew-next',
+    messageAt: new Date(nextReceivedAt.getTime() + (6 * 60 * 1000)),
+    receivedAt: nextReceivedAt,
+  });
+  assert.ok(next.conversation.lastHumanAt < next.conversation.lastInboundAt);
+  assert.equal(next.conversation.automationOptIn, true);
+  assert.equal(await WhatsappAutomationJob.countDocuments({
+    conversation: next.conversation._id,
+    status: 'pending',
+  }), 1);
+});
+
 test('chat liberado usa a IA local com prompt separado antes de enviar ao WhatsApp', async () => {
   await WhatsappAutomationJob.updateMany(
     { status: 'pending' },
