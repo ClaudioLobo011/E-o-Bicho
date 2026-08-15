@@ -735,6 +735,114 @@ test('worker envia a confirmação e fecha a conversa sem usar resposta humana',
   assert.equal(conversation.lastActorType, 'bot');
 });
 
+test('avisa apos tres minutos e cancela o fluxo apos mais dois minutos sem resposta', async () => {
+  const waId = '5511999990606';
+  const started = await receive({
+    waId,
+    message: 'Quero agendar um banho',
+  });
+  const initialReply = await WhatsappAutomationJob.findOne({
+    type: 'appointment_flow_reply',
+    status: 'pending',
+    'payload.flowId': String(started.flow._id),
+    'payload.idleStage': { $exists: false },
+  });
+  assert.ok(initialReply);
+  initialReply.runAt = new Date(1);
+  await initialReply.save();
+
+  const originalFetch = global.fetch;
+  let sent = 0;
+  global.fetch = async () => {
+    sent += 1;
+    return new Response(JSON.stringify({
+      messages: [{ id: `wamid.appointment.idle.${sent}` }],
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+  try {
+    await runAutomationCycle({ workerId: 'appointment-idle-worker', maxJobs: 1 });
+    const idleJobs = await WhatsappAutomationJob.find({
+      type: 'appointment_flow_reply',
+      status: 'pending',
+      'payload.flowId': String(started.flow._id),
+      'payload.idleStage': { $in: ['warning', 'expire'] },
+    }).sort({ runAt: 1 });
+    assert.equal(idleJobs.length, 2);
+    assert.equal(idleJobs[0].payload.idleStage, 'warning');
+    assert.equal(idleJobs[1].payload.idleStage, 'expire');
+    assert.equal(idleJobs[1].runAt.getTime() - idleJobs[0].runAt.getTime(), 2 * 60 * 1000);
+
+    idleJobs[0].runAt = new Date(1);
+    await idleJobs[0].save();
+    await runAutomationCycle({ workerId: 'appointment-idle-worker', maxJobs: 1 });
+    const warningLog = await WhatsappLog.findOne({
+      messageId: 'wamid.appointment.idle.2',
+    });
+    assert.match(warningLog.message, /ainda está aí/i);
+    assert.equal((await WhatsappAppointmentFlow.findById(started.flow._id)).status, 'collecting');
+
+    idleJobs[1].runAt = new Date(1);
+    await idleJobs[1].save();
+    await runAutomationCycle({ workerId: 'appointment-idle-worker', maxJobs: 1 });
+  } finally {
+    global.fetch = originalFetch;
+  }
+
+  const expiredFlow = await WhatsappAppointmentFlow.findById(started.flow._id);
+  assert.equal(expiredFlow.status, 'cancelled');
+  assert.equal(expiredFlow.handoffReason, 'idle_timeout');
+  const conversation = await WhatsappConversation.findById(started.flow.conversation);
+  assert.equal(conversation.status, 'CLOSED');
+  assert.equal(conversation.flowState, 'cancelled');
+  const expireLog = await WhatsappLog.findOne({
+    messageId: 'wamid.appointment.idle.3',
+  });
+  assert.match(expireLog.message, /tempo de resposta acabou/i);
+});
+
+test('nova resposta do cliente cancela os temporizadores de inatividade anteriores', async () => {
+  const waId = '5511999990707';
+  const started = await receive({
+    waId,
+    message: 'Quero agendar um banho',
+  });
+  const initialReply = await WhatsappAutomationJob.findOne({
+    type: 'appointment_flow_reply',
+    status: 'pending',
+    'payload.flowId': String(started.flow._id),
+    'payload.idleStage': { $exists: false },
+  });
+  initialReply.runAt = new Date(1);
+  await initialReply.save();
+
+  const originalFetch = global.fetch;
+  global.fetch = async () => new Response(JSON.stringify({
+    messages: [{ id: 'wamid.appointment.reset.timer' }],
+  }), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  });
+  try {
+    await runAutomationCycle({ workerId: 'appointment-reset-worker', maxJobs: 1 });
+  } finally {
+    global.fetch = originalFetch;
+  }
+  const oldTimers = await WhatsappAutomationJob.find({
+    'payload.flowId': String(started.flow._id),
+    'payload.idleStage': { $in: ['warning', 'expire'] },
+  });
+  assert.equal(oldTimers.filter((job) => job.status === 'pending').length, 2);
+
+  await receive({ waId, message: 'Claudia Souza' });
+  const refreshed = await WhatsappAutomationJob.find({
+    _id: { $in: oldTimers.map((job) => job._id) },
+  });
+  assert.ok(refreshed.every((job) => job.status === 'cancelled'));
+});
+
 test('modo manual impede que o fluxo de agendamento responda antes da ativação do chat', async () => {
   await WhatsappAutomationConfig.updateOne(
     { store: storeB._id, phoneNumberId: '209876543210' },

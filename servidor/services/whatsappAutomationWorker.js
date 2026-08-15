@@ -26,8 +26,70 @@ const POLL_MS = Math.max(
   1000,
   Number.parseInt(process.env.WHATSAPP_AUTOMATION_POLL_MS, 10) || 2000
 );
+const APPOINTMENT_IDLE_WARNING_MS = 3 * 60 * 1000;
+const APPOINTMENT_IDLE_EXPIRE_MS = 5 * 60 * 1000;
+const APPOINTMENT_IDLE_WARNING_MESSAGE = 'Você ainda está aí? Se precisar de mais tempo, é só me responder para continuarmos o agendamento.';
+const APPOINTMENT_IDLE_EXPIRE_MESSAGE = 'Como não recebemos sua resposta, o agendamento em andamento foi cancelado por tempo de espera. O tempo de resposta acabou, mas podemos ajudar quando você precisar. É só enviar uma nova mensagem.';
 
 const clean = (value) => (typeof value === 'string' ? value.trim() : '');
+
+const scheduleAppointmentIdleJobs = async ({ job, flow, now }) => {
+  if (!['collecting', 'awaiting_confirmation'].includes(flow.status)) return;
+  const expectedInboundMessageId = clean(job.payload?.expectedInboundMessageId);
+  if (!expectedInboundMessageId) return;
+  const stages = [{
+    stage: 'warning',
+    delay: APPOINTMENT_IDLE_WARNING_MS,
+    reply: APPOINTMENT_IDLE_WARNING_MESSAGE,
+    finalMode: '',
+  }, {
+    stage: 'expire',
+    delay: APPOINTMENT_IDLE_EXPIRE_MS,
+    reply: APPOINTMENT_IDLE_EXPIRE_MESSAGE,
+    finalMode: 'close',
+  }];
+  await Promise.all(stages.map((entry) => WhatsappAutomationJob.findOneAndUpdate(
+    {
+      idempotencyKey: [
+        'appointment_flow_idle',
+        String(flow._id),
+        expectedInboundMessageId,
+        entry.stage,
+      ].join(':'),
+    },
+    {
+      $setOnInsert: {
+        store: job.store,
+        phoneNumberId: job.phoneNumberId,
+        waId: job.waId,
+        conversation: job.conversation,
+        type: 'appointment_flow_reply',
+        status: 'pending',
+        runAt: new Date(now.getTime() + entry.delay),
+        payload: {
+          flowId: String(flow._id),
+          sessionId: flow.sessionId,
+          expectedInboundMessageId,
+          reply: entry.reply,
+          flowStatus: flow.status,
+          flowStep: flow.step,
+          appointmentId: '',
+          finalMode: entry.finalMode,
+          idleStage: entry.stage,
+        },
+        idempotencyKey: [
+          'appointment_flow_idle',
+          String(flow._id),
+          expectedInboundMessageId,
+          entry.stage,
+        ].join(':'),
+        attempts: 0,
+        maxAttempts: 5,
+      },
+    },
+    { upsert: true, new: true }
+  )));
+};
 
 const decryptAccessToken = (integration) => {
   if (!integration?.accessTokenStored || !integration?.accessTokenEncrypted) return '';
@@ -185,7 +247,7 @@ const retryJob = async (job, error) => {
       {
         $set: {
           lastError: clean(error?.message) || 'Falha ao responder fluxo de agendamento',
-          ...(failed && job.payload?.flowStatus !== 'completed'
+          ...(failed && !job.payload?.idleStage && job.payload?.flowStatus !== 'completed'
             ? {
                 status: 'failed',
                 step: 'handoff',
@@ -748,7 +810,7 @@ const executeAppointmentFlowReplyJob = async ({ job, io }) => {
     await completeJob(job, 'Resposta do agendamento sem conteúdo');
     return { skipped: true };
   }
-  const [flow, config, integration, conversation] = await Promise.all([
+  const [loadedFlow, config, integration, conversation] = await Promise.all([
     WhatsappAppointmentFlow.findById(flowId).lean(),
     WhatsappAutomationConfig.findOne({
       store: job.store,
@@ -760,6 +822,7 @@ const executeAppointmentFlowReplyJob = async ({ job, io }) => {
     }).select('+accessTokenEncrypted'),
     WhatsappConversation.findById(job.conversation).lean(),
   ]);
+  let flow = loadedFlow;
   if (!flow || flow.sessionId !== clean(job.payload?.sessionId)) {
     await completeJob(job, 'Fluxo de agendamento inexistente ou substituído');
     return { skipped: true };
@@ -817,6 +880,37 @@ const executeAppointmentFlowReplyJob = async ({ job, io }) => {
     );
     await completeJob(job, 'Janela de atendimento expirada');
     return { skipped: true };
+  }
+
+  const idleStage = clean(job.payload?.idleStage);
+  if (idleStage === 'warning' && !['collecting', 'awaiting_confirmation'].includes(flow.status)) {
+    await completeJob(job, 'Fluxo já foi concluído antes do aviso de inatividade');
+    return { skipped: true };
+  }
+  if (idleStage === 'expire') {
+    if (flow.status !== 'cancelled' || flow.handoffReason !== 'idle_timeout') {
+      flow = await WhatsappAppointmentFlow.findOneAndUpdate(
+        {
+          _id: flow._id,
+          sessionId: flow.sessionId,
+          status: { $in: ['collecting', 'awaiting_confirmation'] },
+          lastInboundMessageId: expectedInboundMessageId,
+        },
+        {
+          $set: {
+            status: 'cancelled',
+            step: 'cancelled',
+            cancelledAt: new Date(),
+            handoffReason: 'idle_timeout',
+          },
+        },
+        { new: true, lean: true }
+      );
+      if (!flow) {
+        await completeJob(job, 'Cliente respondeu ou o fluxo terminou antes da expiração');
+        return { skipped: true };
+      }
+    }
   }
 
   const accessToken = decryptAccessToken(integration);
@@ -926,11 +1020,19 @@ const executeAppointmentFlowReplyJob = async ({ job, io }) => {
           botEligibleAt: null,
           ...(finalMode === 'close' ? { closedAt: now } : { closedAt: null }),
           ...(finalMode === 'handoff' ? { priority: 90 } : {}),
+          ...(idleStage === 'expire' ? {
+            flowState: 'cancelled',
+            'flowData.status': 'cancelled',
+            'flowData.step': 'cancelled',
+          } : {}),
         },
         $inc: { version: 1 },
       }
     ),
   ]);
+  if (!idleStage && !finalMode) {
+    await scheduleAppointmentIdleJobs({ job, flow, now });
+  }
   await completeJob(job);
 
   const updatedConversation = await WhatsappConversation.findById(conversation._id);
