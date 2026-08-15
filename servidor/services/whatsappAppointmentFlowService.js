@@ -50,6 +50,7 @@ const STEP_LABELS = Object.freeze({
   collect_pet_services: 'definir serviços de cada pet',
   select_pet_service_detail: 'detalhar serviço do pet',
   collect_group_preference: 'definir se os pets podem ficar juntos',
+  collect_professional_preference: 'informar preferência de profissional',
   collect_pet_name: 'informar nome do pet',
   collect_pet_species: 'informar espécie do pet',
   collect_pet_breed: 'informar raça do pet',
@@ -264,6 +265,9 @@ const shortEditSimilarity = (left, right) => {
 
 const parseNamedPets = (message, pets) => {
   const normalized = normalizeText(message);
+  if (/\btod[oa]s?(?:\s+os|\s+as)?(?:\s+pets|\s+animais)?\b/.test(normalized)) {
+    return [...pets];
+  }
   return pets.filter((pet) => {
     const name = normalizeText(pet.name);
     if (!name) return false;
@@ -395,20 +399,28 @@ const promptForFlow = (flow) => {
   if (flow.step === 'collect_group_preference') {
     return 'Vejo que há um cãozinho e um gatinho. Eles podem permanecer no mesmo horário sem problemas ou você prefere que o gatinho fique sozinho?';
   }
+  if (flow.step === 'collect_professional_preference') {
+    const unavailable = data.requestedProfessionalUnavailable && data.requestedProfessionalName
+      ? `Não encontrei horários disponíveis com ${data.requestedProfessionalName} nessa data. `
+      : '';
+    return `${unavailable}Você tem preferência de profissional? Se não tiver, responda “sem preferência”.`;
+  }
   if (flow.step === 'select_group_slot') {
     const options = Array.isArray(data.groupOptions) ? data.groupOptions : [];
-    const unavailableProfessional = data.requestedProfessionalUnavailable
-      ? `Não encontrei ${data.requestedProfessionalName} disponível exatamente como você pediu. `
-      : '';
+    const pets = selectedPets(flow);
+    const petNames = pets.map((pet) => pet.name).join(' e ');
+    const preferenceText = data.professionalPreference === 'Sem preferência'
+      ? 'sem preferência de profissional'
+      : `considerando sua preferência por ${data.requestedProfessionalName || data.professionalPreference}`;
     if (data.petsMayStayTogether === false) {
-      return `${unavailableProfessional}Encontrei estas combinações em horários separados:\n${listOptions(options, (option) => (
+      return `Encontrei estas combinações para ${petNames} em horários separados, ${preferenceText}:\n${listOptions(options, (option) => (
         option.assignments.map((item) => `${item.petName} em ${formatDate(item.date)} às ${item.time}`).join(' | ')
       ))}\nVocê pode responder com o número da combinação desejada.`;
     }
-    return `${unavailableProfessional}Encontrei estes horários para os pets juntos:\n${listOptions(options, (option) => {
-      const names = option.assignments.map((item) => item.professionalName).join(' e ');
-      return `${formatDate(option.date)} às ${option.time} — ${names}`;
-    })}\nVocê pode responder com o número ou com o horário desejado.`;
+    const subject = pets.length === 1 ? petNames : `${petNames} juntos`;
+    return `Encontrei estes horários para ${subject}, ${preferenceText}:\n${listOptions(options, (option) => (
+      `${formatDate(option.date)} às ${option.time}`
+    ))}\nVocê pode responder com o número ou com o horário desejado.`;
   }
   if (flow.step === 'select_professional_preference') {
     const option = data.selectedGroupOption || {};
@@ -1035,14 +1047,18 @@ const prepareGroomingGroupOptions = async ({
   flow.data.requestedProfessionalUnavailable = Boolean(
     requestedProfessionalId && !matchingProfessional.length
   );
-  const orderedOptions = matchingProfessional.length
-    ? [...matchingProfessional, ...options.filter((option) => !matchingProfessional.includes(option))]
+  const orderedOptions = requestedProfessionalId
+    ? matchingProfessional
     : options;
   flow.data.preferredDate = requested.date;
   flow.data.preferredMinutes = requested.preferredMinutes;
   flow.data.groupOptions = orderedOptions;
   flow.data.selectedGroupOption = null;
-  flow.step = orderedOptions.length ? 'select_group_slot' : 'collect_date';
+  flow.step = orderedOptions.length
+    ? 'select_group_slot'
+    : flow.data.requestedProfessionalUnavailable
+      ? 'collect_professional_preference'
+      : 'collect_date';
   return orderedOptions;
 };
 
@@ -1056,9 +1072,12 @@ const parseRequestedMinutes = (message) => {
     : null;
 };
 
-const findMentionedProfessional = async ({ storeId, intent, message }) => {
+const findMentionedProfessional = async ({ storeId, intent, message, requireCue = true }) => {
   const normalized = normalizeText(message);
-  if (!/(?:\bcom\b|profission|prefer|atendid[oa]\s+por|\bpel[oa]\b)/.test(normalized)) return null;
+  if (
+    requireCue
+    && !/(?:\bcom\b|profission|prefer|atendid[oa]\s+por|\bpel[oa]\b)/.test(normalized)
+  ) return null;
   const group = intent === 'veterinary_appointment' ? 'veterinario' : 'esteticista';
   const professionals = await User.find({
     empresas: storeId,
@@ -1118,6 +1137,15 @@ const applyInlineGroomingDetails = async ({ flow, message, config, now }) => {
   if (professional) {
     flow.data.requestedProfessionalId = professional.id;
     flow.data.requestedProfessionalName = professional.name;
+    flow.data.professionalPreference = professional.name;
+    flow.data.professionalPreferenceResolved = true;
+    changed = true;
+  } else if (/(sem prefer|nao tenho prefer|qualquer|tanto faz)/.test(normalizeText(message))) {
+    flow.data.requestedProfessionalId = '';
+    flow.data.requestedProfessionalName = '';
+    flow.data.requestedProfessionalUnavailable = false;
+    flow.data.professionalPreference = 'Sem preferência';
+    flow.data.professionalPreferenceResolved = true;
     changed = true;
   }
 
@@ -1158,6 +1186,10 @@ const applyInlineGroomingDetails = async ({ flow, message, config, now }) => {
   const requested = flow.data.initialRequestedDate;
   if (!requested?.date) {
     flow.step = 'collect_date';
+    return changed;
+  }
+  if (flow.data.professionalPreferenceResolved !== true) {
+    flow.step = 'collect_professional_preference';
     return changed;
   }
   if (requested.preferredMinutes === null && Number.isFinite(Number(flow.data.requestedPreferredMinutes))) {
@@ -1494,9 +1526,20 @@ const advanceFlow = async ({ flow, message, messageId, messageAt, config, io }) 
     if (draft.length === selectedPets(flow).length) {
       flow.data.petServiceItems = draft;
       flow.data.draftPetServiceItems = [];
-      flow.step = hasMixedDogAndCat(selectedPets(flow))
-        ? 'collect_group_preference'
-        : 'collect_date';
+      if (hasMixedDogAndCat(selectedPets(flow))) {
+        flow.step = 'collect_group_preference';
+      } else if (!flow.data?.initialRequestedDate?.date) {
+        flow.step = 'collect_date';
+      } else if (flow.data.professionalPreferenceResolved !== true) {
+        flow.step = 'collect_professional_preference';
+      } else {
+        await prepareGroomingGroupOptions({
+          flow,
+          requested: flow.data.initialRequestedDate,
+          config,
+          now: messageAt,
+        });
+      }
     } else {
       flow.step = 'collect_pet_services';
     }
@@ -1533,6 +1576,42 @@ const advanceFlow = async ({ flow, message, messageId, messageAt, config, io }) 
       touchFlow(flow, messageId, messageAt);
       await flow.save();
       return { handled: true, flow, reply: promptForFlow(flow) };
+    }
+  } else if (flow.step === 'collect_professional_preference') {
+    const noPreference = /(sem prefer|nao tenho prefer|qualquer|tanto faz)/.test(normalized);
+    const professional = noPreference ? null : await findMentionedProfessional({
+      storeId: flow.store,
+      intent: flow.intent,
+      message: text,
+      requireCue: false,
+    });
+    if (!noPreference && !professional) {
+      touchFlow(flow, messageId, messageAt);
+      await flow.save();
+      return {
+        handled: true,
+        flow,
+        reply: `Não reconheci o profissional. ${promptForFlow(flow)}`,
+      };
+    }
+    flow.data.requestedProfessionalId = professional?.id || '';
+    flow.data.requestedProfessionalName = professional?.name || '';
+    flow.data.requestedProfessionalUnavailable = false;
+    flow.data.professionalPreference = professional?.name || 'Sem preferência';
+    flow.data.professionalPreferenceResolved = true;
+    const requested = flow.data.initialRequestedDate || {
+      date: flow.data.preferredDate,
+      preferredMinutes: flow.data.preferredMinutes ?? null,
+    };
+    if (!requested?.date) {
+      flow.step = 'collect_date';
+    } else {
+      await prepareGroomingGroupOptions({
+        flow,
+        requested,
+        config,
+        now: messageAt,
+      });
     }
   } else if (flow.step === 'collect_pet_name') {
     if (text.length < 2) {
@@ -1741,6 +1820,9 @@ const advanceFlow = async ({ flow, message, messageId, messageAt, config, io }) 
         flow.data.selectedGroupOption = selected;
         if (requestedProfessional) {
           flow.data.professionalPreference = requestedProfessional.name;
+          flow.status = 'awaiting_confirmation';
+          flow.step = 'confirm_group';
+        } else if (flow.data.professionalPreferenceResolved === true) {
           flow.status = 'awaiting_confirmation';
           flow.step = 'confirm_group';
         } else {

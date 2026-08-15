@@ -247,6 +247,30 @@ test.before(async () => {
     porte: 'Pequeno',
     sexo: 'Fêmea',
     dataNascimento: new Date('2022-06-01T12:00:00.000Z'),
+  }, {
+    owner: groomingCustomer._id,
+    nome: 'Luna',
+    tipo: 'Cachorro',
+    raca: 'Shih-tzu',
+    porte: 'Pequeno',
+    sexo: 'Fêmea',
+    dataNascimento: new Date('2020-03-01T12:00:00.000Z'),
+  }, {
+    owner: groomingCustomer._id,
+    nome: 'Thor',
+    tipo: 'Cachorro',
+    raca: 'Vira-lata',
+    porte: 'Médio',
+    sexo: 'Macho',
+    dataNascimento: new Date('2019-04-01T12:00:00.000Z'),
+  }, {
+    owner: groomingCustomer._id,
+    nome: 'Nina',
+    tipo: 'Gato',
+    raca: 'Siamês',
+    porte: 'Pequeno',
+    sexo: 'Fêmea',
+    dataNascimento: new Date('2023-02-01T12:00:00.000Z'),
   }]);
   await WhatsappAutomationConfig.create([{
     store: storeA._id,
@@ -352,9 +376,13 @@ test('conduz banho e tosa natural para dois pets e confirma profissionais simult
   assert.equal(together.flow.step, 'collect_date');
 
   const requested = futureDateMessage(2, '14:00');
-  const offered = await receive({ waId, message: requested.message });
+  const professionalQuestion = await receive({ waId, message: requested.message });
+  assert.equal(professionalQuestion.flow.step, 'collect_professional_preference');
+  assert.match(professionalQuestion.reply, /preferência de profissional/i);
+  const offered = await receive({ waId, message: 'Sem preferência' });
   assert.equal(offered.flow.step, 'select_group_slot');
   assert.ok(offered.flow.data.groupOptions.length > 0);
+  assert.doesNotMatch(offered.reply, /Adriano|Ingrid/i);
   const offeredOption = offered.flow.data.groupOptions[0];
   assert.equal(offeredOption.assignments.length, 2);
   assert.equal(new Set(offeredOption.assignments.map((item) => String(item.professional))).size, 2);
@@ -369,9 +397,7 @@ test('conduz banho e tosa natural para dois pets e confirma profissionais simult
   assert.ok(laterMinutes > firstOfferedMinutes);
 
   const slot = await receive({ waId, message: '1' });
-  assert.equal(slot.flow.step, 'select_professional_preference');
-  const preference = await receive({ waId, message: 'Nao tenho preferencia' });
-  assert.equal(preference.flow.step, 'confirm_group');
+  assert.equal(slot.flow.step, 'confirm_group');
   const confirmed = await receive({ waId, message: 'Sim pode marcar' });
   assert.equal(confirmed.completed, true);
   assert.equal(confirmed.appointments.length, 2);
@@ -423,7 +449,9 @@ test('entende nomes digitados errado, detalha tosa e separa cao e gato sem sobre
   assert.equal(separate.flow.step, 'collect_date');
 
   const requested = futureDateMessage(4, '14:00');
-  const offered = await receive({ waId, message: requested.message });
+  const professionalQuestion = await receive({ waId, message: requested.message });
+  assert.equal(professionalQuestion.flow.step, 'collect_professional_preference');
+  const offered = await receive({ waId, message: 'Não tenho preferência' });
   assert.equal(offered.flow.step, 'select_group_slot');
   const assignments = offered.flow.data.groupOptions[0].assignments;
   assert.equal(assignments.length, 2);
@@ -459,6 +487,61 @@ test('aproveita pet, servico, data, hora e profissional informados na primeira m
   assert.equal(result.flow.data.selectedGroupOption.time, '14:00');
   assert.match(result.flow.data.professionalPreference, /Adriano/i);
   assert.doesNotMatch(result.reply, /nome completo|nome do pet|espécie|raça/i);
+
+  const cancelled = await receive({ waId, message: 'cancelar' });
+  assert.equal(cancelled.cancelled, true);
+  await WhatsappAutomationJob.updateMany({
+    type: 'appointment_flow_reply',
+    status: 'pending',
+    'payload.flowId': String(cancelled.flow._id),
+  }, {
+    $set: { status: 'completed', completedAt: new Date() },
+  });
+});
+
+test('consulta somente os pets mencionados e oculta profissionais quando nao ha preferencia', async () => {
+  const waId = '5511999990102';
+  const first = await receive({
+    waId,
+    message: 'Gostaria de agendar um banho para o Marley',
+  });
+  assert.equal(first.flow.step, 'collect_date');
+  assert.deepEqual(first.flow.data.selectedPets.map((pet) => pet.name), ['Marley']);
+
+  const requested = futureDateMessage(8, '15:00');
+  const preference = await receive({ waId, message: requested.message });
+  assert.equal(preference.flow.step, 'collect_professional_preference');
+
+  const offered = await receive({ waId, message: 'Sem preferência' });
+  assert.equal(offered.flow.step, 'select_group_slot');
+  assert.ok(offered.flow.data.groupOptions.every((option) => (
+    option.assignments.length === 1 && option.assignments[0].petName === 'Marley'
+  )));
+  assert.match(offered.reply, /horários para Marley/i);
+  assert.doesNotMatch(offered.reply, /pets juntos|Adriano|Ingrid/i);
+
+  const cancelled = await receive({ waId, message: 'cancelar' });
+  assert.equal(cancelled.cancelled, true);
+  await WhatsappAutomationJob.updateMany({
+    type: 'appointment_flow_reply',
+    status: 'pending',
+    'payload.flowId': String(cancelled.flow._id),
+  }, {
+    $set: { status: 'completed', completedAt: new Date() },
+  });
+});
+
+test('diferencia todos os pets de uma selecao por nomes', async () => {
+  const waId = '5511999990102';
+  const all = await receive({
+    waId,
+    message: 'Quero agendar banho para todos os meus pets',
+  });
+  assert.equal(all.flow.data.selectedPets.length, 5);
+  assert.deepEqual(
+    all.flow.data.selectedPets.map((pet) => pet.name).sort(),
+    ['Luna', 'Marley', 'Nina', 'Thor', 'Yummi'],
+  );
 
   const cancelled = await receive({ waId, message: 'cancelar' });
   assert.equal(cancelled.cancelled, true);
