@@ -14,6 +14,13 @@ const {
 const clean = (value) => (typeof value === 'string' ? value.trim() : '');
 const digitsOnly = (value) => String(value || '').replace(/\D+/g, '');
 const objectIdString = (value) => value ? String(value) : '';
+const normalizeInboundMessageAt = (value, receivedAt = new Date()) => {
+  const received = new Date(receivedAt);
+  const candidate = new Date(value);
+  const safeReceived = Number.isNaN(received.getTime()) ? new Date() : received;
+  if (Number.isNaN(candidate.getTime()) || candidate > safeReceived) return safeReceived;
+  return candidate;
+};
 
 const STATUS_MODE = Object.freeze({
   WAITING_HUMAN: 'waiting',
@@ -251,12 +258,14 @@ const handleInboundMessage = async ({
   waId,
   messageId,
   messageAt = new Date(),
+  receivedAt = new Date(),
   suppressAutomation = false,
   io,
 }) => {
   const customer = digitsOnly(waId);
   const phone = clean(phoneNumberId);
   if (!storeId || !phone || !customer) return null;
+  messageAt = normalizeInboundMessageAt(messageAt, receivedAt);
 
   const [store, config] = await Promise.all([
     Store.findById(storeId).select('_id horario').lean(),
@@ -789,6 +798,7 @@ module.exports = {
   handleInboundMessage,
   mapAutomationConfig,
   mapConversationState,
+  normalizeInboundMessageAt,
   transitionConversation,
   updateAutomationConfig,
 };

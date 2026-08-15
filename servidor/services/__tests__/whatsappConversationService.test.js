@@ -335,6 +335,44 @@ test('modo manual mantém conversas pausadas e ativa o bot somente após libera�
   }), 0);
 });
 
+test('modo manual nao agenda resposta no futuro quando o relogio da Meta esta adiantado', async () => {
+  const receivedAt = new Date();
+  const futureMetaTimestamp = new Date(receivedAt.getTime() + (6 * 60 * 1000));
+  const waId = '5511777770099';
+  const initial = await handleInboundMessage({
+    storeId: storeB._id,
+    phoneNumberId: '209876543210',
+    waId,
+    messageId: 'wamid.clock-skew-initial',
+    messageAt: receivedAt,
+    receivedAt,
+  });
+  assert.equal(initial.conversation.status, 'PAUSED');
+
+  await transitionConversation({
+    storeId: storeB._id,
+    phoneNumberId: '209876543210',
+    waId,
+    action: 'release',
+    userId: new mongoose.Types.ObjectId(),
+  });
+  const next = await handleInboundMessage({
+    storeId: storeB._id,
+    phoneNumberId: '209876543210',
+    waId,
+    messageId: 'wamid.clock-skew-future',
+    messageAt: futureMetaTimestamp,
+    receivedAt,
+  });
+  const pending = await WhatsappAutomationJob.findOne({
+    conversation: next.conversation._id,
+    status: 'pending',
+  }).sort({ createdAt: -1 });
+
+  assert.equal(next.conversation.lastInboundAt.getTime(), receivedAt.getTime());
+  assert.equal(pending.runAt.getTime(), receivedAt.getTime());
+});
+
 test('chat liberado usa a IA local com prompt separado antes de enviar ao WhatsApp', async () => {
   await WhatsappAutomationJob.updateMany(
     { status: 'pending' },
