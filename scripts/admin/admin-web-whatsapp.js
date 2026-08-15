@@ -6460,6 +6460,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       } else {
         const text = document.createElement('p');
+        text.className = 'whitespace-pre-wrap break-words';
         text.textContent = message.message || '[mensagem]';
         bubble.appendChild(text);
       }
