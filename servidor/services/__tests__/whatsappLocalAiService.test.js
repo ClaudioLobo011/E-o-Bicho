@@ -26,6 +26,8 @@ test('prompt do E o Bicho fica isolado da Zoe e preserva contexto da conversa', 
     ],
   });
   assert.equal(messages[0].role, 'system');
+  assert.match(messages[0].content, /mensagem mais recente do cliente define a pergunta atual/i);
+  assert.match(messages[0].content, /Respostas anteriores do pr.prio assistente podem conter enganos/i);
   assert.match(messages[0].content, /E o Bicho Vila Isabel/);
   assert.match(messages[0].content, /Nunca invente preço/);
   assert.doesNotMatch(messages[0].content, /assistente social oficial|jogadores|servidor roleplay/i);

@@ -1,5 +1,6 @@
 const Deposit = require('../models/Deposit');
 const Product = require('../models/Product');
+require('../models/Category');
 const {
   normalizeSearchText,
   tokenizeSearchText,
@@ -10,11 +11,32 @@ const MAX_MATCHES = 8;
 const QUERY_STOP_WORDS = new Set([
   'acha', 'ai', 'algum', 'alguma', 'ainda', 'cliente', 'consegue', 'disponivel',
   'estoque', 'favor', 'gostaria', 'medicamento', 'preciso', 'produto', 'queria',
-  'remedio', 'saber', 'teria', 'tem', 'tenho', 'trabalha', 'trabalham', 'vende',
-  'vendem', 'voce', 'voces',
+  'qual', 'quais', 'opcao', 'opcoes', 'remedio', 'saber', 'teria', 'tem', 'tenho',
+  'tipo', 'tipos', 'trabalha', 'trabalham', 'vende', 'vendem', 'voce', 'voces',
+]);
+const QUERY_MODIFIER_TOKENS = new Set([
+  'adulto', 'adultos', 'castrado', 'castrados', 'cao', 'caes', 'cachorro',
+  'cachorros', 'cadela', 'cadelas', 'felino', 'felinos', 'filhote', 'filhotes',
+  'gato', 'gatos', 'grande', 'grandes', 'gigante', 'gigantes', 'medio', 'medios',
+  'mini', 'pequena', 'pequenas', 'pequeno', 'pequenos', 'porte', 'raca', 'racas',
+  'senior', 'seniors',
 ]);
 
 const catalogCache = new Map();
+
+const TOKEN_EQUIVALENTS = new Map([
+  ['adultos', 'adulto'], ['caes', 'cao'], ['cachorros', 'cachorro'],
+  ['cadelas', 'cadela'], ['castrados', 'castrado'], ['felinos', 'felino'],
+  ['filhotes', 'filhote'], ['gatos', 'gato'], ['gigantes', 'gigante'],
+  ['grandes', 'grande'], ['medios', 'medio'], ['pequenas', 'pequena'],
+  ['pequenos', 'pequeno'], ['racas', 'raca'], ['racoes', 'racao'],
+  ['seniors', 'senior'],
+]);
+
+const canonicalToken = (value) => {
+  const normalized = normalizeSearchText(value);
+  return TOKEN_EQUIVALENTS.get(normalized) || normalized;
+};
 
 const clearProductLookupCache = () => catalogCache.clear();
 
@@ -43,26 +65,51 @@ const levenshteinDistance = (left, right) => {
 };
 
 const tokenSimilarity = (left, right) => {
-  const a = normalizeSearchText(left);
-  const b = normalizeSearchText(right);
+  const a = canonicalToken(left);
+  const b = canonicalToken(right);
   if (!a || !b) return 0;
   if (a === b) return 1;
-  if (a.length >= 4 && b.length >= 4 && (a.startsWith(b) || b.startsWith(a))) {
-    return 0.92 * (Math.min(a.length, b.length) / Math.max(a.length, b.length));
-  }
   const distance = levenshteinDistance(a, b);
-  return 1 - (distance / Math.max(a.length, b.length));
+  const editSimilarity = 1 - (distance / Math.max(a.length, b.length));
+  if (a.length >= 4 && b.length >= 4 && (a.startsWith(b) || b.startsWith(a))) {
+    return Math.max(
+      editSimilarity,
+      0.92 * (Math.min(a.length, b.length) / Math.max(a.length, b.length)),
+    );
+  }
+  return editSimilarity;
 };
 
 const productTokens = (product = {}) => {
-  if (Array.isArray(product.searchTokens) && product.searchTokens.length) {
-    return product.searchTokens;
-  }
+  const storedTokens = Array.isArray(product.searchTokens) ? product.searchTokens : [];
+  const categoryNames = Array.isArray(product.categorias)
+    ? product.categorias.map((category) => category?.nome || category?.name || '')
+    : [];
   return tokenizeSearchText([
+    ...storedTokens,
     product.nome,
     product.descricao,
     product.marca,
     product.referencia,
+    product.tipoProduto,
+    ...categoryNames,
+    ...Object.values(product.especificacoes || {}).flat(),
+  ].filter(Boolean).join(' '));
+};
+
+const productIdentityTokens = (product = {}) => {
+  const categoryNames = Array.isArray(product.categorias)
+    ? product.categorias.map((category) => category?.nome || category?.name || '')
+    : [];
+  return tokenizeSearchText([
+    product.cod,
+    product.codbarras,
+    product.nome,
+    product.descricao,
+    product.marca,
+    product.referencia,
+    product.tipoProduto,
+    ...categoryNames,
   ].filter(Boolean).join(' '));
 };
 
@@ -83,30 +130,67 @@ const loadStoreCatalog = async (storeId) => {
   const [deposits, products] = await Promise.all([
     Deposit.find({ empresa: storeId }).select('_id').lean(),
     Product.find({ inativo: { $ne: true } })
-      .select('cod codbarras nome descricao marca referencia venda unidade estoques +searchTokens')
+      .select('cod codbarras nome descricao marca referencia venda unidade estoques tipoProduto especificacoes categorias +searchTokens')
+      .populate({ path: 'categorias', select: 'nome' })
       .lean(),
   ]);
   const depositIds = new Set(deposits.map((entry) => String(entry._id)));
   const items = products.map((product) => ({
     ...product,
     tokens: productTokens(product),
+    identityTokens: productIdentityTokens(product),
     storeStock: computeStoreStock(product, depositIds),
   }));
   catalogCache.set(cacheKey, { items, expiresAt: Date.now() + CACHE_TTL_MS });
   return items;
 };
 
+const matchThreshold = (left, right) => {
+  const tokenLength = Math.max(String(left || '').length, String(right || '').length);
+  return tokenLength >= 8 ? 0.72 : tokenLength >= 5 ? 0.8 : 0.9;
+};
+
+const bestTokenMatch = (queryToken, candidates = []) => candidates.reduce((best, candidate) => {
+  const similarity = tokenSimilarity(queryToken, candidate);
+  return similarity > best.similarity ? { similarity, productToken: candidate } : best;
+}, { similarity: 0, productToken: '' });
+
 const scoreProduct = (product, queryTokens) => {
-  let best = { score: 0, queryToken: '', productToken: '' };
-  queryTokens.forEach((queryToken) => {
-    product.tokens.forEach((candidate) => {
-      const similarity = tokenSimilarity(queryToken, candidate);
-      const lengthWeight = Math.min(1, Math.max(queryToken.length, candidate.length) / 8);
-      const score = similarity * (0.75 + (0.25 * lengthWeight));
-      if (score > best.score) best = { score, queryToken, productToken: candidate };
-    });
+  const matches = queryTokens.map((queryToken) => {
+    const identity = bestTokenMatch(queryToken, product.identityTokens);
+    const catalog = bestTokenMatch(queryToken, product.tokens);
+    const best = identity.similarity >= catalog.similarity
+      ? { ...identity, source: 'identity' }
+      : { ...catalog, source: 'attribute' };
+    const matched = best.similarity >= matchThreshold(queryToken, best.productToken);
+    const modifier = QUERY_MODIFIER_TOKENS.has(canonicalToken(queryToken));
+    const weight = modifier ? 0.45 : 1;
+    return { ...best, queryToken, matched, modifier, weight };
   });
-  return best;
+  const totalWeight = matches.reduce((total, match) => total + match.weight, 0) || 1;
+  const matchedWeight = matches.reduce((total, match) => (
+    total + (match.matched ? match.similarity * match.weight : 0)
+  ), 0);
+  const identityWeight = matches.reduce((total, match) => (
+    total + (match.matched && match.source === 'identity' ? match.similarity * match.weight : 0)
+  ), 0);
+  const distinctiveMatches = matches.filter((match) => match.matched && !match.modifier);
+  const bestDistinctive = distinctiveMatches.reduce(
+    (best, match) => (match.similarity > best.similarity ? match : best),
+    { similarity: 0, queryToken: '', productToken: '' },
+  );
+  return {
+    score: (matchedWeight / totalWeight) * 0.8 + (identityWeight / totalWeight) * 0.2,
+    matches,
+    distinctiveMatches,
+    bestDistinctive,
+  };
+};
+
+const productMatchesQueryToken = (product, match) => {
+  const candidates = match.source === 'identity' ? product.identityTokens : product.tokens;
+  const candidate = bestTokenMatch(match.queryToken, candidates);
+  return candidate.similarity >= matchThreshold(match.queryToken, candidate.productToken);
 };
 
 const resolveSearchText = (message, history = []) => {
@@ -145,18 +229,18 @@ const lookupProductsForMessage = async ({ storeId, message, history = [] }) => {
   const catalog = await loadStoreCatalog(storeId);
   const ranked = catalog
     .map((product) => ({ product, match: scoreProduct(product, queryTokens) }))
-    .filter((entry) => {
-      const tokenLength = Math.max(entry.match.queryToken.length, entry.match.productToken.length);
-      const threshold = tokenLength >= 8 ? 0.72 : tokenLength >= 5 ? 0.8 : 0.9;
-      return entry.match.score >= threshold;
-    })
+    .filter((entry) => entry.match.distinctiveMatches.length > 0 && entry.match.score >= 0.3)
     .sort((left, right) => right.match.score - left.match.score);
   if (!ranked.length) return null;
 
   const best = ranked[0];
-  const anchor = best.match.productToken;
+  const requiredMatches = best.match.matches.filter((match) => (
+    match.matched && !/^\d+(?:[.,]\d+)?$/.test(match.queryToken)
+  ));
+  const anchorMatch = best.match.bestDistinctive;
+  const anchor = anchorMatch.productToken;
   const familyProducts = catalog
-    .filter((product) => product.tokens.some((token) => tokenSimilarity(anchor, token) >= 0.82));
+    .filter((product) => requiredMatches.every((match) => productMatchesQueryToken(product, match)));
   const [freshProducts, deposits] = await Promise.all([
     Product.find({ _id: { $in: familyProducts.map((product) => product._id) } })
       .select('_id estoques')
@@ -180,9 +264,9 @@ const lookupProductsForMessage = async ({ storeId, message, history = [] }) => {
     .slice(0, MAX_MATCHES);
 
   return {
-    understoodAs: anchor,
+    understoodAs: requiredMatches.map((match) => match.productToken).join(' '),
     confidence: best.match.score,
-    correctedFrom: best.match.queryToken,
+    correctedFrom: requiredMatches.map((match) => match.queryToken).join(' '),
     variants: family,
   };
 };
@@ -198,6 +282,7 @@ const buildInventoryPromptContext = (lookup) => {
     ...rows,
     '',
     'Regras para responder sobre estes produtos:',
+    '- Os resultados foram filtrados pela combinacao de identidade, tipo e caracteristicas pedidas. Nao acrescente produtos de outra marca, linha ou categoria.',
     '- Considere disponÃ­vel somente a variaÃ§Ã£o com estoque maior que zero.',
     '- Se houver mais de uma variaÃ§Ã£o, diga que trabalhamos com o produto, liste cada variaÃ§Ã£o disponÃ­vel em uma linha separada e pergunte qual delas o cliente precisa.',
     '- Use os nomes legÃ­veis acima. NÃ£o junte variaÃ§Ãµes na mesma linha.',

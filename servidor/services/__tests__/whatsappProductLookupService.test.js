@@ -56,6 +56,46 @@ test.before(async () => {
     custo: 20,
     venda: 39.9,
     estoques: [{ deposito: mainDeposit._id, quantidade: 3 }],
+  }, {
+    cod: 'MED-PEQUENO',
+    codbarras: '7890000000004',
+    nome: 'Anti-inflamatorio Exemplo para Caes de Porte Pequeno 20ml',
+    custo: 20,
+    venda: 42.9,
+    especificacoes: { pet: ['Cachorro'], porteRaca: ['Pequeno'] },
+    estoques: [{ deposito: mainDeposit._id, quantidade: 5 }],
+  }, {
+    cod: 'QUAT-SELECT-1',
+    codbarras: '7890000000005',
+    nome: 'Racao Quatree Select para Caes Adultos de Porte Pequeno 1Kg',
+    custo: 20,
+    venda: 34.9,
+    especificacoes: { pet: ['Cachorro'], idade: ['Adulto'], porteRaca: ['Pequeno'] },
+    estoques: [{ deposito: mainDeposit._id, quantidade: 6 }],
+  }, {
+    cod: 'QUAT-SELECT-3',
+    codbarras: '7890000000006',
+    nome: 'Racao Quatree Select para Caes Adultos de Porte Pequeno 3Kg',
+    custo: 45,
+    venda: 69.9,
+    especificacoes: { pet: ['Cachorro'], idade: ['Adulto'], porteRaca: ['Pequeno'] },
+    estoques: [{ deposito: mainDeposit._id, quantidade: 4 }],
+  }, {
+    cod: 'QUAT-LIFE-PEQUENO',
+    codbarras: '7890000000007',
+    nome: 'Racao Quatree Life para Caes Adultos de Porte Pequeno 3Kg',
+    custo: 38,
+    venda: 59.9,
+    especificacoes: { pet: ['Cachorro'], idade: ['Adulto'], porteRaca: ['Pequeno'] },
+    estoques: [{ deposito: mainDeposit._id, quantidade: 2 }],
+  }, {
+    cod: 'RACAO-GATO-ADULTO',
+    codbarras: '7890000000008',
+    nome: 'Racao Felina Exemplo para Gatos Adultos 3Kg',
+    custo: 35,
+    venda: 55.9,
+    especificacoes: { pet: ['Gato'], idade: ['Adulto'] },
+    estoques: [{ deposito: mainDeposit._id, quantidade: 7 }],
   }]);
   clearProductLookupCache();
 });
@@ -111,4 +151,40 @@ test('contexto obriga lista por linha e nao mistura estoque com preco', async ()
 test('similaridade diferencia erro pequeno de um produto sem relacao', () => {
   assert.ok(tokenSimilarity('cistimissim', 'cistimicin') > 0.72);
   assert.ok(tokenSimilarity('cistimissim', 'antipulgas') < 0.3);
+});
+
+test('interpreta a frase completa e nao troca racao por medicamento que compartilha o porte', async () => {
+  const result = await lookupProductsForMessage({
+    storeId: store._id,
+    message: 'Quais quatree select para porte pequeno voces tem?',
+  });
+
+  assert.deepEqual(result.variants.map((entry) => entry.code).sort(), [
+    'QUAT-SELECT-1',
+    'QUAT-SELECT-3',
+  ]);
+  assert.equal(result.variants.some((entry) => entry.code === 'MED-PEQUENO'), false);
+  assert.equal(result.variants.some((entry) => entry.code === 'QUAT-LIFE-PEQUENO'), false);
+});
+
+test('tolera erro na marca e na linha sem perder os filtros da frase', async () => {
+  const result = await lookupProductsForMessage({
+    storeId: store._id,
+    message: 'Tem quatre selec para cachorro pequeno?',
+  });
+
+  assert.deepEqual(result.variants.map((entry) => entry.code).sort(), [
+    'QUAT-SELECT-1',
+    'QUAT-SELECT-3',
+  ]);
+});
+
+test('entende consulta por tipo, especie e idade mesmo sem uma marca', async () => {
+  const result = await lookupProductsForMessage({
+    storeId: store._id,
+    message: 'Quais racoes para gatos adultos voces tem?',
+  });
+
+  assert.deepEqual(result.variants.map((entry) => entry.code), ['RACAO-GATO-ADULTO']);
+  assert.equal(result.variants.some((entry) => entry.code === 'MED-PEQUENO'), false);
 });
