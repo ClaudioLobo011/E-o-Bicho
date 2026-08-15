@@ -126,7 +126,6 @@ const findCustomerByWhatsapp = async ({ storeId, waId }) => {
     `^\\D*${phone.split('').join('\\D*')}\\D*$`,
   ));
   const customer = await User.findOne({
-    role: 'cliente',
     $or: [
       { celular: { $in: phones } },
       { celularSecundario: { $in: phones } },
@@ -498,6 +497,7 @@ const findAvailableGroupSlots = async ({
   maxOptions,
   excludeFlowId,
   preferredMinutes,
+  preferredProfessionalId,
   strictlyAfterMinutes,
 }) => {
   const requestedItems = Array.isArray(items) ? items.filter((item) => item?.serviceId) : [];
@@ -550,7 +550,12 @@ const findAvailableGroupSlots = async ({
     ) continue;
     const optionLists = perItemOptions.map((options) => options.filter((option) => (
       option.date === date && option.time === time
-    )));
+    )).sort((left, right) => {
+      if (!preferredProfessionalId) return 0;
+      const leftPreferred = String(left.professional) === String(preferredProfessionalId) ? 0 : 1;
+      const rightPreferred = String(right.professional) === String(preferredProfessionalId) ? 0 : 1;
+      return leftPreferred - rightPreferred;
+    }));
     const assignments = assignDistinctProfessionals(optionLists);
     if (!assignments) continue;
     grouped.push({
@@ -580,6 +585,7 @@ const findAvailableSeparateSlots = async ({
   maxOptions,
   excludeFlowId,
   preferredMinutes,
+  preferredProfessionalId,
 }) => {
   const requestedItems = Array.isArray(items) ? items.filter((item) => item?.serviceId) : [];
   if (!requestedItems.length) return [];
@@ -595,6 +601,13 @@ const findAvailableSeparateSlots = async ({
     internalMaxOptions: 60,
   })));
   if (perItemOptions.some((options) => !options.length)) return [];
+  if (preferredProfessionalId) {
+    perItemOptions.forEach((options) => options.sort((left, right) => {
+      const leftPreferred = String(left.professional) === String(preferredProfessionalId) ? 0 : 1;
+      const rightPreferred = String(right.professional) === String(preferredProfessionalId) ? 0 : 1;
+      return leftPreferred - rightPreferred;
+    }));
+  }
   const desiredLimit = Math.min(5, Math.max(1, Number(maxOptions || config.appointmentMaxOptions) || 3));
   const results = [];
   for (let offset = 0; offset < 12 && results.length < desiredLimit; offset += 1) {
@@ -724,7 +737,7 @@ const createAppointmentFromFlow = async ({
   if (existing) return { appointment: existing, replayed: true };
 
   const [customer, pet, service, professional] = await Promise.all([
-    User.findOne({ _id: customerId, role: 'cliente' }).select('_id').lean(),
+    User.findById(customerId).select('_id').lean(),
     Pet.findOne({ _id: petId, owner: customerId, obito: { $ne: true } }).lean(),
     Service.findOne({ _id: serviceId, ativo: { $ne: false } })
       .select('_id nome valor duracaoMinutos categorias grupo')

@@ -225,9 +225,9 @@ test.before(async () => {
     tipoConta: 'pessoa_fisica',
     email: 'cliente-banho@example.test',
     senha: 'hash',
-    celular: '5511999990102',
+    celular: '(11) 99999-0102',
     nomeCompleto: 'Claudio Cliente',
-    role: 'cliente',
+    role: 'admin_master',
     empresas: [storeA._id],
     empresaPrincipal: storeA._id,
   });
@@ -323,7 +323,7 @@ test('inicia o fluxo com espera humana e confirma um agendamento existente', asy
 });
 
 test('conduz banho e tosa natural para dois pets e confirma profissionais simultaneos', async () => {
-  const waId = groomingCustomer.celular;
+  const waId = '5511999990102';
   const first = await receive({
     waId,
     message: 'Bom dia, quero agendar um banho.',
@@ -337,7 +337,7 @@ test('conduz banho e tosa natural para dois pets e confirma profissionais simult
 
   const services = await receive({
     waId,
-    message: 'Hoje seria banho apenas para o Marley e uma tosa na maquina para a Yummi',
+    message: 'Seria banho apenas para o Marley e uma tosa na maquina para a Yummi',
   });
   assert.equal(services.flow.step, 'collect_group_preference');
   assert.deepEqual(
@@ -393,7 +393,7 @@ test('conduz banho e tosa natural para dois pets e confirma profissionais simult
 });
 
 test('entende nomes digitados errado, detalha tosa e separa cao e gato sem sobreposicao', async () => {
-  const waId = groomingCustomer.celular;
+  const waId = '5511999990102';
   const first = await receive({
     waId,
     message: 'Quero marcar banho e tosa para meus pets',
@@ -428,6 +428,37 @@ test('entende nomes digitados errado, detalha tosa e separa cao e gato sem sobre
   const assignments = offered.flow.data.groupOptions[0].assignments;
   assert.equal(assignments.length, 2);
   assert.equal(new Set(assignments.map((item) => item.time)).size, 2);
+
+  const cancelled = await receive({ waId, message: 'cancelar' });
+  assert.equal(cancelled.cancelled, true);
+  await WhatsappAutomationJob.updateMany({
+    type: 'appointment_flow_reply',
+    status: 'pending',
+    'payload.flowId': String(cancelled.flow._id),
+  }, {
+    $set: { status: 'completed', completedAt: new Date() },
+  });
+});
+
+test('aproveita pet, servico, data, hora e profissional informados na primeira mensagem', async () => {
+  const waId = '5511999990102';
+  const requested = futureDateMessage(6, '14:00');
+  const result = await receive({
+    waId,
+    message: `Quero agendar banho para o Marley em ${requested.message} com Adriano`,
+  });
+
+  assert.equal(String(result.flow.customer), String(groomingCustomer._id));
+  assert.equal(result.flow.data.customerName, 'Claudio Cliente');
+  assert.equal(result.flow.data.selectedPets.length, 1);
+  assert.equal(result.flow.data.selectedPets[0].name, 'Marley');
+  assert.equal(result.flow.data.petServiceItems[0].serviceName, 'Banho');
+  assert.equal(result.flow.step, 'confirm_group');
+  assert.equal(result.flow.status, 'awaiting_confirmation');
+  assert.equal(result.flow.data.selectedGroupOption.date, requested.date);
+  assert.equal(result.flow.data.selectedGroupOption.time, '14:00');
+  assert.match(result.flow.data.professionalPreference, /Adriano/i);
+  assert.doesNotMatch(result.reply, /nome completo|nome do pet|espécie|raça/i);
 
   const cancelled = await receive({ waId, message: 'cancelar' });
   assert.equal(cancelled.cancelled, true);

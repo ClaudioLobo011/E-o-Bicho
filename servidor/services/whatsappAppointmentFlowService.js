@@ -280,6 +280,23 @@ const parseNamedPets = (message, pets) => {
   });
 };
 
+const applySelectedPets = (flow, pets) => {
+  const chosen = Array.isArray(pets) ? pets.filter(Boolean) : [];
+  if (!chosen.length) return false;
+  flow.data.selectedPets = chosen.map((pet) => ({ ...pet }));
+  flow.pet = chosen.length === 1 ? chosen[0].id : null;
+  if (chosen.length === 1) {
+    const [pet] = chosen;
+    flow.data.petName = pet.name;
+    flow.data.petSpecies = pet.species;
+    flow.data.petBreed = pet.breed;
+    flow.data.petSex = pet.sex;
+    flow.data.petBirthDate = pet.birthDate;
+    flow.data.petSize = pet.size || '';
+  }
+  return true;
+};
+
 const inferRequestedServiceKind = (message) => {
   const normalized = normalizeText(message);
   const hasBath = /\bbanho\b/.test(normalized);
@@ -380,12 +397,15 @@ const promptForFlow = (flow) => {
   }
   if (flow.step === 'select_group_slot') {
     const options = Array.isArray(data.groupOptions) ? data.groupOptions : [];
+    const unavailableProfessional = data.requestedProfessionalUnavailable
+      ? `Não encontrei ${data.requestedProfessionalName} disponível exatamente como você pediu. `
+      : '';
     if (data.petsMayStayTogether === false) {
-      return `Encontrei estas combinações em horários separados:\n${listOptions(options, (option) => (
+      return `${unavailableProfessional}Encontrei estas combinações em horários separados:\n${listOptions(options, (option) => (
         option.assignments.map((item) => `${item.petName} em ${formatDate(item.date)} às ${item.time}`).join(' | ')
       ))}\nVocê pode responder com o número da combinação desejada.`;
     }
-    return `Encontrei estes horários para os pets juntos:\n${listOptions(options, (option) => {
+    return `${unavailableProfessional}Encontrei estes horários para os pets juntos:\n${listOptions(options, (option) => {
       const names = option.assignments.map((item) => item.professionalName).join(' e ');
       return `${formatDate(option.date)} às ${option.time} — ${names}`;
     })}\nVocê pode responder com o número ou com o horário desejado.`;
@@ -602,6 +622,7 @@ const createFlow = async ({
   message,
   messageId,
   messageAt,
+  config,
 }) => {
   const flow = new WhatsappAppointmentFlow({
     store: storeId,
@@ -628,7 +649,15 @@ const createFlow = async ({
     loadServices(flow, message),
     loadCustomerContext(flow),
   ]);
-  if (flow.status === 'collecting') chooseNextIdentityStep(flow);
+  if (flow.status === 'collecting') {
+    chooseNextIdentityStep(flow);
+    await applyInlineGroomingDetails({
+      flow,
+      message,
+      config,
+      now: messageAt,
+    });
+  }
   touchFlow(flow, messageId, messageAt);
   await flow.save();
   return flow;
@@ -636,7 +665,7 @@ const createFlow = async ({
 
 const materializeCustomer = async (flow) => {
   if (flow.customer) {
-    const existing = await User.findOne({ _id: flow.customer, role: 'cliente' });
+    const existing = await User.findById(flow.customer);
     if (existing) return existing;
   }
   const matched = await findCustomerByWhatsapp({
@@ -991,17 +1020,169 @@ const prepareGroomingGroupOptions = async ({
     intent: flow.intent,
     startDate: requested.date,
     preferredMinutes: requested.preferredMinutes,
+    preferredProfessionalId: flow.data?.requestedProfessionalId || null,
     ...(flow.data?.petsMayStayTogether === false ? {} : { strictlyAfterMinutes }),
     config,
     now,
     excludeFlowId: flow._id,
   });
+  const requestedProfessionalId = clean(flow.data?.requestedProfessionalId);
+  const matchingProfessional = requestedProfessionalId
+    ? options.filter((option) => option.assignments.some((assignment) => (
+      String(assignment.professional) === requestedProfessionalId
+    )))
+    : [];
+  flow.data.requestedProfessionalUnavailable = Boolean(
+    requestedProfessionalId && !matchingProfessional.length
+  );
+  const orderedOptions = matchingProfessional.length
+    ? [...matchingProfessional, ...options.filter((option) => !matchingProfessional.includes(option))]
+    : options;
   flow.data.preferredDate = requested.date;
   flow.data.preferredMinutes = requested.preferredMinutes;
-  flow.data.groupOptions = options;
+  flow.data.groupOptions = orderedOptions;
   flow.data.selectedGroupOption = null;
-  flow.step = options.length ? 'select_group_slot' : 'collect_date';
-  return options;
+  flow.step = orderedOptions.length ? 'select_group_slot' : 'collect_date';
+  return orderedOptions;
+};
+
+const parseRequestedMinutes = (message) => {
+  const match = normalizeText(message).match(/\b(?:as|a|por volta de)?\s*(\d{1,2})(?::|h)(\d{2})?\b/);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2] || 0);
+  return hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59
+    ? (hours * 60) + minutes
+    : null;
+};
+
+const findMentionedProfessional = async ({ storeId, intent, message }) => {
+  const normalized = normalizeText(message);
+  if (!/(?:\bcom\b|profission|prefer|atendid[oa]\s+por|\bpel[oa]\b)/.test(normalized)) return null;
+  const group = intent === 'veterinary_appointment' ? 'veterinario' : 'esteticista';
+  const professionals = await User.find({
+    empresas: storeId,
+    grupos: group,
+    role: { $in: ['funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master'] },
+  }).select('_id nomeCompleto nomeContato razaoSocial').lean();
+  const matches = professionals.map((professional) => {
+    const name = clean(
+      professional.nomeCompleto || professional.nomeContato || professional.razaoSocial
+    );
+    const parts = normalizeText(name).split(/\s+/).filter((part) => part.length >= 4);
+    const matchedParts = parts.filter((part) => normalized.includes(part));
+    return { professional, name, score: matchedParts.length };
+  }).filter((entry) => entry.score > 0).sort((left, right) => right.score - left.score);
+  if (!matches.length || (matches[1] && matches[1].score === matches[0].score)) return null;
+  return { id: String(matches[0].professional._id), name: matches[0].name };
+};
+
+const inferTogetherPreference = (message) => {
+  const normalized = normalizeText(message);
+  if (/(sozinh|separad|nao.*junt)/.test(normalized)) return false;
+  if (/(junt|mesmo horario|sem problema|podem ficar|pode ficar)/.test(normalized)) return true;
+  return null;
+};
+
+const applyInlineGroomingDetails = async ({ flow, message, config, now }) => {
+  if (flow.intent !== 'grooming_appointment') return false;
+  let changed = false;
+  const data = flow.data || {};
+  const petOptions = Array.isArray(data.petOptions) ? data.petOptions : [];
+  if (!selectedPets(flow).length && petOptions.length) {
+    const namedPets = parseNamedPets(message, petOptions);
+    if (namedPets.length) changed = applySelectedPets(flow, namedPets) || changed;
+  }
+
+  const requestedDate = parseRequestedDate(message, {
+    now,
+    timezone: config.timezone,
+  });
+  const requestedMinutes = parseRequestedMinutes(message);
+  if (requestedDate) {
+    flow.data.initialRequestedDate = {
+      ...requestedDate,
+      preferredMinutes: requestedDate.preferredMinutes ?? requestedMinutes ?? data.requestedPreferredMinutes ?? null,
+    };
+    changed = true;
+  } else if (requestedMinutes !== null) {
+    flow.data.requestedPreferredMinutes = requestedMinutes;
+    changed = true;
+  }
+
+  const professional = await findMentionedProfessional({
+    storeId: flow.store,
+    intent: flow.intent,
+    message,
+  });
+  if (professional) {
+    flow.data.requestedProfessionalId = professional.id;
+    flow.data.requestedProfessionalName = professional.name;
+    changed = true;
+  }
+
+  const pets = selectedPets(flow);
+  if (!pets.length) {
+    chooseNextIdentityStep(flow);
+    return changed;
+  }
+
+  if (!Array.isArray(flow.data.petServiceItems) || flow.data.petServiceItems.length < pets.length) {
+    const hasServiceInMessage = Boolean(inferRequestedServiceKind(message));
+    const canReuseInitialService = pets.length === 1 && clean(flow.data.initialServiceKind);
+    if (hasServiceInMessage || canReuseInitialService) {
+      assignGroomingServices(
+        flow,
+        message,
+        Array.isArray(flow.data.draftPetServiceItems) ? flow.data.draftPetServiceItems : [],
+      );
+      changed = true;
+    }
+  }
+  if (!Array.isArray(flow.data.petServiceItems) || flow.data.petServiceItems.length < pets.length) {
+    if (flow.step === 'select_pet_service_detail') return changed;
+    chooseNextIdentityStep(flow);
+    return changed;
+  }
+
+  if (hasMixedDogAndCat(pets) && typeof flow.data.petsMayStayTogether !== 'boolean') {
+    const preference = inferTogetherPreference(message);
+    if (preference === null) {
+      flow.step = 'collect_group_preference';
+      return changed;
+    }
+    flow.data.petsMayStayTogether = preference;
+    changed = true;
+  }
+
+  const requested = flow.data.initialRequestedDate;
+  if (!requested?.date) {
+    flow.step = 'collect_date';
+    return changed;
+  }
+  if (requested.preferredMinutes === null && Number.isFinite(Number(flow.data.requestedPreferredMinutes))) {
+    requested.preferredMinutes = Number(flow.data.requestedPreferredMinutes);
+  }
+  const options = await prepareGroomingGroupOptions({ flow, requested, config, now });
+  changed = true;
+  if (!options.length) return changed;
+
+  const exact = requested.preferredMinutes === null
+    ? null
+    : options.find((option) => (
+      option.date === requested.date && parseMinutes(option.time) === requested.preferredMinutes
+    ));
+  if (
+    exact
+    && flow.data.requestedProfessionalId
+    && !flow.data.requestedProfessionalUnavailable
+  ) {
+    flow.data.selectedGroupOption = exact;
+    flow.data.professionalPreference = flow.data.requestedProfessionalName;
+    flow.status = 'awaiting_confirmation';
+    flow.step = 'confirm_group';
+  }
+  return changed;
 };
 
 const parseGroupOption = (message, options, { timezone, now } = {}) => {
@@ -1092,6 +1273,32 @@ const advanceFlow = async ({ flow, message, messageId, messageAt, config, io }) 
       messageAt,
       io,
     });
+  }
+
+  if (
+    flow.intent === 'grooming_appointment'
+    && ['select_pet', 'collect_pet_services', 'collect_group_preference', 'collect_date'].includes(flow.step)
+  ) {
+    const inlineHandled = await applyInlineGroomingDetails({
+      flow,
+      message: text,
+      config,
+      now: messageAt,
+    });
+    if (inlineHandled) {
+      touchFlow(flow, messageId, messageAt);
+      await flow.save();
+      const reply = promptForFlow(flow);
+      flow.lastPrompt = reply;
+      await flow.save();
+      await recordFlowAudit({
+        flow,
+        action: 'appointment_flow_advanced',
+        previousState: previous,
+        extra: { inlineDetails: true },
+      });
+      return { handled: true, flow, reply };
+    }
   }
   if (/(emergenc|urgenc|nao respira|sem respirar|convuls|envenen|atropel|sangramento|desmai)/.test(normalized)) {
     return handoffFlow({
@@ -1218,17 +1425,7 @@ const advanceFlow = async ({ flow, message, messageId, messageAt, config, io }) 
       flow.step = 'collect_pet_name';
     } else {
       const chosen = named.length ? named : [pets[selection]];
-      flow.data.selectedPets = chosen.map((pet) => ({ ...pet }));
-      flow.pet = chosen.length === 1 ? chosen[0].id : null;
-      if (chosen.length === 1) {
-        const [pet] = chosen;
-        flow.data.petName = pet.name;
-        flow.data.petSpecies = pet.species;
-        flow.data.petBreed = pet.breed;
-        flow.data.petSex = pet.sex;
-        flow.data.petBirthDate = pet.birthDate;
-        flow.data.petSize = pet.size || '';
-      }
+      applySelectedPets(flow, chosen);
       flow.step = flow.intent === 'grooming_appointment'
         ? 'collect_pet_services'
         : 'collect_date';
@@ -1502,7 +1699,7 @@ const advanceFlow = async ({ flow, message, messageId, messageAt, config, io }) 
           return { handled: true, flow, reply: 'Não encontrei os dois juntos nessa data. Qual outra data você prefere?' };
         }
       } else {
-        const selected = parseGroupOption(text, options, {
+        let selected = parseGroupOption(text, options, {
           timezone: config.timezone,
           now: messageAt,
         });
@@ -1511,8 +1708,44 @@ const advanceFlow = async ({ flow, message, messageId, messageAt, config, io }) 
           await flow.save();
           return { handled: true, flow, reply: `Não reconheci o horário.\n${promptForFlow(flow)}` };
         }
+        const requestedProfessional = await findMentionedProfessional({
+          storeId: flow.store,
+          intent: flow.intent,
+          message: text,
+        });
+        if (requestedProfessional) {
+          flow.data.requestedProfessionalId = requestedProfessional.id;
+          flow.data.requestedProfessionalName = requestedProfessional.name;
+          const refreshed = await prepareGroomingGroupOptions({
+            flow,
+            requested: {
+              date: selected.date,
+              preferredMinutes: parseMinutes(selected.time),
+            },
+            config,
+            now: messageAt,
+          });
+          selected = refreshed.find((option) => (
+            option.date === selected.date
+            && option.time === selected.time
+            && option.assignments.some((assignment) => (
+              String(assignment.professional) === requestedProfessional.id
+            ))
+          ));
+          if (!selected) {
+            touchFlow(flow, messageId, messageAt);
+            await flow.save();
+            return { handled: true, flow, reply: promptForFlow(flow) };
+          }
+        }
         flow.data.selectedGroupOption = selected;
-        flow.step = 'select_professional_preference';
+        if (requestedProfessional) {
+          flow.data.professionalPreference = requestedProfessional.name;
+          flow.status = 'awaiting_confirmation';
+          flow.step = 'confirm_group';
+        } else {
+          flow.step = 'select_professional_preference';
+        }
       }
     }
   } else if (flow.step === 'select_professional_preference') {
@@ -1884,6 +2117,7 @@ const processAppointmentInbound = async ({
       message: body,
       messageId,
       messageAt: now,
+      config,
     });
     if (flow.status === 'handoff') {
       return handoffFlow({
