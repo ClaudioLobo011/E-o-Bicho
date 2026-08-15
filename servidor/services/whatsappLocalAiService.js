@@ -2,6 +2,10 @@ const fs = require('fs/promises');
 
 const Store = require('../models/Store');
 const WhatsappLog = require('../models/WhatsappLog');
+const {
+  buildInventoryPromptContext,
+  lookupProductsForMessage,
+} = require('./whatsappProductLookupService');
 
 const DEFAULT_ENDPOINT = 'http://127.0.0.1:18080';
 const DEFAULT_MODEL = 'zoe-local';
@@ -14,6 +18,8 @@ const DEFAULT_SYSTEM_PROMPT = `
 Você é o assistente virtual da E o Bicho e atende clientes pelo WhatsApp em português do Brasil.
 
 Regras obrigatórias:
+- Quando houver contexto de estoque em tempo real, use exatamente os produtos e variações informados nele. Entenda pequenos erros de digitação pelo nome corrigido fornecido.
+- Quando existirem variações, escreva cada uma em uma linha separada e termine perguntando qual delas o cliente precisa.
 - Responda de forma simpática, objetiva e natural, normalmente em até 4 frases curtas.
 - Use apenas informações presentes no contexto da loja ou na conversa. Nunca invente preço, estoque, promoção, horário, disponibilidade ou confirmação de agendamento.
 - Quando faltar uma informação específica, diga com clareza que a equipe humana precisa confirmar.
@@ -80,11 +86,13 @@ const stripThinking = (value) => clean(value)
   .replace(/```$/i, '')
   .trim();
 
-const buildChatMessages = ({ config = {}, store = {}, history = [] }) => {
+const buildChatMessages = ({ config = {}, store = {}, history = [], inventoryLookup = null }) => {
   const configuredPrompt = clean(config.aiSystemPrompt);
+  const inventoryContext = buildInventoryPromptContext(inventoryLookup);
   const system = [
     configuredPrompt || DEFAULT_SYSTEM_PROMPT,
     buildStoreContext(store),
+    inventoryContext,
   ].filter(Boolean).join('\n\nContexto confirmado da loja:\n');
   const messages = [{ role: 'system', content: system }];
   history.forEach((entry) => {
@@ -155,7 +163,20 @@ const generateWhatsappAiReply = async ({ storeId, phoneNumberId, waId, config = 
       .lean(),
   ]);
   const history = recent.reverse();
-  const messages = buildChatMessages({ config, store: store || {}, history });
+  const latestInbound = [...history].reverse().find((entry) => entry.direction === 'incoming');
+  const inventoryLookup = latestInbound
+    ? await lookupProductsForMessage({
+      storeId,
+      message: latestInbound.message,
+      history,
+    })
+    : null;
+  const messages = buildChatMessages({
+    config,
+    store: store || {},
+    history,
+    inventoryLookup,
+  });
   if (!messages.some((message) => message.role === 'user')) {
     throw new Error('Não há mensagem de cliente disponível para a IA responder.');
   }
