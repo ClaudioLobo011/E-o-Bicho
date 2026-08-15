@@ -7,6 +7,10 @@ const WhatsappIntegration = require('../models/WhatsappIntegration');
 const WhatsappLog = require('../models/WhatsappLog');
 const WhatsappWebhookEvent = require('../models/WhatsappWebhookEvent');
 const { handleHumanReply } = require('./whatsappConversationService');
+const {
+  applyWhatsappMessageMutation,
+  parseWhatsappMessageMutation,
+} = require('./whatsappMessageMutationService');
 
 const COEXISTENCE_FIELDS = new Set([
   'history',
@@ -110,6 +114,26 @@ const upsertLogOperation = ({
 }) => {
   const messageId = clean(message.id || message.message_id);
   const messageAt = parseTimestamp(message.timestamp) || now;
+  const mutation = parseWhatsappMessageMutation({
+    message,
+    direction,
+    customer,
+    source,
+    at: messageAt,
+  });
+  if (mutation) {
+    return {
+      operation: null,
+      contact: null,
+      realtime: null,
+      customer,
+      mutation: {
+        storeId: integration.store,
+        phoneNumberId: phone.phoneNumberId,
+        mutation,
+      },
+    };
+  }
   const body = extractBody(message);
   const errors = normalizeMessageErrors(message.errors);
   const origin = direction === 'outgoing' ? phone.phoneNumber : customer;
@@ -359,6 +383,7 @@ const processCoexistenceWebhookChanges = async ({
   const logOperations = [];
   const contactOperations = [];
   const realtime = [];
+  const messageMutations = [];
   const humanActivities = [];
   const integrationOperations = [];
   let automationDisconnected = false;
@@ -366,7 +391,8 @@ const processCoexistenceWebhookChanges = async ({
   relevant.forEach(({ field, value }) => {
     if (field === 'smb_message_echoes') {
       collectEchoes({ integration, value, now }).forEach((item) => {
-        logOperations.push(item.operation);
+        if (item.operation) logOperations.push(item.operation);
+        if (item.mutation) messageMutations.push(item.mutation);
         if (item.contact) {
           contactOperations.push({
             updateOne: {
@@ -391,6 +417,13 @@ const processCoexistenceWebhookChanges = async ({
             waId: item.contact.waId,
             at: item.contact.lastMessageAt,
           });
+        } else if (item.mutation && item.customer) {
+          humanActivities.push({
+            storeId: integration.store,
+            phoneNumberId: item.mutation.phoneNumberId,
+            waId: item.customer,
+            at: item.mutation.mutation.at,
+          });
         }
       });
     }
@@ -398,7 +431,8 @@ const processCoexistenceWebhookChanges = async ({
     if (field === 'history') {
       const history = collectHistory({ integration, value, now });
       history.messages.forEach((item) => {
-        logOperations.push(item.operation);
+        if (item.operation) logOperations.push(item.operation);
+        if (item.mutation) messageMutations.push(item.mutation);
         if (item.contact) {
           contactOperations.push({
             updateOne: {
@@ -491,6 +525,15 @@ const processCoexistenceWebhookChanges = async ({
 
   if (logOperations.length) {
     await WhatsappLog.bulkWrite(logOperations, { ordered: false });
+  }
+  if (messageMutations.length) {
+    for (const entry of messageMutations) {
+      try {
+        await applyWhatsappMessageMutation({ ...entry, io });
+      } catch (error) {
+        console.error('Erro ao aplicar edição/reação sincronizada do WhatsApp:', error);
+      }
+    }
   }
   if (contactOperations.length) {
     await WhatsappContact.bulkWrite(contactOperations, { ordered: false });

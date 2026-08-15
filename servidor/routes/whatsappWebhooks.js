@@ -20,6 +20,10 @@ const {
 const {
   processAppointmentInbound,
 } = require('../services/whatsappAppointmentFlowService');
+const {
+  applyWhatsappMessageMutation,
+  parseWhatsappMessageMutation,
+} = require('../services/whatsappMessageMutationService');
 
 const router = express.Router();
 
@@ -647,6 +651,7 @@ router.post('/', async (req, res) => {
     const logs = [];
     const statusUpserts = [];
     const incomingUpserts = [];
+    const messageMutations = [];
     const incomingSeen = new Set();
     const realtimeEvents = [];
     const readReceipts = new Set();
@@ -717,6 +722,22 @@ router.post('/', async (req, res) => {
             const origin = digitsOnly(message?.from) || trimValue(message?.from);
             const messageErrors = Array.isArray(message?.errors) ? message.errors : [];
             const messageType = trimValue(message?.type);
+            const mutation = parseWhatsappMessageMutation({
+              message,
+              direction: 'incoming',
+              customer: origin,
+              source: 'webhook',
+              at: parseMessageTimestamp(message?.timestamp) || now,
+            });
+            if (mutation) {
+              incomingLogsCount += 1;
+              messageMutations.push({
+                storeId: integration.store,
+                phoneNumberId: numberMeta.phoneNumberId,
+                mutation,
+              });
+              return;
+            }
             const unsupported = messageType === 'unsupported';
             const hasErrors = unsupported || messageErrors.length > 0;
             const body = hasErrors
@@ -1014,6 +1035,16 @@ router.post('/', async (req, res) => {
 
     if (incomingUpserts.length > 0) {
       await WhatsappLog.bulkWrite(incomingUpserts, { ordered: false });
+    }
+    if (messageMutations.length > 0) {
+      const io = req.app?.get('socketio');
+      for (const entry of messageMutations) {
+        try {
+          await applyWhatsappMessageMutation({ ...entry, io });
+        } catch (error) {
+          console.error('Erro ao aplicar edição/reação do WhatsApp:', error);
+        }
+      }
     }
 
     if (mediaTasks.length > 0 && accessToken && isR2Configured()) {

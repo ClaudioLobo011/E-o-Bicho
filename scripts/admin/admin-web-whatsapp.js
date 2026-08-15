@@ -1773,6 +1773,28 @@ document.addEventListener('DOMContentLoaded', () => {
     const messageId = trimValue(payload.messageId);
     const clientId = trimValue(payload.clientId);
 
+    if (payload.mutationType && messageId) {
+      const target = state.messages.find((entry) => entry.messageId === messageId);
+      if (!target) {
+        if (state.selectedContactId === resolvedContactId) void loadMessages({ silent: true });
+        return;
+      }
+      if (payload.mutationType === 'edit') {
+        target.message = payload.message || target.message;
+        target.edited = true;
+        target.editedAt = payload.editedAt || new Date().toISOString();
+        if (matchedContact?.lastMessageId === messageId) {
+          matchedContact.lastMessage = target.message;
+          renderConversations();
+          updateChatHeader();
+        }
+      } else if (payload.mutationType === 'reaction') {
+        target.reactions = Array.isArray(payload.reactions) ? payload.reactions : [];
+      }
+      if (state.selectedContactId === resolvedContactId) renderMessages();
+      return;
+    }
+
     if (direction === 'outgoing') {
       if (clientId) {
         const pending = state.messages.find((entry) => entry.clientId === clientId);
@@ -2256,6 +2278,9 @@ document.addEventListener('DOMContentLoaded', () => {
     actorUser: message.actorUser || '',
     messageType: message.messageType || '',
     source: message.source || '',
+    edited: message.edited === true,
+    editedAt: message.editedAt || null,
+    reactions: Array.isArray(message.reactions) ? message.reactions : [],
     media: message.media || null,
     contacts: Array.isArray(message.contacts) ? message.contacts : null,
   });
@@ -6124,6 +6149,14 @@ document.addEventListener('DOMContentLoaded', () => {
         : 'mt-2 flex items-center justify-end gap-1 text-[10px] text-gray-400';
       const time = document.createElement('span');
       time.textContent = formatTime(createdAt);
+      if (message.edited) {
+        const edited = document.createElement('span');
+        edited.textContent = 'editada';
+        edited.title = message.editedAt
+          ? `Editada em ${new Date(message.editedAt).toLocaleString('pt-BR')}`
+          : 'Mensagem editada';
+        meta.appendChild(edited);
+      }
       meta.appendChild(time);
 
       if (isOutgoing) {
@@ -6473,6 +6506,21 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       if (appendMeta) {
         bubble.appendChild(meta);
+      }
+      const reactions = Array.isArray(message.reactions)
+        ? message.reactions.filter((entry) => trimValue(entry?.emoji))
+        : [];
+      if (reactions.length > 0) {
+        const reactionWrap = document.createElement('div');
+        reactionWrap.className = 'mt-1 flex flex-wrap items-center gap-1';
+        reactions.forEach((entry) => {
+          const reaction = document.createElement('span');
+          reaction.className = 'inline-flex min-w-7 items-center justify-center rounded-full border border-gray-200 bg-white px-2 py-0.5 text-sm shadow-sm';
+          reaction.textContent = entry.emoji;
+          reaction.title = entry.direction === 'outgoing' ? 'Reação da equipe' : 'Reação do cliente';
+          reactionWrap.appendChild(reaction);
+        });
+        bubble.appendChild(reactionWrap);
       }
       wrapper.appendChild(bubble);
       elements.messages.appendChild(wrapper);

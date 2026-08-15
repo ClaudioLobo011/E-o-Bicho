@@ -653,6 +653,16 @@ const mapMessageResponse = (log) => ({
   actorUser: log?.actorUser ? String(log.actorUser) : '',
   messageType: log?.messageType || '',
   source: log?.source || '',
+  edited: log?.meta?.edited === true,
+  editedAt: log?.meta?.editedAt || null,
+  reactions: Array.isArray(log?.meta?.reactions)
+    ? log.meta.reactions.map((entry) => ({
+        actorKey: sanitizeString(entry?.actorKey),
+        emoji: sanitizeString(entry?.emoji),
+        direction: sanitizeString(entry?.direction),
+        at: entry?.at || null,
+      })).filter((entry) => entry.emoji)
+    : [],
   media: buildMediaResponse(log),
   contacts: buildContactsResponse(log),
 });
@@ -2173,6 +2183,9 @@ router.get(
 
     const seenMessages = new Set();
     const filtered = logs.filter((entry) => {
+      if (['edit', 'reaction'].includes(sanitizeString(entry?.messageType).toLowerCase())) {
+        return false;
+      }
       const messageId = sanitizeString(entry?.messageId);
       if (!messageId) return true;
       const key = `${sanitizeString(entry?.direction)}:${messageId}`;

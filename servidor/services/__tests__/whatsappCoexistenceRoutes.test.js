@@ -247,6 +247,52 @@ test('webhooks de coexistência espelham mensagem do celular e atualizam a sincr
   assert.equal(echoedLogs[0].source, 'whatsapp_business_app');
   assert.equal(emitted.some((entry) => entry.event === 'whatsapp:message'), true);
 
+  await processCoexistenceWebhookChanges({
+    entries: [{
+      changes: [{
+        field: 'smb_message_echoes',
+        value: {
+          metadata: {
+            phone_number_id: '109876543210',
+            display_phone_number: '5511999990001',
+          },
+          message_echoes: [{
+            id: 'wamid.echo-edit-1',
+            to: '5511888880001',
+            timestamp: '1750000001',
+            type: 'edit',
+            edit: {
+              original_message_id: 'wamid.echo-1',
+              message: { type: 'text', text: { body: 'Resposta corrigida no celular' } },
+            },
+          }, {
+            id: 'wamid.echo-reaction-1',
+            to: '5511888880001',
+            timestamp: '1750000002',
+            type: 'reaction',
+            reaction: { message_id: 'wamid.echo-1', emoji: '👍' },
+          }],
+        },
+      }],
+    }],
+    integration,
+    wabaId: 'waba-id',
+    io,
+  });
+
+  const mutatedEcho = await WhatsappLog.findOne({
+    store: store._id,
+    messageId: 'wamid.echo-1',
+  }).lean();
+  assert.equal(mutatedEcho.message, 'Resposta corrigida no celular');
+  assert.equal(mutatedEcho.meta.edited, true);
+  assert.equal(mutatedEcho.meta.reactions[0].emoji, '👍');
+  assert.equal(await WhatsappLog.countDocuments({
+    messageId: { $in: ['wamid.echo-edit-1', 'wamid.echo-reaction-1'] },
+  }), 0);
+  assert.equal(emitted.some((entry) => entry.payload?.mutationType === 'edit'), true);
+  assert.equal(emitted.some((entry) => entry.payload?.mutationType === 'reaction'), true);
+
   integration = await WhatsappIntegration.findOne({ store: store._id }).lean();
   await processCoexistenceWebhookChanges({
     entries: [{
@@ -320,6 +366,27 @@ test('webhooks de coexistência espelham mensagem do celular e atualizam a sincr
     { _id: unsupportedHistory._id },
     { $set: { message: '[errors]' } }
   );
+  await WhatsappLog.create([{
+    store: store._id,
+    phoneNumberId: '109876543210',
+    direction: 'incoming',
+    status: 'Recebido',
+    origin: '5511888880001',
+    destination: '5511999990001',
+    message: '[edit]',
+    messageId: 'wamid.legacy-edit',
+    messageType: 'edit',
+  }, {
+    store: store._id,
+    phoneNumberId: '109876543210',
+    direction: 'incoming',
+    status: 'Recebido',
+    origin: '5511888880001',
+    destination: '5511999990001',
+    message: '[reaction]',
+    messageId: 'wamid.legacy-reaction',
+    messageType: 'reaction',
+  }]);
   const legacyMessages = await request(app)
     .get(`/api/integrations/whatsapp/${store._id}/conversations/5511888880001/messages?phoneNumberId=109876543210`)
     .set('Authorization', `Bearer ${adminToken}`);
@@ -328,6 +395,9 @@ test('webhooks de coexistência espelham mensagem do celular e atualizam a sincr
     (message) => message.messageId === 'wamid.unsupported-history-1'
   );
   assert.equal(legacyUnsupported.message, 'Mensagem não disponível no histórico sincronizado.');
+  assert.equal(legacyMessages.body.messages.some(
+    (message) => ['wamid.legacy-edit', 'wamid.legacy-reaction'].includes(message.messageId)
+  ), false);
 
   integration = updated.toObject();
   await processCoexistenceWebhookChanges({
@@ -344,7 +414,7 @@ test('webhooks de coexistência espelham mensagem do celular e atualizam a sincr
   updated = await WhatsappIntegration.findOne({ store: store._id });
   assert.equal(updated.onboardingStatus, 'disconnected');
   assert.equal(updated.phoneNumbers[0].status, 'Desconectado');
-  assert.equal(await WhatsappWebhookEvent.countDocuments({ store: store._id }), 4);
+  assert.equal(await WhatsappWebhookEvent.countDocuments({ store: store._id }), 5);
 });
 
 test('somente administrador remove numero local e limpa o vinculo quando era o ultimo', async () => {
