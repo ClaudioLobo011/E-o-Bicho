@@ -51,6 +51,9 @@ const mapConversationState = (conversation) => {
     botEligibleAt: conversation.botEligibleAt || null,
     automationPausedUntil: conversation.automationPausedUntil || null,
     automationPauseReason: conversation.automationPauseReason || '',
+    automationOptIn: conversation.automationOptIn === true,
+    automationOptInAt: conversation.automationOptInAt || null,
+    automationOptInBy: objectIdString(conversation.automationOptInBy),
     customerServiceWindowExpiresAt: conversation.customerServiceWindowExpiresAt || null,
     intent: conversation.intent || '',
     flow: conversation.flow || '',
@@ -68,6 +71,9 @@ const mapConversationState = (conversation) => {
 
 const mapAutomationConfig = (config = {}) => ({
   enabled: Boolean(config.enabled),
+  manualChatActivation: config.manualChatActivation === true,
+  aiEnabled: config.aiEnabled === true,
+  aiModel: config.aiModel || 'zoe-local',
   timezone: config.timezone || 'America/Sao_Paulo',
   humanGraceMinutes: Number(config.humanGraceMinutes) || 5,
   afterHoursImmediate: config.afterHoursImmediate !== false,
@@ -263,8 +269,11 @@ const handleInboundMessage = async ({
     phoneNumberId: phone,
     waId: customer,
   }).lean();
-  const pauseActive = current?.status === 'PAUSED'
+  const manualChatActivation = safeConfig.manualChatActivation === true;
+  const chatActivated = !manualChatActivation || current?.automationOptIn === true;
+  const timedPauseActive = current?.status === 'PAUSED'
     && (!current.automationPausedUntil || new Date(current.automationPausedUntil) > messageAt);
+  const pauseActive = !chatActivated || timedPauseActive;
   const automationEnabled = Boolean(
     !suppressAutomation
     && safeConfig.enabled
@@ -272,7 +281,8 @@ const handleInboundMessage = async ({
     && !pauseActive
   );
   const graceMs = Math.max(1, Number(safeConfig.humanGraceMinutes) || 5) * 60 * 1000;
-  const immediate = !hours.isOpen && safeConfig.afterHoursImmediate !== false;
+  const immediate = (manualChatActivation && chatActivated)
+    || (!hours.isOpen && safeConfig.afterHoursImmediate !== false);
   const botEligibleAt = automationEnabled
     ? new Date(messageAt.getTime() + (immediate ? 0 : graceMs))
     : null;
@@ -296,6 +306,10 @@ const handleInboundMessage = async ({
         botEligibleAt,
         customerServiceWindowExpiresAt: serviceWindowExpiresAt,
         closedAt: null,
+        ...(!chatActivated ? {
+          automationPauseReason: 'Aguardando ativação manual da IA',
+          automationPausedUntil: null,
+        } : {}),
       },
       $inc: { unreadCount: 1, version: 1 },
       $setOnInsert: {
@@ -351,6 +365,9 @@ const handleHumanReply = async ({
         botEligibleAt: null,
         automationPausedUntil: null,
         automationPauseReason: '',
+        automationOptIn: false,
+        automationOptInAt: null,
+        automationOptInBy: null,
         intent: '',
         flow: '',
         flowState: '',
@@ -411,6 +428,9 @@ const transitionConversation = async ({
     current.lastHumanSource = 'manual_takeover';
     current.lastActorType = 'human_web';
     current.botEligibleAt = null;
+    current.automationOptIn = false;
+    current.automationOptInAt = null;
+    current.automationOptInBy = null;
     current.closedAt = null;
     current.intent = '';
     current.flow = '';
@@ -426,6 +446,9 @@ const transitionConversation = async ({
       : null;
     current.automationPauseReason = clean(reason) || 'Pausa manual';
     current.botEligibleAt = null;
+    current.automationOptIn = false;
+    current.automationOptInAt = null;
+    current.automationOptInBy = null;
     current.intent = '';
     current.flow = '';
     current.flowState = '';
@@ -435,6 +458,9 @@ const transitionConversation = async ({
     current.serviceMode = 'closed';
     current.botEligibleAt = null;
     current.closedAt = now;
+    current.automationOptIn = false;
+    current.automationOptInAt = null;
+    current.automationOptInBy = null;
     current.intent = '';
     current.flow = '';
     current.flowState = '';
@@ -447,20 +473,40 @@ const transitionConversation = async ({
     const safeConfig = config || new WhatsappAutomationConfig({ store: storeId, phoneNumberId: phone });
     const hours = resolveOperatingHours({ store, config: safeConfig, at: now });
     const automationEnabled = Boolean(safeConfig.enabled && !safeConfig.paused);
-    const immediate = automationEnabled && !hours.isOpen && safeConfig.afterHoursImmediate !== false;
+    const manualChatActivation = safeConfig.manualChatActivation === true;
+    const windowExpiresAt = current.customerServiceWindowExpiresAt
+      ? new Date(current.customerServiceWindowExpiresAt)
+      : null;
+    const hasActiveCustomerWindow = Boolean(
+      current.lastInboundMessageId
+      && windowExpiresAt
+      && !Number.isNaN(windowExpiresAt.getTime())
+      && windowExpiresAt > now
+    );
+    const canScheduleReply = automationEnabled && (
+      !manualChatActivation || hasActiveCustomerWindow
+    );
+    const immediate = canScheduleReply && (
+      manualChatActivation || (!hours.isOpen && safeConfig.afterHoursImmediate !== false)
+    );
     const graceMs = Math.max(1, Number(safeConfig.humanGraceMinutes) || 5) * 60 * 1000;
     current.status = immediate ? 'BOT_ACTIVE' : 'WAITING_HUMAN';
     current.serviceMode = STATUS_MODE[current.status];
     current.assignedTo = null;
     current.automationPausedUntil = null;
     current.automationPauseReason = '';
-    current.botEligibleAt = automationEnabled
+    current.automationOptIn = manualChatActivation ? true : current.automationOptIn;
+    current.automationOptInAt = manualChatActivation ? now : current.automationOptInAt;
+    current.automationOptInBy = manualChatActivation
+      ? (userId || current.automationOptInBy)
+      : current.automationOptInBy;
+    current.botEligibleAt = canScheduleReply
       ? new Date(now.getTime() + (immediate ? 0 : graceMs))
       : null;
     current.closedAt = null;
     await current.save();
     await cancelConversationJobs(current._id, 'Atendimento liberado');
-    if (automationEnabled) {
+    if (canScheduleReply) {
       await createGraceJob({
         conversation: current,
         runAt: current.botEligibleAt,
@@ -516,6 +562,18 @@ const updateAutomationConfig = async ({
   const allowed = {};
   if (Object.prototype.hasOwnProperty.call(payload, 'enabled')) {
     allowed.enabled = payload.enabled === true;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'manualChatActivation')) {
+    allowed.manualChatActivation = payload.manualChatActivation === true;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'aiEnabled')) {
+    allowed.aiEnabled = payload.aiEnabled === true;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'aiMaxTokens')) {
+    allowed.aiMaxTokens = Math.min(500, Math.max(80, Number(payload.aiMaxTokens) || 220));
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'aiTimeoutMs')) {
+    allowed.aiTimeoutMs = Math.min(120000, Math.max(5000, Number(payload.aiTimeoutMs) || 60000));
   }
   if (Object.prototype.hasOwnProperty.call(payload, 'timezone')) {
     allowed.timezone = clean(payload.timezone) || 'America/Sao_Paulo';
@@ -590,6 +648,9 @@ const updateAutomationConfig = async ({
   }
   [
     'botName',
+    'aiEndpoint',
+    'aiModel',
+    'aiSystemPrompt',
     'welcomeMessage',
     'afterHoursMessage',
     'fallbackMessage',

@@ -274,6 +274,65 @@ test('webhooks de coexistência espelham mensagem do celular e atualizam a sincr
   await processCoexistenceWebhookChanges({
     entries: [{
       changes: [{
+        field: 'history',
+        value: {
+          metadata: {
+            phone_number_id: '109876543210',
+            display_phone_number: '5511999990001',
+          },
+          history: [{
+            metadata: { phase: 2, progress: 100, chunk_order: 5 },
+            threads: [{
+              id: '5511888880001',
+              messages: [{
+                id: 'wamid.unsupported-history-1',
+                from: '5511888880001',
+                timestamp: '1750000100',
+                type: 'errors',
+                errors: [{
+                  code: 131051,
+                  title: 'Message type unknown',
+                  message: 'Message type unknown',
+                  error_data: { details: 'Unsupported message received' },
+                }],
+                history_context: { status: 'pending' },
+              }],
+            }],
+          }],
+        },
+      }],
+    }],
+    integration,
+    wabaId: 'waba-id',
+    io,
+  });
+
+  const unsupportedHistory = await WhatsappLog.findOne({
+    store: store._id,
+    messageId: 'wamid.unsupported-history-1',
+  }).lean();
+  assert.equal(unsupportedHistory.message, 'Mensagem não disponível no histórico sincronizado.');
+  assert.equal(unsupportedHistory.meta.errors[0].code, 131051);
+  assert.equal(unsupportedHistory.meta.errors[0].details, 'Unsupported message received');
+  assert.equal(unsupportedHistory.meta.historyContext.status, 'pending');
+
+  await WhatsappLog.updateOne(
+    { _id: unsupportedHistory._id },
+    { $set: { message: '[errors]' } }
+  );
+  const legacyMessages = await request(app)
+    .get(`/api/integrations/whatsapp/${store._id}/conversations/5511888880001/messages?phoneNumberId=109876543210`)
+    .set('Authorization', `Bearer ${adminToken}`);
+  assert.equal(legacyMessages.status, 200, legacyMessages.text);
+  const legacyUnsupported = legacyMessages.body.messages.find(
+    (message) => message.messageId === 'wamid.unsupported-history-1'
+  );
+  assert.equal(legacyUnsupported.message, 'Mensagem não disponível no histórico sincronizado.');
+
+  integration = updated.toObject();
+  await processCoexistenceWebhookChanges({
+    entries: [{
+      changes: [{
         field: 'account_update',
         value: { event: 'PARTNER_REMOVED' },
       }],
@@ -285,7 +344,7 @@ test('webhooks de coexistência espelham mensagem do celular e atualizam a sincr
   updated = await WhatsappIntegration.findOne({ store: store._id });
   assert.equal(updated.onboardingStatus, 'disconnected');
   assert.equal(updated.phoneNumbers[0].status, 'Desconectado');
-  assert.equal(await WhatsappWebhookEvent.countDocuments({ store: store._id }), 3);
+  assert.equal(await WhatsappWebhookEvent.countDocuments({ store: store._id }), 4);
 });
 
 test('somente administrador remove numero local e limpa o vinculo quando era o ultimo', async () => {

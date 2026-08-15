@@ -35,6 +35,17 @@ const clamp = (value, max = 1000) => {
   return `${text.slice(0, max - 3)}...`;
 };
 
+const HISTORY_MESSAGE_UNAVAILABLE = 'Mensagem não disponível no histórico sincronizado.';
+
+const normalizeMessageErrors = (errors) => (Array.isArray(errors) ? errors : [])
+  .filter(Boolean)
+  .map((entry) => ({
+    code: entry?.code ?? null,
+    title: clean(entry?.title || entry?.message),
+    message: clean(entry?.message),
+    details: clean(entry?.error_data?.details || entry?.errorData?.details || entry?.details),
+  }));
+
 const extractBody = (message = {}) => {
   const type = clean(message.type);
   if (type === 'text') return clamp(message.text?.body);
@@ -48,6 +59,9 @@ const extractBody = (message = {}) => {
   if (type === 'location') return '[localização]';
   if (type === 'contacts') return '[contato]';
   if (type === 'reaction') return '[reação]';
+  if (['errors', 'unknown', 'unsupported'].includes(type) || normalizeMessageErrors(message.errors).length) {
+    return HISTORY_MESSAGE_UNAVAILABLE;
+  }
   return clamp(message.body || message.message) || `[${type || 'mensagem'}]`;
 };
 
@@ -97,6 +111,7 @@ const upsertLogOperation = ({
   const messageId = clean(message.id || message.message_id);
   const messageAt = parseTimestamp(message.timestamp) || now;
   const body = extractBody(message);
+  const errors = normalizeMessageErrors(message.errors);
   const origin = direction === 'outgoing' ? phone.phoneNumber : customer;
   const destination = direction === 'outgoing' ? customer : phone.phoneNumber;
   const numberLabel = phone.displayName || phone.phoneNumber || `ID ${phone.phoneNumberId}`;
@@ -119,6 +134,8 @@ const upsertLogOperation = ({
     meta: {
       coexistence: true,
       messageType: clean(message.type),
+      ...(errors.length ? { errors } : {}),
+      ...(message.history_context ? { historyContext: message.history_context } : {}),
     },
     updatedAt: now,
   };

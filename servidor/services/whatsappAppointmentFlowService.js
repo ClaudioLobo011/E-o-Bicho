@@ -1180,6 +1180,12 @@ const processAppointmentInbound = async ({
     waId: customerWaId,
   });
   if (!conversation) return { handled: false };
+  const automationAllowed = transition
+    ? transition.automationEnabled === true
+    : config.manualChatActivation !== true || conversation.automationOptIn === true;
+  if (!automationAllowed || conversation.status === 'PAUSED') {
+    return { handled: false, reason: 'conversation_paused' };
+  }
 
   if (!flow && detected?.kind === 'handoff') {
     flow = new WhatsappAppointmentFlow({

@@ -15,6 +15,9 @@ const { decryptText } = require('../utils/certificates');
 const {
   emitConversationState,
 } = require('./whatsappConversationService');
+const {
+  generateWhatsappAiReply,
+} = require('./whatsappLocalAiService');
 
 const GRAPH_VERSION = process.env.WHATSAPP_GRAPH_API_VERSION || 'v25.0';
 const GRAPH_ORIGIN = process.env.WHATSAPP_GRAPH_ORIGIN || 'https://graph.facebook.com';
@@ -251,6 +254,10 @@ const executeHumanGraceJob = async ({ job, io }) => {
     await completeJob(job, 'Conversa não encontrada');
     return { skipped: true };
   }
+  if (config.manualChatActivation === true && originalConversation.automationOptIn !== true) {
+    await completeJob(job, 'IA não ativada manualmente nesta conversa');
+    return { skipped: true, reason: 'manual_activation_required' };
+  }
   const serviceWindowExpiresAt = originalConversation.customerServiceWindowExpiresAt
     ? new Date(originalConversation.customerServiceWindowExpiresAt)
     : null;
@@ -294,6 +301,7 @@ const executeHumanGraceJob = async ({ job, io }) => {
       version: originalConversation.version,
       customerServiceWindowExpiresAt: { $gt: new Date() },
       ...(expectedInboundMessageId ? { lastInboundMessageId: expectedInboundMessageId } : {}),
+      ...(config.manualChatActivation === true ? { automationOptIn: true } : {}),
       $or: [
         { lastHumanAt: null },
         { lastHumanAt: { $lt: originalConversation.lastInboundAt || new Date(0) } },
@@ -329,9 +337,43 @@ const executeHumanGraceJob = async ({ job, io }) => {
   }
 
   const reason = clean(job.payload?.reason);
-  const message = reason.includes('after_hours')
-    ? clean(config.afterHoursMessage)
-    : clean(config.welcomeMessage);
+  let message = '';
+  let generatedByAi = false;
+  if (config.aiEnabled === true) {
+    try {
+      message = await generateWhatsappAiReply({
+        storeId: job.store,
+        phoneNumberId: job.phoneNumberId,
+        waId: job.waId,
+        config,
+      });
+      generatedByAi = true;
+    } catch (error) {
+      const unavailableConversation = await WhatsappConversation.findOneAndUpdate(
+        { _id: conversation._id, status: 'BOT_ACTIVE' },
+        {
+          $set: {
+            status: 'NEEDS_HUMAN',
+            serviceMode: 'waiting',
+            botEligibleAt: null,
+            automationOptIn: false,
+            automationOptInAt: null,
+            automationOptInBy: null,
+          },
+          $addToSet: { labels: 'ia_indisponivel' },
+          $inc: { version: 1 },
+        },
+        { new: true }
+      );
+      await completeJob(job, `IA local indisponível: ${clean(error?.message)}`);
+      emitConversationState(io, unavailableConversation);
+      return { skipped: true, reason: 'local_ai_unavailable' };
+    }
+  } else {
+    message = reason.includes('after_hours')
+      ? clean(config.afterHoursMessage)
+      : clean(config.welcomeMessage);
+  }
   if (!message) {
     await completeJob(job, 'Mensagem automática não configurada');
     emitConversationState(io, conversation);
@@ -364,7 +406,7 @@ const executeHumanGraceJob = async ({ job, io }) => {
         message,
         messageId: result.messageId,
         messageTimestamp: now,
-        source: 'automation',
+        source: generatedByAi ? 'automation_ai' : 'automation',
         actorType: 'bot',
         messageType: 'text',
         correlationId: clean(job.payload?.correlationId),
@@ -372,6 +414,8 @@ const executeHumanGraceJob = async ({ job, io }) => {
           graphStatus: result.graphStatus,
           automationJobId: String(job._id),
           reason,
+          aiGenerated: generatedByAi,
+          ...(generatedByAi ? { aiModel: clean(config.aiModel) || 'zoe-local' } : {}),
         },
         updatedAt: now,
       },
@@ -438,7 +482,7 @@ const executeHumanGraceJob = async ({ job, io }) => {
       destination: job.waId,
       createdAt: log?.createdAt?.toISOString?.() || now.toISOString(),
       actorType: 'bot',
-      source: 'automation',
+      source: generatedByAi ? 'automation_ai' : 'automation',
     });
   }
   emitConversationState(io, updatedConversation);

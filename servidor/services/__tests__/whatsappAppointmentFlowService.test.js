@@ -416,3 +416,27 @@ test('worker envia a confirmação e fecha a conversa sem usar resposta humana',
   assert.equal(conversation.status, 'CLOSED');
   assert.equal(conversation.lastActorType, 'bot');
 });
+
+test('modo manual impede que o fluxo de agendamento responda antes da ativação do chat', async () => {
+  await WhatsappAutomationConfig.updateOne(
+    { store: storeB._id, phoneNumberId: '209876543210' },
+    { $set: { manualChatActivation: true, aiEnabled: true } },
+  );
+
+  const waId = '5511999990999';
+  const result = await receive({
+    store: storeB,
+    phoneNumberId: '209876543210',
+    waId,
+    message: 'Quero marcar um banho amanhã',
+  });
+
+  assert.equal(result.handled, false);
+  assert.equal(result.reason, 'conversation_paused');
+  assert.equal(result.transition.automationEnabled, false);
+  assert.equal(await WhatsappAppointmentFlow.countDocuments({
+    store: storeB._id,
+    phoneNumberId: '209876543210',
+    waId,
+  }), 0);
+});

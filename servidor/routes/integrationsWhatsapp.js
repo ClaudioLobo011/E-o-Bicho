@@ -566,6 +566,17 @@ const applyUserNamesToConversations = async (conversations = []) => {
   });
 };
 
+const HISTORY_MESSAGE_UNAVAILABLE = 'Mensagem não disponível no histórico sincronizado.';
+
+const normalizeMessageForDisplay = (message, messageType = '') => {
+  const value = sanitizeString(message);
+  const type = sanitizeString(messageType).toLowerCase();
+  if (value.toLowerCase() === '[errors]' || (!value && type === 'errors')) {
+    return HISTORY_MESSAGE_UNAVAILABLE;
+  }
+  return value;
+};
+
 const mapConversationResponse = (contact) => {
   const unreadCount = Number(contact?.unreadCount);
   return {
@@ -573,7 +584,7 @@ const mapConversationResponse = (contact) => {
     waId: normalizeWaId(contact?.waId || contact?.id || ''),
     name: contact?.name || '',
     phoneNumberId: contact?.phoneNumberId || '',
-    lastMessage: contact?.lastMessage || '',
+    lastMessage: normalizeMessageForDisplay(contact?.lastMessage),
     lastMessageAt: contact?.lastMessageAt ? contact.lastMessageAt.toISOString() : null,
     lastDirection: contact?.lastDirection || '',
     lastMessageId: contact?.lastMessageId || '',
@@ -588,7 +599,7 @@ const mapConversationFromLog = (entry) => ({
   waId: normalizeWaId(entry?.contact || ''),
   name: '',
   phoneNumberId: entry?.phoneNumberId || '',
-  lastMessage: entry?.lastMessage || '',
+  lastMessage: normalizeMessageForDisplay(entry?.lastMessage, entry?.lastMessageType),
   lastMessageAt: entry?.lastMessageAt ? new Date(entry.lastMessageAt).toISOString() : null,
   lastDirection: entry?.lastDirection || '',
   lastMessageId: entry?.lastMessageId || '',
@@ -633,7 +644,7 @@ const mapMessageResponse = (log) => ({
   id: log?._id ? String(log._id) : undefined,
   direction: log?.direction || '',
   status: log?.status || '',
-  message: log?.message || '',
+  message: normalizeMessageForDisplay(log?.message, log?.messageType),
   origin: log?.origin || '',
   destination: log?.destination || '',
   messageId: log?.messageId || '',

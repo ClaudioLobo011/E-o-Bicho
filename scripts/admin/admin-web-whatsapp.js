@@ -2209,6 +2209,9 @@ document.addEventListener('DOMContentLoaded', () => {
       botEligibleAt: value.botEligibleAt || null,
       automationPausedUntil: value.automationPausedUntil || null,
       automationPauseReason: value.automationPauseReason || '',
+      automationOptIn: value.automationOptIn === true,
+      automationOptInAt: value.automationOptInAt || null,
+      automationOptInBy: value.automationOptInBy || '',
       customerServiceWindowExpiresAt: value.customerServiceWindowExpiresAt || null,
       intent: value.intent || '',
       flow: value.flow || '',
@@ -2318,7 +2321,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const text = elements.automationBadge.querySelector('[data-automation-text]');
       elements.automationBadge.className =
         'inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold';
-      if (state.automationConfig?.enabled && !state.automationConfig?.paused) {
+      if (
+        state.automationConfig?.enabled
+        && !state.automationConfig?.paused
+        && state.automationConfig?.manualChatActivation
+      ) {
+        elements.automationBadge.classList.add('bg-violet-50', 'text-violet-700');
+        if (text) text.textContent = 'IA em modo manual';
+      } else if (state.automationConfig?.enabled && !state.automationConfig?.paused) {
         elements.automationBadge.classList.add('bg-violet-50', 'text-violet-700');
         if (text) text.textContent = 'Robô ativo';
       } else if (state.automationConfig?.paused) {
@@ -2390,13 +2400,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const renderServiceControls = () => {
     const contact = getSelectedContact();
     const conversation = contact?.conversationState;
+    const manualAi = Boolean(state.automationConfig?.manualChatActivation);
     elements.serviceControls?.classList.toggle('hidden', !contact);
     elements.serviceControls?.classList.toggle('flex', Boolean(contact));
     renderContactPreference(contact);
     if (!contact) return;
     const meta = getServiceMeta(conversation?.status);
     if (elements.serviceState) {
-      elements.serviceState.textContent = conversation ? meta.label : 'Sem estado operacional';
+      elements.serviceState.textContent = conversation
+        ? (manualAi && conversation.status === 'PAUSED' ? 'IA pausada' : meta.label)
+        : (manualAi ? 'IA pausada por padrão' : 'Sem estado operacional');
       elements.serviceState.className =
         `inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${meta.classes}`;
     }
@@ -2431,13 +2444,20 @@ document.addEventListener('DOMContentLoaded', () => {
       elements.takeoverButton.classList.toggle('hidden', status === 'HUMAN_ACTIVE');
     }
     if (elements.releaseButton) {
-      const show = ['HUMAN_ACTIVE', 'PAUSED', 'CLOSED'].includes(status);
+      const show = manualAi
+        ? conversation?.automationOptIn !== true
+        : ['HUMAN_ACTIVE', 'PAUSED', 'CLOSED'].includes(status);
+      elements.releaseButton.textContent = manualAi ? 'Ativar IA' : 'Liberar';
       elements.releaseButton.disabled = pending || !show;
       elements.releaseButton.classList.toggle('hidden', !show);
     }
     if (elements.pauseButton) {
-      elements.pauseButton.disabled = pending || status === 'PAUSED' || status === 'CLOSED';
-      elements.pauseButton.classList.toggle('hidden', status === 'PAUSED' || status === 'CLOSED');
+      const show = manualAi
+        ? conversation?.automationOptIn === true
+        : !['PAUSED', 'CLOSED'].includes(status);
+      elements.pauseButton.disabled = pending || !show;
+      elements.pauseButton.textContent = manualAi ? 'Pausar IA' : 'Pausar';
+      elements.pauseButton.classList.toggle('hidden', !show);
     }
     if (elements.closeConversationButton) {
       elements.closeConversationButton.disabled = pending || status === 'CLOSED';
@@ -2460,6 +2480,8 @@ document.addEventListener('DOMContentLoaded', () => {
       } else if (status === 'PAUSED') {
         elements.serviceDeadline.textContent =
           conversation?.automationPauseReason || 'Pausa manual';
+      } else if (manualAi && conversation?.automationOptIn && !deadline) {
+        elements.serviceDeadline.textContent = 'IA ativada · aguardando mensagem do cliente';
       } else {
         elements.serviceDeadline.textContent = '';
       }
@@ -5235,8 +5257,12 @@ document.addEventListener('DOMContentLoaded', () => {
       updateChatHeader();
       const labels = {
         takeover: 'Atendimento assumido pela equipe.',
-        release: 'Conversa liberada para a regra automática.',
-        pause: 'Automação pausada nesta conversa.',
+        release: state.automationConfig?.manualChatActivation
+          ? 'IA ativada somente nesta conversa.'
+          : 'Conversa liberada para a regra automática.',
+        pause: state.automationConfig?.manualChatActivation
+          ? 'IA pausada nesta conversa.'
+          : 'Automação pausada nesta conversa.',
         close: 'Conversa encerrada.',
       };
       notify(labels[action] || 'Atendimento atualizado.', 'success');
@@ -7863,9 +7889,21 @@ document.addEventListener('DOMContentLoaded', () => {
       void runConversationAction('takeover');
     });
     elements.releaseButton?.addEventListener('click', () => {
+      if (
+        state.automationConfig?.manualChatActivation
+        && !window.confirm('Ativar a IA somente nesta conversa?')
+      ) return;
       void runConversationAction('release');
     });
     elements.pauseButton?.addEventListener('click', () => {
+      if (state.automationConfig?.manualChatActivation) {
+        if (!window.confirm('Pausar a IA nesta conversa?')) return;
+        void runConversationAction('pause', {
+          pauseMinutes: 0,
+          reason: 'IA pausada manualmente pela equipe',
+        });
+        return;
+      }
       const rawMinutes = window.prompt(
         'Por quantos minutos deseja pausar a automação nesta conversa? Use 0 para pausar sem prazo.',
         '60'

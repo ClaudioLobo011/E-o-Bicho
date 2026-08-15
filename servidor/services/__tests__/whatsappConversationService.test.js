@@ -264,3 +264,154 @@ test('tomada e liberação manual registram transições sem temporizador em mem
     1
   );
 });
+
+test('modo manual mantém conversas pausadas e ativa o bot somente após liberação', async () => {
+  await WhatsappAutomationConfig.updateOne(
+    { store: storeB._id, phoneNumberId: '209876543210' },
+    { $set: { manualChatActivation: true, aiEnabled: true } }
+  );
+  const firstInbound = await handleInboundMessage({
+    storeId: storeB._id,
+    phoneNumberId: '209876543210',
+    waId: '5511777770001',
+    messageId: 'wamid.manual-paused-1',
+    messageAt: new Date(),
+  });
+  assert.equal(firstInbound.conversation.status, 'PAUSED');
+  assert.equal(firstInbound.conversation.automationOptIn, false);
+  assert.equal(firstInbound.automationEnabled, false);
+  assert.equal(await WhatsappAutomationJob.countDocuments({
+    conversation: firstInbound.conversation._id,
+    status: 'pending',
+  }), 0);
+
+  const released = await transitionConversation({
+    storeId: storeB._id,
+    phoneNumberId: '209876543210',
+    waId: '5511777770001',
+    action: 'release',
+    userId: new mongoose.Types.ObjectId(),
+  });
+  assert.equal(released.status, 'BOT_ACTIVE');
+  assert.equal(released.automationOptIn, true);
+  assert.equal(await WhatsappAutomationJob.countDocuments({
+    conversation: released._id,
+    status: 'pending',
+  }), 1);
+
+  const nextInbound = await handleInboundMessage({
+    storeId: storeB._id,
+    phoneNumberId: '209876543210',
+    waId: '5511777770001',
+    messageId: 'wamid.manual-active-2',
+    messageAt: new Date(Date.now() + 1000),
+  });
+  assert.equal(nextInbound.conversation.status, 'BOT_ACTIVE');
+  assert.equal(nextInbound.automationEnabled, true);
+
+  const paused = await transitionConversation({
+    storeId: storeB._id,
+    phoneNumberId: '209876543210',
+    waId: '5511777770001',
+    action: 'pause',
+    pauseMinutes: 0,
+    reason: 'Pausa do piloto',
+  });
+  assert.equal(paused.status, 'PAUSED');
+  assert.equal(paused.automationOptIn, false);
+
+  const inboundWhilePaused = await handleInboundMessage({
+    storeId: storeB._id,
+    phoneNumberId: '209876543210',
+    waId: '5511777770001',
+    messageId: 'wamid.manual-paused-3',
+    messageAt: new Date(Date.now() + 2000),
+  });
+  assert.equal(inboundWhilePaused.conversation.status, 'PAUSED');
+  assert.equal(inboundWhilePaused.automationEnabled, false);
+  assert.equal(await WhatsappAutomationJob.countDocuments({
+    conversation: released._id,
+    status: 'pending',
+  }), 0);
+});
+
+test('chat liberado usa a IA local com prompt separado antes de enviar ao WhatsApp', async () => {
+  await WhatsappAutomationJob.updateMany(
+    { status: 'pending' },
+    { $set: { status: 'cancelled', cancelledAt: new Date() } }
+  );
+  await WhatsappIntegration.create({
+    store: storeB._id,
+    appId: 'app-id-b',
+    wabaId: 'waba-id-b',
+    accessTokenEncrypted: encryptText('business-token-b'),
+    accessTokenStored: true,
+    onboardingStatus: 'connected',
+    phoneNumbers: [{
+      phoneNumberId: '209876543210',
+      phoneNumber: '5511999999998',
+      displayName: 'Loja B',
+      status: 'Conectado',
+    }],
+  });
+  await WhatsappLog.create({
+    store: storeB._id,
+    phoneNumberId: '209876543210',
+    direction: 'incoming',
+    status: 'Recebido',
+    origin: '5511777770002',
+    destination: '5511999999998',
+    message: 'Vocês fazem banho em cachorro?',
+    messageId: 'wamid.ai-inbound-1',
+    messageType: 'text',
+    actorType: 'customer',
+  });
+  await handleInboundMessage({
+    storeId: storeB._id,
+    phoneNumberId: '209876543210',
+    waId: '5511777770002',
+    messageId: 'wamid.ai-inbound-1',
+    messageAt: new Date(),
+  });
+  const released = await transitionConversation({
+    storeId: storeB._id,
+    phoneNumberId: '209876543210',
+    waId: '5511777770002',
+    action: 'release',
+    userId: new mongoose.Types.ObjectId(),
+  });
+  assert.equal(released.automationOptIn, true);
+
+  const originalFetch = global.fetch;
+  const originalKey = process.env.EOBICHO_LOCAL_AI_API_KEY;
+  process.env.EOBICHO_LOCAL_AI_API_KEY = 'test-local-key';
+  let localAiPayload;
+  global.fetch = async (url, options) => {
+    const parsed = new URL(String(url));
+    if (parsed.hostname === '127.0.0.1') {
+      localAiPayload = JSON.parse(options.body);
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: 'Sim! Trabalhamos com banho. O valor precisa ser confirmado pela equipe conforme o porte.' } }],
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    return new Response(JSON.stringify({ messages: [{ id: 'wamid.ai-reply-1' }] }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+  try {
+    const processed = await runAutomationCycle({ workerId: 'ai-worker', maxJobs: 1 });
+    assert.equal(processed, 1);
+  } finally {
+    global.fetch = originalFetch;
+    if (originalKey === undefined) delete process.env.EOBICHO_LOCAL_AI_API_KEY;
+    else process.env.EOBICHO_LOCAL_AI_API_KEY = originalKey;
+  }
+
+  assert.match(localAiPayload.messages[0].content, /E o Bicho/);
+  assert.match(localAiPayload.messages.at(-1).content, /banho em cachorro/i);
+  const reply = await WhatsappLog.findOne({ messageId: 'wamid.ai-reply-1' }).lean();
+  assert.equal(reply.source, 'automation_ai');
+  assert.equal(reply.meta.aiGenerated, true);
+  assert.match(reply.message, /valor precisa ser confirmado/i);
+});
