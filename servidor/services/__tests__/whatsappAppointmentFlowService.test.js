@@ -37,6 +37,9 @@ let service;
 let professionalA;
 let customerA;
 let petA;
+let groomingCustomer;
+let groomingPets;
+let groomingServices;
 let sequence = 0;
 
 const fullDayStoreSchedule = {
@@ -121,6 +124,40 @@ test.before(async () => {
     categorias: ['veterinario'],
     ativo: true,
   });
+  const groomingGroup = await ServiceGroup.create({
+    nome: 'Estética WhatsApp',
+    tiposPermitidos: ['esteticista'],
+    ativo: true,
+  });
+  groomingServices = await Service.create([{
+    nome: 'Banho',
+    grupo: groomingGroup._id,
+    duracaoMinutos: 30,
+    valor: 60,
+    categorias: ['banho'],
+    ativo: true,
+  }, {
+    nome: 'Banho Felino',
+    grupo: groomingGroup._id,
+    duracaoMinutos: 30,
+    valor: 90,
+    categorias: ['banho'],
+    ativo: true,
+  }, {
+    nome: 'Tosa Felina Maquina',
+    grupo: groomingGroup._id,
+    duracaoMinutos: 30,
+    valor: 150,
+    categorias: ['tosa'],
+    ativo: true,
+  }, {
+    nome: 'Tosa Felina Tesoura',
+    grupo: groomingGroup._id,
+    duracaoMinutos: 30,
+    valor: 180,
+    categorias: ['tosa'],
+    ativo: true,
+  }]);
   [professionalA] = await User.create([{
     tipoConta: 'pessoa_fisica',
     email: 'vet-a@example.test',
@@ -143,6 +180,28 @@ test.before(async () => {
     empresas: [storeB._id],
     empresaPrincipal: storeB._id,
     horarios: fullDayProfessionalSchedule,
+  }, {
+    tipoConta: 'pessoa_fisica',
+    email: 'groomer-a@example.test',
+    senha: 'hash',
+    celular: '5511900000003',
+    nomeCompleto: 'Adriano Teste',
+    role: 'funcionario',
+    grupos: ['esteticista'],
+    empresas: [storeA._id],
+    empresaPrincipal: storeA._id,
+    horarios: fullDayProfessionalSchedule,
+  }, {
+    tipoConta: 'pessoa_fisica',
+    email: 'groomer-b@example.test',
+    senha: 'hash',
+    celular: '5511900000004',
+    nomeCompleto: 'Ingrid Teste',
+    role: 'funcionario',
+    grupos: ['esteticista'],
+    empresas: [storeA._id],
+    empresaPrincipal: storeA._id,
+    horarios: fullDayProfessionalSchedule,
   }]);
   customerA = await User.create({
     tipoConta: 'pessoa_fisica',
@@ -162,6 +221,33 @@ test.before(async () => {
     sexo: 'Macho',
     dataNascimento: new Date('2022-01-01T12:00:00.000Z'),
   });
+  groomingCustomer = await User.create({
+    tipoConta: 'pessoa_fisica',
+    email: 'cliente-banho@example.test',
+    senha: 'hash',
+    celular: '5511999990102',
+    nomeCompleto: 'Claudio Cliente',
+    role: 'cliente',
+    empresas: [storeA._id],
+    empresaPrincipal: storeA._id,
+  });
+  groomingPets = await Pet.create([{
+    owner: groomingCustomer._id,
+    nome: 'Marley',
+    tipo: 'Cachorro',
+    raca: 'Poodle',
+    porte: 'Pequeno',
+    sexo: 'Macho',
+    dataNascimento: new Date('2021-01-01T12:00:00.000Z'),
+  }, {
+    owner: groomingCustomer._id,
+    nome: 'Yummi',
+    tipo: 'Gato',
+    raca: 'Sem raça definida',
+    porte: 'Pequeno',
+    sexo: 'Fêmea',
+    dataNascimento: new Date('2022-06-01T12:00:00.000Z'),
+  }]);
   await WhatsappAutomationConfig.create([{
     store: storeA._id,
     phoneNumberId: '109876543210',
@@ -234,6 +320,124 @@ test('inicia o fluxo com espera humana e confirma um agendamento existente', asy
   assert.equal(await Appointment.countDocuments({
     sourceReference: confirmation.flow.sessionId,
   }), 1);
+});
+
+test('conduz banho e tosa natural para dois pets e confirma profissionais simultaneos', async () => {
+  const waId = groomingCustomer.celular;
+  const first = await receive({
+    waId,
+    message: 'Bom dia, quero agendar um banho.',
+  });
+  assert.equal(first.flow.step, 'select_pet');
+  assert.match(first.reply, /Claudio, quem viria/i);
+
+  const pets = await receive({ waId, message: 'Marley e Yummi' });
+  assert.equal(pets.flow.step, 'collect_pet_services');
+  assert.equal(pets.flow.data.selectedPets.length, 2);
+
+  const services = await receive({
+    waId,
+    message: 'Hoje seria banho apenas para o Marley e uma tosa na maquina para a Yummi',
+  });
+  assert.equal(services.flow.step, 'collect_group_preference');
+  assert.deepEqual(
+    services.flow.data.petServiceItems.map((item) => item.serviceName).sort(),
+    ['Banho', 'Tosa Felina Maquina'],
+  );
+
+  const together = await receive({
+    waId,
+    message: 'Os dois podem estar no mesmo horario sem problemas',
+  });
+  assert.equal(together.flow.step, 'collect_date');
+
+  const requested = futureDateMessage(2, '14:00');
+  const offered = await receive({ waId, message: requested.message });
+  assert.equal(offered.flow.step, 'select_group_slot');
+  assert.ok(offered.flow.data.groupOptions.length > 0);
+  const offeredOption = offered.flow.data.groupOptions[0];
+  assert.equal(offeredOption.assignments.length, 2);
+  assert.equal(new Set(offeredOption.assignments.map((item) => String(item.professional))).size, 2);
+  assert.equal(new Set(offeredOption.assignments.map((item) => item.time)).size, 1);
+
+  const firstOfferedMinutes = Number(offeredOption.time.slice(0, 2)) * 60
+    + Number(offeredOption.time.slice(3, 5));
+  const later = await receive({ waId, message: 'As 14 fica cedo, teria mais tarde?' });
+  assert.equal(later.flow.step, 'select_group_slot');
+  const laterMinutes = Number(later.flow.data.groupOptions[0].time.slice(0, 2)) * 60
+    + Number(later.flow.data.groupOptions[0].time.slice(3, 5));
+  assert.ok(laterMinutes > firstOfferedMinutes);
+
+  const slot = await receive({ waId, message: '1' });
+  assert.equal(slot.flow.step, 'select_professional_preference');
+  const preference = await receive({ waId, message: 'Nao tenho preferencia' });
+  assert.equal(preference.flow.step, 'confirm_group');
+  const confirmed = await receive({ waId, message: 'Sim pode marcar' });
+  assert.equal(confirmed.completed, true);
+  assert.equal(confirmed.appointments.length, 2);
+
+  const stored = await Appointment.find({
+    _id: { $in: confirmed.appointments.map((appointment) => appointment._id) },
+  }).sort({ scheduledAt: 1 });
+  assert.equal(stored.length, 2);
+  assert.equal(new Set(stored.map((appointment) => String(appointment.pet))).size, 2);
+  assert.equal(new Set(stored.map((appointment) => String(appointment.profissional))).size, 2);
+  assert.equal(new Set(stored.map((appointment) => appointment.scheduledAt.toISOString())).size, 1);
+  assert.deepEqual(
+    stored.map((appointment) => String(appointment.servico)).sort(),
+    groomingServices
+      .filter((entry) => ['Banho', 'Tosa Felina Maquina'].includes(entry.nome))
+      .map((entry) => String(entry._id))
+      .sort(),
+  );
+});
+
+test('entende nomes digitados errado, detalha tosa e separa cao e gato sem sobreposicao', async () => {
+  const waId = groomingCustomer.celular;
+  const first = await receive({
+    waId,
+    message: 'Quero marcar banho e tosa para meus pets',
+  });
+  assert.equal(first.flow.step, 'select_pet');
+
+  const pets = await receive({ waId, message: 'Marlei e Yuumi' });
+  assert.equal(pets.flow.step, 'collect_pet_services');
+  assert.equal(pets.flow.data.selectedPets.length, 2);
+
+  const services = await receive({
+    waId,
+    message: 'Banho para o Marlei e tosa para a Yuumi',
+  });
+  assert.equal(services.flow.step, 'select_pet_service_detail');
+  assert.equal(services.flow.data.pendingServicePet.name, 'Yummi');
+  assert.equal(services.flow.data.pendingServiceOptions.length, 2);
+
+  const detail = await receive({ waId, message: 'Na tesoura' });
+  assert.equal(detail.flow.step, 'collect_group_preference');
+  assert.ok(detail.flow.data.petServiceItems.some((item) => item.serviceName === 'Tosa Felina Tesoura'));
+
+  const separate = await receive({
+    waId,
+    message: 'Prefiro que o gatinho fique sozinho',
+  });
+  assert.equal(separate.flow.step, 'collect_date');
+
+  const requested = futureDateMessage(4, '14:00');
+  const offered = await receive({ waId, message: requested.message });
+  assert.equal(offered.flow.step, 'select_group_slot');
+  const assignments = offered.flow.data.groupOptions[0].assignments;
+  assert.equal(assignments.length, 2);
+  assert.equal(new Set(assignments.map((item) => item.time)).size, 2);
+
+  const cancelled = await receive({ waId, message: 'cancelar' });
+  assert.equal(cancelled.cancelled, true);
+  await WhatsappAutomationJob.updateMany({
+    type: 'appointment_flow_reply',
+    status: 'pending',
+    'payload.flowId': String(cancelled.flow._id),
+  }, {
+    $set: { status: 'completed', completedAt: new Date() },
+  });
 });
 
 test('cadastra novo cliente e pet somente ao confirmar', async () => {
@@ -409,7 +613,7 @@ test('worker envia a confirmação e fecha a conversa sem usar resposta humana',
   });
   assert.ok(log);
   assert.equal(log.source, 'automation_appointment');
-  assert.match(log.message, /Agendamento confirmado/);
+  assert.match(log.message, /Agendamento(?:s)? (?:confirmado|concluídos)/);
   const conversation = await WhatsappConversation.findById(
     pendingConfirmation.conversation
   );

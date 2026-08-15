@@ -18,6 +18,8 @@ const {
 const {
   addDays,
   createAppointmentFromFlow,
+  findAvailableGroupSlots,
+  findAvailableSeparateSlots,
   findAvailableSlots,
   findCustomerByWhatsapp,
   findServicesForIntent,
@@ -45,6 +47,9 @@ const STEP_LABELS = Object.freeze({
   select_service: 'escolher serviço',
   collect_customer_name: 'informar nome do cliente',
   select_pet: 'escolher pet',
+  collect_pet_services: 'definir serviços de cada pet',
+  select_pet_service_detail: 'detalhar serviço do pet',
+  collect_group_preference: 'definir se os pets podem ficar juntos',
   collect_pet_name: 'informar nome do pet',
   collect_pet_species: 'informar espécie do pet',
   collect_pet_breed: 'informar raça do pet',
@@ -52,7 +57,10 @@ const STEP_LABELS = Object.freeze({
   collect_pet_birthdate: 'informar idade do pet',
   collect_date: 'escolher data',
   select_slot: 'escolher horário',
+  select_group_slot: 'escolher horário dos pets',
+  select_professional_preference: 'escolher preferência de profissional',
   confirm: 'confirmar agendamento',
+  confirm_group: 'confirmar agendamentos',
   booking: 'gravando agendamento',
   completed: 'agendamento confirmado',
   cancelled: 'agendamento interrompido',
@@ -81,6 +89,8 @@ const mapFlow = (flow) => {
     selectedDate: selected?.date || '',
     selectedTime: selected?.time || '',
     professionalName: selected?.professionalName || '',
+    pets: Array.isArray(data.selectedPets) ? data.selectedPets : [],
+    appointmentIds: Array.isArray(data.appointmentIds) ? data.appointmentIds : [],
     expiresAt: flow.expiresAt || null,
     updatedAt: flow.updatedAt || null,
   };
@@ -208,6 +218,134 @@ const listOptions = (items, mapper) => items
   .map((item, index) => `${index + 1}. ${mapper(item)}`)
   .join('\n');
 
+const selectedPets = (flow) => {
+  const data = flow.data || {};
+  if (Array.isArray(data.selectedPets) && data.selectedPets.length) return data.selectedPets;
+  if (flow.pet && data.petName) {
+    return [{
+      id: String(flow.pet),
+      name: data.petName,
+      species: data.petSpecies || '',
+      breed: data.petBreed || '',
+      sex: data.petSex || '',
+      birthDate: data.petBirthDate || null,
+      size: data.petSize || '',
+    }];
+  }
+  return [];
+};
+
+const petDisplay = (pet) => `${pet.name}${pet.species ? ` (${pet.species})` : ''}`;
+
+const hasMixedDogAndCat = (pets) => {
+  const species = pets.map((pet) => normalizeText(pet.species));
+  return species.some((value) => /(cao|cachorr)/.test(value))
+    && species.some((value) => /(gato|felin)/.test(value));
+};
+
+const shortEditSimilarity = (left, right) => {
+  const a = normalizeText(left);
+  const b = normalizeText(right);
+  if (!a || !b) return 0;
+  const previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let row = 1; row <= a.length; row += 1) {
+    const current = [row];
+    for (let column = 1; column <= b.length; column += 1) {
+      current[column] = Math.min(
+        previous[column] + 1,
+        current[column - 1] + 1,
+        previous[column - 1] + (a[row - 1] === b[column - 1] ? 0 : 1),
+      );
+    }
+    previous.splice(0, previous.length, ...current);
+  }
+  return 1 - (previous[b.length] / Math.max(a.length, b.length));
+};
+
+const parseNamedPets = (message, pets) => {
+  const normalized = normalizeText(message);
+  return pets.filter((pet) => {
+    const name = normalizeText(pet.name);
+    if (!name) return false;
+    if (normalized.includes(name)) return true;
+    return normalized.split(/\s+/).some((token) => (
+      token.length >= 3
+      && name.length >= 3
+      && (
+        token.startsWith(name)
+        || name.startsWith(token)
+        || shortEditSimilarity(token, name) >= 0.72
+      )
+    ));
+  });
+};
+
+const inferRequestedServiceKind = (message) => {
+  const normalized = normalizeText(message);
+  const hasBath = /\bbanho\b/.test(normalized);
+  const hasGrooming = /\btosa\b|\btosar\b/.test(normalized);
+  if (hasBath && hasGrooming) return 'banho_tosa';
+  if (hasGrooming) return 'tosa';
+  if (hasBath) return 'banho';
+  return '';
+};
+
+const inferPetServiceKind = (message, pet, allPets) => {
+  const normalized = normalizeText(message);
+  const name = normalizeText(pet.name);
+  const alias = normalized.split(/\s+/).find((token) => (
+    token === name || shortEditSimilarity(token, name) >= 0.72
+  )) || name;
+  const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const before = new RegExp(`(banho(?:\\s+e\\s+tosa)?|tosa)[^,.!?]{0,55}\\b${escaped}\\b`);
+  const after = new RegExp(`\\b${escaped}\\b[^,.!?]{0,55}(banho(?:\\s+e\\s+tosa)?|tosa)`);
+  const match = normalized.match(before) || normalized.match(after);
+  if (match) return inferRequestedServiceKind(match[0]);
+  const globalKind = inferRequestedServiceKind(message);
+  const mentioned = parseNamedPets(message, allPets);
+  return mentioned.length <= 1 ? globalKind : '';
+};
+
+const serviceMatchesPet = (service, pet) => {
+  const name = normalizeText(service.name);
+  const species = normalizeText(pet.species);
+  const feline = /(gato|felin)/.test(species);
+  if (feline) return /felin/.test(name) || !/(canin|cao|caes|cachorr)/.test(name);
+  return !/felin/.test(name);
+};
+
+const resolvePetService = ({ services, pet, kind, message }) => {
+  const normalized = normalizeText(message);
+  let candidates = services.filter((service) => serviceMatchesPet(service, pet));
+  if (kind === 'banho') {
+    candidates = candidates.filter((service) => (
+      service.categories.includes('banho') && /\bbanho\b/.test(normalizeText(service.name))
+    ));
+  } else if (kind === 'tosa' || kind === 'banho_tosa') {
+    candidates = candidates.filter((service) => (
+      service.categories.some((category) => ['tosa', 'banho_tosa'].includes(category))
+      && /\btosa\b/.test(normalizeText(service.name))
+    ));
+  } else {
+    return { selected: null, candidates: [] };
+  }
+  const explicit = candidates.find((service) => {
+    const words = normalizeText(service.name).split(/\s+/).filter((word) => (
+      word.length >= 4 && !['banho', 'tosa', 'felino', 'felina', 'canino', 'canina', 'completa', 'completo'].includes(word)
+    ));
+    return words.length && words.every((word) => normalized.includes(word));
+  });
+  if (explicit) return { selected: explicit, candidates };
+  if (kind === 'banho') {
+    const feline = /(gato|felin)/.test(normalizeText(pet.species));
+    const defaultBath = candidates.find((service) => (
+      feline ? normalizeText(service.name) === 'banho felino' : normalizeText(service.name) === 'banho'
+    ));
+    if (defaultBath) return { selected: defaultBath, candidates };
+  }
+  return { selected: candidates.length === 1 ? candidates[0] : null, candidates };
+};
+
 const promptForFlow = (flow) => {
   const data = flow.data || {};
   if (flow.step === 'select_intent') {
@@ -222,9 +360,52 @@ const promptForFlow = (flow) => {
   }
   if (flow.step === 'select_pet') {
     const pets = Array.isArray(data.petOptions) ? data.petOptions : [];
-    return `Para qual pet será o atendimento?\n${listOptions(pets, (item) => (
+    const firstName = clean(data.customerName).split(/\s+/)[0];
+    const greeting = firstName ? `${firstName}, quem viria para o atendimento?` : 'Quem viria para o atendimento?';
+    return `${greeting}\n${listOptions(pets, (item) => (
       `${item.name}${item.breed ? ` — ${item.breed}` : ''}`
-    ))}\n${pets.length + 1}. Cadastrar outro pet\nResponda com o número da opção.`;
+    ))}\n${pets.length + 1}. Cadastrar outro pet\nVocê pode responder com o nome de um ou mais pets.`;
+  }
+  if (flow.step === 'collect_pet_services') {
+    const pets = selectedPets(flow);
+    return `Perfeito. Qual serviço cada pet precisa?\n${pets.map((pet) => `- ${petDisplay(pet)}: banho, tosa ou banho e tosa?`).join('\n')}`;
+  }
+  if (flow.step === 'select_pet_service_detail') {
+    const pending = data.pendingServicePet || {};
+    const options = Array.isArray(data.pendingServiceOptions) ? data.pendingServiceOptions : [];
+    return `Para ${pending.name || 'o pet'}, qual tipo de serviço você prefere?\n${listOptions(options, (item) => item.name)}\nResponda com o número ou com o nome do serviço.`;
+  }
+  if (flow.step === 'collect_group_preference') {
+    return 'Vejo que há um cãozinho e um gatinho. Eles podem permanecer no mesmo horário sem problemas ou você prefere que o gatinho fique sozinho?';
+  }
+  if (flow.step === 'select_group_slot') {
+    const options = Array.isArray(data.groupOptions) ? data.groupOptions : [];
+    if (data.petsMayStayTogether === false) {
+      return `Encontrei estas combinações em horários separados:\n${listOptions(options, (option) => (
+        option.assignments.map((item) => `${item.petName} em ${formatDate(item.date)} às ${item.time}`).join(' | ')
+      ))}\nVocê pode responder com o número da combinação desejada.`;
+    }
+    return `Encontrei estes horários para os pets juntos:\n${listOptions(options, (option) => {
+      const names = option.assignments.map((item) => item.professionalName).join(' e ');
+      return `${formatDate(option.date)} às ${option.time} — ${names}`;
+    })}\nVocê pode responder com o número ou com o horário desejado.`;
+  }
+  if (flow.step === 'select_professional_preference') {
+    const option = data.selectedGroupOption || {};
+    const names = [...new Set((option.assignments || []).map((item) => item.professionalName))];
+    return `Para esse horário tenho ${names.join(' e ')}. Você tem preferência de profissional ou pode ser sem preferência?`;
+  }
+  if (flow.step === 'confirm_group') {
+    const option = data.selectedGroupOption || {};
+    const noPreference = data.professionalPreference === 'Sem preferência';
+    return [
+      'Confirme os dados dos agendamentos:',
+      ...(option.assignments || []).map((item) => (
+        `${item.petName}: ${item.serviceName} — ${formatDate(item.date || option.date)} às ${item.time || option.time} — ${noPreference ? 'Sem preferência' : item.professionalName}`
+      )),
+      '',
+      'Responda SIM para confirmar ou NÃO para cancelar.',
+    ].join('\n');
   }
   if (flow.step === 'collect_pet_name') {
     return 'Qual é o nome do pet?';
@@ -276,6 +457,25 @@ const touchFlow = (flow, messageId, messageAt) => {
 
 const chooseNextIdentityStep = (flow) => {
   const data = flow.data || {};
+  if (flow.intent === 'grooming_appointment' && flow.customer) {
+    const pets = selectedPets(flow);
+    if (!pets.length && Array.isArray(data.petOptions) && data.petOptions.length) {
+      flow.step = 'select_pet';
+      return;
+    }
+    if (pets.length && !Array.isArray(data.petServiceItems)) {
+      flow.step = 'collect_pet_services';
+      return;
+    }
+    if (Array.isArray(data.petServiceItems) && data.petServiceItems.length) {
+      if (hasMixedDogAndCat(pets) && typeof data.petsMayStayTogether !== 'boolean') {
+        flow.step = 'collect_group_preference';
+        return;
+      }
+      flow.step = 'collect_date';
+      return;
+    }
+  }
   if (!flow.service) {
     flow.step = 'select_service';
     return;
@@ -339,6 +539,15 @@ const loadCustomerContext = async (flow) => {
     flow.data.petSex = pets[0].sexo;
     flow.data.petBirthDate = pets[0].dataNascimento;
     flow.data.petOptions = [];
+    flow.data.selectedPets = [{
+      id: String(pets[0]._id),
+      name: pets[0].nome,
+      species: pets[0].tipo,
+      breed: pets[0].raca,
+      size: pets[0].porte || '',
+      sex: pets[0].sexo,
+      birthDate: pets[0].dataNascimento,
+    }];
   } else if (pets.length > 1) {
     flow.data.petOptions = pets.slice(0, 8).map((pet) => ({
       id: String(pet._id),
@@ -347,6 +556,7 @@ const loadCustomerContext = async (flow) => {
       breed: pet.raca,
       sex: pet.sexo,
       birthDate: pet.dataNascimento,
+      size: pet.porte || '',
     }));
   }
 };
@@ -369,10 +579,11 @@ const loadServices = async (flow, message) => {
   const selected = exact || (services.length === 1 ? services[0] : null);
   flow.data = {
     ...(flow.data || {}),
-    serviceOptions: services.slice(0, 8).map((service) => ({
+    serviceOptions: services.slice(0, 30).map((service) => ({
       id: String(service._id),
       name: service.nome,
       duration: Number(service.duracaoMinutos) || 30,
+      categories: Array.isArray(service.categorias) ? service.categorias : [],
     })),
   };
   if (selected) {
@@ -401,7 +612,14 @@ const createFlow = async ({
     status: 'collecting',
     intent,
     step: intent === 'appointment_unspecified' ? 'select_intent' : 'select_service',
-    data: {},
+    data: {
+      initialServiceKind: intent === 'grooming_appointment'
+        ? inferRequestedServiceKind(message)
+        : '',
+      initialRequestedDate: intent === 'grooming_appointment'
+        ? parseRequestedDate(message, { now: messageAt })
+        : null,
+    },
     lastInboundMessageId: clean(messageId),
     lastInboundAt: messageAt,
     expiresAt: new Date(messageAt.getTime() + FLOW_TTL_MS),
@@ -720,6 +938,143 @@ const cancelFlow = async ({
   return { handled: true, flow, reply, cancelled: true };
 };
 
+const assignGroomingServices = (flow, message, existingItems = []) => {
+  const pets = selectedPets(flow);
+  const services = Array.isArray(flow.data?.serviceOptions) ? flow.data.serviceOptions : [];
+  const byPetId = new Map(existingItems.map((item) => [String(item.petId), item]));
+  for (const pet of pets) {
+    if (byPetId.has(String(pet.id))) continue;
+    const kind = inferPetServiceKind(message, pet, pets)
+      || (pets.length === 1 ? clean(flow.data?.initialServiceKind) : '');
+    const resolved = resolvePetService({ services, pet, kind, message });
+    if (!resolved.selected) {
+      flow.data.pendingServicePet = pet;
+      flow.data.pendingServiceKind = kind;
+      flow.data.pendingServiceOptions = resolved.candidates.slice(0, 8);
+      flow.data.draftPetServiceItems = [...byPetId.values()];
+      flow.step = resolved.candidates.length
+        ? 'select_pet_service_detail'
+        : 'collect_pet_services';
+      return false;
+    }
+    byPetId.set(String(pet.id), {
+      petId: String(pet.id),
+      petName: pet.name,
+      petSpecies: pet.species,
+      serviceId: resolved.selected.id,
+      serviceName: resolved.selected.name,
+      serviceDuration: resolved.selected.duration,
+      serviceKind: kind,
+    });
+  }
+  flow.data.petServiceItems = [...byPetId.values()];
+  flow.data.pendingServicePet = null;
+  flow.data.pendingServiceKind = '';
+  flow.data.pendingServiceOptions = [];
+  flow.data.draftPetServiceItems = [];
+  return flow.data.petServiceItems.length === pets.length;
+};
+
+const prepareGroomingGroupOptions = async ({
+  flow,
+  requested,
+  config,
+  now,
+  strictlyAfterMinutes,
+}) => {
+  const finder = flow.data?.petsMayStayTogether === false
+    ? findAvailableSeparateSlots
+    : findAvailableGroupSlots;
+  const options = await finder({
+    storeId: flow.store,
+    items: flow.data?.petServiceItems || [],
+    intent: flow.intent,
+    startDate: requested.date,
+    preferredMinutes: requested.preferredMinutes,
+    ...(flow.data?.petsMayStayTogether === false ? {} : { strictlyAfterMinutes }),
+    config,
+    now,
+    excludeFlowId: flow._id,
+  });
+  flow.data.preferredDate = requested.date;
+  flow.data.preferredMinutes = requested.preferredMinutes;
+  flow.data.groupOptions = options;
+  flow.data.selectedGroupOption = null;
+  flow.step = options.length ? 'select_group_slot' : 'collect_date';
+  return options;
+};
+
+const parseGroupOption = (message, options, { timezone, now } = {}) => {
+  const index = parseSelection(message, options.length);
+  if (index !== null) return options[index];
+  const requested = parseRequestedDate(message, { timezone, now });
+  const normalized = normalizeText(message);
+  const timeOnly = normalized.match(/\b(\d{1,2})(?::|h)(\d{2})?\b/);
+  const wantedMinutes = requested?.preferredMinutes ?? (timeOnly
+    ? (Number(timeOnly[1]) * 60) + Number(timeOnly[2] || 0)
+    : null);
+  return options.find((option) => {
+    if (requested?.date && option.date !== requested.date) return false;
+    if (wantedMinutes !== null && parseMinutes(option.time) !== wantedMinutes) return false;
+    return requested?.date || wantedMinutes !== null;
+  }) || null;
+};
+
+const buildGroupConfirmation = ({ flow, appointments }) => {
+  const option = flow.data?.selectedGroupOption || {};
+  const preference = flow.data?.professionalPreference || 'Sem preferência';
+  return [
+    'Agendamentos concluídos com sucesso! ✅',
+    ...(option.assignments || []).map((item) => (
+      `${item.petName}: ${item.serviceName} — ${formatDate(item.date || option.date)} às ${item.time || option.time} — ${preference === 'Sem preferência' ? preference : item.professionalName}`
+    )),
+    '',
+    'Algo mais em que eu possa ajudar?',
+    appointments.length ? `Códigos: ${appointments.map((appointment) => String(appointment._id).slice(-8).toUpperCase()).join(', ')}` : '',
+  ].filter(Boolean).join('\n');
+};
+
+const createGroupAppointments = async ({ flow, config }) => {
+  const option = flow.data?.selectedGroupOption || {};
+  const assignments = Array.isArray(option.assignments) ? option.assignments : [];
+  if (!assignments.length) throw new Error('Nenhum horário foi selecionado para os pets.');
+  const created = [];
+  try {
+    for (let index = 0; index < assignments.length; index += 1) {
+      const assignment = assignments[index];
+      const childFlow = {
+        ...flow.toObject(),
+        _id: flow._id,
+        sessionId: `${flow.sessionId}:${index + 1}`,
+        pet: assignment.petId,
+        service: assignment.serviceId,
+        selectedOption: assignment,
+      };
+      const result = await createAppointmentFromFlow({
+        flow: childFlow,
+        customerId: flow.customer,
+        petId: assignment.petId,
+        serviceId: assignment.serviceId,
+        option: assignment,
+        intent: flow.intent,
+        config,
+      });
+      created.push({ appointment: result.appointment, replayed: result.replayed });
+    }
+    return created;
+  } catch (error) {
+    const newAppointments = created.filter((entry) => !entry.replayed).map((entry) => entry.appointment._id);
+    if (newAppointments.length) {
+      await mongoose.model('Appointment').deleteMany({ _id: { $in: newAppointments } });
+    }
+    await mongoose.model('WhatsappAppointmentSlotLock').deleteMany({
+      flow: flow._id,
+      appointment: { $in: newAppointments },
+    });
+    throw error;
+  }
+};
+
 const advanceFlow = async ({ flow, message, messageId, messageAt, config, io }) => {
   const text = clean(message);
   const normalized = normalizeText(text);
@@ -842,7 +1197,8 @@ const advanceFlow = async ({ flow, message, messageId, messageAt, config, io }) 
   } else if (flow.step === 'select_pet') {
     const pets = Array.isArray(flow.data?.petOptions) ? flow.data.petOptions : [];
     const selection = parseSelection(text, pets.length + 1);
-    if (selection === null) {
+    const named = parseNamedPets(text, pets);
+    if (selection === null && !named.length) {
       touchFlow(flow, messageId, messageAt);
       await flow.save();
       return {
@@ -861,14 +1217,125 @@ const advanceFlow = async ({ flow, message, messageId, messageAt, config, io }) 
       flow.data.petOptions = [];
       flow.step = 'collect_pet_name';
     } else {
-      const pet = pets[selection];
-      flow.pet = pet.id;
-      flow.data.petName = pet.name;
-      flow.data.petSpecies = pet.species;
-      flow.data.petBreed = pet.breed;
-      flow.data.petSex = pet.sex;
-      flow.data.petBirthDate = pet.birthDate;
-      flow.step = 'collect_date';
+      const chosen = named.length ? named : [pets[selection]];
+      flow.data.selectedPets = chosen.map((pet) => ({ ...pet }));
+      flow.pet = chosen.length === 1 ? chosen[0].id : null;
+      if (chosen.length === 1) {
+        const [pet] = chosen;
+        flow.data.petName = pet.name;
+        flow.data.petSpecies = pet.species;
+        flow.data.petBreed = pet.breed;
+        flow.data.petSex = pet.sex;
+        flow.data.petBirthDate = pet.birthDate;
+        flow.data.petSize = pet.size || '';
+      }
+      flow.step = flow.intent === 'grooming_appointment'
+        ? 'collect_pet_services'
+        : 'collect_date';
+    }
+  } else if (flow.step === 'collect_pet_services') {
+    const assigned = assignGroomingServices(
+      flow,
+      text,
+      Array.isArray(flow.data?.draftPetServiceItems) ? flow.data.draftPetServiceItems : [],
+    );
+    if (assigned) {
+      if (hasMixedDogAndCat(selectedPets(flow))) {
+        flow.step = 'collect_group_preference';
+      } else {
+        const initialDate = flow.data?.initialRequestedDate;
+        if (initialDate?.date) {
+          const options = await prepareGroomingGroupOptions({
+            flow,
+            requested: initialDate,
+            config,
+            now: messageAt,
+          });
+          if (!options.length) flow.step = 'collect_date';
+        } else {
+          flow.step = 'collect_date';
+        }
+      }
+    }
+  } else if (flow.step === 'select_pet_service_detail') {
+    const options = Array.isArray(flow.data?.pendingServiceOptions)
+      ? flow.data.pendingServiceOptions
+      : [];
+    const selection = parseSelection(text, options.length);
+    const matchingByName = options.filter((service) => {
+      const name = normalizeText(service.name);
+      if (name.length >= 4 && normalized.includes(name)) return true;
+      const distinguishingWords = name.split(/\s+/).filter((word) => (
+        word.length >= 4
+        && !['banho', 'tosa', 'felino', 'felina', 'canino', 'canina', 'completa', 'completo'].includes(word)
+      ));
+      return distinguishingWords.some((word) => normalized.includes(word));
+    });
+    const byName = matchingByName.length === 1 ? matchingByName[0] : null;
+    const selected = selection === null ? byName : options[selection];
+    if (!selected) {
+      touchFlow(flow, messageId, messageAt);
+      await flow.save();
+      return { handled: true, flow, reply: `Não reconheci o serviço.\n${promptForFlow(flow)}` };
+    }
+    const pendingPet = flow.data.pendingServicePet;
+    const draft = Array.isArray(flow.data.draftPetServiceItems)
+      ? flow.data.draftPetServiceItems
+      : [];
+    draft.push({
+      petId: String(pendingPet.id),
+      petName: pendingPet.name,
+      petSpecies: pendingPet.species,
+      serviceId: selected.id,
+      serviceName: selected.name,
+      serviceDuration: selected.duration,
+      serviceKind: flow.data.pendingServiceKind || inferRequestedServiceKind(selected.name),
+    });
+    flow.data.draftPetServiceItems = draft;
+    flow.data.pendingServicePet = null;
+    flow.data.pendingServiceOptions = [];
+    if (draft.length === selectedPets(flow).length) {
+      flow.data.petServiceItems = draft;
+      flow.data.draftPetServiceItems = [];
+      flow.step = hasMixedDogAndCat(selectedPets(flow))
+        ? 'collect_group_preference'
+        : 'collect_date';
+    } else {
+      flow.step = 'collect_pet_services';
+    }
+  } else if (flow.step === 'collect_group_preference') {
+    if (/(sozinh|separad|nao.*junt)/.test(normalized)) {
+      flow.data.petsMayStayTogether = false;
+      const initialDate = flow.data?.initialRequestedDate;
+      if (initialDate?.date) {
+        const options = await prepareGroomingGroupOptions({
+          flow,
+          requested: initialDate,
+          config,
+          now: messageAt,
+        });
+        if (!options.length) flow.step = 'collect_date';
+      } else {
+        flow.step = 'collect_date';
+      }
+    } else if (/(junt|mesmo horario|sem problema|podem ficar|pode ficar)/.test(normalized)) {
+      flow.data.petsMayStayTogether = true;
+      const initialDate = flow.data?.initialRequestedDate;
+      if (initialDate?.date) {
+        const options = await prepareGroomingGroupOptions({
+          flow,
+          requested: initialDate,
+          config,
+          now: messageAt,
+        });
+        if (!options.length) flow.step = 'collect_date';
+      } else {
+        flow.step = 'collect_date';
+      }
+    } else {
+      touchFlow(flow, messageId, messageAt);
+      await flow.save();
+      return { handled: true, flow, reply: promptForFlow(flow) };
     }
   } else if (flow.step === 'collect_pet_name') {
     if (text.length < 2) {
@@ -930,7 +1397,28 @@ const advanceFlow = async ({ flow, message, messageId, messageAt, config, io }) 
         reply: 'Não consegui identificar a data. Envie no formato 25/07, “amanhã” ou “segunda às 14h”.',
       };
     }
-    const options = await findAvailableSlots({
+    if (
+      flow.intent === 'grooming_appointment'
+      && Array.isArray(flow.data?.petServiceItems)
+      && flow.data.petServiceItems.length
+    ) {
+      const options = await prepareGroomingGroupOptions({
+        flow,
+        requested,
+        config,
+        now: messageAt,
+      });
+      if (!options.length) {
+        touchFlow(flow, messageId, messageAt);
+        await flow.save();
+        return {
+          handled: true,
+          flow,
+          reply: `Não encontrei uma combinação disponível a partir de ${formatDate(requested.date)}. Informe outra data para eu consultar.`,
+        };
+      }
+    } else {
+      const options = await findAvailableSlots({
       storeId: flow.store,
       serviceId: flow.service,
       intent: flow.intent,
@@ -940,21 +1428,22 @@ const advanceFlow = async ({ flow, message, messageId, messageAt, config, io }) 
       now: messageAt,
       excludeFlowId: flow._id,
     });
-    flow.data.preferredDate = requested.date;
-    flow.data.preferredMinutes = requested.preferredMinutes;
-    flow.options = options;
-    flow.selectedOption = null;
-    if (!options.length) {
-      flow.step = 'collect_date';
-      touchFlow(flow, messageId, messageAt);
-      await flow.save();
-      return {
-        handled: true,
-        flow,
-        reply: `Não encontrei horário disponível a partir de ${formatDate(requested.date)}. Informe outra data para eu consultar.`,
-      };
+      flow.data.preferredDate = requested.date;
+      flow.data.preferredMinutes = requested.preferredMinutes;
+      flow.options = options;
+      flow.selectedOption = null;
+      if (!options.length) {
+        flow.step = 'collect_date';
+        touchFlow(flow, messageId, messageAt);
+        await flow.save();
+        return {
+          handled: true,
+          flow,
+          reply: `Não encontrei horário disponível a partir de ${formatDate(requested.date)}. Informe outra data para eu consultar.`,
+        };
+      }
+      flow.step = 'select_slot';
     }
-    flow.step = 'select_slot';
   } else if (flow.step === 'select_slot') {
     const options = Array.isArray(flow.options) ? flow.options : [];
     const selection = parseSelection(text, options.length);
@@ -970,6 +1459,177 @@ const advanceFlow = async ({ flow, message, messageId, messageAt, config, io }) 
     flow.selectedOption = options[selection];
     flow.status = 'awaiting_confirmation';
     flow.step = 'confirm';
+  } else if (flow.step === 'select_group_slot') {
+    const options = Array.isArray(flow.data?.groupOptions) ? flow.data.groupOptions : [];
+    if (/(mais tarde|depois|horario posterior)/.test(normalized)) {
+      const baseline = Number.isFinite(Number(flow.data?.preferredMinutes))
+        ? Number(flow.data.preferredMinutes)
+        : parseMinutes(options[0]?.time);
+      const requested = {
+        date: flow.data?.preferredDate || options[0]?.date,
+        preferredMinutes: baseline === null ? null : baseline + Number(config.appointmentSlotIntervalMinutes || 30),
+      };
+      const later = await prepareGroomingGroupOptions({
+        flow,
+        requested,
+        config,
+        now: messageAt,
+        strictlyAfterMinutes: baseline,
+      });
+      if (!later.length) {
+        flow.step = 'collect_date';
+        touchFlow(flow, messageId, messageAt);
+        await flow.save();
+        return { handled: true, flow, reply: 'Não encontrei um horário posterior com essa combinação. Qual outra data você prefere?' };
+      }
+    } else {
+      if (/(junt|mesmo horario)/.test(normalized) && flow.data?.petsMayStayTogether === false) {
+        flow.data.petsMayStayTogether = true;
+        const requested = {
+          date: flow.data?.preferredDate || options[0]?.date,
+          preferredMinutes: flow.data?.preferredMinutes ?? null,
+        };
+        const together = await prepareGroomingGroupOptions({
+          flow,
+          requested,
+          config,
+          now: messageAt,
+        });
+        if (!together.length) {
+          flow.step = 'collect_date';
+          touchFlow(flow, messageId, messageAt);
+          await flow.save();
+          return { handled: true, flow, reply: 'Não encontrei os dois juntos nessa data. Qual outra data você prefere?' };
+        }
+      } else {
+        const selected = parseGroupOption(text, options, {
+          timezone: config.timezone,
+          now: messageAt,
+        });
+        if (!selected) {
+          touchFlow(flow, messageId, messageAt);
+          await flow.save();
+          return { handled: true, flow, reply: `Não reconheci o horário.\n${promptForFlow(flow)}` };
+        }
+        flow.data.selectedGroupOption = selected;
+        flow.step = 'select_professional_preference';
+      }
+    }
+  } else if (flow.step === 'select_professional_preference') {
+    const option = flow.data?.selectedGroupOption || {};
+    const assignments = Array.isArray(option.assignments) ? option.assignments : [];
+    const noPreference = /(sem prefer|nao tenho prefer|qualquer|tanto faz|pode ser)/.test(normalized);
+    const named = assignments.filter((assignment) => {
+      const fullName = normalizeText(assignment.professionalName);
+      return fullName.split(/\s+/).some((part) => part.length >= 4 && normalized.includes(part));
+    });
+    if (!noPreference && !named.length) {
+      touchFlow(flow, messageId, messageAt);
+      await flow.save();
+      return { handled: true, flow, reply: promptForFlow(flow) };
+    }
+    flow.data.professionalPreference = noPreference
+      ? 'Sem preferência'
+      : named.map((entry) => entry.professionalName).join(' e ');
+    flow.status = 'awaiting_confirmation';
+    flow.step = 'confirm_group';
+  } else if (flow.step === 'confirm_group') {
+    const confirmed = /^(sim|s|confirmo|confirmar|pode marcar|pode confirmar|1)\b/.test(normalized);
+    const denied = /^(nao|n|cancelar|cancela|2)\b/.test(normalized);
+    if (denied) return cancelFlow({ flow, messageId, messageAt, io });
+    if (!confirmed) {
+      touchFlow(flow, messageId, messageAt);
+      await flow.save();
+      return { handled: true, flow, reply: 'Responda SIM para confirmar ou NÃO para cancelar os agendamentos.' };
+    }
+    const claimed = await WhatsappAppointmentFlow.findOneAndUpdate(
+      { _id: flow._id, status: 'awaiting_confirmation', step: 'confirm_group' },
+      {
+        $set: {
+          status: 'booking',
+          step: 'booking',
+          lastInboundMessageId: clean(messageId),
+          lastInboundAt: messageAt,
+        },
+      },
+      { new: true },
+    );
+    if (!claimed) {
+      const current = await WhatsappAppointmentFlow.findById(flow._id);
+      return {
+        handled: true,
+        flow: current || flow,
+        reply: current?.status === 'completed'
+          ? 'Estes agendamentos já foram confirmados.'
+          : 'Estes agendamentos já estão sendo processados.',
+      };
+    }
+    flow = claimed;
+    try {
+      const results = await createGroupAppointments({ flow, config });
+      const appointments = results.map((entry) => entry.appointment);
+      flow.appointment = appointments[0]?._id || null;
+      flow.data.appointmentIds = appointments.map((appointment) => String(appointment._id));
+      flow.status = 'completed';
+      flow.step = 'completed';
+      flow.completedAt = new Date();
+      flow.lastError = '';
+      touchFlow(flow, messageId, messageAt);
+      await flow.save();
+      const reply = buildGroupConfirmation({ flow, appointments });
+      flow.lastPrompt = reply;
+      await flow.save();
+      await updateConversationForFlow({
+        flow,
+        reply,
+        runAt: new Date(),
+        messageId,
+        io,
+        finalMode: 'close',
+      });
+      await recordFlowAudit({
+        flow,
+        action: 'appointment_flow_completed',
+        previousState: previous,
+        extra: { appointmentIds: flow.data.appointmentIds },
+      });
+      return { handled: true, flow, reply, appointments, completed: true };
+    } catch (error) {
+      if (error?.code === 'APPOINTMENT_SLOT_UNAVAILABLE') {
+        const requested = {
+          date: flow.data?.preferredDate,
+          preferredMinutes: flow.data?.preferredMinutes,
+        };
+        flow.status = 'collecting';
+        const options = await prepareGroomingGroupOptions({
+          flow,
+          requested,
+          config,
+          now: messageAt,
+        });
+        flow.lastError = error.message;
+        touchFlow(flow, messageId, messageAt);
+        await flow.save();
+        const reply = options.length
+          ? `Esse horário acabou de ser ocupado. Separei novas opções:\n${promptForFlow(flow)}`
+          : 'Esse horário acabou de ser ocupado. Informe outra data para eu consultar novamente.';
+        await updateConversationForFlow({ flow, reply, runAt: new Date(), messageId, io });
+        return { handled: true, flow, reply, conflict: true };
+      }
+      flow.status = 'failed';
+      flow.step = 'handoff';
+      flow.lastError = clean(error?.message) || 'Falha ao criar os agendamentos';
+      flow.handoffReason = 'booking_failed';
+      await flow.save();
+      return handoffFlow({
+        flow,
+        reason: 'booking_failed',
+        config,
+        messageId,
+        messageAt,
+        io,
+      });
+    }
   } else if (flow.step === 'confirm') {
     const confirmed = /^(sim|s|confirmo|confirmar|pode confirmar|1)\b/.test(normalized);
     const denied = /^(nao|n|cancelar|cancela|2)\b/.test(normalized);

@@ -122,11 +122,16 @@ const phoneCandidates = (waId) => {
 const findCustomerByWhatsapp = async ({ storeId, waId }) => {
   const phones = phoneCandidates(waId);
   if (!phones.length) return null;
+  const loosePatterns = phones.map((phone) => new RegExp(
+    `^\\D*${phone.split('').join('\\D*')}\\D*$`,
+  ));
   const customer = await User.findOne({
     role: 'cliente',
     $or: [
       { celular: { $in: phones } },
       { celularSecundario: { $in: phones } },
+      { celular: { $in: loosePatterns } },
+      { celularSecundario: { $in: loosePatterns } },
     ],
   })
     .select('_id nomeCompleto nomeContato razaoSocial celular celularSecundario empresas empresaPrincipal')
@@ -338,13 +343,13 @@ const findAvailableSlots = async ({
   maxOptions,
   excludeFlowId,
   preferredMinutes,
+  internalMaxOptions,
 }) => {
   const timezone = normalizeTimezone(config.timezone);
   const searchDays = Math.min(30, Math.max(1, Number(config.appointmentSearchDays) || 14));
-  const limit = Math.min(
-    5,
-    Math.max(1, Number(maxOptions || config.appointmentMaxOptions) || 3)
-  );
+  const limit = internalMaxOptions
+    ? Math.min(60, Math.max(1, Number(internalMaxOptions) || 30))
+    : Math.min(5, Math.max(1, Number(maxOptions || config.appointmentMaxOptions) || 3));
   const slotInterval = [15, 30, 60].includes(Number(config.appointmentSlotIntervalMinutes))
     ? Number(config.appointmentSlotIntervalMinutes)
     : 30;
@@ -466,6 +471,164 @@ const findAvailableSlots = async ({
     }
   }
   return options;
+};
+
+const assignDistinctProfessionals = (optionLists, index = 0, used = new Set(), chosen = []) => {
+  if (index >= optionLists.length) return [...chosen];
+  for (const option of optionLists[index]) {
+    const professionalId = String(option.professional || '');
+    if (!professionalId || used.has(professionalId)) continue;
+    used.add(professionalId);
+    chosen.push(option);
+    const result = assignDistinctProfessionals(optionLists, index + 1, used, chosen);
+    if (result) return result;
+    chosen.pop();
+    used.delete(professionalId);
+  }
+  return null;
+};
+
+const findAvailableGroupSlots = async ({
+  storeId,
+  items,
+  intent = 'grooming_appointment',
+  startDate,
+  config = {},
+  now = new Date(),
+  maxOptions,
+  excludeFlowId,
+  preferredMinutes,
+  strictlyAfterMinutes,
+}) => {
+  const requestedItems = Array.isArray(items) ? items.filter((item) => item?.serviceId) : [];
+  if (!requestedItems.length) return [];
+  const perItemOptions = await Promise.all(requestedItems.map((item) => findAvailableSlots({
+    storeId,
+    serviceId: item.serviceId,
+    intent,
+    startDate,
+    config,
+    now,
+    excludeFlowId,
+    preferredMinutes,
+    internalMaxOptions: 60,
+  })));
+  if (perItemOptions.some((options) => !options.length)) return [];
+
+  const keys = new Set(perItemOptions[0].map((option) => `${option.date}|${option.time}`));
+  perItemOptions.slice(1).forEach((options) => {
+    const available = new Set(options.map((option) => `${option.date}|${option.time}`));
+    [...keys].forEach((key) => {
+      if (!available.has(key)) keys.delete(key);
+    });
+  });
+
+  const desiredLimit = Math.min(5, Math.max(1, Number(maxOptions || config.appointmentMaxOptions) || 3));
+  const grouped = [];
+  const preferred = Number.isFinite(Number(preferredMinutes)) ? Number(preferredMinutes) : null;
+  const keyRank = (key) => {
+    const [date, time] = key.split('|');
+    const minutes = parseMinutes(time) ?? 0;
+    const timeRank = preferred === null
+      ? minutes
+      : (minutes >= preferred ? minutes - preferred : 1440 + minutes - preferred);
+    return { timeRank, date, time };
+  };
+  const orderedKeys = [...keys].sort((left, right) => {
+    const a = keyRank(left);
+    const b = keyRank(right);
+    return a.date.localeCompare(b.date) || a.timeRank - b.timeRank || a.time.localeCompare(b.time);
+  });
+  for (const key of orderedKeys) {
+    const [date, time] = key.split('|');
+    const minutes = parseMinutes(time);
+    if (
+      Number.isFinite(Number(strictlyAfterMinutes))
+      && date === startDate
+      && minutes !== null
+      && minutes <= Number(strictlyAfterMinutes)
+    ) continue;
+    const optionLists = perItemOptions.map((options) => options.filter((option) => (
+      option.date === date && option.time === time
+    )));
+    const assignments = assignDistinctProfessionals(optionLists);
+    if (!assignments) continue;
+    grouped.push({
+      key: `${date}|${time}|${assignments.map((entry) => entry.professional).join(',')}`,
+      date,
+      time,
+      assignments: assignments.map((option, index) => ({
+        ...option,
+        petId: requestedItems[index].petId,
+        petName: requestedItems[index].petName,
+        serviceId: requestedItems[index].serviceId,
+        serviceName: requestedItems[index].serviceName,
+      })),
+    });
+    if (grouped.length >= desiredLimit) break;
+  }
+  return grouped;
+};
+
+const findAvailableSeparateSlots = async ({
+  storeId,
+  items,
+  intent = 'grooming_appointment',
+  startDate,
+  config = {},
+  now = new Date(),
+  maxOptions,
+  excludeFlowId,
+  preferredMinutes,
+}) => {
+  const requestedItems = Array.isArray(items) ? items.filter((item) => item?.serviceId) : [];
+  if (!requestedItems.length) return [];
+  const perItemOptions = await Promise.all(requestedItems.map((item) => findAvailableSlots({
+    storeId,
+    serviceId: item.serviceId,
+    intent,
+    startDate,
+    config,
+    now,
+    excludeFlowId,
+    preferredMinutes,
+    internalMaxOptions: 60,
+  })));
+  if (perItemOptions.some((options) => !options.length)) return [];
+  const desiredLimit = Math.min(5, Math.max(1, Number(maxOptions || config.appointmentMaxOptions) || 3));
+  const results = [];
+  for (let offset = 0; offset < 12 && results.length < desiredLimit; offset += 1) {
+    const assignments = [];
+    for (let itemIndex = 0; itemIndex < requestedItems.length; itemIndex += 1) {
+      const options = perItemOptions[itemIndex];
+      const option = options.slice(offset).find((candidate) => !assignments.some((assigned) => (
+        intervalsOverlap(
+          new Date(assigned.startAt).getTime(),
+          new Date(assigned.endAt).getTime(),
+          new Date(candidate.startAt).getTime(),
+          new Date(candidate.endAt).getTime(),
+        )
+      )));
+      if (!option) break;
+      assignments.push({
+        ...option,
+        petId: requestedItems[itemIndex].petId,
+        petName: requestedItems[itemIndex].petName,
+        serviceId: requestedItems[itemIndex].serviceId,
+        serviceName: requestedItems[itemIndex].serviceName,
+      });
+    }
+    if (assignments.length !== requestedItems.length) continue;
+    const key = assignments.map((entry) => `${entry.petId}:${entry.key}`).join('|');
+    if (results.some((entry) => entry.key === key)) continue;
+    results.push({
+      key,
+      date: assignments[0].date,
+      time: assignments[0].time,
+      assignments,
+    });
+  }
+  return results;
 };
 
 const getServicePrice = async ({ storeId, service, pet }) => {
@@ -593,6 +756,7 @@ const createAppointmentFromFlow = async ({
     config: { ...config, appointmentMinLeadMinutes: 0 },
     now: new Date(),
     maxOptions: 5,
+    internalMaxOptions: 60,
     excludeFlowId: flow._id,
     preferredMinutes: parseMinutes(option.time),
   });
@@ -668,6 +832,8 @@ module.exports = {
   addDays,
   createAppointmentFromFlow,
   findAvailableSlots,
+  findAvailableGroupSlots,
+  findAvailableSeparateSlots,
   findCustomerByWhatsapp,
   findServicesForIntent,
   getPetList,
