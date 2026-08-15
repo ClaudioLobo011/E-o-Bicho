@@ -1764,8 +1764,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const direction = payload.direction || 'incoming';
     const contactId = digitsOnly(payload.waId || payload.origin || payload.destination || '');
-    if (!contactId) return;
-    const matchedContact = state.contacts.find((entry) => isPhoneMatch(entry.waId, contactId));
+    const matchedContact = contactId
+      ? state.contacts.find((entry) => isPhoneMatch(entry.waId, contactId))
+      : null;
     const resolvedContactId = matchedContact?.waId || contactId;
 
     const createdAt = payload.createdAt || new Date().toISOString();
@@ -1776,24 +1777,30 @@ document.addEventListener('DOMContentLoaded', () => {
     if (payload.mutationType && messageId) {
       const target = state.messages.find((entry) => entry.messageId === messageId);
       if (!target) {
-        if (state.selectedContactId === resolvedContactId) void loadMessages({ silent: true });
+        if (state.selectedContactId && (!resolvedContactId || state.selectedContactId === resolvedContactId)) {
+          void loadMessages({ silent: true });
+        }
         return;
       }
+      const mutationContact = matchedContact
+        || state.contacts.find((entry) => entry.lastMessageId === messageId);
       if (payload.mutationType === 'edit') {
         target.message = payload.message || target.message;
         target.edited = true;
         target.editedAt = payload.editedAt || new Date().toISOString();
-        if (matchedContact?.lastMessageId === messageId) {
-          matchedContact.lastMessage = target.message;
+        if (mutationContact?.lastMessageId === messageId) {
+          mutationContact.lastMessage = target.message;
           renderConversations();
           updateChatHeader();
         }
       } else if (payload.mutationType === 'reaction') {
         target.reactions = Array.isArray(payload.reactions) ? payload.reactions : [];
       }
-      if (state.selectedContactId === resolvedContactId) renderMessages();
+      renderMessages();
       return;
     }
+
+    if (!contactId) return;
 
     if (direction === 'outgoing') {
       if (clientId) {
@@ -6092,6 +6099,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const contacts = Array.isArray(message.contacts) ? message.contacts : [];
       const isContact = contacts.length > 0 || message.message === '[contato]';
       const isImage = (media && media.type === 'image') || trimValue(message.message) === '[imagem]';
+      const isSticker = (media && media.type === 'sticker')
+        || ['[figurinha]', '[sticker]'].includes(trimValue(message.message).toLowerCase());
       const isAudio = (media && media.type === 'audio') || message.message === '[voz]' || message.message === '[audio]';
       const isDocument = (media && media.type === 'document') || trimValue(message.message) === '[documento]';
       const wrapper = document.createElement('div');
@@ -6111,7 +6120,7 @@ document.addEventListener('DOMContentLoaded', () => {
         : 'rounded-2xl rounded-bl-md border border-gray-200 bg-white text-sm text-gray-700 shadow-sm';
       if (isDocument) {
         bubble.className = `w-[320px] max-w-[90%] ${bubbleToneClass} p-0 overflow-hidden`;
-      } else if (isImage) {
+      } else if (isImage || isSticker) {
         bubble.className = `max-w-[70%] ${bubbleToneClass} p-2`;
       } else {
         bubble.className = `max-w-[70%] ${bubbleToneClass} p-3`;
@@ -6180,6 +6189,39 @@ document.addEventListener('DOMContentLoaded', () => {
           });
           bubble.appendChild(contactWrap);
         }
+      } else if (isSticker && media?.id) {
+        const mediaId = trimValue(media.id || media.mediaId || '');
+        let stickerUrl = media.r2Url || media.url || '';
+        if (!stickerUrl && mediaId && state.mediaCache.has(mediaId)) {
+          stickerUrl = state.mediaCache.get(mediaId) || '';
+        }
+
+        const sticker = document.createElement('img');
+        sticker.alt = 'Figurinha';
+        sticker.className = 'max-h-52 max-w-52 rounded-lg object-contain';
+        sticker.src = stickerUrl || '/public/image/placeholder.svg';
+        bubble.appendChild(sticker);
+
+        const ensureStickerUrl = async (force = false) => {
+          if (stickerUrl && !force) return true;
+          if (!mediaId) return false;
+          try {
+            const fetched = await fetchMediaBlobUrl(mediaId);
+            if (fetched) {
+              stickerUrl = fetched;
+              sticker.src = fetched;
+              return true;
+            }
+          } catch (error) {
+            console.error('web-whatsapp:sticker-fetch', error);
+          }
+          return false;
+        };
+
+        if (!stickerUrl) void ensureStickerUrl();
+        sticker.addEventListener('error', () => {
+          void ensureStickerUrl(true);
+        }, { once: true });
       } else if (isImage) {
         const mediaId = trimValue(media?.id || media?.mediaId || '');
         let imageUrl = media?.r2Url || media?.url || '';

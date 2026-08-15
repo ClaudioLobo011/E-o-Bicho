@@ -377,7 +377,7 @@ const inferMediaTypeFromLog = (log) => {
   if (message === '[imagem]') return 'image';
   if (message === '[video]') return 'video';
   if (message === '[documento]') return 'document';
-  if (message === '[sticker]') return 'sticker';
+  if (message === '[sticker]' || message === '[figurinha]') return 'sticker';
   return '';
 };
 

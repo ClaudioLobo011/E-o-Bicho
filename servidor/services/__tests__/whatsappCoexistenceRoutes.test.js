@@ -293,6 +293,50 @@ test('webhooks de coexistência espelham mensagem do celular e atualizam a sincr
   assert.equal(emitted.some((entry) => entry.payload?.mutationType === 'edit'), true);
   assert.equal(emitted.some((entry) => entry.payload?.mutationType === 'reaction'), true);
 
+  await processCoexistenceWebhookChanges({
+    entries: [{
+      changes: [{
+        field: 'smb_message_echoes',
+        value: {
+          metadata: {
+            phone_number_id: '109876543210',
+            display_phone_number: '5511999990001',
+          },
+          message_echoes: [{
+            id: 'wamid.echo-sticker-1',
+            to: '5511888880001',
+            timestamp: '1750000003',
+            type: 'sticker',
+            sticker: {
+              id: 'media-sticker-1',
+              mime_type: 'image/webp',
+              sha256: 'sticker-sha256',
+              animated: true,
+            },
+          }],
+        },
+      }],
+    }],
+    integration,
+    wabaId: 'waba-id',
+    io,
+  });
+
+  const stickerEcho = await WhatsappLog.findOne({
+    store: store._id,
+    messageId: 'wamid.echo-sticker-1',
+  }).lean();
+  assert.equal(stickerEcho.message, '[figurinha]');
+  assert.equal(stickerEcho.messageType, 'sticker');
+  assert.equal(stickerEcho.meta.media.type, 'sticker');
+  assert.equal(stickerEcho.meta.media.id, 'media-sticker-1');
+  assert.equal(stickerEcho.meta.media.animated, true);
+  assert.equal(emitted.some((entry) => (
+    entry.event === 'whatsapp:message'
+      && entry.payload?.messageId === 'wamid.echo-sticker-1'
+      && entry.payload?.media?.type === 'sticker'
+  )), true);
+
   integration = await WhatsappIntegration.findOne({ store: store._id }).lean();
   await processCoexistenceWebhookChanges({
     entries: [{
@@ -414,7 +458,7 @@ test('webhooks de coexistência espelham mensagem do celular e atualizam a sincr
   updated = await WhatsappIntegration.findOne({ store: store._id });
   assert.equal(updated.onboardingStatus, 'disconnected');
   assert.equal(updated.phoneNumbers[0].status, 'Desconectado');
-  assert.equal(await WhatsappWebhookEvent.countDocuments({ store: store._id }), 5);
+  assert.equal(await WhatsappWebhookEvent.countDocuments({ store: store._id }), 6);
 });
 
 test('somente administrador remove numero local e limpa o vinculo quando era o ultimo', async () => {

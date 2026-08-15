@@ -50,6 +50,19 @@ const normalizeMessageErrors = (errors) => (Array.isArray(errors) ? errors : [])
     details: clean(entry?.error_data?.details || entry?.errorData?.details || entry?.details),
   }));
 
+const extractStickerPayload = (message = {}, direction = '') => {
+  if (clean(message.type) !== 'sticker' || !clean(message.sticker?.id)) return null;
+  return {
+    type: 'sticker',
+    id: clean(message.sticker.id),
+    mimeType: clean(message.sticker.mime_type) || 'image/webp',
+    sha256: clean(message.sticker.sha256),
+    url: clean(message.sticker.url),
+    animated: message.sticker.animated === true,
+    direction,
+  };
+};
+
 const extractBody = (message = {}) => {
   const type = clean(message.type);
   if (type === 'text') return clamp(message.text?.body);
@@ -135,6 +148,7 @@ const upsertLogOperation = ({
     };
   }
   const body = extractBody(message);
+  const media = extractStickerPayload(message, direction);
   const errors = normalizeMessageErrors(message.errors);
   const origin = direction === 'outgoing' ? phone.phoneNumber : customer;
   const destination = direction === 'outgoing' ? customer : phone.phoneNumber;
@@ -160,6 +174,7 @@ const upsertLogOperation = ({
       messageType: clean(message.type),
       ...(errors.length ? { errors } : {}),
       ...(message.history_context ? { historyContext: message.history_context } : {}),
+      ...(media ? { media } : {}),
     },
     updatedAt: now,
   };
@@ -213,6 +228,7 @@ const upsertLogOperation = ({
       source,
       actorType: set.actorType,
       messageType: set.messageType,
+      ...(media ? { media } : {}),
     } : null,
   };
 };
