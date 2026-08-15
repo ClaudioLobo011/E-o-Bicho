@@ -113,12 +113,13 @@ test.describe('integração do PDV Desktop', () => {
     });
     const recurringAppointments = await request.get('/desktop/appointments?start=2026-08-15T03%3A00%3A00.000Z&end=2026-08-16T03%3A00%3A00.000Z').set(headers);
     assert.equal(recurringAppointments.status, 200, recurringAppointments.text);
-    assert.equal(recurringAppointments.body.appointments.length, 1);
-    assert.equal(recurringAppointments.body.appointments[0].scheduledAt, '2026-08-15T12:00:00.000Z');
-    assert.equal(recurringAppointments.body.appointments[0].total, 50);
-    assert.equal(recurringAppointments.body.appointments[0].status, 'agendado');
-    assert.equal(recurringAppointments.body.appointments[0].paid, true);
-    assert.match(recurringAppointments.body.appointments[0].id, /:occurrence:/);
+    const recurringPulled = recurringAppointments.body.appointments.find((entry) => entry.sourceAppointmentId === String(recurringAppointment._id));
+    assert.ok(recurringPulled);
+    assert.equal(recurringPulled.scheduledAt, '2026-08-15T12:00:00.000Z');
+    assert.equal(recurringPulled.total, 50);
+    assert.equal(recurringPulled.status, 'agendado');
+    assert.equal(recurringPulled.paid, true);
+    assert.match(recurringPulled.id, /:occurrence:/);
     await Pdv.updateOne({ _id: base.pdv._id }, { $set: { tipoUso: 'executavel', 'desktop.status': 'ativo' } });
     const statusRecurringAppointment = await Appointment.create({
       store: base.company._id,
@@ -170,9 +171,27 @@ test.describe('integração do PDV Desktop', () => {
     assert.equal(recurringMoved.itens.length, 2);
     assert.equal(recurringMoved.itens.filter((item) => item.data === '2026-08-15').length, 1);
     assert.equal(recurringMoved.itens.find((item) => item.data === '2026-08-15').hora, '10:30');
+    const paidServiceChange = await request.post('/desktop/events/batch').set(headers).send({ events: [{
+      eventId: 'recurring-paid-service-change', type: 'appointment.updated', occurredAt: new Date().toISOString(),
+      payload: {
+        appointmentId: String(recurringAppointment._id), sourceAppointmentId: String(recurringAppointment._id),
+        sourceOccurrenceKey: '2026-08-15T13:30:00.000Z', expectedVersion: 3,
+        customerId: String(customer._id), petId: String(pet._id), scheduledAt: '2026-08-15T13:30:00.000Z',
+        status: 'em_espera', services: [{ serviceId: String(new mongoose.Types.ObjectId()), unitPrice: 50, date: '2026-08-15', time: '10:30', status: 'em_espera' }],
+      },
+    }] });
+    assert.equal(paidServiceChange.body.results[0].accepted, false);
+    assert.equal(paidServiceChange.body.results[0].code, 'PAID_APPOINTMENT_RESTRICTED');
+    const paidDelete = await request.post('/desktop/events/batch').set(headers).send({ events: [{
+      eventId: 'recurring-paid-delete', type: 'appointment.deleted', occurredAt: new Date().toISOString(),
+      payload: { appointmentId: String(recurringAppointment._id), sourceAppointmentId: String(recurringAppointment._id), sourceOccurrenceKey: '2026-08-15T13:30:00.000Z', expectedVersion: 3 },
+    }] });
+    assert.equal(paidDelete.body.results[0].accepted, false);
+    assert.match(paidDelete.body.results[0].error, /Para excluir cancela primeiro a venda \(VENDA-RECORRENTE\)/);
     const movedOccurrences = await request.get('/desktop/appointments?start=2026-08-15T03%3A00%3A00.000Z&end=2026-08-16T03%3A00%3A00.000Z').set(headers);
-    assert.equal(movedOccurrences.body.appointments.length, 1);
-    assert.equal(movedOccurrences.body.appointments[0].scheduledAt, '2026-08-15T13:30:00.000Z');
+    const movedOccurrence = movedOccurrences.body.appointments.find((entry) => entry.sourceAppointmentId === String(recurringAppointment._id));
+    assert.ok(movedOccurrence);
+    assert.equal(movedOccurrence.scheduledAt, '2026-08-15T13:30:00.000Z');
     const staleOccurrenceMove = await request.post('/desktop/events/batch').set(headers).send({ events: [{
       eventId: 'recurring-stale-occurrence', type: 'appointment.updated', occurredAt: new Date().toISOString(),
       payload: {

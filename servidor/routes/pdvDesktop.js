@@ -550,6 +550,28 @@ async function desktopAppointmentPayload(source, host) {
   };
 }
 
+function validatePaidDesktopAppointmentChanges(appointment, values, occurrenceKey = '') {
+  if (!appointment.pago && !appointment.codigoVenda) return;
+  const currentItems = occurrenceKey
+    ? (appointment.itens || []).filter((item) => desktopAppointmentItemDate(item, appointment.scheduledAt)?.toISOString() === occurrenceKey)
+    : (appointment.itens || []);
+  const restrictedChange = String(appointment.cliente) !== String(values.cliente)
+    || String(appointment.pet) !== String(values.pet)
+    || clean(appointment.observacoes) !== clean(values.observacoes)
+    || currentItems.length !== values.itens.length
+    || values.itens.some((item, index) => {
+      const original = currentItems[index] || {};
+      return String(original.servico || '') !== String(item.servico || '')
+        || Number(original.valor || 0) !== Number(item.valor || 0)
+        || clean(original.observacao) !== clean(item.observacao);
+    });
+  if (restrictedChange) {
+    const error = new Error('Agendamento já faturado. Não é permitido alterar cliente, pet ou serviços.');
+    error.code = 'PAID_APPOINTMENT_RESTRICTED';
+    throw error;
+  }
+}
+
 async function materializeDesktopAppointmentEvent(event, host) {
   const source = event.payload && typeof event.payload === 'object' ? event.payload : {};
   const mutationId = clean(source.clientMutationId || event.eventId);
@@ -571,7 +593,7 @@ async function materializeDesktopAppointmentEvent(event, host) {
     throw conflict;
   }
   if (event.type === 'appointment.deleted') {
-    if (appointment.pago || appointment.codigoVenda) throw new Error('Agendamento faturado não pode ser excluído pela Agenda.');
+    if (appointment.pago || appointment.codigoVenda) throw new Error(`Para excluir cancela primeiro a venda (${appointment.codigoVenda || 'código não informado'}).`);
     const occurrenceKey = clean(source.sourceOccurrenceKey);
     if (occurrenceKey) {
       const occurrenceItems = (appointment.itens || []).filter((item) => desktopAppointmentItemDate(item, appointment.scheduledAt)?.toISOString() === occurrenceKey);
@@ -604,6 +626,7 @@ async function materializeDesktopAppointmentEvent(event, host) {
       conflict.code = 'APPOINTMENT_VERSION_CONFLICT';
       throw conflict;
     }
+    validatePaidDesktopAppointmentChanges(appointment, values, occurrenceKey);
     const remaining = (appointment.itens || []).filter((item) => desktopAppointmentItemDate(item, appointment.scheduledAt)?.toISOString() !== occurrenceKey);
     appointment.itens = [...remaining, ...values.itens];
     appointment.servico = appointment.itens[0]?.servico || values.servico;
@@ -618,6 +641,7 @@ async function materializeDesktopAppointmentEvent(event, host) {
     await appointment.save();
     return appointment;
   }
+  validatePaidDesktopAppointmentChanges(appointment, values);
   Object.assign(appointment, values, { version: expectedVersion + 1 });
   await appointment.save();
   return appointment;
@@ -749,7 +773,7 @@ async function materializeDesktopEvent(event, pdv, host) {
       .map((entry) => [`${entry.appointmentId}:${entry.occurrenceKey}`, entry])).values());
     if (!references.length || clean(source.status).toLowerCase() !== 'finalizado') throw new Error('Atualização de atendimento inválida.');
     for (const reference of references) {
-      const appointment = await Appointment.findOne({ _id: reference.appointmentId, store: host.empresa, pago: { $ne: true } });
+      const appointment = await Appointment.findOne({ _id: reference.appointmentId, store: host.empresa });
       if (!appointment) continue;
       if (!reference.occurrenceKey) {
         appointment.status = 'finalizado';
