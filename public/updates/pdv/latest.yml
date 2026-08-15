@@ -1,8 +1,8 @@
-version: 0.8.37
+version: 0.8.38
 files:
-  - url: E-o-Bicho-0.8.37-Atualizacao.exe
-    sha512: ICu10rGahURKk8d+ReWpP0lzrMQmnhPBBVAXobOCK+uSTSYk41qW0lm+4jLQlsqurH39YgitcQPvOc+Q9dZkCw==
-    size: 102417853
-path: E-o-Bicho-0.8.37-Atualizacao.exe
-sha512: ICu10rGahURKk8d+ReWpP0lzrMQmnhPBBVAXobOCK+uSTSYk41qW0lm+4jLQlsqurH39YgitcQPvOc+Q9dZkCw==
-releaseDate: '2026-08-15T13:08:10.738Z'
+  - url: E-o-Bicho-0.8.38-Atualizacao.exe
+    sha512: zz3zCk2+9aTQwhjagXk3TOk44ihl7m2fqKECaSqZVY4W+BWBbATYfFO+LvtueiVhjgGeRBvlCOWR4o5pE4pUTg==
+    size: 102418888
+path: E-o-Bicho-0.8.38-Atualizacao.exe
+sha512: zz3zCk2+9aTQwhjagXk3TOk44ihl7m2fqKECaSqZVY4W+BWBbATYfFO+LvtueiVhjgGeRBvlCOWR4o5pE4pUTg==
+releaseDate: '2026-08-15T13:39:02.469Z'
