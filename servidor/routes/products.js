@@ -1641,6 +1641,16 @@ const sanitizeFiscalData = (rawFiscal = {}, existingFiscal = {}, updatedBy = '')
         aliquota: sanitizeFiscalNumber(rawFiscal?.fcp?.aliquota ?? existingFiscal?.fcp?.aliquota ?? null),
         aplica: Boolean(rawFiscal?.fcp?.aplica ?? existingFiscal?.fcp?.aplica ?? false),
     },
+    ibsCbs: {
+        cst: sanitizeFiscalString(rawFiscal?.ibsCbs?.cst, existingFiscal?.ibsCbs?.cst || ''),
+        cClassTrib: sanitizeFiscalString(
+            rawFiscal?.ibsCbs?.cClassTrib ?? rawFiscal?.ibsCbs?.classificacaoTributaria,
+            existingFiscal?.ibsCbs?.cClassTrib || ''
+        ),
+        pIBSUF: sanitizeFiscalNumber(rawFiscal?.ibsCbs?.pIBSUF ?? existingFiscal?.ibsCbs?.pIBSUF ?? null),
+        pIBSMun: sanitizeFiscalNumber(rawFiscal?.ibsCbs?.pIBSMun ?? existingFiscal?.ibsCbs?.pIBSMun ?? null),
+        pCBS: sanitizeFiscalNumber(rawFiscal?.ibsCbs?.pCBS ?? existingFiscal?.ibsCbs?.pCBS ?? null),
+    },
     status: {
         nfe: sanitizeFiscalStatus(rawFiscal?.status?.nfe, existingFiscal?.status?.nfe || 'pendente'),
         nfce: sanitizeFiscalStatus(rawFiscal?.status?.nfce, existingFiscal?.status?.nfce || 'pendente'),

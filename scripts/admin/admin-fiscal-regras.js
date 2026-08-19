@@ -191,6 +191,11 @@
     setValue('fcp.indicador', fiscal?.fcp?.indicador || '0');
     setValue('fcp.aliquota', fiscal?.fcp?.aliquota ?? '');
     setValue('fcp.aplica', fiscal?.fcp?.aplica || false);
+    setValue('ibsCbs.cst', fiscal?.ibsCbs?.cst || '');
+    setValue('ibsCbs.cClassTrib', fiscal?.ibsCbs?.cClassTrib || '');
+    setValue('ibsCbs.pIBSUF', fiscal?.ibsCbs?.pIBSUF ?? '');
+    setValue('ibsCbs.pIBSMun', fiscal?.ibsCbs?.pIBSMun ?? '');
+    setValue('ibsCbs.pCBS', fiscal?.ibsCbs?.pCBS ?? '');
   };
 
   const collectFiscalFromForm = () => {
@@ -260,6 +265,13 @@
         aliquota: getNumber('fcp.aliquota'),
         aplica: Boolean(form?.querySelector('[data-field="fcp.aplica"]')?.checked),
       },
+      ibsCbs: {
+        cst: getValue('ibsCbs.cst'),
+        cClassTrib: getValue('ibsCbs.cClassTrib'),
+        pIBSUF: getNumber('ibsCbs.pIBSUF'),
+        pIBSMun: getNumber('ibsCbs.pIBSMun'),
+        pCBS: getNumber('ibsCbs.pCBS'),
+      },
     };
   };
 
@@ -303,6 +315,7 @@
         `Origem: ${fiscal?.origem || '-'}`,
         `CSOSN: ${fiscal?.csosn || '-'}`,
         `CST: ${fiscal?.cst || '-'}`,
+        `IBS/CBS: ${fiscal?.ibsCbs?.cst || '-'} / ${fiscal?.ibsCbs?.cClassTrib || '-'}`,
         `CFOP NF-e (Entrada): ${cfopNfe.entrada || '-'}`,
         `CFOP NF-e: ${cfopNfe.dentroEstado || '-'} / ${cfopNfe.foraEstado || '-'}`,
         `CFOP NFC-e (Entrada): ${cfopNfce.entrada || '-'}`,

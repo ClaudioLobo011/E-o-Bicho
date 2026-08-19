@@ -28,6 +28,14 @@ const fiscalCfopSchema = new mongoose.Schema({
     industrializacao: { type: String, trim: true, default: '' },
 }, { _id: false });
 
+const fiscalIbsCbsSchema = new mongoose.Schema({
+    cst: { type: String, trim: true, default: '' },
+    cClassTrib: { type: String, trim: true, default: '' },
+    pIBSUF: { type: Number, default: null },
+    pIBSMun: { type: Number, default: null },
+    pCBS: { type: Number, default: null },
+}, { _id: false });
+
 const fiscalSchema = new mongoose.Schema({
     fiscalRuleCode: { type: String, trim: true, default: '' },
     fiscalRuleName: { type: String, trim: true, default: '' },
@@ -53,6 +61,7 @@ const fiscalSchema = new mongoose.Schema({
         aliquota: { type: Number, default: null },
         aplica: { type: Boolean, default: false },
     },
+    ibsCbs: { type: fiscalIbsCbsSchema, default: () => ({}) },
     status: {
         nfe: { type: String, enum: ['pendente', 'parcial', 'aprovado'], default: 'pendente' },
         nfce: { type: String, enum: ['pendente', 'parcial', 'aprovado'], default: 'pendente' },

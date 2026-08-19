@@ -84,6 +84,20 @@ const normalizeIpi = (ipi = {}) => ({
   valorBase: Number.isFinite(Number(ipi.valorBase)) ? Number(ipi.valorBase) : null,
 });
 
+const normalizeIbsCbs = (ibsCbs = {}) => ({
+  cst: toStringSafe(ibsCbs.cst),
+  cClassTrib: toStringSafe(ibsCbs.cClassTrib || ibsCbs.classificacaoTributaria),
+  pIBSUF: ibsCbs.pIBSUF === 0 ? 0 : Number.isFinite(Number(ibsCbs.pIBSUF ?? ibsCbs.aliquotaIbsUf))
+    ? Number(ibsCbs.pIBSUF ?? ibsCbs.aliquotaIbsUf)
+    : null,
+  pIBSMun: ibsCbs.pIBSMun === 0 ? 0 : Number.isFinite(Number(ibsCbs.pIBSMun ?? ibsCbs.aliquotaIbsMunicipal))
+    ? Number(ibsCbs.pIBSMun ?? ibsCbs.aliquotaIbsMunicipal)
+    : null,
+  pCBS: ibsCbs.pCBS === 0 ? 0 : Number.isFinite(Number(ibsCbs.pCBS ?? ibsCbs.aliquotaCbs))
+    ? Number(ibsCbs.pCBS ?? ibsCbs.aliquotaCbs)
+    : null,
+});
+
 const normalizeStatus = (status = {}) => {
   const allowed = new Set(['pendente', 'parcial', 'aprovado']);
   const normalizeValue = (value) => {
@@ -111,6 +125,7 @@ const normalizeFiscalData = (fiscal = {}) => ({
   cofins: normalizeTax(fiscal.cofins || {}),
   ipi: normalizeIpi(fiscal.ipi || {}),
   fcp: normalizeFcp(fiscal.fcp || {}),
+  ibsCbs: normalizeIbsCbs(fiscal.ibsCbs || fiscal.ibscbs || fiscal.reformaTributaria || {}),
   status: normalizeStatus(fiscal.status || {}),
   atualizadoEm: fiscal.atualizadoEm ? new Date(fiscal.atualizadoEm) : null,
   atualizadoPor: toStringSafe(fiscal.atualizadoPor),
@@ -178,6 +193,11 @@ const DIFFERENCE_FIELDS = [
   'fcp.indicador',
   'fcp.aliquota',
   'fcp.aplica',
+  'ibsCbs.cst',
+  'ibsCbs.cClassTrib',
+  'ibsCbs.pIBSUF',
+  'ibsCbs.pIBSMun',
+  'ibsCbs.pCBS',
 ];
 
 const FIELD_LABELS = {
@@ -212,6 +232,11 @@ const FIELD_LABELS = {
   'fcp.indicador': 'FCP indicador',
   'fcp.aliquota': 'FCP alíquota',
   'fcp.aplica': 'FCP aplicado',
+  'ibsCbs.cst': 'CST IBS/CBS',
+  'ibsCbs.cClassTrib': 'Classificacao tributaria IBS/CBS',
+  'ibsCbs.pIBSUF': 'Aliquota IBS UF',
+  'ibsCbs.pIBSMun': 'Aliquota IBS municipal',
+  'ibsCbs.pCBS': 'Aliquota CBS',
 };
 
 const computeMissingFields = (fiscal, { regime } = {}) => {

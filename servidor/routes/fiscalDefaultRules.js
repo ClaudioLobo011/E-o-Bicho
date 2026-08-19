@@ -3,6 +3,7 @@ const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 const Store = require('../models/Store');
 const FiscalDefaultRule = require('../models/FiscalDefaultRule');
+const Product = require('../models/Product');
 const { normalizeFiscalData } = require('../services/fiscalRuleEngine');
 
 const router = express.Router();
@@ -33,6 +34,15 @@ const getNextCode = async (storeId) => {
 const ensureStoreExists = async (storeId) => {
   const exists = await Store.exists({ _id: storeId });
   return Boolean(exists);
+};
+
+const touchProductsUsingRule = async (storeId, ruleCode) => {
+  const assignmentPath = `fiscalPorEmpresa.${storeId}.fiscalRuleCode`;
+  return Product.updateMany(
+    { [assignmentPath]: String(ruleCode) },
+    { $set: { updatedAt: new Date() } },
+    { timestamps: false }
+  );
 };
 
 router.get('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
@@ -159,6 +169,8 @@ router.put('/:code', requireAuth, authorizeRoles('admin', 'admin_master'), async
     if (!updatedRule) {
       return res.status(404).json({ message: 'Regra nao encontrada.' });
     }
+
+    await touchProductsUsingRule(storeId, ruleCode);
 
     const total = await FiscalDefaultRule.countDocuments({ empresa: storeId });
     return res.json({ rule: toRulePayload(updatedRule), total });
