@@ -70,6 +70,32 @@ describe('nfceEmitter itens fiscais do PDV', () => {
     assert.equal(item.productId, '696f8c460afa280e65021e80');
   });
 
+  test('preserva valor bruto e separa desconto do item para o XML fiscal', () => {
+    const item = _test.normalizeFiscalItem({
+      productId: '696f8c460afa280e65021e80',
+      quantity: 1,
+      unitPrice: 54.9,
+      totalPrice: 40,
+      itemDiscountValue: 14.9,
+    });
+
+    assert.equal(item.total, 54.9);
+    assert.equal(item.discount, 14.9);
+    assert.equal(item.netTotal, 40);
+  });
+
+  test('distribui desconto geral em centavos sem alterar o total', () => {
+    const items = [
+      { total: 10, discount: 0 },
+      { total: 20, discount: 0 },
+      { total: 30, discount: 0 },
+    ];
+    const allocated = _test.allocateFiscalAmount(items, 10, 'discount');
+
+    assert.equal(allocated.reduce((sum, value) => sum + value, 0), 10);
+    assert.deepEqual(allocated, [1.67, 3.33, 5]);
+  });
+
   test('resolve codigo da regra fiscal salvo no produto', () => {
     assert.equal(_test.resolveFiscalRuleCode({ fiscalRuleCode: ' 2 ' }), '2');
     assert.equal(_test.resolveFiscalRuleCode({ regraFiscalCodigo: '3' }), '3');

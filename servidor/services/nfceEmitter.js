@@ -1132,7 +1132,12 @@ const extractCertificatePair = (pfxBuffer, password) => {
 const normalizeFiscalItem = (item = {}) => {
   const quantity = safeNumber(item.quantity ?? item.quantidade ?? item.qtd ?? 0, 0);
   const unitPrice = safeNumber(item.unitPrice ?? item.valor ?? item.preco ?? item.valorUnitario ?? 0, 0);
-  const total = safeNumber(item.totalPrice ?? item.subtotal ?? unitPrice * quantity, 0);
+  const grossTotal = safeNumber(unitPrice * quantity, 0);
+  const explicitAddition = Math.max(0, safeNumber(item.itemAdditionValue ?? item.additionValue ?? item.acrescimo ?? 0, 0));
+  const reportedTotal = safeNumber(item.totalPrice ?? item.subtotal ?? item.total ?? grossTotal, grossTotal);
+  const inferredDiscount = Math.max(0, grossTotal + explicitAddition - reportedTotal);
+  const explicitDiscount = Math.max(0, safeNumber(item.itemDiscountValue ?? item.discountValue ?? item.desconto ?? 0, 0));
+  const discount = Math.max(explicitDiscount, inferredDiscount);
   const itemType = String(item.tipoItem || item.itemType || item.kind || item.type || '').trim().toLowerCase();
   const productId = firstValidObjectId(
     item.productSnapshot?._id,
@@ -1150,13 +1155,53 @@ const normalizeFiscalItem = (item = {}) => {
     type: itemType,
     quantity,
     unitPrice,
-    total,
+    total: grossTotal,
+    netTotal: Math.max(0, grossTotal - discount + explicitAddition),
+    discount,
+    addition: explicitAddition,
     productSnapshot: item.productSnapshot ? { ...item.productSnapshot } : null,
     name: item.name || item.nome || item.product || item.descricao || '',
     barcode: item.barcode || item.codigoBarras || item.codigo || '',
     internalCode: item.codigoInterno || item.internalCode || '',
     unit: item.unit || item.unidade || item.productSnapshot?.unidade || 'UN',
   };
+};
+
+const allocateFiscalAmount = (items = [], total = 0, field = 'discount') => {
+  if (!items.length) return [];
+  const targetCents = Math.max(0, Math.round(safeNumber(total, 0) * 100));
+  const embeddedCents = items.map((item) => Math.max(0, Math.round(safeNumber(item?.[field], 0) * 100)));
+  const weights = items.map((item) => Math.max(0, Math.round(safeNumber(item?.total, 0) * 100)));
+  const distribute = (amountCents, distributionWeights) => {
+    const result = new Array(items.length).fill(0);
+    if (amountCents <= 0) return result;
+    const weightTotal = distributionWeights.reduce((sum, value) => sum + value, 0);
+    if (weightTotal <= 0) {
+      result[0] = amountCents;
+      return result;
+    }
+    const ranked = distributionWeights.map((weight, index) => {
+      const exact = (amountCents * weight) / weightTotal;
+      const floor = Math.floor(exact);
+      result[index] = floor;
+      return { index, remainder: exact - floor };
+    }).sort((left, right) => right.remainder - left.remainder || left.index - right.index);
+    let remaining = amountCents - result.reduce((sum, value) => sum + value, 0);
+    for (let index = 0; remaining > 0; index = (index + 1) % ranked.length) {
+      result[ranked[index].index] += 1;
+      remaining -= 1;
+    }
+    return result;
+  };
+  const embeddedTotal = embeddedCents.reduce((sum, value) => sum + value, 0);
+  const allocated = embeddedTotal > targetCents
+    ? distribute(targetCents, embeddedCents)
+    : embeddedCents.map((value) => value);
+  if (embeddedTotal < targetCents) {
+    const remaining = distribute(targetCents - embeddedTotal, weights);
+    remaining.forEach((value, index) => { allocated[index] += value; });
+  }
+  return allocated.map((value) => value / 100);
 };
 
 const loadProductsByIds = async (ids = []) => {
@@ -1383,6 +1428,14 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   const desconto = safeNumber(snapshot?.totais?.descontoValor ?? snapshot?.totais?.desconto ?? sale.discountValue ?? 0, 0);
   const acrescimo = safeNumber(snapshot?.totais?.acrescimoValor ?? snapshot?.totais?.acrescimo ?? sale.additionValue ?? 0, 0);
   const totalLiquido = Math.max(0, totalProducts - desconto + acrescimo);
+  const allocatedDiscounts = allocateFiscalAmount(fiscalItems, desconto, 'discount');
+  const allocatedAdditions = allocateFiscalAmount(fiscalItems, acrescimo, 'addition');
+  const adjustedFiscalItems = fiscalItems.map((item, index) => ({
+    ...item,
+    discount: allocatedDiscounts[index] || 0,
+    addition: allocatedAdditions[index] || 0,
+    netTotal: Math.max(0, item.total - (allocatedDiscounts[index] || 0) + (allocatedAdditions[index] || 0)),
+  }));
   const pagamentosRaw = Array.isArray(snapshot?.pagamentos?.items) ? snapshot.pagamentos.items : [];
   const pagamentos = pagamentosRaw.length
     ? pagamentosRaw.map((payment) => ({
@@ -1865,7 +1918,7 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   let totalIcmsBase = 0;
   let totalIcmsValue = 0;
 
-  fiscalItems.forEach((item, index) => {
+  adjustedFiscalItems.forEach((item, index) => {
     const product = item.productId ? productsMap.get(String(item.productId)) : null;
     const fiscalData = product ? fiscalDataByProductId.get(String(product._id)) || {} : {};
     const cfop =
@@ -1903,6 +1956,8 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     infNfeLines.push(`        <qCom>${toDecimal(item.quantity, 4)}</qCom>`);
     infNfeLines.push(`        <vUnCom>${toDecimal(item.unitPrice)}</vUnCom>`);
     infNfeLines.push(`        <vProd>${toDecimal(item.total)}</vProd>`);
+    if (item.discount > 0.009) infNfeLines.push(`        <vDesc>${toDecimal(item.discount)}</vDesc>`);
+    if (item.addition > 0.009) infNfeLines.push(`        <vOutro>${toDecimal(item.addition)}</vOutro>`);
     infNfeLines.push(`        <cEANTrib>${cEANTrib}</cEANTrib>`);
     infNfeLines.push(`        <uTrib>${sanitize(item.unit)}</uTrib>`);
     infNfeLines.push(`        <qTrib>${toDecimal(item.quantity, 4)}</qTrib>`);
@@ -1910,14 +1965,14 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     infNfeLines.push('        <indTot>1</indTot>');
     infNfeLines.push('      </prod>');
     infNfeLines.push('      <imposto>');
-    const icmsSummary = buildIcmsGroup({ lines: infNfeLines, fiscalData, itemTotal: item.total }) || {};
+    const icmsSummary = buildIcmsGroup({ lines: infNfeLines, fiscalData, itemTotal: item.netTotal }) || {};
     totalIcmsBase += safeNumber(icmsSummary.base, 0);
     totalIcmsValue += safeNumber(icmsSummary.value, 0);
     const pisSummary = buildTaxGroup({
       lines: infNfeLines,
       tag: 'PIS',
       data: fiscalData?.pis,
-      baseValue: item.total,
+      baseValue: item.netTotal,
       quantity: item.quantity,
     });
     totalPis += pisSummary.amount || 0;
@@ -1925,7 +1980,7 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
       lines: infNfeLines,
       tag: 'COFINS',
       data: fiscalData?.cofins,
-      baseValue: item.total,
+      baseValue: item.netTotal,
       quantity: item.quantity,
     });
     totalCofins += cofinsSummary.amount || 0;
@@ -2276,6 +2331,7 @@ module.exports = {
     collectFiscalItemCandidates,
     buildIcmsGroup,
     normalizeFiscalItem,
+    allocateFiscalAmount,
     resolveGtinForXml,
     resolveEmitterCrt,
     resolveFiscalRuleCode,
