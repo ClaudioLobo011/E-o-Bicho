@@ -101,6 +101,12 @@ const pdvSchema = new mongoose.Schema(
     tipoUso: { type: String, enum: tiposUso, default: 'web', index: true },
     modoTerminais: { type: String, enum: modosTerminais, default: 'exclusivo' },
     empresa: { type: mongoose.Schema.Types.ObjectId, ref: 'Store', required: true },
+    empresaEmitenteFiscal: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Store',
+      default: null,
+      index: true,
+    },
     serieNfe: { type: String, trim: true },
     serieNfce: { type: String, trim: true },
     numeroNfeInicial: {

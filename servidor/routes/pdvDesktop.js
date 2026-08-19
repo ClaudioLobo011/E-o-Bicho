@@ -1263,6 +1263,7 @@ function getWebRoomCount(req, pdvId) {
 }
 
 async function buildChecklist(req, pdv) {
+  const fiscalIssuerId = pdv.empresaEmitenteFiscal || pdv.empresa;
   const [state, activeHost, paymentCount, pendingEvents, conflictingSeries] = await Promise.all([
     PdvState.findOne({ pdv: pdv._id }).lean(),
     PdvDesktopHost.findOne({ pdv: pdv._id, status: 'active' }).lean(),
@@ -1271,9 +1272,13 @@ async function buildChecklist(req, pdv) {
     pdv.serieNfce
       ? Pdv.countDocuments({
           _id: { $ne: pdv._id },
-          empresa: pdv.empresa,
           ativo: true,
           serieNfce: pdv.serieNfce,
+          ambientesHabilitados: { $in: pdv.ambientesHabilitados || [] },
+          $or: [
+            { empresaEmitenteFiscal: fiscalIssuerId },
+            { empresaEmitenteFiscal: null, empresa: fiscalIssuerId },
+          ],
         })
       : Promise.resolve(0),
   ]);
@@ -1409,7 +1414,7 @@ router.post('/operator-statuses', authenticateHost, async (req, res) => {
 router.get('/bootstrap', authenticateHost, async (req, res) => {
   const host = req.desktopHost;
   const [pdv, state, paymentMethods] = await Promise.all([
-    Pdv.findById(host.pdv).populate('empresa').lean(),
+    Pdv.findById(host.pdv).populate('empresa').populate('empresaEmitenteFiscal').lean(),
     PdvState.findOne({ pdv: host.pdv }).lean(),
     PaymentMethod.find({ company: host.empresa }).sort({ name: 1 }).lean(),
   ]);
@@ -1775,14 +1780,17 @@ router.get('/fiscal/config', authenticateHost, async (req, res) => {
   // O modo matricial emite NFC-e manualmente e precisa do mesmo pacote fiscal local.
   if (pdv?.configuracoesFiscal?.tipoEmissaoPadrao === 'matricial') pdv.configuracoesFiscal.tipoEmissaoPadrao = 'fiscal';
   if (!pdv || pdv.tipoUso !== 'executavel' || pdv.configuracoesFiscal?.tipoEmissaoPadrao !== 'fiscal') return res.status(409).json({ message: 'Este PDV não está configurado para emissão fiscal local.' });
-  const store = await Store.findById(req.desktopHost.empresa).select('+certificadoArquivoCriptografado +certificadoSenhaCriptografada +cscTokenProducaoCriptografado +cscTokenHomologacaoCriptografado').lean();
+  const fiscalIssuerId = pdv.empresaEmitenteFiscal || req.desktopHost.empresa;
+  const store = await Store.findById(fiscalIssuerId).select('+certificadoArquivoCriptografado +certificadoSenhaCriptografada +cscTokenProducaoCriptografado +cscTokenHomologacaoCriptografado').lean();
   if (!store?.certificadoArquivoCriptografado || !store?.certificadoSenhaCriptografada) return res.status(409).json({ message: 'Certificado A1 não configurado para operação offline.' });
   const environment = pdv.ambientePadrao === 'producao' ? 'producao' : 'homologacao';
   const encryptedCsc = environment === 'producao' ? store.cscTokenProducaoCriptografado : store.cscTokenHomologacaoCriptografado;
   const cscId = environment === 'producao' ? store.cscIdProducao : store.cscIdHomologacao;
   if (!encryptedCsc || !cscId) return res.status(409).json({ message: 'CSC não configurado para o ambiente fiscal do PDV.' });
   return res.json({
-    version: 1, environment, series: Number(pdv.serieNfce), generatedAt: new Date().toISOString(),
+    version: 2, environment, series: Number(pdv.serieNfce), generatedAt: new Date().toISOString(),
+    operationalStoreId: String(req.desktopHost.empresa),
+    fiscalIssuerStoreId: String(store._id),
     certificateBase64: decryptBuffer(store.certificadoArquivoCriptografado).toString('base64'),
     certificatePassword: decryptText(store.certificadoSenhaCriptografada), cscId: String(cscId), cscToken: decryptText(encryptedCsc),
     store: {
@@ -1928,6 +1936,7 @@ router.post('/pdvs/:id/copy-settings', ...adminOnly, async (req, res) => {
     tipoUso: 'executavel',
     modoTerminais: source.modoTerminais || 'exclusivo',
     empresa: source.empresa,
+    empresaEmitenteFiscal: source.empresaEmitenteFiscal || source.empresa,
     serieNfe: '',
     serieNfce: '',
     numeroNfeInicial: null,

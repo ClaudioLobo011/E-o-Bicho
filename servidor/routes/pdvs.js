@@ -2316,6 +2316,37 @@ const buildPdvPayload = ({ body, store }) => {
   };
 };
 
+const ensureExclusivePdvFiscalSeries = async ({
+  pdvId = null,
+  issuerStoreId,
+  serieNfce,
+  environments = [],
+}) => {
+  const normalizedSeries = normalizeString(serieNfce);
+  const normalizedEnvironments = normalizeAmbientes(environments);
+  if (!normalizedSeries || !issuerStoreId || !normalizedEnvironments.length) return;
+
+  const issuerObjectId = new mongoose.Types.ObjectId(String(issuerStoreId));
+  const conflict = await Pdv.findOne({
+    ...(pdvId ? { _id: { $ne: pdvId } } : {}),
+    ativo: true,
+    serieNfce: normalizedSeries,
+    ambientesHabilitados: { $in: normalizedEnvironments },
+    $or: [
+      { empresaEmitenteFiscal: issuerObjectId },
+      { empresaEmitenteFiscal: null, empresa: issuerObjectId },
+    ],
+  })
+    .select('codigo nome serieNfce ambientePadrao')
+    .lean();
+
+  if (conflict) {
+    throw createValidationError(
+      `A série NFC-e ${normalizedSeries} já é usada pelo emitente fiscal no PDV ${conflict.codigo || conflict.nome}.`
+    );
+  }
+};
+
 const parseDateOrNull = (value) => {
   if (!value) return null;
   const date = new Date(value);
@@ -3519,6 +3550,7 @@ router.get('/', requireAuth, authorizeRoles('admin'), async (req, res) => {
     const pdvs = await Pdv.find(query)
       .sort({ nome: 1 })
       .populate('empresa')
+      .populate('empresaEmitenteFiscal')
       .lean();
     res.json({ pdvs });
   } catch (error) {
@@ -3679,6 +3711,7 @@ router.get('/:id', requireAuth, authorizeRoles('admin'), async (req, res) => {
     const caixaOnlyRequested = lightweightRequested && scope === 'caixa';
     const pdv = await Pdv.findById(req.params.id)
       .populate('empresa')
+      .populate('empresaEmitenteFiscal')
       .populate('configuracoesEstoque.depositoPadrao')
       .populate('configuracoesFinanceiro.contaCorrente')
       .populate('configuracoesFinanceiro.contaContabilReceber')
@@ -3793,6 +3826,14 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
       return res.status(400).json({ message: 'Empresa informada nÃ£o foi encontrada.' });
     }
 
+    const empresaEmitenteFiscalId = normalizeString(
+      req.body.empresaEmitenteFiscal || req.body.fiscalIssuerStore || empresaId
+    );
+    const fiscalStore = await Store.findById(empresaEmitenteFiscalId).lean();
+    if (!fiscalStore) {
+      return res.status(400).json({ message: 'Empresa emitente fiscal não foi encontrada.' });
+    }
+
     let codigo = normalizeString(req.body.codigo);
     if (!codigo) {
       codigo = await generateNextCode();
@@ -3805,7 +3846,12 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
 
     let payload;
     try {
-      payload = buildPdvPayload({ body: req.body, store });
+      payload = buildPdvPayload({ body: req.body, store: fiscalStore });
+      await ensureExclusivePdvFiscalSeries({
+        issuerStoreId: empresaEmitenteFiscalId,
+        serieNfce: payload.serieNfce,
+        environments: payload.ambientesHabilitados,
+      });
     } catch (validationError) {
       return res.status(400).json({ message: validationError.message });
     }
@@ -3816,6 +3862,7 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
       ...payload,
       codigo,
       empresa: empresaId,
+      empresaEmitenteFiscal: empresaEmitenteFiscalId,
       configuracoesFiscal: {
         tipoEmissaoPadrao: req.body?.tipoOperacao === 'matricial' ? 'matricial' : 'fiscal',
       },
@@ -3829,7 +3876,7 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
       atualizadoPor: criadoPor,
     });
 
-    const populated = await pdv.populate('empresa');
+    const populated = await pdv.populate(['empresa', 'empresaEmitenteFiscal']);
     res.status(201).json(populated);
   } catch (error) {
     console.error('Erro ao criar PDV:', error);
@@ -3855,6 +3902,14 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
       return res.status(400).json({ message: 'Empresa informada nÃ£o foi encontrada.' });
     }
 
+    const empresaEmitenteFiscalId = normalizeString(
+      req.body.empresaEmitenteFiscal || req.body.fiscalIssuerStore || empresaId
+    );
+    const fiscalStore = await Store.findById(empresaEmitenteFiscalId).lean();
+    if (!fiscalStore) {
+      return res.status(400).json({ message: 'Empresa emitente fiscal não foi encontrada.' });
+    }
+
     const existingPdv = await Pdv.findById(pdvId).lean();
     if (!existingPdv) {
       return res.status(404).json({ message: 'PDV não encontrado.' });
@@ -3862,7 +3917,13 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
 
     let payload;
     try {
-      payload = buildPdvPayload({ body: req.body, store });
+      payload = buildPdvPayload({ body: req.body, store: fiscalStore });
+      await ensureExclusivePdvFiscalSeries({
+        pdvId,
+        issuerStoreId: empresaEmitenteFiscalId,
+        serieNfce: payload.serieNfce,
+        environments: payload.ambientesHabilitados,
+      });
     } catch (validationError) {
       return res.status(400).json({ message: validationError.message });
     }
@@ -3892,6 +3953,7 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
         ...payload,
         codigo,
         empresa: empresaId,
+        empresaEmitenteFiscal: empresaEmitenteFiscalId,
         atualizadoPor,
         configuracoesFiscal: {
           ...(existingPdv.configuracoesFiscal || {}),
@@ -3905,7 +3967,7 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
         },
       },
       { new: true, runValidators: true }
-    ).populate('empresa');
+    ).populate(['empresa', 'empresaEmitenteFiscal']);
 
     if (!updated) {
       return res.status(404).json({ message: 'PDV nÃ£o encontrado.' });
@@ -3955,9 +4017,10 @@ const emitSaleFiscalHandler = async (req, res) => {
       return res.status(404).json({ message: 'PDV nÃ£o encontrado.' });
     }
 
-    const empresaId = pdv.empresa?._id || pdv.empresa;
+    const empresaOperacionalId = pdv.empresa?._id || pdv.empresa;
+    const empresaId = pdv.empresaEmitenteFiscal || empresaOperacionalId;
     if (!empresaId) {
-      return res.status(400).json({ message: 'Empresa vinculada ao PDV nÃ£o foi encontrada.' });
+      return res.status(400).json({ message: 'Empresa emitente fiscal do PDV não foi encontrada.' });
     }
 
     const empresa = await Store.findById(empresaId).select(
@@ -3965,7 +4028,7 @@ const emitSaleFiscalHandler = async (req, res) => {
     );
 
     if (!empresa) {
-      return res.status(400).json({ message: 'Empresa vinculada ao PDV nÃ£o foi encontrada.' });
+      return res.status(400).json({ message: 'Empresa emitente fiscal do PDV não foi encontrada.' });
     }
 
     if (!empresa.certificadoArquivoCriptografado || !empresa.certificadoSenhaCriptografada) {
@@ -4149,6 +4212,11 @@ const emitSaleFiscalHandler = async (req, res) => {
     sale.fiscalEnvironment = ambiente;
     sale.fiscalSerie = serieNfce;
     sale.fiscalNumber = proximoNumeroFiscal;
+    sale.fiscalIssuerStoreId = String(storeForXml._id || empresaId);
+    sale.fiscalIssuerCnpj = normalizeString(storeForXml.cnpj);
+    sale.fiscalIssuerName = normalizeString(
+      storeForXml.nomeFantasia || storeForXml.razaoSocial || storeForXml.nome
+    );
     sale.fiscalXmlContent = emissionResult.xml;
     sale.fiscalQrCodeData = emissionResult.qrCodePayload || '';
     sale.fiscalQrCodeImage = qrCodeImage || '';

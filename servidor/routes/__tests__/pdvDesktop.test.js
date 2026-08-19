@@ -30,6 +30,7 @@ const Appointment = require('../../models/Appointment');
 const Exchange = require('../../models/Exchange');
 const Transfer = require('../../models/Transfer');
 const router = require('../../routes/pdvDesktop');
+const { encryptBuffer, encryptText } = require('../../utils/certificates');
 
 let mongo;
 function app() { const instance = express(); instance.use(express.json()); instance.use('/desktop', router); return instance; }
@@ -555,6 +556,71 @@ test.describe('integração do PDV Desktop', () => {
     assert.equal(converted.desktop.status, 'ativo');
     assert.equal(converted.modoTerminais, 'espelhado');
     assert.equal(await PdvConversionBackup.countDocuments({ pdv: base.pdv._id, reason: 'convert' }), 1);
+  });
+
+  test('provisiona o certificado e os dados da empresa emitente fiscal sem trocar a empresa operacional', async () => {
+    const base = await fixture();
+    const issuer = await Store.create({
+      codigo: `EMIT-${Date.now()}`,
+      nome: 'Emitente Fiscal Vila',
+      nomeFantasia: 'Emitente Fiscal Vila',
+      razaoSocial: 'EMITENTE FISCAL VILA LTDA',
+      cnpj: '07919703000167',
+      inscricaoEstadual: '12345678',
+      regimeTributario: 'simples',
+      uf: 'RJ',
+      codigoUf: '33',
+      codigoIbgeMunicipio: '3304557',
+      municipio: 'Rio de Janeiro',
+      logradouro: 'Rua Fiscal',
+      numero: '100',
+      bairro: 'Vila Isabel',
+      cep: '20551000',
+      certificadoArquivoCriptografado: encryptBuffer(Buffer.from('pfx-de-teste')),
+      certificadoSenhaCriptografada: encryptText('senha-teste'),
+      cscIdProducao: '000004',
+      cscTokenProducaoCriptografado: encryptText('csc-producao-teste'),
+      cscTokenProducaoArmazenado: true,
+    });
+    await Pdv.updateOne(
+      { _id: base.pdv._id },
+      {
+        $set: {
+          tipoUso: 'executavel',
+          'desktop.status': 'ativo',
+          empresaEmitenteFiscal: issuer._id,
+          serieNfce: '4',
+          ambientesHabilitados: ['producao'],
+          ambientePadrao: 'producao',
+          'configuracoesFiscal.tipoEmissaoPadrao': 'matricial',
+        },
+      }
+    );
+
+    const request = supertest(app());
+    const pairing = await request
+      .post(`/desktop/pdvs/${base.pdv._id}/pairing-code`)
+      .set('Authorization', 'Bearer test')
+      .send();
+    const paired = await request
+      .post('/desktop/pair')
+      .send({ pairingCode: pairing.body.pairingCode, machineId: 'issuer-host' });
+    const headers = { 'X-Desktop-Token': paired.body.token };
+
+    const bootstrap = await request.get('/desktop/bootstrap').set(headers);
+    assert.equal(bootstrap.status, 200, bootstrap.text);
+    assert.equal(String(bootstrap.body.pdv.empresa._id), String(base.company._id));
+    assert.equal(String(bootstrap.body.pdv.empresaEmitenteFiscal._id), String(issuer._id));
+
+    const fiscalConfig = await request.get('/desktop/fiscal/config').set(headers);
+    assert.equal(fiscalConfig.status, 200, fiscalConfig.text);
+    assert.equal(fiscalConfig.body.version, 2);
+    assert.equal(fiscalConfig.body.operationalStoreId, String(base.company._id));
+    assert.equal(fiscalConfig.body.fiscalIssuerStoreId, String(issuer._id));
+    assert.equal(fiscalConfig.body.series, 4);
+    assert.equal(fiscalConfig.body.store.cnpj, '07919703000167');
+    assert.equal(fiscalConfig.body.certificatePassword, 'senha-teste');
+    assert.equal(fiscalConfig.body.cscToken, 'csc-producao-teste');
   });
 
   test('registra transferência desktop uma única vez e não movimenta estoque antes da aprovação', async () => {

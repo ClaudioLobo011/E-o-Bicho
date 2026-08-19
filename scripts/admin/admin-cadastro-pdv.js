@@ -25,6 +25,7 @@
     active: '#pdv-active',
     activeLabel: '[data-active-label]',
     company: '#pdv-company',
+    fiscalIssuerCompany: '#pdv-fiscal-issuer-company',
     nfeSeries: '#pdv-nfe-series',
     nfceSeries: '#pdv-nfce-series',
     nfeInitialNumber: '#pdv-nfe-initial-number',
@@ -76,6 +77,14 @@
       normalized.empresa = { ...pdv.empresa, _id: normalizeId(pdv.empresa._id) };
     } else if (pdv.empresa != null) {
       normalized.empresa = normalizeId(pdv.empresa);
+    }
+    if (pdv.empresaEmitenteFiscal && typeof pdv.empresaEmitenteFiscal === 'object') {
+      normalized.empresaEmitenteFiscal = {
+        ...pdv.empresaEmitenteFiscal,
+        _id: normalizeId(pdv.empresaEmitenteFiscal._id),
+      };
+    } else if (pdv.empresaEmitenteFiscal != null) {
+      normalized.empresaEmitenteFiscal = normalizeId(pdv.empresaEmitenteFiscal);
     }
     return normalized;
   };
@@ -213,7 +222,7 @@
       state.stores.some((store) => normalizeId(store?._id) === normalizeId(storeId));
 
   const getSelectedStore = () => {
-    const companyId = normalizeId(elements.company?.value);
+    const companyId = normalizeId(elements.fiscalIssuerCompany?.value || elements.company?.value);
     if (!companyId) return null;
     return (
       state.stores.find((store) => normalizeId(store?._id) === companyId) || null
@@ -559,6 +568,9 @@
     if (elements.syncAuto) elements.syncAuto.checked = true;
     if (elements.usageType) { elements.usageType.value = 'web'; elements.usageType.disabled = false; }
     if (elements.operationType) elements.operationType.value = 'fiscal';
+    if (elements.fiscalIssuerCompany) {
+      elements.fiscalIssuerCompany.value = normalizeId(elements.company?.value);
+    }
     if (elements.terminalMode) elements.terminalMode.value = 'exclusivo';
     if (elements.printPolicy) elements.printPolicy.value = 'perguntar';
     elements.desktopStatusCard?.classList.add('hidden');
@@ -607,6 +619,13 @@
         : normalizeId(pdv.empresa);
     if (elements.company) {
       elements.company.value = empresaId;
+    }
+    if (elements.fiscalIssuerCompany) {
+      const emitenteId =
+        typeof pdv.empresaEmitenteFiscal === 'object' && pdv.empresaEmitenteFiscal
+          ? normalizeId(pdv.empresaEmitenteFiscal._id)
+          : normalizeId(pdv.empresaEmitenteFiscal || empresaId);
+      elements.fiscalIssuerCompany.value = emitenteId;
     }
     updateCompanySummary();
     if (elements.nfeSeries) elements.nfeSeries.value = pdv.serieNfe || '';
@@ -753,7 +772,21 @@
       if (!store) {
         notify('Não foi possível localizar a empresa selecionada.', 'error');
         return null;
-    }
+      }
+
+      const empresaEmitenteFiscalId = normalizeId(elements.fiscalIssuerCompany?.value || empresaId);
+      if (!empresaEmitenteFiscalId || !isStoreAllowed(empresaEmitenteFiscalId)) {
+        notify('Selecione uma empresa emitente fiscal válida.', 'warning');
+        elements.fiscalIssuerCompany?.focus();
+        return null;
+      }
+      const fiscalStore = state.stores.find(
+        (item) => normalizeId(item._id) === empresaEmitenteFiscalId
+      );
+      if (!fiscalStore) {
+        notify('Não foi possível localizar a empresa emitente fiscal.', 'error');
+        return null;
+      }
 
     const tipoOperacao = elements.operationType?.value || 'fiscal';
     const exigeConfiguracaoFiscal = tipoOperacao === 'fiscal';
@@ -770,14 +803,14 @@
     }
 
     for (const env of ambientesHabilitados) {
-      if (!storeSupportsEnvironment(store, env)) {
-        notify(`Configure o CSC de ${ambientesLabels[env]} na empresa para utilizar este ambiente.`, 'warning');
+      if (!storeSupportsEnvironment(fiscalStore, env)) {
+        notify(`Configure o CSC de ${ambientesLabels[env]} na empresa emitente fiscal para utilizar este ambiente.`, 'warning');
         return null;
       }
     }
 
-    if (ambientePadrao && !storeSupportsEnvironment(store, ambientePadrao)) {
-      notify('O ambiente padrão selecionado não está disponível para a empresa.', 'warning');
+    if (ambientePadrao && !storeSupportsEnvironment(fiscalStore, ambientePadrao)) {
+      notify('O ambiente padrão selecionado não está disponível para a empresa emitente fiscal.', 'warning');
       return null;
     }
 
@@ -856,6 +889,7 @@
       tipoOperacao,
       politicaImpressao: elements.printPolicy?.value || 'perguntar',
       empresa: empresaId,
+      empresaEmitenteFiscal: empresaEmitenteFiscalId,
       serieNfe: elements.nfeSeries?.value.trim() || '',
       serieNfce: elements.nfceSeries?.value.trim() || '',
       numeroNfeInicial: numeroNfeInicial.value,
@@ -874,6 +908,7 @@
     const populateCompanySelect = () => {
       if (!elements.company) return;
       const previous = normalizeId(elements.company.value);
+      const previousIssuer = normalizeId(elements.fiscalIssuerCompany?.value);
 
       if (!state.stores.length) {
         elements.company.innerHTML = '<option value="">Nenhuma empresa cadastrada</option>';
@@ -888,12 +923,23 @@
         );
       });
         elements.company.innerHTML = options.join('');
+        if (elements.fiscalIssuerCompany) {
+          elements.fiscalIssuerCompany.innerHTML = options.join('');
+        }
       }
 
       if (previous && state.stores.some((store) => normalizeId(store._id) === previous)) {
         elements.company.value = previous;
       } else if (previous) {
         elements.company.value = '';
+      }
+
+      if (elements.fiscalIssuerCompany) {
+        if (previousIssuer && state.stores.some((store) => normalizeId(store._id) === previousIssuer)) {
+          elements.fiscalIssuerCompany.value = previousIssuer;
+        } else {
+          elements.fiscalIssuerCompany.value = elements.company.value || '';
+        }
       }
 
       updateCompanySummary();
@@ -1143,6 +1189,16 @@
 
     if (elements.company) {
       elements.company.addEventListener('change', () => {
+        if (elements.fiscalIssuerCompany && !elements.fiscalIssuerCompany.value) {
+          elements.fiscalIssuerCompany.value = elements.company.value || '';
+        }
+        updateCompanySummary();
+        syncEnvironmentAvailability({ preserveSelection: false, preferredDefault: 'homologacao' });
+      });
+    }
+
+    if (elements.fiscalIssuerCompany) {
+      elements.fiscalIssuerCompany.addEventListener('change', () => {
         updateCompanySummary();
         syncEnvironmentAvailability({ preserveSelection: false, preferredDefault: 'homologacao' });
       });
