@@ -26,6 +26,9 @@
     "pdv:migrate-normalized": "node scripts/backfill-pdvstate-normalized.js --write",
     "products:search-index:dry-run": "node scripts/backfill-product-search-index.js",
     "products:search-index": "node scripts/backfill-product-search-index.js --write"
+    ,"customers:audit-identities": "node scripts/audit-customer-identities.js"
+    ,"customers:backfill-identities": "node scripts/audit-customer-identities.js --apply"
+    ,"customers:check-whatsapp-otp": "node scripts/check-whatsapp-otp.js"
   },
   "keywords": [],
   "author": "",

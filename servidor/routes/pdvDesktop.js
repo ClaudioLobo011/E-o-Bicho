@@ -28,6 +28,7 @@ const pdvDomain = require('./pdvs');
 const { adjustProductStockForDeposit, toObjectIdOrNull } = require('../utils/inventoryStock');
 const { decryptBuffer, decryptText } = require('../utils/certificates');
 const { deriveAppointmentStatus } = require('../services/appointmentStatus');
+const { normalizeBrazilPhone, phoneLookupQuery, effectiveWebAccountStatus } = require('../utils/customerIdentity');
 
 const router = express.Router();
 const adminOnly = [requireAuth, authorizeRoles('admin', 'admin_master')];
@@ -507,9 +508,9 @@ async function resolveDesktopCustomerId(customerId, host) {
   }).sort({ createdAt: -1 }).lean();
   const source = registration?.payload && typeof registration.payload === 'object' ? registration.payload : {};
   const document = clean(source.document).replace(/\D/g, '');
-  const phone = clean(source.phone).replace(/\D/g, '');
+  const phone = normalizeBrazilPhone(source.phone);
   const matches = [
-    ...(phone ? [{ celular: phone }] : []),
+    ...(phone ? [phoneLookupQuery(phone)] : []),
     ...(document.length === 11 ? [{ cpf: document }] : []),
     ...(document.length === 14 ? [{ cnpj: document }] : []),
   ];
@@ -548,6 +549,40 @@ async function desktopAppointmentPayload(source, host) {
     profissional: primaryProfessional, scheduledAt, valor: itens.reduce((sum, item) => sum + Number(item.valor || 0), 0),
     status, observacoes: clean(source.notes),
   };
+}
+
+async function syncDesktopCustomerAddresses(customerId, source = {}) {
+  const candidates = Array.isArray(source.addresses) && source.addresses.length
+    ? source.addresses
+    : source.address && typeof source.address === 'object' ? [source.address] : [];
+  const unique = new Map();
+  candidates.forEach((entry, index) => {
+    if (!entry || typeof entry !== 'object') return;
+    const id = clean(entry.id || entry._id);
+    unique.set(id || `row:${index}`, entry);
+  });
+  for (const entry of unique.values()) {
+    const addressId = clean(entry.id || entry._id);
+    const isDefault = Boolean(entry.principal || entry.isPrimary || entry.isDefault);
+    if (isDefault) await UserAddress.updateMany({ user: customerId }, { $set: { isDefault: false } });
+    const values = {
+      apelido: clean(entry.label || entry.apelido) || (isDefault ? 'Principal' : 'Endereço'),
+      cep: clean(entry.zipCode || entry.cep),
+      logradouro: clean(entry.street || entry.logradouro),
+      numero: clean(entry.number || entry.numero),
+      complemento: clean(entry.complement || entry.complemento),
+      bairro: clean(entry.district || entry.bairro),
+      cidade: clean(entry.city || entry.cidade || entry.municipio),
+      uf: clean(entry.state || entry.uf).toUpperCase(),
+      isDefault,
+    };
+    if (!values.cep && !values.logradouro) continue;
+    const query = mongoose.Types.ObjectId.isValid(addressId)
+      ? { _id: addressId, user: customerId }
+      : isDefault ? { user: customerId, isDefault: true } : null;
+    if (query) await UserAddress.findOneAndUpdate(query, { $set: values, $setOnInsert: { user: customerId } }, { upsert: true, new: true, setDefaultsOnInsert: true });
+    else await UserAddress.create({ user: customerId, ...values });
+  }
 }
 
 function validatePaidDesktopAppointmentChanges(appointment, values, occurrenceKey = '') {
@@ -667,7 +702,9 @@ async function materializeDesktopEvent(event, pdv, host) {
     'exchange.finalized',
     'transfer.requested',
     'customer.created',
+    'customer.updated',
     'pet.created',
+    'pet.updated',
     'appointment.status.updated',
     'appointment.created',
     'appointment.updated',
@@ -685,10 +722,10 @@ async function materializeDesktopEvent(event, pdv, host) {
     let customer = await User.findById(customerId);
     if (!customer) {
       const document = clean(source.document).replace(/\D/g, '');
-      const phone = clean(source.phone).replace(/\D/g, '');
+      const phone = normalizeBrazilPhone(source.phone);
       if (!clean(source.name) || !phone) throw new Error('Nome e telefone são obrigatórios para cadastrar o cliente.');
       const duplicate = await User.findOne({ $or: [
-        { celular: phone },
+        phoneLookupQuery(phone),
         ...(document.length === 11 ? [{ cpf: document }] : []),
         ...(document.length === 14 ? [{ cnpj: document }] : []),
       ] });
@@ -704,6 +741,7 @@ async function materializeDesktopEvent(event, pdv, host) {
           email: clean(source.email) || `cadastro.desktop+${customerId}@eobicho.local`,
           senha: password,
           celular: phone,
+          celularNormalizado: phone,
           telefone: clean(source.secondaryPhone),
           codigoCliente: Number(last?.codigoCliente || 0) + 1,
           nomeCompleto: document.length === 14 ? undefined : clean(source.name),
@@ -713,19 +751,14 @@ async function materializeDesktopEvent(event, pdv, host) {
           genero: clean(source.gender),
           dataNascimento: source.birthDate || undefined,
           role: 'cliente',
+          webAccountStatus: 'store_only',
+          registrationSource: 'pdv',
           empresaPrincipal: host.empresa,
           empresas: [host.empresa],
         });
       }
     }
-    const address = source.address && typeof source.address === 'object' ? source.address : {};
-    if (clean(address.zipCode || address.cep) || clean(address.street || address.logradouro)) {
-      await UserAddress.findOneAndUpdate(
-        { user: customer._id, isDefault: true },
-        { $set: { apelido: clean(address.label) || 'Principal', cep: clean(address.zipCode || address.cep), logradouro: clean(address.street || address.logradouro), numero: clean(address.number || address.numero), complemento: clean(address.complement || address.complemento), bairro: clean(address.district || address.bairro), cidade: clean(address.city || address.cidade), uf: clean(address.state || address.uf).toUpperCase(), isDefault: true } },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
-      );
-    }
+    await syncDesktopCustomerAddresses(customer._id, source);
     return true;
   }
   if (event.type === 'pet.created') {
@@ -786,6 +819,70 @@ async function materializeDesktopEvent(event, pdv, host) {
       }
       await appointment.save();
     }
+    return true;
+  }
+  if (event.type === 'pet.updated') {
+    const source = event.payload && typeof event.payload === 'object' ? event.payload : {};
+    const petId = clean(source.petId || source.id);
+    const customerId = await resolveDesktopCustomerId(source.customerId || source.ownerId, host);
+    if (!mongoose.Types.ObjectId.isValid(petId) || !mongoose.Types.ObjectId.isValid(customerId)) throw new Error('Cliente ou pet inválido para atualização.');
+    const pet = await Pet.findOne({ _id: petId, owner: customerId });
+    if (!pet) throw new Error('Pet não encontrado para este cliente.');
+    pet.nome = clean(source.name || source.nome);
+    pet.tipo = clean(source.type || source.tipo).toLowerCase();
+    pet.raca = clean(source.breed || source.raca);
+    pet.porte = clean(source.size || source.porte).toLowerCase();
+    pet.sexo = clean(source.sex || source.sexo).toUpperCase();
+    pet.dataNascimento = source.birthDate || source.dataNascimento;
+    pet.microchip = clean(source.microchip);
+    pet.pelagemCor = clean(source.coatColor || source.pelagemCor);
+    pet.rga = clean(source.rga);
+    pet.peso = clean(source.weight || source.peso);
+    pet.codAntigoPet = clean(source.oldCode || source.codAntigoPet);
+    pet.obito = Boolean(source.deceased ?? source.obito);
+    pet.castrado = Boolean(source.neutered ?? source.castrado);
+    if (!pet.nome || !pet.tipo || !pet.raca || !['M', 'F'].includes(pet.sexo) || !pet.dataNascimento) throw new Error('Complete os dados obrigatórios do pet.');
+    await pet.save();
+    return true;
+  }
+  if (event.type === 'customer.updated') {
+    const source = event.payload && typeof event.payload === 'object' ? event.payload : {};
+    const requestedCustomerId = clean(source.customerId || source.id);
+    const customerId = await resolveDesktopCustomerId(requestedCustomerId, host);
+    if (!mongoose.Types.ObjectId.isValid(customerId)) throw new Error('Identificador do cliente inválido.');
+    const customer = await User.findById(customerId);
+    if (!customer) throw new Error('Cliente não encontrado para atualização.');
+    const name = clean(source.name);
+    const document = clean(source.document).replace(/\D/g, '');
+    const phone = normalizeBrazilPhone(source.phone);
+    const secondaryPhone = clean(source.secondaryPhone).replace(/\D/g, '');
+    if (!name || !phone) throw new Error('Nome e telefone são obrigatórios para alterar o cliente.');
+    const corporate = clean(customer.tipoConta || source.accountType).toLowerCase() === 'pessoa_juridica' || document.length === 14;
+    if (corporate) customer.razaoSocial = name;
+    else customer.nomeCompleto = name;
+    const phoneOwner = await User.findOne({ _id: { $ne: customer._id }, ...phoneLookupQuery(phone) }).select('_id').lean();
+    if (phoneOwner) throw new Error('Já existe um cliente com este celular.');
+    if (customer.celularVerificadoEm && effectiveWebAccountStatus(customer) === 'active' && normalizeBrazilPhone(customer.celular) !== phone) {
+      customer.celularPendente = phone;
+    } else {
+      customer.celular = phone;
+      customer.celularNormalizado = phone;
+    }
+    customer.celularSecundario = secondaryPhone;
+    if (document.length === 11) {
+      customer.cpf = document;
+      customer.cnpj = undefined;
+    } else if (document.length === 14) {
+      customer.cnpj = document;
+      customer.cpf = undefined;
+    }
+    if (clean(source.email)) customer.email = clean(source.email).toLowerCase();
+    if (Object.prototype.hasOwnProperty.call(source, 'gender')) customer.genero = clean(source.gender).toUpperCase();
+    if (Object.prototype.hasOwnProperty.call(source, 'birthDate')) customer.dataNascimento = source.birthDate || undefined;
+    if (Object.prototype.hasOwnProperty.call(source, 'notes')) customer.observacao = clean(source.notes);
+    customer.empresas = Array.from(new Set([...(customer.empresas || []).map(String), String(host.empresa)])).map((id) => new mongoose.Types.ObjectId(id));
+    await customer.save();
+    await syncDesktopCustomerAddresses(customer._id, source);
     return true;
   }
   let action;
@@ -1405,8 +1502,8 @@ router.get('/directory/snapshot', authenticateHost, async (req, res) => {
   const companyState = clean(stores[0]?.uf).toUpperCase();
   addresses.forEach((address) => {
     const userId = String(address.user || '');
-    if (!userId || addressByUser.has(userId)) return;
-    addressByUser.set(userId, {
+    if (!userId) return;
+    const normalized = {
       id: String(address._id),
       label: address.apelido || '',
       zipCode: address.cep || '',
@@ -1416,7 +1513,11 @@ router.get('/directory/snapshot', authenticateHost, async (req, res) => {
       district: address.bairro || '',
       city: address.cidade || '',
       state: address.uf || companyState || '',
-    });
+      principal: Boolean(address.isDefault),
+      isDefault: Boolean(address.isDefault),
+    };
+    if (!addressByUser.has(userId)) addressByUser.set(userId, []);
+    addressByUser.get(userId).push(normalized);
   });
   const nameOf = (user) => clean(user.nomeCompleto || user.nomeContato || user.razaoSocial || user.email);
   const customers = customersUsers.map((user) => ({
@@ -1439,7 +1540,8 @@ router.get('/directory/snapshot', authenticateHost, async (req, res) => {
     notes: user.observacao || user.observacoes || '',
     creditLimit: Number(user.limiteCredito || 0),
     pendingAmount: Number(user.valorPendente || 0),
-    address: addressByUser.get(String(user._id)) || null,
+    address: (addressByUser.get(String(user._id)) || [])[0] || null,
+    addresses: addressByUser.get(String(user._id)) || [],
   }));
   const companyId = String(host.empresa || '');
   const sellers = users.filter((user) => {
@@ -1474,9 +1576,11 @@ router.get('/directory/snapshot', authenticateHost, async (req, res) => {
     generatedAt: new Date().toISOString(),
     customers,
     pets: pets.map((pet) => ({
-      id: String(pet._id), ownerId: String(pet.owner), code: pet.codigoPet ? String(pet.codigoPet) : '', legacyCode: pet.codAntigoPet || '',
-      name: pet.nome || '', species: pet.tipo || '', breed: pet.raca || '', size: pet.porte || '', sex: pet.sexo || '', birthDate: pet.dataNascimento || null,
-      microchip: pet.microchip || '', color: pet.pelagemCor || '', rga: pet.rga || '', weight: pet.peso || '', neutered: Boolean(pet.castrado),
+      id: String(pet._id), ownerId: String(pet.owner), code: pet.codigoPet ? String(pet.codigoPet) : '',
+      oldCode: pet.codAntigoPet || '', legacyCode: pet.codAntigoPet || '',
+      name: pet.nome || '', type: pet.tipo || '', species: pet.tipo || '', breed: pet.raca || '', size: pet.porte || '', sex: pet.sexo || '', birthDate: pet.dataNascimento || null,
+      microchip: pet.microchip || '', coatColor: pet.pelagemCor || '', color: pet.pelagemCor || '', rga: pet.rga || '', weight: pet.peso || '',
+      neutered: Boolean(pet.castrado), deceased: Boolean(pet.obito),
     })),
     sellers,
     couriers,

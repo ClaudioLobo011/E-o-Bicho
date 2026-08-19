@@ -7588,13 +7588,13 @@
   const setCustomerRegisterRequiredState = (enabled) => {
     const required = Boolean(enabled);
     if (elements.customerRequiredName) elements.customerRequiredName.classList.toggle('hidden', !required);
-    if (elements.customerRequiredDoc) elements.customerRequiredDoc.classList.toggle('hidden', !required);
+    if (elements.customerRequiredDoc) elements.customerRequiredDoc.classList.add('hidden');
     if (elements.customerRequiredSexo) elements.customerRequiredSexo.classList.toggle('hidden', !required);
     if (elements.customerRequiredCep) elements.customerRequiredCep.classList.toggle('hidden', !required);
     if (elements.customerRequiredNumber) elements.customerRequiredNumber.classList.toggle('hidden', !required);
 
     if (elements.customerSearchInput) elements.customerSearchInput.required = required;
-    if (elements.customerPreviewDoc) elements.customerPreviewDoc.required = required;
+    if (elements.customerPreviewDoc) elements.customerPreviewDoc.required = false;
     if (elements.customerPreviewSexo) elements.customerPreviewSexo.required = required;
     if (elements.customerPreviewCep) elements.customerPreviewCep.required = required;
     if (elements.customerPreviewNumber) elements.customerPreviewNumber.required = required;
@@ -11825,7 +11825,7 @@
       notify('Informe o nome do cliente.', 'warning');
       return false;
     }
-    if (documentDigits.length !== 11 && documentDigits.length !== 14) {
+    if (documentDigits && documentDigits.length !== 11 && documentDigits.length !== 14) {
       elements.customerPreviewDoc?.focus();
       notify('Informe um CPF/CNPJ válido.', 'warning');
       return false;
@@ -12528,9 +12528,7 @@
     if (elements.deliveryAddressFields?.apelido) {
       elements.deliveryAddressFields.apelido.required = required;
     }
-    if (elements.deliveryCustomerCpf) {
-      elements.deliveryCustomerCpf.required = required;
-    }
+    if (elements.deliveryCustomerCpf) elements.deliveryCustomerCpf.required = false;
     if (elements.deliveryAddressFields?.cep) {
       elements.deliveryAddressFields.cep.required = required;
     }
@@ -12538,7 +12536,7 @@
       elements.deliveryCustomerSexo.required = required;
     }
     elements.deliveryRequiredApe?.classList.toggle('hidden', !required);
-    elements.deliveryRequiredCpf?.classList.toggle('hidden', !required);
+    elements.deliveryRequiredCpf?.classList.add('hidden');
     elements.deliveryRequiredCep?.classList.toggle('hidden', !required);
     elements.deliveryRequiredSexo?.classList.toggle('hidden', !required);
     if (elements.deliveryAddressConfirmWrap) {
@@ -13014,7 +13012,6 @@
     if (deliveryCustomerRegisterMode) {
       const missingRequired =
         !(elements.deliveryAddressFields?.apelido?.value || '').trim() ||
-        !(elements.deliveryCustomerCpf?.value || '').trim() ||
         !(elements.deliveryAddressFields?.cep?.value || '').trim() ||
         !(elements.deliveryCustomerSexo?.value || '').trim();
       if (missingRequired) {
@@ -22100,7 +22097,6 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
     const payload = buildDeliveryCustomerCreatePayload();
     const missingRequired =
       !String(payload.nome || payload.razaoSocial || '').trim() ||
-      !normalizeDocumentDigits(payload.cpf || payload.cnpj || '') ||
       !sanitizeCepDigits(payload.cep || elements.deliveryAddressFields?.cep?.value || '') ||
       !String(elements.deliveryCustomerSexo?.value || '').trim();
     if (missingRequired) {
@@ -22163,7 +22159,6 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
     const payload = buildDeliveryCustomerCreatePayload();
     const missingRequired =
       !String(payload.nome || payload.razaoSocial || '').trim() ||
-      !normalizeDocumentDigits(payload.cpf || payload.cnpj || '') ||
       !sanitizeCepDigits(payload.cep || elements.deliveryAddressFields?.cep?.value || '') ||
       !String(elements.deliveryCustomerSexo?.value || '').trim();
     if (missingRequired) {

@@ -28,6 +28,9 @@ const userSchema = new Schema({
     unique: true,
     sparse: true
   },
+  celularNormalizado: { type: String, trim: true, index: true },
+  celularVerificadoEm: { type: Date },
+  celularPendente: { type: String, trim: true },
   telefone: {
     type: String // Opcional
   },
@@ -234,6 +237,20 @@ const userSchema = new Schema({
   }],
 
   emailVerified: { type: Boolean, default: false },
+  webAccountStatus: {
+    type: String,
+    enum: ['store_only', 'pending_completion', 'active', 'blocked'],
+  },
+  registrationSource: {
+    type: String,
+    enum: ['site', 'pdv', 'agenda', 'whatsapp', 'importacao', 'legacy'],
+    default: 'legacy',
+  },
+  webActivatedAt: { type: Date },
+  phoneOtpHash: { type: String },
+  phoneOtpExpires: { type: Date },
+  phoneOtpAttempts: { type: Number, default: 0 },
+  phoneOtpSentAt: { type: Date },
   emailVerificationToken: { type: String },
   emailVerificationExpires: { type: Date },
   passwordResetToken: { type: String },

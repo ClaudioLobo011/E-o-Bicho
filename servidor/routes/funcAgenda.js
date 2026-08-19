@@ -25,6 +25,7 @@ const {
   schedulePostServiceSurvey,
 } = require('../services/whatsappPostServiceSurveyService');
 const { deriveAppointmentStatus } = require('../services/appointmentStatus');
+const { normalizeBrazilPhone, phoneLookupQuery } = require('../utils/customerIdentity');
 
 const requireStaff = authorizeRoles('funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master');
 const MAX_CODIGO_CLIENTE_SEQUENCIAL = 999999999;
@@ -382,6 +383,8 @@ async function buildClientePayload(body = {}, opts = {}) {
 
   const celular = sanitizeTelefone(body.celular || currentUser?.celular || '');
   if (!celular) throw new Error('Celular é obrigatório.');
+  const celularNormalizado = normalizeBrazilPhone(celular);
+  if (!celularNormalizado || celularNormalizado.length !== 11) throw new Error('Informe um celular válido, com DDD.');
 
   const telefone = sanitizeTelefone(body.telefone);
   const celular2 = sanitizeTelefone(body.celular2 || body.celularSecundario);
@@ -397,6 +400,7 @@ async function buildClientePayload(body = {}, opts = {}) {
     tipoConta,
     email,
     celular,
+    celularNormalizado,
     telefone: telefone || '',
     telefoneSecundario: telefone2 || '',
     celularSecundario: celular2 || '',
@@ -429,11 +433,8 @@ async function buildClientePayload(body = {}, opts = {}) {
       throw new Error('Nome do cliente é obrigatório.');
     }
     const cpf = sanitizeCpf(body.cpf || currentUser?.cpf);
-    if (!cpf && !isUpdate) {
-      throw new Error('CPF é obrigatório para pessoa física.');
-    }
     payload.nomeCompleto = nomeCompleto || currentUser?.nomeCompleto || '';
-    payload.cpf = cpf || '';
+    if (cpf) payload.cpf = cpf;
     payload.genero = normalizeClienteGenero(body.sexo || body.genero || currentUser?.genero || '');
     const dataNascimento = parseDate(body.nascimento || body.dataNascimento);
     if (dataNascimento) payload.dataNascimento = dataNascimento;
@@ -1937,6 +1938,11 @@ router.post('/clientes', authMiddleware, requireStaff, async (req, res) => {
 
     const payload = await buildClientePayload(req.body, { isUpdate: false });
     payload.role = 'cliente';
+    payload.webAccountStatus = 'store_only';
+    payload.registrationSource = 'agenda';
+
+    const phoneDuplicate = await User.findOne({ role: 'cliente', ...phoneLookupQuery(payload.celularNormalizado) }).lean();
+    if (phoneDuplicate) return res.status(409).json({ message: 'Já existe um cliente com este celular.' });
 
     let plainPassword = sanitizeString(req.body.senha || req.body.password || '');
     let senhaGerada = false;
@@ -2035,11 +2041,12 @@ router.post('/clientes/importar-lote', authMiddleware, requireStaff, async (req,
       const nome = sanitizeString(row.nome);
       const documentoDigits = onlyDigits(row.cpfCnpj);
 
-      if (!codigoAntigo || !nome || !documentoDigits) {
+      const phones = collectImportPhones(row);
+      if (!codigoAntigo || !nome || !phones.celular) {
         summary.skipped += 1;
         errors.push({
           line,
-          message: 'Campos obrigatorios ausentes (Codigo Antigo, Nome, CPF/CNPJ).',
+          message: 'Campos obrigatórios ausentes (Código Antigo, Nome, Celular).',
         });
         continue;
       }
@@ -2051,17 +2058,12 @@ router.post('/clientes/importar-lote', authMiddleware, requireStaff, async (req,
           ? storeIndex.get(storeNameKey)
           : '';
 
-        const phones = collectImportPhones(row);
-
         let email = sanitizeEmail(row.email);
         if (!email) {
           email = buildFallbackEmail(`${timestampSeed}-${i}`);
         }
 
-        let celular = phones.celular;
-        if (!celular) {
-          celular = buildFallbackCellular(timestampSeed + i);
-        }
+        const celular = phones.celular;
 
         const payloadInput = {
           tipoConta,
@@ -2091,7 +2093,10 @@ router.post('/clientes/importar-lote', authMiddleware, requireStaff, async (req,
           payloadInput.nascimento = parseImportBirthDate(row.dataNascimento);
         }
 
-        const existing = await User.findOne({ codigoAntigo, role: 'cliente' })
+        const existing = await User.findOne({
+          role: 'cliente',
+          $or: [{ codigoAntigo }, phoneLookupQuery(celular)],
+        })
           .select('role tipoConta nomeCompleto razaoSocial nomeFantasia nomeContato email celular telefone apelido pais cpf cnpj inscricaoEstadual genero dataNascimento rgNumero estadoIE isentoIE empresaPrincipal empresas telefoneSecundario celularSecundario codigoAntigo')
           .lean();
 
@@ -2144,6 +2149,8 @@ router.post('/clientes/importar-lote', authMiddleware, requireStaff, async (req,
         } else {
           let payload = await buildClientePayload(payloadInput, { isUpdate: false });
           payload.role = 'cliente';
+          payload.webAccountStatus = 'store_only';
+          payload.registrationSource = 'importacao';
 
           const plainPassword = randomBytes(8).toString('base64url').slice(0, 12);
           const salt = await bcrypt.genSalt(10);
@@ -2162,10 +2169,6 @@ router.post('/clientes/importar-lote', authMiddleware, requireStaff, async (req,
               }
               if (creationErr?.code === 11000 && duplicateKeys.includes('email')) {
                 payload.email = buildFallbackEmail(`${timestampSeed}-${i}-${attempt + 1}`);
-                continue;
-              }
-              if (creationErr?.code === 11000 && duplicateKeys.includes('celular')) {
-                payload.celular = buildFallbackCellular(timestampSeed + i + attempt + 1);
                 continue;
               }
               throw creationErr;
@@ -2371,10 +2374,12 @@ router.put('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: 'ID inválido.' });
     }
-    const current = await User.findById(id).select('role tipoConta nomeCompleto razaoSocial nomeFantasia nomeContato email celular telefone apelido pais cpf cnpj inscricaoEstadual genero dataNascimento rgNumero estadoIE isentoIE empresaPrincipal empresas telefoneSecundario celularSecundario codigoAntigo valorPendente').lean();
+    const current = await User.findById(id).select('role tipoConta nomeCompleto razaoSocial nomeFantasia nomeContato email celular celularNormalizado telefone apelido pais cpf cnpj inscricaoEstadual genero dataNascimento rgNumero estadoIE isentoIE empresaPrincipal empresas telefoneSecundario celularSecundario codigoAntigo valorPendente').lean();
     await ensureClienteEhEditavel(current);
 
     const payload = await buildClientePayload(req.body, { isUpdate: true, currentUser: current });
+    const phoneDuplicate = await User.findOne({ _id: { $ne: id }, role: 'cliente', ...phoneLookupQuery(payload.celularNormalizado) }).lean();
+    if (phoneDuplicate) return res.status(409).json({ message: 'Já existe um cliente com este celular.' });
     const unsetPayload = {};
 
     Object.keys(payload).forEach(key => {

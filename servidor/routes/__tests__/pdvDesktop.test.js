@@ -87,6 +87,9 @@ test.describe('integração do PDV Desktop', () => {
     assert.equal(directory.body.customers.find((entry) => entry.name === 'Cliente Desktop').address.street, 'Rua Desktop');
     assert.equal(directory.body.customers.find((entry) => entry.name === 'Cliente de Outra Loja').address.street, 'Rua Compartilhada');
     assert.equal(directory.body.pets.find((entry) => entry.name === 'Bidu').ownerId, String(customer._id));
+    assert.equal(directory.body.pets.find((entry) => entry.name === 'Bidu').type, 'cachorro');
+    assert.equal(directory.body.pets.find((entry) => entry.name === 'Bidu').species, 'cachorro');
+    assert.equal(directory.body.pets.find((entry) => entry.name === 'Bidu').deceased, false);
     assert.equal(directory.body.pets.find((entry) => entry.name === 'Pet Compartilhado').ownerId, String(sharedCustomer._id));
     assert.equal(directory.body.sellers.find((entry) => entry.name === 'Vendedor Desktop').code, '987654');
     assert.equal(directory.body.sellers.some((entry) => entry.name === 'Vendedor de Outra Loja'), false);
@@ -246,6 +249,32 @@ test.describe('integração do PDV Desktop', () => {
     assert.equal(await User.countDocuments({ celular: customer.celular }), 1);
     const linkedCustomer = await User.findById(customer._id).lean();
     assert.ok(linkedCustomer.empresas.map(String).includes(String(base.company._id)));
+    const existingPrimaryAddress = await UserAddress.findOne({ user: customer._id }).lean();
+    const primaryAddressId = String(existingPrimaryAddress._id);
+    const secondaryAddressId = String(new mongoose.Types.ObjectId());
+    const customerAddressUpdate = {
+      eventId: 'customer-addresses-1',
+      type: 'customer.updated',
+      occurredAt: new Date().toISOString(),
+      payload: {
+        customerId: String(customer._id), name: customer.nomeCompleto, phone: customer.celular, document: customer.cpf,
+        address: { id: primaryAddressId, label: 'Principal', zipCode: '20270215', street: 'Rua Principal', number: '10', city: 'Rio de Janeiro', state: 'RJ', principal: true },
+        addresses: [
+          { id: primaryAddressId, label: 'Principal', zipCode: '20270215', street: 'Rua Principal', number: '10', city: 'Rio de Janeiro', state: 'RJ', principal: true },
+          { id: secondaryAddressId, label: 'Trabalho', zipCode: '21073185', street: 'Rua Secundária', number: '20', city: 'Rio de Janeiro', state: 'RJ' },
+        ],
+      },
+    };
+    const customerAddressResponse = await request.post('/desktop/events/batch').set(headers).send({ events: [customerAddressUpdate] });
+    assert.equal(customerAddressResponse.body.results[0].status, 'processed', customerAddressResponse.text);
+    const customerAddresses = await UserAddress.find({ user: customer._id }).sort({ isDefault: -1 }).lean();
+    assert.equal(customerAddresses.length, 2);
+    assert.equal(customerAddresses[0].logradouro, 'Rua Principal');
+    assert.equal(customerAddresses[1].logradouro, 'Rua Secundária');
+    const directoryWithAddresses = await request.get('/desktop/directory/snapshot').set(headers);
+    const directoryCustomer = directoryWithAddresses.body.customers.find((entry) => entry.id === String(customer._id));
+    assert.equal(directoryCustomer.addresses.length, 2);
+    assert.equal(directoryCustomer.address.id, primaryAddressId);
     const duplicateLocalCustomerId = duplicateCustomerEvent.payload.customerId;
     const duplicatePetId = String(new mongoose.Types.ObjectId());
     const duplicatePetEvent = {
@@ -258,6 +287,15 @@ test.describe('integração do PDV Desktop', () => {
     assert.equal(duplicatePetResponse.body.results[0].status, 'processed', duplicatePetResponse.text);
     const duplicatePet = await Pet.findById(duplicatePetId).lean();
     assert.equal(String(duplicatePet.owner), String(customer._id));
+    const updatePetEvent = {
+      eventId: 'pet-update-existing-1', type: 'pet.updated', occurredAt: new Date().toISOString(),
+      payload: { petId: duplicatePetId, customerId: duplicateLocalCustomerId, name: 'Pet atualizado', type: 'cachorro', breed: 'Poodle', size: 'medio', sex: 'M', birthDate: '2026-08-01' },
+    };
+    const updatePetResponse = await request.post('/desktop/events/batch').set(headers).send({ events: [updatePetEvent] });
+    assert.equal(updatePetResponse.body.results[0].status, 'processed', updatePetResponse.text);
+    const updatedPet = await Pet.findById(duplicatePetId).lean();
+    assert.equal(updatedPet.nome, 'Pet atualizado');
+    assert.equal(await Pet.countDocuments({ _id: duplicatePetId }), 1);
     const duplicateAppointmentEvent = {
       eventId: 'appointment-existing-customer-1',
       type: 'appointment.created',

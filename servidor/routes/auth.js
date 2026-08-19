@@ -3,12 +3,30 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const UserAddress = require('../models/UserAddress');
 const { body, validationResult } = require('express-validator');
 const { cpf, cnpj } = require('cpf-cnpj-validator');
 const authMiddleware = require('../middlewares/authMiddleware');
 const requireAuth = require('../middlewares/requireAuth');
 const crypto = require('crypto');
 const { sendMail } = require('../utils/mailer');
+const {
+  digitsOnly,
+  normalizeBrazilPhone,
+  isBrazilianMobile,
+  phoneVariants,
+  normalizeCpf,
+  normalizeCnpj,
+  effectiveWebAccountStatus,
+  phoneLookupQuery,
+} = require('../utils/customerIdentity');
+const {
+  OTP_MAX_ATTEMPTS,
+  OTP_RESEND_MS,
+  createOtp,
+  otpMatches,
+  sendPhoneOtp,
+} = require('../services/phoneOtpService');
 
 // ===================== TOTP helpers (sem dependências) =====================
 function base32Encode(buf) {
@@ -86,10 +104,6 @@ function decrypt(payload) {
   } catch { return ''; }
 }
 
-function digitsOnly(value) {
-  return String(value || '').replace(/\D+/g, '');
-}
-
 function formatCpf(digits) {
   if (digits.length !== 11) return digits;
   return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
@@ -116,9 +130,22 @@ function buildIdentifierQuery(identifier) {
       const formatted = formatCnpj(digits);
       or.push({ cnpj: raw }, { cnpj: digits }, { cnpj: formatted });
     }
+    const normalizedPhone = normalizeBrazilPhone(raw);
+    if (normalizedPhone) {
+      or.push({ celularNormalizado: normalizedPhone }, { celular: { $in: phoneVariants(normalizedPhone) } });
+    }
   }
 
   return { $or: or };
+}
+
+async function resolveUserByIdentifier(identifier) {
+  if (isBrazilianMobile(identifier)) {
+    const byPhone = await User.findOne(phoneLookupQuery(identifier));
+    if (byPhone) return byPhone;
+  }
+  const query = buildIdentifierQuery(identifier);
+  return query ? User.findOne(query) : null;
 }
 
 const MAX_CODIGO_CLIENTE_SEQUENCIAL = 999999999;
@@ -166,7 +193,10 @@ const registerValidationRules = [
   body('nomeCompleto').if(body('tipoConta').equals('pessoa_fisica')).notEmpty().withMessage('O nome completo é obrigatório.').isLength({ min: 3 }).withMessage('O nome deve ter pelo menos 3 caracteres.'),
   body('razaoSocial').if(body('tipoConta').equals('pessoa_juridica')).notEmpty().withMessage('A razão social é obrigatória.'),
   body('email').notEmpty().withMessage('O e-mail é obrigatório.').isEmail().withMessage('Por favor, insira um e-mail válido.').normalizeEmail(),
-  body('celular').notEmpty().withMessage('O número de celular é obrigatório.'),
+  body('celular').notEmpty().withMessage('O número de celular é obrigatório.').custom((value) => {
+    if (!isBrazilianMobile(value)) throw new Error('Informe um celular brasileiro válido, com DDD.');
+    return true;
+  }),
   body('senha').isLength({ min: 8 }).withMessage('A senha deve ter no mínimo 8 caracteres.').matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/).withMessage('A senha deve conter pelo menos uma letra maiúscula, uma minúscula e um número.'),
   body('confirm_password').notEmpty().withMessage('A confirmação de senha é obrigatória.').custom((value, { req }) => { if (value !== req.body.senha) { throw new Error('As senhas não coincidem. Por favor, tente novamente.'); } return true; }),
   body('cpf').if(body('tipoConta').equals('pessoa_fisica')).notEmpty().withMessage('O CPF é obrigatório.').custom((value) => { if (!cpf.isValid(value)) { throw new Error('O CPF inserido não é válido.'); } return true; }),
@@ -174,6 +204,149 @@ const registerValidationRules = [
   body('terms').equals('on').withMessage('Você deve concordar com os termos e condições para se registar.'),
   body('inscricaoEstadual').if(body('tipoConta').equals('pessoa_juridica')).if(body('isentoIE').not().exists()).notEmpty().withMessage('A Inscrição Estadual é obrigatória quando não isento.'),
 ];
+
+function signCompletionToken(user) {
+  return jwt.sign(
+    { id: String(user._id), phone: normalizeBrazilPhone(user.celularNormalizado || user.celular), purpose: 'account_completion' },
+    process.env.JWT_SECRET,
+    { expiresIn: '15m' }
+  );
+}
+
+function readCompletionToken(req) {
+  const authorization = String(req.headers.authorization || '');
+  const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : String(req.body?.completionToken || '');
+  if (!token) return null;
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    return payload?.purpose === 'account_completion' ? payload : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+async function findCustomerByPhone(value) {
+  const query = phoneLookupQuery(value);
+  if (!query) return null;
+  return User.findOne({ role: 'cliente', ...query });
+}
+
+router.post('/account/lookup', async (req, res) => {
+  const celular = normalizeBrazilPhone(req.body?.celular);
+  if (!isBrazilianMobile(celular)) return res.status(400).json({ message: 'Informe um celular válido, com DDD.' });
+  const user = await findCustomerByPhone(celular);
+  if (!user) return res.json({ exists: false, status: 'not_found' });
+  const status = effectiveWebAccountStatus(user);
+  if (['store_only', 'pending_completion'].includes(status)) {
+    return res.json({ exists: true, status, code: 'ACCOUNT_COMPLETION_REQUIRED', message: 'Este número já tem um cadastro. Confirme o celular para terminar o cadastro do site.' });
+  }
+  return res.json({ exists: true, status, code: status === 'active' ? 'ACCOUNT_ALREADY_ACTIVE' : 'ACCOUNT_BLOCKED' });
+});
+
+router.post('/account/phone/send-code', async (req, res) => {
+  try {
+    const celular = normalizeBrazilPhone(req.body?.celular);
+    if (!isBrazilianMobile(celular)) return res.status(400).json({ message: 'Informe um celular válido, com DDD.' });
+    const user = await findCustomerByPhone(celular);
+    if (!user || !['store_only', 'pending_completion'].includes(effectiveWebAccountStatus(user))) {
+      return res.status(400).json({ message: 'Não há cadastro de loja pendente para este celular.' });
+    }
+    if (user.phoneOtpSentAt && Date.now() - new Date(user.phoneOtpSentAt).getTime() < OTP_RESEND_MS) {
+      return res.status(429).json({ message: 'Aguarde um minuto antes de solicitar outro código.' });
+    }
+    const otp = createOtp();
+    await sendPhoneOtp({ phone: celular, code: otp.code });
+    user.phoneOtpHash = otp.hash;
+    user.phoneOtpExpires = otp.expiresAt;
+    user.phoneOtpAttempts = 0;
+    user.phoneOtpSentAt = new Date();
+    user.webAccountStatus = 'pending_completion';
+    user.celularNormalizado = celular;
+    await user.save();
+    return res.json({ ok: true, message: 'Código enviado para o celular cadastrado.' });
+  } catch (error) {
+    return res.status(error.code === 'PHONE_OTP_PROVIDER_NOT_CONFIGURED' ? 503 : 500).json({ message: error.message || 'Não foi possível enviar o código.' });
+  }
+});
+
+router.post('/account/phone/verify', async (req, res) => {
+  const celular = normalizeBrazilPhone(req.body?.celular);
+  const code = digitsOnly(req.body?.code);
+  const user = await findCustomerByPhone(celular);
+  if (!user || !user.phoneOtpHash || !user.phoneOtpExpires) return res.status(400).json({ message: 'Código inválido ou não solicitado.' });
+  if (new Date(user.phoneOtpExpires) < new Date()) return res.status(400).json({ message: 'Código expirado. Solicite outro.' });
+  if ((user.phoneOtpAttempts || 0) >= OTP_MAX_ATTEMPTS) return res.status(429).json({ message: 'Limite de tentativas atingido. Solicite outro código.' });
+  if (!otpMatches(code, user.phoneOtpHash)) {
+    user.phoneOtpAttempts = (user.phoneOtpAttempts || 0) + 1;
+    await user.save();
+    return res.status(400).json({ message: 'Código inválido.' });
+  }
+  user.phoneOtpHash = undefined;
+  user.phoneOtpExpires = undefined;
+  user.phoneOtpAttempts = 0;
+  user.celularVerificadoEm = new Date();
+  user.webAccountStatus = 'pending_completion';
+  await user.save();
+  return res.json({ ok: true, completionToken: signCompletionToken(user) });
+});
+
+router.get('/account/completion', async (req, res) => {
+  const payload = readCompletionToken(req);
+  if (!payload) return res.status(401).json({ message: 'Confirmação expirada. Confirme o celular novamente.' });
+  const user = await User.findById(payload.id).lean();
+  if (!user || normalizeBrazilPhone(user.celularNormalizado || user.celular) !== payload.phone) return res.status(401).json({ message: 'Confirmação inválida.' });
+  const addresses = await UserAddress.find({ user: user._id }).sort({ isDefault: -1, createdAt: 1 }).lean();
+  return res.json({
+    user: {
+      tipoConta: user.tipoConta || (user.cnpj ? 'pessoa_juridica' : 'pessoa_fisica'),
+      nomeCompleto: user.nomeCompleto || '', razaoSocial: user.razaoSocial || '', email: user.email || '',
+      celular: normalizeBrazilPhone(user.celularNormalizado || user.celular), telefone: user.telefone || '',
+      cpf: user.cpf || '', cnpj: user.cnpj || '', genero: user.genero || '', dataNascimento: user.dataNascimento || '',
+      nomeContato: user.nomeContato || '', inscricaoEstadual: user.inscricaoEstadual || '', estadoIE: user.estadoIE || '', isentoIE: !!user.isentoIE,
+    },
+    addresses,
+  });
+});
+
+router.post('/account/complete', registerValidationRules, async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+  const payload = readCompletionToken(req);
+  if (!payload) return res.status(401).json({ message: 'Confirmação expirada. Confirme o celular novamente.' });
+  const user = await User.findById(payload.id);
+  if (!user || !['store_only', 'pending_completion'].includes(effectiveWebAccountStatus(user))) return res.status(409).json({ message: 'Este cadastro já foi concluído ou não está disponível.' });
+  const celular = normalizeBrazilPhone(req.body.celular);
+  if (celular !== payload.phone) return res.status(400).json({ message: 'O celular confirmado não pode ser alterado nesta etapa.' });
+  const email = String(req.body.email || '').trim().toLowerCase();
+  const reqCpf = normalizeCpf(req.body.cpf);
+  const reqCnpj = normalizeCnpj(req.body.cnpj);
+  const conflicts = [{ email }, { celularNormalizado: celular }];
+  if (reqCpf) conflicts.push({ cpf: reqCpf });
+  if (reqCnpj) conflicts.push({ cnpj: reqCnpj });
+  const duplicate = await User.findOne({ _id: { $ne: user._id }, $or: conflicts }).lean();
+  if (duplicate) return res.status(409).json({ message: 'E-mail, celular ou documento já pertence a outro cadastro.' });
+  user.tipoConta = req.body.tipoConta;
+  user.email = email;
+  user.celular = celular;
+  user.celularNormalizado = celular;
+  user.telefone = req.body.telefone || '';
+  user.nomeCompleto = req.body.nomeCompleto || '';
+  user.cpf = reqCpf || undefined;
+  user.genero = req.body.genero || '';
+  user.dataNascimento = req.body.dataNascimento || undefined;
+  user.razaoSocial = req.body.razaoSocial || '';
+  user.cnpj = reqCnpj || undefined;
+  user.nomeContato = req.body.nomeContato || '';
+  user.inscricaoEstadual = req.body.inscricaoEstadual || '';
+  user.estadoIE = req.body.estadoIE || '';
+  user.isentoIE = req.body.isentoIE === 'on' || req.body.isentoIE === true;
+  user.senha = await bcrypt.hash(String(req.body.senha), await bcrypt.genSalt(10));
+  user.webAccountStatus = 'active';
+  user.webActivatedAt = new Date();
+  user.celularVerificadoEm = user.celularVerificadoEm || new Date();
+  await user.save();
+  return res.json({ message: 'Cadastro concluído com sucesso. Você já pode entrar no site.' });
+});
 
 // ROTA: POST /api/register
 router.post('/register', registerValidationRules, async (req, res) => {
@@ -183,9 +356,12 @@ router.post('/register', registerValidationRules, async (req, res) => {
   }
 
   try {
-    const { email, celular, cpf: reqCpf, cnpj: reqCnpj } = req.body;
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const celular = normalizeBrazilPhone(req.body.celular);
+    const reqCpf = normalizeCpf(req.body.cpf);
+    const reqCnpj = normalizeCnpj(req.body.cnpj);
 
-    const conditions = [{ email }, { celular }];
+    const conditions = [{ email }, { celularNormalizado: celular }, { celular: { $in: phoneVariants(celular) } }];
     if (reqCpf) conditions.push({ cpf: reqCpf });
     if (reqCnpj) conditions.push({ cnpj: reqCnpj });
 
@@ -193,10 +369,19 @@ router.post('/register', registerValidationRules, async (req, res) => {
 
     if (userExists) {
       let field, message;
-      if (userExists.email === email) {
+      const samePhone = normalizeBrazilPhone(userExists.celularNormalizado || userExists.celular) === celular;
+      const accountStatus = effectiveWebAccountStatus(userExists);
+      if (samePhone && ['store_only', 'pending_completion'].includes(accountStatus)) {
+        return res.status(409).json({
+          code: 'ACCOUNT_COMPLETION_REQUIRED',
+          field: 'celular',
+          message: 'Este celular já possui um cadastro feito na loja. Confirme o número e termine o cadastro para entrar no site.',
+        });
+      }
+      if (String(userExists.email || '').toLowerCase() === email) {
         field = 'email';
         message = 'Este email já está a ser utilizado.';
-      } else if (userExists.celular === celular) {
+      } else if (samePhone) {
         field = 'celular';
         message = 'Este número de celular já está a ser utilizado.';
       } else if (reqCpf && userExists.cpf === reqCpf) {
@@ -220,21 +405,26 @@ router.post('/register', registerValidationRules, async (req, res) => {
 
     const basePayload = {
       tipoConta: req.body.tipoConta,
-      email: req.body.email,
+      email,
       senha: hashedPassword,
-      celular: req.body.celular,
+      celular,
+      celularNormalizado: celular,
+      celularVerificadoEm: new Date(),
       telefone: req.body.telefone,
       nomeCompleto: req.body.nomeCompleto,
-      cpf: req.body.cpf,
+      cpf: reqCpf || undefined,
       genero: req.body.genero,
       dataNascimento: req.body.dataNascimento,
       razaoSocial: req.body.razaoSocial,
-      cnpj: req.body.cnpj,
+      cnpj: reqCnpj || undefined,
       nomeContato: req.body.nomeContato,
       inscricaoEstadual: req.body.inscricaoEstadual,
       estadoIE: req.body.estadoIE,
       isentoIE: isento,
       role: 'cliente',
+      webAccountStatus: 'active',
+      registrationSource: 'site',
+      webActivatedAt: new Date(),
     };
 
     let savedUser = null;
@@ -288,10 +478,21 @@ router.post('/register', registerValidationRules, async (req, res) => {
 router.post('/login', async (req, res) => {
     const { identifier, senha } = req.body;
     try {
-        const query = buildIdentifierQuery(identifier);
-        const user = query ? await User.findOne(query) : null;
+        const user = await resolveUserByIdentifier(identifier);
 
-        if (!user || !(await bcrypt.compare(senha, user.senha))) {
+        if (!user) {
+            return res.status(400).json({ message: 'Credenciais inválidas.' });
+        }
+
+        const accountStatus = effectiveWebAccountStatus(user);
+        if (String(user.role || '').toLowerCase() === 'cliente' && ['store_only', 'pending_completion'].includes(accountStatus)) {
+            return res.status(409).json({
+              code: 'ACCOUNT_COMPLETION_REQUIRED',
+              message: 'Este celular já possui um cadastro feito na loja. Termine o cadastro para entrar no site.',
+            });
+        }
+        if (accountStatus === 'blocked') return res.status(403).json({ message: 'Este acesso está bloqueado.' });
+        if (!(await bcrypt.compare(senha, user.senha))) {
             return res.status(400).json({ message: 'Credenciais inválidas.' });
         }
 
@@ -321,10 +522,21 @@ router.post('/login', async (req, res) => {
 router.post('/login-funcionario', async (req, res) => {
     const { identifier, senha } = req.body || {};
     try {
-        const query = buildIdentifierQuery(identifier);
-        const user = query ? await User.findOne(query) : null;
+        const user = await resolveUserByIdentifier(identifier);
 
-        if (!user || !(await bcrypt.compare(senha, user.senha))) {
+        if (!user) {
+            return res.status(400).json({ message: 'Credenciais inválidas.' });
+        }
+
+        const accountStatus = effectiveWebAccountStatus(user);
+        if (String(user.role || '').toLowerCase() === 'cliente' && ['store_only', 'pending_completion'].includes(accountStatus)) {
+            return res.status(409).json({
+              code: 'ACCOUNT_COMPLETION_REQUIRED',
+              message: 'Este celular já possui um cadastro feito na loja. Termine o cadastro para entrar no site.',
+            });
+        }
+        if (accountStatus === 'blocked') return res.status(403).json({ message: 'Este acesso está bloqueado.' });
+        if (!(await bcrypt.compare(senha, user.senha))) {
             return res.status(400).json({ message: 'Credenciais inválidas.' });
         }
 
@@ -574,9 +786,11 @@ router.post('/password/change', requireAuth, async (req, res) => {
 
 // ========================= Quick Access (Login Rápido) =========================
 function findUserByIdentifier(identifier) {
-  const query = buildIdentifierQuery(identifier);
-  if (!query) return null;
-  return User.findOne(query);
+  return resolveUserByIdentifier(identifier);
+}
+
+function canUseQuickAccess(user) {
+  return !!user && effectiveWebAccountStatus(user) === 'active';
 }
 
 // GET /api/auth/quick/options?identifier=...
@@ -585,7 +799,7 @@ router.get('/quick/options', async (req, res) => {
     const { identifier } = req.query;
     if (!identifier) return res.status(400).json({ message: 'Informe o identificador' });
     const user = await findUserByIdentifier(identifier);
-    if (!user) return res.json({ email: false, totp: false }); // não vaza existência
+    if (!canUseQuickAccess(user)) return res.json({ email: false, totp: false }); // não vaza existência
     res.json({ email: !!user.emailVerified, totp: !!user.totpEnabled, emailMasked: user.email?.replace(/(^.).*(@.*$)/,'$1***$2') });
   } catch (e) {
     res.status(500).json({ message: 'Erro ao consultar opções' });
@@ -598,7 +812,7 @@ router.post('/quick/email/send', async (req, res) => {
     const { identifier } = req.body || {};
     if (!identifier) return res.status(400).json({ message: 'Informe o identificador' });
     const user = await findUserByIdentifier(identifier);
-    if (!user || !user.emailVerified) return res.status(200).json({ ok: true }); // resposta genérica
+    if (!canUseQuickAccess(user) || !user.emailVerified) return res.status(200).json({ ok: true }); // resposta genérica
 
     // throttle simples: se ainda válido, não reenviar
     if (user.quickEmailCodeExpires && user.quickEmailCodeExpires > new Date()) {
@@ -630,7 +844,7 @@ router.post('/quick/email/verify', async (req, res) => {
     const { identifier, code } = req.body || {};
     if (!identifier || !code) return res.status(400).json({ message: 'Dados inválidos' });
     const user = await findUserByIdentifier(identifier);
-    if (!user) return res.status(400).json({ message: 'Código inválido' });
+    if (!canUseQuickAccess(user)) return res.status(400).json({ message: 'Código inválido' });
     if (!user.quickEmailCodeHash || !user.quickEmailCodeExpires || user.quickEmailCodeExpires < new Date()) {
       return res.status(400).json({ message: 'Código expirado' });
     }
@@ -662,7 +876,7 @@ router.post('/quick/totp/verify', async (req, res) => {
     const { identifier, token } = req.body || {};
     if (!identifier || !token) return res.status(400).json({ message: 'Dados inválidos' });
     const user = await findUserByIdentifier(identifier);
-    if (!user || !user.totpEnabled || !user.totpSecretEnc) return res.status(400).json({ message: 'Código inválido' });
+    if (!canUseQuickAccess(user) || !user.totpEnabled || !user.totpSecretEnc) return res.status(400).json({ message: 'Código inválido' });
     const secret = decrypt(user.totpSecretEnc);
     const ok = verifyTotp(base32Decode(secret), String(token));
     if (!ok) return res.status(400).json({ message: 'Código inválido' });

@@ -1,4 +1,5 @@
 const bcrypt = require('bcryptjs');
+const { normalizeBrazilPhone } = require('../utils/customerIdentity');
 const crypto = require('crypto');
 const mongoose = require('mongoose');
 
@@ -711,8 +712,11 @@ const materializeCustomer = async (flow) => {
       email,
       senha,
       celular: digitsOnly(flow.waId),
+      celularNormalizado: normalizeBrazilPhone(flow.waId),
       nomeCompleto: customerName,
       role: 'cliente',
+      webAccountStatus: 'store_only',
+      registrationSource: 'whatsapp',
       empresas: [flow.store],
       empresaPrincipal: flow.store,
       codigoCliente,

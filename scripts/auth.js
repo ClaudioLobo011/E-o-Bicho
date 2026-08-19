@@ -1,5 +1,67 @@
 // --- Remember Me helpers ---
 const REMEMBER_KEY = 'rememberLogin'; // { identifier: '...' }
+let accountCompletionToken = '';
+let accountCompletionPhone = '';
+
+function activeSignupPhone() {
+  return document.getElementById('radio-pf')?.checked
+    ? document.getElementById('celular-pf')?.value || ''
+    : document.getElementById('celular-pj')?.value || '';
+}
+
+function showAccountCompletion(phone = '') {
+  accountCompletionPhone = phone || activeSignupPhone();
+  document.getElementById('account-completion-panel')?.classList.remove('hidden');
+  document.getElementById('account-completion-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function setCompletionMessage(message, error = false) {
+  const target = document.getElementById('completion-message');
+  if (!target) return;
+  target.textContent = message;
+  target.className = `text-sm ${error ? 'text-red-600' : 'text-green-700'}`;
+}
+
+function fillCompletionForm(user = {}) {
+  const isPj = user.tipoConta === 'pessoa_juridica';
+  const radio = document.getElementById(isPj ? 'radio-pj' : 'radio-pf');
+  if (radio) radio.checked = true;
+  const values = {
+    name: user.nomeCompleto, 'razao_social': user.razaoSocial,
+    'email-pf': user.email, 'email-pj': user.email,
+    'celular-pf': user.celular, 'celular-pj': user.celular,
+    'telefone-pf': user.telefone, 'telefone-pj': user.telefone,
+    cpf: user.cpf, cnpj: user.cnpj, genero: user.genero, data_nascimento: String(user.dataNascimento || '').slice(0, 10),
+    nome_contato: user.nomeContato, ie: user.inscricaoEstadual, estado_ie: user.estadoIE,
+  };
+  Object.entries(values).forEach(([id, value]) => { const el = document.getElementById(id); if (el && value != null) el.value = value; });
+  const isento = document.getElementById('isento_ie');
+  if (isento) isento.checked = !!user.isentoIE;
+  window.toggleForms?.();
+}
+
+async function sendAccountCompletionCode() {
+  accountCompletionPhone = accountCompletionPhone || activeSignupPhone();
+  const response = await fetch(`${API_CONFIG.BASE_URL}/auth/account/phone/send-code`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ celular: accountCompletionPhone }) });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.message || 'Não foi possível enviar o código.');
+  setCompletionMessage(result.message || 'Código enviado.');
+}
+
+async function verifyAccountCompletionCode() {
+  const code = document.getElementById('completion-code')?.value || '';
+  const response = await fetch(`${API_CONFIG.BASE_URL}/auth/account/phone/verify`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ celular: accountCompletionPhone || activeSignupPhone(), code }) });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.message || 'Código inválido.');
+  accountCompletionToken = result.completionToken;
+  const detailsResponse = await fetch(`${API_CONFIG.BASE_URL}/auth/account/completion`, { headers: { Authorization: `Bearer ${accountCompletionToken}` } });
+  const details = await detailsResponse.json().catch(() => ({}));
+  if (!detailsResponse.ok) throw new Error(details.message || 'Não foi possível carregar o cadastro.');
+  fillCompletionForm(details.user);
+  setCompletionMessage('Celular confirmado. Revise os dados, informe CPF e senha e conclua o cadastro.');
+  const submit = document.querySelector('#signup-form button[type="submit"]');
+  if (submit) submit.textContent = 'Concluir cadastro';
+}
 
 function hydrateRememberedIdentifier() {
   // Preenche o campo de login com o identificador salvo e marca o checkbox
@@ -84,6 +146,14 @@ function initializeAuth() {
         setTimeout(window.toggleForms, 150);
 
         signupForm.addEventListener('submit', handleSignupSubmit);
+        document.getElementById('completion-send-code')?.addEventListener('click', () => sendAccountCompletionCode().catch((error) => setCompletionMessage(error.message, true)));
+        document.getElementById('completion-verify-code')?.addEventListener('click', () => verifyAccountCompletionCode().catch((error) => setCompletionMessage(error.message, true)));
+        const completionPhone = new URLSearchParams(window.location.search).get('completePhone');
+        if (completionPhone) {
+          const phoneInput = document.getElementById('celular-pf');
+          if (phoneInput) phoneInput.value = completionPhone;
+          showAccountCompletion(completionPhone);
+        }
     }
 }
 
@@ -106,12 +176,16 @@ async function handleLoginSubmit(event) {
     });
     const result = await response.json();
     if (!response.ok) {
+      if (result.code === 'ACCOUNT_COMPLETION_REQUIRED') {
+        window.location.href = `/pages/cadastro.html?completePhone=${encodeURIComponent(data.identifier || '')}`;
+        return;
+      }
       throw new Error(result.message || 'Erro desconhecido');
     }
 
     // salva a sessão como o site já usa
     localStorage.setItem('loggedInUser', JSON.stringify({
-      id: result.user._id,
+      id: result.user._id || result.user.id,
       token: result.token,
       ...result.user
     }));
@@ -225,13 +299,17 @@ async function handleSignupSubmit(event) {
     }
 
     try {
-        const response = await fetch(`${API_CONFIG.BASE_URL}/auth/register`, {
+        const response = await fetch(`${API_CONFIG.BASE_URL}/auth/${accountCompletionToken ? 'account/complete' : 'register'}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...(accountCompletionToken ? { Authorization: `Bearer ${accountCompletionToken}` } : {}) },
             body: JSON.stringify(data),
         });
         const result = await response.json();
         if (!response.ok) {
+            if (result.code === 'ACCOUNT_COMPLETION_REQUIRED') {
+                showAccountCompletion(data.celular);
+                setCompletionMessage(result.message, false);
+            }
             const error = new Error('Falha na validação ou erro do servidor');
             error.result = result;
             throw error;

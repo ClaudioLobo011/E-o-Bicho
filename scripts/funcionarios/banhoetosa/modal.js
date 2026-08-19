@@ -1747,7 +1747,7 @@ function agendaCustomerHasPetData() {
 function agendaCustomerSyncRequiredIndicators() {
   const active = !!els.customerSaveToggle?.checked;
   els.customerRequiredName?.classList.toggle('hidden', !active);
-  els.customerRequiredDoc?.classList.toggle('hidden', !active);
+  els.customerRequiredDoc?.classList.add('hidden');
   els.customerRequiredSexo?.classList.toggle('hidden', !active);
   els.customerRequiredCep?.classList.toggle('hidden', !active);
   els.customerRequiredPhone1?.classList.toggle('hidden', !active);
@@ -1767,7 +1767,7 @@ async function agendaCustomerSave(options = {}) {
     agendaCustomerDigits(agendaCustomerJoinPhone(els.customerPhone1Ddd?.value, els.customerPhone1?.value))
   );
   if (!String(payload.nome || payload.razaoSocial || '').trim()) throw new Error('Informe o nome do cliente.');
-  if (docDigits.length !== 11 && docDigits.length !== 14) throw new Error('Informe um CPF/CNPJ válido.');
+  if (docDigits && docDigits.length !== 11 && docDigits.length !== 14) throw new Error('Informe um CPF/CNPJ válido.');
   if (!String(payload.sexo || '').trim()) throw new Error('Informe o sexo do cliente.');
   if (!hasPrimaryPhone) throw new Error('Informe o telefone principal do cliente.');
   if (cepDigits.length !== 8) throw new Error('Informe um CEP válido com 8 dígitos.');
