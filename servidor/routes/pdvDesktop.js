@@ -1422,9 +1422,10 @@ router.get('/bootstrap', authenticateHost, async (req, res) => {
     pdv,
     state: state || null,
     paymentMethods,
-    // Versões anteriores à 0.8.5 não protegiam a pasta dados durante o NSIS.
-    // O feed seguro passou a ser embutido no aplicativo a partir da 0.8.5.
-    updateFeedUrl: '',
+    // Informe explicitamente o feed sem cache do CDN do site. Assim uma nova
+    // versão fica disponível mesmo enquanto a implantação estática da Vercel
+    // ainda processa o instalador.
+    updateFeedUrl: 'https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/main/public/updates/pdv',
   });
 });
 
