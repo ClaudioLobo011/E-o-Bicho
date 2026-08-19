@@ -4140,14 +4140,15 @@ const emitSaleFiscalHandler = async (req, res) => {
         ? ultimoNumeroEmitido
         : numeroInicial - 1;
     const preSignedXml = normalizeString(req.body?.signedXml);
+    const requestedSeries = normalizeString(req.body?.fiscalSeries);
+    const rebuildOfflineXml = Boolean(preSignedXml && requestedSeries !== serieNfce);
+    const usePreSignedXml = Boolean(preSignedXml && !rebuildOfflineXml);
     const requestedFiscalNumber = Number(req.body?.fiscalNumber);
     const proximoNumeroFiscal = preSignedXml && Number.isInteger(requestedFiscalNumber) && requestedFiscalNumber > 0
       ? requestedFiscalNumber
       : baseSequencia + 1;
 
     if (preSignedXml) {
-      const requestedSeries = normalizeString(req.body?.fiscalSeries);
-      if (requestedSeries !== serieNfce) return res.status(409).json({ message: 'A sÃ©rie do XML offline nÃ£o pertence a este PDV.' });
       const reserved = await PdvCodeRange.findOne({ pdv: pdv._id, host: req.desktopHost?._id, kind: 'nfce', start: { $lte: proximoNumeroFiscal }, end: { $gte: proximoNumeroFiscal }, status: { $ne: 'revoked' } }).lean();
       if (!reserved) return res.status(409).json({ message: 'O nÃºmero da NFC-e offline nÃ£o pertence a uma faixa reservada para esta mÃ¡quina.' });
     }
@@ -4158,7 +4159,7 @@ const emitSaleFiscalHandler = async (req, res) => {
         ? empresa.toObject()
         : empresa || {};
     let emissionResult;
-    if (preSignedXml) {
+    if (usePreSignedXml) {
       const { privateKeyPem, certificatePem, certificateChain } = extractCertificatePair(
         decryptBuffer(empresa.certificadoArquivoCriptografado),
         decryptText(empresa.certificadoSenhaCriptografada)
