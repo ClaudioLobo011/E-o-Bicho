@@ -1,7 +1,20 @@
 const { describe, test } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const { _test } = require('../nfceEmitter');
+
+test('mantém desconto e acréscimo na ordem exigida pelo schema do produto', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'nfceEmitter.js'), 'utf8');
+  const productBlockStart = source.indexOf("infNfeLines.push(`        <vProd>");
+  const productBlockEnd = source.indexOf("infNfeLines.push('      </prod>')", productBlockStart);
+  const productBlock = source.slice(productBlockStart, productBlockEnd);
+
+  assert.ok(productBlock.indexOf('<vUnTrib>') < productBlock.indexOf('<vDesc>'));
+  assert.ok(productBlock.indexOf('<vDesc>') < productBlock.indexOf('<indTot>'));
+  assert.ok(productBlock.indexOf('<vOutro>') < productBlock.indexOf('<indTot>'));
+});
 
 describe('nfceEmitter CRT', () => {
   test('mapeia regimes do cadastro de empresa para CRT da NFC-e', () => {

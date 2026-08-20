@@ -1956,12 +1956,12 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     infNfeLines.push(`        <qCom>${toDecimal(item.quantity, 4)}</qCom>`);
     infNfeLines.push(`        <vUnCom>${toDecimal(item.unitPrice)}</vUnCom>`);
     infNfeLines.push(`        <vProd>${toDecimal(item.total)}</vProd>`);
-    if (item.discount > 0.009) infNfeLines.push(`        <vDesc>${toDecimal(item.discount)}</vDesc>`);
-    if (item.addition > 0.009) infNfeLines.push(`        <vOutro>${toDecimal(item.addition)}</vOutro>`);
     infNfeLines.push(`        <cEANTrib>${cEANTrib}</cEANTrib>`);
     infNfeLines.push(`        <uTrib>${sanitize(item.unit)}</uTrib>`);
     infNfeLines.push(`        <qTrib>${toDecimal(item.quantity, 4)}</qTrib>`);
     infNfeLines.push(`        <vUnTrib>${toDecimal(item.unitPrice)}</vUnTrib>`);
+    if (item.discount > 0.009) infNfeLines.push(`        <vDesc>${toDecimal(item.discount)}</vDesc>`);
+    if (item.addition > 0.009) infNfeLines.push(`        <vOutro>${toDecimal(item.addition)}</vOutro>`);
     infNfeLines.push('        <indTot>1</indTot>');
     infNfeLines.push('      </prod>');
     infNfeLines.push('      <imposto>');
