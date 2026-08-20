@@ -4144,11 +4144,11 @@ const emitSaleFiscalHandler = async (req, res) => {
     const rebuildOfflineXml = Boolean(preSignedXml && requestedSeries !== serieNfce);
     const usePreSignedXml = Boolean(preSignedXml && !rebuildOfflineXml);
     const requestedFiscalNumber = Number(req.body?.fiscalNumber);
-    const proximoNumeroFiscal = preSignedXml && Number.isInteger(requestedFiscalNumber) && requestedFiscalNumber > 0
+    let proximoNumeroFiscal = usePreSignedXml && Number.isInteger(requestedFiscalNumber) && requestedFiscalNumber > 0
       ? requestedFiscalNumber
       : baseSequencia + 1;
 
-    if (preSignedXml) {
+    if (usePreSignedXml) {
       const reserved = await PdvCodeRange.findOne({ pdv: pdv._id, host: req.desktopHost?._id, kind: 'nfce', start: { $lte: proximoNumeroFiscal }, end: { $gte: proximoNumeroFiscal }, status: { $ne: 'revoked' } }).lean();
       if (!reserved) return res.status(409).json({ message: 'O nÃºmero da NFC-e offline nÃ£o pertence a uma faixa reservada para esta mÃ¡quina.' });
     }
@@ -4174,9 +4174,32 @@ const emitSaleFiscalHandler = async (req, res) => {
         signatureValue: normalizeString(req.body?.signatureValue), qrCodePayload: normalizeString(req.body?.qrCodePayload), transmission,
       };
     } else {
-      emissionResult = await emitPdvSaleFiscal({
-        sale, pdv, store: storeForXml, emissionDate, environment: ambiente, serie: serieNfce, numero: proximoNumeroFiscal,
-      });
+      const maxDuplicateNumberRetries = 10;
+      let duplicateNumberRetries = 0;
+
+      while (!emissionResult) {
+        try {
+          emissionResult = await emitPdvSaleFiscal({
+            sale, pdv, store: storeForXml, emissionDate, environment: ambiente, serie: serieNfce, numero: proximoNumeroFiscal,
+          });
+        } catch (emissionError) {
+          const protocolStatus = normalizeString(
+            emissionError?.cause?.details?.protocolStatus || emissionError?.details?.protocolStatus
+          );
+          const isHistoricalNumberCollision = protocolStatus === '539';
+
+          if (!isHistoricalNumberCollision || duplicateNumberRetries >= maxDuplicateNumberRetries) {
+            throw emissionError;
+          }
+
+          duplicateNumberRetries += 1;
+          proximoNumeroFiscal += 1;
+          console.warn(
+            `[NFC-e] SÃ©rie ${serieNfce}: nÃºmero fiscal jÃ¡ utilizado na SEFAZ. ` +
+              `Nova tentativa com nÃºmero ${proximoNumeroFiscal} (${duplicateNumberRetries}/${maxDuplicateNumberRetries}).`
+          );
+        }
+      }
     }
     fiscalPerf.mark('sefaz_emissao');
 
