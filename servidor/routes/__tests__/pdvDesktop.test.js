@@ -288,6 +288,15 @@ test.describe('integração do PDV Desktop', () => {
     assert.equal(duplicatePetResponse.body.results[0].status, 'processed', duplicatePetResponse.text);
     const duplicatePet = await Pet.findById(duplicatePetId).lean();
     assert.equal(String(duplicatePet.owner), String(customer._id));
+    const petWithoutBirthId = String(new mongoose.Types.ObjectId());
+    const petWithoutBirthResponse = await request.post('/desktop/events/batch').set(headers).send({ events: [{
+      eventId: 'pet-without-birth-1', type: 'pet.created', occurredAt: new Date().toISOString(),
+      payload: { petId: petWithoutBirthId, customerId: duplicateLocalCustomerId, name: 'Pet sem nascimento', type: 'cachorro', breed: 'SRD', size: 'medio', sex: 'F', birthDate: '' },
+    }] });
+    assert.equal(petWithoutBirthResponse.body.results[0].status, 'processed', petWithoutBirthResponse.text);
+    const petWithoutBirth = await Pet.findById(petWithoutBirthId).lean();
+    assert.equal(petWithoutBirth.nome, 'Pet sem nascimento');
+    assert.equal(petWithoutBirth.dataNascimento, undefined);
     const updatePetEvent = {
       eventId: 'pet-update-existing-1', type: 'pet.updated', occurredAt: new Date().toISOString(),
       payload: { petId: duplicatePetId, customerId: duplicateLocalCustomerId, name: 'Pet atualizado', type: 'cachorro', breed: 'Poodle', size: 'medio', sex: 'M', birthDate: '2026-08-01' },

@@ -780,7 +780,7 @@ async function materializeDesktopEvent(event, pdv, host) {
       raca: clean(source.breed || source.raca),
       porte: clean(source.size || source.porte).toLowerCase(),
       sexo: clean(source.sex || source.sexo).toUpperCase(),
-      dataNascimento: source.birthDate || source.dataNascimento,
+      dataNascimento: source.birthDate || source.dataNascimento || undefined,
       microchip: clean(source.microchip),
       pelagemCor: clean(source.coatColor || source.pelagemCor),
       rga: clean(source.rga),
@@ -833,7 +833,9 @@ async function materializeDesktopEvent(event, pdv, host) {
     pet.raca = clean(source.breed || source.raca);
     pet.porte = clean(source.size || source.porte).toLowerCase();
     pet.sexo = clean(source.sex || source.sexo).toUpperCase();
-    pet.dataNascimento = source.birthDate || source.dataNascimento;
+    if (Object.prototype.hasOwnProperty.call(source, 'birthDate') || Object.prototype.hasOwnProperty.call(source, 'dataNascimento')) {
+      pet.dataNascimento = source.birthDate || source.dataNascimento || undefined;
+    }
     pet.microchip = clean(source.microchip);
     pet.pelagemCor = clean(source.coatColor || source.pelagemCor);
     pet.rga = clean(source.rga);
@@ -841,7 +843,7 @@ async function materializeDesktopEvent(event, pdv, host) {
     pet.codAntigoPet = clean(source.oldCode || source.codAntigoPet);
     pet.obito = Boolean(source.deceased ?? source.obito);
     pet.castrado = Boolean(source.neutered ?? source.castrado);
-    if (!pet.nome || !pet.tipo || !pet.raca || !['M', 'F'].includes(pet.sexo) || !pet.dataNascimento) throw new Error('Complete os dados obrigatórios do pet.');
+    if (!pet.nome || !pet.tipo || !pet.raca || !['M', 'F'].includes(pet.sexo)) throw new Error('Complete os dados obrigatórios do pet.');
     await pet.save();
     return true;
   }

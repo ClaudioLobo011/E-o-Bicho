@@ -15,7 +15,7 @@ const petSchema = new Schema({
   raca: { type: String, required: true },
   porte: { type: String },
   sexo: { type: String, required: true },
-  dataNascimento: { type: Date, required: true },
+  dataNascimento: { type: Date },
   microchip: { type: String },
   pelagemCor: { type: String },
   rga: { type: String },
