@@ -1744,6 +1744,92 @@ router.get('/appointments', authenticateHost, async (req, res) => {
     .lean();
   return res.json({ appointments: appointments.flatMap((appointment) => appointmentOccurrencesForDesktop(appointment, start, end)), generatedAt: new Date().toISOString(), start, end });
 });
+router.get('/agenda/commission-report', authenticateHost, async (req, res) => {
+  const day = clean(req.query.date);
+  const professionalId = clean(req.query.professionalId);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !mongoose.Types.ObjectId.isValid(professionalId)) {
+    return res.status(400).json({ message: 'Data ou profissional inválido para o relatório de comissão.' });
+  }
+
+  const professional = await User.findOne({
+    _id: professionalId,
+    $or: [
+      { empresaPrincipal: req.desktopHost.empresa },
+      { empresaContratual: req.desktopHost.empresa },
+      { empresas: req.desktopHost.empresa },
+    ],
+    grupos: { $in: ['esteticista', 'veterinario'] },
+  }).select('_id nomeCompleto nomeContato razaoSocial email userGroup').populate('userGroup', 'comissaoServicoPercent').lean();
+  if (!professional) return res.status(404).json({ message: 'Profissional não encontrado nesta empresa.' });
+
+  const start = new Date(`${day}T00:00:00-03:00`);
+  const end = new Date(start.getTime() + 86400000);
+  const [appointments, config] = await Promise.all([
+    Appointment.find({
+      store: req.desktopHost.empresa,
+      $or: [{ scheduledAt: { $gte: start, $lt: end } }, { 'itens.data': day }],
+    })
+      .sort({ scheduledAt: 1, _id: 1 })
+      .limit(5000)
+      .populate('cliente', 'nomeCompleto nomeContato razaoSocial email')
+      .populate('pet', 'nome')
+      .populate({ path: 'itens.servico', select: 'nome valor grupo comissaoPercent', populate: { path: 'grupo', select: 'comissaoPercent' } })
+      .lean(),
+    ProfessionalCommissionConfig.findOne({ user: professionalId }).select('groupRules serviceRules').lean(),
+  ]);
+
+  const serviceRules = new Map((config?.serviceRules || []).map((rule) => [String(rule.service || ''), Number(rule.percent)]));
+  const groupRules = new Map((config?.groupRules || []).map((rule) => [String(rule.group || ''), Number(rule.percent)]));
+  const fallbackPercent = Number(professional.userGroup?.comissaoServicoPercent || 0);
+  const validPercent = (value) => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
+  const groupedRows = new Map();
+
+  appointments.forEach((appointment) => {
+    (Array.isArray(appointment.itens) ? appointment.itens : []).forEach((item) => {
+      const assignedId = String(item.profissional || appointment.profissional || '');
+      const status = clean(item.status || appointment.status).toLowerCase();
+      const scheduledAt = desktopAppointmentItemDate(item, appointment.scheduledAt);
+      const itemDay = scheduledAt ? new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(scheduledAt) : '';
+      if (assignedId !== professionalId || status !== 'finalizado' || itemDay !== day) return;
+
+      const serviceId = String(item.servico?._id || item.servico || '');
+      const groupId = String(item.servico?.grupo?._id || item.servico?.grupo || '');
+      const candidates = [
+        serviceRules.get(serviceId),
+        groupRules.get(groupId),
+        item.servico?.comissaoPercent,
+        item.servico?.grupo?.comissaoPercent,
+        item.comissaoPercent,
+        fallbackPercent,
+      ];
+      const percent = Number(candidates.find(validPercent) ?? 0);
+      const value = Number(item.valor ?? item.servico?.valor ?? 0);
+      const key = `${appointment._id}:${scheduledAt ? scheduledAt.toISOString() : day}`;
+      const current = groupedRows.get(key) || {
+        appointmentId: key,
+        petName: clean(appointment.pet?.nome) || 'Pet',
+        customerName: userName(appointment.cliente) || 'Cliente',
+        scheduledAt: scheduledAt || appointment.scheduledAt,
+        commission: 0,
+        serviceCount: 0,
+      };
+      current.commission += value * (percent / 100);
+      current.serviceCount += 1;
+      groupedRows.set(key, current);
+    });
+  });
+
+  const rows = [...groupedRows.values()]
+    .map((row) => ({ ...row, commission: Math.round((row.commission + Number.EPSILON) * 100) / 100 }))
+    .sort((left, right) => new Date(left.scheduledAt) - new Date(right.scheduledAt));
+  const total = Math.round((rows.reduce((sum, row) => sum + row.commission, 0) + Number.EPSILON) * 100) / 100;
+  return res.json({
+    report: { date: day, professionalId, professionalName: userName(professional), rows, total },
+    source: 'professional_commission_config',
+    generatedAt: new Date().toISOString(),
+  });
+});
+
 
 router.get('/deliveries', authenticateHost, async (req, res) => {
   const state = await PdvState.findOne({ pdv: req.desktopHost.pdv }).select('deliveryOrders').lean();

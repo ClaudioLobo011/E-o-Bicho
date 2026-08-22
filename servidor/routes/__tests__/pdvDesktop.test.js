@@ -116,6 +116,23 @@ test.describe('integração do PDV Desktop', () => {
     assert.equal(appointments.body.appointments.length, 1);
     assert.equal(appointments.body.appointments[0].customerName, 'Cliente Desktop');
     assert.equal(appointments.body.appointments[0].petName, 'Bidu');
+    await Appointment.create({
+      store: base.company._id,
+      cliente: customer._id,
+      pet: pet._id,
+      profissional: professional._id,
+      scheduledAt: new Date('2026-08-22T12:00:00.000Z'),
+      valor: 100,
+      status: 'finalizado',
+      itens: [{ servico: service._id, profissional: professional._id, valor: 100, data: '2026-08-22', hora: '09:00', status: 'finalizado' }],
+    });
+    const commissionReport = await request.get(`/desktop/agenda/commission-report?date=2026-08-22&professionalId=${professional._id}`).set(headers);
+    assert.equal(commissionReport.status, 200, commissionReport.text);
+    assert.equal(commissionReport.body.source, 'professional_commission_config');
+    assert.equal(commissionReport.body.report.professionalName, 'Paulo Desktop');
+    assert.equal(commissionReport.body.report.rows.length, 1);
+    assert.equal(commissionReport.body.report.rows[0].commission, 40);
+    assert.equal(commissionReport.body.report.total, 40);
     const recurringServiceId = new mongoose.Types.ObjectId();
     const recurringAppointment = await Appointment.create({
       store: base.company._id,
