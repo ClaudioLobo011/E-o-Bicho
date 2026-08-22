@@ -1,8 +1,8 @@
-version: 0.8.53
+version: 0.8.54
 files:
-  - url: E-o-Bicho-0.8.53-Atualizacao.exe
-    sha512: /MwkuVdwMibKAmJa8DJUU8P6K+i/D2f6hZfpWUtXWuVazYHUOergRld/Zc9yfJCFpoj1ntwPKW4aDw1TRhG9oQ==
-    size: 102434584
-path: E-o-Bicho-0.8.53-Atualizacao.exe
-sha512: /MwkuVdwMibKAmJa8DJUU8P6K+i/D2f6hZfpWUtXWuVazYHUOergRld/Zc9yfJCFpoj1ntwPKW4aDw1TRhG9oQ==
-releaseDate: '2026-08-22T19:56:00.948Z'
+  - url: E-o-Bicho-0.8.54-Atualizacao.exe
+    sha512: hp1cN6ZWze3GK6Bgejl5O9U0qtFULKL1SL5UQyeYEM7EnwzwY0rybFkFpg23q2qzBnm1brYp+9Q18C7ue1qv1A==
+    size: 102434639
+path: E-o-Bicho-0.8.54-Atualizacao.exe
+sha512: hp1cN6ZWze3GK6Bgejl5O9U0qtFULKL1SL5UQyeYEM7EnwzwY0rybFkFpg23q2qzBnm1brYp+9Q18C7ue1qv1A==
+releaseDate: '2026-08-22T20:53:25.120Z'
