@@ -24,6 +24,7 @@ const FiscalDefaultRule = require('../models/FiscalDefaultRule');
 const Store = require('../models/Store');
 const Deposit = require('../models/Deposit');
 const Service = require('../models/Service');
+const ProfessionalCommissionConfig = require('../models/ProfessionalCommissionConfig');
 const pdvDomain = require('./pdvs');
 const { adjustProductStockForDeposit, toObjectIdOrNull } = require('../utils/inventoryStock');
 const { decryptBuffer, decryptText } = require('../utils/certificates');
@@ -1479,7 +1480,7 @@ router.get('/catalog/products', authenticateHost, async (req, res) => {
 
 router.get('/directory/snapshot', authenticateHost, async (req, res) => {
   const host = req.desktopHost;
-  const userFields = '_id codigoCliente nomeCompleto nomeContato razaoSocial email cpf cnpj inscricaoEstadual celular telefone celularSecundario telefoneSecundario tipoConta genero dataNascimento criadoEm observacao observacoes role grupos empresas empresaPrincipal empresaContratual limiteCredito valorPendente';
+  const userFields = '_id codigoCliente nomeCompleto nomeContato razaoSocial email cpf cnpj inscricaoEstadual celular telefone celularSecundario telefoneSecundario tipoConta genero dataNascimento criadoEm observacao observacoes role grupos userGroup empresas empresaPrincipal empresaContratual limiteCredito valorPendente';
   const [customersUsers, users] = await Promise.all([
     // O cadastro de clientes é compartilhado entre todas as lojas.
     User.find({ $or: [{ role: 'cliente' }, { codigoCliente: { $exists: true, $ne: null } }] }).select(userFields).limit(50000).lean(),
@@ -1490,7 +1491,7 @@ router.get('/directory/snapshot', authenticateHost, async (req, res) => {
         { empresaContratual: host.empresa },
         { empresas: host.empresa },
       ],
-    }).select(userFields).limit(50000).lean(),
+    }).select(userFields).populate('userGroup', 'comissaoServicoPercent').limit(50000).lean(),
   ]);
   const customerIds = customersUsers.map((user) => user._id);
   const [pets, addresses, stores, deposits, services] = await Promise.all([
@@ -1503,8 +1504,8 @@ router.get('/directory/snapshot', authenticateHost, async (req, res) => {
       .lean(),
     Store.find({ _id: host.empresa }).select('_id codigo nome nomeFantasia uf').lean(),
     Deposit.find({ empresa: host.empresa }).select('_id codigo nome empresa').sort({ nome: 1 }).lean(),
-    Service.find({ ativo: { $ne: false } }).select('_id nome valor duracaoMinutos grupo categorias porte updatedAt')
-      .populate({ path: 'grupo', select: 'nome tiposPermitidos' }).sort({ nome: 1 }).lean(),
+    Service.find({ ativo: { $ne: false } }).select('_id nome valor duracaoMinutos grupo categorias porte comissaoPercent updatedAt')
+      .populate({ path: 'grupo', select: 'nome tiposPermitidos comissaoPercent' }).sort({ nome: 1 }).lean(),
   ]);
   const addressByUser = new Map();
   const companyState = clean(stores[0]?.uf).toUpperCase();
@@ -1574,10 +1575,25 @@ router.get('/directory/snapshot', authenticateHost, async (req, res) => {
     name: nameOf(user),
     document: user.cpf || user.cnpj || '',
   }));
-  const professionals = users.filter((user) => Array.isArray(user.grupos) && user.grupos.some((group) => ['esteticista', 'veterinario'].includes(group)))
+  const professionalUsers = users.filter((user) => Array.isArray(user.grupos) && user.grupos.some((group) => ['esteticista', 'veterinario'].includes(group)));
+  const commissionConfigs = professionalUsers.length
+    ? await ProfessionalCommissionConfig.find({ user: { $in: professionalUsers.map((user) => user._id) } })
+      .select('user groupRules serviceRules').lean()
+    : [];
+  const commissionConfigByUser = new Map(commissionConfigs.map((config) => [String(config.user), config]));
+  const professionals = professionalUsers
     .map((user) => ({
       id: String(user._id), name: nameOf(user),
       type: user.grupos.includes('veterinario') ? 'veterinario' : 'esteticista', groups: user.grupos || [],
+      commission: {
+        fallbackPercent: Number(user.userGroup?.comissaoServicoPercent || 0),
+        groupRules: (commissionConfigByUser.get(String(user._id))?.groupRules || []).map((rule) => ({
+          groupId: String(rule.group || ''), percent: Number(rule.percent || 0),
+        })),
+        serviceRules: (commissionConfigByUser.get(String(user._id))?.serviceRules || []).map((rule) => ({
+          serviceId: String(rule.service || ''), percent: Number(rule.percent || 0),
+        })),
+      },
     })).filter((entry) => entry.name);
   return res.json({
     version: 1,
@@ -1595,6 +1611,9 @@ router.get('/directory/snapshot', authenticateHost, async (req, res) => {
     professionals,
     services: services.map((service) => ({
       id: String(service._id), name: service.nome || '', price: Number(service.valor || 0), durationMinutes: Number(service.duracaoMinutos || 0),
+      groupId: String(service.grupo?._id || service.grupo || ''),
+      commissionPercent: service.comissaoPercent == null ? null : Number(service.comissaoPercent),
+      groupCommissionPercent: Number(service.grupo?.comissaoPercent || 0),
       allowedStaffTypes: Array.isArray(service.grupo?.tiposPermitidos) ? service.grupo.tiposPermitidos : [],
       categories: Array.isArray(service.categorias) ? service.categorias : [], sizes: Array.isArray(service.porte) ? service.porte : [],
     })),

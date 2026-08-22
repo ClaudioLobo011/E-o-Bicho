@@ -29,6 +29,10 @@ const UserAddress = require('../../models/UserAddress');
 const Appointment = require('../../models/Appointment');
 const Exchange = require('../../models/Exchange');
 const Transfer = require('../../models/Transfer');
+const UserGroup = require('../../models/UserGroup');
+const ServiceGroup = require('../../models/ServiceGroup');
+const Service = require('../../models/Service');
+const ProfessionalCommissionConfig = require('../../models/ProfessionalCommissionConfig');
 const router = require('../../routes/pdvDesktop');
 const { encryptBuffer, encryptText } = require('../../utils/certificates');
 
@@ -60,6 +64,11 @@ test.describe('integração do PDV Desktop', () => {
     await UserAddress.create({ user: customer._id, cep: '20000000', logradouro: 'Rua Desktop', numero: '10', cidade: 'Rio de Janeiro', uf: 'RJ', isDefault: true });
     await User.create({ tipoConta: 'pessoa_fisica', email: `desktop-seller-${suffix}@example.com`, senha: 'hash', celular: `218${suffix}`, nomeCompleto: 'Vendedor Desktop', role: 'funcionario', grupos: ['vendedor'], empresas: [base.company._id], codigoCliente: 987654 });
     const courier = await User.create({ tipoConta: 'pessoa_fisica', email: `desktop-courier-${suffix}@example.com`, senha: 'hash', celular: `216${suffix}`, nomeCompleto: 'Entregador Desktop', role: 'funcionario', grupos: ['entregador'], empresas: [base.company._id], codigoCliente: 123456 });
+    const employeeGroup = await UserGroup.create({ codigo: 9001, nome: 'Esteticistas Desktop', comissaoServicoPercent: 15 });
+    const serviceGroup = await ServiceGroup.create({ nome: 'Banho Desktop', tiposPermitidos: ['esteticista'], comissaoPercent: 25 });
+    const service = await Service.create({ nome: 'Banho Comissão Desktop', grupo: serviceGroup._id, duracaoMinutos: 60, valor: 100, porte: ['Todos'], ativo: true });
+    const professional = await User.create({ tipoConta: 'pessoa_fisica', email: `desktop-professional-${suffix}@example.com`, senha: 'hash', celular: `214${suffix}`, nomeCompleto: 'Paulo Desktop', role: 'funcionario', grupos: ['esteticista'], empresas: [base.company._id], userGroup: employeeGroup._id });
+    await ProfessionalCommissionConfig.create({ user: professional._id, professionalType: 'esteticista', groupRules: [{ group: serviceGroup._id, percent: 30 }], serviceRules: [{ service: service._id, percent: 40 }] });
     const otherCompany = await Store.create({ codigo: `OUTRA-${Date.now()}`, nome: 'Outra Loja', nomeFantasia: 'Outra Loja', cnpj: `9${Date.now()}`.slice(-14) });
     const sharedCustomer = await User.create({ tipoConta: 'pessoa_fisica', email: `desktop-shared-${suffix}@example.com`, senha: 'hash', celular: `217${suffix}`, nomeCompleto: 'Cliente de Outra Loja', cpf: `987${suffix}`, role: 'cliente', empresaPrincipal: otherCompany._id });
     const sharedPet = await Pet.create({ owner: sharedCustomer._id, nome: 'Pet Compartilhado', tipo: 'cachorro', raca: 'vira-lata', sexo: 'macho', dataNascimento: new Date('2023-01-01T00:00:00Z') });
@@ -95,6 +104,13 @@ test.describe('integração do PDV Desktop', () => {
     assert.equal(directory.body.sellers.find((entry) => entry.name === 'Vendedor Desktop').code, '987654');
     assert.equal(directory.body.sellers.some((entry) => entry.name === 'Vendedor de Outra Loja'), false);
     assert.equal(directory.body.couriers.find((entry) => entry.name === 'Entregador Desktop').code, '123456');
+    const directoryProfessional = directory.body.professionals.find((entry) => entry.name === 'Paulo Desktop');
+    assert.equal(directoryProfessional.commission.fallbackPercent, 15);
+    assert.deepEqual(directoryProfessional.commission.groupRules, [{ groupId: String(serviceGroup._id), percent: 30 }]);
+    assert.deepEqual(directoryProfessional.commission.serviceRules, [{ serviceId: String(service._id), percent: 40 }]);
+    const directoryService = directory.body.services.find((entry) => entry.name === 'Banho Comissão Desktop');
+    assert.equal(directoryService.groupId, String(serviceGroup._id));
+    assert.equal(directoryService.groupCommissionPercent, 25);
     const appointments = await request.get(`/desktop/appointments?start=${encodeURIComponent(new Date(Date.now() - 86400000).toISOString())}&end=${encodeURIComponent(new Date(Date.now() + 86400000).toISOString())}`).set(headers);
     assert.equal(appointments.status, 200, appointments.text);
     assert.equal(appointments.body.appointments.length, 1);
