@@ -26,6 +26,7 @@ outputs/pedido_1472/
 # Arquivos auxiliares usados somente para gerar relatórios fora do site
 .codex-tmp/
 .codex-work/
+.codex-backups/
 _tmp_*.js
 servidor/tmp_*.js
 servidor/tmp_*.js.bak

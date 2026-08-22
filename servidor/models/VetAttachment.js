@@ -49,6 +49,7 @@ const VetAttachmentFileSchema = new Schema({
 }, { _id: true, id: false });
 
 const VetAttachmentSchema = new Schema({
+  desktopFileId: { type: String, trim: true, default: '' },
   cliente: {
     type: Schema.Types.ObjectId,
     ref: 'User',
@@ -89,5 +90,6 @@ const VetAttachmentSchema = new Schema({
 
 VetAttachmentSchema.index({ cliente: 1, pet: 1, createdAt: -1 });
 VetAttachmentSchema.index({ appointment: 1 });
+VetAttachmentSchema.index({ desktopFileId: 1 }, { unique: true, partialFilterExpression: { desktopFileId: { $gt: '' } } });
 
 module.exports = mongoose.model('VetAttachment', VetAttachmentSchema);

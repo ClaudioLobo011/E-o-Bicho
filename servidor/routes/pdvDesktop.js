@@ -20,6 +20,7 @@ const AccountReceivable = require('../models/AccountReceivable');
 const Appointment = require('../models/Appointment');
 const Exchange = require('../models/Exchange');
 const Transfer = require('../models/Transfer');
+const VetAttachment = require('../models/VetAttachment');
 const FiscalDefaultRule = require('../models/FiscalDefaultRule');
 const Store = require('../models/Store');
 const Deposit = require('../models/Deposit');
@@ -30,6 +31,7 @@ const { adjustProductStockForDeposit, toObjectIdOrNull } = require('../utils/inv
 const { decryptBuffer, decryptText } = require('../utils/certificates');
 const { deriveAppointmentStatus } = require('../services/appointmentStatus');
 const { normalizeBrazilPhone, phoneLookupQuery, effectiveWebAccountStatus } = require('../utils/customerIdentity');
+const { isR2Configured, uploadBufferToR2, buildPublicUrl } = require('../utils/cloudflareR2');
 
 const router = express.Router();
 const adminOnly = [requireAuth, authorizeRoles('admin', 'admin_master')];
@@ -216,6 +218,17 @@ function appointmentForDesktop(appointment, occurrence = null) {
       notes: item?.observacao || '',
     };
   });
+  const sourceProducts = (Array.isArray(appointment?.clinicalProducts) ? appointment.clinicalProducts : []).filter((item) => !occurrence || clean(item?.occurrenceKey) === clean(occurrence.key));
+  const clinicalProducts = sourceProducts.map((item, index) => {
+    const product = item?.product && typeof item.product === 'object' ? item.product : null;
+    return {
+      id: clean(item?._id || `${appointment._id}:product:${index}`), sourceRecordId: clean(item?.sourceRecordId),
+      productId: clean(product?._id || item?.product), name: item?.name || product?.nome || `Produto ${index + 1}`,
+      code: item?.code || product?.cod || '', barcode: item?.barcode || product?.codbarras || '', quantity: Number(item?.quantity || 0),
+      baseUnitPrice: Number(item?.unitPrice || 0), unitPrice: Number(item?.unitPrice || 0), itemDiscountValue: Number(item?.itemDiscountValue || 0),
+      total: Number(item?.total || 0), itemType: 'product', type: 'product', occurrenceKey: clean(item?.occurrenceKey),
+    };
+  });
   const status = deriveAppointmentStatus({ ...appointment, itens: sourceItems });
   return {
     id: occurrence?.id || String(appointment._id),
@@ -231,8 +244,11 @@ function appointmentForDesktop(appointment, occurrence = null) {
     professionalId: clean(professional?._id || appointment.profissional),
     professionalName: userName(professional),
     services,
+    clinicalProducts,
     scheduledAt: occurrence?.scheduledAt || appointment.scheduledAt,
-    total: Number(occurrence ? services.reduce((sum, item) => sum + Number(item.unitPrice || 0), 0) : (appointment.valor || services.reduce((sum, item) => sum + Number(item.unitPrice || 0), 0))),
+    total: Number(occurrence
+      ? services.reduce((sum, item) => sum + Number(item.unitPrice || 0), 0) + clinicalProducts.reduce((sum, item) => sum + Number(item.total || 0), 0)
+      : (appointment.valor || services.reduce((sum, item) => sum + Number(item.unitPrice || 0), 0) + clinicalProducts.reduce((sum, item) => sum + Number(item.total || 0), 0))),
     status,
     paid: Boolean(appointment.pago),
     saleCode: appointment.codigoVenda || '',
@@ -544,10 +560,29 @@ async function desktopAppointmentPayload(source, host) {
     if (professionalId) entry.profissional = professionalId;
     return entry;
   });
+  const sourceProducts = Array.isArray(source.clinicalProducts) ? source.clinicalProducts : [];
+  const productIds = sourceProducts.map((item) => clean(item.productId || item.id));
+  if (productIds.some((id) => !mongoose.Types.ObjectId.isValid(id))) throw new Error('Produto inválido no atendimento clínico.');
+  const knownProducts = productIds.length ? await Product.find({ _id: { $in: productIds } }).select('_id nome cod codbarras').lean() : [];
+  const productMap = new Map(knownProducts.map((product) => [String(product._id), product]));
+  const clinicalProducts = sourceProducts.map((item) => {
+    const productId = clean(item.productId || item.id);
+    const product = productMap.get(productId);
+    const quantity = Number(item.quantity || 0);
+    const unitPrice = Math.max(0, Number(item.unitPrice ?? item.price ?? 0));
+    const gross = quantity * unitPrice;
+    const itemDiscountValue = Math.min(gross, Math.max(0, Number(item.itemDiscountValue ?? item.discountValue ?? 0)));
+    if (!product || !(quantity > 0)) throw new Error('Produto ou quantidade inválida no atendimento clínico.');
+    return {
+      sourceRecordId: clean(item.sourceRecordId), product: product._id, name: clean(item.name) || product.nome || 'Produto',
+      code: clean(item.code) || product.cod || '', barcode: clean(item.barcode) || product.codbarras || '', quantity, unitPrice,
+      itemDiscountValue, total: Math.max(0, gross - itemDiscountValue), occurrenceKey: clean(item.occurrenceKey || source.sourceOccurrenceKey || source.scheduledAt),
+    };
+  });
   const primaryProfessional = itens.find((item) => item.profissional)?.profissional || null;
   return {
-    store: host.empresa, cliente: customerId, pet: petId, servico: itens[0].servico, itens,
-    profissional: primaryProfessional, scheduledAt, valor: itens.reduce((sum, item) => sum + Number(item.valor || 0), 0),
+    store: host.empresa, cliente: customerId, pet: petId, servico: itens[0].servico, itens, clinicalProducts,
+    profissional: primaryProfessional, scheduledAt, valor: itens.reduce((sum, item) => sum + Number(item.valor || 0), 0) + clinicalProducts.reduce((sum, item) => sum + Number(item.total || 0), 0),
     status, observacoes: clean(source.notes),
   };
 }
@@ -591,18 +626,29 @@ function validatePaidDesktopAppointmentChanges(appointment, values, occurrenceKe
   const currentItems = occurrenceKey
     ? (appointment.itens || []).filter((item) => desktopAppointmentItemDate(item, appointment.scheduledAt)?.toISOString() === occurrenceKey)
     : (appointment.itens || []);
+  const currentProducts = occurrenceKey
+    ? (appointment.clinicalProducts || []).filter((item) => clean(item.occurrenceKey) === clean(occurrenceKey))
+    : (appointment.clinicalProducts || []);
   const restrictedChange = String(appointment.cliente) !== String(values.cliente)
     || String(appointment.pet) !== String(values.pet)
     || clean(appointment.observacoes) !== clean(values.observacoes)
     || currentItems.length !== values.itens.length
+    || currentProducts.length !== values.clinicalProducts.length
     || values.itens.some((item, index) => {
       const original = currentItems[index] || {};
       return String(original.servico || '') !== String(item.servico || '')
         || Number(original.valor || 0) !== Number(item.valor || 0)
         || clean(original.observacao) !== clean(item.observacao);
+    })
+    || values.clinicalProducts.some((item, index) => {
+      const original = currentProducts[index] || {};
+      return String(original.product || '') !== String(item.product || '')
+        || Number(original.quantity || 0) !== Number(item.quantity || 0)
+        || Number(original.unitPrice || 0) !== Number(item.unitPrice || 0)
+        || Number(original.itemDiscountValue || 0) !== Number(item.itemDiscountValue || 0);
     });
   if (restrictedChange) {
-    const error = new Error('Agendamento já faturado. Não é permitido alterar cliente, pet ou serviços.');
+    const error = new Error('Agendamento já faturado. Não é permitido alterar cliente, pet ou serviços; produtos também ficam bloqueados.');
     error.code = 'PAID_APPOINTMENT_RESTRICTED';
     throw error;
   }
@@ -640,10 +686,12 @@ async function materializeDesktopAppointmentEvent(event, host) {
       }
       const remaining = (appointment.itens || []).filter((item) => desktopAppointmentItemDate(item, appointment.scheduledAt)?.toISOString() !== occurrenceKey);
       if (remaining.length) {
+        const remainingProducts = (appointment.clinicalProducts || []).filter((item) => clean(item.occurrenceKey) !== occurrenceKey);
         appointment.itens = remaining;
+        appointment.clinicalProducts = remainingProducts;
         appointment.servico = remaining[0].servico;
         appointment.profissional = remaining.find((item) => item.profissional)?.profissional || null;
-        appointment.valor = remaining.reduce((sum, item) => sum + Number(item.valor || 0), 0);
+        appointment.valor = remaining.reduce((sum, item) => sum + Number(item.valor || 0), 0) + remainingProducts.reduce((sum, item) => sum + Number(item.total || 0), 0);
         appointment.version = expectedVersion + 1;
         await appointment.save();
         return appointment;
@@ -664,10 +712,12 @@ async function materializeDesktopAppointmentEvent(event, host) {
     }
     validatePaidDesktopAppointmentChanges(appointment, values, occurrenceKey);
     const remaining = (appointment.itens || []).filter((item) => desktopAppointmentItemDate(item, appointment.scheduledAt)?.toISOString() !== occurrenceKey);
+    const remainingProducts = (appointment.clinicalProducts || []).filter((item) => clean(item.occurrenceKey) !== occurrenceKey);
     appointment.itens = [...remaining, ...values.itens];
+    appointment.clinicalProducts = [...remainingProducts, ...values.clinicalProducts];
     appointment.servico = appointment.itens[0]?.servico || values.servico;
     appointment.profissional = appointment.itens.find((item) => item.profissional)?.profissional || null;
-    appointment.valor = appointment.itens.reduce((sum, item) => sum + Number(item.valor || 0), 0);
+    appointment.valor = appointment.itens.reduce((sum, item) => sum + Number(item.valor || 0), 0) + appointment.clinicalProducts.reduce((sum, item) => sum + Number(item.total || 0), 0);
     if (!remaining.length) {
       appointment.scheduledAt = values.scheduledAt;
       appointment.status = values.status;
@@ -1741,9 +1791,11 @@ router.get('/appointments', authenticateHost, async (req, res) => {
     .populate('profissional', 'nomeCompleto nomeContato razaoSocial email')
     .populate('itens.servico', 'nome valor duracaoMinutos')
     .populate('itens.profissional', 'nomeCompleto nomeContato razaoSocial email')
+    .populate('clinicalProducts.product', 'nome cod codbarras venda')
     .lean();
   return res.json({ appointments: appointments.flatMap((appointment) => appointmentOccurrencesForDesktop(appointment, start, end)), generatedAt: new Date().toISOString(), start, end });
 });
+
 router.get('/agenda/commission-report', authenticateHost, async (req, res) => {
   const day = clean(req.query.date);
   const professionalId = clean(req.query.professionalId);
@@ -1830,6 +1882,51 @@ router.get('/agenda/commission-report', authenticateHost, async (req, res) => {
   });
 });
 
+router.post('/clinical-files/:fileId', authenticateHost, express.raw({ type: 'application/octet-stream', limit: '20mb' }), async (req, res) => {
+  try {
+    if (!isR2Configured()) return res.status(503).json({ message: 'Cloudflare R2 não configurado.' });
+    const desktopFileId = clean(req.params.fileId);
+    if (!desktopFileId) return res.status(400).json({ message: 'Arquivo clínico sem identificador.' });
+    const existing = await VetAttachment.findOne({ desktopFileId }).lean();
+    if (existing) {
+      const file = existing.arquivos?.[0] || {};
+      return res.json({ id: String(existing._id), cloudId: String(existing._id), url: file.r2Url || file.url || '', replayed: true });
+    }
+    const buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    if (!buffer.length) return res.status(400).json({ message: 'Arquivo clínico vazio.' });
+    const decodeHeader = (name, fallback = '') => { try { return decodeURIComponent(clean(req.get(name)) || fallback); } catch { return fallback; } };
+    const customerId = await resolveDesktopCustomerId(req.get('X-Clinical-Customer-Id'), req.desktopHost);
+    const petId = clean(req.get('X-Clinical-Pet-Id'));
+    const appointmentReference = desktopAppointmentReference(req.get('X-Clinical-Appointment-Id'));
+    if (!mongoose.Types.ObjectId.isValid(customerId) || !mongoose.Types.ObjectId.isValid(petId)) return res.status(400).json({ message: 'Tutor ou pet inválido no arquivo clínico.' });
+    const pet = await Pet.findOne({ _id: petId, owner: customerId }).select('_id').lean();
+    if (!pet) return res.status(400).json({ message: 'O pet do arquivo clínico não pertence ao tutor.' });
+    let appointment = null;
+    if (mongoose.Types.ObjectId.isValid(appointmentReference.appointmentId)) {
+      appointment = await Appointment.findOne({ _id: appointmentReference.appointmentId, store: req.desktopHost.empresa, cliente: customerId, pet: petId }).select('_id').lean();
+      if (!appointment) return res.status(400).json({ message: 'O atendimento do arquivo clínico não foi encontrado.' });
+    }
+    const fileName = decodeHeader('X-Clinical-File-Name', 'anexo').replace(/[\\/:*?"<>|]+/g, '-').slice(0, 160) || 'anexo';
+    const mimeType = clean(req.get('X-Clinical-Mime-Type')).toLowerCase() || 'application/octet-stream';
+    if (!['image/png', 'image/jpeg', 'application/pdf'].includes(mimeType)) return res.status(415).json({ message: 'A nuvem aceita imagens PNG/JPG e PDF na ficha clínica.' });
+    const key = ['Ficha Clinica', String(customerId), String(petId), appointment ? String(appointment._id) : 'sem-atendimento', 'Desktop', `${desktopFileId}-${fileName}`].join('/');
+    const uploaded = await uploadBufferToR2(buffer, { key, contentType: mimeType });
+    const r2Key = uploaded?.key || key;
+    const url = uploaded?.url || buildPublicUrl(r2Key);
+    const category = decodeHeader('X-Clinical-Category', 'Outro');
+    const title = decodeHeader('X-Clinical-Title', fileName);
+    const description = decodeHeader('X-Clinical-Description', '');
+    const doc = await VetAttachment.create({
+      desktopFileId, cliente: customerId, pet: petId, appointment: appointment?._id || null,
+      observacao: `${category === 'Exame' || clean(req.get('X-Clinical-Record-Id')) ? '__vet_exame__:' : ''}${title}${description ? ` · ${description}` : ''}`,
+      arquivos: [{ nome: title || fileName, originalName: fileName, mimeType, size: buffer.length, url, r2Key, r2Url: url, createdAt: new Date() }],
+    });
+    return res.status(201).json({ id: String(doc._id), cloudId: String(doc._id), url, replayed: false });
+  } catch (error) {
+    console.error('POST /desktop/clinical-files/:fileId', error);
+    return res.status(500).json({ message: error.message || 'Erro ao enviar arquivo clínico para a nuvem.' });
+  }
+});
 
 router.get('/deliveries', authenticateHost, async (req, res) => {
   const state = await PdvState.findOne({ pdv: req.desktopHost.pdv }).select('deliveryOrders').lean();
