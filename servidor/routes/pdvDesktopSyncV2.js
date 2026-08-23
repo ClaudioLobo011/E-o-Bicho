@@ -299,12 +299,12 @@ async function loadDirectoryUpserts(entity, host, cursor, limit) {
     })) };
   }
   if (entity === 'stores') {
-    documents = await Store.find({ _id: host.empresa, ...cursorQuery(cursor) }).select('_id codigo nome nomeFantasia uf updatedAt')
+    documents = await Store.find(cursorQuery(cursor)).select('_id codigo nome nomeFantasia uf updatedAt')
       .sort({ updatedAt: 1, _id: 1 }).limit(limit + 1).lean();
     return { documents, map: (page) => page.map((store) => ({ id: String(store._id), code: store.codigo || '', name: store.nomeFantasia || store.nome || '', state: store.uf || '', updatedAt: store.updatedAt || null })) };
   }
   if (entity === 'deposits') {
-    documents = await Deposit.find({ empresa: host.empresa, ...cursorQuery(cursor) }).select('_id codigo nome empresa updatedAt')
+    documents = await Deposit.find(cursorQuery(cursor)).select('_id codigo nome empresa updatedAt')
       .sort({ updatedAt: 1, _id: 1 }).limit(limit + 1).lean();
     return { documents, map: (page) => page.map((deposit) => ({ id: String(deposit._id), code: deposit.codigo || '', name: deposit.nome || '', companyId: String(deposit.empresa), updatedAt: deposit.updatedAt || null })) };
   }
@@ -327,7 +327,7 @@ router.get('/directory/:entity', async (req, res) => {
   };
   const tombstoneEntity = tombstoneEntities[entity];
   const deletionFilter = { entity: tombstoneEntity, ...cursorQuery(composite.deletions) };
-  if (entity === 'employees' || entity === 'deposits') {
+  if (entity === 'employees') {
     deletionFilter.companies = req.desktopHost.empresa;
   }
   const deletionDocuments = await PdvDesktopSyncTombstone.find(deletionFilter)

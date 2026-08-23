@@ -22,6 +22,7 @@ const PaymentMethod = require('../../models/PaymentMethod');
 const User = require('../../models/User');
 const Pet = require('../../models/Pet');
 const UserAddress = require('../../models/UserAddress');
+const Deposit = require('../../models/Deposit');
 const Appointment = require('../../models/Appointment');
 const PdvDesktopHost = require('../../models/PdvDesktopHost');
 require('../../models/UserGroup');
@@ -126,6 +127,7 @@ test.describe('sincronização incremental do PDV Desktop v2', () => {
     const base = await pairedFixture('sync-directory-host');
     const suffix = String(Date.now()).slice(-8);
     const otherCompany = await Store.create({ codigo: `OTHER-${suffix}`, nome: 'Outra Empresa', nomeFantasia: 'Outra Empresa', cnpj: `9${suffix}`.padEnd(14, '0').slice(0, 14) });
+    const otherDeposit = await Deposit.create({ codigo: `OTHER-DEP-${suffix}`, nome: 'Depósito Outra Empresa', empresa: otherCompany._id });
     const customer = await User.create({ tipoConta: 'pessoa_fisica', email: `global-${suffix}@example.com`, senha: 'hash', celular: `219${suffix}`, nomeCompleto: 'Cliente Global', role: 'cliente', empresaPrincipal: otherCompany._id });
     const pet = await Pet.create({ owner: customer._id, nome: 'Pet Global', tipo: 'cachorro', raca: 'SRD', sexo: 'macho' });
     const address = await UserAddress.create({ user: customer._id, cep: '20000000', logradouro: 'Rua Global', numero: '10', cidade: 'Rio de Janeiro', uf: 'RJ', isDefault: true });
@@ -140,6 +142,10 @@ test.describe('sincronização incremental do PDV Desktop v2', () => {
     assert.ok(addresses.body.upserts.some((entry) => entry.id === String(address._id) && entry.street === 'Rua Global'));
     const employees = await base.request.get('/desktop/sync/v2/directory/employees').set(base.headers);
     assert.equal(employees.body.upserts.filter((entry) => entry.seller).length, 1);
+    const stores = await base.request.get('/desktop/sync/v2/directory/stores').set(base.headers);
+    assert.ok(stores.body.upserts.some((entry) => entry.id === String(otherCompany._id)));
+    const deposits = await base.request.get('/desktop/sync/v2/directory/deposits').set(base.headers);
+    assert.ok(deposits.body.upserts.some((entry) => entry.id === String(otherDeposit._id) && entry.companyId === String(otherCompany._id)));
 
     await recordDesktopSyncDeletion({ entity: 'address', entityId: address._id, ownerId: customer._id });
     await UserAddress.deleteOne({ _id: address._id });

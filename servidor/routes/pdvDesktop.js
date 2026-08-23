@@ -515,10 +515,11 @@ async function materializeDesktopTransferEvent(event, pdv, host) {
   const companyId = String(host.empresa);
   const originCompanyId = clean(source.originCompanyId);
   const destinationCompanyId = clean(source.destinationCompanyId);
-  if (originCompanyId !== companyId || destinationCompanyId !== companyId) throw new Error('O PDV só pode solicitar transferências entre depósitos da própria empresa.');
+  if (originCompanyId !== companyId) throw new Error('A origem da transferência deve pertencer à empresa deste PDV.');
+  if (!mongoose.Types.ObjectId.isValid(destinationCompanyId)) throw new Error('A empresa de destino da transferência é inválida.');
   const [originDeposit, destinationDeposit, responsible] = await Promise.all([
     Deposit.findOne({ _id: source.originDepositId, empresa: host.empresa }).lean(),
-    Deposit.findOne({ _id: source.destinationDepositId, empresa: host.empresa }).lean(),
+    Deposit.findOne({ _id: source.destinationDepositId, empresa: destinationCompanyId }).lean(),
     User.findOne({ _id: source.responsibleId, $or: [{ empresaPrincipal: host.empresa }, { empresaContratual: host.empresa }, { empresas: host.empresa }] }).lean(),
   ]);
   if (!originDeposit || !destinationDeposit || String(originDeposit._id) === String(destinationDeposit._id)) throw new Error('Depósitos de origem e destino inválidos.');
@@ -541,7 +542,7 @@ async function materializeDesktopTransferEvent(event, pdv, host) {
         number: Number(last?.number || 0) + 1,
         requestDate: new Date(source.requestDate || source.createdAt || Date.now()), status: 'solicitada',
         originCompany: host.empresa, originDeposit: originDeposit._id,
-        destinationCompany: host.empresa, destinationDeposit: destinationDeposit._id,
+        destinationCompany: destinationCompanyId, destinationDeposit: destinationDeposit._id,
         responsible: responsible._id, referenceDocument: clean(source.referenceDocument), observations: clean(source.observations), items,
         desktopTransferId, desktopEventIds: [event.eventId], desktopHost: host._id, desktopPdv: pdv._id,
       });
@@ -1627,8 +1628,8 @@ router.get('/directory/snapshot', authenticateHost, async (req, res) => {
       .select('_id user apelido cep logradouro numero complemento bairro cidade uf isDefault updatedAt')
       .sort({ isDefault: -1, updatedAt: -1, _id: -1 })
       .lean(),
-    Store.find({ _id: host.empresa }).select('_id codigo nome nomeFantasia uf').lean(),
-    Deposit.find({ empresa: host.empresa }).select('_id codigo nome empresa').sort({ nome: 1 }).lean(),
+    Store.find({}).select('_id codigo nome nomeFantasia uf').sort({ nomeFantasia: 1, nome: 1 }).lean(),
+    Deposit.find({}).select('_id codigo nome empresa').sort({ nome: 1 }).lean(),
     Service.find({ ativo: { $ne: false } }).select('_id nome valor duracaoMinutos grupo categorias porte comissaoPercent updatedAt')
       .populate({ path: 'grupo', select: 'nome tiposPermitidos comissaoPercent' }).sort({ nome: 1 }).lean(),
   ]);

@@ -665,12 +665,13 @@ test.describe('integração do PDV Desktop', () => {
     assert.equal(fiscalConfig.body.cscToken, 'csc-producao-teste');
   });
 
-  test('registra transferência desktop uma única vez e não movimenta estoque antes da aprovação', async () => {
+  test('registra transferência desktop entre lojas uma única vez e não movimenta estoque antes da aprovação', async () => {
     const base = await fixture();
     const suffix = String(Date.now()).slice(-8);
+    const destinationCompany = await Store.create({ codigo: `DEST-${suffix}`, nome: 'Empresa Destino', nomeFantasia: 'Empresa Destino', cnpj: `8${suffix}`.padEnd(14, '0').slice(0, 14) });
     const [origin, destination, responsible] = await Promise.all([
       Deposit.create({ codigo: `TO-${suffix}`, nome: 'Origem', empresa: base.company._id }),
-      Deposit.create({ codigo: `TD-${suffix}`, nome: 'Destino', empresa: base.company._id }),
+      Deposit.create({ codigo: `TD-${suffix}`, nome: 'Destino', empresa: destinationCompany._id }),
       User.create({ tipoConta: 'pessoa_fisica', email: `transfer-${suffix}@example.com`, senha: 'hash', celular: `214${suffix}`, nomeCompleto: 'Responsável Transferência', role: 'funcionario', empresas: [base.company._id] }),
     ]);
     await Product.updateOne({ _id: base.product._id }, { $set: { estoques: [{ deposito: origin._id, quantidade: 8 }, { deposito: destination._id, quantidade: 2 }] } });
@@ -679,13 +680,19 @@ test.describe('integração do PDV Desktop', () => {
     const paired = await request.post('/desktop/pair').send({ pairingCode: pairing.body.pairingCode, machineId: 'transfer-host' });
     await Pdv.updateOne({ _id: base.pdv._id }, { $set: { tipoUso: 'executavel', 'desktop.status': 'ativo' } });
     const headers = { 'X-Desktop-Token': paired.body.token };
-    const payload = { id: 'local-transfer-1', pdvId: String(base.pdv._id), originCompanyId: String(base.company._id), originDepositId: String(origin._id), destinationCompanyId: String(base.company._id), destinationDepositId: String(destination._id), responsibleId: String(responsible._id), items: [{ productId: String(base.product._id), quantity: 3 }] };
+    const directory = await request.get('/desktop/directory/snapshot').set(headers);
+    assert.ok(directory.body.stores.some((entry) => entry.id === String(destinationCompany._id)));
+    assert.ok(directory.body.deposits.some((entry) => entry.id === String(destination._id) && entry.companyId === String(destinationCompany._id)));
+    const payload = { id: 'local-transfer-1', pdvId: String(base.pdv._id), originCompanyId: String(base.company._id), originDepositId: String(origin._id), destinationCompanyId: String(destinationCompany._id), destinationDepositId: String(destination._id), responsibleId: String(responsible._id), items: [{ productId: String(base.product._id), quantity: 3 }] };
     const event = { eventId: 'transfer-event-1', type: 'transfer.requested', occurredAt: new Date().toISOString(), payload };
     const first = await request.post('/desktop/events/batch').set(headers).send({ events: [event] });
     const replay = await request.post('/desktop/events/batch').set(headers).send({ events: [event] });
     assert.equal(first.body.results[0].status, 'processed');
     assert.equal(replay.body.results[0].replayed, true);
     assert.equal(await Transfer.countDocuments({ desktopTransferId: payload.id }), 1);
+    const transfer = await Transfer.findOne({ desktopTransferId: payload.id }).lean();
+    assert.equal(String(transfer.originCompany), String(base.company._id));
+    assert.equal(String(transfer.destinationCompany), String(destinationCompany._id));
     const product = await Product.findById(base.product._id).lean();
     assert.deepEqual(product.estoques.map((entry) => Number(entry.quantidade)), [8, 2]);
     const snapshot = await request.get('/desktop/transfers').set(headers);
