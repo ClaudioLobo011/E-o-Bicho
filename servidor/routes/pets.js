@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Pet = require('../models/Pet');
 const requireAuth = require('../middlewares/requireAuth');
+const { recordDesktopSyncDeletion } = require('../services/desktopSyncTombstones');
 
 // Middleware para validar acesso aos pets
 function authorizePetAccess(req, res, next) {
@@ -108,6 +109,7 @@ router.delete('/:petId', requireAuth, async (req, res) => {
     }
 
     await Pet.findByIdAndDelete(req.params.petId);
+    await recordDesktopSyncDeletion({ entity: 'pet', entityId: pet._id, ownerId: pet.owner });
     res.json({ message: 'Pet excluído com sucesso!' });
   } catch (error) {
     res.status(500).json({ message: 'Erro ao excluir pet.' });

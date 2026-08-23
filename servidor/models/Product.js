@@ -227,6 +227,7 @@ productSchema.index({ searchTokens: 1 });
 productSchema.index({ searchTokenPrefixes: 1 });
 productSchema.index({ codigosComplementares: 1 });
 productSchema.index({ 'fornecedores.codigoProduto': 1 });
+productSchema.index({ updatedAt: 1, _id: 1 });
 // Usado pelo PDV para localizar, em uma única consulta, os produtos fracionados
 // afetados pelos itens da venda.
 productSchema.index(

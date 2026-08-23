@@ -76,6 +76,7 @@ AppointmentSchema.index(
 );
 
 AppointmentSchema.pre(/^find/, function excludeSoftDeleted(next) {
+  if (this.getOptions()?.includeDeleted) return next();
   const query = this.getQuery();
   if (!Object.prototype.hasOwnProperty.call(query, 'deletedAt')) {
     this.where({ deletedAt: null });

@@ -1,6 +1,7 @@
 ﻿const express = require('express');
 const router = express.Router();
 const Store = require('../models/Store');
+const { recordDesktopSyncDeletion } = require('../services/desktopSyncTombstones');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -780,6 +781,7 @@ router.delete('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), asyn
     try {
         const deletedStore = await Store.findByIdAndDelete(req.params.id);
         if (!deletedStore) return res.status(404).json({ message: 'Loja nÃ£o encontrada.' });
+        await recordDesktopSyncDeletion({ entity: 'store', entityId: deletedStore._id, companies: [deletedStore._id] });
         res.json({ message: 'Loja apagada com sucesso.' });
     } catch (error) { 
         console.error("Erro ao apagar loja:", error);

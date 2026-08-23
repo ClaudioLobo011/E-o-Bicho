@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const Deposit = require('../models/Deposit');
+const { recordDesktopSyncDeletion } = require('../services/desktopSyncTombstones');
 const Product = require('../models/Product');
 const Store = require('../models/Store');
 const requireAuth = require('../middlewares/requireAuth');
@@ -503,6 +504,7 @@ router.delete('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), asyn
         if (!deleted) {
             return res.status(404).json({ message: 'Depósito não encontrado.' });
         }
+        await recordDesktopSyncDeletion({ entity: 'deposit', entityId: deleted._id, companies: [deleted.empresa] });
         res.json({ message: 'Depósito removido com sucesso.' });
     } catch (error) {
         console.error('Erro ao apagar depósito:', error);

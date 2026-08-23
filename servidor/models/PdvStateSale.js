@@ -9,6 +9,7 @@ const pdvStateSaleSchema = new mongoose.Schema(
     saleId: { type: String, required: true, trim: true },
     saleCode: { type: String, trim: true, default: '', index: true },
     createdAtFromEntity: { type: Date, default: null, index: true },
+    payloadHash: { type: String, trim: true, default: '', index: true },
     payload: { type: mongoose.Schema.Types.Mixed, required: true },
   },
   { timestamps: true }
@@ -17,5 +18,7 @@ const pdvStateSaleSchema = new mongoose.Schema(
 pdvStateSaleSchema.index({ pdv: 1, saleId: 1 }, { unique: true });
 pdvStateSaleSchema.index({ pdv: 1, createdAtFromEntity: -1 });
 pdvStateSaleSchema.index({ empresa: 1, createdAtFromEntity: -1 });
+pdvStateSaleSchema.index({ pdv: 1, _id: 1 });
+pdvStateSaleSchema.index({ pdv: 1, updatedAt: 1, _id: 1 });
 
 module.exports = mongoose.model('PdvStateSale', pdvStateSaleSchema);

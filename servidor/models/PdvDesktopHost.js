@@ -13,11 +13,13 @@ const schema = new mongoose.Schema({
   initialSyncCompletedAt: { type: Date, default: null },
   lastHeartbeatAt: { type: Date, default: null, index: true },
   appVersion: { type: String, trim: true, default: '' },
+  syncProtocolVersion: { type: Number, min: 1, default: 1 },
   pendingEvents: { type: Number, min: 0, default: 0 },
   pendingFiscal: { type: Number, min: 0, default: 0 },
 }, { timestamps: true });
 
 schema.index({ pdv: 1, status: 1 });
 schema.index({ pdv: 1, machineId: 1 }, { unique: true, sparse: true });
+schema.index({ tokenHash: 1, status: 1 });
 
 module.exports = mongoose.model('PdvDesktopHost', schema);

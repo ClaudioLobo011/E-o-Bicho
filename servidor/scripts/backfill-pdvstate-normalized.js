@@ -94,12 +94,52 @@ const chunked = async (items, size, handler) => {
   }
 };
 
+const filterPendingOperations = async (Model, keyField, operations) => {
+  // Arrays legados podem repetir a mesma entidade. A última ocorrência é a
+  // versão mais recente exibida pelo PDV e precisa vencer deterministicamente.
+  const byIdentity = new Map();
+  operations.forEach((operation) => {
+    const filter = operation?.updateOne?.filter || {};
+    const identity = `${normalizeString(filter.pdv)}:${normalizeString(filter[keyField])}`;
+    if (identity !== ':') byIdentity.set(identity, operation);
+  });
+  const deduplicated = [...byIdentity.values()];
+  const groups = new Map();
+  deduplicated.forEach((operation) => {
+    const filter = operation?.updateOne?.filter || {};
+    const pdv = normalizeString(filter.pdv);
+    const key = normalizeString(filter[keyField]);
+    if (!pdv || !key) return;
+    if (!groups.has(pdv)) groups.set(pdv, new Set());
+    groups.get(pdv).add(key);
+  });
+  const existingHashes = new Map();
+  for (const [pdv, keys] of groups.entries()) {
+    const documents = await Model.find({ pdv, [keyField]: { $in: [...keys] } })
+      .select(`pdv ${keyField} payloadHash payload`).lean();
+    documents.forEach((document) => {
+      existingHashes.set(
+        `${normalizeString(document.pdv)}:${normalizeString(document[keyField])}`,
+        normalizeString(document.payloadHash) || hashJson(document.payload)
+      );
+    });
+  }
+  return deduplicated.filter((operation) => {
+    const filter = operation.updateOne.filter;
+    const nextHash = normalizeString(operation.updateOne.update?.$set?.payloadHash);
+    return existingHashes.get(`${normalizeString(filter.pdv)}:${normalizeString(filter[keyField])}`) !== nextHash;
+  });
+};
+
 const main = async () => {
   if (!process.env.MONGO_URI) {
     throw new Error('MONGO_URI não configurada.');
   }
 
-  await mongoose.connect(process.env.MONGO_URI);
+  await mongoose.connect(process.env.MONGO_URI, {
+    compressors: ['zlib'],
+    zlibCompressionLevel: 6,
+  });
 
   const query = {};
   if (TARGET_PDV) {
@@ -150,6 +190,7 @@ const main = async () => {
               saleId,
               saleCode,
               createdAtFromEntity: safeDate(sale?.createdAt),
+              payloadHash: hashJson(sale),
               payload: sale,
             },
           },
@@ -180,6 +221,7 @@ const main = async () => {
               receivableId,
               saleId: normalizeString(entry?.saleId),
               createdAtFromEntity: safeDate(entry?.createdAt),
+              payloadHash: hashJson(entry),
               payload: entry,
             },
           },
@@ -205,6 +247,7 @@ const main = async () => {
               deliveryId,
               saleId: normalizeString(entry?.saleRecordId || entry?.saleId),
               createdAtFromEntity: safeDate(entry?.createdAt || entry?.registeredAt),
+              payloadHash: hashJson(entry),
               payload: entry,
             },
           },
@@ -230,6 +273,7 @@ const main = async () => {
               eventId,
               eventType: normalizeString(entry?.id || entry?.label).toLowerCase(),
               createdAtFromEntity: safeDate(entry?.timestamp),
+              payloadHash: hashJson(entry),
               payload: entry,
             },
           },
@@ -256,6 +300,7 @@ const main = async () => {
               saleId: normalizeString(entry?.saleId),
               deposit: ensureObjectId(entry?.deposit),
               createdAtFromEntity: safeDate(entry?.processedAt),
+              payloadHash: hashJson(entry),
               payload: entry,
             },
           },
@@ -266,12 +311,27 @@ const main = async () => {
     });
   });
 
+  const [pendingSaleOps, pendingReceivableOps, pendingDeliveryOps, pendingHistoryOps, pendingMovementOps] = await Promise.all([
+    filterPendingOperations(PdvStateSale, 'saleId', saleOps),
+    filterPendingOperations(PdvStateReceivable, 'receivableId', receivableOps),
+    filterPendingOperations(PdvStateDeliveryOrder, 'deliveryId', deliveryOps),
+    filterPendingOperations(PdvStateHistoryEvent, 'eventId', historyOps),
+    filterPendingOperations(PdvStateInventoryMovement, 'movementId', movementOps),
+  ]);
+  const pendingWrites = {
+    sales: pendingSaleOps.length,
+    receivables: pendingReceivableOps.length,
+    deliveries: pendingDeliveryOps.length,
+    historyEvents: pendingHistoryOps.length,
+    inventoryMovements: pendingMovementOps.length,
+  };
+
   if (WRITE_MODE) {
-    await chunked(saleOps, 500, (ops) => PdvStateSale.bulkWrite(ops, { ordered: false }));
-    await chunked(receivableOps, 500, (ops) => PdvStateReceivable.bulkWrite(ops, { ordered: false }));
-    await chunked(deliveryOps, 500, (ops) => PdvStateDeliveryOrder.bulkWrite(ops, { ordered: false }));
-    await chunked(historyOps, 500, (ops) => PdvStateHistoryEvent.bulkWrite(ops, { ordered: false }));
-    await chunked(movementOps, 500, (ops) => PdvStateInventoryMovement.bulkWrite(ops, { ordered: false }));
+    await chunked(pendingSaleOps, 500, (ops) => PdvStateSale.bulkWrite(ops, { ordered: false }));
+    await chunked(pendingReceivableOps, 500, (ops) => PdvStateReceivable.bulkWrite(ops, { ordered: false }));
+    await chunked(pendingDeliveryOps, 500, (ops) => PdvStateDeliveryOrder.bulkWrite(ops, { ordered: false }));
+    await chunked(pendingHistoryOps, 500, (ops) => PdvStateHistoryEvent.bulkWrite(ops, { ordered: false }));
+    await chunked(pendingMovementOps, 500, (ops) => PdvStateInventoryMovement.bulkWrite(ops, { ordered: false }));
   }
 
   const targetCounts = WRITE_MODE
@@ -292,6 +352,7 @@ const main = async () => {
         targetPdv: TARGET_PDV || null,
         limit: LIMIT || null,
         stats,
+        pendingWrites,
         targetCounts,
       },
       null,
@@ -319,4 +380,3 @@ main()
   .finally(async () => {
     await mongoose.disconnect().catch(() => {});
   });
-

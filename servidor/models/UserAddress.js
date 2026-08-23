@@ -23,4 +23,6 @@ const userAddressSchema = new mongoose.Schema({
   isDefault: { type: Boolean, default: true }
 }, { timestamps: true });
 
+userAddressSchema.index({ user: 1, updatedAt: 1, _id: 1 });
+
 module.exports = mongoose.model('UserAddress', userAddressSchema);

@@ -9,6 +9,7 @@ const pdvStateReceivableSchema = new mongoose.Schema(
     receivableId: { type: String, required: true, trim: true },
     saleId: { type: String, trim: true, default: '', index: true },
     createdAtFromEntity: { type: Date, default: null, index: true },
+    payloadHash: { type: String, trim: true, default: '', index: true },
     payload: { type: mongoose.Schema.Types.Mixed, required: true },
   },
   { timestamps: true }
@@ -17,4 +18,3 @@ const pdvStateReceivableSchema = new mongoose.Schema(
 pdvStateReceivableSchema.index({ pdv: 1, receivableId: 1 }, { unique: true });
 
 module.exports = mongoose.model('PdvStateReceivable', pdvStateReceivableSchema);
-

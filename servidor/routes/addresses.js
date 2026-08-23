@@ -3,6 +3,7 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const UserAddress = require('../models/UserAddress');
 const requireAuth = require('../middlewares/requireAuth');
+const { recordDesktopSyncDeletion } = require('../services/desktopSyncTombstones');
 
 const STAFF_ROLES = new Set(['funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master']);
 
@@ -173,6 +174,7 @@ router.delete('/:id', requireAuth, async (req, res) => {
     }
 
     await addr.deleteOne();
+    await recordDesktopSyncDeletion({ entity: 'address', entityId: addr._id, ownerId: addr.user });
     res.json({ message: 'Endereço removido com sucesso.' });
   } catch (err) {
     console.error('Erro ao remover endereço:', err);

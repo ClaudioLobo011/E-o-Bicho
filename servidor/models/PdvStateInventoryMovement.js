@@ -10,6 +10,7 @@ const pdvStateInventoryMovementSchema = new mongoose.Schema(
     saleId: { type: String, trim: true, default: '', index: true },
     deposit: { type: mongoose.Schema.Types.ObjectId, ref: 'Deposit', default: null, index: true },
     createdAtFromEntity: { type: Date, default: null, index: true },
+    payloadHash: { type: String, trim: true, default: '', index: true },
     payload: { type: mongoose.Schema.Types.Mixed, required: true },
   },
   { timestamps: true }
@@ -18,4 +19,3 @@ const pdvStateInventoryMovementSchema = new mongoose.Schema(
 pdvStateInventoryMovementSchema.index({ pdv: 1, movementId: 1 }, { unique: true });
 
 module.exports = mongoose.model('PdvStateInventoryMovement', pdvStateInventoryMovementSchema);
-

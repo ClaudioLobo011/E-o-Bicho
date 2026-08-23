@@ -23,5 +23,7 @@ const petSchema = new Schema({
   obito: { type: Boolean, default: false },
   castrado: { type: Boolean, default: false },
 }, { timestamps: true }); // timestamps adiciona os campos createdAt e updatedAt automaticamente
+
+petSchema.index({ owner: 1, updatedAt: 1, _id: 1 });
  
 module.exports = mongoose.model('Pet', petSchema);

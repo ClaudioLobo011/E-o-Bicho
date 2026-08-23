@@ -9,6 +9,7 @@ const pdvStateHistoryEventSchema = new mongoose.Schema(
     eventId: { type: String, required: true, trim: true },
     eventType: { type: String, trim: true, default: '', index: true },
     createdAtFromEntity: { type: Date, default: null, index: true },
+    payloadHash: { type: String, trim: true, default: '', index: true },
     payload: { type: mongoose.Schema.Types.Mixed, required: true },
   },
   { timestamps: true }
@@ -17,4 +18,3 @@ const pdvStateHistoryEventSchema = new mongoose.Schema(
 pdvStateHistoryEventSchema.index({ pdv: 1, eventId: 1 }, { unique: true });
 
 module.exports = mongoose.model('PdvStateHistoryEvent', pdvStateHistoryEventSchema);
-

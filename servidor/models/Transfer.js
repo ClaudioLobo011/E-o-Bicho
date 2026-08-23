@@ -138,5 +138,7 @@ const transferSchema = new mongoose.Schema({
 });
 
 transferSchema.index({ desktopPdv: 1, desktopTransferId: 1 }, { unique: true, sparse: true });
+transferSchema.index({ originCompany: 1, updatedAt: 1, _id: 1 });
+transferSchema.index({ destinationCompany: 1, updatedAt: 1, _id: 1 });
 
 module.exports = mongoose.model('Transfer', transferSchema);

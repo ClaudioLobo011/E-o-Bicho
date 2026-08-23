@@ -267,7 +267,9 @@ const userSchema = new Schema({
   quickEmailCodeExpires: { type: Date },
   quickEmailCodeAttempts: { type: Number, default: 0 },
 
-});
+}, { timestamps: true });
+
+userSchema.index({ updatedAt: 1, _id: 1 });
 
 module.exports = mongoose.model('User', userSchema);
 

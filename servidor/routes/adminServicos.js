@@ -4,6 +4,7 @@ const router = express.Router();
 const ServiceModel = require('../models/Service');
 const ServiceGroup = require('../models/ServiceGroup');
 const authMiddleware = require('../middlewares/authMiddleware');
+const { recordDesktopSyncDeletion } = require('../services/desktopSyncTombstones');
 
 const STAFF_ROLES = new Set(['funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master']);
 
@@ -173,6 +174,7 @@ router.delete('/:id', authMiddleware, requireAdmin, async (req, res) => {
   try {
     const del = await Service.findByIdAndDelete(req.params.id);
     if (!del) return res.status(404).json({ message: 'Serviço não encontrado' });
+    await recordDesktopSyncDeletion({ entity: 'service', entityId: del._id });
     res.json({ deleted: true });
   } catch (e) {
     console.error('DELETE /admin/servicos/:id', e);

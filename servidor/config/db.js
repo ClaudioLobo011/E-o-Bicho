@@ -6,7 +6,12 @@ mongoose.set('transactionAsyncLocalStorage', true);
 const connectDB = async () => {
   try {
     // Tenta conectar usando a URI do nosso ficheiro .env
-    await mongoose.connect(process.env.MONGO_URI);
+    await mongoose.connect(process.env.MONGO_URI, {
+      // O driver compacta o tráfego entre a API e o MongoDB. Isso reduz o
+      // volume transferido sem alterar o formato dos documentos.
+      compressors: ['zlib'],
+      zlibCompressionLevel: 6,
+    });
 
     console.log('MongoDB Conectado com sucesso via db.js!');
   } catch (err) {

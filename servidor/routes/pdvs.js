@@ -3234,6 +3234,35 @@ const normalizeMirrorEntityId = (value) => normalizeString(value);
 const hashMirrorPayload = (payload) =>
   crypto.createHash('sha1').update(JSON.stringify(payload || null)).digest('hex');
 
+const filterChangedMirrorOps = async ({ model, pdvId, keyField, operations }) => {
+  if (!Array.isArray(operations) || !operations.length) return [];
+  // O estado legado pode conter a mesma identidade mais de uma vez. Mantemos
+  // sempre a última versão do array para evitar bulk writes concorrentes e
+  // resultados não determinísticos no espelho normalizado.
+  const deduplicatedByKey = new Map();
+  operations.forEach((operation) => {
+    const key = normalizeMirrorEntityId(operation?.updateOne?.filter?.[keyField]);
+    if (key) deduplicatedByKey.set(key, operation);
+  });
+  const deduplicated = [...deduplicatedByKey.values()];
+  const keys = deduplicated
+    .map((operation) => normalizeMirrorEntityId(operation?.updateOne?.filter?.[keyField]))
+    .filter(Boolean);
+  if (!keys.length) return [];
+  const existing = await model.find({ pdv: pdvId, [keyField]: { $in: keys } })
+    .select(`${keyField} payloadHash payload`)
+    .lean();
+  const hashes = new Map(existing.map((entry) => [
+    normalizeMirrorEntityId(entry[keyField]),
+    normalizeMirrorEntityId(entry.payloadHash) || hashMirrorPayload(entry.payload),
+  ]));
+  return deduplicated.filter((operation) => {
+    const key = normalizeMirrorEntityId(operation?.updateOne?.filter?.[keyField]);
+    const nextHash = normalizeMirrorEntityId(operation?.updateOne?.update?.$set?.payloadHash);
+    return !key || !nextHash || hashes.get(key) !== nextHash;
+  });
+};
+
 const toMirrorObjectIdOrNull = (value) => {
   if (!value) return null;
   if (value instanceof mongoose.Types.ObjectId) return value;
@@ -3315,6 +3344,7 @@ const syncPdvStateNormalizedMirror = async ({ pdvDoc, updatedState }) => {
             saleId,
             saleCode: normalizeMirrorEntityId(sale?.saleCode || sale?.saleCodeLabel),
             createdAtFromEntity: parseDateOrNull(sale?.createdAt),
+            payloadHash: hashMirrorPayload(sale),
             payload: sale,
           },
         },
@@ -3323,7 +3353,10 @@ const syncPdvStateNormalizedMirror = async ({ pdvDoc, updatedState }) => {
     });
   });
   if (saleOps.length) {
-    await PdvStateSale.bulkWrite(saleOps, { ordered: false });
+    const changedOps = await filterChangedMirrorOps({
+      model: PdvStateSale, pdvId, keyField: 'saleId', operations: saleOps,
+    });
+    if (changedOps.length) await PdvStateSale.bulkWrite(changedOps, { ordered: false });
   }
 
   const receivableSource = [
@@ -3350,6 +3383,7 @@ const syncPdvStateNormalizedMirror = async ({ pdvDoc, updatedState }) => {
             receivableId,
             saleId: normalizeMirrorEntityId(entry?.saleId),
             createdAtFromEntity: parseDateOrNull(entry?.createdAt),
+            payloadHash: hashMirrorPayload(entry),
             payload: entry,
           },
         },
@@ -3358,7 +3392,10 @@ const syncPdvStateNormalizedMirror = async ({ pdvDoc, updatedState }) => {
     });
   });
   if (receivableOps.length) {
-    await PdvStateReceivable.bulkWrite(receivableOps, { ordered: false });
+    const changedOps = await filterChangedMirrorOps({
+      model: PdvStateReceivable, pdvId, keyField: 'receivableId', operations: receivableOps,
+    });
+    if (changedOps.length) await PdvStateReceivable.bulkWrite(changedOps, { ordered: false });
   }
 
   const deliveries = Array.isArray(updatedState.deliveryOrders) ? updatedState.deliveryOrders : [];
@@ -3380,6 +3417,7 @@ const syncPdvStateNormalizedMirror = async ({ pdvDoc, updatedState }) => {
             deliveryId,
             saleId: normalizeMirrorEntityId(entry?.saleRecordId || entry?.saleId),
             createdAtFromEntity: parseDateOrNull(entry?.createdAt || entry?.registeredAt),
+            payloadHash: hashMirrorPayload(entry),
             payload: entry,
           },
         },
@@ -3388,7 +3426,10 @@ const syncPdvStateNormalizedMirror = async ({ pdvDoc, updatedState }) => {
     });
   });
   if (deliveryOps.length) {
-    await PdvStateDeliveryOrder.bulkWrite(deliveryOps, { ordered: false });
+    const changedOps = await filterChangedMirrorOps({
+      model: PdvStateDeliveryOrder, pdvId, keyField: 'deliveryId', operations: deliveryOps,
+    });
+    if (changedOps.length) await PdvStateDeliveryOrder.bulkWrite(changedOps, { ordered: false });
   }
 
   const historyEntries = Array.isArray(updatedState.history) ? updatedState.history : [];
@@ -3410,6 +3451,7 @@ const syncPdvStateNormalizedMirror = async ({ pdvDoc, updatedState }) => {
             eventId,
             eventType: normalizeMirrorEntityId(entry?.id || entry?.label).toLowerCase(),
             createdAtFromEntity: parseDateOrNull(entry?.timestamp),
+            payloadHash: hashMirrorPayload(entry),
             payload: entry,
           },
         },
@@ -3418,7 +3460,10 @@ const syncPdvStateNormalizedMirror = async ({ pdvDoc, updatedState }) => {
     });
   });
   if (historyOps.length) {
-    await PdvStateHistoryEvent.bulkWrite(historyOps, { ordered: false });
+    const changedOps = await filterChangedMirrorOps({
+      model: PdvStateHistoryEvent, pdvId, keyField: 'eventId', operations: historyOps,
+    });
+    if (changedOps.length) await PdvStateHistoryEvent.bulkWrite(changedOps, { ordered: false });
   }
 
   const inventoryMovements = Array.isArray(updatedState.inventoryMovements)
@@ -3443,6 +3488,7 @@ const syncPdvStateNormalizedMirror = async ({ pdvDoc, updatedState }) => {
             saleId: normalizeMirrorEntityId(entry?.saleId),
             deposit: toMirrorObjectIdOrNull(entry?.deposit),
             createdAtFromEntity: parseDateOrNull(entry?.processedAt),
+            payloadHash: hashMirrorPayload(entry),
             payload: entry,
           },
         },
@@ -3451,7 +3497,10 @@ const syncPdvStateNormalizedMirror = async ({ pdvDoc, updatedState }) => {
     });
   });
   if (movementOps.length) {
-    await PdvStateInventoryMovement.bulkWrite(movementOps, { ordered: false });
+    const changedOps = await filterChangedMirrorOps({
+      model: PdvStateInventoryMovement, pdvId, keyField: 'movementId', operations: movementOps,
+    });
+    if (changedOps.length) await PdvStateInventoryMovement.bulkWrite(changedOps, { ordered: false });
   }
 };
 

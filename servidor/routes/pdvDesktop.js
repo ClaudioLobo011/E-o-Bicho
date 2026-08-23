@@ -32,6 +32,7 @@ const { decryptBuffer, decryptText } = require('../utils/certificates');
 const { deriveAppointmentStatus } = require('../services/appointmentStatus');
 const { normalizeBrazilPhone, phoneLookupQuery, effectiveWebAccountStatus } = require('../utils/customerIdentity');
 const { isR2Configured, uploadBufferToR2, buildPublicUrl } = require('../utils/cloudflareR2');
+const createDesktopSyncV2Router = require('./pdvDesktopSyncV2');
 
 const router = express.Router();
 const adminOnly = [requireAuth, authorizeRoles('admin', 'admin_master')];
@@ -53,6 +54,48 @@ const desktopEventActor = (source, host) => ({
 });
 const userName = (user) => clean(user?.nomeCompleto || user?.nomeContato || user?.razaoSocial || user?.email);
 const DESKTOP_STAFF_ROLES = new Set(['funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master']);
+
+const DESKTOP_SYNC_METRIC_PATHS = new Set([
+  '/bootstrap', '/sales/history', '/catalog/products', '/directory/snapshot',
+  '/appointments', '/deliveries', '/transfers',
+]);
+
+function countSyncDocuments(payload) {
+  if (!payload || typeof payload !== 'object') return 0;
+  return Object.values(payload).reduce((total, value) => total + (Array.isArray(value) ? value.length : 0), 0);
+}
+
+function desktopSyncMetrics(req, res, next) {
+  const isSyncRoute = req.method === 'GET'
+    && (req.path.startsWith('/sync/v2/') || DESKTOP_SYNC_METRIC_PATHS.has(req.path));
+  if (!isSyncRoute) return next();
+  const startedAt = process.hrtime.bigint();
+  const originalJson = res.json.bind(res);
+  res.json = (payload) => {
+    const serialized = JSON.stringify(payload ?? null);
+    const metric = {
+      route: String(req.originalUrl || req.path).split('?')[0],
+      status: res.statusCode,
+      documents: countSyncDocuments(payload),
+      bytes: Buffer.byteLength(serialized, 'utf8'),
+      durationMs: Number(process.hrtime.bigint() - startedAt) / 1e6,
+      pdv: String(req.desktopHost?.pdv || ''),
+      host: String(req.desktopHost?._id || ''),
+      syncType: req.path.endsWith('/bootstrap') ? 'configuration' : (req.query?.cursor ? 'incremental' : 'initial'),
+      cursor: clean(req.query?.cursor),
+    };
+    console.info('[PDV_SYNC_METRIC]', JSON.stringify({ ...metric, durationMs: Number(metric.durationMs.toFixed(2)) }));
+    res.set('X-PDV-Sync-Documents', String(metric.documents));
+    res.set('X-PDV-Sync-Bytes', String(metric.bytes));
+    res.set('X-PDV-Sync-Duration-Ms', metric.durationMs.toFixed(2));
+    res.set('X-PDV-Sync-Type', metric.syncType);
+    res.set('X-PDV-Sync-Cursor-Used', metric.cursor ? 'true' : 'false');
+    return originalJson(payload);
+  };
+  return next();
+}
+
+router.use(desktopSyncMetrics);
 
 function desktopOperatorIdentifierQuery(identifier) {
   const raw = clean(identifier);
@@ -1358,6 +1401,32 @@ router.get('/pdvs/available', ...adminOnly, async (req, res) => {
   return res.json({ pdvs });
 });
 
+router.get('/sync/migration-status', ...adminOnly, async (req, res) => {
+  const activeSince = new Date(Date.now() - 15 * 60 * 1000);
+  const hosts = await PdvDesktopHost.find({ status: 'active' })
+    .select('pdv empresa name machineId appVersion syncProtocolVersion lastHeartbeatAt initialSyncCompletedAt')
+    .populate('pdv', 'codigo nome').sort({ lastHeartbeatAt: -1 }).lean();
+  const recentlyOnline = hosts.filter((host) => host.lastHeartbeatAt && new Date(host.lastHeartbeatAt) >= activeSince);
+  const legacyHosts = recentlyOnline.filter((host) => Number(host.syncProtocolVersion || 1) < 2);
+  return res.json({
+    protocolTarget: 2,
+    legacyRoutesEnabled: true,
+    readyToRetireLegacy: recentlyOnline.length > 0 && legacyHosts.length === 0,
+    totals: {
+      active: hosts.length,
+      recentlyOnline: recentlyOnline.length,
+      protocolV2: recentlyOnline.length - legacyHosts.length,
+      legacy: legacyHosts.length,
+    },
+    hosts: hosts.map((host) => ({
+      id: String(host._id), pdvId: String(host.pdv?._id || host.pdv || ''), pdv: host.pdv?.nome || host.pdv?.codigo || '',
+      name: host.name || host.machineId || '', appVersion: host.appVersion || '',
+      syncProtocolVersion: Number(host.syncProtocolVersion || 1), lastHeartbeatAt: host.lastHeartbeatAt || null,
+      initialSyncCompletedAt: host.initialSyncCompletedAt || null,
+    })),
+  });
+});
+
 router.post('/pdvs/:id/pairing-code', ...adminOnly, async (req, res) => {
   const pdv = await Pdv.findById(req.params.id);
   if (!pdv) return res.status(404).json({ message: 'PDV não encontrado.' });
@@ -1416,6 +1485,7 @@ router.post('/heartbeat', authenticateHost, async (req, res) => {
   host.lastHeartbeatAt = new Date();
   host.localDbReady = Boolean(req.body?.localDbReady);
   host.appVersion = clean(req.body?.appVersion);
+  host.syncProtocolVersion = Math.max(1, Number.parseInt(req.body?.syncProtocolVersion, 10) || 1);
   host.pendingEvents = Math.max(0, Number(req.body?.pendingEvents || 0));
   host.pendingFiscal = Math.max(0, Number(req.body?.pendingFiscal || 0));
   if (req.body?.initialSyncCompleted && !host.initialSyncCompletedAt) host.initialSyncCompletedAt = new Date();
@@ -1463,6 +1533,11 @@ router.post('/operator-statuses', authenticateHost, async (req, res) => {
     return { id, active: Boolean(user && desktopOperatorIsActive(user) && desktopOperatorCanAccessCompany(user, req.desktopHost.empresa)) };
   }) });
 });
+
+// A API v2 funciona em paralelo com todas as rotas antigas. Isso permite
+// atualizar os caixas gradualmente e só remover os snapshots completos quando
+// nenhum host ativo ainda declarar protocolo 1 no heartbeat.
+router.use('/sync/v2', authenticateHost, createDesktopSyncV2Router({ appointmentOccurrencesForDesktop }));
 
 router.get('/bootstrap', authenticateHost, async (req, res) => {
   const host = req.desktopHost;

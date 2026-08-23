@@ -26,6 +26,7 @@ const {
 } = require('../services/whatsappPostServiceSurveyService');
 const { deriveAppointmentStatus } = require('../services/appointmentStatus');
 const { normalizeBrazilPhone, phoneLookupQuery } = require('../utils/customerIdentity');
+const { recordDesktopSyncDeletion, recordDesktopSyncDeletions } = require('../services/desktopSyncTombstones');
 
 const requireStaff = authorizeRoles('funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master');
 const MAX_CODIGO_CLIENTE_SEQUENCIAL = 999999999;
@@ -2445,7 +2446,7 @@ router.delete('/clientes/:id', authMiddleware, requireStaff, async (req, res) =>
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: 'ID invalido.' });
     }
-    const cliente = await User.findById(id).select('role').lean();
+    const cliente = await User.findById(id).select('role empresaPrincipal empresaContratual empresas').lean();
     if (!cliente) {
       return res.status(404).json({ message: 'Cliente nao encontrado.' });
     }
@@ -2454,11 +2455,18 @@ router.delete('/clientes/:id', authMiddleware, requireStaff, async (req, res) =>
       return res.status(403).json({ message: 'Apenas clientes podem ser removidos.' });
     }
 
-    await Promise.all([
-      UserAddress.deleteMany({ user: id }),
-      Pet.deleteMany({ owner: id }),
+    const [addresses, pets] = await Promise.all([
+      UserAddress.find({ user: id }).select('_id user').lean(),
+      Pet.find({ owner: id }).select('_id owner').lean(),
     ]);
+    await Promise.all([UserAddress.deleteMany({ user: id }), Pet.deleteMany({ owner: id })]);
     await User.deleteOne({ _id: id });
+    const companies = [cliente.empresaPrincipal, cliente.empresaContratual, ...(cliente.empresas || [])].filter(Boolean);
+    await recordDesktopSyncDeletions([
+      { entity: 'customer', entityId: id, companies },
+      ...addresses.map((address) => ({ entity: 'address', entityId: address._id, ownerId: id })),
+      ...pets.map((pet) => ({ entity: 'pet', entityId: pet._id, ownerId: id })),
+    ]);
 
     res.json({ message: 'Cliente removido com sucesso.' });
   } catch (err) {
@@ -2641,6 +2649,8 @@ router.delete('/clientes/:id/enderecos/:enderecoId', authMiddleware, requireStaf
       return res.status(404).json({ message: 'Endereço não encontrado.' });
     }
 
+    await recordDesktopSyncDeletion({ entity: 'address', entityId: deleted._id, ownerId: id });
+
     res.json({ message: 'Endereço removido com sucesso.' });
   } catch (err) {
     console.error('DELETE /func/clientes/:id/enderecos/:enderecoId', err);
@@ -2774,6 +2784,8 @@ router.delete('/clientes/:id/pets/:petId', authMiddleware, requireStaff, async (
     if (!deleted) {
       return res.status(404).json({ message: 'Pet não encontrado.' });
     }
+
+    await recordDesktopSyncDeletion({ entity: 'pet', entityId: deleted._id, ownerId: id });
 
     res.json({ message: 'Pet removido com sucesso.' });
   } catch (err) {

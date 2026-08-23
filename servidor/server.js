@@ -3,9 +3,11 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
+const compression = require('compression');
 const dotenv = require('dotenv');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
+const crypto = require('crypto');
 const serverPackage = require('./package.json');
 
 // Carrega variÃ¡veis de ambiente antes de importar mÃ³dulos que dependem delas
@@ -19,7 +21,9 @@ const {
   startWhatsappAutomationWorker,
 } = require('./services/whatsappAutomationWorker');
 const User = require('./models/User');
+const PdvDesktopHost = require('./models/PdvDesktopHost');
 const WhatsappIntegration = require('./models/WhatsappIntegration');
+const { startDesktopSyncChangeNotifier } = require('./services/desktopSyncChangeNotifier');
 const {
   canAccessStore,
   normalizePhoneNumberId,
@@ -28,6 +32,7 @@ const {
 const app = express();
 const server = http.createServer(app);
 let whatsappAutomationWorker = null;
+let desktopSyncChangeNotifier = null;
 const buildPdvRoomKey = (pdvId) => {
   const id = typeof pdvId === 'string' ? pdvId.trim() : '';
   if (!/^[a-fA-F0-9]{24}$/.test(id)) return null;
@@ -74,7 +79,15 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  exposedHeaders: ['Content-Disposition', 'X-Auth-Reason'],
+  exposedHeaders: [
+    'Content-Disposition',
+    'X-Auth-Reason',
+    'X-PDV-Sync-Documents',
+    'X-PDV-Sync-Bytes',
+    'X-PDV-Sync-Duration-Ms',
+    'X-PDV-Sync-Type',
+    'X-PDV-Sync-Cursor-Used',
+  ],
 };
 const io = new Server(server, {
   cors: {
@@ -113,6 +126,9 @@ app.use(express.json({
 app.use(express.urlencoded({ extended: true, limit: BODY_PARSER_LIMIT }));
 app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
+// As respostas incrementais podem conter muitos registros no primeiro cursor.
+// Comprime JSON acima de 1 KiB sem alterar webhooks nem contratos legados.
+app.use(compression({ threshold: 1024 }));
 app.use(express.static('public'));
 
 // Endpoints operacionais sem dados de negocio ou segredos. O tunnel e o
@@ -347,6 +363,17 @@ function respondToSocketEvent(socket, callback, payload) {
   }
 }
 
+async function authorizeDesktopSyncSocket(socket, payload = {}) {
+  const raw = String(payload.token || socket.handshake?.auth?.desktopToken || '').trim().replace(/^Bearer\s+/i, '');
+  if (!raw) throw new Error('Token do servidor local não informado.');
+  const tokenHash = crypto.createHash('sha256').update(raw).digest('hex');
+  const host = await PdvDesktopHost.findOne({ tokenHash, status: 'active' }).select('_id pdv').lean();
+  if (!host) throw new Error('Servidor local não autorizado.');
+  const requestedPdv = String(payload.pdvId || '').trim();
+  if (requestedPdv && requestedPdv !== String(host.pdv)) throw new Error('PDV não pertence a este servidor local.');
+  return { hostId: String(host._id), pdvId: String(host.pdv), room: `pdv:${host.pdv}` };
+}
+
 io.on('connection', (socket) => {
   const joinedRooms = new Set();
   const joinedWhatsappRooms = new Set();
@@ -427,6 +454,19 @@ io.on('connection', (socket) => {
     joinedPdvRooms.delete(room);
   });
 
+  socket.on('desktop:sync:join', async (payload = {}, callback) => {
+    try {
+      const context = await authorizeDesktopSyncSocket(socket, payload);
+      await socket.join(context.room);
+      joinedPdvRooms.add(context.room);
+      socket.data.desktopSyncHost = context;
+      if (typeof callback === 'function') callback({ ok: true, pdvId: context.pdvId });
+    } catch (_) {
+      if (typeof callback === 'function') callback({ ok: false, message: 'Servidor local não autorizado.' });
+      else socket.emit('desktop:sync:denied', { message: 'Servidor local não autorizado.' });
+    }
+  });
+
   socket.on('disconnect', () => {
     joinedRooms.clear();
     joinedWhatsappRooms.clear();
@@ -458,6 +498,7 @@ async function startServer() {
       whatsappAutomationWorker = startWhatsappAutomationWorker({ io });
     }
   }
+  if (!desktopSyncChangeNotifier) desktopSyncChangeNotifier = startDesktopSyncChangeNotifier({ io });
   return { app, server, port };
 }
 

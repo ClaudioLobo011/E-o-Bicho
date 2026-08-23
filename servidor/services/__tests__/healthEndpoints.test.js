@@ -5,6 +5,10 @@ const mongoose = require('mongoose');
 
 const { app } = require('../../server');
 
+app.get('/__compression-test', (_req, res) => {
+  res.json({ payload: 'dados-incrementais-'.repeat(300) });
+});
+
 test('GET /healthz exposes only a minimal liveness response', async () => {
   const response = await request(app).get('/healthz');
 
@@ -22,4 +26,14 @@ test('GET /readyz reflects the current MongoDB connection state', async () => {
   assert.equal(response.status, expectedReady ? 200 : 503);
   assert.equal(response.body.ok, expectedReady);
   assert.equal(response.body.database, expectedReady ? 'ready' : 'not-ready');
+});
+
+test('respostas JSON grandes usam compressão HTTP quando o cliente aceita gzip', async () => {
+  const response = await request(app)
+    .get('/__compression-test')
+    .set('Accept-Encoding', 'gzip');
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers['content-encoding'], 'gzip');
+  assert.equal(response.body.payload.length, 'dados-incrementais-'.length * 300);
 });

@@ -24,11 +24,19 @@
     "images:update-prefix:dry-run": "node scripts/update-image-prefix.js --dry-run",
     "pdv:migrate-normalized:dry-run": "node scripts/backfill-pdvstate-normalized.js",
     "pdv:migrate-normalized": "node scripts/backfill-pdvstate-normalized.js --write",
+    "pdv:sync-timestamps:dry-run": "node scripts/backfill-desktop-sync-timestamps.js",
+    "pdv:sync-timestamps": "node scripts/backfill-desktop-sync-timestamps.js --write",
+    "pdv:sync-indexes:dry-run": "node scripts/ensure-desktop-sync-indexes.js",
+    "pdv:sync-indexes": "node scripts/ensure-desktop-sync-indexes.js --write",
+    "pdv:sync-hashes:dry-run": "node scripts/backfill-pdv-normalized-payload-hashes.js",
+    "pdv:sync-hashes": "node scripts/backfill-pdv-normalized-payload-hashes.js --write",
+    "pdv:sync-migration-status": "node scripts/check-desktop-sync-migration.js",
+    "pdv:sync-migration-ready": "node scripts/check-desktop-sync-migration.js --require-ready",
     "products:search-index:dry-run": "node scripts/backfill-product-search-index.js",
-    "products:search-index": "node scripts/backfill-product-search-index.js --write"
-    ,"customers:audit-identities": "node scripts/audit-customer-identities.js"
-    ,"customers:backfill-identities": "node scripts/audit-customer-identities.js --apply"
-    ,"customers:check-whatsapp-otp": "node scripts/check-whatsapp-otp.js"
+    "products:search-index": "node scripts/backfill-product-search-index.js --write",
+    "customers:audit-identities": "node scripts/audit-customer-identities.js",
+    "customers:backfill-identities": "node scripts/audit-customer-identities.js --apply",
+    "customers:check-whatsapp-otp": "node scripts/check-whatsapp-otp.js"
   },
   "keywords": [],
   "author": "",
@@ -39,6 +47,7 @@
     "axios": "^1.13.2",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.2",
+    "compression": "^1.8.1",
     "cors": "^2.8.5",
     "cpf-cnpj-validator": "^1.0.3",
     "dotenv": "^17.2.1",
