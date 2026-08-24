@@ -402,11 +402,24 @@ router.get('/deliveries', async (req, res) => {
   if (req.query.cursor && !cursor) return res.status(400).json({ message: 'Cursor de deliveries inválido.' });
   const limit = pageLimit(req);
   const documents = await PdvStateDeliveryOrder.find({ pdv: req.desktopHost.pdv, ...cursorQuery(cursor) })
-    .sort({ updatedAt: 1, _id: 1 }).select('payload updatedAt').limit(limit + 1).lean();
+    .sort({ updatedAt: 1, _id: 1 }).select('deliveryId payload updatedAt').limit(limit + 1).lean();
   const hasMore = documents.length > limit;
-  const page = hasMore ? documents.slice(0, limit) : documents;
-  const next = cursorFor(page[page.length - 1], cursor && { id: String(cursor.id), updatedAt: cursor.updatedAt.toISOString() });
-  return res.json({ deliveries: page.map((entry) => ({ ...(entry.payload || {}), cloudUpdatedAt: entry.updatedAt })), nextCursor: next ? encodeCursor(next) : '', hasMore });
+  const rawPage = hasMore ? documents.slice(0, limit) : documents;
+  const canonicalByIdentity = new Map();
+  rawPage.forEach((entry) => {
+    const saleCode = String(entry?.payload?.saleCode || '').trim();
+    const identity = saleCode ? `sale:${saleCode}` : `id:${entry.deliveryId}`;
+    canonicalByIdentity.set(identity, entry);
+  });
+  const page = [...canonicalByIdentity.values()];
+  // O cursor acompanha a página bruta, inclusive quando algum legado duplicado
+  // foi ignorado. Assim o cliente nunca solicita a mesma página novamente.
+  const next = cursorFor(rawPage[rawPage.length - 1], cursor && { id: String(cursor.id), updatedAt: cursor.updatedAt.toISOString() });
+  const ignoredDuplicates = rawPage.length - page.length;
+  return res.json({
+    deliveries: page.map((entry) => ({ ...(entry.payload || {}), cloudUpdatedAt: entry.updatedAt })),
+    nextCursor: next ? encodeCursor(next) : '', hasMore, ignoredDuplicates,
+  });
 });
 
 router.get('/transfers', async (req, res) => {

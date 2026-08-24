@@ -3398,7 +3398,19 @@ const syncPdvStateNormalizedMirror = async ({ pdvDoc, updatedState }) => {
     if (changedOps.length) await PdvStateReceivable.bulkWrite(changedOps, { ordered: false });
   }
 
-  const deliveries = Array.isArray(updatedState.deliveryOrders) ? updatedState.deliveryOrders : [];
+  const deliveryCandidates = Array.isArray(updatedState.deliveryOrders) ? updatedState.deliveryOrders : [];
+  const deliveryByIdentity = new Map();
+  const duplicateDeliverySaleCodes = new Set();
+  deliveryCandidates.forEach((entry) => {
+    const deliveryId = buildMirrorDeliveryId(entry);
+    if (!deliveryId) return;
+    const saleCode = normalizeMirrorEntityId(entry?.saleCode);
+    const identity = saleCode ? `sale:${saleCode}` : `id:${deliveryId}`;
+    if (saleCode && deliveryByIdentity.has(identity)) duplicateDeliverySaleCodes.add(saleCode);
+    // O último estado presente no PdvState é a versão operacional mais recente.
+    deliveryByIdentity.set(identity, entry);
+  });
+  const deliveries = [...deliveryByIdentity.values()];
   const deliveryIds = [];
   const deliveryOps = [];
   deliveries.forEach((entry) => {
@@ -3430,6 +3442,13 @@ const syncPdvStateNormalizedMirror = async ({ pdvDoc, updatedState }) => {
       model: PdvStateDeliveryOrder, pdvId, keyField: 'deliveryId', operations: deliveryOps,
     });
     if (changedOps.length) await PdvStateDeliveryOrder.bulkWrite(changedOps, { ordered: false });
+  }
+  if (duplicateDeliverySaleCodes.size) {
+    await PdvStateDeliveryOrder.deleteMany({
+      pdv: pdvId,
+      'payload.saleCode': { $in: [...duplicateDeliverySaleCodes] },
+      deliveryId: { $nin: deliveryIds },
+    });
   }
 
   const historyEntries = Array.isArray(updatedState.history) ? updatedState.history : [];

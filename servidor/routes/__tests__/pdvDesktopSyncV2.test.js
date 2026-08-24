@@ -185,6 +185,40 @@ test.describe('sincronização incremental do PDV Desktop v2', () => {
     assert.equal(deliveries.body.deliveries[0].status, 'emRota');
   });
 
+  test('delivery duplicado por código é entregue uma única vez e o cursor avança', async () => {
+    const base = await pairedFixture('sync-delivery-duplicate-host');
+    await PdvStateDeliveryOrder.insertMany([
+      {
+        pdv: base.pdv._id, empresa: base.company._id, sourceState: base.state._id,
+        deliveryId: 'delivery-duplicate-old', saleId: 'sale-duplicate',
+        payload: { id: 'delivery-duplicate-old', saleId: 'sale-duplicate', saleCode: 'PDV-000428', status: 'registrado', total: 40 },
+      },
+      {
+        pdv: base.pdv._id, empresa: base.company._id, sourceState: base.state._id,
+        deliveryId: 'delivery-duplicate-new', saleId: 'sale-duplicate',
+        payload: { id: 'delivery-duplicate-new', saleId: 'sale-duplicate', saleCode: 'PDV-000428', status: 'finalizado', total: 40 },
+      },
+      {
+        pdv: base.pdv._id, empresa: base.company._id, sourceState: base.state._id,
+        deliveryId: 'delivery-distinct', saleId: 'sale-distinct',
+        payload: { id: 'delivery-distinct', saleId: 'sale-distinct', saleCode: 'PDV-000429', status: 'emRota', total: 50 },
+      },
+    ]);
+
+    const first = await base.request.get('/desktop/sync/v2/deliveries?limit=25').set(base.headers);
+    assert.equal(first.status, 200, first.text);
+    assert.equal(first.body.deliveries.length, 2);
+    assert.equal(new Set(first.body.deliveries.map((entry) => entry.saleCode)).size, 2);
+    assert.equal(first.body.ignoredDuplicates, 1);
+    assert.ok(first.body.nextCursor);
+
+    const second = await base.request.get(`/desktop/sync/v2/deliveries?limit=25&cursor=${encodeURIComponent(first.body.nextCursor)}`).set(base.headers);
+    assert.equal(second.status, 200, second.text);
+    assert.equal(second.body.deliveries.length, 0);
+    assert.equal(second.body.hasMore, false);
+    assert.equal(second.headers['x-pdv-sync-cursor-used'], 'true');
+  });
+
   test('espelho normalizado não regrava vendas antigas quando o conteúdo não mudou', async () => {
     const base = await pairedFixture('sync-hash-host');
     const state = {
@@ -224,7 +258,11 @@ test.describe('sincronização incremental do PDV Desktop v2', () => {
         pdv: base.pdv._id,
         empresa: base.company._id,
         updatedAt: new Date(),
-        completedSales: [], accountsReceivable: [], deliveryOrders: [],
+        completedSales: [], accountsReceivable: [],
+        deliveryOrders: [
+          { id: 'delivery-legacy-old', saleCode: 'PDV-000428', status: 'registrado', total: 20 },
+          { id: 'delivery-legacy-current', saleCode: 'PDV-000428', status: 'finalizado', total: 20 },
+        ],
         history: [
           { id: 'event-duplicate', label: 'Versão anterior', amount: 10 },
           { id: 'event-duplicate', label: 'Versão atual', amount: 20 },
@@ -237,9 +275,13 @@ test.describe('sincronização incremental do PDV Desktop v2', () => {
     });
     const histories = await PdvStateHistoryEvent.find({ pdv: base.pdv._id, eventId: 'event-duplicate' }).lean();
     const movements = await PdvStateInventoryMovement.find({ pdv: base.pdv._id, movementId: `sale-duplicate:${base.company._id}` }).lean();
+    const deliveries = await PdvStateDeliveryOrder.find({ pdv: base.pdv._id, 'payload.saleCode': 'PDV-000428' }).lean();
     assert.equal(histories.length, 1);
     assert.equal(histories[0].payload.amount, 20);
     assert.equal(movements.length, 1);
     assert.equal(movements[0].payload.quantity, 2);
+    assert.equal(deliveries.length, 1);
+    assert.equal(deliveries[0].deliveryId, 'delivery-legacy-current');
+    assert.equal(deliveries[0].payload.status, 'finalizado');
   });
 });
