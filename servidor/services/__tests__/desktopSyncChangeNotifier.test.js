@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { scopesForChange } = require('../desktopSyncChangeNotifier');
+const { scopesForChange, domainsForChange } = require('../desktopSyncChangeNotifier');
 
 test('avisos operacionais são limitados ao PDV ou empresa afetada', () => {
   assert.deepEqual(scopesForChange({ ns: { coll: 'pdvstatesales' }, fullDocument: { pdv: 'pdv-1' } }), ['pdv:pdv-1']);
@@ -37,4 +37,15 @@ test('exclusões de funcionário são restritas às empresas e clientes permanec
 test('mudança sem documento completo usa aviso global como proteção', () => {
   assert.deepEqual(scopesForChange({ ns: { coll: 'pdvstatesales' } }), ['all']);
   assert.deepEqual(scopesForChange({ ns: { coll: 'appointments' } }), ['all']);
+});
+
+test('alteração de usuário avisa somente o diretório correspondente', () => {
+  assert.deepEqual(domainsForChange({ ns: { coll: 'users' }, fullDocument: { role: 'cliente', codigoCliente: 10 } }), ['customers']);
+  assert.deepEqual(domainsForChange({ ns: { coll: 'users' }, fullDocument: { role: 'funcionario', grupos: ['esteticista'] } }), ['employees']);
+  assert.deepEqual(domainsForChange({ ns: { coll: 'users' } }), ['customers', 'employees']);
+  assert.deepEqual(domainsForChange({ ns: { coll: 'products' }, fullDocument: {} }), ['products']);
+  assert.deepEqual(domainsForChange({ ns: { coll: 'paymentmethods' }, fullDocument: {} }), ['configuration']);
+  assert.deepEqual(domainsForChange({ ns: { coll: 'professionalcommissionconfigs' }, fullDocument: {} }), ['employees']);
+  assert.deepEqual(scopesForChange({ ns: { coll: 'users' }, fullDocument: { role: 'cliente', empresaPrincipal: 'loja-1' } }), ['all']);
+  assert.deepEqual(scopesForChange({ ns: { coll: 'users' }, fullDocument: { role: 'funcionario', empresas: ['loja-1', 'loja-2'] } }), ['company:loja-1', 'company:loja-2']);
 });

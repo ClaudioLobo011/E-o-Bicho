@@ -170,6 +170,34 @@ function latestVersion(values = []) {
   }, null);
 }
 
+async function changeVersionsForHost(host) {
+  const customerQuery = { $or: [{ role: 'cliente' }, { codigoCliente: { $exists: true, $ne: null } }] };
+  const employeeQuery = {
+    role: { $in: [...staffRoles] },
+    $or: [{ empresaPrincipal: host.empresa }, { empresaContratual: host.empresa }, { empresas: host.empresa }],
+  };
+  const transferQuery = { $or: [{ originCompany: host.empresa }, { destinationCompany: host.empresa }] };
+  const [
+    pdv, state, paymentMethod, product, sale, customer, employee, pet, address,
+    appointment, delivery, transfer, service, store, deposit,
+  ] = await Promise.all([
+    latestUpdatedAt(Pdv, { _id: host.pdv }), latestUpdatedAt(PdvState, { pdv: host.pdv }),
+    latestUpdatedAt(PaymentMethod, { company: host.empresa }), latestUpdatedAt(Product),
+    latestUpdatedAt(PdvStateSale, { pdv: host.pdv }), latestUpdatedAt(User, customerQuery),
+    latestUpdatedAt(User, employeeQuery), latestUpdatedAt(Pet), latestUpdatedAt(UserAddress),
+    latestUpdatedAt(Appointment, { store: host.empresa }, { includeDeleted: true }),
+    latestUpdatedAt(PdvStateDeliveryOrder, { pdv: host.pdv }), latestUpdatedAt(Transfer, transferQuery),
+    latestUpdatedAt(Service), latestUpdatedAt(Store), latestUpdatedAt(Deposit, { empresa: host.empresa }),
+  ]);
+  const iso = (value) => value ? new Date(value).toISOString() : null;
+  return {
+    configuration: iso(latestVersion([pdv, paymentMethod, store])), cash: iso(state), products: iso(product), sales: iso(sale),
+    customers: iso(customer), employees: iso(employee), pets: iso(pet), addresses: iso(address),
+    appointments: iso(appointment), deliveries: iso(delivery), transfers: iso(transfer), services: iso(service),
+    stores: iso(store), deposits: iso(deposit),
+  };
+}
+
 router.get('/bootstrap', async (req, res) => {
   const host = req.desktopHost;
   const [pdv, state, paymentMethods, versions] = await Promise.all([
@@ -216,6 +244,13 @@ router.get('/bootstrap', async (req, res) => {
   });
 });
 
+// O Socket.IO dá o aviso imediato. Esta resposta pequena apenas compara
+// versões para recuperar mudanças ocorridas enquanto o PDV estava offline.
+router.get('/changes', async (req, res) => res.json({
+  generatedAt: new Date().toISOString(),
+  versions: await changeVersionsForHost(req.desktopHost),
+}));
+
 router.get('/sales', async (req, res) => {
   const cursor = decodeCursor(req.query.cursor);
   if (req.query.cursor && !cursor) return res.status(400).json({ message: 'Cursor de vendas inválido.' });
@@ -255,6 +290,7 @@ async function loadDirectoryUpserts(entity, host, cursor, limit) {
   if (entity === 'employees') {
     query = {
       $and: [
+        { role: { $in: [...staffRoles] } },
         { $or: [{ empresaPrincipal: host.empresa }, { empresaContratual: host.empresa }, { empresas: host.empresa }] },
         cursorQuery(cursor),
       ],

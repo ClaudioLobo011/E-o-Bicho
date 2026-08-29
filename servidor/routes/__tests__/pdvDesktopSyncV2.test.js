@@ -142,6 +142,7 @@ test.describe('sincronização incremental do PDV Desktop v2', () => {
     assert.ok(addresses.body.upserts.some((entry) => entry.id === String(address._id) && entry.street === 'Rua Global'));
     const employees = await base.request.get('/desktop/sync/v2/directory/employees').set(base.headers);
     assert.equal(employees.body.upserts.filter((entry) => entry.seller).length, 1);
+    assert.equal(employees.body.upserts.some((entry) => entry.id === String(customer._id)), false);
     const stores = await base.request.get('/desktop/sync/v2/directory/stores').set(base.headers);
     assert.ok(stores.body.upserts.some((entry) => entry.id === String(otherCompany._id)));
     const deposits = await base.request.get('/desktop/sync/v2/directory/deposits').set(base.headers);
@@ -153,6 +154,27 @@ test.describe('sincronização incremental do PDV Desktop v2', () => {
     assert.equal(deletion.status, 200, deletion.text);
     assert.deepEqual(deletion.body.deletedIds, [String(address._id)]);
     assert.equal(deletion.body.upserts.length, 0);
+  });
+
+  test('informa versões pequenas por domínio para recuperar avisos perdidos', async () => {
+    const base = await pairedFixture('sync-change-versions-host');
+    const before = await base.request.get('/desktop/sync/v2/changes').set(base.headers);
+    assert.equal(before.status, 200, before.text);
+    assert.ok(before.body.versions.configuration);
+    assert.equal(typeof before.body.versions, 'object');
+    assert.ok(Buffer.byteLength(before.text) < 4096);
+
+    const productsBefore = before.body.versions.products;
+    const employeeBefore = before.body.versions.employees;
+    const suffix = String(Date.now()).slice(-8);
+    await User.create({
+      tipoConta: 'pessoa_fisica', email: `esthetician-${suffix}@example.com`, senha: 'hash', celular: `216${suffix}`,
+      nomeCompleto: 'Novo Esteticista Incremental', role: 'funcionario', grupos: ['esteticista'], empresas: [base.company._id],
+    });
+    const after = await base.request.get('/desktop/sync/v2/changes').set(base.headers);
+    assert.equal(after.status, 200, after.text);
+    assert.notEqual(after.body.versions.employees, employeeBefore);
+    assert.equal(after.body.versions.products, productsBefore);
   });
 
   test('agenda removida e delivery normalizado chegam incrementalmente', async () => {

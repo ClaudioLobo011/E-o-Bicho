@@ -245,6 +245,10 @@ router.put('/:userId', authMiddleware, requireAdmin, async (req, res) => {
       }
     ).lean();
 
+    // O cursor incremental de profissionais é baseado no User. Avançá-lo
+    // faz a nova comissão chegar sem reenviar toda a equipe.
+    await User.updateOne({ _id: userId }, { $currentDate: { updatedAt: true } });
+
     return res.json(mapConfigForClient(saved));
   } catch (error) {
     console.error('PUT /api/admin/comissoes-profissionais/:userId', error);

@@ -13,6 +13,9 @@ const COLLECTION_DOMAINS = new Map([
   ['transfers', ['transfers']],
   ['pdvs', ['configuration']],
   ['paymentmethods', ['configuration']],
+  ['professionalcommissionconfigs', ['employees']],
+  ['commissionconfigs', ['employees', 'services']],
+  ['usergroups', ['employees']],
   ['pdvstates', ['cash']],
   ['pdvstatesales', ['sales']],
   ['pdvstatedeliveryorders', ['deliveries']],
@@ -21,10 +24,30 @@ const COLLECTION_DOMAINS = new Map([
 
 const GLOBAL_SCOPE = 'all';
 const cleanId = (value) => String(value?._id || value || '').trim();
+const STAFF_ROLES = new Set(['funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master']);
+
+function domainsForChange(change = {}) {
+  const collection = String(change?.ns?.coll || '');
+  const defaults = COLLECTION_DOMAINS.get(collection) || [];
+  if (collection !== 'users' || !change.fullDocument) return defaults;
+  const user = change.fullDocument;
+  const role = String(user.role || '').toLowerCase();
+  const domains = [];
+  if (role === 'cliente' || user.codigoCliente !== null && user.codigoCliente !== undefined) domains.push('customers');
+  if (STAFF_ROLES.has(role)) domains.push('employees');
+  return domains.length ? domains : defaults;
+}
 
 function scopesForChange(change = {}) {
   const collection = String(change?.ns?.coll || '');
   const document = change?.fullDocument || {};
+  if (collection === 'users' && change.fullDocument) {
+    const domains = domainsForChange(change);
+    if (domains.includes('customers')) return [GLOBAL_SCOPE];
+    const companies = [document.empresaPrincipal, document.empresaContratual, ...(Array.isArray(document.empresas) ? document.empresas : [])]
+      .map(cleanId).filter(Boolean);
+    if (domains.includes('employees') && companies.length) return [...new Set(companies.map((id) => `company:${id}`))];
+  }
   if (collection === 'pdvstatesales' || collection === 'pdvstatedeliveryorders') {
     const pdvId = cleanId(document.pdv);
     return pdvId ? [`pdv:${pdvId}`] : [GLOBAL_SCOPE];
@@ -112,7 +135,7 @@ function startDesktopSyncChangeNotifier({ io, debounceMs = 1000, retryMs = 5 * 6
   }
 
   function queueChange(change = {}) {
-    const domains = COLLECTION_DOMAINS.get(change?.ns?.coll) || [];
+    const domains = domainsForChange(change);
     scopesForChange(change).forEach((scope) => addPending(scope, domains));
     if (!flushTimer) flushTimer = setTimeout(() => void flush(), debounceMs);
   }
@@ -167,4 +190,4 @@ function startDesktopSyncChangeNotifier({ io, debounceMs = 1000, retryMs = 5 * 6
   };
 }
 
-module.exports = { startDesktopSyncChangeNotifier, scopesForChange };
+module.exports = { startDesktopSyncChangeNotifier, scopesForChange, domainsForChange };
