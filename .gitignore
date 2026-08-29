@@ -27,6 +27,7 @@ outputs/pedido_1472/
 .codex-tmp/
 .codex-work/
 .codex-backups/
+.codex-output/
 _tmp_*.js
 servidor/tmp_*.js
 servidor/tmp_*.js.bak

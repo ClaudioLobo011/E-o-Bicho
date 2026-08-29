@@ -177,6 +177,29 @@ test.describe('sincronização incremental do PDV Desktop v2', () => {
     assert.equal(after.body.versions.products, productsBefore);
   });
 
+  test('data futura inválida não avança a versão nem o cursor de funcionários', async () => {
+    const base = await pairedFixture('sync-future-employee-host');
+    const suffix = String(Date.now()).slice(-8);
+    const futureEmployee = await User.create({
+      tipoConta: 'pessoa_fisica', email: `future-${suffix}@example.com`, senha: 'hash', celular: `215${suffix}`,
+      nomeCompleto: 'Funcionário com relógio inválido', role: 'funcionario', grupos: ['esteticista'], empresas: [base.company._id],
+    });
+    await User.collection.updateOne({ _id: futureEmployee._id }, { $set: { updatedAt: new Date('2035-01-01T00:00:00.000Z') } });
+    const currentEmployee = await User.create({
+      tipoConta: 'pessoa_fisica', email: `current-${suffix}@example.com`, senha: 'hash', celular: `214${suffix}`,
+      nomeCompleto: 'Funcionário Atual', role: 'funcionario', grupos: ['esteticista'], empresas: [base.company._id],
+    });
+
+    const employees = await base.request.get('/desktop/sync/v2/directory/employees').set(base.headers);
+    assert.equal(employees.status, 200, employees.text);
+    assert.equal(employees.body.upserts.some((entry) => entry.id === String(futureEmployee._id)), false);
+    assert.equal(employees.body.upserts.some((entry) => entry.id === String(currentEmployee._id)), true);
+
+    const changes = await base.request.get('/desktop/sync/v2/changes').set(base.headers);
+    assert.equal(changes.status, 200, changes.text);
+    assert.equal(changes.body.versions.employees, currentEmployee.updatedAt.toISOString());
+  });
+
   test('agenda removida e delivery normalizado chegam incrementalmente', async () => {
     const base = await pairedFixture('sync-operational-host');
     const suffix = String(Date.now()).slice(-8);

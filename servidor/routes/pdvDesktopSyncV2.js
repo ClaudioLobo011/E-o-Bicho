@@ -20,6 +20,7 @@ const PdvDesktopSyncTombstone = require('../models/PdvDesktopSyncTombstone');
 const router = express.Router();
 const clean = (value) => String(value || '').trim();
 const staffRoles = new Set(['funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master']);
+const MAX_CURSOR_CLOCK_SKEW_MS = 24 * 60 * 60 * 1000;
 let mapAppointmentOccurrences = null;
 
 function encodeCursor(value) {
@@ -57,13 +58,22 @@ function decodeCompositeCursor(value) {
 }
 
 function cursorQuery(cursor) {
-  if (!cursor) return {};
-  return {
+  // Um legado com updatedAt no futuro não pode empurrar o cursor por anos e
+  // impedir que alterações atuais cheguem aos PDVs. Registros sem updatedAt
+  // continuam aceitos para manter compatibilidade com cadastros antigos.
+  const validTimestamp = {
+    $or: [
+      { updatedAt: { $lte: new Date(Date.now() + MAX_CURSOR_CLOCK_SKEW_MS) } },
+      { updatedAt: { $exists: false } },
+    ],
+  };
+  if (!cursor) return validTimestamp;
+  return { $and: [validTimestamp, {
     $or: [
       { updatedAt: { $gt: cursor.updatedAt } },
       { updatedAt: cursor.updatedAt, _id: { $gt: cursor.id } },
     ],
-  };
+  }] };
 }
 
 function cursorFor(document, fallback = null) {
@@ -157,7 +167,8 @@ function transferForDesktop(entry) {
 }
 
 async function latestUpdatedAt(Model, query = {}, options = {}) {
-  const finder = Model.findOne(query).sort({ updatedAt: -1, _id: -1 }).select('updatedAt');
+  const safeQuery = { $and: [query, cursorQuery(null)] };
+  const finder = Model.findOne(safeQuery).sort({ updatedAt: -1, _id: -1 }).select('updatedAt');
   if (options.includeDeleted) finder.setOptions({ includeDeleted: true });
   const latest = await finder.lean();
   return latest?.updatedAt || null;
