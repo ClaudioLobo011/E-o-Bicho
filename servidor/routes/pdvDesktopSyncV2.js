@@ -433,15 +433,16 @@ router.get('/appointments', async (req, res) => {
     const page = hasMore ? documents.slice(0, limit) : documents;
     const upserts = [];
     const deletedSourceIds = [];
+    const changedSourceIds = [];
     page.forEach((appointment) => {
       const sourceId = String(appointment._id);
       if (appointment.deletedAt) { deletedSourceIds.push(sourceId); return; }
       const occurrences = mapAppointmentOccurrences(appointment, start, end);
-      if (occurrences.length) upserts.push(...occurrences);
+      if (occurrences.length) { upserts.push(...occurrences); changedSourceIds.push(sourceId); }
       else deletedSourceIds.push(sourceId);
     });
     const next = cursorFor(page[page.length - 1], cursor && { id: String(cursor.id), updatedAt: cursor.updatedAt.toISOString() });
-    return res.json({ appointments: upserts, deletedSourceIds, nextCursor: next ? encodeCursor(next) : '', hasMore });
+    return res.json({ appointments: upserts, changedSourceIds, deletedSourceIds, nextCursor: next ? encodeCursor(next) : '', hasMore });
 });
 
 router.get('/deliveries', async (req, res) => {

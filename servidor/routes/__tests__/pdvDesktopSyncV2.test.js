@@ -213,9 +213,19 @@ test.describe('sincronização incremental do PDV Desktop v2', () => {
     assert.equal(firstAgenda.status, 200, firstAgenda.text);
     assert.equal(firstAgenda.body.appointments.length, 1);
     assert.equal(firstAgenda.body.appointments[0].sourceAppointmentId, String(appointment._id));
+    assert.deepEqual(firstAgenda.body.changedSourceIds, [String(appointment._id)]);
 
-    await Appointment.updateOne({ _id: appointment._id }, { $set: { deletedAt: new Date(), updatedAt: new Date(Date.now() + 1000) } });
-    const deletedAgenda = await base.request.get(`/desktop/sync/v2/appointments?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&cursor=${encodeURIComponent(firstAgenda.body.nextCursor)}`).set(base.headers);
+    const movedAt = new Date(appointment.scheduledAt.getTime() + 3600000);
+    await Appointment.updateOne({ _id: appointment._id }, { $set: { scheduledAt: movedAt, updatedAt: new Date(Date.now() + 1000) } });
+    const movedAgenda = await base.request.get(`/desktop/sync/v2/appointments?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&cursor=${encodeURIComponent(firstAgenda.body.nextCursor)}`).set(base.headers);
+    assert.equal(movedAgenda.status, 200, movedAgenda.text);
+    assert.deepEqual(movedAgenda.body.changedSourceIds, [String(appointment._id)]);
+    assert.equal(movedAgenda.body.appointments.length, 1);
+    assert.equal(new Date(movedAgenda.body.appointments[0].scheduledAt).getTime(), movedAt.getTime());
+    assert.notEqual(movedAgenda.body.appointments[0].scheduledAt, firstAgenda.body.appointments[0].scheduledAt);
+
+    await Appointment.updateOne({ _id: appointment._id }, { $set: { deletedAt: new Date(), updatedAt: new Date(Date.now() + 2000) } });
+    const deletedAgenda = await base.request.get(`/desktop/sync/v2/appointments?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&cursor=${encodeURIComponent(movedAgenda.body.nextCursor)}`).set(base.headers);
     assert.equal(deletedAgenda.status, 200, deletedAgenda.text);
     assert.deepEqual(deletedAgenda.body.deletedSourceIds, [String(appointment._id)]);
 
