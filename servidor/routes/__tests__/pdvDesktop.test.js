@@ -266,6 +266,24 @@ test.describe('integração do PDV Desktop', () => {
     const conflictResponse = await request.post('/desktop/events/batch').set(headers).send({ events: [conflictingEvent] });
     assert.equal(conflictResponse.body.results[0].accepted, false);
     assert.equal(conflictResponse.body.results[0].code, 'APPOINTMENT_VERSION_CONFLICT');
+    const invalidStatusResponse = await request.post('/desktop/events/batch').set(headers).send({ events: [{
+      eventId: 'appointment-status-invalid', type: 'appointment.status.updated', occurredAt: new Date().toISOString(), payload: { appointmentIds: ['referencia-invalida'], status: 'finalizado' },
+    }] });
+    assert.equal(invalidStatusResponse.body.results[0].accepted, false);
+    assert.equal(invalidStatusResponse.body.results[0].disposition, 'requires_action');
+    assert.equal(invalidStatusResponse.body.results[0].retryable, false);
+    const customerWithoutCepId = String(new mongoose.Types.ObjectId());
+    const customerWithoutCepResponse = await request.post('/desktop/events/batch').set(headers).send({ events: [{
+      eventId: 'customer-without-cep', type: 'customer.created', occurredAt: new Date().toISOString(), payload: { customerId: customerWithoutCepId, name: 'Cliente sem CEP', phone: `213${suffix}`, address: { street: 'Rua Incompleta', number: '1' } },
+    }] });
+    assert.equal(customerWithoutCepResponse.body.results[0].code, 'CUSTOMER_CEP_REQUIRED');
+    assert.equal(customerWithoutCepResponse.body.results[0].disposition, 'requires_action');
+    assert.equal(await User.exists({ _id: customerWithoutCepId }), null);
+    const repairedCustomerResponse = await request.post('/desktop/events/batch').set(headers).send({ events: [{
+      eventId: 'customer-without-cep', type: 'customer.created', occurredAt: new Date().toISOString(), payload: { customerId: customerWithoutCepId, name: 'Cliente com CEP', phone: `213${suffix}`, address: { zipCode: '20550230', street: 'Rua Corrigida', number: '1', city: 'Rio de Janeiro', state: 'RJ', principal: true } },
+    }] });
+    assert.equal(repairedCustomerResponse.body.results[0].status, 'processed', repairedCustomerResponse.text);
+    assert.equal((await UserAddress.findOne({ user: customerWithoutCepId }).lean()).cep, '20550230');
     const duplicateCustomerEvent = {
       eventId: 'customer-existing-1',
       type: 'customer.created',
@@ -275,6 +293,7 @@ test.describe('integração do PDV Desktop', () => {
         name: 'Cliente Desktop Repetido',
         phone: customer.celular,
         document: customer.cpf,
+        address: { id: String((await UserAddress.findOne({ user: customer._id }))._id), zipCode: '20000000', street: 'Rua Desktop', number: '10', city: 'Rio de Janeiro', state: 'RJ', principal: true },
       },
     };
     const duplicateCustomerResponse = await request.post('/desktop/events/batch').set(headers).send({ events: [duplicateCustomerEvent] });
@@ -366,6 +385,8 @@ test.describe('integração do PDV Desktop', () => {
       { eventId: 'event-1', type: 'sale.completed', occurredAt: new Date().toISOString(), payload: { id: 'local-sale-1', saleCode: `${base.pdv.codigo.replace(/[^A-Za-z0-9]/g, '')}-000001`, appointmentId: String(appointment._id), appointmentIds: [String(appointment._id), `${billingRecurringAppointment._id}:occurrence:2026-08-15T12:00:00.000Z`], grossTotal: 20, netTotal: 20, items: [{ productId: String(new mongoose.Types.ObjectId()), code: base.product.cod, name: base.product.nome, quantity: 1, unitPrice: 20 }], payments: [{ paymentMethodId: String(base.payment._id), amount: 20 }] } },
     ];
     const first = await request.post('/desktop/events/batch').set(headers).send({ events });
+    const duplicateOpen = await request.post('/desktop/events/batch').set(headers).send({ events: [{ eventId: 'cash-open-duplicate-state', type: 'cash.opened', occurredAt: new Date().toISOString(), payload: { openingAmount: 999 } }] });
+    assert.equal(duplicateOpen.body.results[0].status, 'processed', duplicateOpen.text);
     const replay = await request.post('/desktop/events/batch').set(headers).send({ events: [events[1]] });
     assert.equal(first.body.results[1].accepted, true, first.text);
     assert.equal(first.body.results[1].status, 'processed');
@@ -424,6 +445,9 @@ test.describe('integração do PDV Desktop', () => {
     assert.equal(stateWithDelivery.deliveryOrders[0].status, 'finalizado');
     assert.equal(stateWithDelivery.deliveryOrders[0].courierLabel, 'Entregador Desktop');
     assert.equal(stateWithDelivery.completedSales.find((entry) => entry.id === 'delivery-sale-record-1').cashContributions.length, 1);
+    const staleDeliveryStatus = await request.post('/desktop/events/batch').set(headers).send({ events: [{ eventId: 'delivery-stale-after-final', type: 'delivery.status.updated', occurredAt: new Date().toISOString(), payload: { orderId: 'delivery-local-1', status: 'emRota' } }] });
+    assert.equal(staleDeliveryStatus.body.results[0].status, 'processed', staleDeliveryStatus.text);
+    assert.equal((await PdvState.findOne({ pdv: base.pdv._id }).lean()).deliveryOrders[0].status, 'finalizado');
     const deliveryPull = await request.get('/desktop/deliveries').set(headers);
     assert.equal(deliveryPull.body.deliveries[0].id, 'delivery-local-1');
 
@@ -446,6 +470,10 @@ test.describe('integração do PDV Desktop', () => {
     const redundantCloseRecord = await PdvDesktopEvent.findOne({ pdv: base.pdv._id, eventId: 'cash-close-after-web-1' }).lean();
     assert.equal(redundantCloseRecord.status, 'processed');
     assert.equal(redundantCloseRecord.error, '');
+    const missingAppointmentDelete = await request.post('/desktop/events/batch').set(headers).send({ events: [{
+      eventId: 'appointment-delete-already-absent', type: 'appointment.deleted', occurredAt: new Date().toISOString(), payload: { appointmentId: String(new mongoose.Types.ObjectId()), expectedVersion: 1 },
+    }] });
+    assert.equal(missingAppointmentDelete.body.results[0].status, 'processed', missingAppointmentDelete.text);
     const revertedAppointment = await Appointment.findById(appointment._id).lean();
     assert.equal(revertedAppointment.pago, false);
     assert.equal(revertedAppointment.status, 'em_atendimento');

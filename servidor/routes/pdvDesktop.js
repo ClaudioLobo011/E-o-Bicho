@@ -38,6 +38,29 @@ const router = express.Router();
 const adminOnly = [requireAuth, authorizeRoles('admin', 'admin_master')];
 const hash = (value) => crypto.createHash('sha256').update(String(value || '')).digest('hex');
 const clean = (value) => String(value || '').trim();
+const desktopEventError = (message, code, disposition = 'conflict') => {
+  const error = new Error(message);
+  error.code = code;
+  error.disposition = disposition;
+  error.retryable = false;
+  return error;
+};
+const desktopAddressZip = (entry = {}) => clean(entry.zipCode || entry.cep).replace(/\D/g, '');
+const desktopCustomerAddressCandidates = (source = {}) => (
+  Array.isArray(source.addresses) && source.addresses.length
+    ? source.addresses
+    : source.address && typeof source.address === 'object' ? [source.address] : []
+).filter((entry) => entry && typeof entry === 'object');
+const requireDesktopCustomerCep = (source = {}) => {
+  const candidates = desktopCustomerAddressCandidates(source);
+  if (!candidates.length || !candidates.every((entry) => desktopAddressZip(entry).length === 8)) {
+    throw desktopEventError(
+      'Informe um CEP válido com 8 dígitos para cadastrar o cliente.',
+      'CUSTOMER_CEP_REQUIRED',
+      'requires_action'
+    );
+  }
+};
 const desktopAppointmentReference = (value) => {
   const reference = clean(value);
   const marker = ':occurrence:';
@@ -632,9 +655,7 @@ async function desktopAppointmentPayload(source, host) {
 }
 
 async function syncDesktopCustomerAddresses(customerId, source = {}) {
-  const candidates = Array.isArray(source.addresses) && source.addresses.length
-    ? source.addresses
-    : source.address && typeof source.address === 'object' ? [source.address] : [];
+  const candidates = desktopCustomerAddressCandidates(source);
   const unique = new Map();
   candidates.forEach((entry, index) => {
     if (!entry || typeof entry !== 'object') return;
@@ -645,9 +666,17 @@ async function syncDesktopCustomerAddresses(customerId, source = {}) {
     const addressId = clean(entry.id || entry._id);
     const isDefault = Boolean(entry.principal || entry.isPrimary || entry.isDefault);
     if (isDefault) await UserAddress.updateMany({ user: customerId }, { $set: { isDefault: false } });
+    const cep = desktopAddressZip(entry);
+    if (cep.length !== 8) {
+      throw desktopEventError(
+        'Informe um CEP válido com 8 dígitos para cadastrar o endereço do cliente.',
+        'CUSTOMER_CEP_REQUIRED',
+        'requires_action'
+      );
+    }
     const values = {
       apelido: clean(entry.label || entry.apelido) || (isDefault ? 'Principal' : 'Endereço'),
-      cep: clean(entry.zipCode || entry.cep),
+      cep,
       logradouro: clean(entry.street || entry.logradouro),
       numero: clean(entry.number || entry.numero),
       complemento: clean(entry.complement || entry.complemento),
@@ -709,6 +738,12 @@ async function materializeDesktopAppointmentEvent(event, host) {
     const values = await desktopAppointmentPayload(source, host);
     const actorId = clean(source.operator?.id);
     return Appointment.create({ ...values, createdBy: mongoose.Types.ObjectId.isValid(actorId) ? actorId : undefined, source: 'manual', clientMutationId: mutationId, version: 1 });
+  }
+  if (!appointment && event.type === 'appointment.deleted') {
+    // Excluir novamente um registro que já não existe produz o mesmo estado
+    // desejado. Isso também cobre exclusões feitas na nuvem antes do envio
+    // offline chegar, sem transformar a repetição em uma pendência eterna.
+    return null;
   }
   if (!appointment) throw new Error('Agendamento não encontrado para sincronização.');
   if (String(appointment.store) !== String(host.empresa)) throw new Error('Agendamento pertence a outra empresa.');
@@ -812,6 +847,9 @@ async function materializeDesktopEvent(event, pdv, host) {
   }
   if (event.type === 'customer.created') {
     const source = event.payload && typeof event.payload === 'object' ? event.payload : {};
+    // Valida antes de criar o User. Assim uma tentativa incompleta não deixa
+    // um cliente parcial na nuvem sem o endereço obrigatório.
+    requireDesktopCustomerCep(source);
     const customerId = clean(source.customerId || source.id);
     if (!mongoose.Types.ObjectId.isValid(customerId)) throw new Error('Identificador local do cliente inválido.');
     let customer = await User.findById(customerId);
@@ -895,11 +933,23 @@ async function materializeDesktopEvent(event, pdv, host) {
   }
   const source = event.payload && typeof event.payload === 'object' ? event.payload : {};
   if (event.type === 'appointment.status.updated') {
-    const references = Array.from(new Map((Array.isArray(source.appointmentIds) ? source.appointmentIds : [])
+    const rawReferences = [
+      ...(Array.isArray(source.appointmentIds) ? source.appointmentIds : []),
+      source.appointmentId,
+      source.sourceAppointmentId,
+      source.id,
+    ].filter(Boolean);
+    const references = Array.from(new Map(rawReferences
       .map(desktopAppointmentReference)
       .filter((entry) => mongoose.Types.ObjectId.isValid(entry.appointmentId))
       .map((entry) => [`${entry.appointmentId}:${entry.occurrenceKey}`, entry])).values());
-    if (!references.length || clean(source.status).toLowerCase() !== 'finalizado') throw new Error('Atualização de atendimento inválida.');
+    if (!references.length || clean(source.status).toLowerCase() !== 'finalizado') {
+      throw desktopEventError(
+        'Atualização de atendimento inválida. Revise o atendimento no aplicativo.',
+        'APPOINTMENT_STATUS_REQUIRES_ACTION',
+        'requires_action'
+      );
+    }
     for (const reference of references) {
       const appointment = await Appointment.findOne({ _id: reference.appointmentId, store: host.empresa });
       if (!appointment) continue;
@@ -1036,6 +1086,12 @@ async function materializeDesktopEvent(event, pdv, host) {
     });
   };
   if (event.type === 'cash.opened') {
+    const currentState = await PdvState.findOne({ pdv: pdv._id }).select('caixaAberto').lean();
+    if (currentState?.caixaAberto) {
+      // O caixa já está no estado pedido. Repetir o evento offline não deve
+      // tentar abrir uma segunda sessão nem permanecer em retry.
+      return true;
+    }
     action = 'pdv.caixa.open';
     const sourceOpeningPayments = Array.isArray(source.openingPayments) && source.openingPayments.length
       ? source.openingPayments
@@ -1135,6 +1191,17 @@ async function materializeDesktopEvent(event, pdv, host) {
       timestamp: source.paidAt || event.occurredAt,
     };
   } else if (event.type === 'delivery.status.updated') {
+    const orderId = clean(source.orderId || source.deliveryOrderId || source.id);
+    const state = await PdvState.findOne({ pdv: pdv._id }).select('deliveryOrders').lean();
+    const currentOrder = (Array.isArray(state?.deliveryOrders) ? state.deliveryOrders : [])
+      .find((entry) => clean(entry?.id || entry?._id || entry?.orderId || entry?.deliveryOrderId) === orderId);
+    const currentStatus = clean(currentOrder?.status).toLowerCase();
+    const requestedStatus = clean(source.status).toLowerCase();
+    if (currentOrder && (currentStatus === requestedStatus || currentStatus === 'finalizado')) {
+      // Um evento atrasado não pode reabrir nem regredir uma entrega já
+      // finalizada; o objetivo operacional já foi alcançado na nuvem.
+      return true;
+    }
     action = 'pdv.delivery.update_status';
     payload = {
       orderId: source.orderId || source.deliveryOrderId || source.id,
@@ -2154,6 +2221,14 @@ router.post('/events/batch', authenticateHost, async (req, res) => {
       }
       if (!record) throw new Error('Evento não foi localizado após o reenvio.');
       if (record.status !== 'processed') {
+        // O aplicativo pode corrigir o conteúdo de um evento que exige ação
+        // (por exemplo, completar o CEP) sem trocar sua chave idempotente.
+        // Eventos já processados continuam imutáveis.
+        if (event?.payload && typeof event.payload === 'object') {
+          record.payload = event.payload;
+          record.type = type;
+          record.occurredAt = occurredAt;
+        }
         const processed = await materializeDesktopEvent(record, pdv, host);
         if (processed) {
           record.status = 'processed';
@@ -2164,7 +2239,14 @@ router.post('/events/batch', authenticateHost, async (req, res) => {
       results.push({ eventId, accepted: true, replayed, status: record.status });
     } catch (error) {
       await PdvDesktopEvent.updateOne({ pdv: host.pdv, eventId }, { $set: { status: 'failed', error: error?.message || 'Falha ao processar evento.' } }).catch(() => {});
-      results.push({ eventId, accepted: false, code: error?.code || 'DESKTOP_EVENT_FAILED', error: error?.message || 'Falha ao registrar evento.' });
+      results.push({
+        eventId,
+        accepted: false,
+        code: error?.code || 'DESKTOP_EVENT_FAILED',
+        disposition: error?.disposition || 'retryable',
+        retryable: error?.retryable !== false,
+        error: error?.message || 'Falha ao registrar evento.',
+      });
     }
   }
   return res.json({ results });
