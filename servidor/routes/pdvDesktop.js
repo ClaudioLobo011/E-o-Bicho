@@ -69,6 +69,34 @@ const desktopAppointmentReference = (value) => {
     ? { reference, appointmentId: reference, occurrenceKey: '' }
     : { reference, appointmentId: reference.slice(0, markerIndex), occurrenceKey: reference.slice(markerIndex + marker.length) };
 };
+const resolveDesktopAppointmentReference = async (value, host) => {
+  const parsed = desktopAppointmentReference(value);
+  if (mongoose.Types.ObjectId.isValid(parsed.appointmentId)) return parsed;
+  const mutationId = parsed.appointmentId.startsWith('local:')
+    ? parsed.appointmentId.slice('local:'.length)
+    : parsed.appointmentId;
+  if (!mutationId) return parsed;
+  const appointment = await Appointment.findOne({
+    clientMutationId: mutationId,
+    store: host.empresa,
+  }).select('_id').lean();
+  if (!appointment) return parsed;
+  const appointmentId = String(appointment._id);
+  return {
+    ...parsed,
+    originalReference: parsed.reference,
+    appointmentId,
+    reference: parsed.occurrenceKey
+      ? `${appointmentId}:occurrence:${parsed.occurrenceKey}`
+      : appointmentId,
+  };
+};
+const resolveDesktopAppointmentReferences = async (values, host) => {
+  const resolved = await Promise.all((values || []).map((value) => resolveDesktopAppointmentReference(value, host)));
+  return Array.from(new Map(resolved
+    .filter((entry) => mongoose.Types.ObjectId.isValid(entry.appointmentId))
+    .map((entry) => [`${entry.appointmentId}:${entry.occurrenceKey}`, entry])).values());
+};
 const desktopEventActor = (source, host) => ({
   id: clean(source?.operator?.id) || String(host._id),
   name: clean(source?.operator?.name) || host.name || 'PDV Desktop',
@@ -732,7 +760,7 @@ async function materializeDesktopAppointmentEvent(event, host) {
   const mutationId = clean(source.clientMutationId || event.eventId);
   const appointmentId = clean(source.sourceAppointmentId || source.appointmentId);
   let appointment = mongoose.Types.ObjectId.isValid(appointmentId) ? await Appointment.findById(appointmentId) : null;
-  if (!appointment && mutationId) appointment = await Appointment.findOne({ clientMutationId: mutationId });
+  if (!appointment && mutationId) appointment = await Appointment.findOne({ clientMutationId: mutationId, store: host.empresa });
   if (event.type === 'appointment.created') {
     if (appointment) return appointment;
     const values = await desktopAppointmentPayload(source, host);
@@ -939,10 +967,7 @@ async function materializeDesktopEvent(event, pdv, host) {
       source.sourceAppointmentId,
       source.id,
     ].filter(Boolean);
-    const references = Array.from(new Map(rawReferences
-      .map(desktopAppointmentReference)
-      .filter((entry) => mongoose.Types.ObjectId.isValid(entry.appointmentId))
-      .map((entry) => [`${entry.appointmentId}:${entry.occurrenceKey}`, entry])).values());
+    const references = await resolveDesktopAppointmentReferences(rawReferences, host);
     if (!references.length || clean(source.status).toLowerCase() !== 'finalizado') {
       throw desktopEventError(
         'Atualização de atendimento inválida. Revise o atendimento no aplicativo.',
@@ -1315,11 +1340,10 @@ async function materializeDesktopEvent(event, pdv, host) {
   }), { action, requestId: event.eventId, idempotencyKey: event.eventId });
   if (['sale.completed', 'delivery.finalized'].includes(event.type)) {
     await syncDesktopSaleReceivables(source, pdv, host);
-    const appointmentReferences = Array.from(new Set(
+    const appointmentReferences = await resolveDesktopAppointmentReferences(Array.from(new Set(
       (Array.isArray(source.appointmentIds) ? source.appointmentIds : [source.appointmentId])
         .map(clean).filter(Boolean)
-    )).map(desktopAppointmentReference)
-      .filter((reference) => mongoose.Types.ObjectId.isValid(reference.appointmentId));
+    )), host);
     for (const reference of appointmentReferences) {
       const appointment = await Appointment.findOne({ _id: reference.appointmentId, store: host.empresa });
       if (!appointment) continue;
@@ -1342,11 +1366,10 @@ async function materializeDesktopEvent(event, pdv, host) {
     }
   }
   if (event.type === 'sale.cancelled') {
-    const appointmentReferences = Array.from(new Set(
+    const appointmentReferences = await resolveDesktopAppointmentReferences(Array.from(new Set(
       (Array.isArray(source.appointmentIds) ? source.appointmentIds : [source.appointmentId])
         .map(clean).filter(Boolean)
-    )).map(desktopAppointmentReference)
-      .filter((reference) => mongoose.Types.ObjectId.isValid(reference.appointmentId));
+    )), host);
     const originalStatuses = source.appointmentOriginalStatuses && typeof source.appointmentOriginalStatuses === 'object'
       ? source.appointmentOriginalStatuses : {};
     for (const reference of appointmentReferences) {
@@ -1356,7 +1379,7 @@ async function materializeDesktopEvent(event, pdv, host) {
         codigoVenda: source.saleCode || '',
       });
       if (!appointment) continue;
-      const status = clean(originalStatuses[reference.reference] || originalStatuses[reference.appointmentId] || 'em_atendimento').toLowerCase();
+      const status = clean(originalStatuses[reference.originalReference] || originalStatuses[reference.reference] || originalStatuses[reference.appointmentId] || 'em_atendimento').toLowerCase();
       appointment.pago = false;
       appointment.codigoVenda = '';
       if (reference.occurrenceKey) {

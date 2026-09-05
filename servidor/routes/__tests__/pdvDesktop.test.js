@@ -60,7 +60,8 @@ test.describe('integração do PDV Desktop', () => {
     const suffix = String(Date.now()).slice(-8);
     const customer = await User.create({ tipoConta: 'pessoa_fisica', email: `desktop-customer-${suffix}@example.com`, senha: 'hash', celular: `219${suffix}`, nomeCompleto: 'Cliente Desktop', cpf: `123${suffix}`, role: 'cliente', empresaPrincipal: base.company._id });
     const pet = await Pet.create({ owner: customer._id, nome: 'Bidu', tipo: 'cachorro', raca: 'vira-lata', sexo: 'macho', dataNascimento: new Date('2022-01-01T00:00:00Z') });
-    const appointment = await Appointment.create({ store: base.company._id, cliente: customer._id, pet: pet._id, scheduledAt: new Date(Date.now() + 3600000), valor: 20, status: 'em_atendimento', observacoes: 'Atendimento do teste desktop' });
+    const appointmentMutationId = `appointment-cloud-alias-${suffix}`;
+    const appointment = await Appointment.create({ store: base.company._id, cliente: customer._id, pet: pet._id, scheduledAt: new Date(Date.now() + 3600000), valor: 20, status: 'em_atendimento', observacoes: 'Atendimento do teste desktop', clientMutationId: appointmentMutationId });
     await UserAddress.create({ user: customer._id, cep: '20000000', logradouro: 'Rua Desktop', numero: '10', cidade: 'Rio de Janeiro', uf: 'RJ', isDefault: true });
     await User.create({ tipoConta: 'pessoa_fisica', email: `desktop-seller-${suffix}@example.com`, senha: 'hash', celular: `218${suffix}`, nomeCompleto: 'Vendedor Desktop', role: 'funcionario', grupos: ['vendedor'], empresas: [base.company._id], codigoCliente: 987654 });
     const courier = await User.create({ tipoConta: 'pessoa_fisica', email: `desktop-courier-${suffix}@example.com`, senha: 'hash', celular: `216${suffix}`, nomeCompleto: 'Entregador Desktop', role: 'funcionario', grupos: ['entregador'], empresas: [base.company._id], codigoCliente: 123456 });
@@ -382,7 +383,7 @@ test.describe('integração do PDV Desktop', () => {
     });
     const events = [
       { eventId: 'cash-1', type: 'cash.opened', occurredAt: new Date().toISOString(), payload: { openingAmount: 50 } },
-      { eventId: 'event-1', type: 'sale.completed', occurredAt: new Date().toISOString(), payload: { id: 'local-sale-1', saleCode: `${base.pdv.codigo.replace(/[^A-Za-z0-9]/g, '')}-000001`, appointmentId: String(appointment._id), appointmentIds: [String(appointment._id), `${billingRecurringAppointment._id}:occurrence:2026-08-15T12:00:00.000Z`], grossTotal: 20, netTotal: 20, items: [{ productId: String(new mongoose.Types.ObjectId()), code: base.product.cod, name: base.product.nome, quantity: 1, unitPrice: 20 }], payments: [{ paymentMethodId: String(base.payment._id), amount: 20 }] } },
+      { eventId: 'event-1', type: 'sale.completed', occurredAt: new Date().toISOString(), payload: { id: 'local-sale-1', saleCode: `${base.pdv.codigo.replace(/[^A-Za-z0-9]/g, '')}-000001`, appointmentId: `local:${appointmentMutationId}`, appointmentIds: [`local:${appointmentMutationId}`, `${billingRecurringAppointment._id}:occurrence:2026-08-15T12:00:00.000Z`], grossTotal: 20, netTotal: 20, items: [{ productId: String(new mongoose.Types.ObjectId()), code: base.product.cod, name: base.product.nome, quantity: 1, unitPrice: 20 }], payments: [{ paymentMethodId: String(base.payment._id), amount: 20 }] } },
     ];
     const first = await request.post('/desktop/events/batch').set(headers).send({ events });
     const duplicateOpen = await request.post('/desktop/events/batch').set(headers).send({ events: [{ eventId: 'cash-open-duplicate-state', type: 'cash.opened', occurredAt: new Date().toISOString(), payload: { openingAmount: 999 } }] });
@@ -395,8 +396,8 @@ test.describe('integração do PDV Desktop', () => {
     const cloudState = await PdvState.findOne({ pdv: base.pdv._id }).lean();
     assert.equal(cloudState.completedSales.length, 1);
     assert.equal(cloudState.completedSales[0].id, 'local-sale-1');
-    assert.equal(cloudState.completedSales[0].appointmentId, String(appointment._id));
-    assert.deepEqual(cloudState.completedSales[0].appointmentIds, [String(appointment._id), `${billingRecurringAppointment._id}:occurrence:2026-08-15T12:00:00.000Z`]);
+    assert.equal(cloudState.completedSales[0].appointmentId, `local:${appointmentMutationId}`);
+    assert.deepEqual(cloudState.completedSales[0].appointmentIds, [`local:${appointmentMutationId}`, `${billingRecurringAppointment._id}:occurrence:2026-08-15T12:00:00.000Z`]);
     assert.equal(String(cloudState.completedSales[0].items[0].productId), String(base.product._id));
     assert.equal(Number(cloudState.completedSales[0].items[0].unitCost), 10);
     const salesHistory = await request.get('/desktop/sales/history?limit=50').set(headers);
@@ -453,7 +454,7 @@ test.describe('integração do PDV Desktop', () => {
 
     const operationalEvents = [
       { eventId: 'cash-entry-1', type: 'cash.entry', occurredAt: new Date().toISOString(), payload: { amount: 5, paymentMethodId: String(base.payment._id), reason: 'Reforço' } },
-      { eventId: 'cancel-1', type: 'sale.cancelled', occurredAt: new Date().toISOString(), payload: { saleId: 'local-sale-1', saleCode: events[1].payload.saleCode, appointmentId: String(appointment._id), appointmentIds: [String(appointment._id)], reason: 'Cliente desistiu' } },
+      { eventId: 'cancel-1', type: 'sale.cancelled', occurredAt: new Date().toISOString(), payload: { saleId: 'local-sale-1', saleCode: events[1].payload.saleCode, appointmentId: `local:${appointmentMutationId}`, appointmentIds: [`local:${appointmentMutationId}`], reason: 'Cliente desistiu' } },
       { eventId: 'cash-close-1', type: 'cash.closed', occurredAt: new Date().toISOString(), payload: { countedPayments: [{ paymentMethodId: String(base.payment._id), amount: 55 }], reason: 'Fim do turno' } },
     ];
     const operational = await request.post('/desktop/events/batch').set(headers).send({ events: operationalEvents });
@@ -462,6 +463,10 @@ test.describe('integração do PDV Desktop', () => {
     const finalState = await PdvState.findOne({ pdv: base.pdv._id }).lean();
     assert.equal(finalState.completedSales.find((entry) => entry.id === 'local-sale-1').status, 'cancelled');
     assert.equal(finalState.caixaAberto, false);
+    const cancelledAppointment = await Appointment.findById(appointment._id).lean();
+    assert.equal(cancelledAppointment.pago, false);
+    assert.equal(cancelledAppointment.codigoVenda, '');
+    assert.equal(cancelledAppointment.status, 'em_atendimento');
     const redundantClose = await request.post('/desktop/events/batch').set(headers).send({ events: [
       { eventId: 'cash-close-after-web-1', type: 'cash.closed', occurredAt: new Date().toISOString(), payload: { cashSessionId: 'desktop-stale-session', countedPayments: [{ paymentMethodId: String(base.payment._id), amount: 55 }], reason: 'Caixa já fechado no Web' } },
     ] });
