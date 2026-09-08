@@ -1167,41 +1167,125 @@ const normalizeFiscalItem = (item = {}) => {
   };
 };
 
+const distributeCents = (amountCents, distributionWeights = []) => {
+  const normalizedAmount = Math.max(0, Math.round(safeNumber(amountCents, 0)));
+  const weights = distributionWeights.map((value) => Math.max(0, Math.round(safeNumber(value, 0))));
+  const result = new Array(weights.length).fill(0);
+  if (!weights.length || normalizedAmount <= 0) return result;
+  const weightTotal = weights.reduce((sum, value) => sum + value, 0);
+  if (weightTotal <= 0) {
+    result[0] = normalizedAmount;
+    return result;
+  }
+  const ranked = weights.map((weight, index) => {
+    const exact = (normalizedAmount * weight) / weightTotal;
+    const floor = Math.floor(exact);
+    result[index] = floor;
+    return { index, remainder: exact - floor };
+  }).sort((left, right) => right.remainder - left.remainder || left.index - right.index);
+  let remaining = normalizedAmount - result.reduce((sum, value) => sum + value, 0);
+  for (let index = 0; remaining > 0; index = (index + 1) % ranked.length) {
+    result[ranked[index].index] += 1;
+    remaining -= 1;
+  }
+  return result;
+};
+
 const allocateFiscalAmount = (items = [], total = 0, field = 'discount') => {
   if (!items.length) return [];
   const targetCents = Math.max(0, Math.round(safeNumber(total, 0) * 100));
   const embeddedCents = items.map((item) => Math.max(0, Math.round(safeNumber(item?.[field], 0) * 100)));
   const weights = items.map((item) => Math.max(0, Math.round(safeNumber(item?.total, 0) * 100)));
-  const distribute = (amountCents, distributionWeights) => {
-    const result = new Array(items.length).fill(0);
-    if (amountCents <= 0) return result;
-    const weightTotal = distributionWeights.reduce((sum, value) => sum + value, 0);
-    if (weightTotal <= 0) {
-      result[0] = amountCents;
-      return result;
-    }
-    const ranked = distributionWeights.map((weight, index) => {
-      const exact = (amountCents * weight) / weightTotal;
-      const floor = Math.floor(exact);
-      result[index] = floor;
-      return { index, remainder: exact - floor };
-    }).sort((left, right) => right.remainder - left.remainder || left.index - right.index);
-    let remaining = amountCents - result.reduce((sum, value) => sum + value, 0);
-    for (let index = 0; remaining > 0; index = (index + 1) % ranked.length) {
-      result[ranked[index].index] += 1;
-      remaining -= 1;
-    }
-    return result;
-  };
   const embeddedTotal = embeddedCents.reduce((sum, value) => sum + value, 0);
   const allocated = embeddedTotal > targetCents
-    ? distribute(targetCents, embeddedCents)
+    ? distributeCents(targetCents, embeddedCents)
     : embeddedCents.map((value) => value);
   if (embeddedTotal < targetCents) {
-    const remaining = distribute(targetCents - embeddedTotal, weights);
+    const remaining = distributeCents(targetCents - embeddedTotal, weights);
     remaining.forEach((value, index) => { allocated[index] += value; });
   }
   return allocated.map((value) => value / 100);
+};
+
+const isServiceFiscalItem = (item = {}) =>
+  ['service', 'servico', 'serviço'].includes(String(item.itemType || item.type || '').trim().toLowerCase());
+
+const allocatePaymentAmounts = (payments = [], total = 0) => {
+  const targetCents = Math.max(0, Math.round(safeNumber(total, 0) * 100));
+  const normalized = payments
+    .map((payment) => ({
+      ...payment,
+      valor: safeNumber(payment?.valor ?? payment?.amount ?? 0, 0),
+    }))
+    .filter((payment) => payment.valor > 0);
+  if (!normalized.length) return [];
+  const weights = normalized.map((payment) => Math.max(0, Math.round(payment.valor * 100)));
+  return distributeCents(targetCents, weights)
+    .map((value, index) => ({ ...normalized[index], valor: value / 100 }))
+    .filter((payment) => payment.valor > 0);
+};
+
+const resolveSalePaymentMetadata = (sale = {}, payment = {}, index = 0) => {
+  const paymentId = normalizeStringSafe(payment?.id || payment?.paymentId || payment?._id);
+  const contributions = Array.isArray(sale?.cashContributions) ? sale.cashContributions : [];
+  const matchingContribution = contributions.find((entry) => {
+    const contributionId = normalizeStringSafe(entry?.paymentId || entry?.id || entry?._id);
+    return paymentId && contributionId === paymentId;
+  }) || contributions[index] || null;
+  const paymentTags = Array.isArray(sale?.paymentTags) ? sale.paymentTags : [];
+  const label = String(
+    payment?.descricao ||
+      payment?.label ||
+      payment?.nome ||
+      matchingContribution?.paymentLabel ||
+      matchingContribution?.label ||
+      paymentTags[index] ||
+      ''
+  ).trim();
+  const paymentCode = String(
+    payment?.forma || payment?.codigo || payment?.tipo || matchingContribution?.paymentCode
+      || ''
+  ).trim();
+  return {
+    label: label || 'Pagamento',
+    code: paymentCode || label || '01',
+  };
+};
+
+const buildFiscalProjection = ({ items = [], discount = 0, addition = 0, payments = [], change = 0 } = {}) => {
+  const allocatedDiscounts = allocateFiscalAmount(items, discount, 'discount');
+  const allocatedAdditions = allocateFiscalAmount(items, addition, 'addition');
+  const adjustedItems = items.map((item, index) => {
+    const itemDiscount = allocatedDiscounts[index] || 0;
+    const itemAddition = allocatedAdditions[index] || 0;
+    return {
+      ...item,
+      discount: itemDiscount,
+      addition: itemAddition,
+      netTotal: Math.max(0, Number(((Math.round(item.total * 100) - Math.round(itemDiscount * 100) + Math.round(itemAddition * 100)) / 100).toFixed(2))),
+    };
+  });
+  const fiscalItems = adjustedItems.filter((item) => !isServiceFiscalItem(item));
+  const centsSum = (field) => fiscalItems.reduce(
+    (sum, item) => sum + Math.round(safeNumber(item?.[field], 0) * 100),
+    0
+  );
+  const totalProducts = centsSum('total') / 100;
+  const fiscalDiscount = centsSum('discount') / 100;
+  const fiscalAddition = centsSum('addition') / 100;
+  const totalLiquido = Math.max(0, (centsSum('total') - centsSum('discount') + centsSum('addition')) / 100);
+  const excludedServices = adjustedItems.length - fiscalItems.length;
+  return {
+    adjustedItems,
+    fiscalItems,
+    totalProducts,
+    discount: fiscalDiscount,
+    addition: fiscalAddition,
+    totalLiquido,
+    payments: excludedServices > 0 ? allocatePaymentAmounts(payments, totalLiquido) : payments,
+    change: excludedServices > 0 ? 0 : Math.max(0, safeNumber(change, 0)),
+    excludedServices,
+  };
 };
 
 const loadProductsByIds = async (ids = []) => {
@@ -1340,6 +1424,79 @@ const resolveEmitterCrt = (regime) => {
   throw new Error('Regime tributario da empresa invalido ou nao informado para emissao de NFC-e.');
 };
 
+const validateFiscalXmlTotals = (xmlSource) => {
+  const issues = [];
+  const parserIssues = [];
+  const source = String(xmlSource || '').trim();
+  if (!source) return { valid: false, issues: ['XML fiscal vazio.'], emissionType: '' };
+  let document;
+  try {
+    document = new DOMParser({
+      errorHandler: {
+        warning: () => {},
+        error: (message) => parserIssues.push(String(message || 'XML inválido.')),
+        fatalError: (message) => parserIssues.push(String(message || 'XML inválido.')),
+      },
+    }).parseFromString(source, 'application/xml');
+  } catch (error) {
+    return { valid: false, issues: [`XML fiscal inválido: ${error.message}`], emissionType: '' };
+  }
+  if (parserIssues.length) issues.push('XML fiscal não pôde ser interpretado com segurança.');
+  const select = (path, context = document) => xpath.select(path, context) || [];
+  const firstText = (path, context = document) => {
+    const node = select(path, context)[0];
+    return node?.textContent == null ? '' : String(node.textContent).trim();
+  };
+  const cents = (value) => Math.round(safeNumber(value, 0) * 100);
+  const totalCents = (path, context = document) => select(path, context).reduce(
+    (sum, node) => sum + cents(node?.textContent),
+    0
+  );
+  const infNfe = select("//*[local-name()='infNFe']")[0];
+  const icmsTot = select("//*[local-name()='ICMSTot']")[0];
+  if (!infNfe) issues.push('XML fiscal sem o grupo infNFe.');
+  if (!icmsTot) issues.push('XML fiscal sem o grupo ICMSTot.');
+  if (!infNfe || !icmsTot) {
+    return { valid: false, issues, emissionType: firstText("//*[local-name()='tpEmis']") };
+  }
+
+  const comparisons = [
+    ['vProd', "//*[local-name()='det']/*[local-name()='prod']/*[local-name()='vProd']"],
+    ['vDesc', "//*[local-name()='det']/*[local-name()='prod']/*[local-name()='vDesc']"],
+    ['vOutro', "//*[local-name()='det']/*[local-name()='prod']/*[local-name()='vOutro']"],
+  ];
+  for (const [tag, itemPath] of comparisons) {
+    const declared = cents(firstText(`./*[local-name()='${tag}']`, icmsTot));
+    const itemSum = totalCents(itemPath);
+    if (declared !== itemSum) {
+      issues.push(`${tag} total (${(declared / 100).toFixed(2)}) difere da soma dos itens (${(itemSum / 100).toFixed(2)}).`);
+    }
+  }
+
+  const productNodes = select("//*[local-name()='det']/*[local-name()='prod']");
+  productNodes.forEach((product, index) => {
+    const quantity = safeNumber(firstText("./*[local-name()='qCom']", product), 0);
+    const unitPrice = safeNumber(firstText("./*[local-name()='vUnCom']", product), 0);
+    const declaredProduct = cents(firstText("./*[local-name()='vProd']", product));
+    const calculatedProduct = cents(quantity * unitPrice);
+    if (declaredProduct !== calculatedProduct) {
+      issues.push(`vProd do item ${index + 1} difere de qCom x vUnCom.`);
+    }
+  });
+
+  const vNf = cents(firstText("./*[local-name()='vNF']", icmsTot));
+  const paymentTotal = totalCents("//*[local-name()='pag']/*[local-name()='detPag']/*[local-name()='vPag']");
+  const change = cents(firstText("//*[local-name()='pag']/*[local-name()='vTroco']"));
+  if (paymentTotal - change !== vNf) {
+    issues.push(`Pagamentos líquidos (${((paymentTotal - change) / 100).toFixed(2)}) diferem do vNF (${(vNf / 100).toFixed(2)}).`);
+  }
+  return {
+    valid: issues.length === 0,
+    issues,
+    emissionType: firstText("//*[local-name()='tpEmis']"),
+  };
+};
+
 const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, serie, numero }) => {
   if (!sale || typeof sale !== 'object') {
     throw new Error('Venda inválida para emissão fiscal.');
@@ -1348,9 +1505,8 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   const saleCodeForFile = normalizeStringSafe(sale?.saleCode) || normalizeStringSafe(sale?.id);
   let xmlFileBaseName = saleCodeForFile ? `NFCe-${saleCodeForFile}` : '';
   const fiscalItemsRaw = collectFiscalItemCandidates(sale);
-  const fiscalItems = fiscalItemsRaw
-    .map((item) => normalizeFiscalItem(item))
-    .filter((item) => !['servico', 'serviço'].includes(item.itemType) && item.type !== 'service');
+  const normalizedSaleItems = fiscalItemsRaw.map((item) => normalizeFiscalItem(item));
+  const fiscalItems = normalizedSaleItems.filter((item) => !isServiceFiscalItem(item));
   if (!fiscalItems.length) {
     throw new Error('Itens da venda não estão disponíveis para emissão fiscal.');
   }
@@ -1424,39 +1580,59 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     xmlFileBaseName = `NFCe-${accessKey}`;
   }
 
-  const totalProducts = fiscalItems.reduce((sum, item) => sum + item.total, 0);
-  const desconto = safeNumber(snapshot?.totais?.descontoValor ?? snapshot?.totais?.desconto ?? sale.discountValue ?? 0, 0);
-  const acrescimo = safeNumber(snapshot?.totais?.acrescimoValor ?? snapshot?.totais?.acrescimo ?? sale.additionValue ?? 0, 0);
-  const totalLiquido = Math.max(0, totalProducts - desconto + acrescimo);
-  const allocatedDiscounts = allocateFiscalAmount(fiscalItems, desconto, 'discount');
-  const allocatedAdditions = allocateFiscalAmount(fiscalItems, acrescimo, 'addition');
-  const adjustedFiscalItems = fiscalItems.map((item, index) => ({
-    ...item,
-    discount: allocatedDiscounts[index] || 0,
-    addition: allocatedAdditions[index] || 0,
-    netTotal: Math.max(0, item.total - (allocatedDiscounts[index] || 0) + (allocatedAdditions[index] || 0)),
-  }));
+  const requestedDiscount = safeNumber(
+    snapshot?.totais?.descontoValor ?? snapshot?.totais?.desconto ?? sale.discountValue ?? 0,
+    0
+  );
+  const requestedAddition = safeNumber(
+    snapshot?.totais?.acrescimoValor ?? snapshot?.totais?.acrescimo ?? sale.additionValue ?? 0,
+    0
+  );
+  const fallbackSaleTotal = Math.max(
+    0,
+    safeNumber(
+      snapshot?.totais?.totalLiquido ?? snapshot?.totais?.liquido ?? sale.totalLiquido ?? sale.total,
+      normalizedSaleItems.reduce((sum, item) => sum + item.total, 0) - requestedDiscount + requestedAddition
+    )
+  );
   const pagamentosRaw = Array.isArray(snapshot?.pagamentos?.items) ? snapshot.pagamentos.items : [];
-  const pagamentos = pagamentosRaw.length
-    ? pagamentosRaw.map((payment) => ({
-        descricao: payment?.descricao || payment?.label || payment?.nome || 'Pagamento',
+  const sourcePayments = pagamentosRaw.length
+    ? pagamentosRaw.map((payment, index) => {
+      const metadata = resolveSalePaymentMetadata(sale, payment, index);
+      return {
+        descricao: metadata.label,
         valor: safeNumber(payment?.valor ?? payment?.formatted ?? 0, 0),
-        forma: payment?.forma || payment?.codigo || payment?.tipo || '01',
+        forma: metadata.code,
         indPag: payment?.indPag ?? payment?.indicador ?? payment?.indicadorPagamento,
         integracao: payment?.tpIntegra ?? payment?.integracao ?? payment?.tipoIntegracao,
         card: payment?.card || payment?.cartao || null,
         cnpj: payment?.cnpjCredenciadora || payment?.cnpj || null,
         tBand: payment?.tBand || payment?.bandeira || null,
         cAut: payment?.cAut || payment?.autorizacao || null,
-      }))
+      };
+    })
     : [
         {
           descricao: 'Dinheiro',
-          valor: totalLiquido,
+          valor: fallbackSaleTotal,
           forma: '01',
         },
       ];
-  const troco = safeNumber(snapshot?.totais?.trocoValor ?? snapshot?.totais?.troco ?? 0, 0);
+  const sourceChange = safeNumber(snapshot?.totais?.trocoValor ?? snapshot?.totais?.troco ?? 0, 0);
+  const fiscalProjection = buildFiscalProjection({
+    items: normalizedSaleItems,
+    discount: requestedDiscount,
+    addition: requestedAddition,
+    payments: sourcePayments,
+    change: sourceChange,
+  });
+  const adjustedFiscalItems = fiscalProjection.fiscalItems;
+  const totalProducts = fiscalProjection.totalProducts;
+  const desconto = fiscalProjection.discount;
+  const acrescimo = fiscalProjection.addition;
+  const totalLiquido = fiscalProjection.totalLiquido;
+  const pagamentos = fiscalProjection.payments;
+  const troco = fiscalProjection.change;
 
   const encryptedCertificate = storeObject?.certificadoArquivoCriptografado;
   if (!encryptedCertificate) {
@@ -2327,11 +2503,17 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
 module.exports = {
   emitPdvSaleFiscal,
   extractCertificatePair,
+  validateFiscalXmlTotals,
   _test: {
     collectFiscalItemCandidates,
     buildIcmsGroup,
     normalizeFiscalItem,
+    distributeCents,
     allocateFiscalAmount,
+    allocatePaymentAmounts,
+    resolveSalePaymentMetadata,
+    buildFiscalProjection,
+    validateFiscalXmlTotals,
     resolveGtinForXml,
     resolveEmitterCrt,
     resolveFiscalRuleCode,

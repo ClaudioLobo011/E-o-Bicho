@@ -109,6 +109,87 @@ describe('nfceEmitter itens fiscais do PDV', () => {
     assert.deepEqual(allocated, [1.67, 3.33, 5]);
   });
 
+  test('projeta desconto e pagamento somente sobre mercadorias quando a venda tambem possui servico', () => {
+    const items = [
+      { itemType: 'service', total: 100, discount: 0, addition: 0 },
+      { itemType: 'product', total: 49.9, discount: 0, addition: 0 },
+      { itemType: 'product', total: 235.9, discount: 0, addition: 0 },
+      { itemType: 'product', total: 195.9, discount: 0, addition: 0 },
+      { itemType: 'product', total: 271.9, discount: 0, addition: 0 },
+    ];
+    const projection = _test.buildFiscalProjection({
+      items,
+      discount: 10,
+      payments: [{ forma: '01', valor: 843.6 }],
+    });
+
+    assert.equal(projection.excludedServices, 1);
+    assert.equal(projection.fiscalItems.length, 4);
+    assert.equal(projection.totalProducts, 753.6);
+    assert.equal(projection.discount, 8.83);
+    assert.equal(projection.totalLiquido, 744.77);
+    assert.deepEqual(projection.payments.map((payment) => payment.valor), [744.77]);
+    assert.equal(projection.change, 0);
+    assert.equal(
+      projection.fiscalItems.reduce((sum, item) => sum + Math.round(item.discount * 100), 0),
+      883
+    );
+  });
+
+  test('preserva pagamentos e troco quando todos os itens sao mercadorias', () => {
+    const payments = [{ forma: '01', valor: 20 }];
+    const projection = _test.buildFiscalProjection({
+      items: [{ itemType: 'product', total: 10, discount: 0, addition: 0 }],
+      payments,
+      change: 10,
+    });
+
+    assert.deepEqual(projection.payments, payments);
+    assert.equal(projection.change, 10);
+    assert.equal(projection.totalLiquido, 10);
+  });
+
+  test('recupera a forma de pagamento pelo movimento de caixa quando o snapshot antigo possui somente o id', () => {
+    const metadata = _test.resolveSalePaymentMetadata(
+      {
+        paymentTags: ['Crédito'],
+        cashContributions: [
+          { paymentId: '68d6e9ecef99f353f564f6b2', paymentLabel: 'Crédito', amount: 843.6 },
+        ],
+      },
+      { id: '68d6e9ecef99f353f564f6b2', valor: 843.6, parcelas: 1 },
+      0
+    );
+
+    assert.deepEqual(metadata, { label: 'Crédito', code: 'Crédito' });
+  });
+
+  test('detecta XML antigo com desconto total ausente nos itens antes de enviar a SEFAZ', () => {
+    const validation = _test.validateFiscalXmlTotals(`
+      <NFe><infNFe><ide><tpEmis>1</tpEmis></ide>
+        <det nItem="1"><prod><qCom>1.0000</qCom><vUnCom>100.0000000000</vUnCom><vProd>100.00</vProd></prod></det>
+        <total><ICMSTot><vProd>100.00</vProd><vDesc>10.00</vDesc><vOutro>0.00</vOutro><vNF>90.00</vNF></ICMSTot></total>
+        <pag><detPag><vPag>90.00</vPag></detPag></pag>
+      </infNFe></NFe>
+    `);
+
+    assert.equal(validation.valid, false);
+    assert.equal(validation.emissionType, '1');
+    assert.ok(validation.issues.some((issue) => issue.startsWith('vDesc total')));
+  });
+
+  test('aceita XML cujos totais, itens e pagamentos fecham em centavos', () => {
+    const validation = _test.validateFiscalXmlTotals(`
+      <NFe><infNFe><ide><tpEmis>1</tpEmis></ide>
+        <det nItem="1"><prod><qCom>1.0000</qCom><vUnCom>100.0000000000</vUnCom><vProd>100.00</vProd><vDesc>10.00</vDesc></prod></det>
+        <total><ICMSTot><vProd>100.00</vProd><vDesc>10.00</vDesc><vOutro>0.00</vOutro><vNF>90.00</vNF></ICMSTot></total>
+        <pag><detPag><vPag>90.00</vPag></detPag></pag>
+      </infNFe></NFe>
+    `);
+
+    assert.deepEqual(validation, { valid: true, issues: [], emissionType: '1' });
+  });
+
   test('resolve codigo da regra fiscal salvo no produto', () => {
     assert.equal(_test.resolveFiscalRuleCode({ fiscalRuleCode: ' 2 ' }), '2');
     assert.equal(_test.resolveFiscalRuleCode({ regraFiscalCodigo: '3' }), '3');

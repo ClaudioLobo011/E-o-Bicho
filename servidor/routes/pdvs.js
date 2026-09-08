@@ -31,7 +31,11 @@ const AccountingAccount = require('../models/AccountingAccount');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 const { uploadBufferToR2, isR2Configured } = require('../utils/cloudflareR2');
-const { emitPdvSaleFiscal, extractCertificatePair } = require('../services/nfceEmitter');
+const {
+  emitPdvSaleFiscal,
+  extractCertificatePair,
+  validateFiscalXmlTotals,
+} = require('../services/nfceEmitter');
 const { transmitNfceToSefaz } = require('../services/sefazTransmitter');
 const { decryptBuffer, decryptText } = require('../utils/certificates');
 const { buildFiscalR2Key } = require('../utils/fiscalDrivePath');
@@ -4209,16 +4213,43 @@ const emitSaleFiscalHandler = async (req, res) => {
         : numeroInicial - 1;
     const preSignedXml = normalizeString(req.body?.signedXml);
     const requestedSeries = normalizeString(req.body?.fiscalSeries);
-    const rebuildOfflineXml = Boolean(preSignedXml && requestedSeries !== serieNfce);
-    const usePreSignedXml = Boolean(preSignedXml && !rebuildOfflineXml);
     const requestedFiscalNumber = Number(req.body?.fiscalNumber);
-    let proximoNumeroFiscal = usePreSignedXml && Number.isInteger(requestedFiscalNumber) && requestedFiscalNumber > 0
+    const preSignedSeriesMatches = Boolean(preSignedXml && requestedSeries === serieNfce);
+    const preSignedValidation = preSignedSeriesMatches
+      ? validateFiscalXmlTotals(preSignedXml)
+      : null;
+    const invalidContingencyXml = Boolean(
+      preSignedValidation && !preSignedValidation.valid && preSignedValidation.emissionType === '9'
+    );
+    if (invalidContingencyXml) {
+      return res.status(422).json({
+        message:
+          'O XML de contingência foi gerado por uma versão antiga e possui totais inconsistentes. ' +
+          'Atualize o PDV antes de retransmitir para preservar a data original da emissão.',
+        details: preSignedValidation.issues,
+      });
+    }
+    const usePreSignedXml = Boolean(
+      preSignedSeriesMatches && preSignedValidation?.valid
+    );
+    const preserveRequestedNumber = Boolean(
+      preSignedSeriesMatches && Number.isInteger(requestedFiscalNumber) && requestedFiscalNumber > 0
+    );
+    let proximoNumeroFiscal = preserveRequestedNumber
       ? requestedFiscalNumber
       : baseSequencia + 1;
 
-    if (usePreSignedXml) {
+    if (preserveRequestedNumber) {
       const reserved = await PdvCodeRange.findOne({ pdv: pdv._id, host: req.desktopHost?._id, kind: 'nfce', start: { $lte: proximoNumeroFiscal }, end: { $gte: proximoNumeroFiscal }, status: { $ne: 'revoked' } }).lean();
       if (!reserved) return res.status(409).json({ message: 'O nÃºmero da NFC-e offline nÃ£o pertence a uma faixa reservada para esta mÃ¡quina.' });
+    }
+
+    if (preSignedValidation && !preSignedValidation.valid) {
+      console.warn(
+        `[NFC-e] XML pré-assinado inconsistente para ${sale.saleCode || saleId}; ` +
+          `a API reconstruirá a NFC-e ${proximoNumeroFiscal}/${serieNfce}: ` +
+          preSignedValidation.issues.join(' | ')
+      );
     }
 
     emissionDate = new Date();
