@@ -1266,8 +1266,13 @@
     return items;
   }
 
+  function spreadsheetCellValue(value) {
+    const text = String(value ?? "");
+    return /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+  }
+
   function csvCell(value) {
-    return `"${String(value ?? "").replace(/"/g, '""')}"`;
+    return `"${spreadsheetCellValue(value).replace(/"/g, '""')}"`;
   }
   function downloadBlob(blob, filename) {
     const link = document.createElement("a");
@@ -1329,7 +1334,7 @@
         `comissoes-${period.start}-a-${period.end}.csv`,
       );
     } else {
-      const html = `<!doctype html><html><head><meta charset="utf-8"></head><body><table><thead><tr>${header.map((cell) => `<th>${escapeHtml(cell)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table></body></html>`;
+      const html = `<!doctype html><html><head><meta charset="utf-8"></head><body><table><thead><tr>${header.map((cell) => `<th>${escapeHtml(cell)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(spreadsheetCellValue(cell))}</td>`).join("")}</tr>`).join("")}</tbody></table></body></html>`;
       downloadBlob(
         new Blob([`\uFEFF${html}`], {
           type: "application/vnd.ms-excel;charset=utf-8",
@@ -1378,7 +1383,7 @@
         `${slug}.csv`,
       );
     else {
-      const html = `<html><head><meta charset="utf-8"></head><body><table><thead><tr>${header.map((cell) => `<th>${escapeHtml(cell)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table></body></html>`;
+      const html = `<html><head><meta charset="utf-8"></head><body><table><thead><tr>${header.map((cell) => `<th>${escapeHtml(cell)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(spreadsheetCellValue(cell))}</td>`).join("")}</tr>`).join("")}</tbody></table></body></html>`;
       downloadBlob(
         new Blob([`\uFEFF${html}`], {
           type: "application/vnd.ms-excel;charset=utf-8",
