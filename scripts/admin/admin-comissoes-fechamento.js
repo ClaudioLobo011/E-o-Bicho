@@ -4,7 +4,6 @@
   let filteredList = [];
   let closingsData = [];
   let pendentesList = [];
-  let pendentesAllList = [];
   let configAccounts = [];
   let configSelected = null;
   let configBankAccounts = [];
@@ -13,6 +12,8 @@
   let configIncludePdvSales = true;
   let stores = [];
   let modalKpisRequestSeq = 0;
+  let fechamentosRequestSeq = 0;
+  let pendentesRequestSeq = 0;
 
   const el = (id) => document.getElementById(id);
   const formatMoney = (v) => currency.format(Number(v || 0));
@@ -21,7 +22,10 @@
 
   function formatInputDate(date) {
     if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
-    return date.toISOString().slice(0, 10);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
   function formatInputTime(date) {
@@ -65,18 +69,8 @@
 
   function toYmd(value) {
     if (!value) return '';
-    // Quando vier com horário (ISO completo), usamos a data local (getFullYear/getMonth/getDate)
-    // para evitar avanços/retrocessos de dia por causa de fuso.
     if (typeof value === 'string') {
-      if (value.includes('T')) {
-        const d = new Date(value);
-        if (!Number.isNaN(d.getTime())) {
-          const y = d.getFullYear();
-          const m = String(d.getMonth() + 1).padStart(2, '0');
-          const day = String(d.getDate()).padStart(2, '0');
-          return `${y}-${m}-${day}`;
-        }
-      }
+      // A parte de calendário veio do formulário e deve ser preservada literalmente.
       const m = value.match(/(\d{4})-(\d{2})-(\d{2})/);
       if (m) return `${m[1]}-${m[2]}-${m[3]}`;
     }
@@ -86,15 +80,6 @@
     const m = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
     return `${y}-${m}-${day}`;
-  }
-
-  function toDateParamMidday(date) {
-    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    // Coloca meio-dia para evitar mudança de dia por fuso quando o backend normaliza para 00:00
-    return `${y}-${m}-${d}T12:00:00`;
   }
 
   function renderKpis(list) {
@@ -163,6 +148,11 @@
       const isSynthetic = !item.id || String(item.id).startsWith('dyn-');
       const normalizedStatus = String(item.status || '').toLowerCase();
       const previsto = Number(item.previsto || item.totalPeriodo || 0);
+      const previsaoData = item.previsaoPagamentoData || item.previsaoPagamento || '';
+      const previsaoHora = String(item.previsaoPagamentoHora || '').trim();
+      const previsaoLabel = previsaoData
+        ? `${formatDateNoTZ(previsaoData)}${previsaoHora ? ` ${previsaoHora}` : ''}`
+        : '--';
       const actionButtons = isSynthetic
         ? `
           <button
@@ -225,7 +215,7 @@
         <td class="px-4 py-3">${statusBadge(item.status)}</td>
         <td class="px-4 py-3 text-gray-700">
           <p>${item.proximo || item.meioPagamento || '--'}</p>
-          <p class="text-xs text-gray-500">Prev: ${item.previsaoPagamento ? new Date(item.previsaoPagamento).toLocaleDateString('pt-BR') : '--'}</p>
+          <p class="text-xs text-gray-500">Prev: ${previsaoLabel}</p>
         </td>
         <td class="px-4 py-3">
           ${actionButtons}
@@ -313,7 +303,7 @@ function renderCardsPendentes(list) {
     return 0;
   };
 
-  const source = pendentesAllList.length ? pendentesAllList : Array.isArray(list) ? list : [];
+  const source = Array.isArray(list) ? list : [];
 
   const pendentes = new Map();
   source.forEach((item) => {
@@ -413,6 +403,14 @@ function getPeriodoRange() {
     return { start, end };
   }
 
+  function getPeriodoValues() {
+    const { start, end } = getPeriodoRange();
+    return {
+      start: toYmd(el('filtro-inicio')?.value) || formatInputDate(start),
+      end: toYmd(el('filtro-fim')?.value) || formatInputDate(end),
+    };
+  }
+
   function formatPeriodo(item) {
     if (item.periodoInicio) {
       const iniStr = formatDateNoTZ(item.periodoInicio);
@@ -420,18 +418,6 @@ function getPeriodoRange() {
       return `${iniStr} a ${fimStr}`;
     }
     return item.periodo || '--';
-  }
-
-  function filtraPorMes(list) {
-    const { start, end } = getPeriodoRange();
-    return list.filter((item) => {
-      const ini = item.periodoInicio ? new Date(item.periodoInicio) : null;
-      const fim = item.periodoFim ? new Date(item.periodoFim) : ini;
-      if (!ini && !fim) return true;
-      const iniTime = ini ? ini.getTime() : 0;
-      const fimTime = fim ? fim.getTime() : iniTime;
-      return !(fimTime < start.getTime() || iniTime > end.getTime());
-    });
   }
 
   function aplicaFiltros() {
@@ -511,7 +497,6 @@ function getPeriodoRange() {
     el('empresa-select')?.addEventListener('change', () => {
       fetchFechamentos();
       fetchPendentes();
-      fetchPendentes({ all: true });
       const store = el('empresa-select')?.value || '';
       if (store) loadConfigForStore(store);
       atualizaModalKpis();
@@ -630,7 +615,6 @@ function getPeriodoRange() {
       if (chkPdv) chkPdv.checked = configIncludePdvSales;
       await fetchFechamentos();
       await fetchPendentes();
-      await fetchPendentes({ all: true });
       closeConfigModal();
     } catch (e) {
       console.error('salvarConfig', e);
@@ -669,7 +653,7 @@ function getPeriodoRange() {
 
     // KPI Total (não pagos): soma do pendente do profissional selecionado
     const pendenteBase =
-      (pendentesAllList.length ? pendentesAllList : pendentesList).filter(
+      pendentesList.filter(
         (p) => !funcionarioId || String(p.profissional) === String(funcionarioId),
       );
 
@@ -762,21 +746,24 @@ function getPeriodoRange() {
   }
 
   async function fetchFechamentos() {
+    const requestSeq = ++fechamentosRequestSeq;
     try {
       const store = el('empresa-select')?.value || '';
-      const { start, end } = getPeriodoRange();
+      const { start, end } = getPeriodoValues();
       const params = new URLSearchParams();
       if (store) params.set('store', store);
-      if (start) params.set('start', toDateParamMidday(start));
-      if (end) params.set('end', toDateParamMidday(end));
+      if (start) params.set('start', start);
+      if (end) params.set('end', end);
       const resp = await fetch(`${API_CONFIG.BASE_URL}/admin/comissoes/fechamentos?${params.toString()}`, {
         headers: authHeaders(),
       });
       const data = await resp.json();
+      if (requestSeq !== fechamentosRequestSeq) return;
       closingsData = Array.isArray(data) ? data : [];
       filteredList = closingsData.slice();
       aplicaFiltros();
     } catch (e) {
+      if (requestSeq !== fechamentosRequestSeq) return;
       console.error('fetchFechamentos', e);
       closingsData = [];
       filteredList = [];
@@ -784,40 +771,28 @@ function getPeriodoRange() {
     }
   }
 
-  async function fetchPendentes({ all = false } = {}) {
+  async function fetchPendentes() {
+    const requestSeq = ++pendentesRequestSeq;
     try {
       const store = el('empresa-select')?.value || '';
-      const { start, end } = getPeriodoRange();
+      const { start, end } = getPeriodoValues();
       const params = new URLSearchParams();
       if (store) params.set('store', store);
-      if (!all) {
-        params.set('start', toDateParamMidday(start));
-        params.set('end', toDateParamMidday(end));
-      } else {
-        // busca histórica ampla
-        params.set('start', '2000-01-01T12:00:00');
-        params.set('end', toDateParamMidday(new Date()));
-      }
+      params.set('start', start);
+      params.set('end', end);
       const resp = await fetch(
         `${API_CONFIG.BASE_URL}/admin/comissoes/fechamentos/pendentes?${params.toString()}`,
         { headers: authHeaders() },
       );
       const data = await resp.json();
-      const parsed = Array.isArray(data) ? data : [];
-      if (all) {
-        pendentesAllList = parsed;
-      } else {
-        pendentesList = parsed;
-        renderCardsPendentes(pendentesList);
-      }
+      if (requestSeq !== pendentesRequestSeq) return;
+      pendentesList = Array.isArray(data) ? data : [];
+      renderCardsPendentes(pendentesList);
     } catch (e) {
+      if (requestSeq !== pendentesRequestSeq) return;
       console.error('fetchPendentes', e);
-      if (all) {
-        pendentesAllList = [];
-      } else {
-        pendentesList = [];
-        renderCardsPendentes([]);
-      }
+      pendentesList = [];
+      renderCardsPendentes([]);
     }
   }
 
@@ -841,7 +816,6 @@ function getPeriodoRange() {
       }
       await fetchFechamentos();
       await fetchPendentes();
-      await fetchPendentes({ all: true });
     } catch (e) {
       console.error('marcarFechamentoPago', e);
       alert(e.message || 'Erro ao marcar pagamento');
@@ -863,7 +837,6 @@ function getPeriodoRange() {
       }
       await fetchFechamentos();
       await fetchPendentes();
-      await fetchPendentes({ all: true });
     } catch (e) {
       console.error('reabrirFechamento', e);
       alert(e.message || 'Erro ao reabrir fechamento');
@@ -958,7 +931,7 @@ function getPeriodoRange() {
                 <tr>
                   <th>Nome</th>
                   <th>Serviço</th>
-                  <th>Data</th>
+                  <th>Data/Hora do agendamento</th>
                   <th>Valor</th>
                   <th>Comissão %</th>
                   <th>Comissão R$</th>
@@ -1009,7 +982,9 @@ function getPeriodoRange() {
           profissionalId: funcionario,
           inicio,
           fim,
-          previsaoPagamento: previsao ? `${previsao}${previsaoHora ? `T${previsaoHora}` : ''}` : null,
+          previsaoPagamento: previsao || null,
+          previsaoPagamentoData: previsao || '',
+          previsaoPagamentoHora: previsaoHora || '',
           meioPagamento: meio || '',
           storeId: store || null,
         }),
@@ -1043,7 +1018,6 @@ function getPeriodoRange() {
     fetchStores().then(() => {
       fetchFechamentos();
       fetchPendentes();
-      fetchPendentes({ all: true });
       const store = el('empresa-select')?.value || '';
       if (store) loadConfigForStore(store);
     });

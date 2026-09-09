@@ -7,6 +7,9 @@ const CommissionClosingSchema = new Schema(
     store: { type: Schema.Types.ObjectId, ref: 'Store', default: null },
     periodoInicio: { type: Date, required: true },
     periodoFim: { type: Date, required: true },
+    // Preservam literalmente os dias escolhidos no formulário, sem conversão de fuso.
+    periodoInicioData: { type: String, trim: true, default: '' },
+    periodoFimData: { type: String, trim: true, default: '' },
     totalPeriodo: { type: Number, default: 0 },
     totalPendente: { type: Number, default: 0 },
     totalVendas: { type: Number, default: 0 },
@@ -15,6 +18,8 @@ const CommissionClosingSchema = new Schema(
     pendenteServicos: { type: Number, default: 0 },
     totalPago: { type: Number, default: 0 },
     previsaoPagamento: { type: Date, default: null },
+    previsaoPagamentoData: { type: String, trim: true, default: '' },
+    previsaoPagamentoHora: { type: String, trim: true, default: '' },
     meioPagamento: { type: String, trim: true, default: '' },
     payable: { type: Schema.Types.ObjectId, ref: 'AccountPayable', default: null },
     status: {

@@ -25,6 +25,9 @@ const DEFAULT_WINDOW_DAYS = 90;
 const SERVICE_STATUS_VALUES = new Set(['agendado', 'em_espera', 'em_atendimento', 'finalizado']);
 const DEFAULT_COMISSAO_PERCENT = 1;
 const DEFAULT_COMISSAO_SERVICO_PERCENT = 0.5;
+const SAO_PAULO_TIME_ZONE = 'America/Sao_Paulo';
+const CALENDAR_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})/;
+const CLOCK_TIME_PATTERN = /^(\d{2}):(\d{2})(?::(\d{2}))?$/;
 const DEFAULT_SUMMARY_CONCURRENCY = Math.max(
   1,
   Number(process.env.COMMISSIONS_SUMMARY_CONCURRENCY || 2) || 2,
@@ -61,14 +64,6 @@ const runWithConcurrency = async (items = [], task, concurrency = DEFAULT_SUMMAR
 const toCacheDateKey = (value) => {
   if (!(value instanceof Date) || Number.isNaN(value.getTime())) return '';
   return value.toISOString();
-};
-
-const addDaysAtStartOfDay = (value, days = 0) => {
-  const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  date.setDate(date.getDate() + Number(days || 0));
-  date.setHours(0, 0, 0, 0);
-  return date;
 };
 
 const buildSummaryCacheKey = ({ storeId = null, startDate = null, endDate = null } = {}) =>
@@ -159,35 +154,117 @@ const resolveServiceCommissionPercent = ({
   return firstNumericValue(servicePercent, groupPercent, itemPercent, fallbackPercent) ?? 0;
 };
 
-const parseDateUtcMidnight = (value) => {
-  if (!value) return null;
-  if (typeof value === 'string') {
-    const m = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (m) {
-      const y = Number(m[1]);
-      const mo = Number(m[2]) - 1;
-      const d = Number(m[3]);
-      const dt = new Date(y, mo, d, 0, 0, 0, 0);
-      return Number.isNaN(dt.getTime()) ? null : dt;
-    }
+const normalizeCalendarDateKey = (value) => {
+  if (!value) return '';
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? '' : value.toISOString().slice(0, 10);
   }
-  const dt = value instanceof Date ? new Date(value.getTime()) : new Date(value);
-  return Number.isNaN(dt.getTime()) ? null : dt;
+
+  const match = String(value).trim().match(CALENDAR_DATE_PATTERN);
+  if (!match) return '';
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const validation = new Date(Date.UTC(year, month - 1, day));
+  if (
+    validation.getUTCFullYear() !== year ||
+    validation.getUTCMonth() !== month - 1 ||
+    validation.getUTCDate() !== day
+  ) {
+    return '';
+  }
+  return `${match[1]}-${match[2]}-${match[3]}`;
 };
 
-// Datas para calculo (mantem o fuso local)
-const toStartOfDay = (value) => {
-  const date = parseDateUtcMidnight(value);
-  if (!date) return null;
-  date.setHours(0, 0, 0, 0);
-  return date;
+const getCalendarDateKeyInSaoPaulo = (value = new Date()) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: SAO_PAULO_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const byType = new Map(parts.map((part) => [part.type, part.value]));
+  return `${byType.get('year')}-${byType.get('month')}-${byType.get('day')}`;
 };
 
-const toEndOfDay = (value) => {
-  const date = parseDateUtcMidnight(value);
-  if (!date) return null;
-  date.setHours(23, 59, 59, 999);
-  return date;
+const calendarDateToInstant = (value, { endOfDay = false } = {}) => {
+  const dateKey = normalizeCalendarDateKey(value);
+  if (!dateKey) return null;
+  const clock = endOfDay ? '23:59:59.999' : '00:00:00.000';
+  const date = new Date(`${dateKey}T${clock}-03:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const toStartOfDay = (value) => calendarDateToInstant(value);
+const toEndOfDay = (value) => calendarDateToInstant(value, { endOfDay: true });
+
+const addCalendarDays = (value, days = 0) => {
+  const dateKey = normalizeCalendarDateKey(value);
+  if (!dateKey) return '';
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + Number(days || 0)));
+  return date.toISOString().slice(0, 10);
+};
+
+const normalizeAppointmentTimeKey = (value) => {
+  const match = String(value || '').trim().match(CLOCK_TIME_PATTERN);
+  if (!match) return '';
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  const second = Number(match[3] || 0);
+  if (hour > 23 || minute > 59 || second > 59) return '';
+  return `${match[1]}:${match[2]}:${String(second).padStart(2, '0')}`;
+};
+
+const getAppointmentItemSchedule = (item = {}) => {
+  const dateKey = normalizeCalendarDateKey(item?.data);
+  if (!dateKey) return null;
+  const timeKey = normalizeAppointmentTimeKey(item?.hora);
+  return {
+    dateKey,
+    timeKey,
+    sortKey: `${dateKey}T${timeKey || '00:00:00'}`,
+  };
+};
+
+const isCalendarDateInRange = (dateKey, startDateKey = '', endDateKey = '') => {
+  const normalized = normalizeCalendarDateKey(dateKey);
+  if (!normalized) return false;
+  if (startDateKey && normalized < startDateKey) return false;
+  if (endDateKey && normalized > endDateKey) return false;
+  return true;
+};
+
+const formatCalendarDate = (value) => {
+  const dateKey = normalizeCalendarDateKey(value);
+  if (!dateKey) return '--';
+  const [year, month, day] = dateKey.split('-');
+  return `${day}/${month}/${year}`;
+};
+
+const getClosingPeriodStartKey = (closing = {}) =>
+  normalizeCalendarDateKey(closing?.periodoInicioData) ||
+  normalizeCalendarDateKey(closing?.periodoInicio);
+
+const getClosingPeriodEndKey = (closing = {}) =>
+  normalizeCalendarDateKey(closing?.periodoFimData) ||
+  normalizeCalendarDateKey(closing?.periodoFim);
+
+const parsePaymentSchedule = ({ value = null, date = '', time = '' } = {}) => {
+  const dateKey = normalizeCalendarDateKey(date) || normalizeCalendarDateKey(value);
+  if (!dateKey) return null;
+  const embeddedTime = String(value || '').match(/T(\d{2}:\d{2}(?::\d{2})?)/)?.[1] || '';
+  const timeKey = normalizeAppointmentTimeKey(time || embeddedTime);
+  const instant = new Date(`${dateKey}T${timeKey || '23:59:59'}-03:00`);
+  if (Number.isNaN(instant.getTime())) return null;
+  return {
+    dateKey,
+    timeKey: timeKey ? timeKey.slice(0, 5) : '',
+    instant,
+  };
 };
 
 const resolveUserStoreAccess = async (req, userId) => {
@@ -613,13 +690,23 @@ const resolveServicoItemsForUser = (appointment = {}, userId = '') => {
   return { items: [], matchedByTopLevel: false };
 };
 
-const mapAppointmentToServicoRecord = (
+const mapAppointmentToServicoRecords = (
   appointment = {},
-  { userId, defaultPercent = 0, professionalCommission = null } = {},
+  {
+    userId,
+    defaultPercent = 0,
+    professionalCommission = null,
+    startDateKey = '',
+    endDateKey = '',
+  } = {},
 ) => {
   const normalizedUserId = userId ? String(userId) : '';
   const { items, matchedByTopLevel } = resolveServicoItemsForUser(appointment, normalizedUserId);
-  if (!items.length && !matchedByTopLevel) return null;
+  if (!items.length && !matchedByTopLevel) return [];
+
+  const isPago = appointment.pago === true || !!String(appointment.codigoVenda || '').trim();
+  // O pagamento pertence ao agendamento, mas a elegibilidade e o período pertencem a cada serviço.
+  if (!isPago) return [];
 
   const fallbackPercent = Number.isFinite(defaultPercent) ? defaultPercent : 0;
   const getItemPercent = (item) =>
@@ -642,43 +729,36 @@ const mapAppointmentToServicoRecord = (
       fallbackPercent,
     });
 
-  const valorServico = items.length
-    ? items.reduce((sum, item) => sum + (parseNumber(item.valor) || 0), 0)
-    : parseNumber(appointment.valor) || 0;
-
-  const comissaoServico = items.length
-    ? items.reduce((sum, item) => {
-        const base = parseNumber(item.valor) || 0;
-        const percent = getItemPercent(item);
-        const applied = percent !== null ? percent : fallbackPercent;
-        return sum + base * (applied / 100);
-      }, 0)
-    : valorServico * (getItemPercent(null) / 100);
-  const isFinalizado = items.length
-    ? items.every((it) => isServicoFinalizado(it.status))
-    : isServicoFinalizado(appointment.status);
-  const isPago = !!(appointment.pago || appointment.codigoVenda);
-  // Fechamento de comissao deve considerar apenas servicos concluidos e pagos.
-  if (!isFinalizado || !isPago) return null;
-  const aReceber = (isFinalizado && !isPago) || (isPago && !isFinalizado);
-
-  return {
-    _createdAt: appointment.scheduledAt ? new Date(appointment.scheduledAt) : null,
-    comissaoServico,
-    comissaoTotal: comissaoServico,
-    valorVenda: valorServico,
-    status: isFinalizado ? 'finalizado' : normalizeServiceStatus(appointment.status || 'agendado'),
-    isFinalizado,
-    pago: isPago,
-    aReceber,
-  };
+  return items
+    .filter((item) => isServicoFinalizado(item?.status))
+    .map((item) => ({ item, schedule: getAppointmentItemSchedule(item) }))
+    .filter(({ schedule }) => (
+      schedule && isCalendarDateInRange(schedule.dateKey, startDateKey, endDateKey)
+    ))
+    .map(({ item, schedule }) => {
+      const valorServico = parseNumber(item?.valor) || 0;
+      const percent = getItemPercent(item);
+      const appliedPercent = percent !== null ? percent : fallbackPercent;
+      const comissaoServico = valorServico * (appliedPercent / 100);
+      return {
+        _scheduleDate: schedule.dateKey,
+        _scheduleTime: schedule.timeKey,
+        _scheduleSortKey: schedule.sortKey,
+        comissaoServico,
+        comissaoTotal: comissaoServico,
+        valorVenda: valorServico,
+        status: 'finalizado',
+        isFinalizado: true,
+        pago: true,
+        aReceber: false,
+      };
+    });
 };
 
 const buildServicosRecords = (appointments = [], opts = {}) => {
   const records = [];
   appointments.forEach((appt) => {
-    const mapped = mapAppointmentToServicoRecord(appt, opts);
-    if (mapped) records.push(mapped);
+    records.push(...mapAppointmentToServicoRecords(appt, opts));
   });
   return records;
 };
@@ -965,8 +1045,8 @@ const fetchSalesForUser = async ({
 
 const fetchServicoRecords = async ({
   user,
-  startDate = null,
-  endDate = null,
+  startDateKey = '',
+  endDateKey = '',
   storeId = null,
   defaultPercent = 0,
   professionalCommission = null,
@@ -978,14 +1058,16 @@ const fetchServicoRecords = async ({
     ? new mongoose.Types.ObjectId(String(user._id))
     : null;
 
+  const normalizedStartDateKey = normalizeCalendarDateKey(startDateKey);
+  const normalizedEndDateKey = normalizeCalendarDateKey(endDateKey);
   const serviceDateMatch = {};
-  if (startDate) serviceDateMatch.$gte = startDate;
-  if (endDate) serviceDateMatch.$lte = endDate;
+  if (normalizedStartDateKey) serviceDateMatch.$gte = normalizedStartDateKey;
+  if (normalizedEndDateKey) serviceDateMatch.$lte = normalizedEndDateKey;
 
   const serviceQuery = {};
   if (Object.keys(serviceDateMatch).length) {
-    // Comissão de serviços deve seguir a data/hora real do atendimento.
-    serviceQuery.scheduledAt = serviceDateMatch;
+    // Campo literal preenchido no item da agenda; não usar scheduledAt/createdAt para o relatório.
+    serviceQuery['itens.data'] = serviceDateMatch;
   }
   if (profissionalId) {
     serviceQuery.$and = (serviceQuery.$and || []).concat({
@@ -1002,7 +1084,7 @@ const fetchServicoRecords = async ({
   const appointments = profissionalId
     ? await Appointment.find(serviceQuery)
         .select(
-          'scheduledAt createdAt itens valor pago codigoVenda status profissional servico store',
+          'itens valor pago codigoVenda status profissional servico store',
         )
         .populate({
           path: 'itens.servico',
@@ -1022,6 +1104,8 @@ const fetchServicoRecords = async ({
     comissaoServicoPercent: defaultPercent,
     defaultPercent,
     professionalCommission,
+    startDateKey: normalizedStartDateKey,
+    endDateKey: normalizedEndDateKey,
   });
 };
 
@@ -1030,8 +1114,8 @@ const buildServiceCommissionRows = ({
   user = null,
   defaultPercent = 0,
   professionalCommission = null,
-  periodStart = null,
-  periodEnd = null,
+  startDateKey = '',
+  endDateKey = '',
 }) => {
   const normalizedUserId = normalizeObjectId(user?._id || user);
   if (!normalizedUserId) return [];
@@ -1046,24 +1130,15 @@ const buildServiceCommissionRows = ({
       appointment?.petNome ||
       appointment?.nomePet ||
       'Pet';
-    const baseDateRaw = appointment?.scheduledAt || null;
-    const baseDate = baseDateRaw ? new Date(baseDateRaw) : null;
-    if (baseDate && !Number.isNaN(baseDate.getTime())) {
-      if (periodStart && baseDate < periodStart) return;
-      if (periodEnd && baseDate > periodEnd) return;
-    }
-    const baseDateLabel =
-      baseDate && !Number.isNaN(baseDate.getTime()) ? baseDate.toLocaleDateString('pt-BR') : '--';
-
     const { items, matchedByTopLevel } = resolveServicoItemsForUser(appointment, normalizedUserId);
-    const isPago = !!(appointment?.pago || appointment?.codigoVenda);
-    const isFinalizado = items.length
-      ? items.every((it) => isServicoFinalizado(it?.status))
-      : isServicoFinalizado(appointment?.status);
-    if (!isPago || !isFinalizado) return;
+    const isPago = appointment?.pago === true || !!String(appointment?.codigoVenda || '').trim();
+    if (!isPago) return;
 
     if (items.length) {
       items.forEach((item) => {
+        if (!isServicoFinalizado(item?.status)) return;
+        const schedule = getAppointmentItemSchedule(item);
+        if (!schedule || !isCalendarDateInRange(schedule.dateKey, startDateKey, endDateKey)) return;
         const valor = parseNumber(item?.valor) || 0;
         const percentual = resolveServiceCommissionPercent({
           professionalCommission,
@@ -1093,8 +1168,8 @@ const buildServiceCommissionRows = ({
             item?.nome ||
             appointment?.nome ||
             'Serviço',
-          data: baseDateLabel,
-          dataRaw: baseDate && !Number.isNaN(baseDate.getTime()) ? baseDate : null,
+          data: `${formatCalendarDate(schedule.dateKey)}${schedule.timeKey ? ` ${schedule.timeKey.slice(0, 5)}` : ''}`,
+          dataRaw: schedule.sortKey,
           valor,
           percentual: appliedPercent,
           comissao,
@@ -1104,33 +1179,13 @@ const buildServiceCommissionRows = ({
     }
 
     if (matchedByTopLevel) {
-      const valor = parseNumber(appointment?.valor) || 0;
-      const percentual = resolveServiceCommissionPercent({
-        professionalCommission,
-        serviceId: appointment?.servico?._id || appointment?.servico,
-        groupId: appointment?.servico?.grupo?._id || appointment?.servico?.grupo,
-        servicePercent: appointment?.servico?.comissaoPercent,
-        groupPercent: appointment?.servico?.grupo?.comissaoPercent,
-        itemPercent: null,
-        fallbackPercent,
-      });
-      const appliedPercent = percentual !== null ? percentual : fallbackPercent;
-      rows.push({
-        petNome,
-        servicoNome: appointment?.servico?.nome || 'Serviço',
-        data: baseDateLabel,
-        dataRaw: baseDate && !Number.isNaN(baseDate.getTime()) ? baseDate : null,
-        valor,
-        percentual: appliedPercent,
-        comissao: valor * (appliedPercent / 100),
-      });
+      // Registros sem itens não possuem a data/hora literal do formulário e não entram no relatório.
+      return;
     }
   });
 
   rows.sort((a, b) => {
-    const ta = a?.dataRaw instanceof Date ? a.dataRaw.getTime() : 0;
-    const tb = b?.dataRaw instanceof Date ? b.dataRaw.getTime() : 0;
-    return ta - tb;
+    return String(a?.dataRaw || '').localeCompare(String(b?.dataRaw || ''));
   });
 
   return rows.map(({ dataRaw, ...rest }) => rest);
@@ -1140,6 +1195,8 @@ const computeCommissionSummaryForUser = async ({
   user,
   startDate = null,
   endDate = null,
+  startDateKey = '',
+  endDateKey = '',
   storeId = null,
   debug = false,
   runtimeContext = null,
@@ -1150,6 +1207,10 @@ const computeCommissionSummaryForUser = async ({
   const options = calculationOptions || defaultCommissionCalculationOptions();
   const includeServices = options.includeServices !== false;
   const includePdvSales = options.includePdvSales !== false;
+  const normalizedStartDateKey =
+    normalizeCalendarDateKey(startDateKey) || normalizeCalendarDateKey(startDate);
+  const normalizedEndDateKey =
+    normalizeCalendarDateKey(endDateKey) || normalizeCalendarDateKey(endDate);
 
   let group = null;
   if (user.userGroup && typeof user.userGroup === 'object') {
@@ -1296,8 +1357,8 @@ const computeCommissionSummaryForUser = async ({
   const servicoRecords = includeServices
     ? await fetchServicoRecords({
         user,
-        startDate,
-        endDate,
+        startDateKey: normalizedStartDateKey,
+        endDateKey: normalizedEndDateKey,
         storeId,
         defaultPercent: comissaoServicoPercent,
         professionalCommission,
@@ -1340,11 +1401,7 @@ const pickUserName = (user = {}) =>
   user.nomeCompleto || user.nomeContato || user.razaoSocial || user.nome || user.email || 'Sem nome';
 
 const formatPeriod = (inicio, fim) => {
-  const start = inicio instanceof Date ? inicio : inicio ? new Date(inicio) : null;
-  const end = fim instanceof Date ? fim : fim ? new Date(fim) : null;
-  const startStr = start && !Number.isNaN(start.getTime()) ? start.toLocaleDateString('pt-BR') : '--';
-  const endStr = end && !Number.isNaN(end.getTime()) ? end.toLocaleDateString('pt-BR') : '--';
-  return `${startStr} a ${endStr}`;
+  return `${formatCalendarDate(inicio)} a ${formatCalendarDate(fim)}`;
 };
 
 const getSaleDate = (sale = {}) => {
@@ -1559,10 +1616,16 @@ router.get(
       const storeId =
         requestedStoreId ||
         (!allowAllStores && allowedStoreIds.length ? allowedStoreIds[0] : null);
-      const startLocal =
-        toStartOfDay(req.query?.start) ||
-        toStartOfDay(new Date(Date.now() - DEFAULT_WINDOW_DAYS * 24 * 60 * 60 * 1000));
-      const endLocal = req.query?.end ? toEndOfDay(req.query.end) : toEndOfDay(new Date());
+      const startDateKey =
+        normalizeCalendarDateKey(req.query?.start) ||
+        getCalendarDateKeyInSaoPaulo(new Date(Date.now() - DEFAULT_WINDOW_DAYS * 24 * 60 * 60 * 1000));
+      const endDateKey =
+        normalizeCalendarDateKey(req.query?.end) || getCalendarDateKeyInSaoPaulo();
+      if (startDateKey > endDateKey) {
+        return res.status(400).json({ message: 'Periodo invalido.' });
+      }
+      const startLocal = toStartOfDay(startDateKey);
+      const endLocal = toEndOfDay(endDateKey);
       const debug = req.query?.debug === '1';
 
       const filter = {};
@@ -1588,19 +1651,29 @@ router.get(
       closings.forEach((closing) => {
         const pairKey = buildProfessionalStorePairKey(closing.profissional, closing.store);
         const current = latestClosingEndByPair.get(pairKey);
-        const end = closing?.periodoFim ? new Date(closing.periodoFim) : null;
-        if (!end || Number.isNaN(end.getTime())) return;
-        if (!current || end > current) latestClosingEndByPair.set(pairKey, end);
+        const closingEndKey = getClosingPeriodEndKey(closing);
+        if (!closingEndKey) return;
+        if (!current || closingEndKey > current) latestClosingEndByPair.set(pairKey, closingEndKey);
       });
 
       const payload = closings.map((closing) => {
         const profissionalNome = pickUserName(closing.profissional);
+        const periodoInicioData = getClosingPeriodStartKey(closing);
+        const periodoFimData = getClosingPeriodEndKey(closing);
+        const previsaoPagamentoData =
+          normalizeCalendarDateKey(closing.previsaoPagamentoData) ||
+          normalizeCalendarDateKey(closing.previsaoPagamento);
         const storeNome =
           closing.store?.nome || closing.store?.nomeFantasia || closing.store?.razaoSocial || '';
         const ultimoPagamento =
           closing.status === 'pago'
-            ? (closing.updatedAt || closing.previsaoPagamento || closing.periodoFim || closing.createdAt)
-            : null;
+            ? (
+                previsaoPagamentoData ||
+                getCalendarDateKeyInSaoPaulo(
+                  closing.updatedAt || closing.previsaoPagamento || closing.periodoFim || closing.createdAt,
+                )
+              )
+            : '';
 
         return {
           id: closing._id,
@@ -1608,9 +1681,9 @@ router.get(
           profissionalNome,
           store: closing.store?._id || closing.store || null,
           storeNome,
-          periodoInicio: closing.periodoInicio,
-          periodoFim: closing.periodoFim,
-          periodo: formatPeriod(closing.periodoInicio, closing.periodoFim),
+          periodoInicio: periodoInicioData,
+          periodoFim: periodoFimData,
+          periodo: formatPeriod(periodoInicioData, periodoFimData),
           previsto: closing.totalPeriodo,
           pago: closing.totalPago,
           pendente: closing.totalPendente,
@@ -1622,10 +1695,10 @@ router.get(
           pendenteServicos: closing.pendenteServicos,
           status: closing.status || 'pendente',
           previsaoPagamento: closing.previsaoPagamento,
+          previsaoPagamentoData,
+          previsaoPagamentoHora: normalizeAppointmentTimeKey(closing.previsaoPagamentoHora).slice(0, 5),
           meioPagamento: closing.meioPagamento || '',
-          ultimoPagamento: ultimoPagamento
-            ? new Date(ultimoPagamento).toLocaleDateString('pt-BR')
-            : '--',
+          ultimoPagamento: ultimoPagamento ? formatCalendarDate(ultimoPagamento) : '--',
           createdAt: closing.createdAt,
         };
       });
@@ -1669,9 +1742,9 @@ router.get(
       const syntheticKeys = new Set(
         payload.map(
           (c) =>
-            `${String(c.profissional)}|${String(c.store || '')}|${toCacheDateKey(
-              c.periodoInicio ? new Date(c.periodoInicio) : null,
-            )}|${toCacheDateKey(c.periodoFim ? new Date(c.periodoFim) : null)}`,
+            `${String(c.profissional)}|${String(c.store || '')}|${normalizeCalendarDateKey(
+              c.periodoInicio,
+            )}|${normalizeCalendarDateKey(c.periodoFim)}`,
         ),
       );
       const runtimeContext = {};
@@ -1683,14 +1756,15 @@ router.get(
           const options =
             calculationOptionsByStore.get(String(storeKey)) || defaultCommissionCalculationOptions();
           if (!options.includeServices && !options.includePdvSales) continue;
-          let calcStart = startLocal;
+          let calcStartKey = startDateKey;
           const latestClosingEnd = latestClosingEndByPair.get(pairKey);
-          const nextStart = latestClosingEnd ? addDaysAtStartOfDay(latestClosingEnd, 1) : null;
-          if (nextStart && nextStart > calcStart) calcStart = nextStart;
-          if (!calcStart || calcStart > endLocal) continue;
+          const nextStartKey = latestClosingEnd ? addCalendarDays(latestClosingEnd, 1) : '';
+          if (nextStartKey && nextStartKey > calcStartKey) calcStartKey = nextStartKey;
+          if (!calcStartKey || calcStartKey > endDateKey) continue;
 
+          const calcStart = toStartOfDay(calcStartKey);
           const calcEnd = endLocal;
-          const dedupKey = `${pairKey}|${toCacheDateKey(calcStart)}|${toCacheDateKey(calcEnd)}`;
+          const dedupKey = `${pairKey}|${calcStartKey}|${endDateKey}`;
           if (syntheticKeys.has(dedupKey)) continue;
           pendingPairs.push({
             profissional,
@@ -1698,6 +1772,8 @@ router.get(
             dedupKey,
             calcStart,
             calcEnd,
+            calcStartKey,
+            calcEndKey: endDateKey,
             hasPriorClosing: existingKey.has(pairKey),
             options,
           });
@@ -1706,11 +1782,23 @@ router.get(
 
       const computedPairs = await runWithConcurrency(
         pendingPairs,
-        async ({ profissional, storeKey, dedupKey, calcStart, calcEnd, hasPriorClosing, options }) => {
+        async ({
+          profissional,
+          storeKey,
+          dedupKey,
+          calcStart,
+          calcEnd,
+          calcStartKey,
+          calcEndKey,
+          hasPriorClosing,
+          options,
+        }) => {
           const summary = await computeCommissionSummaryForUser({
             user: profissional,
             startDate: calcStart,
             endDate: calcEnd,
+            startDateKey: calcStartKey,
+            endDateKey: calcEndKey,
             storeId: storeKey,
             debug,
             runtimeContext,
@@ -1723,6 +1811,8 @@ router.get(
             summary,
             calcStart,
             calcEnd,
+            calcStartKey,
+            calcEndKey,
             hasPriorClosing,
             options,
           };
@@ -1730,37 +1820,47 @@ router.get(
       );
 
       computedPairs.forEach(
-        ({ profissional, storeKey, dedupKey, summary, calcStart, calcEnd, hasPriorClosing }) => {
-        const totals = summary?.totals || emptyTotals();
-        // Mantém card "zerado" quando já existe fechamento anterior, para facilitar o próximo fechamento.
-        if (!totals.totalPeriodo && !totals.totalPendente && !hasPriorClosing) return;
-        payload.push({
-          id: `dyn-${profissional._id}-${storeKey || 'all'}-${calcStart.getTime()}-${calcEnd.getTime()}`,
-          profissional: profissional._id,
-          profissionalNome: pickUserName(profissional),
-          store: storeKey || null,
-          storeNome: storeNamesById.get(storeKey) || '',
-          periodoInicio: calcStart,
-          periodoFim: calcEnd,
-          periodo: formatPeriod(calcStart, calcEnd),
-          previsto: totals.totalPeriodo,
-          pago: 0,
-          pendente: totals.totalPendente,
-          totalPeriodo: totals.totalPeriodo,
-          totalPendente: totals.totalPendente,
-          totalVendas: totals.totalVendas,
-          totalServicos: totals.totalServicos,
-          pendenteVendas: totals.pendenteVendas,
-          pendenteServicos: totals.pendenteServicos,
-          status: 'em_aberto',
-          previsaoPagamento: null,
-          meioPagamento: '',
-          ultimoPagamento: '--',
-          synthetic: true,
-          debug: debug ? summary?.debug : undefined,
-        });
-        syntheticKeys.add(dedupKey);
-      },
+        ({
+          profissional,
+          storeKey,
+          dedupKey,
+          summary,
+          calcStart,
+          calcEnd,
+          calcStartKey,
+          calcEndKey,
+          hasPriorClosing,
+        }) => {
+          const totals = summary?.totals || emptyTotals();
+          // Mantém card "zerado" quando já existe fechamento anterior, para facilitar o próximo fechamento.
+          if (!totals.totalPeriodo && !totals.totalPendente && !hasPriorClosing) return;
+          payload.push({
+            id: `dyn-${profissional._id}-${storeKey || 'all'}-${calcStart.getTime()}-${calcEnd.getTime()}`,
+            profissional: profissional._id,
+            profissionalNome: pickUserName(profissional),
+            store: storeKey || null,
+            storeNome: storeNamesById.get(storeKey) || '',
+            periodoInicio: calcStartKey,
+            periodoFim: calcEndKey,
+            periodo: formatPeriod(calcStartKey, calcEndKey),
+            previsto: totals.totalPeriodo,
+            pago: 0,
+            pendente: totals.totalPendente,
+            totalPeriodo: totals.totalPeriodo,
+            totalPendente: totals.totalPendente,
+            totalVendas: totals.totalVendas,
+            totalServicos: totals.totalServicos,
+            pendenteVendas: totals.pendenteVendas,
+            pendenteServicos: totals.pendenteServicos,
+            status: 'em_aberto',
+            previsaoPagamento: null,
+            meioPagamento: '',
+            ultimoPagamento: '--',
+            synthetic: true,
+            debug: debug ? summary?.debug : undefined,
+          });
+          syntheticKeys.add(dedupKey);
+        },
       );
 
       if (debug) {
@@ -1798,9 +1898,11 @@ router.get(
         return res.status(400).json({ message: 'Profissional invalido.' });
       }
 
-      const startDateLocal = toStartOfDay(req.query?.start);
-      const endDateLocal = toEndOfDay(req.query?.end);
-      if (!startDateLocal || !endDateLocal) {
+      const startDateKey = normalizeCalendarDateKey(req.query?.start);
+      const endDateKey = normalizeCalendarDateKey(req.query?.end);
+      const startDateLocal = toStartOfDay(startDateKey);
+      const endDateLocal = toEndOfDay(endDateKey);
+      if (!startDateKey || !endDateKey || !startDateLocal || !endDateLocal || startDateKey > endDateKey) {
         return res.status(400).json({ message: 'Periodo invalido.' });
       }
 
@@ -1838,8 +1940,8 @@ router.get(
           profissional: profissional._id,
           profissionalNome: pickUserName(profissional),
           store: safeStoreId,
-          periodoInicio: startDateLocal,
-          periodoFim: endDateLocal,
+          periodoInicio: startDateKey,
+          periodoFim: endDateKey,
           totals: emptyTotals(),
         });
       }
@@ -1848,6 +1950,8 @@ router.get(
         user: profissional,
         startDate: startDateLocal,
         endDate: endDateLocal,
+        startDateKey,
+        endDateKey,
         storeId: safeStoreId,
         calculationOptions,
       });
@@ -1856,8 +1960,8 @@ router.get(
         profissional: profissional._id,
         profissionalNome: pickUserName(profissional),
         store: safeStoreId,
-        periodoInicio: startDateLocal,
-        periodoFim: endDateLocal,
+        periodoInicio: startDateKey,
+        periodoFim: endDateKey,
         totals: summary?.totals || emptyTotals(),
       });
     } catch (error) {
@@ -1891,9 +1995,16 @@ router.get(
         requestedStoreId ||
         (!allowAllStores && allowedStoreIds.length ? allowedStoreIds[0] : null);
 
-      const start = toStartOfDay(req.query?.start) ||
-        toStartOfDay(new Date(Date.now() - DEFAULT_WINDOW_DAYS * 24 * 60 * 60 * 1000));
-      const end = req.query?.end ? toEndOfDay(req.query.end) : toEndOfDay(new Date());
+      const startDateKey =
+        normalizeCalendarDateKey(req.query?.start) ||
+        getCalendarDateKeyInSaoPaulo(new Date(Date.now() - DEFAULT_WINDOW_DAYS * 24 * 60 * 60 * 1000));
+      const endDateKey =
+        normalizeCalendarDateKey(req.query?.end) || getCalendarDateKeyInSaoPaulo();
+      if (startDateKey > endDateKey) {
+        return res.status(400).json({ message: 'Periodo invalido.' });
+      }
+      const start = toStartOfDay(startDateKey);
+      const end = toEndOfDay(endDateKey);
 
       const profissionais = await User.find({ role: { $in: ['funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master'] } })
         .select('nomeCompleto nomeContato razaoSocial nome email userGroup codigoCliente')
@@ -1945,6 +2056,8 @@ router.get(
             user: profissional,
             startDate: start,
             endDate: end,
+            startDateKey,
+            endDateKey,
             storeId,
             runtimeContext,
             calculationOptions,
@@ -2046,14 +2159,14 @@ router.get(
         profissional?.userGroup?.comissaoServicoPercent ?? DEFAULT_COMISSAO_SERVICO_PERCENT,
       );
 
-      const periodStart = closing.periodoInicio ? toStartOfDay(closing.periodoInicio) : null;
-      const periodEnd = closing.periodoFim ? toEndOfDay(closing.periodoFim) : null;
-      if (!periodStart || !periodEnd) {
+      const startDateKey = getClosingPeriodStartKey(closing);
+      const endDateKey = getClosingPeriodEndKey(closing);
+      if (!startDateKey || !endDateKey || startDateKey > endDateKey) {
         return res.status(400).json({ message: 'Periodo do fechamento invalido.' });
       }
 
       const serviceQuery = {
-        scheduledAt: { $gte: periodStart, $lte: periodEnd },
+        'itens.data': { $gte: startDateKey, $lte: endDateKey },
         $and: [
           {
             $or: [
@@ -2069,7 +2182,7 @@ router.get(
 
       const appointments = await Appointment.find(serviceQuery)
         .select(
-          'scheduledAt createdAt itens valor pago codigoVenda status profissional servico store pet',
+          'itens valor pago codigoVenda status profissional servico store pet',
         )
         .populate('pet', 'nome')
         .populate({
@@ -2089,8 +2202,8 @@ router.get(
         user: profissional,
         defaultPercent,
         professionalCommission,
-        periodStart,
-        periodEnd,
+        startDateKey,
+        endDateKey,
       });
 
       const totals = rows.reduce(
@@ -2108,9 +2221,9 @@ router.get(
         profissionalNome: pickUserName(profissional),
         store: requestedStoreId || null,
         storeNome: closing.store?.nome || closing.store?.nomeFantasia || closing.store?.razaoSocial || '',
-        periodoInicio: periodStart,
-        periodoFim: periodEnd,
-        periodo: formatPeriod(periodStart, periodEnd),
+        periodoInicio: startDateKey,
+        periodoFim: endDateKey,
+        periodo: formatPeriod(startDateKey, endDateKey),
         rows,
         totals: {
           itens: rows.length,
@@ -2131,7 +2244,16 @@ router.post(
   authorizeRoles(...ADMIN_ROLES),
   async (req, res) => {
     try {
-      const { profissionalId, inicio, fim, previsaoPagamento, meioPagamento, storeId } = req.body || {};
+      const {
+        profissionalId,
+        inicio,
+        fim,
+        previsaoPagamento,
+        previsaoPagamentoData,
+        previsaoPagamentoHora,
+        meioPagamento,
+        storeId,
+      } = req.body || {};
       if (!profissionalId || !isValidObjectId(profissionalId)) {
         return res.status(400).json({ message: 'Profissional obrigatorio.' });
       }
@@ -2153,11 +2275,18 @@ router.post(
             .lean()
         : null;
       const calculationOptions = normalizeCommissionCalculationOptions(storeConfig);
-      const startDateLocal = toStartOfDay(inicio);
-      const endDateLocal = toEndOfDay(fim);
-      if (!startDateLocal || !endDateLocal) {
+      const startDateKey = normalizeCalendarDateKey(inicio);
+      const endDateKey = normalizeCalendarDateKey(fim);
+      const startDateLocal = toStartOfDay(startDateKey);
+      const endDateLocal = toEndOfDay(endDateKey);
+      if (!startDateKey || !endDateKey || !startDateLocal || !endDateLocal || startDateKey > endDateKey) {
         return res.status(400).json({ message: 'Periodo invalido.' });
       }
+      const paymentSchedule = parsePaymentSchedule({
+        value: previsaoPagamento,
+        date: previsaoPagamentoData,
+        time: previsaoPagamentoHora,
+      });
 
       const profissional = await User.findById(profissionalId)
         .select('nomeCompleto nomeContato razaoSocial nome email userGroup codigoCliente')
@@ -2187,30 +2316,36 @@ router.post(
         });
       }
 
-        const summary = await computeCommissionSummaryForUser({
-          user: profissional,
-          startDate: startDateLocal,
-          endDate: endDateLocal,
-          storeId: safeStoreId,
-          calculationOptions,
-        });
+      const summary = await computeCommissionSummaryForUser({
+        user: profissional,
+        startDate: startDateLocal,
+        endDate: endDateLocal,
+        startDateKey,
+        endDateKey,
+        storeId: safeStoreId,
+        calculationOptions,
+      });
 
-        const totals = summary.totals || emptyTotals();
-        const payload = {
-          profissional: profissional._id,
-          store: safeStoreId,
-          periodoInicio: startDateLocal,
-          periodoFim: endDateLocal,
-          totalPeriodo: totals.totalPeriodo,
-          totalPendente: totals.totalPendente,
-          totalVendas: totals.totalVendas,
+      const totals = summary.totals || emptyTotals();
+      const payload = {
+        profissional: profissional._id,
+        store: safeStoreId,
+        periodoInicio: startDateLocal,
+        periodoFim: endDateLocal,
+        periodoInicioData: startDateKey,
+        periodoFimData: endDateKey,
+        totalPeriodo: totals.totalPeriodo,
+        totalPendente: totals.totalPendente,
+        totalVendas: totals.totalVendas,
         totalServicos: totals.totalServicos,
         pendenteVendas: totals.pendenteVendas,
         pendenteServicos: totals.pendenteServicos,
         totalPago: 0,
-        previsaoPagamento: previsaoPagamento ? toEndOfDay(previsaoPagamento) : null,
+        previsaoPagamento: paymentSchedule?.instant || null,
+        previsaoPagamentoData: paymentSchedule?.dateKey || '',
+        previsaoPagamentoHora: paymentSchedule?.timeKey || '',
         meioPagamento: (meioPagamento || '').toString().trim(),
-        status: previsaoPagamento ? 'agendado' : 'pendente',
+        status: paymentSchedule ? 'agendado' : 'pendente',
         createdBy: req.user?.id || req.user?._id || profissional._id,
       };
 
@@ -2226,8 +2361,8 @@ router.post(
         return res.status(201).json({
           id: created._id,
           profissional: created.profissional,
-          periodoInicio: created.periodoInicio,
-          periodoFim: created.periodoFim,
+          periodoInicio: created.periodoInicioData || startDateKey,
+          periodoFim: created.periodoFimData || endDateKey,
           totalPeriodo: created.totalPeriodo,
           totalPendente: created.totalPendente,
           totalVendas: created.totalVendas,
@@ -2237,10 +2372,12 @@ router.post(
           totalPago: created.totalPago,
           status: created.status,
           previsaoPagamento: created.previsaoPagamento,
+          previsaoPagamentoData: created.previsaoPagamentoData || '',
+          previsaoPagamentoHora: created.previsaoPagamentoHora || '',
           meioPagamento: created.meioPagamento,
           store: created.store,
           profissionalNome: pickUserName(profissional),
-          periodo: formatPeriod(created.periodoInicio, created.periodoFim),
+          periodo: formatPeriod(created.periodoInicioData || startDateKey, created.periodoFimData || endDateKey),
           payable: created.payable || null,
           warning:
             syncErr.message ||
@@ -2252,8 +2389,8 @@ router.post(
       return res.status(201).json({
         id: created._id,
         profissional: created.profissional,
-        periodoInicio: created.periodoInicio,
-        periodoFim: created.periodoFim,
+        periodoInicio: created.periodoInicioData || startDateKey,
+        periodoFim: created.periodoFimData || endDateKey,
         totalPeriodo: created.totalPeriodo,
         totalPendente: created.totalPendente,
         totalVendas: created.totalVendas,
@@ -2263,10 +2400,12 @@ router.post(
         totalPago: created.totalPago,
         status: created.status,
         previsaoPagamento: created.previsaoPagamento,
+        previsaoPagamentoData: created.previsaoPagamentoData || '',
+        previsaoPagamentoHora: created.previsaoPagamentoHora || '',
         meioPagamento: created.meioPagamento,
         store: created.store,
         profissionalNome: pickUserName(profissional),
-        periodo: formatPeriod(created.periodoInicio, created.periodoFim),
+        periodo: formatPeriod(created.periodoInicioData || startDateKey, created.periodoFimData || endDateKey),
         payable: created.payable || null,
         debug: req.query?.debug === '1' ? summary.debug : undefined,
       });
@@ -2288,7 +2427,14 @@ router.put(
         return res.status(400).json({ message: 'Fechamento invalido.' });
       }
 
-      const allowedFields = ['status', 'totalPago', 'previsaoPagamento', 'meioPagamento'];
+      const allowedFields = [
+        'status',
+        'totalPago',
+        'previsaoPagamento',
+        'previsaoPagamentoData',
+        'previsaoPagamentoHora',
+        'meioPagamento',
+      ];
       const update = {};
       allowedFields.forEach((field) => {
         if (Object.prototype.hasOwnProperty.call(req.body || {}, field)) {
@@ -2301,10 +2447,24 @@ router.put(
         update.totalPago = parsed !== null ? parsed : 0;
       }
 
-      if (update.previsaoPagamento) {
-        const parsedDate = toEndOfDay(update.previsaoPagamento);
-        if (!parsedDate) return res.status(400).json({ message: 'Previsao invalida.' });
-        update.previsaoPagamento = parsedDate;
+      const hasPaymentScheduleUpdate = [
+        'previsaoPagamento',
+        'previsaoPagamentoData',
+        'previsaoPagamentoHora',
+      ].some((field) => Object.prototype.hasOwnProperty.call(req.body || {}, field));
+      if (hasPaymentScheduleUpdate) {
+        const paymentSchedule = parsePaymentSchedule({
+          value: update.previsaoPagamento,
+          date: update.previsaoPagamentoData,
+          time: update.previsaoPagamentoHora,
+        });
+        const shouldClear = !update.previsaoPagamento && !update.previsaoPagamentoData;
+        if (!paymentSchedule && !shouldClear) {
+          return res.status(400).json({ message: 'Previsao invalida.' });
+        }
+        update.previsaoPagamento = paymentSchedule?.instant || null;
+        update.previsaoPagamentoData = paymentSchedule?.dateKey || '';
+        update.previsaoPagamentoHora = paymentSchedule?.timeKey || '';
       }
 
       if (update.meioPagamento !== undefined) {
@@ -2349,6 +2509,8 @@ router.put(
         totalPago: closing.totalPago,
         totalPendente: closing.totalPendente,
         previsaoPagamento: closing.previsaoPagamento,
+        previsaoPagamentoData: closing.previsaoPagamentoData || '',
+        previsaoPagamentoHora: closing.previsaoPagamentoHora || '',
         meioPagamento: closing.meioPagamento,
         payable: closing.payable || null,
       });
