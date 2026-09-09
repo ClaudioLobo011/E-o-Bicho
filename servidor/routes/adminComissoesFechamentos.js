@@ -17,6 +17,7 @@ const Store = require('../models/Store');
 const AccountingAccount = require('../models/AccountingAccount');
 const BankAccount = require('../models/BankAccount');
 const AccountPayable = require('../models/AccountPayable');
+const CommissionItemLock = require('../models/CommissionItemLock');
 const ProfessionalCommissionConfig = require('../models/ProfessionalCommissionConfig');
 const { hasAdminMasterGlobalAccess } = require('../utils/adminMasterMode');
 
@@ -32,6 +33,7 @@ const DEFAULT_SUMMARY_CONCURRENCY = Math.max(
   1,
   Number(process.env.COMMISSIONS_SUMMARY_CONCURRENCY || 2) || 2,
 );
+const MAX_CLOSING_ITEMS = 10000;
 
 const emptyTotals = () => ({
   totalPeriodo: 0,
@@ -158,7 +160,7 @@ const normalizeCalendarDateKey = (value) => {
   if (!value) return '';
 
   if (value instanceof Date) {
-    return Number.isNaN(value.getTime()) ? '' : value.toISOString().slice(0, 10);
+    return Number.isNaN(value.getTime()) ? '' : getCalendarDateKeyInSaoPaulo(value);
   }
 
   const match = String(value).trim().match(CALENDAR_DATE_PATTERN);
@@ -247,11 +249,11 @@ const formatCalendarDate = (value) => {
 
 const getClosingPeriodStartKey = (closing = {}) =>
   normalizeCalendarDateKey(closing?.periodoInicioData) ||
-  normalizeCalendarDateKey(closing?.periodoInicio);
+  (closing?.periodoInicio ? getCalendarDateKeyInSaoPaulo(closing.periodoInicio) : '');
 
 const getClosingPeriodEndKey = (closing = {}) =>
   normalizeCalendarDateKey(closing?.periodoFimData) ||
-  normalizeCalendarDateKey(closing?.periodoFim);
+  (closing?.periodoFim ? getCalendarDateKeyInSaoPaulo(closing.periodoFim) : '');
 
 const parsePaymentSchedule = ({ value = null, date = '', time = '' } = {}) => {
   const dateKey = normalizeCalendarDateKey(date) || normalizeCalendarDateKey(value);
@@ -265,6 +267,36 @@ const parsePaymentSchedule = ({ value = null, date = '', time = '' } = {}) => {
     timeKey: timeKey ? timeKey.slice(0, 5) : '',
     instant,
   };
+};
+
+const getClockTimeInSaoPaulo = (value = new Date()) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: SAO_PAULO_TIME_ZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+  const byType = new Map(parts.map((part) => [part.type, part.value]));
+  return `${byType.get('hour')}:${byType.get('minute')}:${byType.get('second')}`;
+};
+
+const getActorId = (req) => req.user?.id || req.user?._id || null;
+
+const addClosingAudit = (closing, { action, user, reason = '', metadata = null, at = new Date() }) => {
+  if (!closing) return;
+  if (!Array.isArray(closing.auditTrail)) closing.auditTrail = [];
+  closing.auditTrail.push({
+    action,
+    at,
+    date: getCalendarDateKeyInSaoPaulo(at),
+    time: getClockTimeInSaoPaulo(at).slice(0, 5),
+    user: user || null,
+    reason: String(reason || '').trim(),
+    metadata,
+  });
 };
 
 const resolveUserStoreAccess = async (req, userId) => {
@@ -293,29 +325,37 @@ const resolveUserStoreAccess = async (req, userId) => {
 
 const generatePayableCode = () => `COM-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
-const syncPayableForClosing = async ({ closing, totals }) => {
+const syncPayableForClosing = async ({ closing, createIfMissing = true }) => {
   if (!closing || !closing.store || !closing.profissional) return null;
-  const totalPendente = Number(totals?.totalPendente || closing.totalPendente || 0);
-  if (totalPendente <= 0) return null;
+  const totalValue = Number(closing.totalPeriodo || 0);
+  if (!Number.isFinite(totalValue) || totalValue <= 0) {
+    throw new Error('Fechamento sem valor positivo não pode gerar conta a pagar.');
+  }
+  const dueDate = closing.previsaoPagamento || closing.periodoFim || new Date();
+  let payable = closing.payable ? await AccountPayable.findById(closing.payable) : null;
+  if (!payable && !createIfMissing) return null;
 
   const config = await CommissionConfig.findOne({ store: closing.store }).lean();
-  if (!config || !config.accountingAccount || !config.bankAccount) {
+  const accountingAccount = config?.accountingAccount || payable?.accountingAccount || null;
+  const bankAccount = config?.bankAccount || payable?.bankAccount || null;
+  if (!accountingAccount || !bankAccount) {
     throw new Error('Configure conta contábil e conta corrente na engrenagem antes de fechar comissões.');
   }
 
   const [accountingExists, bankExists] = await Promise.all([
     AccountingAccount.exists({
-      _id: config.accountingAccount,
+      _id: accountingAccount,
       paymentNature: 'contas_pagar',
       companies: closing.store,
     }),
-    BankAccount.exists({ _id: config.bankAccount, company: closing.store }),
+    BankAccount.exists({ _id: bankAccount, company: closing.store }),
   ]);
   if (!accountingExists) throw new Error('Conta contábil configurada é inválida para a empresa.');
   if (!bankExists) throw new Error('Conta corrente configurada é inválida para a empresa.');
 
-  const dueDate = closing.previsaoPagamento || closing.periodoFim || new Date();
-  let payable = closing.payable ? await AccountPayable.findById(closing.payable) : null;
+  const installmentStatus =
+    closing.status === 'pago' ? 'paid' : closing.status === 'cancelado' ? 'cancelled' : 'pending';
+  const periodLabel = `${getClosingPeriodStartKey(closing)} a ${getClosingPeriodEndKey(closing)}`;
 
   if (!payable) {
     let code = generatePayableCode();
@@ -333,19 +373,19 @@ const syncPayableForClosing = async ({ closing, totals }) => {
       installmentsCount: 1,
       issueDate: new Date(),
       dueDate,
-      totalValue: totalPendente,
-      bankAccount: config.bankAccount,
-      accountingAccount: config.accountingAccount,
-      notes: `Fechamento de comissão ${closing._id || ''} (${closing.periodoInicio || ''} a ${closing.periodoFim || ''})`,
+      totalValue,
+      bankAccount,
+      accountingAccount,
+      notes: `Fechamento de comissão ${closing._id || ''} (${periodLabel})`,
       installments: [
         {
           number: 1,
           issueDate: new Date(),
           dueDate,
-          value: totalPendente,
-          bankAccount: config.bankAccount,
-          accountingAccount: config.accountingAccount,
-          status: 'pending',
+          value: totalValue,
+          bankAccount,
+          accountingAccount,
+          status: installmentStatus,
         },
       ],
     });
@@ -354,9 +394,10 @@ const syncPayableForClosing = async ({ closing, totals }) => {
     payable.partyType = 'User';
     payable.party = closing.profissional;
     payable.dueDate = dueDate;
-    payable.totalValue = totalPendente;
-    payable.bankAccount = config.bankAccount;
-    payable.accountingAccount = config.accountingAccount;
+    payable.totalValue = totalValue;
+    payable.bankAccount = bankAccount;
+    payable.accountingAccount = accountingAccount;
+    payable.notes = `Fechamento de comissão ${closing._id || ''} (${periodLabel})`;
     // Atualiza/gera parcela única
     if (!Array.isArray(payable.installments) || payable.installments.length === 0) {
       payable.installments = [
@@ -364,19 +405,20 @@ const syncPayableForClosing = async ({ closing, totals }) => {
           number: 1,
           issueDate: new Date(),
           dueDate,
-          value: totalPendente,
-          bankAccount: config.bankAccount,
-          accountingAccount: config.accountingAccount,
-          status: closing.status === 'pago' ? 'paid' : 'pending',
+          value: totalValue,
+          bankAccount,
+          accountingAccount,
+          status: installmentStatus,
         },
       ];
     } else {
       const inst = payable.installments[0];
       inst.dueDate = dueDate;
-      inst.value = totalPendente;
-      inst.bankAccount = config.bankAccount;
-      inst.accountingAccount = config.accountingAccount;
-      inst.status = closing.status === 'pago' ? 'paid' : inst.status || 'pending';
+      inst.value = totalValue;
+      inst.bankAccount = bankAccount;
+      inst.accountingAccount = accountingAccount;
+      inst.status = installmentStatus;
+      payable.installments = [inst];
     }
   }
 
@@ -704,7 +746,9 @@ const mapAppointmentToServicoRecords = (
   const { items, matchedByTopLevel } = resolveServicoItemsForUser(appointment, normalizedUserId);
   if (!items.length && !matchedByTopLevel) return [];
 
-  const isPago = appointment.pago === true || !!String(appointment.codigoVenda || '').trim();
+  // O código de venda identifica a origem, mas não comprova quitação. A comissão
+  // de serviço só nasce quando o próprio agendamento está marcado como pago.
+  const isPago = appointment.pago === true;
   // O pagamento pertence ao agendamento, mas a elegibilidade e o período pertencem a cada serviço.
   if (!isPago) return [];
 
@@ -731,16 +775,37 @@ const mapAppointmentToServicoRecords = (
 
   return items
     .filter((item) => isServicoFinalizado(item?.status))
-    .map((item) => ({ item, schedule: getAppointmentItemSchedule(item) }))
+    .map((item, itemIndex) => ({ item, itemIndex, schedule: getAppointmentItemSchedule(item) }))
     .filter(({ schedule }) => (
       schedule && isCalendarDateInRange(schedule.dateKey, startDateKey, endDateKey)
     ))
-    .map(({ item, schedule }) => {
+    .map(({ item, itemIndex, schedule }) => {
       const valorServico = parseNumber(item?.valor) || 0;
       const percent = getItemPercent(item);
       const appliedPercent = percent !== null ? percent : fallbackPercent;
       const comissaoServico = valorServico * (appliedPercent / 100);
+      const appointmentId = normalizeObjectId(appointment?._id);
+      const itemId = normalizeObjectId(item?._id) || String(itemIndex);
+      const serviceName =
+        item?.servico?.nome ||
+        appointment?.servico?.nome ||
+        item?.nome ||
+        appointment?.nome ||
+        'Serviço';
       return {
+        key: `appointment:${appointmentId || 'legacy'}:item:${itemId}:${schedule.sortKey}`,
+        source: 'appointment_service',
+        sourceDocumentId: appointmentId,
+        sourceItemId: itemId,
+        date: schedule.dateKey,
+        time: schedule.timeKey ? schedule.timeKey.slice(0, 5) : '',
+        petName:
+          appointment?.pet?.nome || appointment?.pet?.name || appointment?.petNome || appointment?.nomePet || 'Pet',
+        description: serviceName,
+        saleCode: String(appointment?.codigoVenda || '').trim(),
+        value: valorServico,
+        percent: appliedPercent,
+        commission: comissaoServico,
         _scheduleDate: schedule.dateKey,
         _scheduleTime: schedule.timeKey,
         _scheduleSortKey: schedule.sortKey,
@@ -753,6 +818,18 @@ const mapAppointmentToServicoRecords = (
         aReceber: false,
       };
     });
+};
+
+const assertClosingStoreAccess = async (req, closing) => {
+  const closingStore = normalizeObjectId(closing?.store);
+  const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req, getActorId(req));
+  if (allowAllStores) return;
+  const allowed = new Set(allowedStoreIds.map(String));
+  if (!closingStore || !allowed.has(closingStore)) {
+    const error = new Error('Empresa nao permitida para o usuario.');
+    error.statusCode = 403;
+    throw error;
+  }
 };
 
 const buildServicosRecords = (appointments = [], opts = {}) => {
@@ -788,7 +865,8 @@ const summarizeSaleRecords = (records = []) => {
 
   records.forEach((item) => {
     const status = normalizeStatus(item.status);
-    if (status === 'cancelado') return;
+    // Comissão de venda só nasce depois que a venda foi concluída/paga.
+    if (status !== 'pago') return;
 
     const comissaoTotal = (parseNumber(item.comissaoVenda) || 0) + (parseNumber(item.comissaoServico) || 0);
     totals.totalVendas += comissaoTotal;
@@ -807,6 +885,7 @@ const buildSaleRecord = (
     productIdSet = new Set(),
     serviceMetaMap = new Map(),
     professionalCommission = null,
+    excludeServiceItems = false,
   },
 ) => {
   const items = collectSaleItems(sale);
@@ -816,6 +895,11 @@ const buildSaleRecord = (
   let comissaoServicos = 0;
   let hasItemProdPercent = false;
   let hasItemSvcPercent = false;
+  const detailRows = [];
+  const saleDate = getSaleDate(sale);
+  const dateKey = saleDate ? getCalendarDateKeyInSaoPaulo(saleDate) : '';
+  const saleId = String(sale?._saleId || sale?.id || sale?._id || '').trim();
+  const saleCode = String(sale?.saleCode || sale?.saleCodeLabel || saleId || '').trim();
 
   const resolvePercent = (item = {}) => {
     const candidate =
@@ -832,7 +916,7 @@ const buildSaleRecord = (
     return Number.isFinite(parsed) ? parsed : null;
   };
 
-  items.forEach((item) => {
+  items.forEach((item, itemIndex) => {
     const total = deriveItemTotal(item);
     const oid = extractItemObjectId(item);
     const isServicoId = oid && serviceIdSet.has(oid);
@@ -841,6 +925,7 @@ const buildSaleRecord = (
     const isServico = isServicoId || (!isProdutoId && !isProdutoSnapshot && item.servico);
 
     if (isServico) {
+      if (excludeServiceItems) return;
       valorServicos += total;
       const serviceMeta = oid ? serviceMetaMap.get(oid) : null;
       const percent = resolveServiceCommissionPercent({
@@ -862,13 +947,63 @@ const buildSaleRecord = (
       });
       const applied = percent !== null ? percent : comissaoServicoPercent;
       if (percent !== null) hasItemSvcPercent = true;
-      comissaoServicos += total * (applied / 100);
+      const itemCommission = total * (applied / 100);
+      comissaoServicos += itemCommission;
+      detailRows.push({
+        key: `pdv:${saleId || 'legacy'}:item:${itemIndex}:service`,
+        source: 'pdv_product',
+        sourceDocumentId: saleId,
+        sourceItemId: String(itemIndex),
+        date: dateKey,
+        time: saleDate
+          ? new Intl.DateTimeFormat('pt-BR', {
+              timeZone: SAO_PAULO_TIME_ZONE,
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+            }).format(saleDate)
+          : '',
+        petName: '',
+        description: String(item?.name || item?.nome || item?.descricao || 'Serviço PDV'),
+        saleCode,
+        value: total,
+        percent: applied,
+        commission: itemCommission,
+        status: normalizeStatus(sale.status),
+        paid: normalizeStatus(sale.status) === 'pago',
+      });
     } else {
       valorProdutos += total;
       const percent = resolvePercent(item);
       const applied = percent !== null ? percent : comissaoPercent;
       if (percent !== null) hasItemProdPercent = true;
-      comissaoProdutos += total * (applied / 100);
+      const itemCommission = total * (applied / 100);
+      comissaoProdutos += itemCommission;
+      detailRows.push({
+        key: `pdv:${saleId || 'legacy'}:item:${itemIndex}:product`,
+        source: 'pdv_product',
+        sourceDocumentId: saleId,
+        sourceItemId: String(itemIndex),
+        date: dateKey,
+        time: saleDate
+          ? new Intl.DateTimeFormat('pt-BR', {
+              timeZone: SAO_PAULO_TIME_ZONE,
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+            }).format(saleDate)
+          : '',
+        petName: '',
+        description: String(
+          item?.name || item?.nome || item?.descricao || item?.productSnapshot?.nome || 'Produto',
+        ),
+        saleCode,
+        value: total,
+        percent: applied,
+        commission: itemCommission,
+        status: normalizeStatus(sale.status),
+        paid: normalizeStatus(sale.status) === 'pago',
+      });
     }
   });
 
@@ -879,6 +1014,31 @@ const buildSaleRecord = (
   if (vendaBase + servicoBase === 0) {
     const totalVenda = deriveSaleTotal(sale);
     vendaBase = totalVenda;
+    if (totalVenda > 0) {
+      detailRows.push({
+        key: `pdv:${saleId || 'legacy'}:sale`,
+        source: 'pdv_product',
+        sourceDocumentId: saleId,
+        sourceItemId: '',
+        date: dateKey,
+        time: saleDate
+          ? new Intl.DateTimeFormat('pt-BR', {
+              timeZone: SAO_PAULO_TIME_ZONE,
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+            }).format(saleDate)
+          : '',
+        petName: '',
+        description: 'Venda PDV',
+        saleCode,
+        value: totalVenda,
+        percent: comissaoPercent,
+        commission: totalVenda * (comissaoPercent / 100),
+        status: normalizeStatus(sale.status),
+        paid: normalizeStatus(sale.status) === 'pago',
+      });
+    }
   }
 
   const comissaoVenda = hasItemProdPercent ? comissaoProdutos : vendaBase * (comissaoPercent / 100);
@@ -899,6 +1059,7 @@ const buildSaleRecord = (
     valorVenda,
     valorProdutos,
     valorServicos,
+    rows: detailRows,
   };
 };
 
@@ -937,6 +1098,7 @@ const getSalesPool = async ({ storeId = null, startDate = null, endDate = null, 
   pipeline.push(
     {
       $project: {
+        _saleId: { $ifNull: ['$completedSales.id', '$completedSales._id'] },
         _pdvStateId: '$_id',
         _storeId: '$empresa',
         seller: '$completedSales.seller',
@@ -944,6 +1106,8 @@ const getSalesPool = async ({ storeId = null, startDate = null, endDate = null, 
         sellerCode: '$completedSales.sellerCode',
         sellerName: '$completedSales.sellerName',
         sellerEmail: '$completedSales.sellerEmail',
+        saleCode: '$completedSales.saleCode',
+        saleCodeLabel: '$completedSales.saleCodeLabel',
         status: '$completedSales.status',
         createdAt: '$completedSales.createdAt',
         createdAtLabel: '$completedSales.createdAtLabel',
@@ -1027,10 +1191,10 @@ const fetchSalesForUser = async ({
 
     if (startDate || endDate) {
       const saleDate = getSaleDate(sale);
-      if (saleDate) {
-        if (startDate && saleDate < startDate) return;
-        if (endDate && saleDate > endDate) return;
-      }
+      // Sem data comprovável a venda não pode ser atribuída a um período financeiro.
+      if (!saleDate) return;
+      if (startDate && saleDate < startDate) return;
+      if (endDate && saleDate > endDate) return;
     }
     matched.push(sale);
   });
@@ -1084,8 +1248,9 @@ const fetchServicoRecords = async ({
   const appointments = profissionalId
     ? await Appointment.find(serviceQuery)
         .select(
-          'itens valor pago codigoVenda status profissional servico store',
+          'itens valor pago codigoVenda status profissional servico store pet',
         )
+        .populate('pet', 'nome')
         .populate({
           path: 'itens.servico',
           select: 'nome grupo comissaoPercent',
@@ -1107,6 +1272,68 @@ const fetchServicoRecords = async ({
     startDateKey: normalizedStartDateKey,
     endDateKey: normalizedEndDateKey,
   });
+};
+
+const fetchServiceEligibilityAudit = async ({
+  user,
+  startDateKey = '',
+  endDateKey = '',
+  storeId = null,
+}) => {
+  const profissionalId = normalizeObjectId(user?._id || user);
+  if (!profissionalId || !isValidObjectId(profissionalId)) {
+    return { eligible: 0, excludedUnpaid: 0, excludedNotFinalized: 0, exclusions: [] };
+  }
+  const query = {
+    'itens.data': { $gte: startDateKey, $lte: endDateKey },
+    $or: [
+      { profissional: new mongoose.Types.ObjectId(profissionalId) },
+      { 'itens.profissional': new mongoose.Types.ObjectId(profissionalId) },
+    ],
+  };
+  if (storeId && isValidObjectId(storeId)) query.store = new mongoose.Types.ObjectId(String(storeId));
+
+  const appointments = await Appointment.find(query)
+    .select('_id itens pago codigoVenda profissional servico pet')
+    .populate('pet', 'nome')
+    .populate('itens.servico', 'nome')
+    .populate('servico', 'nome')
+    .lean();
+  const audit = { eligible: 0, excludedUnpaid: 0, excludedNotFinalized: 0, exclusions: [] };
+  appointments.forEach((appointment) => {
+    const { items } = resolveServicoItemsForUser(appointment, profissionalId);
+    const paid = appointment.pago === true;
+    items.forEach((item) => {
+      const schedule = getAppointmentItemSchedule(item);
+      if (!schedule || !isCalendarDateInRange(schedule.dateKey, startDateKey, endDateKey)) return;
+      let reason = '';
+      if (!isServicoFinalizado(item?.status)) {
+        reason = 'Serviço ainda não finalizado';
+        audit.excludedNotFinalized += 1;
+      } else if (!paid) {
+        reason = 'Agendamento ainda não pago';
+        audit.excludedUnpaid += 1;
+      } else {
+        audit.eligible += 1;
+        return;
+      }
+      audit.exclusions.push({
+        source: 'appointment_service',
+        sourceDocumentId: normalizeObjectId(appointment._id),
+        sourceItemId: normalizeObjectId(item?._id),
+        date: schedule.dateKey,
+        time: schedule.timeKey.slice(0, 5),
+        petName: appointment?.pet?.nome || 'Pet',
+        description: item?.servico?.nome || appointment?.servico?.nome || item?.nome || 'Serviço',
+        saleCode: String(appointment.codigoVenda || '').trim(),
+        value: roundCurrency(item?.valor),
+        status: String(item?.status || ''),
+        reason,
+      });
+    });
+  });
+  audit.exclusions.sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`));
+  return audit;
 };
 
 const buildServiceCommissionRows = ({
@@ -1131,7 +1358,7 @@ const buildServiceCommissionRows = ({
       appointment?.nomePet ||
       'Pet';
     const { items, matchedByTopLevel } = resolveServicoItemsForUser(appointment, normalizedUserId);
-    const isPago = appointment?.pago === true || !!String(appointment?.codigoVenda || '').trim();
+    const isPago = appointment?.pago === true;
     if (!isPago) return;
 
     if (items.length) {
@@ -1349,6 +1576,7 @@ const computeCommissionSummaryForUser = async ({
       productIdSet,
       serviceMetaMap,
       professionalCommission,
+      excludeServiceItems: includeServices,
     }),
   );
 
@@ -1394,11 +1622,226 @@ const computeCommissionSummaryForUser = async ({
       includeServices,
       includePdvSales,
     },
+    items: [
+      ...saleRecords
+        .filter((record) => normalizeStatus(record.status) === 'pago')
+        .flatMap((record) => (Array.isArray(record.rows) ? record.rows : [])),
+      ...servicoRecords,
+    ]
+      .filter((item) => Number(item?.commission || 0) > 0)
+      .sort((a, b) => `${a?.date || ''}T${a?.time || ''}`.localeCompare(`${b?.date || ''}T${b?.time || ''}`)),
   };
 };
 
 const pickUserName = (user = {}) =>
   user.nomeCompleto || user.nomeContato || user.razaoSocial || user.nome || user.email || 'Sem nome';
+
+const roundCurrency = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+
+const buildTotalsFromItems = (items = []) => {
+  const totals = emptyTotals();
+  items.forEach((item) => {
+    const commission = roundCurrency(item?.commission);
+    if (commission <= 0) return;
+    if (item?.source === 'appointment_service') totals.totalServicos += commission;
+    else totals.totalVendas += commission;
+  });
+  totals.totalVendas = roundCurrency(totals.totalVendas);
+  totals.totalServicos = roundCurrency(totals.totalServicos);
+  totals.pendenteVendas = totals.totalVendas;
+  totals.pendenteServicos = totals.totalServicos;
+  totals.totalPeriodo = roundCurrency(totals.totalVendas + totals.totalServicos);
+  totals.totalPendente = totals.totalPeriodo;
+  return totals;
+};
+
+const sanitizeSnapshotItem = (item = {}) => ({
+  key: String(item.key || '').trim(),
+  source: item.source === 'appointment_service' ? 'appointment_service' : 'pdv_product',
+  sourceDocumentId: String(item.sourceDocumentId || '').trim(),
+  sourceItemId: String(item.sourceItemId || '').trim(),
+  date: normalizeCalendarDateKey(item.date),
+  time: normalizeAppointmentTimeKey(item.time).slice(0, 5),
+  petName: String(item.petName || '').trim(),
+  description: String(item.description || '').trim(),
+  saleCode: String(item.saleCode || '').trim(),
+  value: roundCurrency(item.value),
+  percent: Number(item.percent || 0),
+  commission: roundCurrency(item.commission),
+  status: String(item.status || '').trim(),
+  paid: item.paid === true,
+});
+
+const buildCommissionItemLockKey = ({ profissional, store, itemKey }) =>
+  `${normalizeObjectId(store) || 'all'}|${normalizeObjectId(profissional)}|${String(itemKey || '').trim()}`;
+
+const filterUnallocatedItems = async ({ items = [], profissional, store }) => {
+  const sanitized = items
+    .map(sanitizeSnapshotItem)
+    .filter((item) => item.key && item.date && item.commission > 0)
+    .slice(0, MAX_CLOSING_ITEMS);
+  if (!sanitized.length) return { items: [], allocatedKeys: [] };
+  const lockKeys = sanitized.map((item) =>
+    buildCommissionItemLockKey({ profissional, store, itemKey: item.key }),
+  );
+  const existing = await CommissionItemLock.find({ key: { $in: lockKeys } }).select('key').lean();
+  const allocated = new Set(existing.map((entry) => String(entry.key)));
+  return {
+    items: sanitized.filter(
+      (item) => !allocated.has(buildCommissionItemLockKey({ profissional, store, itemKey: item.key })),
+    ),
+    allocatedKeys: lockKeys.filter((key) => allocated.has(key)),
+  };
+};
+
+const calculateAvailableCommissionSummary = async ({
+  user,
+  startDate,
+  endDate,
+  startDateKey,
+  endDateKey,
+  storeId,
+  debug = false,
+  runtimeContext = null,
+  calculationOptions = null,
+}) => {
+  const computed = await computeCommissionSummaryForUser({
+    user,
+    startDate,
+    endDate,
+    startDateKey,
+    endDateKey,
+    storeId,
+    debug,
+    runtimeContext,
+    calculationOptions,
+  });
+  const availability = await filterUnallocatedItems({
+    items: computed?.items || [],
+    profissional: user?._id,
+    store: storeId,
+  });
+  return {
+    ...computed,
+    grossTotals: computed?.totals || emptyTotals(),
+    totals: buildTotalsFromItems(availability.items),
+    items: availability.items,
+    alreadyClosedItems: availability.allocatedKeys.length,
+  };
+};
+
+const commissionTypeFromTotals = (totals = {}) => {
+  const hasSales = Number(totals.totalVendas || 0) > 0;
+  const hasServices = Number(totals.totalServicos || 0) > 0;
+  if (hasSales && hasServices) return 'Misto';
+  if (hasServices) return 'Serviços';
+  if (hasSales) return 'Vendas';
+  return 'Sem comissão';
+};
+
+const serializeClosingRecord = (closing = {}, { selectedStart = '', selectedEnd = '' } = {}) => {
+  const startKey = getClosingPeriodStartKey(closing);
+  const endKey = getClosingPeriodEndKey(closing);
+  const profissionalId = normalizeObjectId(closing.profissional);
+  const storeId = normalizeObjectId(closing.store);
+  const snapshotItems = Array.isArray(closing.snapshotItems) ? closing.snapshotItems : [];
+  const dueDateKey =
+    normalizeCalendarDateKey(closing.previsaoPagamentoData) ||
+    (closing.previsaoPagamento ? getCalendarDateKeyInSaoPaulo(closing.previsaoPagamento) : '');
+  const totals = {
+    totalPeriodo: Number(closing.totalPeriodo || 0),
+    totalPendente: Number(closing.totalPendente || 0),
+    totalVendas: Number(closing.totalVendas || 0),
+    totalServicos: Number(closing.totalServicos || 0),
+    pendenteVendas: Number(closing.pendenteVendas || 0),
+    pendenteServicos: Number(closing.pendenteServicos || 0),
+    totalPago: Number(closing.totalPago || 0),
+  };
+  const crossesSelection = Boolean(
+    selectedStart && selectedEnd && startKey && endKey && (startKey < selectedStart || endKey > selectedEnd),
+  );
+  return {
+    id: closing._id,
+    profissional: closing.profissional?._id || closing.profissional,
+    profissionalNome: pickUserName(closing.profissional),
+    codigoProfissional: closing.profissional?.codigoCliente || '',
+    store: closing.store?._id || closing.store || null,
+    storeNome:
+      closing.store?.nome || closing.store?.nomeFantasia || closing.store?.razaoSocial || '',
+    periodoInicio: startKey,
+    periodoFim: endKey,
+    periodo: formatPeriod(startKey, endKey),
+    previsto: totals.totalPeriodo,
+    pago: totals.totalPago,
+    pendente: totals.totalPendente,
+    ...totals,
+    tipo: commissionTypeFromTotals(totals),
+    status: closing.status || 'pendente',
+    kind: closing.kind || 'regular',
+    previsaoPagamento: closing.previsaoPagamento || null,
+    previsaoPagamentoData:
+      dueDateKey,
+    previsaoPagamentoHora:
+      normalizeAppointmentTimeKey(closing.previsaoPagamentoHora).slice(0, 5),
+    meioPagamento: closing.meioPagamento || '',
+    paidAt: closing.paidAt || null,
+    paidDate: normalizeCalendarDateKey(closing.paidDate),
+    paidTime: normalizeAppointmentTimeKey(closing.paidTime).slice(0, 5),
+    cancelledAt: closing.cancelledAt || null,
+    cancellationReason: closing.cancellationReason || '',
+    payable: closing.payable || null,
+    snapshotVersion: Number(closing.snapshotVersion || 0),
+    snapshotItemCount: snapshotItems.length,
+    crossesSelection,
+    legacyPeriod: !normalizeCalendarDateKey(closing.periodoInicioData) || !normalizeCalendarDateKey(closing.periodoFimData),
+    overdue:
+      closing.status === 'agendado' &&
+      Boolean(dueDateKey && dueDateKey < getCalendarDateKeyInSaoPaulo()),
+    createdAt: closing.createdAt || null,
+    updatedAt: closing.updatedAt || null,
+    auditTrail: Array.isArray(closing.auditTrail) ? closing.auditTrail : [],
+    _professionalKey: profissionalId,
+    _storeKey: storeId,
+  };
+};
+
+const loadProfessionalsForStore = async (storeId = null) => {
+  const roleFilter = {
+    role: { $in: ['funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master'] },
+  };
+  if (!storeId || !isValidObjectId(storeId)) {
+    return User.find(roleFilter)
+      .select('nomeCompleto nomeContato razaoSocial nome email userGroup codigoCliente empresas empresaPrincipal empresaContratual')
+      .populate('userGroup', 'comissaoPercent comissaoServicoPercent')
+      .sort({ nomeCompleto: 1, nomeContato: 1, razaoSocial: 1 })
+      .lean();
+  }
+
+  const objectStoreId = new mongoose.Types.ObjectId(String(storeId));
+  const [appointmentTopIds, appointmentItemIds, closingIds] = await Promise.all([
+    Appointment.distinct('profissional', { store: objectStoreId }),
+    Appointment.distinct('itens.profissional', { store: objectStoreId }),
+    CommissionClosing.distinct('profissional', { store: objectStoreId }),
+  ]);
+  const historicalIds = [...appointmentTopIds, ...appointmentItemIds, ...closingIds]
+    .map(normalizeObjectId)
+    .filter(isValidObjectId)
+    .map((id) => new mongoose.Types.ObjectId(id));
+
+  return User.find({
+    ...roleFilter,
+    $or: [
+      { empresas: objectStoreId },
+      { empresaPrincipal: objectStoreId },
+      { empresaContratual: objectStoreId },
+      ...(historicalIds.length ? [{ _id: { $in: historicalIds } }] : []),
+    ],
+  })
+    .select('nomeCompleto nomeContato razaoSocial nome email userGroup codigoCliente empresas empresaPrincipal empresaContratual')
+    .populate('userGroup', 'comissaoPercent comissaoServicoPercent')
+    .sort({ nomeCompleto: 1, nomeContato: 1, razaoSocial: 1 })
+    .lean();
+};
 
 const formatPeriod = (inicio, fim) => {
   return `${formatCalendarDate(inicio)} a ${formatCalendarDate(fim)}`;
@@ -1595,6 +2038,317 @@ router.post(
 );
 
 router.get(
+  '/admin/comissoes/fechamentos/professionals',
+  requireAuth,
+  authorizeRoles(...ADMIN_ROLES),
+  async (req, res) => {
+    try {
+      const requestedStoreId = req.query?.store && isValidObjectId(req.query.store)
+        ? String(req.query.store)
+        : null;
+      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req, getActorId(req));
+      const allowed = new Set(allowedStoreIds.map(String));
+      if (!allowAllStores && requestedStoreId && !allowed.has(requestedStoreId)) {
+        return res.status(403).json({ message: 'Empresa nao permitida para o usuario.' });
+      }
+      const storeId = requestedStoreId || (!allowAllStores ? allowedStoreIds[0] || null : null);
+      const professionals = await loadProfessionalsForStore(storeId);
+      return res.json(
+        professionals.map((professional) => ({
+          id: professional._id,
+          nome: pickUserName(professional),
+          codigo: professional.codigoCliente || '',
+        })),
+      );
+    } catch (error) {
+      console.error('[adminComissoesFechamentos] professionals', error);
+      return res.status(500).json({ message: 'Nao foi possivel carregar profissionais.' });
+    }
+  },
+);
+
+router.get(
+  '/admin/comissoes/fechamentos/report',
+  requireAuth,
+  authorizeRoles(...ADMIN_ROLES),
+  async (req, res) => {
+    try {
+      const requestedStoreId = req.query?.store && isValidObjectId(req.query.store)
+        ? String(req.query.store)
+        : null;
+      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req, getActorId(req));
+      const allowed = new Set(allowedStoreIds.map(String));
+      if (!allowAllStores && !allowed.size) {
+        return res.json({ items: [], history: [], summary: emptyTotals(), anomalies: {} });
+      }
+      if (requestedStoreId && !allowAllStores && !allowed.has(requestedStoreId)) {
+        return res.status(403).json({ message: 'Empresa nao permitida para o usuario.' });
+      }
+      const storeId = requestedStoreId || (!allowAllStores ? allowedStoreIds[0] || null : null);
+      if (!storeId) {
+        return res.status(400).json({ message: 'Selecione uma empresa para gerar o relatorio.' });
+      }
+
+      const startDateKey = normalizeCalendarDateKey(req.query?.start);
+      const endDateKey = normalizeCalendarDateKey(req.query?.end);
+      if (!startDateKey || !endDateKey || startDateKey > endDateKey) {
+        return res.status(400).json({ message: 'Periodo invalido.' });
+      }
+      const start = toStartOfDay(startDateKey);
+      const end = toEndOfDay(endDateKey);
+
+      const [professionals, config, allClosingDocs] = await Promise.all([
+        loadProfessionalsForStore(storeId),
+        CommissionConfig.findOne({ store: storeId }).lean(),
+        CommissionClosing.find({ store: storeId })
+          .sort({ createdAt: -1 })
+          .populate('profissional', 'nomeCompleto nomeContato razaoSocial nome codigoCliente')
+          .populate('store', 'nome nomeFantasia razaoSocial')
+          .lean(),
+      ]);
+      const closingDocs = allClosingDocs.filter((closing) => {
+        const closingStart = getClosingPeriodStartKey(closing);
+        const closingEnd = getClosingPeriodEndKey(closing);
+        return Boolean(closingStart && closingEnd && closingStart <= endDateKey && closingEnd >= startDateKey);
+      });
+      const calculationOptions = normalizeCommissionCalculationOptions(config);
+      const closingRecords = closingDocs.map((closing) =>
+        serializeClosingRecord(closing, { selectedStart: startDateKey, selectedEnd: endDateKey }),
+      );
+      const activeClosingDocs = closingDocs.filter((closing) => closing.status !== 'cancelado');
+      const activeClosingRecords = closingRecords.filter((closing) => closing.status !== 'cancelado');
+      const closingsByProfessional = new Map();
+      activeClosingDocs.forEach((closing) => {
+        const key = normalizeObjectId(closing.profissional);
+        const list = closingsByProfessional.get(key) || [];
+        list.push(closing);
+        closingsByProfessional.set(key, list);
+      });
+
+      const runtimeContext = {};
+      const computed = await runWithConcurrency(professionals, async (professional) => {
+        const result = await calculateAvailableCommissionSummary({
+          user: professional,
+          startDate: start,
+          endDate: end,
+          startDateKey,
+          endDateKey,
+          storeId,
+          runtimeContext,
+          calculationOptions,
+        });
+        return { professional, result };
+      });
+
+      const rows = [];
+      computed.forEach(({ professional, result }) => {
+        const professionalId = String(professional._id);
+        const related = closingsByProfessional.get(professionalId) || [];
+        const legacyRelated = related.filter(
+          (closing) =>
+            !normalizeCalendarDateKey(closing.periodoInicioData) ||
+            !normalizeCalendarDateKey(closing.periodoFimData) ||
+            Number(closing.snapshotVersion || 0) < 1 ||
+            !Array.isArray(closing.snapshotItems),
+        );
+        const exactLegacy = legacyRelated.filter(
+          (closing) =>
+            getClosingPeriodStartKey(closing) === startDateKey &&
+            getClosingPeriodEndKey(closing) === endDateKey,
+        );
+        const unsafeLegacyOverlap = legacyRelated.filter((closing) => !exactLegacy.includes(closing));
+        const snapshotted = related.filter(
+          (closing) => Number(closing.snapshotVersion || 0) >= 1 && Array.isArray(closing.snapshotItems),
+        );
+        const selectedSnapshotItems = snapshotted.flatMap((closing) =>
+          closing.snapshotItems
+            .filter((item) => isCalendarDateInRange(item.date, startDateKey, endDateKey))
+            .map((item) => ({ closing, item: sanitizeSnapshotItem(item) })),
+        );
+
+        const availableTotals = exactLegacy.length ? emptyTotals() : result?.totals || emptyTotals();
+        let totalVendas = Number(availableTotals.totalVendas || 0);
+        let totalServicos = Number(availableTotals.totalServicos || 0);
+        let paidForServicePeriod = 0;
+        let pendingClosed = 0;
+
+        selectedSnapshotItems.forEach(({ closing, item }) => {
+          const value = roundCurrency(item.commission);
+          if (item.source === 'appointment_service') totalServicos += value;
+          else totalVendas += value;
+          if (closing.status === 'pago') paidForServicePeriod += value;
+          else pendingClosed += value;
+        });
+
+        if (exactLegacy.length) {
+          exactLegacy.forEach((closing) => {
+            totalVendas += Number(closing.totalVendas || 0);
+            totalServicos += Number(closing.totalServicos || 0);
+            if (closing.status === 'pago') {
+              paidForServicePeriod += Number(closing.totalPago || closing.totalPeriodo || 0);
+            } else {
+              pendingClosed += Number(closing.totalPendente || closing.totalPeriodo || 0);
+            }
+          });
+        }
+
+        totalVendas = roundCurrency(totalVendas);
+        totalServicos = roundCurrency(totalServicos);
+        const totalPeriodo = roundCurrency(totalVendas + totalServicos);
+        const availablePending = Number(availableTotals.totalPendente || 0);
+        const needsReconciliation = unsafeLegacyOverlap.length > 0;
+        const totalPendente = needsReconciliation
+          ? 0
+          : roundCurrency(availablePending + pendingClosed);
+        const activeRelated = related.filter((closing) => closing.status !== 'cancelado');
+        const singleExact = activeRelated.length === 1 &&
+          getClosingPeriodStartKey(activeRelated[0]) === startDateKey &&
+          getClosingPeriodEndKey(activeRelated[0]) === endDateKey;
+        let status = 'em_aberto';
+        if (needsReconciliation) status = 'reconciliacao';
+        else if (availablePending > 0) status = 'em_aberto';
+        else if (activeRelated.some((closing) => closing.status === 'agendado')) status = 'agendado';
+        else if (activeRelated.some((closing) => closing.status === 'pendente')) status = 'pendente';
+        else if (activeRelated.length && totalPendente <= 0) status = 'pago';
+
+        if (!totalPeriodo && !activeRelated.length && !needsReconciliation) return;
+        const latestClosing = activeRelated[0] || null;
+        rows.push({
+          id: singleExact ? latestClosing._id : `report-${professionalId}-${startDateKey}-${endDateKey}`,
+          profissional: professional._id,
+          profissionalNome: pickUserName(professional),
+          codigoProfissional: professional.codigoCliente || '',
+          store: storeId,
+          periodoInicio: startDateKey,
+          periodoFim: endDateKey,
+          periodo: formatPeriod(startDateKey, endDateKey),
+          tipo: commissionTypeFromTotals({ totalVendas, totalServicos }),
+          previsto: totalPeriodo,
+          totalPeriodo,
+          pago: roundCurrency(paidForServicePeriod),
+          totalPago: roundCurrency(paidForServicePeriod),
+          pendente: totalPendente,
+          totalPendente,
+          totalVendas,
+          totalServicos,
+          pendenteVendas: Number(availableTotals.pendenteVendas || 0),
+          pendenteServicos: Number(availableTotals.pendenteServicos || 0),
+          status,
+          synthetic: !singleExact,
+          canClose: !needsReconciliation && availablePending > 0,
+          canPay: singleExact && ['pendente', 'agendado'].includes(latestClosing.status),
+          canCancel: singleExact,
+          closingId: singleExact ? latestClosing._id : null,
+          closingIds: activeRelated.map((closing) => closing._id),
+          adjustment: snapshotted.length > 0 && availablePending > 0,
+          alreadyClosedItems: Number(result?.alreadyClosedItems || 0),
+          availableItemCount: Array.isArray(result?.items) ? result.items.length : 0,
+          snapshotItemCount: selectedSnapshotItems.length,
+          needsReconciliation,
+          reconciliationReason: needsReconciliation
+            ? 'Há fechamento legado sobreposto sem itens congelados. Revise antes de pagar ou criar outro fechamento.'
+            : '',
+          previsaoPagamento: latestClosing?.previsaoPagamento || null,
+          previsaoPagamentoData: latestClosing
+            ? normalizeCalendarDateKey(latestClosing.previsaoPagamentoData) ||
+              (latestClosing.previsaoPagamento
+                ? getCalendarDateKeyInSaoPaulo(latestClosing.previsaoPagamento)
+                : '')
+            : '',
+          previsaoPagamentoHora: latestClosing
+            ? normalizeAppointmentTimeKey(latestClosing.previsaoPagamentoHora).slice(0, 5)
+            : '',
+          meioPagamento: latestClosing?.meioPagamento || '',
+          paidDate: latestClosing ? normalizeCalendarDateKey(latestClosing.paidDate) : '',
+          paidTime: latestClosing ? normalizeAppointmentTimeKey(latestClosing.paidTime).slice(0, 5) : '',
+          overdue: activeRelated.some((closing) => {
+            const dueKey = normalizeCalendarDateKey(closing.previsaoPagamentoData) ||
+              (closing.previsaoPagamento ? getCalendarDateKeyInSaoPaulo(closing.previsaoPagamento) : '');
+            return closing.status === 'agendado' && dueKey && dueKey < getCalendarDateKeyInSaoPaulo();
+          }),
+        });
+      });
+
+      rows.sort((a, b) => a.profissionalNome.localeCompare(b.profissionalNome, 'pt-BR'));
+
+      const paidInPeriod = await CommissionClosing.find({
+        store: storeId,
+        status: 'pago',
+        paidDate: { $gte: startDateKey, $lte: endDateKey },
+      })
+        .select('totalPago totalPeriodo paidDate paidTime')
+        .lean();
+      const lastPayment = await CommissionClosing.findOne({
+        store: storeId,
+        status: 'pago',
+        paidDate: { $regex: /^\d{4}-\d{2}-\d{2}$/ },
+      })
+        .sort({ paidDate: -1, paidTime: -1, paidAt: -1 })
+        .select('paidDate paidTime totalPago totalPeriodo')
+        .lean();
+
+      const payableIds = activeClosingDocs.map((closing) => closing.payable).filter(Boolean);
+      const payables = payableIds.length
+        ? await AccountPayable.find({ _id: { $in: payableIds } }).select('_id installments').lean()
+        : [];
+      const payableById = new Map(payables.map((payable) => [String(payable._id), payable]));
+      const payableMismatch = activeClosingDocs.filter((closing) => {
+        if (!closing.payable) return closing.status !== 'pendente';
+        const payable = payableById.get(String(closing.payable));
+        if (!payable) return true;
+        const expected = closing.status === 'pago' ? 'paid' : 'pending';
+        return !Array.isArray(payable.installments) || payable.installments.some((item) => item.status !== expected);
+      }).length;
+      const crossBoundary = activeClosingRecords.filter((closing) => closing.crossesSelection).length;
+      const legacyPeriods = activeClosingRecords.filter((closing) => closing.legacyPeriod).length;
+      const missingPaidDate = activeClosingDocs.filter(
+        (closing) => closing.status === 'pago' && !normalizeCalendarDateKey(closing.paidDate),
+      ).length;
+      const paymentsMade = roundCurrency(
+        paidInPeriod.reduce(
+          (sum, closing) => sum + Number(closing.totalPago || closing.totalPeriodo || 0),
+          0,
+        ),
+      );
+      const expected = roundCurrency(rows.reduce((sum, row) => sum + Number(row.totalPeriodo || 0), 0));
+      const paidForServicePeriod = roundCurrency(rows.reduce((sum, row) => sum + Number(row.totalPago || 0), 0));
+      const outstanding = roundCurrency(rows.reduce((sum, row) => sum + Number(row.totalPendente || 0), 0));
+      const reconciliationValue = roundCurrency(
+        rows.filter((row) => row.needsReconciliation).reduce((sum, row) => sum + Number(row.totalPeriodo || 0), 0),
+      );
+
+      return res.json({
+        period: { start: startDateKey, end: endDateKey },
+        store: storeId,
+        items: rows,
+        history: closingRecords.map(({ _professionalKey, _storeKey, ...record }) => record),
+        summary: {
+          totalExpected: expected,
+          paidForServicePeriod,
+          paymentsMade,
+          outstanding,
+          reconciliationValue,
+          lastPaymentDate: normalizeCalendarDateKey(lastPayment?.paidDate),
+          lastPaymentTime: normalizeAppointmentTimeKey(lastPayment?.paidTime).slice(0, 5),
+        },
+        anomalies: {
+          missingConfiguration: !config?.accountingAccount || !config?.bankAccount,
+          legacyPeriods,
+          crossBoundary,
+          missingPaidDate,
+          payableMismatch,
+          reconciliationRows: rows.filter((row) => row.needsReconciliation).length,
+          overdue: rows.filter((row) => row.overdue).length,
+        },
+      });
+    } catch (error) {
+      console.error('[adminComissoesFechamentos] report', error);
+      return res.status(500).json({ message: 'Nao foi possivel gerar o relatorio de comissoes.' });
+    }
+  },
+);
+
+router.get(
   '/admin/comissoes/fechamentos',
   requireAuth,
   authorizeRoles(...ADMIN_ROLES),
@@ -1631,18 +2385,16 @@ router.get(
       const filter = {};
       if (storeId) filter.store = storeId;
       else if (!allowAllStores && allowedStoreIds.length) filter.store = { $in: allowedStoreIds };
-      if (startLocal || endLocal) {
-        filter.$and = [
-          { periodoInicio: { $lte: endLocal } },
-          { periodoFim: { $gte: startLocal } },
-        ];
-      }
-
-      const closings = await CommissionClosing.find(filter)
+      const allClosings = await CommissionClosing.find(filter)
         .sort({ createdAt: -1 })
         .populate('profissional', 'nomeCompleto nomeContato razaoSocial nome codigoCliente')
         .populate('store', 'nome nomeFantasia razaoSocial')
         .lean();
+      const closings = allClosings.filter((closing) => {
+        const closingStart = getClosingPeriodStartKey(closing);
+        const closingEnd = getClosingPeriodEndKey(closing);
+        return Boolean(closingStart && closingEnd && closingStart <= endDateKey && closingEnd >= startDateKey);
+      });
 
       const existingKey = new Set(
         closings.map((closing) => buildProfessionalStorePairKey(closing.profissional, closing.store)),
@@ -1666,14 +2418,7 @@ router.get(
         const storeNome =
           closing.store?.nome || closing.store?.nomeFantasia || closing.store?.razaoSocial || '';
         const ultimoPagamento =
-          closing.status === 'pago'
-            ? (
-                previsaoPagamentoData ||
-                getCalendarDateKeyInSaoPaulo(
-                  closing.updatedAt || closing.previsaoPagamento || closing.periodoFim || closing.createdAt,
-                )
-              )
-            : '';
+          closing.status === 'pago' ? normalizeCalendarDateKey(closing.paidDate) : '';
 
         return {
           id: closing._id,
@@ -1946,7 +2691,7 @@ router.get(
         });
       }
 
-      const summary = await computeCommissionSummaryForUser({
+      const summary = await calculateAvailableCommissionSummary({
         user: profissional,
         startDate: startDateLocal,
         endDate: endDateLocal,
@@ -1955,6 +2700,14 @@ router.get(
         storeId: safeStoreId,
         calculationOptions,
       });
+      const eligibility = req.query?.details === '1'
+        ? await fetchServiceEligibilityAudit({
+            user: profissional,
+            startDateKey,
+            endDateKey,
+            storeId: safeStoreId,
+          })
+        : undefined;
 
       return res.json({
         profissional: profissional._id,
@@ -1963,6 +2716,10 @@ router.get(
         periodoInicio: startDateKey,
         periodoFim: endDateKey,
         totals: summary?.totals || emptyTotals(),
+        grossTotals: summary?.grossTotals || emptyTotals(),
+        alreadyClosedItems: Number(summary?.alreadyClosedItems || 0),
+        items: req.query?.details === '1' ? summary?.items || [] : undefined,
+        eligibility,
       });
     } catch (error) {
       console.error('[adminComissoesFechamentos] preview', error);
@@ -2006,10 +2763,7 @@ router.get(
       const start = toStartOfDay(startDateKey);
       const end = toEndOfDay(endDateKey);
 
-      const profissionais = await User.find({ role: { $in: ['funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master'] } })
-        .select('nomeCompleto nomeContato razaoSocial nome email userGroup codigoCliente')
-        .populate('userGroup', 'comissaoPercent comissaoServicoPercent')
-        .lean();
+      const profissionais = await loadProfessionalsForStore(storeId);
       const runtimeContext = {};
       const storeConfig = storeId
         ? await CommissionConfig.findOne({ store: storeId })
@@ -2021,38 +2775,10 @@ router.get(
         return res.json([]);
       }
 
-      const paidMatch = {
-        status: 'pago',
-        periodoInicio: { $lte: end },
-        periodoFim: { $gte: start },
-      };
-      if (storeId) paidMatch.store = storeId;
-
-      const paidRows = await CommissionClosing.aggregate([
-        { $match: paidMatch },
-        {
-          $group: {
-            _id: '$profissional',
-            paidSum: {
-              $sum: {
-                $cond: [
-                  { $gt: [{ $ifNull: ['$totalPago', 0] }, 0] },
-                  { $ifNull: ['$totalPago', 0] },
-                  { $ifNull: ['$totalPeriodo', 0] },
-                ],
-              },
-            },
-          },
-        },
-      ]);
-      const paidByProfessional = new Map(
-        paidRows.map((row) => [String(row._id), Number(row.paidSum || 0)]),
-      );
-
       const summaries = await runWithConcurrency(
         profissionais,
         async (profissional) => {
-          const summary = await computeCommissionSummaryForUser({
+          const summary = await calculateAvailableCommissionSummary({
             user: profissional,
             startDate: start,
             endDate: end,
@@ -2065,43 +2791,25 @@ router.get(
           return {
             profissional,
             totals: summary?.totals || emptyTotals(),
+            alreadyClosedItems: Number(summary?.alreadyClosedItems || 0),
           };
         },
       );
 
       const result = [];
-      summaries.forEach(({ profissional, totals }) => {
-        const paidSum = paidByProfessional.get(String(profissional._id)) || 0;
-
-        let totalPendente = totals.totalPendente;
-        let pendenteVendas = totals.pendenteVendas;
-        let pendenteServicos = totals.pendenteServicos;
-
-        if (paidSum > 0) {
-          const base = Math.max(totalPendente, pendenteVendas + pendenteServicos);
-          const remaining = Math.max(base - paidSum, 0);
-          if (pendenteVendas + pendenteServicos > 0) {
-            const ratio = pendenteVendas / (pendenteVendas + pendenteServicos);
-            pendenteVendas = Math.max(remaining * ratio, 0);
-            pendenteServicos = Math.max(remaining - pendenteVendas, 0);
-          } else {
-            pendenteVendas = remaining;
-            pendenteServicos = 0;
-          }
-          totalPendente = remaining;
-        }
-
-        if (!totalPendente) return;
+      summaries.forEach(({ profissional, totals, alreadyClosedItems }) => {
+        if (!totals.totalPendente) return;
 
         result.push({
           profissional: profissional._id,
           profissionalNome: pickUserName(profissional),
-          totalPendente,
-          pendenteServicos,
-          pendenteVendas,
+          totalPendente: totals.totalPendente,
+          pendenteServicos: totals.pendenteServicos,
+          pendenteVendas: totals.pendenteVendas,
           totalServicos: totals.totalServicos,
           totalVendas: totals.totalVendas,
           totalPago: totals.totalPago,
+          alreadyClosedItems,
         });
       });
 
@@ -2109,6 +2817,93 @@ router.get(
     } catch (error) {
       console.error('[adminComissoesFechamentos] pendentes', error);
       return res.status(500).json({ message: 'Nao foi possivel calcular pendencias.' });
+    }
+  },
+);
+
+router.get(
+  '/admin/comissoes/fechamentos/:id/details',
+  requireAuth,
+  authorizeRoles(...ADMIN_ROLES),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      if (!isValidObjectId(id)) return res.status(400).json({ message: 'Fechamento invalido.' });
+      const closing = await CommissionClosing.findById(id)
+        .populate('profissional', 'nomeCompleto nomeContato razaoSocial nome email userGroup codigoCliente')
+        .populate('store', 'nome nomeFantasia razaoSocial _id')
+        .lean();
+      if (!closing) return res.status(404).json({ message: 'Fechamento nao encontrado.' });
+      await assertClosingStoreAccess(req, closing);
+      const startDateKey = getClosingPeriodStartKey(closing);
+      const endDateKey = getClosingPeriodEndKey(closing);
+      if (!startDateKey || !endDateKey || startDateKey > endDateKey) {
+        return res.status(422).json({ message: 'Periodo literal do fechamento nao esta valido.' });
+      }
+
+      let items = [];
+      let exclusions = [];
+      let immutable = Number(closing.snapshotVersion || 0) >= 1;
+      if (immutable) {
+        items = (Array.isArray(closing.snapshotItems) ? closing.snapshotItems : []).map(sanitizeSnapshotItem);
+        exclusions = Array.isArray(closing.snapshotExclusions) ? closing.snapshotExclusions : [];
+      } else {
+        const professional = await User.findById(normalizeObjectId(closing.profissional))
+          .select('nomeCompleto nomeContato razaoSocial nome email userGroup codigoCliente')
+          .populate('userGroup', 'comissaoPercent comissaoServicoPercent')
+          .lean();
+        if (!professional) return res.status(404).json({ message: 'Profissional nao encontrado.' });
+        const storeId = normalizeObjectId(closing.store);
+        const config = storeId
+          ? await CommissionConfig.findOne({ store: storeId }).select('includeServices includePdvSales').lean()
+          : null;
+        const [summary, eligibility] = await Promise.all([
+          computeCommissionSummaryForUser({
+            user: professional,
+            startDate: toStartOfDay(startDateKey),
+            endDate: toEndOfDay(endDateKey),
+            startDateKey,
+            endDateKey,
+            storeId,
+            calculationOptions: normalizeCommissionCalculationOptions(config),
+          }),
+          fetchServiceEligibilityAudit({
+            user: professional,
+            startDateKey,
+            endDateKey,
+            storeId,
+          }),
+        ]);
+        items = (summary?.items || []).map(sanitizeSnapshotItem);
+        exclusions = eligibility.exclusions || [];
+      }
+
+      const snapshotTotals = buildTotalsFromItems(items);
+      return res.json({
+        closing: (() => {
+          const record = serializeClosingRecord(closing);
+          delete record._professionalKey;
+          delete record._storeKey;
+          return record;
+        })(),
+        immutable,
+        warning: immutable
+          ? ''
+          : 'Fechamento legado: detalhes recalculados com os dados atuais e ainda nao congelados.',
+        items,
+        exclusions,
+        totals: {
+          itemCount: items.length,
+          excludedCount: exclusions.length,
+          value: roundCurrency(items.reduce((sum, item) => sum + Number(item.value || 0), 0)),
+          commission: snapshotTotals.totalPeriodo,
+          services: snapshotTotals.totalServicos,
+          sales: snapshotTotals.totalVendas,
+        },
+      });
+    } catch (error) {
+      console.error('[adminComissoesFechamentos] details', error);
+      return res.status(error.statusCode || 500).json({ message: error.message || 'Nao foi possivel carregar detalhes.' });
     }
   },
 );
@@ -2163,6 +2958,47 @@ router.get(
       const endDateKey = getClosingPeriodEndKey(closing);
       if (!startDateKey || !endDateKey || startDateKey > endDateKey) {
         return res.status(400).json({ message: 'Periodo do fechamento invalido.' });
+      }
+
+      if (Number(closing.snapshotVersion || 0) >= 1 && Array.isArray(closing.snapshotItems)) {
+        const snapshotRows = closing.snapshotItems
+          .map(sanitizeSnapshotItem)
+          .sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`))
+          .map((item) => ({
+            petNome: item.petName || (item.source === 'pdv_product' ? 'Venda PDV' : 'Pet'),
+            servicoNome: item.description || '--',
+            data: `${formatCalendarDate(item.date)}${item.time ? ` ${item.time}` : ''}`,
+            valor: item.value,
+            percentual: item.percent,
+            comissao: item.commission,
+            origem: item.source,
+            codigoVenda: item.saleCode,
+          }));
+        const snapshotTotals = snapshotRows.reduce(
+          (acc, row) => {
+            acc.valor += Number(row.valor || 0);
+            acc.comissao += Number(row.comissao || 0);
+            return acc;
+          },
+          { valor: 0, comissao: 0 },
+        );
+        return res.json({
+          fechamentoId: closing._id,
+          profissional: profissional._id,
+          profissionalNome: pickUserName(profissional),
+          store: requestedStoreId || null,
+          storeNome: closing.store?.nome || closing.store?.nomeFantasia || closing.store?.razaoSocial || '',
+          periodoInicio: startDateKey,
+          periodoFim: endDateKey,
+          periodo: formatPeriod(startDateKey, endDateKey),
+          immutable: true,
+          rows: snapshotRows,
+          totals: {
+            itens: snapshotRows.length,
+            valor: roundCurrency(snapshotTotals.valor),
+            comissao: roundCurrency(snapshotTotals.comissao),
+          },
+        });
       }
 
       const serviceQuery = {
@@ -2230,6 +3066,8 @@ router.get(
           valor: totals.valor,
           comissao: totals.comissao,
         },
+        immutable: false,
+        warning: 'Fechamento legado recalculado com os dados atuais.',
       });
     } catch (error) {
       console.error('[adminComissoesFechamentos] resumo-servicos', error);
@@ -2269,6 +3107,9 @@ router.post(
       const safeStoreId =
         requestedStoreId ||
         (!allowAllStores && allowedStoreIds.length ? allowedStoreIds[0] : null);
+      if (!safeStoreId) {
+        return res.status(400).json({ message: 'Selecione uma empresa para criar o fechamento.' });
+      }
       const storeConfig = safeStoreId
         ? await CommissionConfig.findOne({ store: safeStoreId })
             .select('includeServices includePdvSales')
@@ -2282,11 +3123,15 @@ router.post(
       if (!startDateKey || !endDateKey || !startDateLocal || !endDateLocal || startDateKey > endDateKey) {
         return res.status(400).json({ message: 'Periodo invalido.' });
       }
+      const hasPaymentSchedule = Boolean(previsaoPagamento || previsaoPagamentoData);
       const paymentSchedule = parsePaymentSchedule({
         value: previsaoPagamento,
         date: previsaoPagamentoData,
         time: previsaoPagamentoHora,
       });
+      if (hasPaymentSchedule && !paymentSchedule) {
+        return res.status(400).json({ message: 'Previsao de pagamento invalida.' });
+      }
 
       const profissional = await User.findById(profissionalId)
         .select('nomeCompleto nomeContato razaoSocial nome email userGroup codigoCliente')
@@ -2296,27 +3141,32 @@ router.post(
         return res.status(404).json({ message: 'Profissional nao encontrado.' });
       }
 
-      // evita duplicar fechamento no mesmo periodo/loja/profissional
       const overlapFilter = {
         profissional: profissional._id,
         store: safeStoreId,
-        $or: [
-          {
-            periodoInicio: { $lte: endDateLocal },
-            periodoFim: { $gte: startDateLocal },
-          },
-        ],
+        status: { $ne: 'cancelado' },
       };
-
-      const existing = await CommissionClosing.findOne(overlapFilter).lean();
-      if (existing) {
+      const potentialOverlaps = await CommissionClosing.find(overlapFilter)
+        .select('_id snapshotVersion snapshotItems periodoInicio periodoFim periodoInicioData periodoFimData')
+        .lean();
+      const overlapping = potentialOverlaps.filter((closing) => {
+        const closingStart = getClosingPeriodStartKey(closing);
+        const closingEnd = getClosingPeriodEndKey(closing);
+        return Boolean(closingStart && closingEnd && closingStart <= endDateKey && closingEnd >= startDateKey);
+      });
+      const legacyOverlap = overlapping.find(
+        (closing) => Number(closing.snapshotVersion || 0) < 1 || !Array.isArray(closing.snapshotItems),
+      );
+      if (legacyOverlap) {
         return res.status(409).json({
-          message: 'Ja existe um fechamento para este profissional e periodo.',
-          existingId: existing._id,
+          message:
+            'Existe um fechamento legado sobreposto sem itens congelados. Faça a reconciliação antes de criar outro fechamento.',
+          existingId: legacyOverlap._id,
+          code: 'LEGACY_OVERLAP_REQUIRES_RECONCILIATION',
         });
       }
 
-      const summary = await computeCommissionSummaryForUser({
+      const summary = await calculateAvailableCommissionSummary({
         user: profissional,
         startDate: startDateLocal,
         endDate: endDateLocal,
@@ -2325,8 +3175,24 @@ router.post(
         storeId: safeStoreId,
         calculationOptions,
       });
+      const eligibility = await fetchServiceEligibilityAudit({
+        user: profissional,
+        startDateKey,
+        endDateKey,
+        storeId: safeStoreId,
+      });
 
       const totals = summary.totals || emptyTotals();
+      const snapshotItems = Array.isArray(summary.items) ? summary.items.map(sanitizeSnapshotItem) : [];
+      if (!snapshotItems.length || Number(totals.totalPeriodo || 0) <= 0) {
+        return res.status(422).json({
+          message: 'Nao existem novos itens finalizados e pagos com comissao positiva neste periodo.',
+          code: 'NO_PAYABLE_COMMISSION_ITEMS',
+          alreadyClosedItems: Number(summary.alreadyClosedItems || 0),
+        });
+      }
+      const actorId = getActorId(req) || profissional._id;
+      const createdAt = new Date();
       const payload = {
         profissional: profissional._id,
         store: safeStoreId,
@@ -2346,67 +3212,79 @@ router.post(
         previsaoPagamentoHora: paymentSchedule?.timeKey || '',
         meioPagamento: (meioPagamento || '').toString().trim(),
         status: paymentSchedule ? 'agendado' : 'pendente',
-        createdBy: req.user?.id || req.user?._id || profissional._id,
+        kind: overlapping.length ? 'adjustment' : 'regular',
+        snapshotVersion: 1,
+        snapshotCreatedAt: createdAt,
+        snapshotItems,
+        snapshotExclusions: eligibility.exclusions,
+        auditTrail: [
+          {
+            action: paymentSchedule ? 'scheduled' : 'created',
+            at: createdAt,
+            date: getCalendarDateKeyInSaoPaulo(createdAt),
+            time: getClockTimeInSaoPaulo(createdAt).slice(0, 5),
+            user: actorId,
+            metadata: {
+              itemCount: snapshotItems.length,
+              kind: overlapping.length ? 'adjustment' : 'regular',
+            },
+          },
+        ],
+        createdBy: actorId,
       };
 
       const created = await CommissionClosing.create(payload);
+      let payableCreated = null;
       try {
-        const payable = await syncPayableForClosing({ closing: created, totals });
+        await CommissionItemLock.insertMany(
+          snapshotItems.map((item) => ({
+            key: buildCommissionItemLockKey({
+              profissional: profissional._id,
+              store: safeStoreId,
+              itemKey: item.key,
+            }),
+            closing: created._id,
+            profissional: profissional._id,
+            store: safeStoreId,
+            source: item.source,
+            date: item.date,
+          })),
+          { ordered: true },
+        );
+
+        const payable = await syncPayableForClosing({ closing: created });
         if (payable) {
+          payableCreated = payable;
           created.payable = payable._id;
           await created.save();
         }
       } catch (syncErr) {
-        console.error('[adminComissoesFechamentos] payable sync error', syncErr);
-        return res.status(201).json({
-          id: created._id,
-          profissional: created.profissional,
-          periodoInicio: created.periodoInicioData || startDateKey,
-          periodoFim: created.periodoFimData || endDateKey,
-          totalPeriodo: created.totalPeriodo,
-          totalPendente: created.totalPendente,
-          totalVendas: created.totalVendas,
-          totalServicos: created.totalServicos,
-          pendenteVendas: created.pendenteVendas,
-          pendenteServicos: created.pendenteServicos,
-          totalPago: created.totalPago,
-          status: created.status,
-          previsaoPagamento: created.previsaoPagamento,
-          previsaoPagamentoData: created.previsaoPagamentoData || '',
-          previsaoPagamentoHora: created.previsaoPagamentoHora || '',
-          meioPagamento: created.meioPagamento,
-          store: created.store,
-          profissionalNome: pickUserName(profissional),
-          periodo: formatPeriod(created.periodoInicioData || startDateKey, created.periodoFimData || endDateKey),
-          payable: created.payable || null,
-          warning:
-            syncErr.message ||
-            'Não foi possível gerar contas a pagar. Configure conta contábil e conta corrente na engrenagem.',
-          debug: req.query?.debug === '1' ? summary.debug : undefined,
+        await Promise.allSettled([
+          CommissionItemLock.deleteMany({ closing: created._id }),
+          CommissionClosing.deleteOne({ _id: created._id }),
+          payableCreated ? AccountPayable.deleteOne({ _id: payableCreated._id }) : Promise.resolve(),
+        ]);
+        if (syncErr?.code === 11000) {
+          return res.status(409).json({
+            message: 'Um ou mais itens ja pertencem a outro fechamento. Atualize o relatorio e tente novamente.',
+            code: 'COMMISSION_ITEMS_ALREADY_CLOSED',
+          });
+        }
+        console.error('[adminComissoesFechamentos] create rollback', syncErr);
+        return res.status(422).json({
+          message: syncErr.message || 'Nao foi possivel criar a conta a pagar do fechamento.',
+          code: 'PAYABLE_SYNC_FAILED',
         });
       }
 
+      const response = serializeClosingRecord({
+        ...created.toObject(),
+        profissional,
+      });
+      delete response._professionalKey;
+      delete response._storeKey;
       return res.status(201).json({
-        id: created._id,
-        profissional: created.profissional,
-        periodoInicio: created.periodoInicioData || startDateKey,
-        periodoFim: created.periodoFimData || endDateKey,
-        totalPeriodo: created.totalPeriodo,
-        totalPendente: created.totalPendente,
-        totalVendas: created.totalVendas,
-        totalServicos: created.totalServicos,
-        pendenteVendas: created.pendenteVendas,
-        pendenteServicos: created.pendenteServicos,
-        totalPago: created.totalPago,
-        status: created.status,
-        previsaoPagamento: created.previsaoPagamento,
-        previsaoPagamentoData: created.previsaoPagamentoData || '',
-        previsaoPagamentoHora: created.previsaoPagamentoHora || '',
-        meioPagamento: created.meioPagamento,
-        store: created.store,
-        profissionalNome: pickUserName(profissional),
-        periodo: formatPeriod(created.periodoInicioData || startDateKey, created.periodoFimData || endDateKey),
-        payable: created.payable || null,
+        ...response,
         debug: req.query?.debug === '1' ? summary.debug : undefined,
       });
     } catch (error) {
@@ -2427,25 +3305,21 @@ router.put(
         return res.status(400).json({ message: 'Fechamento invalido.' });
       }
 
-      const allowedFields = [
-        'status',
-        'totalPago',
-        'previsaoPagamento',
-        'previsaoPagamentoData',
-        'previsaoPagamentoHora',
-        'meioPagamento',
-      ];
+      if (
+        Object.prototype.hasOwnProperty.call(req.body || {}, 'status') ||
+        Object.prototype.hasOwnProperty.call(req.body || {}, 'totalPago')
+      ) {
+        return res.status(400).json({
+          message: 'Use a confirmacao de pagamento ou cancelamento para alterar o status financeiro.',
+        });
+      }
+      const allowedFields = ['previsaoPagamento', 'previsaoPagamentoData', 'previsaoPagamentoHora', 'meioPagamento'];
       const update = {};
       allowedFields.forEach((field) => {
         if (Object.prototype.hasOwnProperty.call(req.body || {}, field)) {
           update[field] = req.body[field];
         }
       });
-
-      if (update.totalPago !== undefined) {
-        const parsed = parseNumber(update.totalPago);
-        update.totalPago = parsed !== null ? parsed : 0;
-      }
 
       const hasPaymentScheduleUpdate = [
         'previsaoPagamento',
@@ -2471,36 +3345,36 @@ router.put(
         update.meioPagamento = (update.meioPagamento || '').toString().trim();
       }
 
-      if (update.status) {
-        const normalized = String(update.status).toLowerCase();
-        if (!['pendente', 'agendado', 'pago'].includes(normalized)) {
-          return res.status(400).json({ message: 'Status invalido.' });
-        }
-        update.status = normalized;
-      }
-
       const closing = await CommissionClosing.findById(id);
       if (!closing) return res.status(404).json({ message: 'Fechamento nao encontrado.' });
-
-      // recalcula pendente com base no totalPago enviado
-      if (typeof update.totalPago === 'number') {
-        const total = closing.totalPeriodo || 0;
-        const pago = update.totalPago;
-        update.totalPendente = Math.max(total - pago, 0);
+      await assertClosingStoreAccess(req, closing);
+      if (['pago', 'cancelado'].includes(closing.status)) {
+        return res.status(409).json({ message: 'Fechamento pago ou cancelado nao pode ser reagendado.' });
       }
 
+      const previous = closing.toObject();
       Object.assign(closing, update);
+      closing.status = closing.previsaoPagamentoData ? 'agendado' : 'pendente';
+      addClosingAudit(closing, {
+        action: 'scheduled',
+        user: getActorId(req),
+        metadata: {
+          previsaoPagamentoData: closing.previsaoPagamentoData || '',
+          previsaoPagamentoHora: closing.previsaoPagamentoHora || '',
+          meioPagamento: closing.meioPagamento || '',
+        },
+      });
       await closing.save();
 
       try {
-        const totals = { totalPendente: closing.totalPendente };
-        const payable = await syncPayableForClosing({ closing, totals });
+        const payable = await syncPayableForClosing({ closing });
         if (payable && !closing.payable) {
           closing.payable = payable._id;
           await closing.save();
         }
       } catch (err) {
-        console.error('[adminComissoesFechamentos] payable sync on update', err);
+        await CommissionClosing.replaceOne({ _id: closing._id }, previous);
+        return res.status(422).json({ message: err.message || 'Nao foi possivel sincronizar contas a pagar.' });
       }
 
       return res.json({
@@ -2516,13 +3390,13 @@ router.put(
       });
     } catch (error) {
       console.error('[adminComissoesFechamentos] update', error);
-      return res.status(500).json({ message: 'Nao foi possivel atualizar fechamento.' });
+      return res.status(error.statusCode || 500).json({ message: error.message || 'Nao foi possivel atualizar fechamento.' });
     }
   },
 );
 
-router.delete(
-  '/admin/comissoes/fechamentos/:id',
+router.post(
+  '/admin/comissoes/fechamentos/:id/pay',
   requireAuth,
   authorizeRoles(...ADMIN_ROLES),
   async (req, res) => {
@@ -2531,36 +3405,158 @@ router.delete(
       if (!isValidObjectId(id)) {
         return res.status(400).json({ message: 'Fechamento invalido.' });
       }
-
       const closing = await CommissionClosing.findById(id);
       if (!closing) return res.status(404).json({ message: 'Fechamento nao encontrado.' });
-
-      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req, req.user?.id);
-      const allowedStoreSet = new Set(allowedStoreIds.map((v) => String(v)));
-      if (!allowAllStores && allowedStoreSet.size) {
-        const closingStore = closing.store ? String(closing.store) : null;
-        if (!closingStore || !allowedStoreSet.has(closingStore)) {
-          return res.status(403).json({ message: 'Empresa nao permitida para o usuario.' });
+      await assertClosingStoreAccess(req, closing);
+      if (req.body?.confirm !== true) {
+        return res.status(400).json({ message: 'Confirme explicitamente o pagamento.' });
+      }
+      if (!['pendente', 'agendado'].includes(closing.status)) {
+        return res.status(409).json({ message: 'Somente fechamentos pendentes ou agendados podem ser pagos.' });
+      }
+      const paymentDate = normalizeCalendarDateKey(req.body?.paymentDate);
+      const paymentTime = normalizeAppointmentTimeKey(req.body?.paymentTime).slice(0, 5);
+      const paymentMethod = String(req.body?.paymentMethod || closing.meioPagamento || '').trim();
+      if (!paymentDate || !paymentTime) {
+        return res.status(400).json({ message: 'Informe a data e a hora reais do pagamento.' });
+      }
+      if (!paymentMethod) {
+        return res.status(400).json({ message: 'Informe o meio de pagamento.' });
+      }
+      const total = roundCurrency(closing.totalPeriodo);
+      if (total <= 0) {
+        return res.status(422).json({ message: 'Fechamento sem valor positivo nao pode ser pago.' });
+      }
+      if (Object.prototype.hasOwnProperty.call(req.body || {}, 'amount')) {
+        const requestedAmount = roundCurrency(parseNumber(req.body.amount));
+        if (requestedAmount !== total) {
+          return res.status(400).json({
+            message: 'O valor confirmado deve ser exatamente o total do fechamento.',
+            expectedAmount: total,
+          });
         }
       }
-
-      let deletedPayable = null;
-      if (closing.payable) {
-        await AccountPayable.deleteOne({ _id: closing.payable });
-        deletedPayable = closing.payable;
+      const paidSchedule = parsePaymentSchedule({ date: paymentDate, time: paymentTime });
+      const previous = closing.toObject();
+      closing.status = 'pago';
+      closing.totalPago = total;
+      closing.totalPendente = 0;
+      closing.pendenteVendas = 0;
+      closing.pendenteServicos = 0;
+      closing.meioPagamento = paymentMethod;
+      closing.paidAt = paidSchedule.instant;
+      closing.paidDate = paidSchedule.dateKey;
+      closing.paidTime = paidSchedule.timeKey;
+      closing.paidBy = getActorId(req);
+      addClosingAudit(closing, {
+        action: 'paid',
+        user: getActorId(req),
+        at: paidSchedule.instant,
+        metadata: { amount: total, paymentMethod },
+      });
+      await closing.save();
+      try {
+        const payable = await syncPayableForClosing({ closing });
+        if (payable && !closing.payable) {
+          closing.payable = payable._id;
+          await closing.save();
+        }
+      } catch (syncError) {
+        await CommissionClosing.replaceOne({ _id: closing._id }, previous);
+        return res.status(422).json({
+          message: syncError.message || 'Pagamento nao registrado porque contas a pagar nao foi sincronizado.',
+        });
       }
-
-      await CommissionClosing.deleteOne({ _id: id });
-
       return res.json({
-        deletedId: id,
-        deletedPayable,
+        id: closing._id,
+        status: closing.status,
+        totalPago: closing.totalPago,
+        totalPendente: closing.totalPendente,
+        paidAt: closing.paidAt,
+        paidDate: closing.paidDate,
+        paidTime: closing.paidTime,
+        meioPagamento: closing.meioPagamento,
+        payable: closing.payable || null,
       });
     } catch (error) {
-      console.error('[adminComissoesFechamentos] delete', error);
-      return res.status(500).json({ message: 'Nao foi possivel reabrir fechamento.' });
+      console.error('[adminComissoesFechamentos] pay', error);
+      return res.status(error.statusCode || 500).json({ message: error.message || 'Nao foi possivel registrar pagamento.' });
     }
   },
+);
+
+router.post(
+  '/admin/comissoes/fechamentos/:id/cancel',
+  requireAuth,
+  authorizeRoles(...ADMIN_ROLES),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      if (!isValidObjectId(id)) return res.status(400).json({ message: 'Fechamento invalido.' });
+      const closing = await CommissionClosing.findById(id);
+      if (!closing) return res.status(404).json({ message: 'Fechamento nao encontrado.' });
+      await assertClosingStoreAccess(req, closing);
+      if (req.body?.confirm !== true) {
+        return res.status(400).json({ message: 'Confirme explicitamente o cancelamento.' });
+      }
+      if (closing.status === 'cancelado') {
+        return res.status(409).json({ message: 'Fechamento ja cancelado.' });
+      }
+      if (closing.status === 'pago' && req.body?.confirmPaidReversal !== true) {
+        return res.status(400).json({
+          message: 'Confirme a reversao financeira do fechamento pago.',
+          requiresPaidReversal: true,
+        });
+      }
+      const reason = String(req.body?.reason || '').trim();
+      if (reason.length < 5) {
+        return res.status(400).json({ message: 'Informe um motivo de cancelamento com pelo menos 5 caracteres.' });
+      }
+      const previous = closing.toObject();
+      const cancelledAt = new Date();
+      closing.status = 'cancelado';
+      closing.totalPendente = 0;
+      closing.pendenteVendas = 0;
+      closing.pendenteServicos = 0;
+      closing.cancelledAt = cancelledAt;
+      closing.cancelledDate = getCalendarDateKeyInSaoPaulo(cancelledAt);
+      closing.cancelledTime = getClockTimeInSaoPaulo(cancelledAt).slice(0, 5);
+      closing.cancelledBy = getActorId(req);
+      closing.cancellationReason = reason;
+      addClosingAudit(closing, {
+        action: 'cancelled',
+        user: getActorId(req),
+        reason,
+        at: cancelledAt,
+        metadata: { reversedPaidClosing: previous.status === 'pago' },
+      });
+      await closing.save();
+      try {
+        await syncPayableForClosing({ closing, createIfMissing: false });
+        await CommissionItemLock.deleteMany({ closing: closing._id });
+      } catch (syncError) {
+        await CommissionClosing.replaceOne({ _id: closing._id }, previous);
+        return res.status(422).json({
+          message: syncError.message || 'Cancelamento nao aplicado porque contas a pagar nao foi sincronizado.',
+        });
+      }
+      return res.json({
+        id: closing._id,
+        status: closing.status,
+        cancellationReason: closing.cancellationReason,
+        cancelledAt: closing.cancelledAt,
+      });
+    } catch (error) {
+      console.error('[adminComissoesFechamentos] cancel', error);
+      return res.status(error.statusCode || 500).json({ message: error.message || 'Nao foi possivel cancelar fechamento.' });
+    }
+  },
+);
+
+router.delete('/admin/comissoes/fechamentos/:id', requireAuth, authorizeRoles(...ADMIN_ROLES), (req, res) =>
+  res.status(405).json({
+    message: 'Exclusao fisica desativada. Use o cancelamento auditavel do fechamento.',
+  }),
 );
 
 module.exports = router;

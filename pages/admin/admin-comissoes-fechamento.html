@@ -1,192 +1,184 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin — Fechamento de Comissões</title>
-
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-  <link rel="stylesheet" href="../../src/output.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+  <link rel="stylesheet" href="../../src/output.css" />
 </head>
-<body class="bg-gray-100">
+<body class="bg-gray-100 text-gray-800">
   <div id="admin-header-placeholder"></div>
 
-  <main class="container mx-auto px-4 pt-1 pb-8 min-h-screen">
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
-      <aside class="md:col-span-4">
-        <div id="admin-sidebar-placeholder"></div>
-      </aside>
+  <main class="container mx-auto min-h-screen px-4 pb-8 pt-1">
+    <div class="grid grid-cols-1 gap-8 md:grid-cols-4">
+      <aside class="md:col-span-4"><div id="admin-sidebar-placeholder"></div></aside>
 
-      <section class="md:col-span-4 space-y-6">
-        <div class="rounded-2xl bg-white shadow ring-1 ring-black/5">
-          <header class="flex flex-col gap-3 border-b border-gray-100 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
+      <section class="space-y-6 md:col-span-4">
+        <div class="overflow-hidden rounded-2xl bg-white shadow ring-1 ring-black/5">
+          <header class="flex flex-col gap-4 border-b border-gray-100 px-5 py-5 lg:flex-row lg:items-center lg:justify-between lg:px-6">
             <div>
               <p class="text-xs font-semibold uppercase tracking-wide text-primary">Comissões</p>
-              <h1 class="text-2xl font-bold text-gray-800">Fechamento de Comissões</h1>
-              <p class="text-sm text-gray-500">Acompanhe repasses de profissionais e programe pagamentos.</p>
+              <h1 class="text-2xl font-bold text-gray-900">Fechamento de Comissões</h1>
+              <p class="text-sm text-gray-500">Relatório estrito pelas datas informadas e repasses com trilha de auditoria.</p>
             </div>
-            <div class="flex flex-wrap items-center gap-2">
-              <label class="flex items-center gap-2 text-sm text-gray-700">
-                <span class="text-xs font-semibold uppercase tracking-wide text-gray-500">Empresa</span>
-                <select id="empresa-select" class="rounded-lg border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-primary focus:ring-primary">
-                  <option value="">Selecione</option>
+            <div class="flex flex-wrap items-end gap-2">
+              <label class="min-w-56 text-sm text-gray-700">
+                <span class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Empresa</span>
+                <select id="empresa-select" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-primary focus:ring-primary">
+                  <option value="">Carregando...</option>
                 </select>
               </label>
-              <button id="btn-novo-fechamento" class="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white shadow hover:bg-primary/90">
-                <i class="fas fa-plus"></i>
-                Novo fechamento
+              <button type="button" id="btn-novo-fechamento" class="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white shadow hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50">
+                <i class="fas fa-plus" aria-hidden="true"></i><span>Novo fechamento</span>
               </button>
-              <button id="btn-configuracoes" class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50" title="Configurações">
-                <i class="fas fa-gear"></i>
+              <button type="button" id="btn-configuracoes" class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50" aria-label="Abrir configurações de comissões" title="Configurações">
+                <i class="fas fa-gear" aria-hidden="true"></i>
               </button>
-              <button id="btn-exportar" class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">
-                <i class="fas fa-file-arrow-down text-primary"></i>
-                Exportar CSV
+              <button type="button" id="btn-exportar" class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                <i class="fas fa-file-arrow-down text-primary" aria-hidden="true"></i><span>Exportar CSV</span>
               </button>
             </div>
           </header>
 
-          <div class="px-6 py-6 space-y-4">
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <article class="rounded-xl border border-gray-100 bg-gradient-to-br from-primary/10 to-primary/5 p-4 shadow-sm">
+          <div class="space-y-5 px-4 py-5 sm:px-6 sm:py-6">
+            <div id="screen-feedback" class="hidden rounded-xl border px-4 py-3 text-sm" role="status" aria-live="polite"></div>
+
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <article class="rounded-xl border border-primary/15 bg-gradient-to-br from-primary/10 to-primary/5 p-4 shadow-sm">
                 <div class="flex items-center justify-between">
-                  <div class="text-xs font-semibold uppercase tracking-wide text-primary">Total previsto</div>
-                  <i class="fas fa-gauge-high text-primary"></i>
+                  <div class="text-xs font-semibold uppercase tracking-wide text-primary">Comissão do período</div>
+                  <i class="fas fa-gauge-high text-primary" aria-hidden="true"></i>
                 </div>
                 <p id="kpi-total-previsto" class="mt-2 text-2xl font-bold text-gray-900">--</p>
-                <p class="text-sm text-gray-500">Somatório das comissões selecionadas.</p>
+                <p class="text-sm text-gray-500">Somente itens dentro das datas selecionadas.</p>
               </article>
-
               <article class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
                 <div class="flex items-center justify-between">
-                  <div class="text-xs font-semibold uppercase tracking-wide text-emerald-600">Pagamentos do período</div>
-                  <i class="fas fa-circle-check text-emerald-600"></i>
+                  <div class="text-xs font-semibold uppercase tracking-wide text-emerald-600">Pagamentos realizados</div>
+                  <i class="fas fa-circle-check text-emerald-600" aria-hidden="true"></i>
                 </div>
                 <p id="kpi-pagos" class="mt-2 text-2xl font-bold text-gray-900">--</p>
-                <p class="text-sm text-gray-500">Valores já quitados.</p>
+                <p class="text-sm text-gray-500">Pela data/hora real registrada no pagamento.</p>
               </article>
-
               <article class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
                 <div class="flex items-center justify-between">
-                  <div class="text-xs font-semibold uppercase tracking-wide text-amber-500">A receber</div>
-                  <i class="fas fa-clock text-amber-500"></i>
+                  <div class="text-xs font-semibold uppercase tracking-wide text-amber-600">A fechar ou pagar</div>
+                  <i class="fas fa-clock text-amber-600" aria-hidden="true"></i>
                 </div>
                 <p id="kpi-receber" class="mt-2 text-2xl font-bold text-gray-900">--</p>
-                <p class="text-sm text-gray-500">Comissões previstas para repasse.</p>
+                <p class="text-sm text-gray-500">Não inclui valores que exigem reconciliação.</p>
               </article>
-
               <article class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
                 <div class="flex items-center justify-between">
-                  <div class="text-xs font-semibold uppercase tracking-wide text-blue-500">Último pagamento</div>
-                  <i class="fas fa-receipt text-blue-500"></i>
+                  <div class="text-xs font-semibold uppercase tracking-wide text-blue-600">Último pagamento</div>
+                  <i class="fas fa-receipt text-blue-600" aria-hidden="true"></i>
                 </div>
                 <p id="kpi-ultimo" class="mt-2 text-2xl font-bold text-gray-900">--</p>
-                <p class="text-sm text-gray-500">Último repasse registrado.</p>
+                <p class="text-sm text-gray-500">Data e hora efetivas do último repasse.</p>
               </article>
             </div>
 
-            <div class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
-              <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 w-full">
+            <section class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm" aria-labelledby="filtros-title">
+              <h2 id="filtros-title" class="sr-only">Filtros do relatório</h2>
+              <div class="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+                <div class="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <label class="text-sm text-gray-700">
-                    <span class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Status</span>
+                    <span class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Status</span>
                     <select id="filtro-status" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-primary focus:ring-primary">
                       <option value="">Todos</option>
-                      <option value="pendente">Pendente</option>
-                      <option value="agendado">Agendado</option>
-                      <option value="pago">Pago</option>
+                      <option value="pendente">Pendentes / em aberto</option>
+                      <option value="agendado">Agendados</option>
+                      <option value="pago">Pagos</option>
+                      <option value="reconciliacao">Requer reconciliação</option>
                     </select>
                   </label>
-                  <div class="text-sm text-gray-700">
-                    <span class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Período</span>
-                    <div class="grid grid-cols-2 gap-2">
-                      <input id="filtro-inicio" type="date" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-primary focus:ring-primary">
-                      <input id="filtro-fim" type="date" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-primary focus:ring-primary">
-                    </div>
-                  </div>
                   <label class="text-sm text-gray-700">
-                    <span class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Busca</span>
-                    <div class="relative">
-                      <span class="absolute inset-y-0 left-3 flex items-center text-gray-400"><i class="fas fa-search"></i></span>
-                      <input id="filtro-busca" type="search" class="w-full rounded-lg border border-gray-200 pl-9 pr-3 py-2 text-sm shadow-sm focus:border-primary focus:ring-primary" placeholder="Profissional ou código"/>
-                    </div>
+                    <span class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">De</span>
+                    <input id="filtro-inicio" type="date" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-primary focus:ring-primary" />
+                  </label>
+                  <label class="text-sm text-gray-700">
+                    <span class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Até</span>
+                    <input id="filtro-fim" type="date" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-primary focus:ring-primary" />
+                  </label>
+                  <label class="text-sm text-gray-700">
+                    <span class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Busca</span>
+                    <span class="relative block">
+                      <i class="fas fa-search absolute inset-y-0 left-3 flex items-center text-gray-400" aria-hidden="true"></i>
+                      <input id="filtro-busca" type="search" class="w-full rounded-lg border border-gray-200 py-2 pl-9 pr-3 text-sm shadow-sm focus:border-primary focus:ring-primary" placeholder="Nome ou código do profissional" />
+                    </span>
                   </label>
                 </div>
                 <div class="flex flex-wrap gap-2">
-                  <button id="btn-aplicar" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow hover:bg-primary/90">
-                    <i class="fas fa-filter"></i>
-                    Aplicar filtros
+                  <button type="button" id="btn-aplicar" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow hover:bg-primary/90">
+                    <i class="fas fa-filter" aria-hidden="true"></i><span>Aplicar</span>
                   </button>
-                  <button id="btn-limpar" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">
-                    <i class="fas fa-rotate-left"></i>
-                    Limpar
+                  <button type="button" id="btn-limpar" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+                    <i class="fas fa-rotate-left" aria-hidden="true"></i><span>Limpar</span>
                   </button>
                 </div>
               </div>
               <p class="mt-3 text-xs text-gray-500">
-                Para serviços da agenda, o período usa a data e a hora informadas no agendamento e contabiliza somente itens finalizados e pagos.
+                Serviços usam exclusivamente <strong>data e hora gravadas no item do agendamento</strong>. Só entram serviços finalizados cujo agendamento esteja marcado como pago; código de venda sozinho não comprova pagamento.
               </p>
-            </div>
+            </section>
 
-            <div id="agenda-repasses-card" class="rounded-xl border border-gray-100 bg-white shadow-sm">
-              <div class="flex flex-col gap-3 border-b border-gray-100 px-4 py-4 md:flex-row md:items-center md:justify-between">
+            <section id="auditoria-panel" class="hidden rounded-xl border border-amber-200 bg-amber-50 p-4" aria-labelledby="auditoria-title">
+              <div class="flex items-start gap-3">
+                <i class="fas fa-triangle-exclamation mt-0.5 text-amber-600" aria-hidden="true"></i>
+                <div class="min-w-0 flex-1">
+                  <h2 id="auditoria-title" class="font-semibold text-amber-900">Pontos que exigem atenção</h2>
+                  <ul id="auditoria-list" class="mt-2 space-y-1 text-sm text-amber-900"></ul>
+                </div>
+              </div>
+            </section>
+
+            <section id="agenda-repasses-card" class="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm" aria-labelledby="relatorio-title">
+              <div class="flex flex-col gap-3 border-b border-gray-100 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                  <h2 class="text-lg font-semibold text-gray-800">Agenda de repasses</h2>
-                  <p class="text-sm text-gray-500">Fechamentos previstos, agendados ou pagos.</p>
+                  <h2 id="relatorio-title" class="text-lg font-semibold text-gray-900">Relatório estrito do período</h2>
+                  <p class="text-sm text-gray-500">Nenhum valor fora das datas escolhidas entra neste quadro.</p>
                 </div>
-                <div class="flex items-center justify-between gap-3 text-sm font-semibold text-gray-800 w-[16rem]">
-                  <button
-                    id="mes-anterior"
-                    class="flex-none p-2 rounded-lg border border-gray-200 hover:bg-gray-50"
-                    aria-label="Mês anterior"
-                  >
-                    <i class="fas fa-chevron-left"></i>
-                  </button>
-
-                  <span
-                    id="mes-label"
-                    class="flex-1 text-center"
-                  ></span>
-
-                  <button
-                    id="mes-proximo"
-                    class="flex-none p-2 rounded-lg border border-gray-200 hover:bg-gray-50"
-                    aria-label="Próximo mês"
-                  >
-                    <i class="fas fa-chevron-right"></i>
-                  </button>
+                <div class="flex items-center justify-between gap-3 text-sm font-semibold text-gray-800 sm:w-64">
+                  <button type="button" id="mes-anterior" class="rounded-lg border border-gray-200 p-2 hover:bg-gray-50" aria-label="Mês anterior"><i class="fas fa-chevron-left" aria-hidden="true"></i></button>
+                  <span id="mes-label" class="flex-1 text-center"></span>
+                  <button type="button" id="mes-proximo" class="rounded-lg border border-gray-200 p-2 hover:bg-gray-50" aria-label="Próximo mês"><i class="fas fa-chevron-right" aria-hidden="true"></i></button>
                 </div>
-                <span
-                  id="fechamento-contagem"
-                  class="block w-40 text-right text-xs font-semibold uppercase tracking-wide text-gray-500"
-                ></span>
+                <span id="fechamento-contagem" class="text-xs font-semibold uppercase tracking-wide text-gray-500"></span>
               </div>
 
-              <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-100">
+              <div id="report-loading" class="hidden px-4 py-8 text-center text-sm text-gray-500" role="status">
+                <i class="fas fa-spinner fa-spin mr-2" aria-hidden="true"></i>Calculando comissões...
+              </div>
+              <div class="hidden overflow-x-auto lg:block" id="report-table-wrap">
+                <table class="min-w-full divide-y divide-gray-100" data-admin-table-skip="true">
                   <thead class="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
                     <tr>
-                      <th class="px-4 py-3 text-left">Profissional</th>
+                      <th class="px-4 py-3 text-left"><button type="button" class="font-semibold hover:text-primary" data-sort-key="profissionalNome">Profissional <i class="fas fa-sort" aria-hidden="true"></i></button></th>
                       <th class="px-4 py-3 text-left">Tipo</th>
                       <th class="px-4 py-3 text-left">Período</th>
-                      <th class="px-4 py-3 text-left">Previsto</th>
-                      <th class="px-4 py-3 text-left">Pago</th>
+                      <th class="px-4 py-3 text-right"><button type="button" class="font-semibold hover:text-primary" data-sort-key="totalPeriodo">Comissão <i class="fas fa-sort" aria-hidden="true"></i></button></th>
+                      <th class="px-4 py-3 text-right"><button type="button" class="font-semibold hover:text-primary" data-sort-key="totalPago">Já fechada/paga <i class="fas fa-sort" aria-hidden="true"></i></button></th>
                       <th class="px-4 py-3 text-left">Status</th>
-                      <th class="px-4 py-3 text-left">Próximo passo</th>
+                      <th class="px-4 py-3 text-left">Pagamento</th>
                       <th class="px-4 py-3 text-left">Ações</th>
                     </tr>
                   </thead>
-                  <tbody id="fechamento-tbody" class="divide-y divide-gray-100 bg-white text-sm text-gray-700">
-                    <tr>
-                      <td colspan="8" class="px-4 py-4 text-center text-gray-500">Carregando...</td>
-                    </tr>
-                  </tbody>
+                  <tbody id="fechamento-tbody" class="divide-y divide-gray-100 bg-white text-sm text-gray-700"></tbody>
                 </table>
               </div>
-            </div>
-          </div>
+              <div id="report-mobile-list" class="divide-y divide-gray-100 lg:hidden"></div>
+            </section>
 
+            <details id="history-section" class="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
+              <summary class="cursor-pointer px-4 py-4 font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30">
+                Histórico de fechamentos que tocam o período <span id="history-count" class="ml-1 text-sm font-normal text-gray-500"></span>
+              </summary>
+              <p class="border-t border-gray-100 px-4 pt-3 text-xs text-gray-500">Este histórico é separado dos totais acima. Linhas que cruzam os limites aparecem apenas para auditoria.</p>
+              <div id="history-list" class="divide-y divide-gray-100 px-4 pb-4"></div>
+            </details>
           </div>
+        </div>
       </section>
     </div>
   </main>
@@ -195,139 +187,94 @@
   <div id="confirm-modal-placeholder"></div>
   <div id="admin-footer-placeholder"></div>
 
-  <!-- Modal Configurações -->
-  <div id="modal-configuracoes" class="fixed inset-0 z-[999] hidden">
-    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-config-close></div>
-    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-4 py-8 sm:items-center">
-      <div class="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5">
+  <div id="modal-configuracoes" class="fixed inset-0 z-[999] hidden" role="dialog" aria-modal="true" aria-labelledby="config-title" data-modal>
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-modal-close="modal-configuracoes"></div>
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-4 py-6 sm:items-center">
+      <div class="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white shadow-2xl ring-1 ring-black/5" data-modal-panel tabindex="-1">
         <header class="flex items-start justify-between gap-4 border-b border-gray-100 px-5 py-4">
-          <div>
-            <p class="text-xs font-semibold uppercase tracking-wide text-primary">Configurações</p>
-            <h3 class="text-lg font-bold text-gray-900">Comissões - Contas a pagar</h3>
-            <p class="text-sm text-gray-500">Selecione a conta contábil de contas a pagar para a empresa atual.</p>
-          </div>
-          <button type="button" data-config-close class="rounded-full border border-gray-200 p-2 text-gray-500 hover:bg-gray-50 hover:text-gray-700">
-            <i class="fas fa-times"></i>
-          </button>
+          <div><p class="text-xs font-semibold uppercase tracking-wide text-primary">Configurações</p><h2 id="config-title" class="text-lg font-bold text-gray-900">Integração com contas a pagar</h2><p class="text-sm text-gray-500">Empresa: <strong id="config-empresa-nome">--</strong></p></div>
+          <button type="button" data-modal-close="modal-configuracoes" class="rounded-full border border-gray-200 p-2 text-gray-500 hover:bg-gray-50" aria-label="Fechar configurações"><i class="fas fa-times" aria-hidden="true"></i></button>
         </header>
-
-        <div class="px-5 py-4 space-y-4">
-          <div class="text-sm text-gray-700">
-            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Empresa atual</p>
-            <p id="config-empresa-nome" class="font-semibold text-gray-800">--</p>
-          </div>
-          <label class="text-sm text-gray-700 block">
-            <span class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Conta contábil (a pagar)</span>
-            <select id="config-accounting" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-primary focus:ring-primary">
-              <option value="">Selecione</option>
-            </select>
-            <p class="text-xs text-gray-500 mt-1">Apenas contas com natureza "contas_pagar" associadas à empresa selecionada.</p>
-          </label>
-          <label class="text-sm text-gray-700 block">
-            <span class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Conta corrente</span>
-            <select id="config-bankaccount" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-primary focus:ring-primary">
-              <option value="">Selecione</option>
-            </select>
-            <p class="text-xs text-gray-500 mt-1">Contas correntes vinculadas à empresa selecionada.</p>
-          </label>
-          <div class="rounded-lg border border-gray-200 p-3">
-            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Fontes de cálculo</p>
-            <label class="flex items-center gap-2 text-sm text-gray-700 mb-2">
-              <input id="config-include-services" type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary" checked>
-              <span>Serviços</span>
-            </label>
-            <label class="flex items-center gap-2 text-sm text-gray-700">
-              <input id="config-include-pdv-sales" type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary" checked>
-              <span>Vendas PDV</span>
-            </label>
-            <p class="text-xs text-gray-500 mt-2">
-              Serviços: comissão por realização na agenda. Vendas PDV: comissão de vendas no caixa (serviços/produtos).
-            </p>
-          </div>
+        <div class="space-y-4 px-5 py-4">
+          <label class="block text-sm text-gray-700"><span class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Conta contábil (a pagar)</span><select id="config-accounting" class="w-full rounded-lg border border-gray-200 px-3 py-2"><option value="">Selecione</option></select></label>
+          <label class="block text-sm text-gray-700"><span class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Conta corrente</span><select id="config-bankaccount" class="w-full rounded-lg border border-gray-200 px-3 py-2"><option value="">Selecione</option></select></label>
+          <fieldset class="rounded-lg border border-gray-200 p-3">
+            <legend class="px-1 text-xs font-semibold uppercase tracking-wide text-gray-500">Fontes de cálculo</legend>
+            <label class="mt-1 flex items-center gap-2 text-sm"><input id="config-include-services" type="checkbox" class="rounded border-gray-300 text-primary" checked /> Serviços finalizados e pagos da agenda</label>
+            <label class="mt-2 flex items-center gap-2 text-sm"><input id="config-include-pdv-sales" type="checkbox" class="rounded border-gray-300 text-primary" checked /> Vendas pagas do PDV</label>
+            <p class="mt-2 text-xs text-gray-500">Com as duas fontes ativas, serviços do PDV não são somados novamente: a agenda é a fonte do serviço e o PDV contabiliza produtos.</p>
+          </fieldset>
         </div>
-
-        <footer class="flex flex-col gap-2 border-t border-gray-100 bg-gray-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-end">
-          <button type="button" data-config-close class="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100">Cancelar</button>
-          <button type="button" id="config-salvar" class="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow hover:bg-primary/90">Salvar</button>
-        </footer>
+        <footer class="flex justify-end gap-2 border-t border-gray-100 bg-gray-50 px-5 py-4"><button type="button" data-modal-close="modal-configuracoes" class="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold">Cancelar</button><button type="button" id="config-salvar" class="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Salvar</button></footer>
       </div>
     </div>
   </div>
 
-  <div id="modal-fechamento" class="fixed inset-0 z-[999] hidden">
-    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-fechamento-close></div>
-    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-4 py-8 sm:items-center">
-      <div class="w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5">
+  <div id="modal-fechamento" class="fixed inset-0 z-[999] hidden" role="dialog" aria-modal="true" aria-labelledby="fechamento-title" data-modal>
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-modal-close="modal-fechamento"></div>
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-4 py-6 sm:items-center">
+      <div class="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white shadow-2xl ring-1 ring-black/5" data-modal-panel tabindex="-1">
         <header class="flex items-start justify-between gap-4 border-b border-gray-100 px-5 py-4">
-          <div>
-            <p class="text-xs font-semibold uppercase tracking-wide text-primary">Novo fechamento</p>
-            <h3 class="text-lg font-bold text-gray-900">Programar repasse</h3>
-            <p class="text-sm text-gray-500">Informe o colaborador, período e condições de pagamento.</p>
-          </div>
-          <button type="button" data-fechamento-close class="rounded-full border border-gray-200 p-2 text-gray-500 hover:bg-gray-50 hover:text-gray-700">
-            <i class="fas fa-times"></i>
-          </button>
+          <div><p class="text-xs font-semibold uppercase tracking-wide text-primary">Novo fechamento</p><h2 id="fechamento-title" class="text-lg font-bold text-gray-900">Conferir e programar repasse</h2><p class="text-sm text-gray-500">O valor será congelado com a lista exata de itens.</p></div>
+          <button type="button" data-modal-close="modal-fechamento" class="rounded-full border border-gray-200 p-2 text-gray-500 hover:bg-gray-50" aria-label="Fechar novo fechamento"><i class="fas fa-times" aria-hidden="true"></i></button>
         </header>
-
-        <div class="px-5 py-4 space-y-4">
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <label class="text-sm text-gray-700">
-              <span class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Funcionário</span>
-              <select id="fechamento-funcionario" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-primary focus:ring-primary">
-                <option value="">Selecione</option>
-                <option value="ana">Ana Costa</option>
-                <option value="bruno">Bruno Lima</option>
-                <option value="carla">Carla Nogueira</option>
-              </select>
-            </label>
-            <label class="text-sm text-gray-700">
-              <span class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Início</span>
-              <input id="fechamento-inicio" type="date" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-primary focus:ring-primary">
-            </label>
-            <label class="text-sm text-gray-700">
-              <span class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Fim</span>
-              <input id="fechamento-fim" type="date" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-primary focus:ring-primary">
-            </label>
+        <div class="space-y-4 px-5 py-4">
+          <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <label class="text-sm"><span class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Funcionário</span><select id="fechamento-funcionario" class="w-full rounded-lg border border-gray-200 px-3 py-2"><option value="">Selecione</option></select></label>
+            <label class="text-sm"><span class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Início</span><input id="fechamento-inicio" type="date" class="w-full rounded-lg border border-gray-200 px-3 py-2" /></label>
+            <label class="text-sm"><span class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Fim</span><input id="fechamento-fim" type="date" class="w-full rounded-lg border border-gray-200 px-3 py-2" /></label>
           </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <article class="rounded-xl border border-gray-100 bg-gradient-to-br from-primary/10 to-primary/5 p-4 shadow-sm">
-              <div class="text-xs font-semibold uppercase tracking-wide text-primary">Total (não pagos)</div>
-              <p id="fechamento-kpi-pendente" class="mt-2 text-2xl font-bold text-gray-900">--</p>
-              <p class="text-xs text-gray-500">Soma de comissões ainda não pagas.</p>
-            </article>
-            <article class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
-              <div class="text-xs font-semibold uppercase tracking-wide text-gray-700">Total período</div>
-              <p id="fechamento-kpi-periodo" class="mt-2 text-2xl font-bold text-gray-900">--</p>
-              <p class="text-xs text-gray-500">Previsto para o intervalo selecionado.</p>
-            </article>
+          <div id="fechamento-preview-status" class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600" aria-live="polite">Selecione funcionário e período para conferir.</div>
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <article class="rounded-xl bg-primary/10 p-4"><div class="text-xs font-semibold uppercase text-primary">Saldo novo</div><p id="fechamento-kpi-pendente" class="mt-1 text-2xl font-bold">--</p></article>
+            <article class="rounded-xl border border-gray-100 p-4"><div class="text-xs font-semibold uppercase text-gray-500">Itens incluídos</div><p id="fechamento-kpi-itens" class="mt-1 text-2xl font-bold">--</p></article>
+            <article class="rounded-xl border border-gray-100 p-4"><div class="text-xs font-semibold uppercase text-gray-500">Itens excluídos</div><p id="fechamento-kpi-excluidos" class="mt-1 text-2xl font-bold">--</p></article>
           </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
-            <label class="text-sm text-gray-700 md:col-span-5">
-              <span class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Previsão de pagamento</span>
-              <input id="fechamento-prev" type="date" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-primary focus:ring-primary">
-            </label>
-            <label class="text-sm text-gray-700 md:col-span-3">
-              <span class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Hora</span>
-              <input id="fechamento-prev-hora" type="time" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-primary focus:ring-primary">
-            </label>
-            <label class="text-sm text-gray-700 md:col-span-4">
-              <span class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Meio de pagamento</span>
-              <select id="fechamento-meio" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-primary focus:ring-primary">
-                <option value="">Selecione</option>
-                <option value="pix">Pix</option>
-                <option value="transferencia">Transferência</option>
-                <option value="dinheiro">Dinheiro</option>
-              </select>
-            </label>
+          <button type="button" id="fechamento-ver-detalhes" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold hover:bg-gray-50 disabled:opacity-50"><i class="fas fa-list-check" aria-hidden="true"></i>Ver conferência item a item</button>
+          <div class="grid grid-cols-1 gap-3 md:grid-cols-12">
+            <label class="text-sm md:col-span-5"><span class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Previsão de pagamento (opcional)</span><input id="fechamento-prev" type="date" class="w-full rounded-lg border border-gray-200 px-3 py-2" /></label>
+            <label class="text-sm md:col-span-3"><span class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Hora</span><input id="fechamento-prev-hora" type="time" class="w-full rounded-lg border border-gray-200 px-3 py-2" /></label>
+            <label class="text-sm md:col-span-4"><span class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Meio de pagamento</span><select id="fechamento-meio" class="w-full rounded-lg border border-gray-200 px-3 py-2"><option value="">Selecione</option><option value="pix">Pix</option><option value="transferencia">Transferência</option><option value="dinheiro">Dinheiro</option></select></label>
           </div>
         </div>
+        <footer class="flex justify-end gap-2 border-t border-gray-100 bg-gray-50 px-5 py-4"><button type="button" data-modal-close="modal-fechamento" class="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold">Cancelar</button><button type="button" id="fechamento-salvar" class="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50" disabled>Confirmar fechamento</button></footer>
+      </div>
+    </div>
+  </div>
 
-        <footer class="flex flex-col gap-2 border-t border-gray-100 bg-gray-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-end">
-          <button type="button" data-fechamento-close class="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100">Cancelar</button>
-          <button type="button" id="fechamento-salvar" class="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow hover:bg-primary/90">Salvar</button>
-        </footer>
+  <div id="modal-pagamento" class="fixed inset-0 z-[1000] hidden" role="dialog" aria-modal="true" aria-labelledby="pagamento-title" data-modal>
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-modal-close="modal-pagamento"></div>
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-4 py-6 sm:items-center">
+      <div class="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white shadow-2xl" data-modal-panel tabindex="-1">
+        <header class="flex items-start justify-between border-b px-5 py-4"><div><p class="text-xs font-semibold uppercase text-emerald-600">Confirmação financeira</p><h2 id="pagamento-title" class="text-lg font-bold">Registrar pagamento</h2></div><button type="button" data-modal-close="modal-pagamento" class="rounded-full border p-2" aria-label="Fechar pagamento"><i class="fas fa-times" aria-hidden="true"></i></button></header>
+        <div class="space-y-4 px-5 py-4">
+          <div class="rounded-xl bg-emerald-50 p-4"><p id="pagamento-profissional" class="font-semibold text-emerald-900">--</p><p id="pagamento-periodo" class="text-sm text-emerald-800">--</p><p id="pagamento-valor" class="mt-2 text-2xl font-bold text-emerald-900">--</p></div>
+          <div class="grid grid-cols-2 gap-3"><label class="text-sm"><span class="mb-1 block text-xs font-semibold uppercase text-gray-500">Data real</span><input id="pagamento-data" type="date" class="w-full rounded-lg border px-3 py-2" /></label><label class="text-sm"><span class="mb-1 block text-xs font-semibold uppercase text-gray-500">Hora real</span><input id="pagamento-hora" type="time" class="w-full rounded-lg border px-3 py-2" /></label></div>
+          <label class="block text-sm"><span class="mb-1 block text-xs font-semibold uppercase text-gray-500">Meio de pagamento</span><select id="pagamento-meio" class="w-full rounded-lg border px-3 py-2"><option value="">Selecione</option><option value="pix">Pix</option><option value="transferencia">Transferência</option><option value="dinheiro">Dinheiro</option></select></label>
+          <label class="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900"><input id="pagamento-confirmar" type="checkbox" class="mt-0.5 rounded border-gray-300 text-emerald-600" /><span>Conferi profissional, período, valor, data, hora e meio de pagamento.</span></label>
+        </div>
+        <footer class="flex justify-end gap-2 border-t bg-gray-50 px-5 py-4"><button type="button" data-modal-close="modal-pagamento" class="rounded-lg border px-4 py-2 text-sm font-semibold">Voltar</button><button type="button" id="pagamento-salvar" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled>Registrar pagamento</button></footer>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-cancelamento" class="fixed inset-0 z-[1000] hidden" role="dialog" aria-modal="true" aria-labelledby="cancelamento-title" data-modal>
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-modal-close="modal-cancelamento"></div>
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-4 py-6 sm:items-center">
+      <div class="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white shadow-2xl" data-modal-panel tabindex="-1">
+        <header class="flex items-start justify-between border-b px-5 py-4"><div><p class="text-xs font-semibold uppercase text-red-600">Ação auditada</p><h2 id="cancelamento-title" class="text-lg font-bold">Cancelar fechamento</h2><p id="cancelamento-contexto" class="text-sm text-gray-500">--</p></div><button type="button" data-modal-close="modal-cancelamento" class="rounded-full border p-2" aria-label="Fechar cancelamento"><i class="fas fa-times" aria-hidden="true"></i></button></header>
+        <div class="space-y-4 px-5 py-4"><p class="text-sm text-gray-700">O registro e sua auditoria serão preservados. Os itens voltarão a ficar disponíveis para um novo fechamento.</p><label class="block text-sm"><span class="mb-1 block text-xs font-semibold uppercase text-gray-500">Motivo obrigatório</span><textarea id="cancelamento-motivo" rows="3" minlength="5" class="w-full rounded-lg border px-3 py-2" placeholder="Explique por que o fechamento será cancelado"></textarea></label><label id="cancelamento-pago-wrap" class="hidden items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900"><input id="cancelamento-reverter-pago" type="checkbox" class="mt-0.5 rounded text-red-600" /><span>Confirmo também a reversão do fechamento já marcado como pago.</span></label></div>
+        <footer class="flex justify-end gap-2 border-t bg-gray-50 px-5 py-4"><button type="button" data-modal-close="modal-cancelamento" class="rounded-lg border px-4 py-2 text-sm font-semibold">Voltar</button><button type="button" id="cancelamento-salvar" class="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled>Cancelar fechamento</button></footer>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-detalhes" class="fixed inset-0 z-[1001] hidden" role="dialog" aria-modal="true" aria-labelledby="detalhes-title" data-modal>
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-modal-close="modal-detalhes"></div>
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-4">
+      <div class="max-h-[94vh] w-full max-w-6xl overflow-y-auto rounded-2xl bg-white shadow-2xl" data-modal-panel tabindex="-1">
+        <header class="sticky top-0 z-10 flex items-start justify-between border-b bg-white px-5 py-4"><div><p class="text-xs font-semibold uppercase text-primary">Conferência</p><h2 id="detalhes-title" class="text-lg font-bold">Itens da comissão</h2><p id="detalhes-subtitulo" class="text-sm text-gray-500">--</p></div><div class="flex gap-2"><button type="button" id="detalhes-imprimir" class="rounded-lg border px-3 py-2 text-sm font-semibold"><i class="fas fa-print mr-1" aria-hidden="true"></i>PDF</button><button type="button" data-modal-close="modal-detalhes" class="rounded-full border p-2" aria-label="Fechar detalhes"><i class="fas fa-times" aria-hidden="true"></i></button></div></header>
+        <div class="space-y-4 px-5 py-4"><div id="detalhes-alerta" class="hidden rounded-lg border px-3 py-2 text-sm"></div><div id="detalhes-kpis" class="grid grid-cols-2 gap-3 sm:grid-cols-4"></div><div><h3 class="mb-2 font-semibold">Incluídos</h3><div id="detalhes-incluidos" class="overflow-x-auto rounded-lg border"></div></div><div><h3 class="mb-2 font-semibold">Excluídos do pagamento</h3><div id="detalhes-excluidos" class="overflow-x-auto rounded-lg border"></div></div></div>
       </div>
     </div>
   </div>
@@ -338,7 +285,6 @@
   <script src="../../scripts/core/main.js"></script>
   <script src="../../scripts/admin/admin.js"></script>
   <script src="/scripts/common/modal-bridge.js"></script>
-  <script src="../../scripts/admin/admin-comissoes-fechamento.js?v=20260905-1"></script>
+  <script src="../../scripts/admin/admin-comissoes-fechamento.js?v=20260909-1"></script>
 </body>
 </html>
-

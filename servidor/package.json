@@ -36,7 +36,14 @@
     "products:search-index": "node scripts/backfill-product-search-index.js --write",
     "customers:audit-identities": "node scripts/audit-customer-identities.js",
     "customers:backfill-identities": "node scripts/audit-customer-identities.js --apply",
-    "customers:check-whatsapp-otp": "node scripts/check-whatsapp-otp.js"
+    "customers:check-whatsapp-otp": "node scripts/check-whatsapp-otp.js",
+    "commissions:audit": "node scripts/audit-commission-financial-integrity.js",
+    "commissions:literal-dates:dry-run": "node scripts/migrate-commission-closing-literal-dates.js",
+    "commissions:literal-dates": "node scripts/migrate-commission-closing-literal-dates.js --apply --confirm-literal-dates",
+    "commissions:locks:dry-run": "node scripts/ensure-commission-item-lock-index.js",
+    "commissions:locks": "node scripts/ensure-commission-item-lock-index.js --apply --confirm-unique-lock-index",
+    "commissions:reconcile-payables:dry-run": "node scripts/reconcile-commission-payables.js",
+    "commissions:reconcile-payables": "node scripts/reconcile-commission-payables.js --apply --confirm-closing-payment-status"
   },
   "keywords": [],
   "author": "",

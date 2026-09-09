@@ -241,6 +241,7 @@ function buildAdminTableFilterRegex(rawValue) {
 
 function shouldEnhanceAdminTable(table) {
   if (!table || table.getAttribute(ADMIN_TABLE_ENHANCED_ATTR) === 'true') return false;
+  if (table.getAttribute('data-admin-table-skip') === 'true') return false;
   const thead = table.querySelector('thead');
   const tbody = table.querySelector('tbody');
   if (!thead || !tbody) return false;
