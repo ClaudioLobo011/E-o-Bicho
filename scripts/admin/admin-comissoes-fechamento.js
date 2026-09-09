@@ -25,6 +25,7 @@
     historyPageSize: 10,
     sort: { key: "profissionalNome", direction: "asc" },
     currentPreview: null,
+    closingRequestedStart: "",
     currentPayment: null,
     currentApproval: null,
     currentCancellation: null,
@@ -362,7 +363,7 @@
         .map(
           (item) => `<article class="commission-row px-3 py-3 hover:bg-gray-50">
         <div class="min-w-0"><div class="flex flex-wrap items-center gap-1.5"><h3 class="truncate text-sm font-bold text-gray-950">${escapeHtml(item.profissionalNome || "--")}</h3><span class="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600">${escapeHtml(item.tipo || "--")}</span></div><p class="text-[11px] text-gray-500">Cód. ${escapeHtml(item.codigoProfissional || "--")}${item.alreadyClosedItems ? ` · ${numberValue(item.alreadyClosedItems)} congelado(s)` : ""}</p>${item.needsReconciliation ? `<p class="mt-1 text-[11px] text-red-700">${escapeHtml(item.reconciliationReason)}</p>` : ""}</div>
-        <div data-col="period" class="text-xs text-gray-600"><span class="commission-action-label font-semibold">Período: </span>${escapeHtml(item.periodo || formatPeriod(item.periodoInicio, item.periodoFim))}</div>
+        <div data-col="period" class="text-xs text-gray-600"><span class="commission-action-label font-semibold">Período: </span>${escapeHtml(item.periodo || formatPeriod(item.periodoInicio, item.periodoFim))}${item.periodAdjusted && item.previousClosingEnd ? `<p class="mt-1 text-[11px] font-semibold text-blue-700">Continuação automática após o fechamento de ${escapeHtml(formatDate(item.previousClosingEnd))}.</p>` : ""}</div>
         <div class="sm:text-right"><p class="text-sm font-bold text-gray-950">${formatMoney(item.totalPeriodo)}</p><p class="text-[10px] text-gray-500">Pago ${formatMoney(item.totalPago)}</p></div>
         <div>${statusBadge(item.status, item.overdue)}</div>
         <div data-col="payment">${paymentLabel(item)}</div>
@@ -689,6 +690,7 @@
     ++state.previewRequest;
     if (el("fechamento-funcionario")) el("fechamento-funcionario").value = "";
     const period = getPeriod() || { start: "", end: "" };
+    state.closingRequestedStart = period.start;
     ["fechamento-inicio", "fechamento-fim"].forEach((id, index) => {
       if (el(id)) el(id).value = index ? period.end : period.start;
     });
@@ -722,7 +724,9 @@
     const request = ++state.previewRequest;
     const professional = el("fechamento-funcionario")?.value || "";
     const store = el("empresa-select")?.value || "";
-    const start = toYmd(el("fechamento-inicio")?.value);
+    const start = toYmd(
+      state.closingRequestedStart || el("fechamento-inicio")?.value,
+    );
     const end = toYmd(el("fechamento-fim")?.value);
     state.currentPreview = null;
     if (el("fechamento-salvar")) el("fechamento-salvar").disabled = true;
@@ -744,6 +748,12 @@
       );
       if (request !== state.previewRequest) return;
       state.currentPreview = preview;
+      const effectiveStart = toYmd(preview.periodoInicio);
+      if (
+        effectiveStart &&
+        el("fechamento-inicio")?.value !== effectiveStart
+      )
+        el("fechamento-inicio").value = effectiveStart;
       const itemCount = (preview.items || []).length;
       const excludedCount = (preview.eligibility?.exclusions || []).length;
       const total = numberValue(preview.totals?.totalPeriodo);
@@ -755,11 +765,14 @@
         el("fechamento-kpi-excluidos").textContent = String(excludedCount);
       if (el("fechamento-preview-status"))
         el("fechamento-preview-status").textContent =
-          total > 0
-            ? `${itemCount} item(ns) novo(s) pronto(s) para congelar.`
-            : "Nenhum item novo finalizado, pago e com comissão positiva.";
+          preview.periodComplete
+            ? `O período selecionado já foi fechado até ${formatDate(preview.previousClosingEnd)}.`
+            : total > 0
+              ? `${preview.periodAdjusted ? `Período iniciado automaticamente em ${formatDate(effectiveStart)}. ` : ""}${itemCount} item(ns) novo(s) pronto(s) para congelar.`
+              : "Nenhum item novo finalizado, pago e com comissão positiva.";
       if (el("fechamento-salvar"))
-        el("fechamento-salvar").disabled = total <= 0 || !itemCount;
+        el("fechamento-salvar").disabled =
+          preview.periodComplete || total <= 0 || !itemCount;
       if (el("fechamento-ver-detalhes"))
         el("fechamento-ver-detalhes").disabled = itemCount + excludedCount <= 0;
     } catch (error) {
@@ -774,6 +787,7 @@
       el("fechamento-funcionario").value = String(row.profissional || "");
       el("fechamento-inicio").value = toYmd(row.periodoInicio);
       el("fechamento-fim").value = toYmd(row.periodoFim);
+      state.closingRequestedStart = toYmd(row.periodoInicio);
     }
     openModal("modal-fechamento");
     updateClosingPreview();
@@ -828,6 +842,7 @@
       setButtonBusy(button, false);
       button.disabled =
         !state.currentPreview ||
+        state.currentPreview.periodComplete ||
         numberValue(state.currentPreview.totals?.totalPeriodo) <= 0;
     }
   }
@@ -1835,12 +1850,20 @@
     el("fechamento-ver-detalhes").addEventListener("click", () =>
       openDetails(),
     );
-    ["fechamento-funcionario", "fechamento-inicio", "fechamento-fim"].forEach(
+    ["fechamento-funcionario", "fechamento-fim"].forEach(
       (id) => {
         el(id).addEventListener("change", schedulePreview);
         el(id).addEventListener("input", schedulePreview);
       },
     );
+    ["change", "input"].forEach((eventName) => {
+      el("fechamento-inicio").addEventListener(eventName, () => {
+        state.closingRequestedStart = toYmd(
+          el("fechamento-inicio")?.value,
+        );
+        schedulePreview();
+      });
+    });
     [
       "pagamento-confirmar",
       "pagamento-data",

@@ -179,6 +179,14 @@ async function createClosingRequest({ request, headers, fixture, start, end, pay
     });
 }
 
+function toTestStartOfDay(dateKey) {
+  return new Date(`${dateKey}T00:00:00.000-03:00`);
+}
+
+function toTestEndOfDay(dateKey) {
+  return new Date(`${dateKey}T23:59:59.999-03:00`);
+}
+
 test.describe('fechamento de comissões por data literal do agendamento', () => {
   test.before(async () => {
     mongo = await MongoMemoryServer.create();
@@ -369,14 +377,18 @@ test.describe('fechamento de comissões por data literal do agendamento', () => 
       (item) => String(item.profissional) === String(fixture.professional._id),
     );
     assert.ok(row);
-    assert.equal(row.periodoInicio, '2026-08-01');
+    assert.equal(row.periodoInicio, '2026-08-16');
     assert.equal(row.periodoFim, '2026-08-31');
-    assert.equal(row.totalServicos, 80);
-    assert.equal(row.totalPeriodo, 80);
-    assert.equal(row.status, 'reconciliacao');
-    assert.equal(row.totalPendente, 0);
-    assert.equal(response.body.summary.totalExpected, 80);
+    assert.equal(row.totalServicos, 40);
+    assert.equal(row.totalPeriodo, 40);
+    assert.equal(row.status, 'em_aberto');
+    assert.equal(row.totalPendente, 40);
+    assert.equal(row.periodAdjusted, true);
+    assert.equal(row.previousClosingEnd, '2026-08-15');
+    assert.equal(row.needsReconciliation, false);
+    assert.equal(response.body.summary.totalExpected, 40);
     assert.equal(response.body.anomalies.crossBoundary, 1);
+    assert.equal(response.body.anomalies.reconciliationRows, 0);
     assert.equal(response.body.history.length, 1);
     assert.equal(response.body.history[0].crossesSelection, true);
   });
@@ -408,7 +420,99 @@ test.describe('fechamento de comissões por data literal do agendamento', () => 
     assert.equal(response.body.history[0].periodoFim, '2026-08-31');
     assert.equal(response.body.history[0].crossesSelection, false);
     assert.equal(response.body.history[0].legacyPeriod, true);
-    assert.equal(response.body.summary.totalExpected, 50);
+    assert.equal(response.body.items.length, 0);
+    assert.equal(response.body.summary.totalExpected, 0);
+    assert.equal(
+      response.body.issues.some((item) => item.type === 'legacy_snapshot'),
+      false,
+    );
+  });
+
+  test('continua no dia seguinte ao último fechamento semanal sem exigir revisão', async () => {
+    const fixture = await createFixture();
+    await createAppointment({
+      fixture,
+      scheduledAt: '2026-09-01T12:00:00.000Z',
+      items: [
+        { valor: 100, data: '2026-09-01', hora: '09:00', status: 'finalizado' },
+        { valor: 100, data: '2026-09-06', hora: '09:00', status: 'finalizado' },
+        { valor: 100, data: '2026-09-07', hora: '09:00', status: 'finalizado' },
+        { valor: 100, data: '2026-09-13', hora: '09:00', status: 'finalizado' },
+        { valor: 100, data: '2026-09-14', hora: '09:00', status: 'finalizado' },
+      ],
+    });
+    await CommissionClosing.create({
+      profissional: fixture.professional._id,
+      store: fixture.store._id,
+      periodoInicio: toTestStartOfDay('2026-09-01'),
+      periodoFim: toTestEndOfDay('2026-09-06'),
+      periodoInicioData: '2026-09-01',
+      periodoFimData: '2026-09-06',
+      totalPeriodo: 80,
+      totalPago: 80,
+      status: 'pago',
+      createdBy: fixture.admin._id,
+    });
+
+    const request = supertest(createApp());
+    const headers = authorizationFor(fixture.admin);
+    const reportAfterFirstWeek = await request
+      .get(`/api/admin/comissoes/fechamentos/report?store=${fixture.store._id}&start=2026-09-01&end=2026-09-30`)
+      .set(headers);
+    assert.equal(reportAfterFirstWeek.status, 200, reportAfterFirstWeek.text);
+    const firstOpenRow = reportAfterFirstWeek.body.items.find(
+      (item) => String(item.profissional) === String(fixture.professional._id),
+    );
+    assert.ok(firstOpenRow);
+    assert.equal(firstOpenRow.periodoInicio, '2026-09-07');
+    assert.equal(firstOpenRow.previousClosingEnd, '2026-09-06');
+    assert.equal(firstOpenRow.periodAdjusted, true);
+    assert.equal(firstOpenRow.needsReconciliation, false);
+    assert.equal(firstOpenRow.totalServicos, 120);
+
+    await CommissionClosing.create({
+      profissional: fixture.professional._id,
+      store: fixture.store._id,
+      periodoInicio: toTestStartOfDay('2026-09-07'),
+      periodoFim: toTestEndOfDay('2026-09-13'),
+      periodoInicioData: '2026-09-07',
+      periodoFimData: '2026-09-13',
+      totalPeriodo: 80,
+      totalPago: 80,
+      status: 'pago',
+      createdBy: fixture.admin._id,
+    });
+
+    const preview = await request
+      .get(`/api/admin/comissoes/fechamentos/preview?profissionalId=${fixture.professional._id}&store=${fixture.store._id}&start=2026-09-01&end=2026-09-30&details=1`)
+      .set(headers);
+    assert.equal(preview.status, 200, preview.text);
+    assert.equal(preview.body.requestedPeriodoInicio, '2026-09-01');
+    assert.equal(preview.body.periodoInicio, '2026-09-14');
+    assert.equal(preview.body.previousClosingEnd, '2026-09-13');
+    assert.equal(preview.body.periodAdjusted, true);
+    assert.equal(preview.body.periodComplete, false);
+    assert.equal(preview.body.items.length, 1);
+    assert.equal(preview.body.items[0].date, '2026-09-14');
+    assert.equal(preview.body.totals.totalServicos, 40);
+
+    const created = await createClosingRequest({
+      request,
+      headers,
+      fixture,
+      start: '2026-09-01',
+      end: '2026-09-30',
+    });
+    assert.equal(created.status, 201, created.text);
+    assert.equal(created.body.periodoInicio, '2026-09-14');
+    assert.equal(created.body.periodoFim, '2026-09-30');
+    assert.equal(created.body.totalServicos, 40);
+
+    const saved = await CommissionClosing.findById(created.body.id).lean();
+    assert.equal(saved.auditTrail[0].metadata.requestedPeriodStart, '2026-09-01');
+    assert.equal(saved.auditTrail[0].metadata.effectivePeriodStart, '2026-09-14');
+    assert.equal(saved.auditTrail[0].metadata.periodAdjusted, true);
+    assert.equal(saved.auditTrail[0].metadata.previousClosingEnd, '2026-09-13');
   });
 
   test('congela itens do fechamento, impede duplicidade e mantém o resumo imutável', async () => {
@@ -456,8 +560,9 @@ test.describe('fechamento de comissões por data literal do agendamento', () => 
       start: '2026-09-01',
       end: '2026-09-30',
     });
-    assert.equal(duplicate.status, 422, duplicate.text);
-    assert.equal(duplicate.body.code, 'NO_PAYABLE_COMMISSION_ITEMS');
+    assert.equal(duplicate.status, 409, duplicate.text);
+    assert.equal(duplicate.body.code, 'COMMISSION_PERIOD_ALREADY_CLOSED');
+    assert.equal(duplicate.body.previousClosingEnd, '2026-09-30');
     assert.equal(await CommissionClosing.countDocuments({}), 1);
   });
 
@@ -851,7 +956,9 @@ test.describe('fechamento de comissões por data literal do agendamento', () => 
       .set(headers);
     assert.equal(report.status, 200, report.text);
     assert.equal(report.body.permissions.canPay, false);
-    assert.equal(report.body.items[0].canPay, false);
+    assert.equal(report.body.items.length, 0);
+    assert.equal(report.body.history.length, 1);
+    assert.equal(report.body.history[0].status, 'pendente');
 
     const forbidden = await request
       .post(`/api/admin/comissoes/fechamentos/${created.body.id}/pay`)

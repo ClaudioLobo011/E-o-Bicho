@@ -293,6 +293,51 @@ const getClosingPeriodEndKey = (closing = {}) =>
   normalizeCalendarDateKey(closing?.periodoFimData) ||
   (closing?.periodoFim ? getCalendarDateKeyInSaoPaulo(closing.periodoFim) : '');
 
+const resolveNextOpenCommissionPeriod = ({
+  selectedStart = '',
+  selectedEnd = '',
+  closings = [],
+} = {}) => {
+  const startDateKey = normalizeCalendarDateKey(selectedStart);
+  const endDateKey = normalizeCalendarDateKey(selectedEnd);
+  if (!startDateKey || !endDateKey || startDateKey > endDateKey) {
+    return {
+      startDateKey: '',
+      endDateKey: '',
+      previousClosing: null,
+      previousClosingEnd: '',
+      exhausted: true,
+    };
+  }
+
+  const previousClosing = closings
+    .filter((closing) => closing?.status !== 'cancelado')
+    .map((closing) => ({
+      closing,
+      start: getClosingPeriodStartKey(closing),
+      end: getClosingPeriodEndKey(closing),
+    }))
+    .filter(({ start, end }) => start && end && start <= endDateKey && end >= startDateKey)
+    .sort((left, right) => {
+      const byEnd = right.end.localeCompare(left.end);
+      if (byEnd) return byEnd;
+      return String(right.closing?.createdAt || '').localeCompare(String(left.closing?.createdAt || ''));
+    })[0] || null;
+
+  const nextStart = previousClosing
+    ? addCalendarDays(previousClosing.end, 1)
+    : startDateKey;
+  const effectiveStart = nextStart > startDateKey ? nextStart : startDateKey;
+
+  return {
+    startDateKey: effectiveStart,
+    endDateKey,
+    previousClosing: previousClosing?.closing || null,
+    previousClosingEnd: previousClosing?.end || '',
+    exhausted: !effectiveStart || effectiveStart > endDateKey,
+  };
+};
+
 const parsePaymentSchedule = ({ value = null, date = '', time = '' } = {}) => {
   const dateKey = normalizeCalendarDateKey(date) || normalizeCalendarDateKey(value);
   if (!dateKey) return null;
@@ -2336,7 +2381,6 @@ router.get(
       if (!startDateKey || !endDateKey || startDateKey > endDateKey) {
         return res.status(400).json({ message: 'Periodo invalido.' });
       }
-      const start = toStartOfDay(startDateKey);
       const end = toEndOfDay(endDateKey);
 
       const [professionals, config, allClosingDocs] = await Promise.all([
@@ -2358,172 +2402,101 @@ router.get(
       const closingRecords = closingDocs.map((closing) =>
         serializeClosingRecord(closing, { selectedStart: startDateKey, selectedEnd: endDateKey }),
       );
+      const activeAllClosingDocs = allClosingDocs.filter((closing) => closing.status !== 'cancelado');
       const activeClosingDocs = closingDocs.filter((closing) => closing.status !== 'cancelado');
       const activeClosingRecords = closingRecords.filter((closing) => closing.status !== 'cancelado');
-      const closingsByProfessional = new Map();
-      activeClosingDocs.forEach((closing) => {
+      const allClosingsByProfessional = new Map();
+      activeAllClosingDocs.forEach((closing) => {
         const key = normalizeObjectId(closing.profissional);
-        const list = closingsByProfessional.get(key) || [];
+        const list = allClosingsByProfessional.get(key) || [];
         list.push(closing);
-        closingsByProfessional.set(key, list);
+        allClosingsByProfessional.set(key, list);
       });
 
       const runtimeContext = {};
       const computed = await runWithConcurrency(professionals, async (professional) => {
+        const professionalId = String(professional._id);
+        const openPeriod = resolveNextOpenCommissionPeriod({
+          selectedStart: startDateKey,
+          selectedEnd: endDateKey,
+          closings: allClosingsByProfessional.get(professionalId) || [],
+        });
+        if (openPeriod.exhausted) {
+          return { professional, result: null, openPeriod };
+        }
         const result = await calculateAvailableCommissionSummary({
           user: professional,
-          startDate: start,
+          startDate: toStartOfDay(openPeriod.startDateKey),
           endDate: end,
-          startDateKey,
+          startDateKey: openPeriod.startDateKey,
           endDateKey,
           storeId,
           runtimeContext,
           calculationOptions,
         });
-        return { professional, result };
+        return { professional, result, openPeriod };
       });
 
       const rows = [];
-      computed.forEach(({ professional, result }) => {
+      computed.forEach(({ professional, result, openPeriod }) => {
+        if (!result || openPeriod?.exhausted) return;
         const professionalId = String(professional._id);
-        const related = closingsByProfessional.get(professionalId) || [];
-        const legacyRelated = related.filter(
-          (closing) =>
-            !normalizeCalendarDateKey(closing.periodoInicioData) ||
-            !normalizeCalendarDateKey(closing.periodoFimData) ||
-            Number(closing.snapshotVersion || 0) < 1 ||
-            !Array.isArray(closing.snapshotItems),
-        );
-        const exactLegacy = legacyRelated.filter(
-          (closing) =>
-            getClosingPeriodStartKey(closing) === startDateKey &&
-            getClosingPeriodEndKey(closing) === endDateKey,
-        );
-        const unsafeLegacyOverlap = legacyRelated.filter((closing) => !exactLegacy.includes(closing));
-        const snapshotted = related.filter(
-          (closing) => Number(closing.snapshotVersion || 0) >= 1 && Array.isArray(closing.snapshotItems),
-        );
-        const selectedSnapshotItems = snapshotted.flatMap((closing) =>
-          closing.snapshotItems
-            .filter((item) => isCalendarDateInRange(item.date, startDateKey, endDateKey))
-            .map((item) => ({ closing, item: sanitizeSnapshotItem(item) })),
-        );
-
-        const availableTotals = exactLegacy.length ? emptyTotals() : result?.totals || emptyTotals();
-        let totalVendas = Number(availableTotals.totalVendas || 0);
-        let totalServicos = Number(availableTotals.totalServicos || 0);
-        let paidForServicePeriod = 0;
-        let pendingClosed = 0;
-
-        selectedSnapshotItems.forEach(({ closing, item }) => {
-          const value = roundCurrency(item.commission);
-          if (item.source === 'appointment_service') totalServicos += value;
-          else totalVendas += value;
-          if (closing.status === 'pago') paidForServicePeriod += value;
-          else pendingClosed += value;
-        });
-
-        if (exactLegacy.length) {
-          exactLegacy.forEach((closing) => {
-            totalVendas += Number(closing.totalVendas || 0);
-            totalServicos += Number(closing.totalServicos || 0);
-            if (closing.status === 'pago') {
-              paidForServicePeriod += Number(closing.totalPago || closing.totalPeriodo || 0);
-            } else {
-              pendingClosed += Number(closing.totalPendente || closing.totalPeriodo || 0);
-            }
-          });
-        }
-
-        totalVendas = roundCurrency(totalVendas);
-        totalServicos = roundCurrency(totalServicos);
+        const effectiveStartDateKey = openPeriod.startDateKey;
+        const availableTotals = result?.totals || emptyTotals();
+        const totalVendas = roundCurrency(availableTotals.totalVendas);
+        const totalServicos = roundCurrency(availableTotals.totalServicos);
         const totalPeriodo = roundCurrency(totalVendas + totalServicos);
-        const availablePending = Number(availableTotals.totalPendente || 0);
-        const needsReconciliation = unsafeLegacyOverlap.length > 0;
-        const totalPendente = needsReconciliation
-          ? 0
-          : roundCurrency(availablePending + pendingClosed);
-        const activeRelated = related.filter((closing) => closing.status !== 'cancelado');
-        const singleExact = activeRelated.length === 1 &&
-          getClosingPeriodStartKey(activeRelated[0]) === startDateKey &&
-          getClosingPeriodEndKey(activeRelated[0]) === endDateKey;
-        let status = 'em_aberto';
-        if (needsReconciliation) status = 'reconciliacao';
-        else if (availablePending > 0) status = 'em_aberto';
-        else if (activeRelated.some((closing) => closing.status === 'aguardando_aprovacao')) {
-          status = 'aguardando_aprovacao';
-        } else if (activeRelated.some((closing) => closing.status === 'agendado')) status = 'agendado';
-        else if (activeRelated.some((closing) => closing.status === 'pendente')) status = 'pendente';
-        else if (activeRelated.length && totalPendente <= 0) status = 'pago';
+        const totalPendente = roundCurrency(availableTotals.totalPendente || totalPeriodo);
+        if (totalPeriodo <= 0 || totalPendente <= 0) return;
 
-        if (!totalPeriodo && !activeRelated.length && !needsReconciliation) return;
-        const latestClosing = activeRelated[0] || null;
         rows.push({
-          id: singleExact ? latestClosing._id : `report-${professionalId}-${startDateKey}-${endDateKey}`,
+          id: `report-${professionalId}-${effectiveStartDateKey}-${endDateKey}`,
           profissional: professional._id,
           profissionalNome: pickUserName(professional),
           codigoProfissional: professional.codigoCliente || '',
           store: storeId,
-          periodoInicio: startDateKey,
+          periodoInicio: effectiveStartDateKey,
           periodoFim: endDateKey,
-          periodo: formatPeriod(startDateKey, endDateKey),
+          periodo: formatPeriod(effectiveStartDateKey, endDateKey),
+          selectedPeriodoInicio: startDateKey,
+          periodAdjusted: effectiveStartDateKey !== startDateKey,
+          previousClosingEnd: openPeriod.previousClosingEnd,
+          previousClosingId: openPeriod.previousClosing?._id || null,
           tipo: commissionTypeFromTotals({ totalVendas, totalServicos }),
           previsto: totalPeriodo,
           totalPeriodo,
-          pago: roundCurrency(paidForServicePeriod),
-          totalPago: roundCurrency(paidForServicePeriod),
+          pago: 0,
+          totalPago: 0,
           pendente: totalPendente,
           totalPendente,
           totalVendas,
           totalServicos,
           pendenteVendas: Number(availableTotals.pendenteVendas || 0),
           pendenteServicos: Number(availableTotals.pendenteServicos || 0),
-          status,
-          synthetic: !singleExact,
-          canClose: permissions.canClose && !needsReconciliation && availablePending > 0,
-          canPay:
-            permissions.canPay &&
-            singleExact &&
-            ['pendente', 'agendado'].includes(latestClosing.status),
-          canApprove:
-            permissions.canPay &&
-            singleExact &&
-            latestClosing.status === 'aguardando_aprovacao' &&
-            normalizeObjectId(latestClosing.paymentApproval?.requestedBy) !== normalizeObjectId(getActorId(req)),
-          canCancel: permissions.canCancel && singleExact,
-          closingId: singleExact ? latestClosing._id : null,
-          closingIds: activeRelated.map((closing) => closing._id),
-          adjustment: snapshotted.length > 0 && availablePending > 0,
+          status: 'em_aberto',
+          synthetic: true,
+          canClose: permissions.canClose,
+          canPay: false,
+          canApprove: false,
+          canCancel: false,
+          closingId: null,
+          closingIds: [],
+          adjustment: false,
           alreadyClosedItems: Number(result?.alreadyClosedItems || 0),
           availableItemCount: Array.isArray(result?.items) ? result.items.length : 0,
-          snapshotItemCount: selectedSnapshotItems.length,
-          needsReconciliation,
-          reconciliationReason: needsReconciliation
-            ? 'Há fechamento legado sobreposto sem itens congelados. Revise antes de pagar ou criar outro fechamento.'
-            : '',
-          previsaoPagamento: latestClosing?.previsaoPagamento || null,
-          previsaoPagamentoData: latestClosing
-            ? normalizeCalendarDateKey(latestClosing.previsaoPagamentoData) ||
-              (latestClosing.previsaoPagamento
-                ? getCalendarDateKeyInSaoPaulo(latestClosing.previsaoPagamento)
-                : '')
-            : '',
-          previsaoPagamentoHora: latestClosing
-            ? normalizeAppointmentTimeKey(latestClosing.previsaoPagamentoHora).slice(0, 5)
-            : '',
-          meioPagamento: latestClosing?.meioPagamento || '',
-          paidDate: latestClosing ? normalizeCalendarDateKey(latestClosing.paidDate) : '',
-          paidTime: latestClosing ? normalizeAppointmentTimeKey(latestClosing.paidTime).slice(0, 5) : '',
-          paymentReference: latestClosing?.paymentReference || latestClosing?.paymentApproval?.reference || '',
-          hasPaymentReceipt: Boolean(latestClosing?.paymentReceipt || latestClosing?.paymentApproval?.receipt),
-          paymentApproval: latestClosing
-            ? serializeClosingRecord(latestClosing).paymentApproval
-            : { required: false, status: 'none' },
-          overdue: activeRelated.some((closing) => {
-            const dueKey = normalizeCalendarDateKey(closing.previsaoPagamentoData) ||
-              (closing.previsaoPagamento ? getCalendarDateKeyInSaoPaulo(closing.previsaoPagamento) : '');
-            return closing.status === 'agendado' && dueKey && dueKey < getCalendarDateKeyInSaoPaulo();
-          }),
+          snapshotItemCount: 0,
+          needsReconciliation: false,
+          reconciliationReason: '',
+          previsaoPagamento: null,
+          previsaoPagamentoData: '',
+          previsaoPagamentoHora: '',
+          meioPagamento: '',
+          paidDate: '',
+          paidTime: '',
+          paymentReference: '',
+          hasPaymentReceipt: false,
+          paymentApproval: { required: false, status: 'none' },
+          overdue: false,
         });
       });
 
@@ -2588,19 +2561,6 @@ router.get(
           actions: permissions.canConfigure ? ['configure'] : [],
         });
       }
-      activeClosingRecords
-        .filter((record) => record.legacyPeriod || Number(record.snapshotVersion || 0) < 1)
-        .forEach((record) => {
-          issues.push({
-            id: `legacy-${record.id}`,
-            type: 'legacy_snapshot',
-            severity: 'warning',
-            title: 'Fechamento legado sem congelamento completo',
-            description: `${record.profissionalNome || 'Profissional'} - ${record.periodo}`,
-            closingId: record.id,
-            actions: permissions.canClose ? ['reconcile_snapshot', 'details'] : ['details'],
-          });
-        });
       payableIssues.forEach((closing) => {
         const record = recordById.get(String(closing._id));
         issues.push({
@@ -2665,6 +2625,7 @@ router.get(
           appointmentDateSource: 'itens.data',
           appointmentTimeSource: 'itens.hora',
           serviceEligibility: 'finalizado_e_pago',
+          openPeriodStart: 'dia_seguinte_ao_ultimo_fechamento',
         },
         permissions,
         config: serializeCommissionConfig(config, req),
@@ -2687,6 +2648,7 @@ router.get(
           missingPaidDate,
           payableMismatch,
           reconciliationRows: rows.filter((row) => row.needsReconciliation).length,
+          continuedPeriods: rows.filter((row) => row.periodAdjusted).length,
           overdue: rows.filter((row) => row.overdue).length,
         },
       });
@@ -3113,11 +3075,9 @@ router.get(
         return res.status(400).json({ message: 'Profissional invalido.' });
       }
 
-      const startDateKey = normalizeCalendarDateKey(req.query?.start);
+      const requestedStartDateKey = normalizeCalendarDateKey(req.query?.start);
       const endDateKey = normalizeCalendarDateKey(req.query?.end);
-      const startDateLocal = toStartOfDay(startDateKey);
-      const endDateLocal = toEndOfDay(endDateKey);
-      if (!startDateKey || !endDateKey || !startDateLocal || !endDateLocal || startDateKey > endDateKey) {
+      if (!requestedStartDateKey || !endDateKey || requestedStartDateKey > endDateKey) {
         return res.status(400).json({ message: 'Periodo invalido.' });
       }
 
@@ -3144,19 +3104,60 @@ router.get(
         return res.status(404).json({ message: 'Profissional nao encontrado.' });
       }
 
-      const storeConfig = safeStoreId
-        ? await CommissionConfig.findOne({ store: safeStoreId })
-            .select('includeServices includePdvSales')
-            .lean()
-        : null;
+      const [storeConfig, previousClosings] = await Promise.all([
+        safeStoreId
+          ? CommissionConfig.findOne({ store: safeStoreId })
+              .select('includeServices includePdvSales')
+              .lean()
+          : null,
+        safeStoreId
+          ? CommissionClosing.find({
+              profissional: profissional._id,
+              store: safeStoreId,
+              status: { $ne: 'cancelado' },
+            })
+              .select('periodoInicio periodoFim periodoInicioData periodoFimData status createdAt')
+              .lean()
+          : [],
+      ]);
+      const openPeriod = resolveNextOpenCommissionPeriod({
+        selectedStart: requestedStartDateKey,
+        selectedEnd: endDateKey,
+        closings: previousClosings,
+      });
+      const periodMetadata = {
+        requestedPeriodoInicio: requestedStartDateKey,
+        periodoInicio: openPeriod.exhausted ? requestedStartDateKey : openPeriod.startDateKey,
+        periodoFim: endDateKey,
+        periodAdjusted: !openPeriod.exhausted && openPeriod.startDateKey !== requestedStartDateKey,
+        periodComplete: openPeriod.exhausted,
+        previousClosingEnd: openPeriod.previousClosingEnd,
+        previousClosingId: openPeriod.previousClosing?._id || null,
+      };
+      if (openPeriod.exhausted) {
+        return res.json({
+          profissional: profissional._id,
+          profissionalNome: pickUserName(profissional),
+          store: safeStoreId,
+          ...periodMetadata,
+          totals: emptyTotals(),
+          grossTotals: emptyTotals(),
+          alreadyClosedItems: 0,
+          items: req.query?.details === '1' ? [] : undefined,
+          eligibility: req.query?.details === '1' ? { exclusions: [] } : undefined,
+        });
+      }
+
+      const startDateKey = openPeriod.startDateKey;
+      const startDateLocal = toStartOfDay(startDateKey);
+      const endDateLocal = toEndOfDay(endDateKey);
       const calculationOptions = normalizeCommissionCalculationOptions(storeConfig);
       if (!calculationOptions.includeServices && !calculationOptions.includePdvSales) {
         return res.json({
           profissional: profissional._id,
           profissionalNome: pickUserName(profissional),
           store: safeStoreId,
-          periodoInicio: startDateKey,
-          periodoFim: endDateKey,
+          ...periodMetadata,
           totals: emptyTotals(),
         });
       }
@@ -3183,8 +3184,7 @@ router.get(
         profissional: profissional._id,
         profissionalNome: pickUserName(profissional),
         store: safeStoreId,
-        periodoInicio: startDateKey,
-        periodoFim: endDateKey,
+        ...periodMetadata,
         totals: summary?.totals || emptyTotals(),
         grossTotals: summary?.grossTotals || emptyTotals(),
         alreadyClosedItems: Number(summary?.alreadyClosedItems || 0),
@@ -3230,10 +3230,24 @@ router.get(
       if (startDateKey > endDateKey) {
         return res.status(400).json({ message: 'Periodo invalido.' });
       }
-      const start = toStartOfDay(startDateKey);
       const end = toEndOfDay(endDateKey);
 
-      const profissionais = await loadProfessionalsForStore(storeId);
+      const [profissionais, closingDocs] = await Promise.all([
+        loadProfessionalsForStore(storeId),
+        CommissionClosing.find({
+          ...(storeId ? { store: storeId } : {}),
+          status: { $ne: 'cancelado' },
+        })
+          .select('profissional periodoInicio periodoFim periodoInicioData periodoFimData status createdAt')
+          .lean(),
+      ]);
+      const closingsByProfessional = new Map();
+      closingDocs.forEach((closing) => {
+        const key = normalizeObjectId(closing.profissional);
+        const list = closingsByProfessional.get(key) || [];
+        list.push(closing);
+        closingsByProfessional.set(key, list);
+      });
       const runtimeContext = {};
       const storeConfig = storeId
         ? await CommissionConfig.findOne({ store: storeId })
@@ -3248,11 +3262,19 @@ router.get(
       const summaries = await runWithConcurrency(
         profissionais,
         async (profissional) => {
+          const openPeriod = resolveNextOpenCommissionPeriod({
+            selectedStart: startDateKey,
+            selectedEnd: endDateKey,
+            closings: closingsByProfessional.get(String(profissional._id)) || [],
+          });
+          if (openPeriod.exhausted) {
+            return { profissional, totals: emptyTotals(), alreadyClosedItems: 0, openPeriod };
+          }
           const summary = await calculateAvailableCommissionSummary({
             user: profissional,
-            startDate: start,
+            startDate: toStartOfDay(openPeriod.startDateKey),
             endDate: end,
-            startDateKey,
+            startDateKey: openPeriod.startDateKey,
             endDateKey,
             storeId,
             runtimeContext,
@@ -3262,12 +3284,13 @@ router.get(
             profissional,
             totals: summary?.totals || emptyTotals(),
             alreadyClosedItems: Number(summary?.alreadyClosedItems || 0),
+            openPeriod,
           };
         },
       );
 
       const result = [];
-      summaries.forEach(({ profissional, totals, alreadyClosedItems }) => {
+      summaries.forEach(({ profissional, totals, alreadyClosedItems, openPeriod }) => {
         if (!totals.totalPendente) return;
 
         result.push({
@@ -3280,6 +3303,10 @@ router.get(
           totalVendas: totals.totalVendas,
           totalPago: totals.totalPago,
           alreadyClosedItems,
+          periodoInicio: openPeriod.startDateKey,
+          periodoFim: endDateKey,
+          periodAdjusted: openPeriod.startDateKey !== startDateKey,
+          previousClosingEnd: openPeriod.previousClosingEnd,
         });
       });
 
@@ -3613,11 +3640,9 @@ router.post(
         : null;
       assertCommissionAction(req, storeConfig, 'close');
       const calculationOptions = normalizeCommissionCalculationOptions(storeConfig);
-      const startDateKey = normalizeCalendarDateKey(inicio);
+      const requestedStartDateKey = normalizeCalendarDateKey(inicio);
       const endDateKey = normalizeCalendarDateKey(fim);
-      const startDateLocal = toStartOfDay(startDateKey);
-      const endDateLocal = toEndOfDay(endDateKey);
-      if (!startDateKey || !endDateKey || !startDateLocal || !endDateLocal || startDateKey > endDateKey) {
+      if (!requestedStartDateKey || !endDateKey || requestedStartDateKey > endDateKey) {
         return res.status(400).json({ message: 'Periodo invalido.' });
       }
       const hasPaymentSchedule = Boolean(previsaoPagamento || previsaoPagamentoData);
@@ -3644,8 +3669,23 @@ router.post(
         status: { $ne: 'cancelado' },
       };
       const potentialOverlaps = await CommissionClosing.find(overlapFilter)
-        .select('_id snapshotVersion snapshotItems periodoInicio periodoFim periodoInicioData periodoFimData')
+        .select('_id snapshotVersion snapshotItems periodoInicio periodoFim periodoInicioData periodoFimData status createdAt')
         .lean();
+      const openPeriod = resolveNextOpenCommissionPeriod({
+        selectedStart: requestedStartDateKey,
+        selectedEnd: endDateKey,
+        closings: potentialOverlaps,
+      });
+      if (openPeriod.exhausted) {
+        return res.status(409).json({
+          message: `O período já está fechado até ${formatCalendarDate(openPeriod.previousClosingEnd)}. Selecione uma data final posterior para continuar.`,
+          code: 'COMMISSION_PERIOD_ALREADY_CLOSED',
+          previousClosingEnd: openPeriod.previousClosingEnd,
+        });
+      }
+      const startDateKey = openPeriod.startDateKey;
+      const startDateLocal = toStartOfDay(startDateKey);
+      const endDateLocal = toEndOfDay(endDateKey);
       const overlapping = potentialOverlaps.filter((closing) => {
         const closingStart = getClosingPeriodStartKey(closing);
         const closingEnd = getClosingPeriodEndKey(closing);
@@ -3724,6 +3764,10 @@ router.post(
             metadata: {
               itemCount: snapshotItems.length,
               kind: overlapping.length ? 'adjustment' : 'regular',
+              requestedPeriodStart: requestedStartDateKey,
+              effectivePeriodStart: startDateKey,
+              periodAdjusted: requestedStartDateKey !== startDateKey,
+              previousClosingEnd: openPeriod.previousClosingEnd || '',
             },
           },
         ],
