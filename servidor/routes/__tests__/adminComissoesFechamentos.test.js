@@ -15,6 +15,7 @@ const BankAccount = require('../../models/BankAccount');
 const CommissionClosing = require('../../models/CommissionClosing');
 const CommissionItemLock = require('../../models/CommissionItemLock');
 const CommissionConfig = require('../../models/CommissionConfig');
+const CommissionPaymentReceipt = require('../../models/CommissionPaymentReceipt');
 const Pet = require('../../models/Pet');
 const Pdv = require('../../models/Pdv');
 const PdvState = require('../../models/PdvState');
@@ -710,5 +711,204 @@ test.describe('fechamento de comissões por data literal do agendamento', () => 
     assert.equal(preview.body.totals.totalPeriodo, 41);
     assert.equal(preview.body.items.filter((item) => item.source === 'appointment_service').length, 1);
     assert.equal(preview.body.items.filter((item) => item.source === 'pdv_product').length, 1);
+  });
+
+  test('segunda aprovação exige outro administrador e mantém comprovante privado', async () => {
+    const fixture = await createFixture();
+    await CommissionConfig.updateOne(
+      { store: fixture.store._id },
+      { $set: { requireSecondApproval: true, secondApprovalThreshold: 10 } },
+    );
+    await createAppointment({
+      fixture,
+      scheduledAt: '2026-09-24T15:00:00.000Z',
+      items: [{ valor: 100, data: '2026-09-24', hora: '12:30', status: 'finalizado' }],
+    });
+    const request = supertest(createApp());
+    const requesterHeaders = authorizationFor(fixture.admin);
+    const created = await createClosingRequest({
+      request,
+      headers: requesterHeaders,
+      fixture,
+      start: '2026-09-01',
+      end: '2026-09-30',
+    });
+    assert.equal(created.status, 201, created.text);
+
+    const invalidReceipt = await request
+      .post(`/api/admin/comissoes/fechamentos/${created.body.id}/pay`)
+      .set(requesterHeaders)
+      .field('confirm', 'true')
+      .field('amount', '40')
+      .field('paymentDate', '2026-10-07')
+      .field('paymentTime', '13:45')
+      .field('paymentMethod', 'pix')
+      .attach('receipt', Buffer.from('arquivo falso'), {
+        filename: 'falso.pdf',
+        contentType: 'application/pdf',
+      });
+    assert.equal(invalidReceipt.status, 400, invalidReceipt.text);
+    assert.equal(invalidReceipt.body.code, 'INVALID_RECEIPT_SIGNATURE');
+    assert.equal(await CommissionPaymentReceipt.countDocuments({ closing: created.body.id }), 0);
+
+    const requested = await request
+      .post(`/api/admin/comissoes/fechamentos/${created.body.id}/pay`)
+      .set(requesterHeaders)
+      .field('confirm', 'true')
+      .field('amount', '40')
+      .field('paymentDate', '2026-10-07')
+      .field('paymentTime', '13:45')
+      .field('paymentMethod', 'pix')
+      .field('paymentReference', 'PIX-TESTE-001')
+      .attach('receipt', Buffer.from('%PDF-1.4 teste'), {
+        filename: 'comprovante.pdf',
+        contentType: 'application/pdf',
+      });
+    assert.equal(requested.status, 202, requested.text);
+    assert.equal(requested.body.status, 'aguardando_aprovacao');
+    assert.equal(await CommissionPaymentReceipt.countDocuments({ closing: created.body.id }), 1);
+
+    const selfApproval = await request
+      .post(`/api/admin/comissoes/fechamentos/${created.body.id}/payment-approval`)
+      .set(requesterHeaders)
+      .send({ confirm: true, decision: 'approve' });
+    assert.equal(selfApproval.status, 403, selfApproval.text);
+    assert.equal(selfApproval.body.code, 'SECOND_APPROVER_MUST_DIFFER');
+
+    const suffix = String(Date.now()).slice(-9);
+    const reviewer = await User.create({
+      tipoConta: 'pessoa_fisica',
+      email: `revisor-comissao-${suffix}@example.com`,
+      senha: 'hash',
+      celular: `2150${suffix}`.slice(0, 13),
+      nomeCompleto: 'Revisor Comissão',
+      role: 'admin_master',
+    });
+    const reviewerHeaders = authorizationFor(reviewer);
+    const approved = await request
+      .post(`/api/admin/comissoes/fechamentos/${created.body.id}/payment-approval`)
+      .set(reviewerHeaders)
+      .send({ confirm: true, decision: 'approve' });
+    assert.equal(approved.status, 200, approved.text);
+    assert.equal(approved.body.status, 'pago');
+    assert.equal(approved.body.paymentReference, 'PIX-TESTE-001');
+    assert.equal(approved.body.hasPaymentReceipt, true);
+
+    const closing = await CommissionClosing.findById(created.body.id);
+    assert.equal(closing.paymentApproval.status, 'approved');
+    assert.equal(String(closing.paymentApproval.requestedBy), String(fixture.admin._id));
+    assert.equal(String(closing.paymentApproval.reviewedBy), String(reviewer._id));
+    assert.deepEqual(
+      closing.auditTrail.slice(-3).map((entry) => entry.action),
+      ['payment_requested', 'payment_approved', 'paid'],
+    );
+    const payable = await AccountPayable.findById(closing.payable);
+    assert.equal(payable.installments[0].status, 'paid');
+
+    const receipt = await request
+      .get(`/api/admin/comissoes/fechamentos/${created.body.id}/receipt`)
+      .set(reviewerHeaders);
+    assert.equal(receipt.status, 200, receipt.text);
+    assert.match(receipt.headers['content-type'], /^application\/pdf/);
+    assert.match(receipt.headers['cache-control'], /no-store/);
+    assert.equal(Buffer.compare(receipt.body, Buffer.from('%PDF-1.4 teste')), 0);
+  });
+
+  test('permissões por empresa bloqueiam pagamento no servidor e escondem a ação no relatório', async () => {
+    const fixture = await createFixture();
+    await createAppointment({
+      fixture,
+      scheduledAt: '2026-09-25T15:00:00.000Z',
+      items: [{ valor: 100, data: '2026-09-25', hora: '10:00', status: 'finalizado' }],
+    });
+    const request = supertest(createApp());
+    const created = await createClosingRequest({
+      request,
+      headers: authorizationFor(fixture.admin),
+      fixture,
+      start: '2026-09-01',
+      end: '2026-09-30',
+    });
+    assert.equal(created.status, 201, created.text);
+    await CommissionConfig.updateOne(
+      { store: fixture.store._id },
+      { $set: { payRoles: ['admin_master'] } },
+    );
+
+    const suffix = String(Date.now()).slice(-9);
+    const scopedAdmin = await User.create({
+      tipoConta: 'pessoa_fisica',
+      email: `admin-sem-pagamento-${suffix}@example.com`,
+      senha: 'hash',
+      celular: `2140${suffix}`.slice(0, 13),
+      nomeCompleto: 'Admin sem pagamento',
+      role: 'admin',
+      empresas: [fixture.store._id],
+    });
+    const headers = authorizationFor(scopedAdmin);
+    const report = await request
+      .get(`/api/admin/comissoes/fechamentos/report?store=${fixture.store._id}&start=2026-09-01&end=2026-09-30`)
+      .set(headers);
+    assert.equal(report.status, 200, report.text);
+    assert.equal(report.body.permissions.canPay, false);
+    assert.equal(report.body.items[0].canPay, false);
+
+    const forbidden = await request
+      .post(`/api/admin/comissoes/fechamentos/${created.body.id}/pay`)
+      .set(headers)
+      .send({
+        confirm: true,
+        amount: 40,
+        paymentDate: '2026-10-08',
+        paymentTime: '09:00',
+        paymentMethod: 'pix',
+      });
+    assert.equal(forbidden.status, 403, forbidden.text);
+    assert.equal(forbidden.body.code, 'COMMISSION_ACTION_FORBIDDEN');
+  });
+
+  test('detalhes paginam sem alterar os totais e indicadores preservam a política literal', async () => {
+    const fixture = await createFixture();
+    await createAppointment({
+      fixture,
+      scheduledAt: '2026-08-30T15:00:00.000Z',
+      items: Array.from({ length: 12 }, (_, index) => ({
+        valor: 10,
+        data: `2026-09-${String(index + 1).padStart(2, '0')}`,
+        hora: '10:00',
+        status: 'finalizado',
+      })),
+    });
+    const request = supertest(createApp());
+    const headers = authorizationFor(fixture.admin);
+    const created = await createClosingRequest({
+      request,
+      headers,
+      fixture,
+      start: '2026-09-01',
+      end: '2026-09-30',
+    });
+    assert.equal(created.status, 201, created.text);
+
+    const details = await request
+      .get(`/api/admin/comissoes/fechamentos/${created.body.id}/details?page=2&pageSize=10`)
+      .set(headers);
+    assert.equal(details.status, 200, details.text);
+    assert.equal(details.body.items.length, 2);
+    assert.equal(details.body.pagination.totalItems, 12);
+    assert.equal(details.body.pagination.page, 2);
+    assert.equal(details.body.totals.itemCount, 12);
+    assert.equal(details.body.totals.commission, 48);
+
+    const analytics = await request
+      .get(`/api/admin/comissoes/fechamentos/analytics?store=${fixture.store._id}&start=2026-09-01&end=2026-09-30`)
+      .set(headers);
+    assert.equal(analytics.status, 200, analytics.text);
+    assert.equal(analytics.body.policy.appointmentDateSource, 'itens.data');
+    assert.equal(analytics.body.policy.appointmentTimeSource, 'itens.hora');
+    assert.equal(analytics.body.policy.serviceEligibility, 'finalizado_e_pago');
+    assert.equal(analytics.body.totals.itemCount, 12);
+    assert.equal(analytics.body.byDay[0].date, '2026-09-01');
+    assert.equal(analytics.body.byDay.at(-1).date, '2026-09-12');
   });
 });

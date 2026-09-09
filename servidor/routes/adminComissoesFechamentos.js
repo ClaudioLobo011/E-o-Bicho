@@ -1,5 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
+const crypto = require('crypto');
+const multer = require('multer');
 
 const router = express.Router();
 
@@ -18,6 +20,7 @@ const AccountingAccount = require('../models/AccountingAccount');
 const BankAccount = require('../models/BankAccount');
 const AccountPayable = require('../models/AccountPayable');
 const CommissionItemLock = require('../models/CommissionItemLock');
+const CommissionPaymentReceipt = require('../models/CommissionPaymentReceipt');
 const ProfessionalCommissionConfig = require('../models/ProfessionalCommissionConfig');
 const { hasAdminMasterGlobalAccess } = require('../utils/adminMasterMode');
 
@@ -34,6 +37,41 @@ const DEFAULT_SUMMARY_CONCURRENCY = Math.max(
   Number(process.env.COMMISSIONS_SUMMARY_CONCURRENCY || 2) || 2,
 );
 const MAX_CLOSING_ITEMS = 10000;
+const MAX_PAYMENT_RECEIPT_BYTES = 5 * 1024 * 1024;
+const PAYMENT_RECEIPT_MIME_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png']);
+const COMMISSION_ACTION_ROLE_FIELDS = {
+  close: 'closeRoles',
+  pay: 'payRoles',
+  cancel: 'cancelRoles',
+  configure: 'configureRoles',
+};
+
+const receiptUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_PAYMENT_RECEIPT_BYTES, files: 1 },
+  fileFilter: (_req, file, callback) => {
+    if (!PAYMENT_RECEIPT_MIME_TYPES.has(String(file?.mimetype || '').toLowerCase())) {
+      const error = new Error('O comprovante deve ser PDF, JPG ou PNG.');
+      error.statusCode = 400;
+      error.code = 'INVALID_RECEIPT_TYPE';
+      return callback(error);
+    }
+    return callback(null, true);
+  },
+});
+
+const acceptPaymentReceipt = (req, res, next) => {
+  receiptUpload.single('receipt')(req, res, (error) => {
+    if (!error) return next();
+    const tooLarge = error?.code === 'LIMIT_FILE_SIZE';
+    return res.status(tooLarge ? 413 : error.statusCode || 400).json({
+      message: tooLarge
+        ? 'O comprovante deve ter no maximo 5 MB.'
+        : error.message || 'Nao foi possivel receber o comprovante.',
+      code: tooLarge ? 'RECEIPT_TOO_LARGE' : error.code || 'RECEIPT_UPLOAD_FAILED',
+    });
+  });
+};
 
 const emptyTotals = () => ({
   totalPeriodo: 0,
@@ -321,6 +359,161 @@ const resolveUserStoreAccess = async (req, userId) => {
   const allowAllStores = false;
 
   return { allowedStoreIds, allowAllStores };
+};
+
+const normalizeCommissionRoles = (value, fallback = ADMIN_ROLES) => {
+  if (!Array.isArray(value)) return [...fallback];
+  return Array.from(
+    new Set(value.map((role) => String(role || '').trim()).filter((role) => ADMIN_ROLES.includes(role))),
+  );
+};
+
+const getCommissionPermissions = (req, config = null) => {
+  const role = String(req.user?.role || '').trim();
+  const permission = (field) => {
+    if (role === 'admin_master') return true;
+    return normalizeCommissionRoles(config?.[field]).includes(role);
+  };
+  return {
+    role,
+    canClose: permission('closeRoles'),
+    canPay: permission('payRoles'),
+    canCancel: permission('cancelRoles'),
+    canConfigure: permission('configureRoles'),
+  };
+};
+
+const assertCommissionAction = (req, config, action) => {
+  const field = COMMISSION_ACTION_ROLE_FIELDS[action];
+  if (!field || getCommissionPermissions(req, config)[`can${action[0].toUpperCase()}${action.slice(1)}`]) {
+    return;
+  }
+  const error = new Error('Seu perfil nao possui permissao para esta acao de comissao.');
+  error.statusCode = 403;
+  error.code = 'COMMISSION_ACTION_FORBIDDEN';
+  throw error;
+};
+
+const serializeCommissionConfig = (config = null, req = null) => ({
+  accountingAccount: config?.accountingAccount ? String(config.accountingAccount) : null,
+  bankAccount: config?.bankAccount ? String(config.bankAccount) : null,
+  includeServices: config?.includeServices !== false,
+  includePdvSales: config?.includePdvSales !== false,
+  requireSecondApproval: config?.requireSecondApproval === true,
+  secondApprovalThreshold: Math.max(0, Number(config?.secondApprovalThreshold || 0)),
+  notifyOverdue: config?.notifyOverdue !== false,
+  closeRoles: normalizeCommissionRoles(config?.closeRoles),
+  payRoles: normalizeCommissionRoles(config?.payRoles),
+  cancelRoles: normalizeCommissionRoles(config?.cancelRoles),
+  configureRoles: normalizeCommissionRoles(config?.configureRoles),
+  permissions: req ? getCommissionPermissions(req, config) : undefined,
+  updatedAt: config?.updatedAt || config?.createdAt || null,
+});
+
+const shouldRequireSecondApproval = (config, amount) =>
+  config?.requireSecondApproval === true &&
+  roundCurrency(amount) >= Math.max(0, Number(config?.secondApprovalThreshold || 0));
+
+const createPaymentReceipt = async ({ closing, file, actorId }) => {
+  if (!file) return null;
+  const data = Buffer.from(file.buffer);
+  const mimeType = String(file.mimetype || '').toLowerCase();
+  const validSignature =
+    (mimeType === 'application/pdf' && data.subarray(0, 4).toString('ascii') === '%PDF') ||
+    (mimeType === 'image/jpeg' && data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) ||
+    (mimeType === 'image/png' && data.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])));
+  if (!validSignature) {
+    const error = new Error('O conteudo do comprovante nao corresponde ao formato informado.');
+    error.statusCode = 400;
+    error.code = 'INVALID_RECEIPT_SIGNATURE';
+    throw error;
+  }
+  return CommissionPaymentReceipt.create({
+    closing: closing._id,
+    store: closing.store,
+    originalName: String(file.originalname || 'comprovante').slice(0, 240),
+    mimeType,
+    size: data.length,
+    sha256: crypto.createHash('sha256').update(data).digest('hex'),
+    data,
+    uploadedBy: actorId,
+  });
+};
+
+const isExplicitConfirmation = (value) => value === true || String(value || '').toLowerCase() === 'true';
+
+const normalizeClosingMutationError = (error) => {
+  if (error?.name === 'VersionError') {
+    error.statusCode = 409;
+    error.code = 'COMMISSION_CLOSING_CHANGED';
+    error.message = 'Este fechamento foi alterado por outro usuario. Atualize o relatorio e tente novamente.';
+  }
+  return error;
+};
+
+const finalizeClosingPayment = async ({
+  closing,
+  paymentDate,
+  paymentTime,
+  paymentMethod,
+  paymentReference = '',
+  paymentReceipt = null,
+  actorId,
+  previousState = null,
+  approvalMetadata = null,
+}) => {
+  const total = roundCurrency(closing.totalPeriodo);
+  const paidSchedule = parsePaymentSchedule({ date: paymentDate, time: paymentTime });
+  if (!paidSchedule || total <= 0) {
+    const error = new Error(
+      total <= 0
+        ? 'Fechamento sem valor positivo nao pode ser pago.'
+        : 'Informe a data e a hora reais do pagamento.',
+    );
+    error.statusCode = 422;
+    throw error;
+  }
+
+  const rollbackState = previousState || closing.toObject();
+  closing.status = 'pago';
+  closing.totalPago = total;
+  closing.totalPendente = 0;
+  closing.pendenteVendas = 0;
+  closing.pendenteServicos = 0;
+  closing.meioPagamento = paymentMethod;
+  closing.paymentReference = String(paymentReference || '').trim().slice(0, 180);
+  closing.paymentReceipt = paymentReceipt || null;
+  closing.paidAt = paidSchedule.instant;
+  closing.paidDate = paidSchedule.dateKey;
+  closing.paidTime = paidSchedule.timeKey;
+  closing.paidBy = actorId;
+  addClosingAudit(closing, {
+    action: 'paid',
+    user: actorId,
+    at: paidSchedule.instant,
+    metadata: {
+      amount: total,
+      paymentMethod,
+      paymentReference: closing.paymentReference,
+      hasReceipt: Boolean(paymentReceipt),
+      ...(approvalMetadata || {}),
+    },
+  });
+  await closing.save();
+
+  try {
+    const payable = await syncPayableForClosing({ closing });
+    if (payable && !closing.payable) {
+      closing.payable = payable._id;
+      await closing.save();
+    }
+  } catch (error) {
+    await CommissionClosing.replaceOne({ _id: closing._id }, rollbackState);
+    error.statusCode = 422;
+    throw error;
+  }
+
+  return closing;
 };
 
 const generatePayableCode = () => `COM-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
@@ -1760,6 +1953,9 @@ const serializeClosingRecord = (closing = {}, { selectedStart = '', selectedEnd 
   const crossesSelection = Boolean(
     selectedStart && selectedEnd && startKey && endKey && (startKey < selectedStart || endKey > selectedEnd),
   );
+  const approval = closing.paymentApproval || {};
+  const approvalReceipt = normalizeObjectId(approval.receipt);
+  const finalReceipt = normalizeObjectId(closing.paymentReceipt);
   return {
     id: closing._id,
     profissional: closing.profissional?._id || closing.profissional,
@@ -1784,6 +1980,19 @@ const serializeClosingRecord = (closing = {}, { selectedStart = '', selectedEnd 
     previsaoPagamentoHora:
       normalizeAppointmentTimeKey(closing.previsaoPagamentoHora).slice(0, 5),
     meioPagamento: closing.meioPagamento || '',
+    paymentReference: closing.paymentReference || '',
+    paymentReceipt: finalReceipt || approvalReceipt || null,
+    hasPaymentReceipt: Boolean(finalReceipt || approvalReceipt),
+    paymentApproval: {
+      required: approval.required === true,
+      status: approval.status || 'none',
+      requestedAt: approval.requestedAt || null,
+      requestedBy: normalizeObjectId(approval.requestedBy) || null,
+      reviewedAt: approval.reviewedAt || null,
+      reviewedBy: normalizeObjectId(approval.reviewedBy) || null,
+      rejectionReason: approval.rejectionReason || '',
+      reference: approval.reference || '',
+    },
     paidAt: closing.paidAt || null,
     paidDate: normalizeCalendarDateKey(closing.paidDate),
     paidTime: normalizeAppointmentTimeKey(closing.paidTime).slice(0, 5),
@@ -1933,13 +2142,7 @@ router.get(
       ]);
 
       return res.json({
-        config: {
-          accountingAccount: config?.accountingAccount ? String(config.accountingAccount) : null,
-          bankAccount: config?.bankAccount ? String(config.bankAccount) : null,
-          includeServices: config?.includeServices !== false,
-          includePdvSales: config?.includePdvSales !== false,
-          updatedAt: config?.updatedAt || config?.createdAt || null,
-        },
+        config: serializeCommissionConfig(config, req),
         accounts: accounts.map((a) => ({
           _id: a._id,
           name: a.name,
@@ -1968,7 +2171,20 @@ router.post(
   authorizeRoles(...ADMIN_ROLES),
   async (req, res) => {
     try {
-      const { storeId, accountingAccount, bankAccount, includeServices, includePdvSales } = req.body || {};
+      const {
+        storeId,
+        accountingAccount,
+        bankAccount,
+        includeServices,
+        includePdvSales,
+        requireSecondApproval,
+        secondApprovalThreshold,
+        notifyOverdue,
+        closeRoles,
+        payRoles,
+        cancelRoles,
+        configureRoles,
+      } = req.body || {};
       if (!storeId || !isValidObjectId(storeId)) {
         return res.status(400).json({ message: 'Informe a empresa.' });
       }
@@ -1977,6 +2193,9 @@ router.post(
       if (!allowAllStores && !allowedStoreSet.has(String(storeId))) {
         return res.status(403).json({ message: 'Empresa nao permitida para o usuario.' });
       }
+
+      const existingConfig = await CommissionConfig.findOne({ store: storeId }).lean();
+      assertCommissionAction(req, existingConfig, 'configure');
 
       let accountingAccountId = null;
       if (accountingAccount) {
@@ -2008,31 +2227,54 @@ router.post(
 
       const includeServicesNormalized = includeServices !== false;
       const includePdvSalesNormalized = includePdvSales !== false;
+      const approvalThreshold = parseNumber(secondApprovalThreshold);
+      if (secondApprovalThreshold !== undefined && (approvalThreshold === null || approvalThreshold < 0)) {
+        return res.status(400).json({ message: 'Limite para segunda aprovacao invalido.' });
+      }
+      const roleValue = (field, received) =>
+        received === undefined
+          ? normalizeCommissionRoles(existingConfig?.[field])
+          : normalizeCommissionRoles(received, []);
+
+      const configValues = {
+        store: storeId,
+        accountingAccount: accountingAccountId,
+        bankAccount: bankAccountId,
+        includeServices: includeServicesNormalized,
+        includePdvSales: includePdvSalesNormalized,
+        requireSecondApproval:
+          requireSecondApproval === undefined
+            ? existingConfig?.requireSecondApproval === true
+            : requireSecondApproval === true,
+        secondApprovalThreshold:
+          secondApprovalThreshold === undefined
+            ? Math.max(0, Number(existingConfig?.secondApprovalThreshold || 0))
+            : approvalThreshold,
+        notifyOverdue:
+          notifyOverdue === undefined ? existingConfig?.notifyOverdue !== false : notifyOverdue !== false,
+        closeRoles: roleValue('closeRoles', closeRoles),
+        payRoles: roleValue('payRoles', payRoles),
+        cancelRoles: roleValue('cancelRoles', cancelRoles),
+        configureRoles: roleValue('configureRoles', configureRoles),
+        updatedBy: req.user?.id || null,
+      };
 
       const config = await CommissionConfig.findOneAndUpdate(
         { store: storeId },
         {
-          store: storeId,
-          accountingAccount: accountingAccountId,
-          bankAccount: bankAccountId,
-          includeServices: includeServicesNormalized,
-          includePdvSales: includePdvSalesNormalized,
-          updatedBy: req.user?.id || null,
+          $set: configValues,
           $setOnInsert: { createdBy: req.user?.id || null },
         },
         { upsert: true, new: true },
       ).lean();
 
-      return res.json({
-        accountingAccount: config.accountingAccount ? String(config.accountingAccount) : null,
-        bankAccount: config.bankAccount ? String(config.bankAccount) : null,
-        includeServices: config.includeServices !== false,
-        includePdvSales: config.includePdvSales !== false,
-        updatedAt: config.updatedAt || config.createdAt || null,
-      });
+      return res.json(serializeCommissionConfig(config, req));
     } catch (error) {
       console.error('[adminComissoesFechamentos] save config', error);
-      return res.status(500).json({ message: 'Nao foi possivel salvar configuracao.' });
+      return res.status(error.statusCode || 500).json({
+        message: error.message || 'Nao foi possivel salvar configuracao.',
+        code: error.code,
+      });
     }
   },
 );
@@ -2112,6 +2354,7 @@ router.get(
         return Boolean(closingStart && closingEnd && closingStart <= endDateKey && closingEnd >= startDateKey);
       });
       const calculationOptions = normalizeCommissionCalculationOptions(config);
+      const permissions = getCommissionPermissions(req, config);
       const closingRecords = closingDocs.map((closing) =>
         serializeClosingRecord(closing, { selectedStart: startDateKey, selectedEnd: endDateKey }),
       );
@@ -2207,7 +2450,9 @@ router.get(
         let status = 'em_aberto';
         if (needsReconciliation) status = 'reconciliacao';
         else if (availablePending > 0) status = 'em_aberto';
-        else if (activeRelated.some((closing) => closing.status === 'agendado')) status = 'agendado';
+        else if (activeRelated.some((closing) => closing.status === 'aguardando_aprovacao')) {
+          status = 'aguardando_aprovacao';
+        } else if (activeRelated.some((closing) => closing.status === 'agendado')) status = 'agendado';
         else if (activeRelated.some((closing) => closing.status === 'pendente')) status = 'pendente';
         else if (activeRelated.length && totalPendente <= 0) status = 'pago';
 
@@ -2235,9 +2480,17 @@ router.get(
           pendenteServicos: Number(availableTotals.pendenteServicos || 0),
           status,
           synthetic: !singleExact,
-          canClose: !needsReconciliation && availablePending > 0,
-          canPay: singleExact && ['pendente', 'agendado'].includes(latestClosing.status),
-          canCancel: singleExact,
+          canClose: permissions.canClose && !needsReconciliation && availablePending > 0,
+          canPay:
+            permissions.canPay &&
+            singleExact &&
+            ['pendente', 'agendado'].includes(latestClosing.status),
+          canApprove:
+            permissions.canPay &&
+            singleExact &&
+            latestClosing.status === 'aguardando_aprovacao' &&
+            normalizeObjectId(latestClosing.paymentApproval?.requestedBy) !== normalizeObjectId(getActorId(req)),
+          canCancel: permissions.canCancel && singleExact,
           closingId: singleExact ? latestClosing._id : null,
           closingIds: activeRelated.map((closing) => closing._id),
           adjustment: snapshotted.length > 0 && availablePending > 0,
@@ -2261,6 +2514,11 @@ router.get(
           meioPagamento: latestClosing?.meioPagamento || '',
           paidDate: latestClosing ? normalizeCalendarDateKey(latestClosing.paidDate) : '',
           paidTime: latestClosing ? normalizeAppointmentTimeKey(latestClosing.paidTime).slice(0, 5) : '',
+          paymentReference: latestClosing?.paymentReference || latestClosing?.paymentApproval?.reference || '',
+          hasPaymentReceipt: Boolean(latestClosing?.paymentReceipt || latestClosing?.paymentApproval?.receipt),
+          paymentApproval: latestClosing
+            ? serializeClosingRecord(latestClosing).paymentApproval
+            : { required: false, status: 'none' },
           overdue: activeRelated.some((closing) => {
             const dueKey = normalizeCalendarDateKey(closing.previsaoPagamentoData) ||
               (closing.previsaoPagamento ? getCalendarDateKeyInSaoPaulo(closing.previsaoPagamento) : '');
@@ -2292,13 +2550,14 @@ router.get(
         ? await AccountPayable.find({ _id: { $in: payableIds } }).select('_id installments').lean()
         : [];
       const payableById = new Map(payables.map((payable) => [String(payable._id), payable]));
-      const payableMismatch = activeClosingDocs.filter((closing) => {
-        if (!closing.payable) return closing.status !== 'pendente';
+      const payableIssues = activeClosingDocs.filter((closing) => {
+        if (!closing.payable) return true;
         const payable = payableById.get(String(closing.payable));
         if (!payable) return true;
         const expected = closing.status === 'pago' ? 'paid' : 'pending';
         return !Array.isArray(payable.installments) || payable.installments.some((item) => item.status !== expected);
-      }).length;
+      });
+      const payableMismatch = payableIssues.length;
       const crossBoundary = activeClosingRecords.filter((closing) => closing.crossesSelection).length;
       const legacyPeriods = activeClosingRecords.filter((closing) => closing.legacyPeriod).length;
       const missingPaidDate = activeClosingDocs.filter(
@@ -2317,11 +2576,101 @@ router.get(
         rows.filter((row) => row.needsReconciliation).reduce((sum, row) => sum + Number(row.totalPeriodo || 0), 0),
       );
 
+      const recordById = new Map(activeClosingRecords.map((record) => [String(record.id), record]));
+      const issues = [];
+      if (!config?.accountingAccount || !config?.bankAccount) {
+        issues.push({
+          id: `config-${storeId}`,
+          type: 'missing_configuration',
+          severity: 'critical',
+          title: 'Configuracao financeira incompleta',
+          description: 'Defina a conta contabil e a conta corrente antes de gerar novos fechamentos.',
+          actions: permissions.canConfigure ? ['configure'] : [],
+        });
+      }
+      activeClosingRecords
+        .filter((record) => record.legacyPeriod || Number(record.snapshotVersion || 0) < 1)
+        .forEach((record) => {
+          issues.push({
+            id: `legacy-${record.id}`,
+            type: 'legacy_snapshot',
+            severity: 'warning',
+            title: 'Fechamento legado sem congelamento completo',
+            description: `${record.profissionalNome || 'Profissional'} - ${record.periodo}`,
+            closingId: record.id,
+            actions: permissions.canClose ? ['reconcile_snapshot', 'details'] : ['details'],
+          });
+        });
+      payableIssues.forEach((closing) => {
+        const record = recordById.get(String(closing._id));
+        issues.push({
+          id: `payable-${closing._id}`,
+          type: 'payable_mismatch',
+          severity: 'critical',
+          title: 'Conta a pagar ausente ou divergente',
+          description: `${record?.profissionalNome || 'Profissional'} - ${record?.periodo || ''}`.trim(),
+          closingId: closing._id,
+          actions: permissions.canConfigure ? ['repair_payable', 'details'] : ['details'],
+        });
+      });
+      activeClosingRecords
+        .filter((record) => record.status === 'pago' && (!record.paidDate || !record.paidTime))
+        .forEach((record) => {
+          issues.push({
+            id: `payment-metadata-${record.id}`,
+            type: 'missing_payment_metadata',
+            severity: 'critical',
+            title: 'Pagamento sem data ou hora literal',
+            description: `${record.profissionalNome || 'Profissional'} - ${record.periodo}`,
+            closingId: record.id,
+            actions: permissions.canPay ? ['complete_payment_metadata', 'details'] : ['details'],
+          });
+        });
+      if (config?.notifyOverdue !== false) {
+        activeClosingRecords.filter((record) => record.overdue).forEach((record) => {
+          issues.push({
+            id: `overdue-${record.id}`,
+            type: 'overdue_payment',
+            severity: 'warning',
+            title: 'Pagamento de comissao vencido',
+            description: `${record.profissionalNome || 'Profissional'} - previsto para ${formatCalendarDate(record.previsaoPagamentoData)}`,
+            closingId: record.id,
+            actions: permissions.canPay ? ['pay', 'details'] : ['details'],
+          });
+        });
+      }
+      activeClosingRecords
+        .filter((record) => record.status === 'aguardando_aprovacao')
+        .forEach((record) => {
+          issues.push({
+            id: `approval-${record.id}`,
+            type: 'pending_approval',
+            severity: 'info',
+            title: 'Pagamento aguardando segunda aprovacao',
+            description: `${record.profissionalNome || 'Profissional'} - ${record.periodo}`,
+            closingId: record.id,
+            actions:
+              permissions.canPay &&
+              normalizeObjectId(record.paymentApproval?.requestedBy) !== normalizeObjectId(getActorId(req))
+                ? ['review_payment', 'details']
+                : ['details'],
+          });
+        });
+
       return res.json({
+        generatedAt: new Date().toISOString(),
         period: { start: startDateKey, end: endDateKey },
         store: storeId,
+        policy: {
+          appointmentDateSource: 'itens.data',
+          appointmentTimeSource: 'itens.hora',
+          serviceEligibility: 'finalizado_e_pago',
+        },
+        permissions,
+        config: serializeCommissionConfig(config, req),
         items: rows,
         history: closingRecords.map(({ _professionalKey, _storeKey, ...record }) => record),
+        issues,
         summary: {
           totalExpected: expected,
           paidForServicePeriod,
@@ -2633,6 +2982,127 @@ router.get(
 );
 
 router.get(
+  '/admin/comissoes/fechamentos/analytics',
+  requireAuth,
+  authorizeRoles(...ADMIN_ROLES),
+  async (req, res) => {
+    try {
+      const storeId = req.query?.store && isValidObjectId(req.query.store) ? String(req.query.store) : null;
+      const { allowedStoreIds, allowAllStores } = await resolveUserStoreAccess(req, getActorId(req));
+      if (!storeId) return res.status(400).json({ message: 'Selecione uma empresa.' });
+      if (!allowAllStores && !allowedStoreIds.map(String).includes(storeId)) {
+        return res.status(403).json({ message: 'Empresa nao permitida para o usuario.' });
+      }
+      const startDateKey = normalizeCalendarDateKey(req.query?.start);
+      const endDateKey = normalizeCalendarDateKey(req.query?.end);
+      if (!startDateKey || !endDateKey || startDateKey > endDateKey) {
+        return res.status(400).json({ message: 'Periodo invalido.' });
+      }
+
+      const [professionals, config] = await Promise.all([
+        loadProfessionalsForStore(storeId),
+        CommissionConfig.findOne({ store: storeId }).lean(),
+      ]);
+      const runtimeContext = {};
+      const computed = await runWithConcurrency(professionals, async (professional) => ({
+        professional,
+        summary: await computeCommissionSummaryForUser({
+          user: professional,
+          startDate: toStartOfDay(startDateKey),
+          endDate: toEndOfDay(endDateKey),
+          startDateKey,
+          endDateKey,
+          storeId,
+          runtimeContext,
+          calculationOptions: normalizeCommissionCalculationOptions(config),
+        }),
+      }));
+
+      const byProfessional = [];
+      const serviceMap = new Map();
+      const dayMap = new Map();
+      let itemCount = 0;
+      let sourceValue = 0;
+      let commission = 0;
+      computed.forEach(({ professional, summary }) => {
+        const items = (summary?.items || []).map(sanitizeSnapshotItem);
+        if (!items.length) return;
+        const professionalEntry = {
+          id: professional._id,
+          name: pickUserName(professional),
+          itemCount: items.length,
+          sourceValue: 0,
+          commission: 0,
+        };
+        items.forEach((item) => {
+          itemCount += 1;
+          sourceValue += Number(item.value || 0);
+          commission += Number(item.commission || 0);
+          professionalEntry.sourceValue += Number(item.value || 0);
+          professionalEntry.commission += Number(item.commission || 0);
+
+          const serviceKey = `${item.source}|${item.description || 'Sem descricao'}`;
+          const serviceEntry = serviceMap.get(serviceKey) || {
+            name: item.description || 'Sem descricao',
+            source: item.source,
+            itemCount: 0,
+            sourceValue: 0,
+            commission: 0,
+          };
+          serviceEntry.itemCount += 1;
+          serviceEntry.sourceValue += Number(item.value || 0);
+          serviceEntry.commission += Number(item.commission || 0);
+          serviceMap.set(serviceKey, serviceEntry);
+
+          const dayEntry = dayMap.get(item.date) || {
+            date: item.date,
+            itemCount: 0,
+            sourceValue: 0,
+            commission: 0,
+          };
+          dayEntry.itemCount += 1;
+          dayEntry.sourceValue += Number(item.value || 0);
+          dayEntry.commission += Number(item.commission || 0);
+          dayMap.set(item.date, dayEntry);
+        });
+        professionalEntry.sourceValue = roundCurrency(professionalEntry.sourceValue);
+        professionalEntry.commission = roundCurrency(professionalEntry.commission);
+        byProfessional.push(professionalEntry);
+      });
+      const roundEntries = (entries) =>
+        entries.map((entry) => ({
+          ...entry,
+          sourceValue: roundCurrency(entry.sourceValue),
+          commission: roundCurrency(entry.commission),
+        }));
+
+      return res.json({
+        generatedAt: new Date().toISOString(),
+        period: { start: startDateKey, end: endDateKey },
+        store: storeId,
+        basis: 'current_eligible_source',
+        policy: {
+          appointmentDateSource: 'itens.data',
+          appointmentTimeSource: 'itens.hora',
+          serviceEligibility: 'finalizado_e_pago',
+        },
+        totals: {
+          itemCount,
+          sourceValue: roundCurrency(sourceValue),
+          commission: roundCurrency(commission),
+        },
+        byProfessional: roundEntries(byProfessional).sort((a, b) => b.commission - a.commission),
+        byService: roundEntries(Array.from(serviceMap.values())).sort((a, b) => b.commission - a.commission),
+        byDay: roundEntries(Array.from(dayMap.values())).sort((a, b) => a.date.localeCompare(b.date)),
+      });
+    } catch (error) {
+      console.error('[adminComissoesFechamentos] analytics', error);
+      return res.status(500).json({ message: 'Nao foi possivel gerar os indicadores detalhados.' });
+    }
+  },
+);
+
+router.get(
   '/admin/comissoes/fechamentos/preview',
   requireAuth,
   authorizeRoles(...ADMIN_ROLES),
@@ -2878,7 +3348,25 @@ router.get(
         exclusions = eligibility.exclusions || [];
       }
 
-      const snapshotTotals = buildTotalsFromItems(items);
+      const allItems = items;
+      const search = String(req.query?.search || '').trim().toLocaleLowerCase('pt-BR');
+      const source = String(req.query?.source || '').trim();
+      const filteredItems = allItems.filter((item) => {
+        if (source && item.source !== source) return false;
+        if (!search) return true;
+        return [item.petName, item.description, item.saleCode, item.date, item.time]
+          .some((value) => String(value || '').toLocaleLowerCase('pt-BR').includes(search));
+      });
+      const requestedPageSize = Number.parseInt(req.query?.pageSize, 10);
+      const pageSize = Number.isFinite(requestedPageSize)
+        ? Math.min(200, Math.max(10, requestedPageSize))
+        : Math.max(filteredItems.length, 1);
+      const requestedPage = Number.parseInt(req.query?.page, 10);
+      const pageCount = Math.max(1, Math.ceil(filteredItems.length / pageSize));
+      const page = Math.min(pageCount, Math.max(1, Number.isFinite(requestedPage) ? requestedPage : 1));
+      const pageItems = filteredItems.slice((page - 1) * pageSize, page * pageSize);
+      const snapshotTotals = buildTotalsFromItems(allItems);
+      const filteredTotals = buildTotalsFromItems(filteredItems);
       return res.json({
         closing: (() => {
           const record = serializeClosingRecord(closing);
@@ -2890,15 +3378,24 @@ router.get(
         warning: immutable
           ? ''
           : 'Fechamento legado: detalhes recalculados com os dados atuais e ainda nao congelados.',
-        items,
+        items: pageItems,
         exclusions,
+        pagination: {
+          page,
+          pageSize,
+          pageCount,
+          totalItems: filteredItems.length,
+          unfilteredItems: allItems.length,
+        },
         totals: {
-          itemCount: items.length,
+          itemCount: allItems.length,
+          filteredItemCount: filteredItems.length,
           excludedCount: exclusions.length,
-          value: roundCurrency(items.reduce((sum, item) => sum + Number(item.value || 0), 0)),
+          value: roundCurrency(allItems.reduce((sum, item) => sum + Number(item.value || 0), 0)),
           commission: snapshotTotals.totalPeriodo,
           services: snapshotTotals.totalServicos,
           sales: snapshotTotals.totalVendas,
+          filteredCommission: filteredTotals.totalPeriodo,
         },
       });
     } catch (error) {
@@ -3112,9 +3609,9 @@ router.post(
       }
       const storeConfig = safeStoreId
         ? await CommissionConfig.findOne({ store: safeStoreId })
-            .select('includeServices includePdvSales')
             .lean()
         : null;
+      assertCommissionAction(req, storeConfig, 'close');
       const calculationOptions = normalizeCommissionCalculationOptions(storeConfig);
       const startDateKey = normalizeCalendarDateKey(inicio);
       const endDateKey = normalizeCalendarDateKey(fim);
@@ -3289,7 +3786,10 @@ router.post(
       });
     } catch (error) {
       console.error('[adminComissoesFechamentos] create', error);
-      return res.status(500).json({ message: 'Nao foi possivel criar fechamento.' });
+      return res.status(error.statusCode || 500).json({
+        message: error.message || 'Nao foi possivel criar fechamento.',
+        code: error.code,
+      });
     }
   },
 );
@@ -3348,8 +3848,10 @@ router.put(
       const closing = await CommissionClosing.findById(id);
       if (!closing) return res.status(404).json({ message: 'Fechamento nao encontrado.' });
       await assertClosingStoreAccess(req, closing);
-      if (['pago', 'cancelado'].includes(closing.status)) {
-        return res.status(409).json({ message: 'Fechamento pago ou cancelado nao pode ser reagendado.' });
+      const storeConfig = await CommissionConfig.findOne({ store: closing.store }).lean();
+      assertCommissionAction(req, storeConfig, 'close');
+      if (['aguardando_aprovacao', 'pago', 'cancelado'].includes(closing.status)) {
+        return res.status(409).json({ message: 'Fechamento em aprovacao, pago ou cancelado nao pode ser reagendado.' });
       }
 
       const previous = closing.toObject();
@@ -3389,8 +3891,12 @@ router.put(
         payable: closing.payable || null,
       });
     } catch (error) {
+      normalizeClosingMutationError(error);
       console.error('[adminComissoesFechamentos] update', error);
-      return res.status(error.statusCode || 500).json({ message: error.message || 'Nao foi possivel atualizar fechamento.' });
+      return res.status(error.statusCode || 500).json({
+        message: error.message || 'Nao foi possivel atualizar fechamento.',
+        code: error.code,
+      });
     }
   },
 );
@@ -3399,7 +3905,9 @@ router.post(
   '/admin/comissoes/fechamentos/:id/pay',
   requireAuth,
   authorizeRoles(...ADMIN_ROLES),
+  acceptPaymentReceipt,
   async (req, res) => {
+    let createdReceipt = null;
     try {
       const { id } = req.params;
       if (!isValidObjectId(id)) {
@@ -3408,7 +3916,9 @@ router.post(
       const closing = await CommissionClosing.findById(id);
       if (!closing) return res.status(404).json({ message: 'Fechamento nao encontrado.' });
       await assertClosingStoreAccess(req, closing);
-      if (req.body?.confirm !== true) {
+      const storeConfig = await CommissionConfig.findOne({ store: closing.store }).lean();
+      assertCommissionAction(req, storeConfig, 'pay');
+      if (!isExplicitConfirmation(req.body?.confirm)) {
         return res.status(400).json({ message: 'Confirme explicitamente o pagamento.' });
       }
       if (!['pendente', 'agendado'].includes(closing.status)) {
@@ -3417,6 +3927,7 @@ router.post(
       const paymentDate = normalizeCalendarDateKey(req.body?.paymentDate);
       const paymentTime = normalizeAppointmentTimeKey(req.body?.paymentTime).slice(0, 5);
       const paymentMethod = String(req.body?.paymentMethod || closing.meioPagamento || '').trim();
+      const paymentReference = String(req.body?.paymentReference || '').trim().slice(0, 180);
       if (!paymentDate || !paymentTime) {
         return res.status(400).json({ message: 'Informe a data e a hora reais do pagamento.' });
       }
@@ -3436,37 +3947,65 @@ router.post(
           });
         }
       }
-      const paidSchedule = parsePaymentSchedule({ date: paymentDate, time: paymentTime });
+      const actorId = getActorId(req);
       const previous = closing.toObject();
-      closing.status = 'pago';
-      closing.totalPago = total;
-      closing.totalPendente = 0;
-      closing.pendenteVendas = 0;
-      closing.pendenteServicos = 0;
-      closing.meioPagamento = paymentMethod;
-      closing.paidAt = paidSchedule.instant;
-      closing.paidDate = paidSchedule.dateKey;
-      closing.paidTime = paidSchedule.timeKey;
-      closing.paidBy = getActorId(req);
-      addClosingAudit(closing, {
-        action: 'paid',
-        user: getActorId(req),
-        at: paidSchedule.instant,
-        metadata: { amount: total, paymentMethod },
-      });
-      await closing.save();
-      try {
-        const payable = await syncPayableForClosing({ closing });
-        if (payable && !closing.payable) {
-          closing.payable = payable._id;
-          await closing.save();
+      createdReceipt = await createPaymentReceipt({ closing, file: req.file, actorId });
+
+      if (shouldRequireSecondApproval(storeConfig, total)) {
+        closing.status = 'aguardando_aprovacao';
+        closing.paymentApproval = {
+          required: true,
+          status: 'pending',
+          requestedAt: new Date(),
+          requestedBy: actorId,
+          reviewedAt: null,
+          reviewedBy: null,
+          rejectionReason: '',
+          paymentDate,
+          paymentTime,
+          paymentMethod,
+          amount: total,
+          reference: paymentReference,
+          receipt: createdReceipt?._id || null,
+        };
+        addClosingAudit(closing, {
+          action: 'payment_requested',
+          user: actorId,
+          metadata: {
+            amount: total,
+            paymentMethod,
+            paymentReference,
+            hasReceipt: Boolean(createdReceipt),
+          },
+        });
+        await closing.save();
+        try {
+          await syncPayableForClosing({ closing });
+        } catch (syncError) {
+          await CommissionClosing.replaceOne({ _id: closing._id }, previous);
+          if (createdReceipt) await CommissionPaymentReceipt.deleteOne({ _id: createdReceipt._id });
+          createdReceipt = null;
+          throw syncError;
         }
-      } catch (syncError) {
-        await CommissionClosing.replaceOne({ _id: closing._id }, previous);
-        return res.status(422).json({
-          message: syncError.message || 'Pagamento nao registrado porque contas a pagar nao foi sincronizado.',
+        return res.status(202).json({
+          id: closing._id,
+          status: closing.status,
+          approvalRequired: true,
+          paymentApproval: serializeClosingRecord(closing).paymentApproval,
+          message: 'Pagamento enviado para segunda aprovacao.',
         });
       }
+
+      await finalizeClosingPayment({
+        closing,
+        paymentDate,
+        paymentTime,
+        paymentMethod,
+        paymentReference,
+        paymentReceipt: createdReceipt?._id || null,
+        actorId,
+        previousState: previous,
+      });
       return res.json({
         id: closing._id,
         status: closing.status,
@@ -3476,11 +4015,378 @@ router.post(
         paidDate: closing.paidDate,
         paidTime: closing.paidTime,
         meioPagamento: closing.meioPagamento,
+        paymentReference: closing.paymentReference,
+        hasPaymentReceipt: Boolean(closing.paymentReceipt),
         payable: closing.payable || null,
       });
     } catch (error) {
+      normalizeClosingMutationError(error);
+      if (createdReceipt) {
+        await CommissionPaymentReceipt.deleteOne({ _id: createdReceipt._id }).catch(() => null);
+      }
       console.error('[adminComissoesFechamentos] pay', error);
-      return res.status(error.statusCode || 500).json({ message: error.message || 'Nao foi possivel registrar pagamento.' });
+      return res.status(error.statusCode || 500).json({
+        message: error.message || 'Nao foi possivel registrar pagamento.',
+        code: error.code,
+      });
+    }
+  },
+);
+
+router.post(
+  '/admin/comissoes/fechamentos/:id/payment-approval',
+  requireAuth,
+  authorizeRoles(...ADMIN_ROLES),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      if (!isValidObjectId(id)) return res.status(400).json({ message: 'Fechamento invalido.' });
+      if (!isExplicitConfirmation(req.body?.confirm)) {
+        return res.status(400).json({ message: 'Confirme explicitamente a revisao do pagamento.' });
+      }
+
+      const closing = await CommissionClosing.findById(id);
+      if (!closing) return res.status(404).json({ message: 'Fechamento nao encontrado.' });
+      await assertClosingStoreAccess(req, closing);
+      const storeConfig = await CommissionConfig.findOne({ store: closing.store }).lean();
+      assertCommissionAction(req, storeConfig, 'pay');
+      if (closing.status !== 'aguardando_aprovacao' || closing.paymentApproval?.status !== 'pending') {
+        return res.status(409).json({ message: 'Este fechamento nao possui pagamento aguardando aprovacao.' });
+      }
+
+      const actorId = normalizeObjectId(getActorId(req));
+      if (normalizeObjectId(closing.paymentApproval.requestedBy) === actorId) {
+        return res.status(403).json({
+          message: 'A segunda aprovacao deve ser feita por outro administrador.',
+          code: 'SECOND_APPROVER_MUST_DIFFER',
+        });
+      }
+
+      const decision = String(req.body?.decision || '').trim().toLowerCase();
+      if (!['approve', 'reject'].includes(decision)) {
+        return res.status(400).json({ message: 'Informe se o pagamento deve ser aprovado ou rejeitado.' });
+      }
+      const previous = closing.toObject();
+      const reviewedAt = new Date();
+
+      if (decision === 'reject') {
+        const reason = String(req.body?.reason || '').trim();
+        if (reason.length < 5) {
+          return res.status(400).json({ message: 'Informe um motivo de rejeicao com pelo menos 5 caracteres.' });
+        }
+        closing.status = closing.previsaoPagamentoData ? 'agendado' : 'pendente';
+        closing.paymentApproval.status = 'rejected';
+        closing.paymentApproval.reviewedAt = reviewedAt;
+        closing.paymentApproval.reviewedBy = actorId;
+        closing.paymentApproval.rejectionReason = reason;
+        addClosingAudit(closing, {
+          action: 'payment_rejected',
+          user: actorId,
+          reason,
+          at: reviewedAt,
+        });
+        await closing.save();
+        try {
+          await syncPayableForClosing({ closing });
+        } catch (error) {
+          await CommissionClosing.replaceOne({ _id: closing._id }, previous);
+          throw error;
+        }
+        return res.json({
+          id: closing._id,
+          status: closing.status,
+          paymentApproval: serializeClosingRecord(closing).paymentApproval,
+          message: 'Solicitacao de pagamento rejeitada.',
+        });
+      }
+
+      const proposed = closing.paymentApproval;
+      const paymentDate = normalizeCalendarDateKey(proposed.paymentDate);
+      const paymentTime = normalizeAppointmentTimeKey(proposed.paymentTime).slice(0, 5);
+      const paymentMethod = String(proposed.paymentMethod || '').trim();
+      const expectedAmount = roundCurrency(closing.totalPeriodo);
+      if (!paymentDate || !paymentTime || !paymentMethod || roundCurrency(proposed.amount) !== expectedAmount) {
+        return res.status(422).json({
+          message: 'A solicitacao nao possui dados de pagamento validos para aprovacao.',
+          code: 'INVALID_PAYMENT_APPROVAL_DATA',
+        });
+      }
+
+      closing.paymentApproval.status = 'approved';
+      closing.paymentApproval.reviewedAt = reviewedAt;
+      closing.paymentApproval.reviewedBy = actorId;
+      closing.paymentApproval.rejectionReason = '';
+      addClosingAudit(closing, {
+        action: 'payment_approved',
+        user: actorId,
+        at: reviewedAt,
+        metadata: { requestedBy: normalizeObjectId(proposed.requestedBy), amount: expectedAmount },
+      });
+      await finalizeClosingPayment({
+        closing,
+        paymentDate,
+        paymentTime,
+        paymentMethod,
+        paymentReference: proposed.reference,
+        paymentReceipt: proposed.receipt || null,
+        actorId,
+        previousState: previous,
+        approvalMetadata: { secondApproval: true },
+      });
+      return res.json({
+        id: closing._id,
+        status: closing.status,
+        totalPago: closing.totalPago,
+        paidDate: closing.paidDate,
+        paidTime: closing.paidTime,
+        meioPagamento: closing.meioPagamento,
+        paymentReference: closing.paymentReference,
+        hasPaymentReceipt: Boolean(closing.paymentReceipt),
+        paymentApproval: serializeClosingRecord(closing).paymentApproval,
+        message: 'Pagamento aprovado e registrado.',
+      });
+    } catch (error) {
+      normalizeClosingMutationError(error);
+      console.error('[adminComissoesFechamentos] payment approval', error);
+      return res.status(error.statusCode || 500).json({
+        message: error.message || 'Nao foi possivel revisar o pagamento.',
+        code: error.code,
+      });
+    }
+  },
+);
+
+router.get(
+  '/admin/comissoes/fechamentos/:id/receipt',
+  requireAuth,
+  authorizeRoles(...ADMIN_ROLES),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      if (!isValidObjectId(id)) return res.status(400).json({ message: 'Fechamento invalido.' });
+      const closing = await CommissionClosing.findById(id).select('store paymentReceipt paymentApproval').lean();
+      if (!closing) return res.status(404).json({ message: 'Fechamento nao encontrado.' });
+      await assertClosingStoreAccess(req, closing);
+      const receiptId = normalizeObjectId(closing.paymentReceipt || closing.paymentApproval?.receipt);
+      if (!receiptId) return res.status(404).json({ message: 'Este fechamento nao possui comprovante.' });
+      const receipt = await CommissionPaymentReceipt.findOne({ _id: receiptId, closing: closing._id })
+        .select('+data')
+        .lean();
+      if (!receipt?.data) return res.status(404).json({ message: 'Comprovante nao encontrado.' });
+      const receiptData = Buffer.isBuffer(receipt.data)
+        ? receipt.data
+        : Buffer.from(receipt.data.buffer || receipt.data);
+      const currentHash = crypto.createHash('sha256').update(receiptData).digest('hex');
+      if (receipt.sha256 && currentHash !== receipt.sha256) {
+        const integrityError = new Error('O comprovante armazenado falhou na verificacao de integridade.');
+        integrityError.statusCode = 500;
+        integrityError.code = 'RECEIPT_INTEGRITY_FAILED';
+        throw integrityError;
+      }
+      const encodedName = encodeURIComponent(receipt.originalName || 'comprovante').replace(/'/g, '%27');
+      res.set({
+        'Content-Type': receipt.mimeType,
+        'Content-Length': String(receiptData.length),
+        'Content-Disposition': `attachment; filename*=UTF-8''${encodedName}`,
+        'Cache-Control': 'private, no-store, max-age=0',
+        'X-Content-Type-Options': 'nosniff',
+      });
+      return res.end(receiptData);
+    } catch (error) {
+      console.error('[adminComissoesFechamentos] receipt', error);
+      return res.status(error.statusCode || 500).json({
+        message: error.message || 'Nao foi possivel baixar o comprovante.',
+        code: error.code,
+      });
+    }
+  },
+);
+
+router.post(
+  '/admin/comissoes/fechamentos/:id/reconcile',
+  requireAuth,
+  authorizeRoles(...ADMIN_ROLES),
+  acceptPaymentReceipt,
+  async (req, res) => {
+    let createdReceipt = null;
+    try {
+      const { id } = req.params;
+      if (!isValidObjectId(id)) return res.status(400).json({ message: 'Fechamento invalido.' });
+      if (!isExplicitConfirmation(req.body?.confirm)) {
+        return res.status(400).json({ message: 'Confirme explicitamente a reconciliacao.' });
+      }
+      const action = String(req.body?.action || '').trim();
+      if (!['repair_payable', 'reconcile_snapshot', 'complete_payment_metadata'].includes(action)) {
+        return res.status(400).json({ message: 'Acao de reconciliacao invalida.' });
+      }
+      const reason = String(req.body?.reason || '').trim();
+      if (reason.length < 5) {
+        return res.status(400).json({ message: 'Informe uma justificativa com pelo menos 5 caracteres.' });
+      }
+
+      const closing = await CommissionClosing.findById(id);
+      if (!closing) return res.status(404).json({ message: 'Fechamento nao encontrado.' });
+      await assertClosingStoreAccess(req, closing);
+      const storeConfig = await CommissionConfig.findOne({ store: closing.store }).lean();
+      assertCommissionAction(req, storeConfig, action === 'complete_payment_metadata' ? 'pay' : action === 'repair_payable' ? 'configure' : 'close');
+      const actorId = getActorId(req);
+      const previous = closing.toObject();
+
+      if (action === 'repair_payable') {
+        const previousPayable = closing.payable
+          ? await AccountPayable.findById(closing.payable).lean()
+          : null;
+        let payable = null;
+        try {
+          payable = await syncPayableForClosing({ closing, createIfMissing: true });
+          closing.payable = payable?._id || closing.payable;
+          addClosingAudit(closing, {
+            action: 'reconciled',
+            user: actorId,
+            reason,
+            metadata: { type: action, payable: normalizeObjectId(payable) },
+          });
+          await closing.save();
+        } catch (error) {
+          if (previousPayable?._id) {
+            await AccountPayable.replaceOne({ _id: previousPayable._id }, previousPayable).catch(() => null);
+          } else if (payable?._id) {
+            await AccountPayable.deleteOne({ _id: payable._id }).catch(() => null);
+          }
+          throw error;
+        }
+      } else if (action === 'complete_payment_metadata') {
+        if (closing.status !== 'pago') {
+          return res.status(409).json({ message: 'Somente pagamentos concluidos podem receber estes dados.' });
+        }
+        const paymentDate = normalizeCalendarDateKey(req.body?.paymentDate);
+        const paymentTime = normalizeAppointmentTimeKey(req.body?.paymentTime).slice(0, 5);
+        const paymentMethod = String(req.body?.paymentMethod || closing.meioPagamento || '').trim();
+        const schedule = parsePaymentSchedule({ date: paymentDate, time: paymentTime });
+        if (!schedule || !paymentMethod) {
+          return res.status(400).json({ message: 'Informe data, hora e meio reais do pagamento.' });
+        }
+        createdReceipt = await createPaymentReceipt({ closing, file: req.file, actorId });
+        closing.paidAt = schedule.instant;
+        closing.paidDate = schedule.dateKey;
+        closing.paidTime = schedule.timeKey;
+        closing.meioPagamento = paymentMethod;
+        if (Object.prototype.hasOwnProperty.call(req.body || {}, 'paymentReference')) {
+          closing.paymentReference = String(req.body.paymentReference || '').trim().slice(0, 180);
+        }
+        if (createdReceipt) closing.paymentReceipt = createdReceipt._id;
+        addClosingAudit(closing, {
+          action: 'reconciled',
+          user: actorId,
+          reason,
+          metadata: { type: action, hasReceipt: Boolean(createdReceipt) },
+        });
+        await closing.save();
+        try {
+          await syncPayableForClosing({ closing });
+        } catch (error) {
+          await CommissionClosing.replaceOne({ _id: closing._id }, previous);
+          throw error;
+        }
+      } else {
+        if (Number(closing.snapshotVersion || 0) >= 1 && Array.isArray(closing.snapshotItems)) {
+          return res.status(409).json({ message: 'Este fechamento ja possui itens congelados.' });
+        }
+        const startDateKey = getClosingPeriodStartKey(closing);
+        const endDateKey = getClosingPeriodEndKey(closing);
+        const professional = await User.findById(closing.profissional)
+          .select('nomeCompleto nomeContato razaoSocial nome email userGroup codigoCliente')
+          .populate('userGroup', 'comissaoPercent comissaoServicoPercent')
+          .lean();
+        if (!professional || !startDateKey || !endDateKey) {
+          return res.status(422).json({ message: 'Nao foi possivel reconstruir o fechamento legado.' });
+        }
+        const [summary, eligibility] = await Promise.all([
+          computeCommissionSummaryForUser({
+            user: professional,
+            startDate: toStartOfDay(startDateKey),
+            endDate: toEndOfDay(endDateKey),
+            startDateKey,
+            endDateKey,
+            storeId: normalizeObjectId(closing.store),
+            calculationOptions: normalizeCommissionCalculationOptions(storeConfig),
+          }),
+          fetchServiceEligibilityAudit({
+            user: professional,
+            startDateKey,
+            endDateKey,
+            storeId: normalizeObjectId(closing.store),
+          }),
+        ]);
+        const snapshotItems = (summary?.items || []).map(sanitizeSnapshotItem);
+        const rebuiltTotal = roundCurrency(buildTotalsFromItems(snapshotItems).totalPeriodo);
+        if (!snapshotItems.length || rebuiltTotal !== roundCurrency(closing.totalPeriodo)) {
+          return res.status(409).json({
+            message: 'O valor recalculado difere do fechamento legado. Revise os detalhes antes de congelar.',
+            expectedAmount: roundCurrency(closing.totalPeriodo),
+            rebuiltAmount: rebuiltTotal,
+            code: 'LEGACY_RECONCILIATION_TOTAL_MISMATCH',
+          });
+        }
+        try {
+          await CommissionItemLock.insertMany(
+            snapshotItems.map((item) => ({
+              key: buildCommissionItemLockKey({
+                profissional: closing.profissional,
+                store: closing.store,
+                itemKey: item.key,
+              }),
+              closing: closing._id,
+              profissional: closing.profissional,
+              store: closing.store,
+              source: item.source,
+              date: item.date,
+            })),
+            { ordered: true },
+          );
+        } catch (error) {
+          if (error?.code === 11000) {
+            return res.status(409).json({
+              message: 'Existem itens deste fechamento vinculados a outro fechamento.',
+              code: 'COMMISSION_ITEMS_ALREADY_CLOSED',
+            });
+          }
+          throw error;
+        }
+        closing.periodoInicioData = startDateKey;
+        closing.periodoFimData = endDateKey;
+        closing.snapshotVersion = 1;
+        closing.snapshotCreatedAt = new Date();
+        closing.snapshotItems = snapshotItems;
+        closing.snapshotExclusions = eligibility?.exclusions || [];
+        addClosingAudit(closing, {
+          action: 'reconciled',
+          user: actorId,
+          reason,
+          metadata: { type: action, itemCount: snapshotItems.length },
+        });
+        try {
+          await closing.save();
+        } catch (error) {
+          await CommissionItemLock.deleteMany({ closing: closing._id });
+          throw error;
+        }
+      }
+
+      const record = serializeClosingRecord(closing);
+      delete record._professionalKey;
+      delete record._storeKey;
+      return res.json({ ...record, message: 'Reconciliacao concluida.' });
+    } catch (error) {
+      normalizeClosingMutationError(error);
+      if (createdReceipt) {
+        await CommissionPaymentReceipt.deleteOne({ _id: createdReceipt._id }).catch(() => null);
+      }
+      console.error('[adminComissoesFechamentos] reconcile', error);
+      return res.status(error.statusCode || 500).json({
+        message: error.message || 'Nao foi possivel reconciliar o fechamento.',
+        code: error.code,
+      });
     }
   },
 );
@@ -3496,6 +4402,8 @@ router.post(
       const closing = await CommissionClosing.findById(id);
       if (!closing) return res.status(404).json({ message: 'Fechamento nao encontrado.' });
       await assertClosingStoreAccess(req, closing);
+      const storeConfig = await CommissionConfig.findOne({ store: closing.store }).lean();
+      assertCommissionAction(req, storeConfig, 'cancel');
       if (req.body?.confirm !== true) {
         return res.status(400).json({ message: 'Confirme explicitamente o cancelamento.' });
       }
@@ -3523,6 +4431,12 @@ router.post(
       closing.cancelledTime = getClockTimeInSaoPaulo(cancelledAt).slice(0, 5);
       closing.cancelledBy = getActorId(req);
       closing.cancellationReason = reason;
+      if (closing.paymentApproval?.status === 'pending') {
+        closing.paymentApproval.status = 'rejected';
+        closing.paymentApproval.reviewedAt = cancelledAt;
+        closing.paymentApproval.reviewedBy = getActorId(req);
+        closing.paymentApproval.rejectionReason = `Cancelado: ${reason}`;
+      }
       addClosingAudit(closing, {
         action: 'cancelled',
         user: getActorId(req),
@@ -3547,6 +4461,7 @@ router.post(
         cancelledAt: closing.cancelledAt,
       });
     } catch (error) {
+      normalizeClosingMutationError(error);
       console.error('[adminComissoesFechamentos] cancel', error);
       return res.status(error.statusCode || 500).json({ message: error.message || 'Nao foi possivel cancelar fechamento.' });
     }
