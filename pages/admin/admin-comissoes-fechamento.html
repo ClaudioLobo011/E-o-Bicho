@@ -7,12 +7,16 @@
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-    <link rel="stylesheet" href="../../src/output.css?v=20260909-6">
+    <link rel="stylesheet" href="../../src/output.css?v=20260909-7">
     <style>
       html,
       body {
         max-width: 100%;
         overflow-x: clip;
+      }
+      .commission-report {
+        container-name: commission-report;
+        container-type: inline-size;
       }
       .commission-row {
         display: grid;
@@ -35,7 +39,7 @@
       .commission-action-label {
         display: none;
       }
-      @media (max-width: 1180px) {
+      @container commission-report (max-width: 73.75rem) {
         .commission-row {
           grid-template-columns: minmax(0, 1.5fr) minmax(7rem, 0.7fr) minmax(
               7rem,
@@ -47,7 +51,7 @@
           display: none;
         }
       }
-      @media (max-width: 720px) {
+      @container commission-report (max-width: 45rem) {
         .commission-row {
           display: flex;
           flex-direction: column;
@@ -61,6 +65,8 @@
         .commission-row-header {
           display: none !important;
         }
+      }
+      @media (max-width: 720px) {
         .commission-action-label {
           display: inline;
         }
@@ -83,9 +89,11 @@
     <div id="admin-header-placeholder"></div>
 
     <main
-      class="mx-auto min-h-screen w-full max-w-[1600px] px-2 pb-8 pt-1 sm:px-4"
+      class="min-h-screen w-full max-w-none px-2 pb-8 pt-1 sm:px-4"
     >
-      <aside><div id="admin-sidebar-placeholder"></div></aside>
+      <aside aria-label="Navegação administrativa">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
 
       <section
         class="mt-3 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/5"
@@ -359,37 +367,15 @@
             </div>
           </section>
 
-          <section
-            id="auditoria-panel"
-            class="hidden overflow-hidden rounded-xl border border-amber-200 bg-amber-50"
-            aria-labelledby="auditoria-title"
+          <div
+            id="commission-workspace"
+            class="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_18rem] xl:items-start 2xl:grid-cols-[minmax(0,1fr)_20rem]"
           >
-            <button
-              type="button"
-              id="auditoria-toggle"
-              class="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left"
+            <section
+              id="commission-report"
+              class="commission-report min-w-0 overflow-hidden rounded-xl border border-gray-200 bg-white"
+              aria-labelledby="relatorio-title"
             >
-              <span
-                ><i class="fas fa-triangle-exclamation mr-2 text-amber-600"></i
-                ><strong id="auditoria-title" class="text-sm text-amber-950"
-                  >Central de pendências</strong
-                >
-                <span
-                  id="auditoria-count"
-                  class="ml-1 rounded-full bg-amber-200 px-2 py-0.5 text-xs font-bold text-amber-900"
-                ></span></span
-              ><i class="fas fa-chevron-down text-amber-700"></i>
-            </button>
-            <div
-              id="auditoria-list"
-              class="divide-y divide-amber-200 border-t border-amber-200"
-            ></div>
-          </section>
-
-          <section
-            class="overflow-hidden rounded-xl border border-gray-200 bg-white"
-            aria-labelledby="relatorio-title"
-          >
             <div
               class="flex flex-col gap-2 border-b border-gray-100 px-3 py-3 lg:flex-row lg:items-center lg:justify-between"
             >
@@ -486,44 +472,81 @@
               id="report-pagination"
               class="flex flex-wrap items-center justify-between gap-2 border-t bg-gray-50 px-3 py-2"
             ></footer>
-          </section>
+            </section>
 
-          <details
-            id="history-section"
-            class="overflow-hidden rounded-xl border border-gray-200 bg-white"
-          >
-            <summary
-              class="cursor-pointer px-3 py-3 text-sm font-semibold text-gray-900"
+            <aside
+              id="commission-sidebar"
+              class="min-w-0 space-y-3"
+              aria-label="Pendências e histórico"
             >
-              Histórico que toca o período
-              <span
-                id="history-count"
-                class="ml-1 font-normal text-gray-500"
-              ></span>
-            </summary>
-            <div
-              class="flex flex-wrap items-center gap-2 border-t bg-gray-50 px-3 py-2"
+            <section
+              id="auditoria-panel"
+              class="hidden overflow-hidden rounded-xl border border-amber-200 bg-amber-50"
+              aria-labelledby="auditoria-title"
             >
-              <input
-                id="history-search"
-                type="search"
-                class="min-w-0 flex-1 rounded-lg border px-3 py-1.5 text-sm"
-                placeholder="Filtrar histórico"><select
-                id="history-status"
-                class="rounded-lg border px-2 py-1.5 text-sm"
+              <button
+                type="button"
+                id="auditoria-toggle"
+                class="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left"
               >
-                <option value="">Todos</option>
-                <option value="pendente">Pendente</option>
-                <option value="agendado">Agendado</option>
-                <option value="aguardando_aprovacao">
-                  Aguardando aprovação
-                </option>
-                <option value="pago">Pago</option>
-                <option value="cancelado">Cancelado</option>
-              </select>
-            </div>
-            <div id="history-list" class="divide-y divide-gray-100 px-3"></div>
-          </details>
+                <span class="min-w-0"
+                  ><i class="fas fa-triangle-exclamation mr-1.5 text-amber-600"></i
+                  ><strong id="auditoria-title" class="text-sm text-amber-950"
+                    >Central de pendências</strong
+                  >
+                  <span
+                    id="auditoria-count"
+                    class="ml-1 rounded-full bg-amber-200 px-2 py-0.5 text-xs font-bold text-amber-900"
+                  ></span></span
+                ><i class="fas fa-chevron-down shrink-0 text-amber-700"></i>
+              </button>
+              <div
+                id="auditoria-list"
+                class="max-h-72 divide-y divide-amber-200 overflow-y-auto border-t border-amber-200"
+              ></div>
+            </section>
+
+            <details
+              id="history-section"
+              class="overflow-hidden rounded-xl border border-gray-200 bg-white"
+            >
+              <summary
+                class="cursor-pointer px-3 py-3 text-sm font-semibold text-gray-900"
+              >
+                Histórico que toca o período
+                <span
+                  id="history-count"
+                  class="ml-1 font-normal text-gray-500"
+                ></span>
+              </summary>
+              <div
+                class="grid gap-2 border-t bg-gray-50 px-3 py-2 sm:grid-cols-2 xl:grid-cols-1"
+              >
+                <input
+                  id="history-search"
+                  type="search"
+                  class="min-w-0 rounded-lg border px-3 py-1.5 text-sm"
+                  placeholder="Filtrar histórico"><select
+                  id="history-status"
+                  class="min-w-0 rounded-lg border px-2 py-1.5 text-sm"
+                >
+                  <option value="">Todos</option>
+                  <option value="pendente">Pendente</option>
+                  <option value="agendado">Agendado</option>
+                  <option value="aguardando_aprovacao">
+                    Aguardando aprovação
+                  </option>
+                  <option value="pago">Pago</option>
+                  <option value="cancelado">Cancelado</option>
+                </select>
+              </div>
+              <div
+                id="history-list"
+                class="max-h-[34rem] divide-y divide-gray-100 overflow-y-auto px-3"
+              ></div>
+            </details>
+            </aside>
+          </div>
         </div>
       </section>
     </main>
@@ -1343,11 +1366,11 @@
     <script>
       var basePath = "../../";
     </script>
-    <script src="../../scripts/core/config.js?v=20260909-6"></script>
-    <script src="../../scripts/core/ui.js?v=20260909-6"></script>
-    <script src="../../scripts/core/main.js?v=20260909-6"></script>
-    <script src="../../scripts/admin/admin.js?v=20260909-6"></script>
-    <script src="/scripts/common/modal-bridge.js?v=20260909-6"></script>
-    <script src="../../scripts/admin/admin-comissoes-fechamento.js?v=20260909-6"></script>
+    <script src="../../scripts/core/config.js?v=20260909-7"></script>
+    <script src="../../scripts/core/ui.js?v=20260909-7"></script>
+    <script src="../../scripts/core/main.js?v=20260909-7"></script>
+    <script src="../../scripts/admin/admin.js?v=20260909-7"></script>
+    <script src="/scripts/common/modal-bridge.js?v=20260909-7"></script>
+    <script src="../../scripts/admin/admin-comissoes-fechamento.js?v=20260909-7"></script>
   </body>
 </html>

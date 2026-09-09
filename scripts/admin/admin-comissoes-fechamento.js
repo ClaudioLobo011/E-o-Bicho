@@ -443,7 +443,7 @@
     list.innerHTML = issues
       .map(
         (issue) =>
-          `<article class="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"><div class="min-w-0"><p class="text-sm font-bold ${styles[issue.severity] || styles.warning}">${escapeHtml(issue.title || "Pendência")}</p><p class="text-xs text-amber-900">${escapeHtml(issue.description || "")}</p></div><div class="flex flex-wrap gap-1.5">${(issue.actions || []).map((action) => `<button type="button" data-issue-action="${escapeHtml(action)}" data-id="${escapeHtml(issue.closingId || "")}" class="rounded-lg border border-amber-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-amber-900">${escapeHtml(labels[action] || action)}</button>`).join("")}</div></article>`,
+          `<article class="space-y-2 px-3 py-2.5"><div class="min-w-0"><p class="text-sm font-bold ${styles[issue.severity] || styles.warning}">${escapeHtml(issue.title || "Pendência")}</p><p class="text-[11px] leading-4 text-amber-900">${escapeHtml(issue.description || "")}</p></div><div class="flex flex-wrap gap-1.5">${(issue.actions || []).map((action) => `<button type="button" data-issue-action="${escapeHtml(action)}" data-id="${escapeHtml(issue.closingId || "")}" class="rounded-lg border border-amber-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-amber-900">${escapeHtml(labels[action] || action)}</button>`).join("")}</div></article>`,
       )
       .join("");
   }
@@ -481,10 +481,10 @@
       visible
         .map(
           (item) =>
-            `<article class="grid gap-2 py-3 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center"><div class="min-w-0"><div class="flex flex-wrap items-center gap-1.5"><p class="truncate text-sm font-bold">${escapeHtml(item.profissionalNome || "--")}</p>${statusBadge(item.status, item.overdue)}${item.crossesSelection ? '<span class="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-semibold text-amber-800">Cruza o período</span>' : ""}${item.legacyPeriod ? '<span class="rounded-full bg-red-100 px-2 py-1 text-[10px] font-semibold text-red-800">Legado</span>' : ""}</div><p class="text-xs text-gray-500">${escapeHtml(item.periodo)} · ${escapeHtml(item.tipo || "--")}</p></div><div class="text-sm lg:text-right"><p class="font-bold">${formatMoney(item.totalPeriodo)}</p><p class="text-[11px] text-gray-500">Pago ${formatMoney(item.totalPago)}</p></div>${actionButtons(item, { history: true })}</article>`,
+            `<article class="space-y-2 py-3"><div class="min-w-0"><div class="flex flex-wrap items-center gap-1.5"><p class="min-w-0 break-words text-sm font-bold">${escapeHtml(item.profissionalNome || "--")}</p>${statusBadge(item.status, item.overdue)}${item.crossesSelection ? '<span class="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-semibold text-amber-800">Cruza o período</span>' : ""}${item.legacyPeriod ? '<span class="rounded-full bg-red-100 px-2 py-1 text-[10px] font-semibold text-red-800">Legado</span>' : ""}</div><p class="text-xs text-gray-500">${escapeHtml(item.periodo)} · ${escapeHtml(item.tipo || "--")}</p></div><div class="flex flex-wrap items-end justify-between gap-2"><div class="text-sm"><p class="font-bold">${formatMoney(item.totalPeriodo)}</p><p class="text-[11px] text-gray-500">Pago ${formatMoney(item.totalPago)}</p></div>${actionButtons(item, { history: true })}</div></article>`,
         )
         .join("") +
-      `<footer class="flex items-center justify-between border-t py-2"><span class="text-xs text-gray-500">Página ${state.historyPage} de ${pageCount}</span><div class="flex gap-1">${pageButton("history-previous", state.historyPage <= 1, "fa-chevron-left", "Anterior")}${pageButton("history-next", state.historyPage >= pageCount, "fa-chevron-right", "Próxima")}</div></footer>`;
+      `<footer class="flex flex-wrap items-center justify-between gap-2 border-t py-2"><span class="text-xs text-gray-500">Página ${state.historyPage} de ${pageCount}</span><div class="flex gap-1">${pageButton("history-previous", state.historyPage <= 1, "fa-chevron-left", "Anterior")}${pageButton("history-next", state.historyPage >= pageCount, "fa-chevron-right", "Próxima")}</div></footer>`;
   }
 
   function applyLocalFilters({ resetPage = true } = {}) {
