@@ -35,6 +35,7 @@ const { isR2Configured, uploadBufferToR2, buildPublicUrl } = require('../utils/c
 const createDesktopSyncV2Router = require('./pdvDesktopSyncV2');
 
 const router = express.Router();
+require('../services/desktopPetHistory').registerPetHistory(router, authenticateHost);
 const adminOnly = [requireAuth, authorizeRoles('admin', 'admin_master')];
 const hash = (value) => crypto.createHash('sha256').update(String(value || '')).digest('hex');
 const clean = (value) => String(value || '').trim();

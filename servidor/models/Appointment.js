@@ -67,6 +67,7 @@ const AppointmentSchema = new Schema({
 }, { timestamps: true });
 
 AppointmentSchema.index({ store: 1, scheduledAt: 1 });
+AppointmentSchema.index({ pet: 1, deletedAt: 1 });
 AppointmentSchema.index({ profissional: 1, scheduledAt: 1 });
 AppointmentSchema.index({ store: 1, updatedAt: 1, _id: 1 });
 AppointmentSchema.index({ store: 1, 'itens.data': 1 });
