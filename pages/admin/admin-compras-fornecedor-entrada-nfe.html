@@ -6,18 +6,18 @@
   <title>Admin: Entrada de NF-e - E o Bicho</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <link rel="stylesheet" href="../../src/output.css">
+  <link rel="stylesheet" href="../../src/admin-compras-fornecedor-entrada-nfe.css?v=20260912-2">
 </head>
-<body class="bg-gray-100">
+<body class="nfe-entry-page bg-gray-100 text-gray-800 antialiased">
   <div id="admin-header-placeholder"></div>
 
-  <main id="nfe-main-content" class="container mx-auto px-4 pt-1 pb-8 min-h-screen">
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
-      <aside class="md:col-span-4">
-        <div id="admin-sidebar-placeholder"></div>
-      </aside>
+  <main id="nfe-main-content" class="min-h-screen w-full max-w-none px-2 pb-8 pt-1 sm:px-4">
+    <aside aria-label="Navegação administrativa">
+      <div id="admin-sidebar-placeholder"></div>
+    </aside>
 
-      <div class="md:col-span-4 space-y-6">
-        <header class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+    <div id="nfe-page-shell" class="mt-3 space-y-3">
+        <header class="nfe-page-heading flex flex-col gap-3 rounded-2xl border border-gray-100 p-4 shadow-sm md:flex-row md:items-center md:justify-between md:p-5">
           <div class="space-y-2">
             <div class="flex items-center gap-2 text-sm text-gray-600">
               <span class="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-primary">
@@ -31,21 +31,50 @@
             </div>
             <div>
               <h1 class="text-2xl font-bold text-gray-800">Entrada de NF-e</h1>
-              <p class="text-sm text-gray-600">Cadastre entradas modelo 55 com dados exigidos pelo Manual de Orientação do Contribuinte 4.0 e notas técnicas vigentes para NFC-e, NF-e e NFSe.</p>
+              <p class="text-sm text-gray-600">Importe, confira e aprove entradas de NF-e modelo 55 com validações claras antes da movimentação de estoque.</p>
             </div>
           </div>
+          <button type="button" data-open-import-modal class="inline-flex min-h-11 items-center justify-center gap-2 self-start rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90 md:self-center">
+            <i class="fas fa-file-import" aria-hidden="true"></i>
+            Importar NF-e
+          </button>
         </header>
 
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
+        <section class="nfe-summary-grid" aria-label="Resumo da entrada">
+          <article class="nfe-summary-card">
+            <span class="nfe-summary-card__label">Total da nota</span>
+            <strong class="nfe-summary-card__value" data-workspace-total>R$ 0,00</strong>
+            <span class="nfe-summary-card__helper">Valor preservado do XML</span>
+          </article>
+          <article class="nfe-summary-card">
+            <span class="nfe-summary-card__label">Produtos</span>
+            <strong class="nfe-summary-card__value" data-workspace-items>0 itens</strong>
+            <span class="nfe-summary-card__helper" data-workspace-items-helper>Nenhum item importado</span>
+          </article>
+          <article class="nfe-summary-card">
+            <span class="nfe-summary-card__label">Pendências</span>
+            <strong class="nfe-summary-card__value" data-workspace-pending>Preencha os dados</strong>
+            <span class="nfe-summary-card__helper" data-workspace-pending-helper>A aprovação ficará disponível ao concluir</span>
+          </article>
+          <article class="nfe-summary-card">
+            <span class="nfe-summary-card__label">Parcelas x NF</span>
+            <strong class="nfe-summary-card__value" data-workspace-duplicates>R$ 0,00</strong>
+            <span class="nfe-summary-card__helper" data-workspace-duplicates-helper>Aguardando duplicatas</span>
+          </article>
+        </section>
+
+        <div id="nfe-workspace">
+          <div id="nfe-workspace-main" class="space-y-3">
+        <section class="nfe-quick-identification space-y-5 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-5">
           <div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
             <div>
-              <h2 class="text-lg font-semibold text-gray-800">Cabeçalho da Nota</h2>
-              <p class="text-sm text-gray-600">Preencha o identificador da nota, dados do fornecedor e referência numérica conforme layout nacional da NF-e/NFC-e.</p>
+              <h2 class="text-lg font-semibold text-gray-800">Identificação rápida</h2>
+              <p class="text-sm text-gray-600">Os dados principais permanecem visíveis durante toda a conferência.</p>
             </div>
             <div class="rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-2 text-right">
               <span class="text-xs font-medium text-emerald-700 block">Total da Nota</span>
               <span class="text-xl font-bold text-emerald-900" data-nfe-total>R$ 0,00</span>
-              <p class="text-[11px] text-emerald-700">Somatório automático dos itens</p>
+              <p class="text-[11px] text-emerald-700">Valor total informado na NF-e</p>
             </div>
           </div>
 
@@ -85,42 +114,33 @@
             </div>
             <div>
               <label for="nfe-supplier" class="block text-sm font-medium text-gray-700 mb-1">Fornecedor*</label>
-              <select id="nfe-supplier" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
-                <option value="">Selecione o fornecedor</option>
-                <option value="30090856000160">30290856000160 - Distribuidora Nacional de Produtos Veterinários Ltda</option>
-                <option value="06117473000150">06117473000150 - MSD Saúde Animal Comércio de Produtos Veterinários Ltda</option>
-                <option value="07404231000110">07404231000110 - Ourofino Saúde Animal Ltda</option>
+              <select id="nfe-supplier" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required disabled>
+                <option value="">Carregando fornecedores...</option>
               </select>
             </div>
           </div>
         </section>
 
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100">
-          <nav class="flex flex-wrap gap-2 border-b border-gray-100 px-6 pt-6">
-            <button type="button" class="tab-button active" data-tab="dados">Dados da Nota</button>
-            <button type="button" class="tab-button" data-tab="totais">Totais da Nota</button>
-            <button type="button" class="tab-button" data-tab="observacoes">Obs / Outras Informações</button>
-            <button type="button" class="tab-button" data-tab="produtos">Produtos</button>
-            <button type="button" class="tab-button" data-tab="transportadora">Transportadora</button>
-            <button type="button" class="tab-button" data-tab="duplicatas">Duplicatas</button>
-            <button type="button" class="tab-button" data-tab="documentos">Documentos Vinculados</button>
+        <section class="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+          <nav class="nfe-steps border-b border-gray-100" role="tablist" aria-label="Etapas da entrada de NF-e">
+            <button type="button" class="tab-button active" data-tab="dados" data-tab-panels="dados" role="tab" aria-selected="true"><span class="nfe-step-number">1</span><span>Origem e identificação</span></button>
+            <button type="button" class="tab-button" data-tab="produtos" data-tab-panels="produtos" role="tab" aria-selected="false"><span class="nfe-step-number">2</span><span>Produtos</span></button>
+            <button type="button" class="tab-button" data-tab="fiscal" data-tab-panels="totais,observacoes,transportadora" role="tab" aria-selected="false"><span class="nfe-step-number">3</span><span>Fiscal e complementos</span></button>
+            <button type="button" class="tab-button" data-tab="duplicatas" data-tab-panels="duplicatas" role="tab" aria-selected="false"><span class="nfe-step-number">4</span><span>Financeiro</span></button>
+            <button type="button" class="tab-button" data-tab="documentos" data-tab-panels="documentos" role="tab" aria-selected="false"><span class="nfe-step-number">5</span><span>Revisão</span></button>
           </nav>
 
-          <div class="p-6 space-y-6">
-            <div class="tab-panel" data-tab-panel="dados">
+          <div class="nfe-tab-content space-y-6 p-4 sm:p-5">
+            <div id="nfe-panel-dados" class="tab-panel" data-tab-panel="dados" role="tabpanel">
               <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
                 <div>
                   <h3 class="text-sm font-semibold text-gray-700">Ações principais</h3>
-                  <p class="text-xs text-gray-600">Gerencie a nota importando XML, visualizando lotes ou ajustando preços e pedidos.</p>
+                  <p class="text-xs text-gray-600">Importe a NF-e ou ajuste preços após a aprovação da entrada.</p>
                 </div>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <button type="button" data-open-import-modal class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
                     <i class="fas fa-file-import"></i>
                     Importar XML
-                  </button>
-                  <button type="button" class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
-                    <i class="fas fa-eye"></i>
-                    Visualizar Lotes
                   </button>
                   <button
                     type="button"
@@ -130,10 +150,6 @@
                   >
                     <i class="fas fa-tags"></i>
                     Alterar Preços
-                  </button>
-                  <button type="button" class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
-                    <i class="fas fa-clipboard-list"></i>
-                    Pedidos
                   </button>
                 </div>
               </div>
@@ -151,16 +167,14 @@
                 </div>
                 <div>
                   <label for="nfe-model" class="block text-sm font-medium text-gray-700 mb-1">Modelo da Nota Fiscal*</label>
-                  <select id="nfe-model" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
+                  <select id="nfe-model" class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600" required disabled>
                     <option value="55" selected>55 - Nota Fiscal Eletrônica (NF-e)</option>
-                    <option value="65">65 - Nota Fiscal de Consumidor Eletrônica (NFC-e)</option>
-                    <option value="57">57 - Conhecimento de Transporte Eletrônico (CT-e)</option>
-                    <option value="nfs-e">NFS-e - Nota Fiscal de Serviços Eletrônica</option>
                   </select>
+                  <p class="mt-1 text-xs text-gray-500">Este fluxo aceita somente NF-e modelo 55.</p>
                 </div>
                 <div>
                   <label for="access-key" class="block text-sm font-medium text-gray-700 mb-1">Chave da NFe (44 dígitos)</label>
-                  <input type="text" id="access-key" maxlength="44" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="35240730290856000160550010000100011999999999">
+                  <input type="text" id="access-key" maxlength="44" class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600" placeholder="Preenchida pelo XML" readonly>
                   <p class="mt-1 text-xs text-gray-600">Composição: cUF + AAMM + CNPJ + modelo + série + número + tpEmis + cNF + DV.</p>
                 </div>
                 <div>
@@ -224,7 +238,11 @@
               </div>
             </div>
 
-            <div class="tab-panel hidden" data-tab-panel="totais">
+            <div id="nfe-panel-totais" class="tab-panel hidden" data-tab-panel="totais" role="tabpanel">
+              <div class="nfe-panel-heading">
+                <h3>Totais e impostos da NF-e</h3>
+                <p>Valores importados do XML para conferência fiscal.</p>
+              </div>
               <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div class="space-y-4">
                   <div>
@@ -293,39 +311,16 @@
               </div>
             </div>
 
-            <div class="tab-panel hidden" data-tab-panel="observacoes">
+            <div id="nfe-panel-observacoes" class="tab-panel hidden" data-tab-panel="observacoes" role="tabpanel">
+              <div class="nfe-panel-heading">
+                <h3>Informações complementares</h3>
+                <p>Condições comerciais e observações preservadas no rascunho.</p>
+              </div>
               <div class="space-y-4">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
-                    <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/30">
-                    Pagar Frete
-                  </label>
-                  <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
-                    <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/30">
-                    Não Alterar Estoque
-                  </label>
-                  <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
-                    <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/30">
-                    Valor Seguro
-                  </label>
-                  <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
-                    <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/30">
-                    Não escriturar o valor de ICMS
-                  </label>
-                </div>
-
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label for="condicao-pagamento" class="block text-sm font-medium text-gray-700 mb-1">Condição de Pagamento</label>
                     <input type="text" id="condicao-pagamento" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="30/60/90 dias">
-                  </div>
-                  <div>
-                    <label for="cliente-retorno" class="block text-sm font-medium text-gray-700 mb-1">Cliente para retorno parcial (F2)</label>
-                    <input type="text" id="cliente-retorno" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Pesquisar cliente">
-                  </div>
-                  <div>
-                    <label for="centro-custo" class="block text-sm font-medium text-gray-700 mb-1">Centro de Custo (F2)</label>
-                    <input type="text" id="centro-custo" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="01.02.03 - Comercial">
                   </div>
                   <div>
                     <label for="forma-pagamento" class="block text-sm font-medium text-gray-700 mb-1">Forma de Pagamento</label>
@@ -344,9 +339,12 @@
               </div>
             </div>
 
-            <div class="tab-panel hidden" data-tab-panel="produtos">
+            <div id="nfe-panel-produtos" class="tab-panel hidden" data-tab-panel="produtos" role="tabpanel">
               <div class="flex flex-wrap items-center justify-between gap-3">
-                <h3 class="text-sm font-semibold text-gray-700">Itens da nota</h3>
+                <div>
+                  <h3 class="text-sm font-semibold text-gray-700">Itens da nota</h3>
+                  <p class="mt-1 text-xs text-gray-500">Comece pela visão essencial e abra a visão fiscal somente quando precisar.</p>
+                </div>
                 <div class="flex flex-wrap gap-2">
                   <button
                     type="button"
@@ -366,15 +364,25 @@
                     <i class="fas fa-gift"></i>
                     Adicionar Bonificação
                   </button>
-                  <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
-                    <i class="fas fa-exchange-alt"></i>
-                    Alterar Fornecedor por Produto
-                  </button>
                 </div>
               </div>
 
-              <div class="mt-4 overflow-x-auto rounded-lg border border-gray-200">
-                <table class="min-w-full divide-y divide-gray-200 text-sm">
+              <div class="nfe-products-toolbar mt-4 rounded-xl border border-gray-100 bg-gray-50 p-2.5">
+                <label class="relative min-w-56 flex-1">
+                  <span class="sr-only">Pesquisar em todos os produtos</span>
+                  <i class="fas fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400" aria-hidden="true"></i>
+                  <input type="search" data-main-products-global-search class="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Pesquisar código, nome, GTIN ou informação fiscal">
+                </label>
+                <button type="button" class="nfe-column-preset" data-main-products-pending aria-pressed="false">Somente pendentes</button>
+                <div class="flex flex-wrap gap-1" role="group" aria-label="Colunas exibidas">
+                  <button type="button" class="nfe-column-preset" data-products-view="essential" aria-pressed="true">Essencial</button>
+                  <button type="button" class="nfe-column-preset" data-products-view="fiscal" aria-pressed="false">Fiscal</button>
+                  <button type="button" class="nfe-column-preset" data-products-view="complete" aria-pressed="false">Completa</button>
+                </div>
+              </div>
+
+              <div class="nfe-products-scroll mt-3 rounded-lg border border-gray-200">
+                <table class="min-w-full divide-y divide-gray-200 text-sm" data-main-products-table data-products-column-view="essential">
                   <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-600">
                     <tr class="text-[11px] font-semibold uppercase tracking-wide text-gray-600">
                       <th scope="col" class="px-4 py-3 text-left align-top">
@@ -869,7 +877,11 @@
               </div>
             </div>
 
-            <div class="tab-panel hidden" data-tab-panel="transportadora">
+            <div id="nfe-panel-transportadora" class="tab-panel hidden" data-tab-panel="transportadora" role="tabpanel">
+              <div class="nfe-panel-heading">
+                <h3>Transporte</h3>
+                <p>Dados de frete, transportador, veículo e volumes informados na nota.</p>
+              </div>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label for="transportadora-cnpj" class="block text-sm font-medium text-gray-700 mb-1">CNPJ</label>
@@ -975,7 +987,11 @@
               </div>
             </div>
 
-            <div class="tab-panel hidden" data-tab-panel="duplicatas">
+            <div id="nfe-panel-duplicatas" class="tab-panel hidden" data-tab-panel="duplicatas" role="tabpanel">
+              <div class="nfe-panel-heading">
+                <h3>Parcelas e contas a pagar</h3>
+                <p>A soma das parcelas deve ser exatamente igual ao total da NF-e.</p>
+              </div>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label for="conta-contabil" class="block text-sm font-medium text-gray-700 mb-1">Conta Contábil (F2)*</label>
@@ -1079,13 +1095,12 @@
               </div>
             </div>
 
-            <div class="tab-panel hidden" data-tab-panel="documentos">
+            <div id="nfe-panel-documentos" class="tab-panel hidden" data-tab-panel="documentos" role="tabpanel">
               <div class="flex flex-wrap items-center justify-between gap-3">
-                <h3 class="text-sm font-semibold text-gray-700">Documentos vinculados</h3>
-                <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-primary/90 transition">
-                  <i class="fas fa-link"></i>
-                  Adicionar NF
-                </button>
+                <div>
+                  <h3 class="text-sm font-semibold text-gray-700">Revisão e documentos vinculados</h3>
+                  <p class="mt-1 text-xs text-gray-500">Confira os documentos trazidos pelo XML e conclua todas as pendências no painel de revisão.</p>
+                </div>
               </div>
 
               <div class="mt-4 overflow-x-auto rounded-lg border border-gray-200">
@@ -1109,36 +1124,61 @@
                 </table>
               </div>
 
-              <div class="mt-4 flex flex-wrap gap-2 text-xs text-gray-600">
-                <button type="button" class="inline-flex items-center gap-1 rounded border border-gray-200 px-2.5 py-1 font-medium hover:bg-gray-50">
-                  <i class="fas fa-file-excel"></i>
-                  Excel
-                </button>
-                <button type="button" class="inline-flex items-center gap-1 rounded border border-gray-200 px-2.5 py-1 font-medium hover:bg-gray-50">
-                  <i class="fas fa-file-pdf"></i>
-                  PDF
-                </button>
-                <button type="button" class="inline-flex items-center gap-1 rounded border border-gray-200 px-2.5 py-1 font-medium hover:bg-gray-50">
-                  <i class="fas fa-table"></i>
-                  Layout
-                </button>
-                <button type="button" class="inline-flex items-center gap-1 rounded border border-gray-200 px-2.5 py-1 font-medium hover:bg-gray-50">
-                  <i class="fas fa-expand"></i>
-                  Tela Cheia
-                </button>
+              <div class="mt-4 rounded-xl border border-sky-100 bg-sky-50 px-4 py-3 text-xs text-sky-800">
+                <i class="fas fa-circle-info mr-1" aria-hidden="true"></i>
+                Exportação e inclusão manual de documentos não estão disponíveis neste fluxo. Somente documentos efetivamente vinculados ao XML são exibidos.
               </div>
             </div>
           </div>
         </section>
+          </div>
 
-      </div>
+          <aside id="nfe-workspace-sidebar" aria-label="Revisão da entrada">
+            <section class="nfe-readiness-card overflow-hidden">
+              <header class="border-b border-gray-100 bg-gray-50/80 px-4 py-3">
+                <div class="flex items-start justify-between gap-3">
+                  <div>
+                    <p class="text-[10px] font-bold uppercase tracking-wide text-primary">Revisão da entrada</p>
+                    <h2 class="mt-1 text-base font-bold text-gray-900">Pendências para aprovar</h2>
+                  </div>
+                  <span class="inline-flex items-center rounded-full border px-2 py-1 text-[10px] font-bold uppercase tracking-wide" data-readiness-badge>Aguardando</span>
+                </div>
+                <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-gray-200" aria-hidden="true">
+                  <div class="h-full rounded-full bg-primary transition-all" style="width:0%" data-readiness-progress></div>
+                </div>
+                <p class="mt-2 text-xs text-gray-500" data-readiness-summary>Preencha os dados para iniciar a conferência.</p>
+              </header>
+              <div class="space-y-4 p-4">
+                <div class="nfe-readiness-list" data-readiness-list aria-live="polite"></div>
+                <dl class="grid grid-cols-1 gap-2 rounded-xl border border-gray-100 bg-gray-50 p-3 text-xs">
+                  <div class="flex items-start justify-between gap-3">
+                    <dt class="text-gray-500">Empresa</dt>
+                    <dd class="max-w-[11rem] truncate text-right font-semibold text-gray-800" data-review-company>Não selecionada</dd>
+                  </div>
+                  <div class="flex items-start justify-between gap-3">
+                    <dt class="text-gray-500">Fornecedor</dt>
+                    <dd class="max-w-[11rem] truncate text-right font-semibold text-gray-800" data-review-supplier>Não selecionado</dd>
+                  </div>
+                  <div class="flex items-start justify-between gap-3">
+                    <dt class="text-gray-500">NF-e</dt>
+                    <dd class="font-semibold text-gray-800" data-review-number>Não informada</dd>
+                  </div>
+                </dl>
+                <p class="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-800">
+                  <i class="fas fa-shield-halved mr-1" aria-hidden="true"></i>
+                  Aprovar movimenta o estoque e, nas NF-e com duplicatas, gera contas a pagar. A ação só é liberada quando não houver bloqueios.
+                </p>
+              </div>
+            </section>
+          </aside>
+        </div>
     </div>
   </main>
 
   <div id="nfe-fixed-actions-bar" class="z-40 border-t border-gray-200 bg-white" style="position: fixed; left: 0; right: 0; bottom: 0;">
-    <div class="container mx-auto px-4 py-3">
-      <div class="flex flex-col-reverse gap-3 md:flex-row md:items-center md:justify-between">
-        <div class="flex flex-wrap items-center gap-2">
+    <div class="w-full max-w-none px-3 py-2 sm:px-4">
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex flex-wrap items-center gap-2" data-secondary-actions>
           <button
             type="button"
             data-delete-entry
@@ -1157,7 +1197,7 @@
           </button>
         </div>
 
-        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-end">
+        <div class="flex items-center justify-end gap-2" data-primary-actions>
           <button type="button" data-save-draft class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
             <i class="fas fa-file-archive"></i>
             Salvar rascunho
@@ -1169,12 +1209,74 @@
           <button
             type="button"
             data-register-entry
-            class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90"
+            class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+            aria-describedby="nfe-approval-action-help"
           >
-            <i class="fas fa-save" data-register-entry-icon></i>
-            <span data-register-entry-text>Gravar</span>
+            <i class="fas fa-circle-check" data-register-entry-icon></i>
+            <span data-register-entry-text>Aprovar entrada</span>
           </button>
+          <span id="nfe-approval-action-help" class="sr-only">A aprovação movimenta estoque e pode criar contas a pagar.</span>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="approval-review-modal" class="fixed inset-0 z-[1200] hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="approval-review-title" aria-describedby="approval-review-description">
+    <div class="absolute inset-0 bg-gray-900/65" data-cancel-approval></div>
+    <div class="relative mx-auto flex min-h-full w-full items-center justify-center p-3">
+      <div data-approval-card class="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <header class="flex items-start justify-between gap-3 border-b border-gray-100 px-5 py-4">
+          <div>
+            <span class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">
+              <i class="fas fa-shield-halved" aria-hidden="true"></i>
+              Ação com efeitos
+            </span>
+            <h2 id="approval-review-title" class="mt-2 text-xl font-bold text-gray-900">Revisar antes de aprovar</h2>
+            <p id="approval-review-description" class="mt-1 text-sm text-gray-600">A aprovação movimentará o estoque e, quando aplicável, criará as contas a pagar apresentadas abaixo.</p>
+          </div>
+          <button type="button" class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-gray-200 text-gray-500 hover:bg-gray-50" data-cancel-approval aria-label="Fechar revisão da aprovação">
+            <i class="fas fa-times" aria-hidden="true"></i>
+          </button>
+        </header>
+        <div class="max-h-[62vh] space-y-4 overflow-y-auto p-5">
+          <dl class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div class="rounded-xl border border-gray-100 bg-gray-50 p-3">
+              <dt class="text-[10px] font-bold uppercase tracking-wide text-gray-500">Empresa</dt>
+              <dd class="mt-1 text-sm font-semibold text-gray-900" data-approval-company>—</dd>
+            </div>
+            <div class="rounded-xl border border-gray-100 bg-gray-50 p-3">
+              <dt class="text-[10px] font-bold uppercase tracking-wide text-gray-500">Fornecedor</dt>
+              <dd class="mt-1 text-sm font-semibold text-gray-900" data-approval-supplier>—</dd>
+            </div>
+            <div class="rounded-xl border border-gray-100 bg-gray-50 p-3">
+              <dt class="text-[10px] font-bold uppercase tracking-wide text-gray-500">Documento</dt>
+              <dd class="mt-1 text-sm font-semibold text-gray-900" data-approval-document>—</dd>
+            </div>
+            <div class="rounded-xl border border-gray-100 bg-gray-50 p-3">
+              <dt class="text-[10px] font-bold uppercase tracking-wide text-gray-500">Total da NF-e</dt>
+              <dd class="mt-1 text-sm font-semibold text-gray-900" data-approval-total>R$ 0,00</dd>
+            </div>
+            <div class="rounded-xl border border-gray-100 bg-gray-50 p-3">
+              <dt class="text-[10px] font-bold uppercase tracking-wide text-gray-500">Movimentação de estoque</dt>
+              <dd class="mt-1 text-sm font-semibold text-gray-900" data-approval-stock>0 produtos</dd>
+            </div>
+            <div class="rounded-xl border border-gray-100 bg-gray-50 p-3">
+              <dt class="text-[10px] font-bold uppercase tracking-wide text-gray-500">Contas a pagar</dt>
+              <dd class="mt-1 text-sm font-semibold text-gray-900" data-approval-duplicates>0 parcelas</dd>
+            </div>
+          </dl>
+          <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <strong class="block">Confirme somente depois de revisar os dados.</strong>
+            <span class="mt-1 block text-xs">Após a aprovação, os campos ficam bloqueados. Uma exclusão posterior exigirá estorno do estoque e remoção das contas a pagar.</span>
+          </div>
+        </div>
+        <footer class="flex flex-col-reverse gap-2 border-t border-gray-100 bg-gray-50 px-5 py-3 sm:flex-row sm:justify-end">
+          <button type="button" class="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-100" data-cancel-approval>Voltar e revisar</button>
+          <button type="button" class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-primary/90" data-confirm-approval>
+            <i class="fas fa-circle-check" aria-hidden="true"></i>
+            Confirmar aprovação
+          </button>
+        </footer>
       </div>
     </div>
   </div>
@@ -1330,8 +1432,8 @@
                   <option value="nao-aplica">N&atilde;o se aplica</option>
                   <option value="mva" selected>Margem Valor Agregado</option>
                   <option value="pauta">Pauta (valor)</option>
-                  <option value="preco-tabelado">PreÃ§o Tabelado MÃ¡x. (valor)</option>
-                  <option value="valor-operacao">Valor da OperaÃ§Ã£o</option>
+                  <option value="preco-tabelado">Preço Tabelado Máx. (valor)</option>
+                  <option value="valor-operacao">Valor da Operação</option>
                 </select>
               </div>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1388,7 +1490,7 @@
                   <input type="text" id="nfe-modal-ipi-base" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
                 </div>
                 <div class="space-y-1">
-                  <label for="nfe-modal-ipi-aliq" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">AlÃ­q. IPI (%)</label>
+                  <label for="nfe-modal-ipi-aliq" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Alíq. IPI (%)</label>
                   <input type="text" id="nfe-modal-ipi-aliq" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
                 </div>
                 <div class="space-y-1">
@@ -1397,7 +1499,7 @@
                 </div>
               </div>
               <div class="space-y-1">
-                <label for="nfe-modal-ipi-enquadramento" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">CÃ³d. de enquad.</label>
+                <label for="nfe-modal-ipi-enquadramento" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Cód. de enquad.</label>
                 <input type="text" id="nfe-modal-ipi-enquadramento" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none">
               </div>
             </div>
@@ -1444,11 +1546,11 @@
               <div class="flex flex-wrap gap-4 text-[10px] text-gray-500">
                 <label class="inline-flex items-center gap-2">
                   <input type="checkbox" id="nfe-modal-pis-st-total" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/30">
-                  Valor do PIS ST compÃµe valor total da NF-e
+                  Valor do PIS ST compõe valor total da NF-e
                 </label>
                 <label class="inline-flex items-center gap-2">
                   <input type="checkbox" id="nfe-modal-pis-excluir-icms" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/30">
-                  Excluir o valor do ICMS da Base de CÃ¡lculo do PIS
+                  Excluir o valor do ICMS da Base de Cálculo do PIS
                 </label>
               </div>
               <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1457,7 +1559,7 @@
                   <input type="text" id="nfe-modal-pis-base" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
                 </div>
                 <div class="space-y-1">
-                  <label for="nfe-modal-pis-aliq" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">AlÃ­quota PIS (%)</label>
+                  <label for="nfe-modal-pis-aliq" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Alíquota PIS (%)</label>
                   <input type="text" id="nfe-modal-pis-aliq" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
                 </div>
                 <div class="space-y-1">
@@ -1508,11 +1610,11 @@
               <div class="flex flex-wrap gap-4 text-[10px] text-gray-500">
                 <label class="inline-flex items-center gap-2">
                   <input type="checkbox" id="nfe-modal-cofins-st-total" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/30">
-                  Valor do COFINS ST compÃµe valor total da NF-e
+                  Valor do COFINS ST compõe valor total da NF-e
                 </label>
                 <label class="inline-flex items-center gap-2">
                   <input type="checkbox" id="nfe-modal-cofins-excluir-icms" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/30">
-                  Excluir o valor do ICMS da Base de CÃ¡lculo do Cofins
+                  Excluir o valor do ICMS da Base de Cálculo do Cofins
                 </label>
               </div>
               <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1521,7 +1623,7 @@
                   <input type="text" id="nfe-modal-cofins-base" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
                 </div>
                 <div class="space-y-1">
-                  <label for="nfe-modal-cofins-aliq" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">AlÃ­quota COFINS (%)</label>
+                  <label for="nfe-modal-cofins-aliq" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Alíquota COFINS (%)</label>
                   <input type="text" id="nfe-modal-cofins-aliq" class="w-full border-b border-gray-300 bg-transparent pb-1 text-[11px] focus:border-primary focus:outline-none" value="0,00">
                 </div>
                 <div class="space-y-1">
@@ -2286,7 +2388,7 @@
     </div>
   </div>
 
-  <div id="import-xml-modal" class="fixed inset-0 z-[999] hidden">
+  <div id="import-xml-modal" class="fixed inset-0 z-[999] hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="import-xml-title" aria-describedby="import-xml-description">
     <div class="absolute inset-0 bg-gray-900/60" data-close-import-modal></div>
     <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
       <div data-import-modal-card class="relative flex w-full max-w-[1352px] transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl opacity-0 transition-all duration-200 ease-out scale-95 min-h-0 text-[12px] leading-[1.35]" style="height:min(90vh,calc(100vh - 3rem));">
@@ -2296,10 +2398,10 @@
               <i class="fas fa-file-import"></i>
               Importação de NF-e
             </span>
-            <h2 class="mt-1.5 text-lg font-semibold text-gray-900">Importar XML autorizado na SEFAZ</h2>
-            <p class="mt-1 max-w-3xl text-[11px] text-gray-600">Utilize um XML emitido conforme o Manual de Orientação do Contribuinte 4.0 ou informe a chave de acesso válida (44 dígitos) para recuperar automaticamente dados oficiais da NF-e, NFC-e ou NFS-e.</p>
+            <h2 id="import-xml-title" class="mt-1.5 text-lg font-semibold text-gray-900">Importar NF-e modelo 55</h2>
+            <p id="import-xml-description" class="mt-1 max-w-3xl text-[11px] text-gray-600">Selecione uma nota autorizada já distribuída pela SEFAZ ou envie o XML processado da NF-e. A tela confere estrutura, protocolo, chave e produtos antes de aplicar os dados.</p>
           </div>
-          <button type="button" data-close-import-modal class="inline-flex items-center justify-center rounded-full border border-gray-200 p-1.5 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700">
+          <button type="button" data-close-import-modal class="inline-flex h-10 w-10 shrink-0 self-start items-center justify-center rounded-full border border-gray-200 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700 sm:self-auto" aria-label="Fechar importação de NF-e">
             <span class="sr-only">Fechar modal</span>
             <i class="fas fa-times"></i>
           </button>
@@ -2482,66 +2584,36 @@
             <section class="rounded-xl border border-gray-200">
               <header class="flex flex-col gap-2.5 border-b border-gray-100 bg-gray-50 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
                 <div class="space-y-0.5">
-                  <h3 class="text-[12px] font-semibold text-gray-900">Selecione como deseja importar</h3>
+                  <h3 class="text-[12px] font-semibold text-gray-900">Importar arquivo XML</h3>
                   <p class="text-[11px] text-gray-600">Utilize uma chave de acesso autorizada, ou faça upload de um XML oficial baixado no Portal Nacional.</p>
                 </div>
                 <div class="flex flex-col gap-0.5 text-[10px] text-gray-600 sm:flex-row sm:items-center">
                   <span class="inline-flex items-center gap-1 text-primary">
                     <i class="fas fa-shield-check text-[11px]"></i>
-                    Validação XSD oficial
+                    Conferência estrutural e protocolo
                   </span>
                   <span class="inline-flex items-center gap-1 text-emerald-600">
                     <i class="fas fa-file-code text-[11px]"></i>
-                    NF-e 4.0 · NFC-e 4.0 · NFS-e ABRASF
+                    NF-e modelo 55
                   </span>
                 </div>
               </header>
               <div class="grid grid-cols-1 gap-2.5 p-3.5 lg:grid-cols-3">
-                <div class="space-y-1.5">
-                  <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-600">Tipo de importação</label>
-                  <div class="grid grid-cols-2 gap-1.5 text-[10px] font-medium text-gray-600">
-                    <label class="inline-flex items-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1.5">
-                      <input type="radio" name="import-mode" value="access-key" class="h-3 w-3 text-primary focus:ring-primary/40" checked>
-                      Chave de acesso
-                    </label>
-                    <label class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-1.5 transition hover:border-primary/40 hover:text-primary">
-                      <input type="radio" name="import-mode" value="file" class="h-3 w-3 text-primary focus:ring-primary/40">
-                      Arquivo XML
-                    </label>
-                  </div>
-                </div>
-                <div class="space-y-1.5" data-import-mode-panel="access-key">
-                  <label for="import-access-key" class="text-[10px] font-semibold uppercase tracking-wide text-gray-600">Informe a chave</label>
-                  <div class="flex gap-1.5">
-                    <input type="text" id="import-access-key" maxlength="44" class="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="35240730290856000160550010000100011999999999">
-                    <button type="button" class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-primary/90">
-                      <i class="fas fa-search"></i>
-                      Consultar portal
-                    </button>
-                  </div>
-                  <p class="text-[9px] text-gray-600">Consulta automática ao Portal Nacional da NF-e/NFC-e ou NFSe Nacional.</p>
-                </div>
-                <div class="space-y-1.5 hidden" data-import-mode-panel="file">
+                <input type="radio" name="import-mode" value="file" checked class="sr-only" aria-hidden="true" tabindex="-1">
+                <div class="space-y-1.5 lg:col-span-2" data-import-mode-panel="file">
                   <label for="import-file-input" class="text-[10px] font-semibold uppercase tracking-wide text-gray-600">Envie o XML</label>
-                  <label for="import-file-input" class="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 px-3 py-5 text-center text-[10px] text-gray-500 transition hover:border-primary hover:text-primary">
+                  <label for="import-file-input" class="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 px-3 py-5 text-center text-[11px] text-gray-500 transition hover:border-primary hover:text-primary">
                     <i class="fas fa-cloud-upload-alt text-lg"></i>
-                    <span>Selecione ou arraste o arquivo XML autorizado</span>
+                    <span><strong>Selecione ou arraste</strong> o XML processado e autorizado da NF-e</span>
                     <input id="import-file-input" type="file" accept=".xml" class="hidden">
                   </label>
-                  <p class="text-[9px] text-gray-600">Validação com esquemas oficiais (XSD) e regras de negócio SEFAZ.</p>
+                  <p class="text-[10px] text-gray-600">A conferência local não substitui uma validação XSD oficial. O arquivo precisa conter NF-e modelo 55, chave válida e protocolo com situação autorizada.</p>
                 </div>
                 <div class="space-y-1.5">
-                  <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-600">Ações rápidas</label>
-                  <div class="grid grid-cols-1 gap-1.5 text-[10px] font-medium text-gray-600 sm:grid-cols-2">
-                    <label class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-1.5 transition hover:border-primary/40 hover:text-primary" data-quick-action-normal>
-                      <input type="checkbox" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/40" checked>
-                      Importar automaticamente produtos novos
-                    </label>
-                    <label class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-1.5 transition hover:border-primary/40 hover:text-primary" data-quick-action-normal>
-                      <input type="checkbox" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/40" checked>
-                      Atualizar preços de compra existentes
-                    </label>
-                    <label class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-1.5 transition hover:border-primary/40 hover:text-primary sm:col-span-2" data-quick-action-bonus-dilution style="display:none;">
+                  <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-600">Como consultar</label>
+                  <p class="rounded-lg border border-sky-100 bg-sky-50 px-3 py-2 text-[10px] leading-relaxed text-sky-800">Para consultar diretamente na SEFAZ, use a aba <strong>Notas Pendentes</strong>. A consulta isolada por chave não está disponível neste fluxo.</p>
+                  <div class="mt-2 grid grid-cols-1 gap-1.5 text-[10px] font-medium text-gray-600">
+                    <label class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-1.5 transition hover:border-primary/40 hover:text-primary" data-quick-action-bonus-dilution style="display:none;">
                       <input type="checkbox" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/40" data-bonus-dilution-checkbox>
                       Diluir em mais de um produto
                     </label>
@@ -2600,11 +2672,11 @@
               <header class="flex flex-col gap-2.5 border-b border-gray-100 bg-gray-50 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
                 <div class="space-y-0.5">
                   <h3 class="text-[12px] font-semibold text-gray-900">Dados da nota fiscal</h3>
-                  <p class="text-[11px] text-gray-600">Resumo preenchido automaticamente conforme leiaute nacional 4.0 da NF-e.</p>
+                  <p class="text-[11px] text-gray-600">Resumo dos campos lidos diretamente do XML processado.</p>
                 </div>
                 <div class="text-right text-[10px] text-gray-600">
-                  <span class="block font-semibold text-gray-700">MOC 4.0</span>
-                  <span>NT 2023.003 · NT 2023.004</span>
+                  <span class="block font-semibold text-gray-700">Conferência local</span>
+                  <span>Modelo 55 · protocolo · chave</span>
                 </div>
               </header>
               <div class="grid grid-cols-1 gap-2.5 p-3.5 text-[10px] text-gray-600 lg:grid-cols-4">
@@ -2700,6 +2772,11 @@
                     <i class="fas fa-layer-group text-[11px]"></i>
                     <span data-import-xml-number>XML não importado</span>
                   </span>
+                  <div class="flex items-center gap-1" role="group" aria-label="Detalhamento das colunas importadas">
+                    <button type="button" class="nfe-column-preset" data-import-products-view="essential" aria-pressed="true">Essencial</button>
+                    <button type="button" class="nfe-column-preset" data-import-products-view="fiscal" aria-pressed="false">Fiscal</button>
+                    <button type="button" class="nfe-column-preset" data-import-products-view="complete" aria-pressed="false">Completa</button>
+                  </div>
                   <button
                     type="button"
                     class="inline-flex items-center gap-1 rounded-full border border-gray-200 px-2 py-0.5 text-[10px] font-semibold text-gray-700 transition hover:border-primary/40 hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
@@ -2726,11 +2803,11 @@
                   </button>
                   <span class="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-sky-700" data-import-xml-validation>
                     <i class="fas fa-circle-info text-[11px]" data-import-xml-validation-icon></i>
-                    <span data-import-xml-validation-text>Aguardando validação fiscal</span>
+                    <span data-import-xml-validation-text>Aguardando conferência do XML</span>
                   </span>
                 </div>
               </header>
-              <div class="overflow-x-auto rounded-lg border border-gray-200">
+              <div class="nfe-import-products-scroll rounded-lg border border-gray-200">
                 <table class="min-w-full table-auto divide-y divide-gray-200 text-[10px]" data-import-products-table>
                   <thead class="bg-gray-50 text-[9px] uppercase tracking-wide text-gray-600" data-import-products-head></thead>
                   <tbody class="divide-y divide-gray-200 bg-white" data-import-products-body></tbody>
@@ -2744,11 +2821,12 @@
               <button type="button" data-close-import-modal class="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100">Cancelar</button>
               <button
                 type="button"
-                class="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90"
+                class="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                 data-confirm-import
+                disabled
               >
                 <i class="fas fa-file-import" data-confirm-import-icon></i>
-                <span data-confirm-import-text>Importar</span>
+                <span data-confirm-import-text>Aplicar dados</span>
               </button>
             </div>
           </footer>
@@ -3045,8 +3123,24 @@
       const fixedActionsBar = document.getElementById('nfe-fixed-actions-bar');
 
       function activateTab(tabId) {
+        const requested = String(tabId || '').trim();
+        const activeButton = Array.from(tabButtons).find((button) => {
+          const mappedPanels = String(button.dataset.tabPanels || button.dataset.tab || '')
+            .split(',')
+            .map((value) => value.trim())
+            .filter(Boolean);
+          return button.dataset.tab === requested || mappedPanels.includes(requested);
+        }) || tabButtons[0] || null;
+        const activeTabId = activeButton?.dataset?.tab || requested;
+        const visiblePanels = new Set(
+          String(activeButton?.dataset?.tabPanels || activeTabId)
+            .split(',')
+            .map((value) => value.trim())
+            .filter(Boolean)
+        );
+
         tabButtons.forEach((button) => {
-          const isActive = button.dataset.tab === tabId;
+          const isActive = button === activeButton;
           button.classList.toggle('active', isActive);
           button.classList.toggle('bg-primary/10', isActive);
           button.classList.toggle('text-primary', isActive);
@@ -3054,10 +3148,17 @@
           button.classList.toggle('border-transparent', isActive);
           button.classList.toggle('border-gray-200', !isActive);
           button.classList.toggle('text-gray-600', !isActive);
+          button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+          button.tabIndex = isActive ? 0 : -1;
         });
 
         tabPanels.forEach((panel) => {
-          panel.classList.toggle('hidden', panel.dataset.tabPanel !== tabId);
+          const isVisible = visiblePanels.has(panel.dataset.tabPanel || '');
+          panel.classList.toggle('hidden', !isVisible);
+          panel.setAttribute('aria-hidden', isVisible ? 'false' : 'true');
+          if (isVisible && activeButton?.id) {
+            panel.setAttribute('aria-labelledby', activeButton.id);
+          }
         });
       }
 
@@ -3106,6 +3207,13 @@
       };
 
       tabButtons.forEach((button) => {
+        const tabId = button.dataset.tab || '';
+        if (!button.id && tabId) button.id = `nfe-tab-${tabId}`;
+        const panelIds = String(button.dataset.tabPanels || tabId)
+          .split(',')
+          .map((value) => `nfe-panel-${value.trim()}`)
+          .filter(Boolean);
+        if (panelIds.length) button.setAttribute('aria-controls', panelIds.join(' '));
         button.classList.add('inline-flex', 'items-center', 'gap-2', 'rounded-lg', 'px-3', 'py-2', 'text-xs', 'font-semibold', 'transition');
         if (!button.classList.contains('active')) {
           button.classList.add('text-gray-600', 'border', 'border-gray-200');
@@ -3116,12 +3224,34 @@
         button.addEventListener('click', () => {
           activateTab(button.dataset.tab);
         });
+
+        button.addEventListener('keydown', (event) => {
+          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+          event.preventDefault();
+          const buttons = Array.from(tabButtons);
+          const currentIndex = buttons.indexOf(button);
+          const targetIndex = event.key === 'Home'
+            ? 0
+            : event.key === 'End'
+            ? buttons.length - 1
+            : event.key === 'ArrowRight'
+            ? (currentIndex + 1) % buttons.length
+            : (currentIndex - 1 + buttons.length) % buttons.length;
+          const target = buttons[targetIndex];
+          if (!target) return;
+          activateTab(target.dataset.tab);
+          target.focus();
+        });
       });
 
       enhanceTableFilterInputsWithSearchTrigger();
       syncFixedActionsSpacing();
       window.addEventListener('resize', syncFixedActionsSpacing);
       window.setTimeout(syncFixedActionsSpacing, 0);
+      if (typeof ResizeObserver === 'function' && fixedActionsBar) {
+        const fixedActionsObserver = new ResizeObserver(syncFixedActionsSpacing);
+        fixedActionsObserver.observe(fixedActionsBar);
+      }
 
       const codeLookupModal = document.getElementById('nfe-code-lookup-modal');
       const codeLookupModalCard = codeLookupModal?.querySelector('[data-code-modal-card]') || null;
@@ -3289,6 +3419,7 @@
         const nfeSeriesInput = document.getElementById('nfe-series');
         const issueDateInput = document.getElementById('issue-date');
         const entryDateInput = document.getElementById('entry-date');
+        const entryTypeSelect = document.getElementById('entry-type');
         const nfeModelSelect = document.getElementById('nfe-model');
         const nfeTypeSelect = document.getElementById('nfe-type');
         const manualProductAddButton = document.querySelector('[data-open-manual-product-modal]');
@@ -3454,12 +3585,48 @@
           isProcessing: false,
         };
         const statusBadge = document.querySelector('[data-nfe-status-badge]');
+        const workspaceTotal = document.querySelector('[data-workspace-total]');
+        const workspaceItems = document.querySelector('[data-workspace-items]');
+        const workspaceItemsHelper = document.querySelector('[data-workspace-items-helper]');
+        const workspacePending = document.querySelector('[data-workspace-pending]');
+        const workspacePendingHelper = document.querySelector('[data-workspace-pending-helper]');
+        const workspaceDuplicates = document.querySelector('[data-workspace-duplicates]');
+        const workspaceDuplicatesHelper = document.querySelector('[data-workspace-duplicates-helper]');
+        const readinessBadge = document.querySelector('[data-readiness-badge]');
+        const readinessProgress = document.querySelector('[data-readiness-progress]');
+        const readinessSummary = document.querySelector('[data-readiness-summary]');
+        const readinessList = document.querySelector('[data-readiness-list]');
+        const reviewCompany = document.querySelector('[data-review-company]');
+        const reviewSupplier = document.querySelector('[data-review-supplier]');
+        const reviewNumber = document.querySelector('[data-review-number]');
+        const mainProductsTable = document.querySelector('[data-main-products-table]');
+        const mainProductsGlobalSearch = document.querySelector('[data-main-products-global-search]');
+        const mainProductsPendingButton = document.querySelector('[data-main-products-pending]');
+        const mainProductsViewButtons = document.querySelectorAll('[data-products-view]');
+        const importProductsViewButtons = importModal?.querySelectorAll('[data-import-products-view]') || [];
+        const approvalReviewModal = document.getElementById('approval-review-modal');
+        const approvalReviewCard = approvalReviewModal?.querySelector('[data-approval-card]') || null;
+        const approvalCancelButtons = approvalReviewModal?.querySelectorAll('[data-cancel-approval]') || [];
+        const approvalConfirmButton = approvalReviewModal?.querySelector('[data-confirm-approval]') || null;
+        const approvalCompany = approvalReviewModal?.querySelector('[data-approval-company]') || null;
+        const approvalSupplier = approvalReviewModal?.querySelector('[data-approval-supplier]') || null;
+        const approvalDocument = approvalReviewModal?.querySelector('[data-approval-document]') || null;
+        const approvalTotal = approvalReviewModal?.querySelector('[data-approval-total]') || null;
+        const approvalStock = approvalReviewModal?.querySelector('[data-approval-stock]') || null;
+        const approvalDuplicates = approvalReviewModal?.querySelector('[data-approval-duplicates]') || null;
         const documentsTableBody = document.querySelector('[data-nfe-documents-body]');
         const documentsEmptyRow = document.querySelector('[data-nfe-documents-empty]');
         const mainProductsTableBody = document.querySelector('[data-nfe-products-body]');
         const mainProductsEmptyRow = document.querySelector('[data-nfe-products-empty]');
         const mainProductsFilteredEmptyRow = document.querySelector('[data-nfe-products-filtered-empty]');
-        const mainProductTableState = { items: [], filters: {}, sort: { key: '', direction: 'asc' } };
+        const mainProductTableState = {
+          items: [],
+          filters: {},
+          globalFilter: '',
+          pendingOnly: false,
+          view: 'essential',
+          sort: { key: '', direction: 'asc' },
+        };
         const mainProductTableFilterInputs = new Map();
         const mainProductSortButtons = new Map();
         const mainProductSortHeaders = new Map();
@@ -3631,6 +3798,10 @@
         let updateStatusBadgeDisplay = () => {};
         let updateDeleteButtonState = () => {};
         let updatePrintReceiptButtonState = () => {};
+        let refreshWorkspaceReadiness = () => {};
+        let refreshConfirmImportState = () => {};
+        let approvalReviewResolver = null;
+        let approvalReviewPreviousFocus = null;
         const PRODUCT_DRAFT_STORAGE_KEY = 'nfeImportProductDraft';
         const productLookupCache = new Map();
         const productLookupPromises = new Map();
@@ -7054,13 +7225,14 @@
               .find((option) => {
                 let optionDigits = option.dataset?.companyDocument;
                 if (!optionDigits) {
-                  optionDigits = digitsOnly(`${option.value}${option.textContent || ''}`);
+                  const textDigits = digitsOnly(option.textContent || '');
+                  optionDigits = [11, 14].includes(textDigits.length) ? textDigits : '';
                   if (optionDigits && option.dataset) {
                     option.dataset.companyDocument = optionDigits;
                   }
                 }
                 if (!optionDigits) return false;
-                return optionDigits === normalized || optionDigits.includes(normalized) || normalized.includes(optionDigits);
+                return optionDigits === normalized;
               }) || null
           );
         };
@@ -7381,6 +7553,7 @@
             if (lastNfeData) {
               lastNfeData.selectedDepositId = '';
             }
+            refreshWorkspaceReadiness();
             return;
           }
 
@@ -7452,6 +7625,8 @@
               'error'
             );
             setDepositPlaceholder('Não foi possível carregar os depósitos.', { disabled: true });
+          } finally {
+            refreshWorkspaceReadiness();
           }
         };
 
@@ -8084,15 +8259,16 @@
 
         const getOptionDocument = (option) => {
           if (!option) return '';
-          const existingDataset = option.dataset?.supplierDocument;
+          const existingDataset = digitsOnly(option.dataset?.supplierDocument || '');
           if (existingDataset) {
             return existingDataset;
           }
-          const digits = digitsOnly(`${option.value}${option.textContent || ''}`);
-          if (digits && option.dataset) {
-            option.dataset.supplierDocument = digits;
+          const digits = digitsOnly(option.textContent || '');
+          const normalized = digits.length === 11 || digits.length === 14 ? digits : '';
+          if (normalized && option.dataset) {
+            option.dataset.supplierDocument = normalized;
           }
-          return digits;
+          return normalized;
         };
 
         const formatDocumentForOption = (value) => {
@@ -8133,7 +8309,7 @@
         };
 
         const ensureSupplierOption = (supplier, documentDigits) => {
-          if (!supplierSelect || !documentDigits) return null;
+          if (!supplierSelect || !documentDigits || ![11, 14].includes(documentDigits.length)) return null;
           const existingOption = findSupplierOptionByDocument(documentDigits);
           const option = existingOption || document.createElement('option');
           const optionValue = supplier?._id || documentDigits;
@@ -8148,6 +8324,7 @@
           if (!existingOption) {
             supplierSelect.appendChild(option);
           }
+          supplierSelect.disabled = false;
           return option;
         };
 
@@ -8268,6 +8445,11 @@
           supplierRegistry.loadingPromise = (async () => {
             try {
               supplierRegistry.error = null;
+              const previousValue = supplierSelect?.value || '';
+              if (supplierSelect && !previousValue) {
+                supplierSelect.disabled = true;
+                supplierSelect.innerHTML = '<option value="">Carregando fornecedores...</option>';
+              }
               const response = await fetch(suppliersEndpoint, {
                 headers: buildAuthHeaders(),
               });
@@ -8280,14 +8462,30 @@
               }
               const suppliers = Array.isArray(data?.suppliers) ? data.suppliers : [];
               supplierRegistry.byDocument.clear();
+              if (supplierSelect) {
+                supplierSelect.innerHTML = '<option value="">Selecione o fornecedor</option>';
+              }
               suppliers.forEach((entry) => {
                 registerSupplierRecord(entry);
               });
+              if (supplierSelect) {
+                supplierSelect.disabled = suppliers.length === 0;
+                if (previousValue && Array.from(supplierSelect.options).some((option) => option.value === previousValue)) {
+                  supplierSelect.value = previousValue;
+                }
+                if (!suppliers.length) {
+                  supplierSelect.options[0].textContent = 'Nenhum fornecedor cadastrado';
+                }
+              }
               supplierRegistry.loaded = true;
               supplierRegistry.lastLoadedAt = Date.now();
             } catch (error) {
               supplierRegistry.error = error;
               supplierRegistry.loaded = false;
+              if (supplierSelect && !supplierSelect.value) {
+                supplierSelect.innerHTML = '<option value="">Não foi possível carregar fornecedores</option>';
+                supplierSelect.disabled = true;
+              }
               console.error('Erro ao carregar fornecedores cadastrados:', error);
             } finally {
               supplierRegistry.loadingPromise = null;
@@ -8299,6 +8497,7 @@
             // Erro já tratado no bloco acima
           }
           applyPendingSupplierSelection();
+          refreshWorkspaceReadiness();
           return supplierRegistry.byDocument;
         };
 
@@ -8427,6 +8626,379 @@
           return normalized;
         };
 
+        const formatWorkspaceCurrency = (value) =>
+          new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+            Number.isFinite(value) ? value : 0
+          );
+
+        const getCurrentEntryItems = () =>
+          (Array.isArray(mainProductTableState?.items) && mainProductTableState.items.length
+            ? mainProductTableState.items
+            : Array.isArray(lastNfeData?.items)
+            ? lastNfeData.items
+            : []);
+
+        const getCurrentEntryDuplicates = () =>
+          (Array.isArray(lastNfeData?.duplicates) ? lastNfeData.duplicates : []);
+
+        const getCurrentNoteTotal = () => {
+          const candidates = [lastNfeData?.totals?.totalValue, totalsProductsInput?.value];
+          for (const candidate of candidates) {
+            const numeric = toNumeric(candidate);
+            if (Number.isFinite(numeric)) return numeric;
+          }
+          return 0;
+        };
+
+        const getSelectedOptionDocument = (select, datasetKey) => {
+          const option = select?.selectedOptions?.[0] || null;
+          return digitsOnly(option?.dataset?.[datasetKey] || '');
+        };
+
+        const getApprovalReadiness = () => {
+          const isRecibo = (nfeTypeSelect?.value || '') === 'RECIBO';
+          const items = getCurrentEntryItems();
+          const duplicates = getCurrentEntryDuplicates();
+          const noteTotal = getCurrentNoteTotal();
+          const destinationDocument = digitsOnly(lastNfeData?.dest?.document || '');
+          const issuerDocument = digitsOnly(lastNfeData?.emit?.document || '');
+          const companyDocument = getSelectedOptionDocument(companySelect, 'companyDocument');
+          const selectedSupplierOption = supplierSelect?.selectedOptions?.[0] || null;
+          const supplierDocument = getOptionDocument(selectedSupplierOption);
+          const supplierAccountingAccount = resolveSupplierAccountingAccount();
+          const invalidStockItems = items.filter((item) => {
+            const explicit = toNumeric(item?.entryStockQuantity);
+            if (Number.isFinite(explicit)) return explicit <= 0;
+            const quantity = toNumeric(item?.quantity);
+            const factor = resolveMainProductConversionFactor(item);
+            const computed = Number.isFinite(quantity) && Number.isFinite(factor) ? quantity * factor : null;
+            return !Number.isFinite(computed) || computed <= 0;
+          });
+          const unresolvedItems = items.filter(
+            (item) => !item || item.validationStatus !== 'matched' || !item.matchedProduct
+          );
+          const invalidDuplicates = duplicates.filter((duplicate) => {
+            const value = toNumeric(duplicate?.value);
+            const dueDate = duplicate?.manualDueDate || duplicate?.dueDate || duplicate?.originalDueDate || '';
+            const bankAccount = duplicate?.bankAccount || bankAccountSelect?.value || '';
+            return !Number.isFinite(value) || value <= 0 || !dueDate || !bankAccount;
+          });
+          const duplicatesTotal = duplicates.reduce((sum, duplicate) => {
+            const value = toNumeric(duplicate?.value);
+            return Number.isFinite(value) ? sum + value : sum;
+          }, 0);
+          const duplicateDifferenceCents = Math.round(duplicatesTotal * 100) - Math.round(noteTotal * 100);
+
+          const checks = [
+            {
+              key: 'origin',
+              label: isRecibo ? 'Origem manual do recibo' : 'XML modelo 55 autorizado',
+              detail: isRecibo
+                ? 'Entrada do tipo Recibo'
+                : lastNfeData
+                ? `Protocolo ${lastNfeData?.protocol?.status || 'não informado'}`
+                : 'Importe uma NF-e autorizada',
+              complete: isRecibo || Boolean(
+                lastNfeData &&
+                lastNfeData?.ide?.model === '55' &&
+                lastNfeData?.protocol?.status === '100' &&
+                lastNfeData?.protocol?.number &&
+                isValidNfeAccessKey(lastNfeData?.accessKey || accessKeyInput?.value || '')
+              ),
+              tab: 'dados',
+              element: null,
+            },
+            {
+              key: 'identification',
+              label: 'Identificação obrigatória',
+              detail: 'Número, emissão, entrada e tipo de entrada',
+              complete: Boolean(
+                nfeNumberInput?.value?.trim() &&
+                issueDateInput?.value &&
+                entryDateInput?.value &&
+                entryTypeSelect?.value
+              ),
+              tab: 'dados',
+              element: !nfeNumberInput?.value?.trim()
+                ? nfeNumberInput
+                : !issueDateInput?.value
+                ? issueDateInput
+                : !entryDateInput?.value
+                ? entryDateInput
+                : entryTypeSelect,
+            },
+            {
+              key: 'company',
+              label: 'Empresa e destinatário',
+              detail: companySelect?.value
+                ? !isRecibo && !destinationDocument
+                  ? 'Documento do destinatário ausente no XML'
+                  : !isRecibo && !companyDocument
+                  ? 'CNPJ não cadastrado para a empresa'
+                  : destinationDocument && companyDocument && destinationDocument !== companyDocument
+                  ? 'CNPJ da empresa diverge do destinatário'
+                  : 'Empresa compatível com a NF-e'
+                : 'Selecione a empresa',
+              complete: Boolean(
+                companySelect?.value &&
+                (isRecibo || (destinationDocument && companyDocument && destinationDocument === companyDocument))
+              ),
+              tab: 'dados',
+              element: companySelect,
+            },
+            {
+              key: 'supplier',
+              label: 'Fornecedor vinculado',
+              detail: supplierSelect?.value
+                ? !isRecibo && !issuerDocument
+                  ? 'Documento do emitente ausente no XML'
+                  : !isRecibo && !supplierDocument
+                  ? 'CNPJ não cadastrado para o fornecedor'
+                  : issuerDocument && supplierDocument && issuerDocument !== supplierDocument
+                  ? 'CNPJ selecionado diverge do emitente'
+                  : 'Fornecedor compatível com o emitente'
+                : 'Selecione um fornecedor cadastrado',
+              complete: Boolean(
+                supplierSelect?.value &&
+                (isRecibo || (issuerDocument && supplierDocument && issuerDocument === supplierDocument))
+              ),
+              tab: 'dados',
+              element: supplierSelect,
+            },
+            {
+              key: 'deposit',
+              label: 'Depósito de entrada',
+              detail: depositSelect?.value ? 'Depósito selecionado' : 'Selecione onde o estoque entrará',
+              complete: Boolean(depositSelect?.value),
+              tab: 'dados',
+              element: depositSelect,
+            },
+            {
+              key: 'products',
+              label: 'Produtos e estoque',
+              detail: !items.length
+                ? 'Nenhum produto importado'
+                : unresolvedItems.length
+                ? `${unresolvedItems.length} produto(s) sem vínculo`
+                : invalidStockItems.length
+                ? `${invalidStockItems.length} produto(s) com estoque inválido`
+                : `${items.length} produto(s) conferido(s)`,
+              complete: items.length > 0 && unresolvedItems.length === 0 && invalidStockItems.length === 0,
+              tab: 'produtos',
+              element: null,
+            },
+            {
+              key: 'finance',
+              label: isRecibo ? 'Financeiro do recibo' : 'Parcelas e total da NF-e',
+              detail: isRecibo
+                ? 'Duplicatas não obrigatórias'
+                : !supplierAccountingAccount?.id
+                ? 'Conta contábil do fornecedor não definida'
+                : !duplicates.length
+                ? 'Informe as duplicatas'
+                : invalidDuplicates.length
+                ? `${invalidDuplicates.length} parcela(s) incompleta(s)`
+                : duplicateDifferenceCents !== 0
+                ? `Diferença de ${formatWorkspaceCurrency(duplicateDifferenceCents / 100)}`
+                : `${duplicates.length} parcela(s) somando ${formatWorkspaceCurrency(duplicatesTotal)}`,
+              complete: isRecibo || (
+                Boolean(supplierAccountingAccount?.id) &&
+                duplicates.length > 0 &&
+                invalidDuplicates.length === 0 &&
+                noteTotal > 0 &&
+                duplicateDifferenceCents === 0
+              ),
+              tab: 'duplicatas',
+              element: null,
+            },
+          ];
+
+          return {
+            checks,
+            issues: checks.filter((check) => !check.complete),
+            items,
+            unresolvedItems,
+            invalidStockItems,
+            duplicates,
+            duplicatesTotal,
+            noteTotal,
+            duplicateDifferenceCents,
+          };
+        };
+
+        refreshWorkspaceReadiness = () => {
+          const readiness = getApprovalReadiness();
+          const completeCount = readiness.checks.length - readiness.issues.length;
+          const progress = readiness.checks.length
+            ? Math.round((completeCount / readiness.checks.length) * 100)
+            : 0;
+          const totalItems = readiness.items.length;
+
+          if (workspaceTotal) workspaceTotal.textContent = formatWorkspaceCurrency(readiness.noteTotal);
+          if (workspaceItems) workspaceItems.textContent = `${totalItems} ${totalItems === 1 ? 'item' : 'itens'}`;
+          if (workspaceItemsHelper) {
+            workspaceItemsHelper.textContent = readiness.unresolvedItems.length
+              ? `${readiness.unresolvedItems.length} sem vínculo com o cadastro`
+              : totalItems
+              ? 'Todos os itens vinculados'
+              : 'Nenhum item importado';
+          }
+          if (workspacePending) {
+            workspacePending.textContent = readiness.issues.length
+              ? `${readiness.issues.length} ${readiness.issues.length === 1 ? 'bloqueio' : 'bloqueios'}`
+              : 'Pronta para aprovar';
+          }
+          if (workspacePendingHelper) {
+            workspacePendingHelper.textContent = readiness.issues[0]?.detail || 'Revisão concluída';
+          }
+          if (workspaceDuplicates) workspaceDuplicates.textContent = formatWorkspaceCurrency(readiness.duplicatesTotal);
+          if (workspaceDuplicatesHelper) {
+            workspaceDuplicatesHelper.textContent = (nfeTypeSelect?.value || '') === 'RECIBO'
+              ? 'Não obrigatório para recibo'
+              : readiness.duplicateDifferenceCents === 0 && readiness.duplicates.length
+              ? 'Parcelas conferem com a NF-e'
+              : `Diferença: ${formatWorkspaceCurrency(readiness.duplicateDifferenceCents / 100)}`;
+          }
+          if (readinessProgress) readinessProgress.style.width = `${progress}%`;
+          if (readinessSummary) {
+            readinessSummary.textContent = readiness.issues.length
+              ? `${completeCount} de ${readiness.checks.length} verificações concluídas.`
+              : 'Todas as verificações foram concluídas.';
+          }
+          if (readinessBadge) {
+            readinessBadge.textContent = readiness.issues.length ? 'Pendente' : 'Pronta';
+            readinessBadge.className = readiness.issues.length
+              ? 'inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-700'
+              : 'inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700';
+          }
+
+          if (readinessList) {
+            readinessList.innerHTML = '';
+            readiness.checks.forEach((check) => {
+              const item = document.createElement('button');
+              item.type = 'button';
+              item.className = 'nfe-readiness-item';
+              item.dataset.state = check.complete ? 'complete' : 'blocked';
+              item.disabled = check.complete;
+              const icon = document.createElement('span');
+              icon.className = 'nfe-readiness-icon';
+              icon.innerHTML = check.complete
+                ? '<i class="fas fa-check text-xs" aria-hidden="true"></i>'
+                : '<i class="fas fa-exclamation text-xs" aria-hidden="true"></i>';
+              const copy = document.createElement('span');
+              copy.className = 'min-w-0';
+              const title = document.createElement('strong');
+              title.className = 'block text-xs font-semibold';
+              title.textContent = check.label;
+              const detail = document.createElement('span');
+              detail.className = 'mt-0.5 block text-[10px] leading-snug opacity-80';
+              detail.textContent = check.detail;
+              copy.append(title, detail);
+              const arrow = document.createElement('i');
+              arrow.className = check.complete ? 'fas fa-check text-xs' : 'fas fa-chevron-right text-[10px]';
+              arrow.setAttribute('aria-hidden', 'true');
+              item.append(icon, copy, arrow);
+              if (!check.complete) {
+                item.addEventListener('click', () => {
+                  activateTab(check.tab);
+                  requestAnimationFrame(() => {
+                    check.element?.focus?.();
+                    check.element?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+                  });
+                });
+              }
+              readinessList.appendChild(item);
+            });
+          }
+
+          const selectedCompanyLabel = companySelect?.value
+            ? companySelect.selectedOptions?.[0]?.textContent?.trim() || ''
+            : '';
+          const selectedSupplierLabel = supplierSelect?.value
+            ? supplierSelect.selectedOptions?.[0]?.dataset?.supplierName
+              || supplierSelect.selectedOptions?.[0]?.textContent?.trim()
+              || ''
+            : '';
+          if (reviewCompany) reviewCompany.textContent = selectedCompanyLabel || 'Não selecionada';
+          if (reviewSupplier) reviewSupplier.textContent = selectedSupplierLabel || 'Não selecionado';
+          if (reviewNumber) {
+            reviewNumber.textContent = nfeNumberInput?.value?.trim()
+              ? `Nº ${nfeNumberInput.value.trim()}${nfeSeriesInput?.value?.trim() ? ` · Série ${nfeSeriesInput.value.trim()}` : ''}`
+              : 'Não informada';
+          }
+          setApproveButtonState(false);
+          return readiness;
+        };
+
+        const closeApprovalReview = (confirmed = false) => {
+          if (!approvalReviewModal || approvalReviewModal.classList.contains('hidden')) return;
+          approvalReviewModal.classList.add('hidden');
+          approvalReviewModal.setAttribute('aria-hidden', 'true');
+          document.body.classList.remove('overflow-hidden');
+          const resolver = approvalReviewResolver;
+          approvalReviewResolver = null;
+          if (resolver) resolver(Boolean(confirmed));
+          approvalReviewPreviousFocus?.focus?.();
+          approvalReviewPreviousFocus = null;
+        };
+
+        const requestApprovalReview = (readiness) => {
+          if (!approvalReviewModal || !approvalConfirmButton) return Promise.resolve(false);
+          const selectedCompanyLabel = companySelect?.value
+            ? companySelect.selectedOptions?.[0]?.textContent?.trim() || '—'
+            : '—';
+          const selectedSupplierLabel = supplierSelect?.value
+            ? supplierSelect.selectedOptions?.[0]?.dataset?.supplierName
+              || supplierSelect.selectedOptions?.[0]?.textContent?.trim()
+              || '—'
+            : '—';
+          if (approvalCompany) approvalCompany.textContent = selectedCompanyLabel;
+          if (approvalSupplier) approvalSupplier.textContent = selectedSupplierLabel;
+          if (approvalDocument) {
+            approvalDocument.textContent = `NF-e nº ${nfeNumberInput?.value?.trim() || '—'}${nfeSeriesInput?.value?.trim() ? ` · Série ${nfeSeriesInput.value.trim()}` : ''}`;
+          }
+          if (approvalTotal) approvalTotal.textContent = formatWorkspaceCurrency(readiness.noteTotal);
+          if (approvalStock) approvalStock.textContent = `${readiness.items.length} produto(s) serão movimentados`;
+          if (approvalDuplicates) {
+            approvalDuplicates.textContent = (nfeTypeSelect?.value || '') === 'RECIBO'
+              ? 'Não serão geradas para recibo'
+              : `${readiness.duplicates.length} parcela(s) · ${formatWorkspaceCurrency(readiness.duplicatesTotal)}`;
+          }
+          approvalReviewPreviousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          approvalReviewModal.classList.remove('hidden');
+          approvalReviewModal.setAttribute('aria-hidden', 'false');
+          document.body.classList.add('overflow-hidden');
+          requestAnimationFrame(() => approvalConfirmButton.focus());
+          return new Promise((resolve) => {
+            approvalReviewResolver = resolve;
+          });
+        };
+
+        approvalCancelButtons.forEach((button) => {
+          button.addEventListener('click', () => closeApprovalReview(false));
+        });
+        approvalConfirmButton?.addEventListener('click', () => closeApprovalReview(true));
+        approvalReviewModal?.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            closeApprovalReview(false);
+          }
+          if (event.key === 'Tab' && approvalReviewCard) {
+            const focusable = Array.from(approvalReviewCard.querySelectorAll(MODAL_FOCUSABLE_SELECTORS))
+              .filter((element) => !element.disabled && element.offsetParent !== null);
+            if (!focusable.length) return;
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (event.shiftKey && document.activeElement === first) {
+              event.preventDefault();
+              last.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+              event.preventDefault();
+              first.focus();
+            }
+          }
+        });
+
         const defaultRegisterIconClass = registerEntryIcon ? registerEntryIcon.className : '';
         const defaultRegisterText = registerEntryText ? registerEntryText.textContent || '' : '';
         const defaultDeleteIconClass = deleteEntryIcon ? deleteEntryIcon.className : '';
@@ -8436,10 +9008,18 @@
 
         const setApproveButtonState = (isProcessing) => {
           if (!registerEntryButton) return;
-          const shouldDisable = Boolean(isProcessing) || isFormLocked;
+          const blockingCount = !isProcessing && !isFormLocked
+            ? getApprovalReadiness().issues.length
+            : 0;
+          const shouldDisable = Boolean(isProcessing) || isFormLocked || blockingCount > 0;
           registerEntryButton.disabled = shouldDisable;
           registerEntryButton.classList.toggle('opacity-60', shouldDisable);
           registerEntryButton.classList.toggle('cursor-wait', Boolean(isProcessing));
+          registerEntryButton.title = isFormLocked
+            ? 'Esta entrada já foi aprovada.'
+            : blockingCount > 0
+            ? `Resolva ${blockingCount} pendência(s) antes de aprovar.`
+            : 'Revisar e aprovar a entrada da NF-e.';
           if (registerEntryIcon) {
             registerEntryIcon.className = isProcessing ? 'fas fa-circle-notch fa-spin' : defaultRegisterIconClass;
           }
@@ -8447,7 +9027,7 @@
             if (isProcessing) {
               registerEntryText.textContent = 'Processando...';
             } else {
-              registerEntryText.textContent = defaultRegisterText || 'Gravar';
+              registerEntryText.textContent = defaultRegisterText || 'Aprovar entrada';
             }
           }
         };
@@ -8528,6 +9108,7 @@
 
         const shouldSkipFormControlLock = (element) => {
           if (!(element instanceof HTMLElement)) return true;
+          if (element.matches('[data-main-products-global-search], [data-main-products-filter]')) return true;
           if (element.hasAttribute('data-admin-screen-search-input')) return true;
           if (element.closest('#price-adjust-modal')) return true;
           return false;
@@ -8535,6 +9116,7 @@
 
         const shouldSkipButtonLock = (button) => {
           if (!(button instanceof HTMLButtonElement)) return true;
+          if (button.matches('[data-main-products-sort], [data-main-products-pending], [data-products-view], [data-open-existing-product]')) return true;
           if (button.dataset.tab) return true;
           if (button.hasAttribute('data-accordion-button')) return true;
           if (button.hasAttribute('data-close-code-modal')) return true;
@@ -8634,6 +9216,7 @@
           setFormLockState(normalized === 'approved');
           updateDeleteButtonState(normalized);
           updatePrintReceiptButtonState();
+          queueMicrotask(() => refreshWorkspaceReadiness());
           return normalized;
         };
 
@@ -8741,7 +9324,7 @@
           const duplicatesTotal = computeDuplicatesTotal(duplicatesClone);
           const totalValueCandidate =
             toNumeric(baseData?.totals?.totalValue) ??
-            (duplicatesTotal > 0 ? duplicatesTotal : totalsSnapshot.products);
+            totalsSnapshot.products;
 
           const headerSnapshot = {
             code: nfeCodeInput?.dataset?.rawCode || currentDraftCode || '',
@@ -8749,6 +9332,7 @@
             serie: nfeSeriesInput?.value?.trim() || '',
             type: nfeTypeSelect ? nfeTypeSelect.value || '' : '',
             model: nfeModelSelect ? nfeModelSelect.value || '' : '',
+            entryType: entryTypeSelect ? entryTypeSelect.value || '' : '',
             issueDate: issueDateInput?.value || '',
             entryDate: entryDateInput?.value || '',
           };
@@ -12897,7 +13481,7 @@ ${'</ht' + 'ml>'}`;
 
         const updateItemConversion = (item, factor) => {
           if (!item) return;
-          if (Number.isFinite(factor)) {
+          if (Number.isFinite(factor) && factor > 0) {
             item.conversion = factor;
             item.conversionMultiplier = factor;
             item.conversionDivider = 1;
@@ -12939,7 +13523,7 @@ ${'</ht' + 'ml>'}`;
           factorText.className = 'text-[9px] text-right font-medium text-gray-500';
           const updateFactorText = () => {
             const factor = toNumeric(item?.conversion);
-            if (Number.isFinite(factor)) {
+            if (Number.isFinite(factor) && factor > 0) {
               let suffix = '';
               if (item?.supplierAppliedConversion && !item?.manualConversionOverride) {
                 const appliedType = item.supplierAppliedConversion.type;
@@ -12950,10 +13534,12 @@ ${'</ht' + 'ml>'}`;
                   suffix = ` (Fornecedor ${symbol} ${formattedAppliedValue})`;
                 }
               }
-              factorText.textContent = `Fator: ${formatDecimal(factor, {
-                minimumFractionDigits: 3,
-                maximumFractionDigits: 3,
-              })}${suffix}`;
+              const sourceQuantity = toNumeric(item?.quantity);
+              const stockQuantity = Number.isFinite(sourceQuantity) ? sourceQuantity * factor : null;
+              const preview = Number.isFinite(stockQuantity)
+                ? `Entrada: ${formatQuantity(sourceQuantity)} × ${formatQuantity(factor)} = ${formatQuantity(stockQuantity)} un.`
+                : `Fator: ${formatDecimal(factor, { minimumFractionDigits: 3, maximumFractionDigits: 3 })}`;
+              factorText.textContent = `${preview}${suffix}`;
             } else {
               factorText.textContent = 'Fator: —';
             }
@@ -13155,7 +13741,7 @@ ${'</ht' + 'ml>'}`;
           })();
 
           let conversionInitial = toNumeric(item?.conversion);
-          if (!Number.isFinite(conversionInitial)) {
+          if (!Number.isFinite(conversionInitial) || conversionInitial <= 0) {
             conversionInitial = 1;
           }
           const quickActions = [];
@@ -13173,7 +13759,6 @@ ${'</ht' + 'ml>'}`;
               title: supplierTitle,
             });
           }
-          quickActions.push({ label: '0', value: 0, title: 'Definir como divisão (0)' });
           quickActions.push({ label: formatDecimal(0.5, { minimumFractionDigits: 1, maximumFractionDigits: 1 }), value: 0.5 });
           quickActions.push({ label: '1', value: 1, title: 'Fator 1 (sem conversão)' });
           quickActions.push({ label: '2', value: 2 });
@@ -13181,7 +13766,7 @@ ${'</ht' + 'ml>'}`;
 
           const conversionEditor = createNumericEditor('Fator', {
             initialValue: conversionInitial,
-            allowZero: true,
+            allowZero: false,
             step: 0.5,
             quickActions,
             onCommit: (value) => {
@@ -13221,6 +13806,7 @@ ${'</ht' + 'ml>'}`;
             item?.validationStatus === 'pending' || item?.validationStatus === 'checking';
 
           if (canOpenExistingProduct) {
+            button.setAttribute('data-open-existing-product', '');
             button.title = 'Abrir o produto cadastrado para visualizar ou editar';
             button.addEventListener('click', () => openExistingProduct(item));
           } else if (!isValidationInProgress) {
@@ -13257,13 +13843,6 @@ ${'</ht' + 'ml>'}`;
             getDisplayText: (item) => getProductStatusLabel(item),
             getFilterValue: (item) => getProductStatusLabel(item),
             getSortValue: (item) => getProductStatusLabel(item),
-          },
-          {
-            key: 'unitarize',
-            label: 'Unitarizar',
-            headerClass: 'px-2 py-1.5 text-left',
-            renderCell: () => buildUnitarizeCell(),
-            getDisplayText: () => 'Unitário',
           },
           {
             key: 'select',
@@ -13312,7 +13891,7 @@ ${'</ht' + 'ml>'}`;
           },
           {
             key: 'conversion',
-            label: 'Multiplicador/Divisão',
+            label: 'Fator de estoque',
             headerClass: 'px-2 py-1.5 text-left',
             isNumeric: true,
             sortType: 'numeric',
@@ -13499,7 +14078,7 @@ ${'</ht' + 'ml>'}`;
           },
           {
             key: 'ipiCst',
-            label: 'ST IPI',
+            label: 'CST IPI',
             headerClass: 'px-2 py-1.5 text-left',
             getDisplayText: (item) => item?.ipiCst || '—',
           },
@@ -13538,7 +14117,7 @@ ${'</ht' + 'ml>'}`;
           },
           {
             key: 'cofinsRate',
-            label: 'ST CONFINS (%)',
+            label: 'Alíquota COFINS (%)',
             headerClass: 'px-2 py-1.5 text-right',
             cellClass: 'px-2 py-1.5 text-right text-gray-600 whitespace-nowrap',
             isNumeric: true,
@@ -13550,7 +14129,7 @@ ${'</ht' + 'ml>'}`;
           },
           {
             key: 'cofinsBase',
-            label: 'Base CONFINS (R$)',
+            label: 'Base COFINS (R$)',
             headerClass: 'px-2 py-1.5 text-right',
             cellClass: 'px-2 py-1.5 text-right text-gray-600 whitespace-nowrap',
             isNumeric: true,
@@ -13562,7 +14141,7 @@ ${'</ht' + 'ml>'}`;
           },
           {
             key: 'cofinsValue',
-            label: 'Valor CONFINS (R$)',
+            label: 'Valor COFINS (R$)',
             headerClass: 'px-2 py-1.5 text-right',
             cellClass: 'px-2 py-1.5 text-right text-gray-600 whitespace-nowrap',
             isNumeric: true,
@@ -13597,9 +14176,54 @@ ${'</ht' + 'ml>'}`;
         ];
 
         const PRODUCT_TABLE_COLUMNS_MAP = new Map(PRODUCT_TABLE_COLUMNS.map((column) => [column.key, column]));
-        const PRODUCT_TABLE_COLUMN_COUNT = PRODUCT_TABLE_COLUMNS.length;
+        const PRODUCT_TABLE_VIEW_KEYS = {
+          essential: new Set([
+            'status',
+            'select',
+            'internalCode',
+            'systemName',
+            'supplierCode',
+            'barcode',
+            'conversion',
+            'unit',
+            'quantity',
+            'unitPrice',
+            'total',
+          ]),
+          fiscal: new Set([
+            'status',
+            'select',
+            'internalCode',
+            'systemName',
+            'supplierCode',
+            'barcode',
+            'conversion',
+            'unit',
+            'quantity',
+            'unitPrice',
+            'total',
+            'ncm',
+            'cfop',
+            'cst',
+            'icmsRate',
+            'icmsBase',
+            'icmsValue',
+            'icmsStRate',
+            'icmsStValue',
+            'ipiRate',
+            'ipiValue',
+            'ipiCst',
+            'pisRate',
+            'pisBase',
+            'pisValue',
+            'cofinsRate',
+            'cofinsBase',
+            'cofinsValue',
+          ]),
+        };
         const productTableState = {
           filters: {},
+          view: 'essential',
           sortKey: null,
           sortDirection: 'asc',
         };
@@ -13607,6 +14231,12 @@ ${'</ht' + 'ml>'}`;
         const productTableSortButtons = new Map();
         let productTableOriginalItems = [];
         let productTableHeaderInitialized = false;
+        const getActiveProductTableColumns = () => {
+          const activeKeys = PRODUCT_TABLE_VIEW_KEYS[productTableState.view];
+          return activeKeys
+            ? PRODUCT_TABLE_COLUMNS.filter((column) => activeKeys.has(column.key))
+            : PRODUCT_TABLE_COLUMNS;
+        };
 
         const normalizeFilterText = (value) =>
           String(value ?? '')
@@ -13775,9 +14405,11 @@ ${'</ht' + 'ml>'}`;
           if (!importProductsTableHead || productTableHeaderInitialized) return;
           productTableHeaderInitialized = true;
           importProductsTableHead.innerHTML = '';
+          productTableFilterInputs.clear();
+          productTableSortButtons.clear();
           const headerRow = document.createElement('tr');
 
-          PRODUCT_TABLE_COLUMNS.forEach((column) => {
+          getActiveProductTableColumns().forEach((column) => {
             const th = document.createElement('th');
             th.dataset.columnKey = column.key;
             const baseClasses = column.headerClass ? column.headerClass.split(/\s+/) : [];
@@ -13881,13 +14513,14 @@ ${'</ht' + 'ml>'}`;
 
         const updateProductTableDisplay = () => {
           if (!importProductsTableBody) return;
+          const activeColumns = getActiveProductTableColumns();
 
           importProductsTableBody.innerHTML = '';
 
           if (!Array.isArray(productTableOriginalItems) || !productTableOriginalItems.length) {
             const emptyRow = document.createElement('tr');
             const emptyCell = document.createElement('td');
-            emptyCell.colSpan = PRODUCT_TABLE_COLUMN_COUNT;
+            emptyCell.colSpan = activeColumns.length;
             emptyCell.className = 'px-3 py-6 text-center text-[10px] text-gray-500';
             emptyCell.textContent = 'Importe um XML autorizado para listar os itens da NF-e.';
             emptyRow.appendChild(emptyCell);
@@ -13901,7 +14534,7 @@ ${'</ht' + 'ml>'}`;
           if (!itemsToRender.length) {
             const emptyRow = document.createElement('tr');
             const emptyCell = document.createElement('td');
-            emptyCell.colSpan = PRODUCT_TABLE_COLUMN_COUNT;
+            emptyCell.colSpan = activeColumns.length;
             emptyCell.className = 'px-3 py-6 text-center text-[10px] text-gray-500';
             emptyCell.textContent = 'Nenhum item encontrado com os filtros aplicados.';
             emptyRow.appendChild(emptyCell);
@@ -13924,7 +14557,7 @@ ${'</ht' + 'ml>'}`;
               row.classList.add('bg-rose-50/60');
             }
 
-            PRODUCT_TABLE_COLUMNS.forEach((column) => {
+            activeColumns.forEach((column) => {
               let cell = null;
               if (typeof column.renderCell === 'function') {
                 cell = column.renderCell(item);
@@ -13938,6 +14571,8 @@ ${'</ht' + 'ml>'}`;
               if (!cell.classList.contains('whitespace-nowrap')) {
                 cell.classList.add('whitespace-nowrap');
               }
+              cell.dataset.columnKey = column.key;
+              cell.dataset.label = column.label;
               row.appendChild(cell);
             });
 
@@ -13948,7 +14583,29 @@ ${'</ht' + 'ml>'}`;
           updateProductValidationBadge(productTableOriginalItems);
         };
 
+        const setImportProductsView = (view) => {
+          const normalizedView = ['essential', 'fiscal', 'complete'].includes(view) ? view : 'essential';
+          if (productTableState.view === normalizedView && productTableHeaderInitialized) return;
+          productTableState.view = normalizedView;
+          const activeKeys = PRODUCT_TABLE_VIEW_KEYS[normalizedView];
+          if (productTableState.sortKey && activeKeys && !activeKeys.has(productTableState.sortKey)) {
+            productTableState.sortKey = null;
+            productTableState.sortDirection = 'asc';
+          }
+          productTableHeaderInitialized = false;
+          initializeProductTableHeader();
+          updateProductTableDisplay();
+          importProductsViewButtons.forEach((button) => {
+            button.setAttribute('aria-pressed', button.dataset.importProductsView === normalizedView ? 'true' : 'false');
+          });
+        };
+
+        importProductsViewButtons.forEach((button) => {
+          button.addEventListener('click', () => setImportProductsView(button.dataset.importProductsView || 'essential'));
+        });
+
         const updateProductValidationBadge = (items) => {
+          queueMicrotask(() => refreshConfirmImportState());
           if (!importXmlValidationText) return;
           if (!Array.isArray(items) || !items.length) {
             importXmlValidationText.textContent = 'Importe o XML autorizado para validar os itens.';
@@ -14381,7 +15038,7 @@ ${'</ht' + 'ml>'}`;
               importXmlNumber.textContent = 'XML não importado';
             }
             if (importXmlValidationText) {
-              importXmlValidationText.textContent = 'Aguardando validação fiscal';
+            importXmlValidationText.textContent = 'Aguardando conferência do XML';
             }
             applyValidationStyles('info');
             productValidationSequence += 1;
@@ -14546,6 +15203,7 @@ ${'</ht' + 'ml>'}`;
           const entry = normalizeDate(data.ide?.entryDate);
           if (entryDateInput) entryDateInput.value = entry.dateInput || '';
           if (nfeModelSelect && data.ide?.model) setSelectValue(nfeModelSelect, data.ide.model);
+          if (entryTypeSelect && data.ide?.entryType) setSelectValue(entryTypeSelect, data.ide.entryType);
           if (nfeTypeSelect) {
             setSelectValue(nfeTypeSelect, resolveEntryType(data));
             setManualProductAddButtonState();
@@ -15350,18 +16008,18 @@ ${'</ht' + 'ml>'}`;
 
         const resolveMainProductConversionFactor = (item) => {
           const conversionFromItem = toNumeric(item?.conversion);
-          if (Number.isFinite(conversionFromItem)) {
+          if (Number.isFinite(conversionFromItem) && conversionFromItem > 0) {
             return conversionFromItem;
           }
           const multiplierValue = toNumeric(item?.conversionMultiplier);
           const dividerValue = toNumeric(item?.conversionDivider);
-          if (Number.isFinite(multiplierValue) && Number.isFinite(dividerValue) && dividerValue !== 0) {
+          if (Number.isFinite(multiplierValue) && multiplierValue > 0 && Number.isFinite(dividerValue) && dividerValue > 0) {
             return multiplierValue / dividerValue;
           }
-          if (Number.isFinite(multiplierValue)) {
+          if (Number.isFinite(multiplierValue) && multiplierValue > 0) {
             return multiplierValue;
           }
-          if (Number.isFinite(dividerValue) && dividerValue !== 0) {
+          if (Number.isFinite(dividerValue) && dividerValue > 0) {
             return 1 / dividerValue;
           }
           return null;
@@ -15560,10 +16218,24 @@ ${'</ht' + 'ml>'}`;
           const activeFilters = Object.entries(mainProductTableState.filters || {}).filter(
             ([, value]) => Boolean(normalizeFilterText(value))
           );
-          if (!activeFilters.length) {
-            return entries;
+          let filteredEntries = entries;
+          if (mainProductTableState.pendingOnly) {
+            filteredEntries = filteredEntries.filter(
+              (entry) => entry?.item?.validationStatus !== 'matched' || !entry?.item?.matchedProduct
+            );
           }
-          return entries.filter((entry) =>
+
+          const globalFilter = normalizeFilterText(mainProductTableState.globalFilter || '');
+          if (globalFilter) {
+            filteredEntries = filteredEntries.filter((entry) =>
+              Object.values(entry?.filterTexts || {}).some((value) => matchesGlobalLikeFilter(value, globalFilter))
+            );
+          }
+
+          if (!activeFilters.length) {
+            return filteredEntries;
+          }
+          return filteredEntries.filter((entry) =>
             activeFilters.every(([key, value]) => {
               const columnValue = entry.filterTexts?.[key] ?? '';
               return matchesGlobalLikeFilter(columnValue, value);
@@ -15785,30 +16457,35 @@ ${'</ht' + 'ml>'}`;
             discountCell.className = 'px-4 py-3 text-right text-gray-600';
             discountCell.textContent = displays.discount;
 
-            row.append(
-              indexCell,
-              codeCell,
-              descriptionCell,
-              unitNfeCell,
-              ncmCell,
-              cestCell,
-              cfopCell,
-              cstCell,
-              icmsRateCell,
-              icmsStRateCell,
-              ipiRateCell,
-              pisRateCell,
-              cofinsRateCell,
-              gtinCell,
-              supplierDescriptionCell,
-              quantityCell,
-              conversionCell,
-              unitCell,
-              entryStockCell,
-              calculatedCostCell,
-              unitPriceCell,
-              discountCell
-            );
+            const rowCells = [
+              ['item', 'Item', indexCell],
+              ['code', 'Código', codeCell],
+              ['description', 'Produto', descriptionCell],
+              ['unitNfe', 'Unidade NF-e', unitNfeCell],
+              ['ncm', 'NCM', ncmCell],
+              ['cest', 'CEST', cestCell],
+              ['cfop', 'CFOP', cfopCell],
+              ['cst', 'CST', cstCell],
+              ['icmsRate', 'ICMS', icmsRateCell],
+              ['icmsStRate', 'ICMS ST', icmsStRateCell],
+              ['ipiRate', 'IPI', ipiRateCell],
+              ['pisRate', 'PIS', pisRateCell],
+              ['cofinsRate', 'COFINS', cofinsRateCell],
+              ['barcode', 'GTIN', gtinCell],
+              ['supplierDescription', 'Descrição na NF-e', supplierDescriptionCell],
+              ['quantity', 'Quantidade XML', quantityCell],
+              ['conversion', 'Fator', conversionCell],
+              ['unit', 'Unidade', unitCell],
+              ['entryStock', 'Entrada no estoque', entryStockCell],
+              ['cost', 'Custo com impostos', calculatedCostCell],
+              ['unitPrice', 'Valor unitário', unitPriceCell],
+              ['discount', 'Desconto', discountCell],
+            ];
+            rowCells.forEach(([key, label, cell]) => {
+              cell.dataset.nfeColumn = key;
+              cell.dataset.label = label;
+              row.appendChild(cell);
+            });
             fragment.appendChild(row);
           });
 
@@ -15856,13 +16533,14 @@ ${'</ht' + 'ml>'}`;
               ? bonificationTotal
               : null;
           }
+          refreshWorkspaceReadiness();
         };
 
         const isReciboTypeSelected = () => (nfeTypeSelect?.value || '') === 'RECIBO';
 
         const setManualProductAddButtonState = () => {
           if (!manualProductAddButton) return;
-          const enabled = isReciboTypeSelected();
+          const enabled = isReciboTypeSelected() && !isFormLocked;
           manualProductAddButton.disabled = !enabled;
           manualProductAddButton.classList.toggle('opacity-60', !enabled);
           manualProductAddButton.classList.toggle('cursor-not-allowed', !enabled);
@@ -16815,6 +17493,10 @@ ${'</ht' + 'ml>'}`;
         };
 
         const saveManualProductFromModal = () => {
+          if (isFormLocked) {
+            notify('Esta nota já foi aprovada. Abra o cadastro do produto para editar seus dados.', 'warning');
+            return;
+          }
           const description = (manualProductModalFields.product?.value || '').trim();
           if (!description) {
             notify('Informe o produto antes de adicionar.', 'warning');
@@ -17488,6 +18170,7 @@ ${'</ht' + 'ml>'}`;
 
         manualProductAddButton?.addEventListener('click', (event) => {
           event.preventDefault();
+          if (isFormLocked) return;
           if (!isReciboTypeSelected()) {
             notify('Para adicionar produto manualmente, selecione o tipo Recibo.', 'warning');
             return;
@@ -17518,6 +18201,12 @@ ${'</ht' + 'ml>'}`;
               ? event.target.closest('tr[data-nfe-products-row][data-main-product-index]')
               : null;
             if (!(row instanceof HTMLElement)) return;
+            if (isFormLocked) {
+              const index = Number.parseInt(row.dataset.mainProductIndex || '', 10);
+              const item = mainProductTableState.items[index];
+              if (item?.matchedProduct) openExistingProduct(item);
+              return;
+            }
             if (!isReciboTypeSelected()) {
               notify('Para editar produto pela grade, selecione o tipo Recibo.', 'warning');
               return;
@@ -17533,6 +18222,8 @@ ${'</ht' + 'ml>'}`;
           if (input.type !== 'search') {
             input.type = 'search';
           }
+          const header = input.closest('th');
+          if (header) header.dataset.nfeColumn = key;
           mainProductTableFilterInputs.set(key, input);
           mainProductTableState.filters[key] = input.value || '';
           input.addEventListener('input', (event) => {
@@ -17556,6 +18247,33 @@ ${'</ht' + 'ml>'}`;
         });
 
         updateMainProductSortButtons();
+
+        const setMainProductsView = (view) => {
+          const normalizedView = ['essential', 'fiscal', 'complete'].includes(view) ? view : 'essential';
+          mainProductTableState.view = normalizedView;
+          if (mainProductsTable) {
+            mainProductsTable.dataset.productsColumnView = normalizedView;
+          }
+          mainProductsViewButtons.forEach((button) => {
+            button.setAttribute('aria-pressed', button.dataset.productsView === normalizedView ? 'true' : 'false');
+          });
+        };
+
+        mainProductsGlobalSearch?.addEventListener('input', (event) => {
+          mainProductTableState.globalFilter = event.target.value || '';
+          updateMainProductsTableDisplay();
+        });
+
+        mainProductsPendingButton?.addEventListener('click', () => {
+          mainProductTableState.pendingOnly = !mainProductTableState.pendingOnly;
+          mainProductsPendingButton.setAttribute('aria-pressed', mainProductTableState.pendingOnly ? 'true' : 'false');
+          updateMainProductsTableDisplay();
+        });
+
+        mainProductsViewButtons.forEach((button) => {
+          button.addEventListener('click', () => setMainProductsView(button.dataset.productsView || 'essential'));
+        });
+        setMainProductsView('essential');
 
         document.querySelectorAll('[data-code-lookup-filter]').forEach((input) => {
           const key = input.dataset.codeLookupFilter;
@@ -17811,6 +18529,7 @@ ${'</ht' + 'ml>'}`;
           noteData.ide.serie = header.serie || noteData.ide.serie || '';
           noteData.ide.model = header.model || noteData.ide.model || '';
           noteData.ide.type = header.type || noteData.ide.type || '';
+          noteData.ide.entryType = header.entryType || noteData.ide.entryType || '';
           noteData.ide.emissionDate = header.issueDate || noteData.ide.emissionDate || '';
           noteData.ide.entryDate = header.entryDate || noteData.ide.entryDate || '';
           if (payload.transport?.mode) {
@@ -18054,6 +18773,7 @@ ${'</ht' + 'ml>'}`;
           if (duplicataDaysTypeSelect) {
             setSelectValue(duplicataDaysTypeSelect, duplicates.length ? 'data' : 'dias');
           }
+          refreshWorkspaceReadiness();
         };
 
         const fillDuplicatasFromNfeData = (data) => {
@@ -18196,6 +18916,7 @@ ${'</ht' + 'ml>'}`;
             { element: bankAccountSelect, value: '' },
             { element: nfeModelSelect, value: '55' },
             { element: nfeTypeSelect, value: 'NF' },
+            { element: entryTypeSelect, value: '' },
             { element: depositSelect, value: '' },
             { element: transportUfSelect, value: '' },
             { element: transportPlateUfSelect, value: '' },
@@ -18345,6 +19066,21 @@ ${'</ht' + 'ml>'}`;
           syncAccountingAccountWithDuplicates();
         };
 
+        const isValidNfeAccessKey = (value) => {
+          const digits = digitsOnly(value);
+          if (digits.length !== 44) return false;
+          const body = digits.slice(0, 43);
+          let weight = 2;
+          let sum = 0;
+          for (let index = body.length - 1; index >= 0; index -= 1) {
+            sum += Number(body[index]) * weight;
+            weight = weight === 9 ? 2 : weight + 1;
+          }
+          const remainder = sum % 11;
+          const calculated = remainder === 0 || remainder === 1 ? 0 : 11 - remainder;
+          return calculated === Number(digits[43]);
+        };
+
         const parseNfeXml = (xmlText) => {
           const parser = new DOMParser();
           const xml = parser.parseFromString(xmlText, 'application/xml');
@@ -18385,6 +19121,21 @@ ${'</ht' + 'ml>'}`;
           const infAdic = infNFe.getElementsByTagName('infAdic')[0] || null;
 
           const accessKey = (infNFe.getAttribute('Id') || infNFe.getAttribute('id') || '').replace(/^NFe/i, '');
+          const model = getText(ide, 'mod');
+          if (model !== '55') {
+            throw new Error(`Este fluxo aceita somente NF-e modelo 55. O XML informado é do modelo ${model || 'não identificado'}.`);
+          }
+          if (!isValidNfeAccessKey(accessKey)) {
+            throw new Error('A chave de acesso da NF-e está ausente ou possui dígito verificador inválido.');
+          }
+          const protocolStatus = getText(infProt, 'cStat');
+          const protocolKey = digitsOnly(getText(infProt, 'chNFe'));
+          if (!infProt || protocolStatus !== '100') {
+            throw new Error(`O XML não possui protocolo de autorização válido (cStat 100${protocolStatus ? `; recebido ${protocolStatus}` : ''}).`);
+          }
+          if (protocolKey && protocolKey !== accessKey) {
+            throw new Error('A chave do protocolo não corresponde à chave da NF-e importada.');
+          }
           const emissionDate = getText(ide, 'dhEmi') || getText(ide, 'dEmi');
           const entryDate = getText(ide, 'dhSaiEnt') || getText(ide, 'dSaiEnt');
           const items = detElements.map((detElement, index) => {
@@ -18841,7 +19592,7 @@ ${'</ht' + 'ml>'}`;
               emissionDate,
               entryDate,
               natOp: getText(ide, 'natOp'),
-              model: getText(ide, 'mod'),
+              model,
               tpNF: getText(ide, 'tpNF'),
               tpEmis: getText(ide, 'tpEmis'),
               cfop,
@@ -19022,7 +19773,7 @@ ${'</ht' + 'ml>'}`;
 
           const focusableElements = importModalCard
             ? Array.from(importModalCard.querySelectorAll(MODAL_FOCUSABLE_SELECTORS)).filter(
-                (element) => element instanceof HTMLElement && element.offsetParent !== null
+                (element) => element instanceof HTMLElement && !element.disabled && element.offsetParent !== null
               )
             : [];
           if (focusableElements.length === 0) return;
@@ -19044,6 +19795,7 @@ ${'</ht' + 'ml>'}`;
           previouslyFocusedElement = document.activeElement;
           resetImportQuickTags();
           importModal.classList.remove('hidden');
+          importModal.setAttribute('aria-hidden', 'false');
           document.body.classList.add('overflow-hidden');
           setPendingPeriodDefaults();
 
@@ -19073,6 +19825,7 @@ ${'</ht' + 'ml>'}`;
             document.body.classList.remove('overflow-hidden');
           }
           document.removeEventListener('keydown', trapFocus);
+          importModal.setAttribute('aria-hidden', 'true');
 
           setTimeout(() => {
             importModal.classList.add('hidden');
@@ -19663,6 +20416,16 @@ ${'</ht' + 'ml>'}`;
             }
             if (isApprovingDraft) return;
 
+            const readiness = getApprovalReadiness();
+            if (readiness.issues.length) {
+              const firstIssue = readiness.issues[0];
+              notify(`Não é possível aprovar: ${firstIssue.detail}.`, 'warning');
+              activateTab(firstIssue.tab);
+              requestAnimationFrame(() => firstIssue.element?.focus?.());
+              refreshWorkspaceReadiness();
+              return;
+            }
+
             if (!companySelect || !companySelect.value) {
               notify('Selecione a empresa responsável antes de aprovar a nota.', 'warning');
               activateTab('dados');
@@ -19707,11 +20470,15 @@ ${'</ht' + 'ml>'}`;
               return;
             }
 
-            const hasEntryStockDefined = itemsSource.some((item) =>
-              Number.isFinite(toNumeric(item?.entryStockQuantity))
-            );
-            if (!hasEntryStockDefined) {
-              notify('Revise o estoque de entrada dos produtos antes de aprovar.', 'warning');
+            const invalidEntryStockItems = itemsSource.filter((item) => {
+              const quantity = resolveMainProductEntryStockQuantity(
+                item,
+                resolveMainProductConversionFactor(item)
+              );
+              return !Number.isFinite(quantity) || quantity <= 0;
+            });
+            if (invalidEntryStockItems.length) {
+              notify(`Revise o estoque de entrada de ${invalidEntryStockItems.length} produto(s) antes de aprovar.`, 'warning');
               activateTab('produtos');
               return;
             }
@@ -19761,6 +20528,9 @@ ${'</ht' + 'ml>'}`;
                 }
               }
             }
+
+            const approvalConfirmed = await requestApprovalReview(readiness);
+            if (!approvalConfirmed) return;
 
             isApprovingDraft = true;
             isStockMovementFinalizing = true;
@@ -19822,6 +20592,25 @@ ${'</ht' + 'ml>'}`;
                     approvalData.details.field
                   ) {
                     focusDuplicateField(approvalData.details.duplicateIndex, approvalData.details.field);
+                  } else if (approvalData.details.field) {
+                    const fieldTargets = {
+                      number: nfeNumberInput,
+                      issueDate: issueDateInput,
+                      entryDate: entryDateInput,
+                      entryType: entryTypeSelect,
+                      model: nfeModelSelect,
+                      accessKey: accessKeyInput,
+                      company: companySelect,
+                      supplier: supplierSelect,
+                      deposit: depositSelect,
+                      accountingAccount: accountingAccountInput,
+                      totalValue: totalsProductsInput,
+                    };
+                    const target = fieldTargets[approvalData.details.field] || null;
+                    requestAnimationFrame(() => {
+                      target?.focus?.();
+                      target?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+                    });
                   }
                 }
                 if (approvalData?.draft) {
@@ -20132,13 +20921,41 @@ ${'</ht' + 'ml>'}`;
             confirmImportButton.disabled = true;
             confirmImportButton.classList.add('cursor-wait', 'opacity-60');
           };
-          const restoreConfirmButton = () => {
-            confirmImportButton.disabled = false;
-            confirmImportButton.classList.remove('cursor-wait', 'opacity-60');
+          refreshConfirmImportState = () => {
+            const items = importModalContext === IMPORT_CONTEXT_BONUS
+              ? (Array.isArray(pendingBonusData?.items) ? pendingBonusData.items : [])
+              : (Array.isArray(lastNfeData?.items) ? lastNfeData.items : []);
+            const unresolvedCount = items.filter(
+              (item) => item?.validationStatus !== 'matched' || !item?.matchedProduct
+            ).length;
+            const canApply = items.length > 0 && unresolvedCount === 0;
+            confirmImportButton.disabled = !canApply;
+            confirmImportButton.classList.toggle('opacity-60', !canApply);
+            confirmImportButton.classList.toggle('cursor-not-allowed', !canApply);
+            confirmImportButton.title = !items.length
+              ? 'Importe uma NF-e para continuar.'
+              : unresolvedCount
+              ? `Resolva ${unresolvedCount} produto(s) pendente(s) antes de aplicar.`
+              : 'Aplicar os dados conferidos à entrada.';
+            if (confirmImportText) {
+              confirmImportText.textContent = unresolvedCount
+                ? `${unresolvedCount} pendência${unresolvedCount === 1 ? '' : 's'}`
+                : (defaultConfirmText || 'Aplicar dados');
+            }
           };
+          const restoreConfirmButton = () => {
+            confirmImportButton.classList.remove('cursor-wait');
+            refreshConfirmImportState();
+          };
+
+          refreshConfirmImportState();
 
           confirmImportButton.addEventListener('click', async (event) => {
             event.preventDefault();
+            if (isFormLocked) {
+              notify('Não é possível adicionar produtos ou bonificações a uma nota já aprovada.', 'warning');
+              return;
+            }
             if (importModalContext === IMPORT_CONTEXT_BONUS) {
               const bonusItems = Array.isArray(pendingBonusData?.items) ? pendingBonusData.items : [];
               if (!bonusItems.length) {
@@ -20240,12 +21057,25 @@ ${'</ht' + 'ml>'}`;
           }
         });
 
+        const readinessWatchRoot = document.getElementById('nfe-page-shell');
+        let readinessFrame = 0;
+        const scheduleReadinessRefresh = () => {
+          if (readinessFrame) cancelAnimationFrame(readinessFrame);
+          readinessFrame = requestAnimationFrame(() => {
+            readinessFrame = 0;
+            refreshWorkspaceReadiness();
+          });
+        };
+        readinessWatchRoot?.addEventListener('input', scheduleReadinessRefresh);
+        readinessWatchRoot?.addEventListener('change', scheduleReadinessRefresh);
+
         resetDraftState();
         updateSummaryFromData(null);
         setSupplierSummary(null);
         applyValidationStyles('info');
         activateImportTab('pending');
         updateImportMode();
+        refreshWorkspaceReadiness();
       }
     });
   </script>

@@ -613,6 +613,9 @@
   .z-\[1100\] {
     z-index: 1100;
   }
+  .z-\[1200\] {
+    z-index: 1200;
+  }
   .z-\[9998\] {
     z-index: 9998;
   }
@@ -1069,6 +1072,9 @@
   .max-h-\[60vh\] {
     max-height: 60vh;
   }
+  .max-h-\[62vh\] {
+    max-height: 62vh;
+  }
   .max-h-\[70vh\] {
     max-height: 70vh;
   }
@@ -1122,6 +1128,12 @@
   }
   .min-h-0 {
     min-height: calc(var(--spacing) * 0);
+  }
+  .min-h-11 {
+    min-height: calc(var(--spacing) * 11);
+  }
+  .min-h-28 {
+    min-height: calc(var(--spacing) * 28);
   }
   .min-h-\[2\.5rem\] {
     min-height: 2.5rem;
@@ -1336,6 +1348,9 @@
   .max-w-52 {
     max-width: calc(var(--spacing) * 52);
   }
+  .max-w-\[11rem\] {
+    max-width: 11rem;
+  }
   .max-w-\[70\%\] {
     max-width: 70%;
   }
@@ -1440,6 +1455,9 @@
   }
   .min-w-52 {
     min-width: calc(var(--spacing) * 52);
+  }
+  .min-w-56 {
+    min-width: calc(var(--spacing) * 56);
   }
   .min-w-\[1\.5rem\] {
     min-width: 1.5rem;
@@ -2557,6 +2575,12 @@
     background-color: color-mix(in srgb, oklch(21% 0.034 264.665) 60%, transparent);
     @supports (color: color-mix(in lab, red, red)) {
       background-color: color-mix(in oklab, var(--color-gray-900) 60%, transparent);
+    }
+  }
+  .bg-gray-900\/65 {
+    background-color: color-mix(in srgb, oklch(21% 0.034 264.665) 65%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      background-color: color-mix(in oklab, var(--color-gray-900) 65%, transparent);
     }
   }
   .bg-gray-900\/70 {
@@ -5865,6 +5889,11 @@
       row-gap: calc(var(--spacing) * 1.5);
     }
   }
+  .sm\:self-auto {
+    @media (width >= 40rem) {
+      align-self: auto;
+    }
+  }
   .sm\:self-end {
     @media (width >= 40rem) {
       align-self: flex-end;
@@ -6214,9 +6243,19 @@
       }
     }
   }
+  .md\:self-center {
+    @media (width >= 48rem) {
+      align-self: center;
+    }
+  }
   .md\:self-end {
     @media (width >= 48rem) {
       align-self: flex-end;
+    }
+  }
+  .md\:p-5 {
+    @media (width >= 48rem) {
+      padding: calc(var(--spacing) * 5);
     }
   }
   .md\:p-6 {
