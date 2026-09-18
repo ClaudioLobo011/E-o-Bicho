@@ -1867,12 +1867,16 @@
         <td class="px-3 py-2 text-right text-gray-700">${Number.isFinite(stock) ? formatInputValue(stock) : '—'}</td>
       `;
       row.addEventListener('click', async () => {
-        const prefill = buildProductPrefill(product);
-        const icmsSimplesData = await getIcmsSimplesDataForCompany();
-        applyIcmsSimplesBase(prefill, product, icmsSimplesData);
-        fillProductModal(prefill, product);
-        closeManualProductLookupModal();
-        setTimeout(() => productModalFields.qty?.focus(), 0);
+        try {
+          const prefill = buildProductPrefill(product);
+          const icmsSimplesData = await getIcmsSimplesDataForCompany();
+          applyIcmsSimplesBase(prefill, product, icmsSimplesData);
+          fillProductModal(prefill, product);
+          closeManualProductLookupModal();
+          setTimeout(() => productModalFields.qty?.focus(), 0);
+        } catch (error) {
+          showToast(error.message || 'Nao foi possivel selecionar o produto.', 'error');
+        }
       });
       fragment.appendChild(row);
     });
