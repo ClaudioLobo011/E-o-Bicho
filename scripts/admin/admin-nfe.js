@@ -2749,6 +2749,7 @@
 
   async function saveDraft() {
     const isNewDraft = !currentDraftId;
+    await refreshLoanItemPrices();
     const payload = await buildDraftPayload();
     const endpoint = currentDraftId
       ? `${API_BASE}/nfe/drafts/${currentDraftId}`
@@ -4246,6 +4247,39 @@
       normalizeKeyword(getInputValue(naturezaSelect)) === 'emprestimo' ||
       normalizeKeyword(getInputValue(finalidadeSelect)) === 'emprestimo'
     );
+  }
+
+  async function refreshLoanItemPrices() {
+    if (!isEmprestimoEmissionSelected()) return;
+    const rows = Array.from(itemsBody?.querySelectorAll('tr[data-item-row]') || []);
+    const items = collectItemRows();
+    const updated = await Promise.all(items.map(async (item) => {
+      let product;
+      if (item.productId) {
+        const response = await fetch(`${API_BASE}/products/${encodeURIComponent(item.productId)}`, { headers: getAuthHeaders() });
+        if (!response.ok) throw new Error(`Nao foi possivel consultar o custo do produto ${item.code}.`);
+        const data = await response.json();
+        product = data.product || data;
+      } else {
+        product = await fetchProductByCode(item.code);
+        if (!product || !matchesProductCode(product, item.code)) throw new Error(`Vincule o produto ${item.code} ao cadastro.`);
+      }
+      return window.NfeLoanPricing.priceItem(item, product.custo);
+    }));
+    if (!isEmprestimoEmissionSelected() || JSON.stringify(items) !== JSON.stringify(collectItemRows())) {
+      throw new Error('Os itens foram alterados durante a consulta de custos. Tente novamente.');
+    }
+    rows.forEach((row, index) => {
+      Object.entries(updated[index]).forEach(([key, value]) => {
+        const input = row.querySelector(`[data-field="${key}"]`);
+        if (input) input.value = value;
+      });
+    });
+    updateTotals();
+  }
+
+  function refreshLoanPricesOnSelection() {
+    refreshLoanItemPrices().catch((error) => showToast(error.message, 'error'));
   }
 
   function syncEmprestimoModeState() {
@@ -7230,6 +7264,9 @@
     const ipiCst = normalizeCstValue(fiscal?.ipi?.cst || '');
     const ipiEnq = normalizeString(fiscal?.ipi?.codigoEnquadramento || '');
     const unidadeBase = product?.unidade || product?.unidadeVenda || '';
+    const unitPrice = isEmprestimoEmissionSelected()
+      ? window.NfeLoanPricing.priceItem({ code: product?.cod, qty: 1 }, product?.custo).unit
+      : formatInputValue(product?.venda);
     return {
       productId: product?._id || product?.id || '',
       code: product?.cod || product?.codbarras || '',
@@ -7238,7 +7275,9 @@
       ncm: product?.ncm || '',
       cfop,
       qty: '1',
-      unit: formatInputValue(product?.venda),
+      unit: unitPrice,
+      qtyTrib: '1',
+      unitTrib: unitPrice,
       discount: '0,00',
       unidadeComercial: unidadeBase,
       unidadeTributavel: product?.unidadeTributavel || unidadeBase,
@@ -8030,6 +8069,14 @@
           numeroPedido: productModalFields.numeroPedido?.value || '',
           numeroItemPedido: productModalFields.numeroItemPedido?.value || '',
         };
+        if (isEmprestimoEmissionSelected()) {
+          try {
+            Object.assign(prefill, window.NfeLoanPricing.priceItem(prefill, modalProductSnapshot?.custo));
+          } catch (error) {
+            showToast(error.message, 'error');
+            return;
+          }
+        }
         addItemRow(prefill);
         closeProductModal();
       });
@@ -8352,9 +8399,11 @@
     });
       naturezaSelect?.addEventListener('change', () => {
         syncEmprestimoModeState();
+        refreshLoanPricesOnSelection();
       });
       finalidadeSelect?.addEventListener('change', () => {
         syncEmprestimoModeState();
+        refreshLoanPricesOnSelection();
       });
       operationSelect?.addEventListener('change', () => {
         syncStockMovementWithOperation();

@@ -2,6 +2,24 @@
     
     // --- REFERENCIAS AO DOM ---
     const form = document.getElementById('edit-product-form');
+    let hasPendingChanges = false;
+    let savingProduct = false;
+    let loadingProduct = false;
+    let productLoadSequence = 0;
+    let loadedInventory = null;
+    let loadedFraction = null;
+    const allowDiscardChanges = () => !savingProduct && !loadingProduct && (!hasPendingChanges || window.confirm('Há alterações não salvas. Deseja descartá-las?'));
+    window.addEventListener('beforeunload', (event) => {
+        if (!hasPendingChanges && !savingProduct) return;
+        event.preventDefault();
+        event.returnValue = '';
+    });
+    const saveStatus = document.getElementById('product-save-status');
+    const setSaveStatus = (message, state = 'idle') => {
+        if (!saveStatus) return;
+        saveStatus.textContent = message;
+        saveStatus.dataset.state = state;
+    };
     const submitButton = form?.querySelector('button[type="submit"]')
         || document.querySelector('button[type="submit"][form="edit-product-form"]');
     const clearFormButton = document.getElementById('clear-form-button');
@@ -1257,7 +1275,7 @@
 
     function activateProductTab(tabId) {
         const normalizedTabId = normalizeTabId(tabId);
-        if (!normalizedTabId) return;
+        if (!normalizedTabId || !productTabContents[normalizedTabId]) return;
         Object.entries(productTabContents).forEach(([id, el]) => {
             if (!el) return;
             const isTarget = id === normalizedTabId;
@@ -1303,8 +1321,20 @@
     if (productTabLinks.length) {
         productTabLinks.forEach((btn) => {
             btn.addEventListener('click', () => activateProductTab(btn.dataset.tab));
+            btn.addEventListener('keydown', (event) => {
+                if (!['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+                const visibleTabs = Array.from(productTabLinks).filter((tab) => !tab.hidden && !tab.classList.contains('hidden') && !tab.disabled);
+                const index = visibleTabs.indexOf(btn);
+                if (index < 0 || !visibleTabs.length) return;
+                event.preventDefault();
+                const next = event.key === 'Home' ? 0 : event.key === 'End' ? visibleTabs.length - 1
+                    : (index + (['ArrowLeft', 'ArrowUp'].includes(event.key) ? -1 : 1) + visibleTabs.length) % visibleTabs.length;
+                activateProductTab(visibleTabs[next].dataset.tab);
+                visibleTabs[next].focus();
+            });
         });
         const availableTabIds = Array.from(productTabLinks)
+            .filter((btn) => !btn.classList.contains('hidden'))
             .map((btn) => normalizeTabId(btn.dataset.tab))
             .filter(Boolean);
         const normalizedStoredTab = normalizeTabId(storedActiveTab);
@@ -1818,11 +1848,7 @@
         }
     };
 
-    const AUTO_SAVE_DEBOUNCE_MS = 1500;
     const IMAGE_INPUT_SUBMIT_GUARD_MS = 1200;
-    let autoSaveTimeoutId = null;
-    let autoSaveInProgress = false;
-    let pendingAutoSave = false;
     let imageUploadInProgress = false;
     let imageInputInteractionAt = 0;
 
@@ -2087,76 +2113,23 @@
             updateData.stock = totalStock;
         }
 
+        if (isEditMode && currentProductSnapshot) {
+            updateData._editor = 'product-workspace-v2';
+            updateData.expectedUpdatedAt = currentProductSnapshot.updatedAt;
+            const inventory = JSON.stringify({ stock: updateData.stock, estoques: updateData.estoques });
+            if (loadedInventory === inventory) {
+                delete updateData.stock;
+                delete updateData.estoques;
+            }
+            if (loadedFraction === JSON.stringify(updateData.fracionado)) delete updateData.fracionado;
+        }
         return { productName, updateData, fractionalErrors };
     };
 
-    const executeAutoSave = async () => {
-        if (!isEditMode || !productId) return;
-
-        const { productName, updateData } = buildProductUpdatePayload();
-        if (!updateData || !productName) return;
-
-        const token = getAuthToken();
-        if (!token) {
-            console.warn('Token de autenticação indisponível. Salvamento automático cancelado.');
-            return;
-        }
-
-        try {
-            const response = await fetch(`${API_CONFIG.BASE_URL}/products/${productId}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                    [PRICE_HISTORY_SCREEN_HEADER]: PRICE_HISTORY_SCREEN_NAME,
-                },
-                body: JSON.stringify(updateData),
-            });
-
-            if (!response.ok) {
-                const error = new Error('Falha ao salvar automaticamente as alterações do produto.');
-                if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
-                    window.showToast(error.message, 'error', 4000);
-                }
-                throw error;
-            }
-        } catch (error) {
-            console.error('Erro durante o salvamento automático do produto.', error);
-        }
-    };
-
-    const flushAutoSave = async () => {
-        if (autoSaveInProgress) {
-            pendingAutoSave = true;
-            return;
-        }
-
-        autoSaveInProgress = true;
-        try {
-            await executeAutoSave();
-        } finally {
-            autoSaveInProgress = false;
-            if (pendingAutoSave) {
-                pendingAutoSave = false;
-                await flushAutoSave();
-            }
-        }
-    };
-
-    const scheduleAutoSave = () => {
-        if (!isEditMode || !productId) return;
-        if (autoSaveTimeoutId) {
-            clearTimeout(autoSaveTimeoutId);
-        }
-        autoSaveTimeoutId = window.setTimeout(() => {
-            autoSaveTimeoutId = null;
-            flushAutoSave();
-        }, AUTO_SAVE_DEBOUNCE_MS);
-    };
-
     const markProductAsModified = () => {
+        hasPendingChanges = true;
+        setSaveStatus('Alterações não salvas. Use Salvar para confirmar.', 'pending');
         updateVigenciaDateToToday();
-        scheduleAutoSave();
     };
 
     const escapeHtml = (value) => {
@@ -4290,7 +4263,7 @@
         if (!Array.isArray(allDeposits) || allDeposits.length === 0) {
             depositTableBody.innerHTML = `
                 <tr>
-                    <td colspan="5" class="px-4 py-6 text-center text-xs text-gray-500">
+                    <td colspan="3" class="px-4 py-6 text-center text-xs text-gray-500">
                         Nenhum depósito vinculado até o momento.
                     </td>
                 </tr>
@@ -4314,8 +4287,8 @@
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td class="px-4 py-3 text-gray-700">
-                    <div class="font-medium text-gray-800">${deposit.nome}</div>
-                    <div class="text-xs text-gray-500">${deposit.codigo}${deposit?.empresa?.nome ? ` - ${deposit.empresa.nome}` : ''}</div>
+                    <div class="font-medium text-gray-800">${escapeHtml(deposit.nome)}</div>
+                    <div class="text-xs text-gray-500">${escapeHtml(deposit.codigo)}${deposit?.empresa?.nome ? ` - ${escapeHtml(deposit.empresa.nome)}` : ''}</div>
                 </td>
                 <td class="px-4 py-3">
                     <input type="number" step="0.001" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" data-deposit-id="${depositId}" data-deposit-field="quantidade">
@@ -4334,6 +4307,7 @@
             });
 
             if (qtyInput) {
+                qtyInput.setAttribute('aria-label', `Estoque em ${deposit.nome}`);
                 const quantityValue = entry?.quantidade;
                 qtyInput.value = quantityValue === null || quantityValue === undefined ? '' : quantityValue;
                 qtyInput.addEventListener('input', (event) => {
@@ -4351,6 +4325,7 @@
             }
 
             if (unitInput) {
+                unitInput.setAttribute('aria-label', `Unidade em ${deposit.nome}`);
                 unitInput.value = normalizedUnit;
                 unitInput.addEventListener('input', (event) => {
                     const current = depositStockMap.get(depositId) || { quantidade: null, unidade: selectedUnit };
@@ -4514,6 +4489,9 @@
         if (!costInput || !saleInput || !markupInput || isUpdatingFromMarkup) return;
         const cost = parseLocalizedNumberInput(costInput.value);
         const sale = parseLocalizedNumberInput(saleInput.value);
+        const marginInput = form.querySelector('#lucro');
+        if (marginInput) marginInput.value = Number.isFinite(cost) && Number.isFinite(sale) && sale > 0
+            ? (((sale - cost) / sale) * 100).toFixed(2) : '';
 
         if (!Number.isFinite(cost) || cost <= 0 || !Number.isFinite(sale)) {
             markupInput.value = '';
@@ -4537,6 +4515,8 @@
         const sale = cost * (1 + (markup / 100));
         isUpdatingFromMarkup = true;
         saleInput.value = Number.isFinite(sale) ? sale.toFixed(2) : '';
+        const marginInput = form.querySelector('#lucro');
+        if (marginInput) marginInput.value = sale > 0 ? (((sale - cost) / sale) * 100).toFixed(2) : '';
         isUpdatingFromMarkup = false;
         if (shouldNormalizeMarkup) {
             updateMarkupFromValues();
@@ -5578,6 +5558,11 @@
     };
 
     const prepareFormForCreation = () => {
+        hasPendingChanges = false;
+        loadedInventory = null;
+        loadedFraction = null;
+        productLoadSequence += 1;
+        setSaveStatus('Novo produto: preencha os dados e use Cadastrar.');
         duplicateCheckInProgress = false;
         currentProductSnapshot = null;
         form?.reset();
@@ -5683,15 +5668,25 @@
     };
 
     const loadProductForEditing = async (targetProductId) => {
+        if (!allowDiscardChanges()) return;
+        const sequence = ++productLoadSequence;
         if (!targetProductId) {
             throw new Error('Produto não informado.');
         }
-        const productResponse = await fetch(`${API_CONFIG.BASE_URL}/products/${targetProductId}`);
-        if (!productResponse.ok) {
-            throw new Error('Não foi possível carregar o produto selecionado.');
+        loadingProduct = true;
+        form.inert = true;
+        submitButton.disabled = true;
+        try {
+            const productResponse = await fetch(`${API_CONFIG.BASE_URL}/products/${targetProductId}`);
+            if (!productResponse.ok) throw new Error('Não foi possível carregar o produto selecionado.');
+            const productPayload = await productResponse.json();
+            if (sequence !== productLoadSequence || savingProduct) return;
+            populateForm(productPayload);
+        } finally {
+            loadingProduct = false;
+            form.inert = false;
+            submitButton.disabled = false;
         }
-        const productPayload = await productResponse.json();
-        populateForm(productPayload);
     };
 
     const handleDuplicateIdentifier = (identifierType) => async () => {
@@ -5731,20 +5726,15 @@
                 confirmText: 'Sim',
                 cancelText: 'Não',
                 onConfirm: async () => {
-                    productId = productSummary._id;
-                    isEditMode = true;
-                    setSubmitButtonIdleText();
                     try {
-                        await loadProductForEditing(productId);
+                        await loadProductForEditing(productSummary._id);
                     } catch (error) {
                         console.error('Falha ao carregar produto existente:', error);
                         showModal({ title: 'Erro', message: error.message || 'Não foi possível carregar o produto selecionado.', confirmText: 'Entendi' });
                     }
                 },
                 onCancel: () => {
-                    productId = null;
-                    isEditMode = false;
-                    prepareFormForCreation();
+                    // Cancelar a consulta não deve apagar o produto em edição.
                 },
             });
         } catch (error) {
@@ -5756,6 +5746,10 @@
     };
 
     const populateForm = (product) => {
+        loadedInventory = null;
+        loadedFraction = null;
+        hasPendingChanges = false;
+        setSaveStatus('Produto carregado. Use Salvar para confirmar alterações.');
         duplicateCheckInProgress = false;
         makeFieldEditable(skuInput);
         makeFieldEditable(nameInput);
@@ -5887,8 +5881,10 @@
         form.querySelector('#custo').value = Number.isFinite(custoNumber) ? custoNumber.toFixed(2) : '';
         form.querySelector('#venda').value = Number.isFinite(vendaNumber) ? vendaNumber.toFixed(2) : '';
         if (promoPriceInput) {
-            promoPriceInput.value = Number.isFinite(promoPriceNumber) ? promoPriceNumber.toFixed(2) : '';
+            promoPriceInput.value = product.precoClube != null && Number.isFinite(promoPriceNumber) ? promoPriceNumber.toFixed(2) : '';
         }
+        form.querySelector('#promo-inicio').value = normalizeDateToInputValue(product.promocao?.periodoInicio || '');
+        form.querySelector('#promo-validade').value = normalizeDateToInputValue(product.promocao?.periodoFim || '');
         if (markupInput) {
             const cost = parseFloat(costInput?.value || '0');
             const sale = parseFloat(saleInput?.value || '0');
@@ -5980,6 +5976,9 @@
         const apInput = document.getElementById('spec-apresentacao');
         if (apInput) apInput.value = espec.apresentacao || '';
         updateMarkupFromValues();
+        const loadedPayload = buildProductUpdatePayload().updateData;
+        loadedInventory = JSON.stringify({ stock: loadedPayload.stock, estoques: loadedPayload.estoques });
+        loadedFraction = JSON.stringify(loadedPayload.fracionado);
     };
 
     const getBrandFromCategories = (selectedCategoryObjects) => {
@@ -5999,6 +5998,9 @@
     };
 
     const initializePage = async () => {
+        loadingProduct = true;
+        form.inert = true;
+        submitButton.disabled = true;
         try {
             const token = getAuthToken();
             const fetchers = [
@@ -6073,8 +6075,12 @@
 
             ensureFiscalRulesTable();
             populateCategoryTree(allHierarchicalCategories, productCategories);
+            loadingProduct = false;
+            form.inert = false;
+            submitButton.disabled = false;
 
         } catch (error) {
+            setSaveStatus('Carregamento incompleto. Recarregue a tela antes de editar.', 'error');
             console.error('Erro ao inicializar a página:', error);
             showModal({ title: 'Erro', message: error.message, confirmText: 'Voltar', onConfirm: () => window.location.href = 'admin-produtos.html' });
         }
@@ -6382,6 +6388,7 @@
     });
 
     clearFormButton?.addEventListener('click', () => {
+        if (!allowDiscardChanges()) return;
         productId = null;
         isEditMode = false;
         duplicateCheckInProgress = false;
@@ -6558,6 +6565,7 @@
         const handleFormMutation = (event) => {
             const target = event?.target;
             if (!target) return;
+            if (target.closest('th') || target.matches('input[type="search"], [data-filter], [data-price-filter], [data-fiscal-filter]') || target === fiscalCompanySelect) return;
             if (
                 target instanceof HTMLInputElement
                 || target instanceof HTMLSelectElement
@@ -6575,9 +6583,15 @@
         form.addEventListener('change', handleFormMutation, true);
     }
 
+    form.addEventListener('invalid', (event) => {
+        const panel = event.target.closest('[role="tabpanel"]');
+        if (panel) activateProductTab(panel.id);
+        setSaveStatus('Revise o campo indicado antes de salvar.', 'error');
+    }, true);
+
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
-        if (!submitButton) return;
+        if (!submitButton || submitButton.disabled || savingProduct || loadingProduct) return;
 
         const submitter = event.submitter instanceof HTMLElement ? event.submitter : null;
         const isExplicitSaveClick = submitter === submitButton
@@ -6588,18 +6602,14 @@
             return;
         }
 
-        if (autoSaveTimeoutId) {
-            clearTimeout(autoSaveTimeoutId);
-            autoSaveTimeoutId = null;
-        }
-        pendingAutoSave = false;
-
         submitButton.disabled = true;
         const loadingText = isEditMode ? 'Salvando...' : 'Cadastrando...';
         submitButton.innerHTML = `<i class="fas fa-spinner fa-spin"></i><span>${loadingText}</span>`;
 
         const { productName, updateData, fractionalErrors } = buildProductUpdatePayload();
         if (!productName) {
+            nameInput?.focus();
+            setSaveStatus('Informe o nome do produto.', 'error');
             showModal({
                 title: 'Dados obrigatórios',
                 message: 'Informe o nome do produto antes de salvar.',
@@ -6610,6 +6620,8 @@
             return;
         }
         if (Array.isArray(fractionalErrors) && fractionalErrors.length) {
+            activateProductTab('tab-fraction');
+            setSaveStatus('Revise o fracionamento antes de salvar.', 'error');
             showModal({
                 title: 'Fracionamento incompleto',
                 message: fractionalErrors[0],
@@ -6632,6 +6644,17 @@
         let responseJson = null;
         let createdProductId = null;
         let uploadedProductPayload = null;
+        let imageWarning = '';
+        if (isEditMode && ('stock' in updateData || 'estoques' in updateData || 'fracionado' in updateData)
+            && !window.confirm('Este salvamento altera estoque ou fracionamento. Confirma os valores conferidos na aba Estoque/Fracionado?')) {
+            submitButton.disabled = false;
+            setSubmitButtonIdleText();
+            return;
+        }
+        savingProduct = true;
+        if (isEditMode && ('stock' in updateData || 'estoques' in updateData || 'fracionado' in updateData)) updateData._confirmInventory = true;
+        form.inert = true;
+        setSaveStatus('Salvando no sistema…', 'saving');
 
         try {
             const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
@@ -6656,8 +6679,9 @@
             });
 
             if (!textResponse.ok) {
+                const failure = await textResponse.json().catch(() => ({}));
                 const actionLabel = isEditMode ? 'salvar os dados do produto' : 'cadastrar o produto';
-                throw new Error(`Falha ao ${actionLabel}.`);
+                throw new Error(failure.message || `Falha ao ${actionLabel}.`);
             }
 
             try {
@@ -6683,10 +6707,16 @@
 
             const files = imageUploadInput?.files || [];
             const targetProductId = isEditMode ? productId : createdProductId;
+            // A identidade do cadastro já existe, mesmo se o upload falhar.
+            const savedSnapshot = responseJson?.product || responseJson;
+            if (savedSnapshot?._id) currentProductSnapshot = cloneDeep(savedSnapshot);
             if (files.length > 0) {
-                const uploadPayload = await uploadProductImages(targetProductId, Array.from(files), token);
-                if (uploadPayload && typeof uploadPayload === 'object') {
-                    uploadedProductPayload = uploadPayload;
+                try {
+                    const uploadPayload = await uploadProductImages(targetProductId, Array.from(files), token);
+                    if (uploadPayload && typeof uploadPayload === 'object') uploadedProductPayload = uploadPayload;
+                    imageUploadInput.value = '';
+                } catch (error) {
+                    imageWarning = `Produto salvo, mas as imagens não foram enviadas: ${error.message}. Selecione-as novamente e salve para tentar o envio.`;
                 }
             }
 
@@ -6756,10 +6786,16 @@
                 pendingImportedProductDraft = null;
             }
 
+            hasPendingChanges = Boolean(imageWarning);
+            setSaveStatus(imageWarning || 'Produto salvo no sistema.', imageWarning ? 'error' : 'saved');
         } catch (error) {
+            hasPendingChanges = true;
+            setSaveStatus(error.message || 'Não foi possível salvar. Tente novamente.', 'error');
             const baseMessage = isEditMode ? 'Não foi possível salvar' : 'Não foi possível cadastrar';
             showModal({ title: 'Erro', message: `${baseMessage}: ${error.message}`, confirmText: 'Tentar Novamente' });
         } finally {
+            savingProduct = false;
+            form.inert = false;
             submitButton.disabled = false;
             setSubmitButtonIdleText();
         }

@@ -4,6 +4,10 @@ const path = require('path');
 
 const root = path.resolve(__dirname, '..');
 const port = Number(process.env.FRONTEND_PORT || 5500);
+const previewApiUrl = process.env.FRONTEND_API_URL?.trim().replace(/\/+$/, '');
+if (previewApiUrl && !/^https?:\/\//.test(previewApiUrl)) {
+  throw new Error('FRONTEND_API_URL deve ser uma URL HTTP ou HTTPS.');
+}
 const mimeTypes = {
   '.css': 'text/css; charset=utf-8',
   '.html': 'text/html; charset=utf-8',
@@ -41,6 +45,17 @@ const server = http.createServer((req, res) => {
     res.writeHead(403);
     return res.end('Acesso negado.');
   }
+  if (previewApiUrl && filename === path.join(root, 'scripts', 'core', 'config.js')) {
+    const config = fs.readFileSync(filename, 'utf8').replace(
+      /const LOCAL_SERVER_URL = '[^']*';/,
+      `const LOCAL_SERVER_URL = ${JSON.stringify(previewApiUrl)};`
+    );
+    res.writeHead(200, {
+      'Content-Type': mimeTypes['.js'],
+      'Cache-Control': 'no-store',
+    });
+    return res.end(req.method === 'HEAD' ? undefined : config);
+  }
   fs.stat(filename, (statError, stats) => {
     if (statError || !stats.isFile()) {
       res.writeHead(404);
@@ -58,5 +73,6 @@ const server = http.createServer((req, res) => {
 server.listen(port, '127.0.0.1', () => {
   console.log(`Site local disponível em http://localhost:${port}`);
   console.log(`Login: http://localhost:${port}/pages/login.html`);
+  if (previewApiUrl) console.log(`API da prévia: ${previewApiUrl}`);
   console.log('Pressione Ctrl+C para encerrar.');
 });

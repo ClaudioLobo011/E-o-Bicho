@@ -1,7 +1,7 @@
 const API_CONFIG = (() => {
   const DEFAULT_PRODUCTION_SERVER_URL = 'https://api.peteobicho.com.br';
   const LEGACY_RENDER_SERVER_URL = 'https://e-o-bicho.onrender.com';
-  const LOCAL_SERVER_URL = 'http://localhost:3000';
+  const LOCAL_SERVER_URL = 'http://localhost:3100';
   const STATIC_DEV_PORTS = new Set(['5500', '5501']);
 
   const normalizeUrl = (url) => {

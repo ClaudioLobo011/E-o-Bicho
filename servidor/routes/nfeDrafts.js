@@ -9,6 +9,7 @@ const NfeEmissionDraft = require('../models/NfeEmissionDraft');
 const FiscalSerie = require('../models/FiscalSerie');
 const Store = require('../models/Store');
 const Product = require('../models/Product');
+const { applyLoanCostPricing, isLoan } = require('../utils/nfeLoanPricing');
 const { sanitizeSegment } = require('../utils/fiscalDrivePath');
 const { decryptBuffer, decryptText } = require('../utils/certificates');
 const { extractCertificatePair } = require('../scripts/utils/certificates');
@@ -1854,7 +1855,7 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const payload = req.body || {};
+    const payload = await applyLoanCostPricing(req.body || {});
     const draftData = buildDraftDocumentFromPayload(payload);
 
     const lastDraft = await NfeEmissionDraft.findOne().sort({ code: -1 }).select('code').lean();
@@ -1929,7 +1930,10 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ message: 'Rascunho de NF-e nÃ£o encontrado.' });
     }
 
-    const payload = req.body || {};
+    if (isLoan(req.body) && (existingDraft.status === 'authorized' || existingDraft.metadata?.sefazProtocol)) {
+      return res.status(409).json({ message: 'Uma NF-e autorizada nao pode ser convertida em emprestimo.' });
+    }
+    const payload = await applyLoanCostPricing(req.body || {});
     const draftData = buildDraftDocumentFromPayload(payload);
     draftData.code = existingDraft.code;
     if (!draftData.header.code) {
@@ -1939,6 +1943,12 @@ router.put('/:id', async (req, res) => {
     const existingLogs = Array.isArray(existingMetadata.logs) ? existingMetadata.logs : [];
     draftData.metadata = { ...existingMetadata, ...(draftData.metadata || {}) };
     draftData.metadata.logs = existingLogs;
+    if (isLoan(payload) && JSON.stringify(existingDraft.payload?.items) !== JSON.stringify(payload.items)) {
+      for (const key of ['xmlContent', 'xmlProcessedContent', 'xmlR2Key', 'xmlUrl', 'xmlGeneratedAt', 'xmlSignedAt', 'xmlDigestValue', 'xmlSignatureValue']) {
+        draftData.metadata[key] = '';
+      }
+      draftData.metadata.xmlNeedsRegeneration = true;
+    }
     if (existingMetadata.lastStatus && !draftData.metadata.lastStatus) {
       draftData.metadata.lastStatus = existingMetadata.lastStatus;
     }
@@ -2394,6 +2404,7 @@ router.post('/:id/xml', async (req, res) => {
     draft.metadata.xmlR2Key = uploadResult?.key || r2Key;
     draft.metadata.xmlUrl = uploadResult?.url || buildPublicUrl(r2Key);
     draft.metadata.xmlGeneratedAt = new Date().toISOString();
+    draft.metadata.xmlNeedsRegeneration = false;
     appendDraftLog(draft, 'XML Gerado');
     draft.markModified('metadata');
     draft.markModified('xml');
@@ -2722,6 +2733,9 @@ router.get('/:id/xml', async (req, res) => {
 
     const draft = await NfeEmissionDraft.findById(id);
     let r2Key = draft?.metadata?.xmlR2Key || '';
+    if (!draft || draft.metadata?.xmlNeedsRegeneration) {
+      return res.status(404).json({ message: 'Gere novamente o documento para refletir os valores atualizados.' });
+    }
     const xmlToServe =
       cleanString(draft?.metadata?.xmlProcessedContent || '') || cleanString(draft?.metadata?.xmlContent || '');
     if (!r2Key && xmlToServe) {

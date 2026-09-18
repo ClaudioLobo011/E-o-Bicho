@@ -91,6 +91,7 @@ const NfeDraftSchema = new mongoose.Schema(
       serie: { type: String, default: '' },
       type: { type: String, default: '' },
       model: { type: String, default: '' },
+      entryType: { type: String, default: '' },
       issueDate: { type: String, default: '' },
       entryDate: { type: String, default: '' },
     },
