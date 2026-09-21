@@ -65,6 +65,32 @@ test.describe('sincronização incremental do PDV Desktop v2', () => {
   test.after(async () => { await mongoose.disconnect(); if (mongo) await mongo.stop(); });
   test.beforeEach(async () => { await mongoose.connection.db.dropDatabase(); });
 
+  test('cliente editado atualiza deliveries ativos e espelho incremental sem mudar pedidos finalizados', async () => {
+    const base = await pairedFixture('delivery-customer-edit');
+    const { syncActiveDeliveryCustomer } = require('../../services/desktopDeliveryCustomer');
+    const customerId = new mongoose.Types.ObjectId().toString();
+    const address = { street: 'Rua Antiga', number: '10', zipCode: '20270080' };
+    await PdvState.updateOne({ _id: base.state._id }, { $set: { deliveryOrders: [
+      { id: 'open', customer: { id: customerId, nome: 'Original' }, address, status: 'emRota', total: 50 },
+      { id: 'closed', customer: { id: customerId, nome: 'Original' }, address, status: 'finalizado', total: 50 },
+      { id: 'other', customer: { id: 'another-customer', nome: 'Outro' }, address, status: 'registrado', total: 50 },
+    ] } });
+    const source = { updateActiveDeliveries: true, name: 'Cliente Editado', phone: '21999999999', address: { ...address, street: 'Rua Campos Sales', number: '20' } };
+    await syncActiveDeliveryCustomer({ customerId, source, host: { empresa: base.company._id }, mirror: pdvDomain.syncPdvStateNormalizedMirror });
+    const state = await PdvState.findById(base.state._id).lean();
+    assert.equal(state.deliveryOrders[0].address.street, 'Rua Campos Sales');
+    assert.equal(state.deliveryOrders[0].customer.nome, 'Cliente Editado');
+    assert.equal(state.deliveryOrders[0].status, 'emRota');
+    assert.equal(state.deliveryOrders[0].total, 50);
+    assert.equal(state.deliveryOrders[1].address.street, 'Rua Antiga');
+    assert.equal(state.deliveryOrders[2].address.street, 'Rua Antiga');
+    const normalized = await PdvStateDeliveryOrder.findOne({ pdv: base.pdv._id, deliveryId: 'open' }).lean();
+    assert.equal(normalized.payload.address.street, 'Rua Campos Sales');
+    const response = await base.request.get('/desktop/sync/v2/deliveries').set(base.headers);
+    assert.equal(response.status, 200, response.text);
+    assert.equal(response.body.deliveries.find((entry) => entry.id === 'open').address.street, 'Rua Campos Sales');
+  });
+
   test('mantém o bootstrap antigo e entrega bootstrap v2 enxuto com histórico paginado por cursor', async () => {
     const base = await pairedFixture();
     const heartbeat = await base.request.post('/desktop/heartbeat').set(base.headers).send({

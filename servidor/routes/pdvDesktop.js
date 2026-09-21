@@ -27,6 +27,7 @@ const Deposit = require('../models/Deposit');
 const Service = require('../models/Service');
 const ProfessionalCommissionConfig = require('../models/ProfessionalCommissionConfig');
 const pdvDomain = require('./pdvs');
+const { syncActiveDeliveryCustomer } = require('../services/desktopDeliveryCustomer');
 const { adjustProductStockForDeposit, toObjectIdOrNull } = require('../utils/inventoryStock');
 const { decryptBuffer, decryptText } = require('../utils/certificates');
 const { deriveAppointmentStatus } = require('../services/appointmentStatus');
@@ -1056,6 +1057,7 @@ async function materializeDesktopEvent(event, pdv, host) {
     customer.empresas = Array.from(new Set([...(customer.empresas || []).map(String), String(host.empresa)])).map((id) => new mongoose.Types.ObjectId(id));
     await customer.save();
     await syncDesktopCustomerAddresses(customer._id, source);
+    await syncActiveDeliveryCustomer({ customerId: customer._id, source, host, mirror: pdvDomain.syncPdvStateNormalizedMirror });
     return true;
   }
   let action;
