@@ -1239,6 +1239,15 @@
           </button>
         </header>
         <div class="max-h-[62vh] space-y-4 overflow-y-auto p-5">
+          <div data-recipient-mismatch-warning class="hidden rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            <strong>Destinatário diferente da empresa selecionada</strong>
+            <p data-recipient-mismatch-details class="mt-2 break-words"></p>
+            <p class="mt-2">A entrada movimentará o estoque e o financeiro da empresa selecionada, mantendo o destinatário original do XML.</p>
+            <label class="mt-3 flex items-start gap-2">
+              <input type="checkbox" data-recipient-mismatch-confirm class="mt-1" />
+              <span>Estou ciente da divergência e confirmo a entrada nesta empresa.</span>
+            </label>
+          </div>
           <dl class="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div class="rounded-xl border border-gray-100 bg-gray-50 p-3">
               <dt class="text-[10px] font-bold uppercase tracking-wide text-gray-500">Empresa</dt>
@@ -8736,12 +8745,12 @@
                   : !isRecibo && !companyDocument
                   ? 'CNPJ não cadastrado para a empresa'
                   : destinationDocument && companyDocument && destinationDocument !== companyDocument
-                  ? 'CNPJ da empresa diverge do destinatário'
+                  ? 'Destinatário divergente — confirmação exigida ao aprovar'
                   : 'Empresa compatível com a NF-e'
                 : 'Selecione a empresa',
               complete: Boolean(
                 companySelect?.value &&
-                (isRecibo || (destinationDocument && companyDocument && destinationDocument === companyDocument))
+                (isRecibo || (destinationDocument && companyDocument))
               ),
               tab: 'dados',
               element: companySelect,
@@ -8815,6 +8824,10 @@
 
           return {
             checks,
+            recipientMismatch: !isRecibo && destinationDocument && companyDocument && destinationDocument !== companyDocument
+              ? { confirmed: true, companyId: companySelect.value, companyDocument, destinationDocument,
+                  accessKey: digitsOnly(lastNfeData?.accessKey || accessKeyInput?.value || '') }
+              : null,
             issues: checks.filter((check) => !check.complete),
             items,
             unresolvedItems,
@@ -8846,10 +8859,11 @@
           if (workspacePending) {
             workspacePending.textContent = readiness.issues.length
               ? `${readiness.issues.length} ${readiness.issues.length === 1 ? 'bloqueio' : 'bloqueios'}`
-              : 'Pronta para aprovar';
+              : readiness.recipientMismatch ? 'Confirmação necessária' : 'Pronta para aprovar';
           }
           if (workspacePendingHelper) {
-            workspacePendingHelper.textContent = readiness.issues[0]?.detail || 'Revisão concluída';
+            workspacePendingHelper.textContent = readiness.issues[0]?.detail ||
+              (readiness.recipientMismatch ? 'Destinatário divergente — confirme ao aprovar' : 'Revisão concluída');
           }
           if (workspaceDuplicates) workspaceDuplicates.textContent = formatWorkspaceCurrency(readiness.duplicatesTotal);
           if (workspaceDuplicatesHelper) {
@@ -8932,6 +8946,9 @@
 
         const closeApprovalReview = (confirmed = false) => {
           if (!approvalReviewModal || approvalReviewModal.classList.contains('hidden')) return;
+          const warning = approvalReviewModal.querySelector('[data-recipient-mismatch-warning]');
+          if (confirmed && !warning?.classList.contains('hidden') &&
+              !approvalReviewModal.querySelector('[data-recipient-mismatch-confirm]')?.checked) return;
           approvalReviewModal.classList.add('hidden');
           approvalReviewModal.setAttribute('aria-hidden', 'true');
           document.body.classList.remove('overflow-hidden');
@@ -8944,6 +8961,16 @@
 
         const requestApprovalReview = (readiness) => {
           if (!approvalReviewModal || !approvalConfirmButton) return Promise.resolve(false);
+          const warning = approvalReviewModal.querySelector('[data-recipient-mismatch-warning]');
+          const consent = approvalReviewModal.querySelector('[data-recipient-mismatch-confirm]');
+          warning.classList.toggle('hidden', !readiness.recipientMismatch);
+          consent.checked = false;
+          approvalConfirmButton.disabled = Boolean(readiness.recipientMismatch);
+          consent.onchange = () => { approvalConfirmButton.disabled = Boolean(readiness.recipientMismatch) && !consent.checked; };
+          if (readiness.recipientMismatch) {
+            warning.querySelector('[data-recipient-mismatch-details]').textContent =
+              `Empresa selecionada: ${companySelect.selectedOptions[0].textContent.trim()} (CNPJ ${readiness.recipientMismatch.companyDocument}). Destinatário no XML: ${lastNfeData?.dest?.name || 'Não informado'} (documento ${readiness.recipientMismatch.destinationDocument}).`;
+          }
           const selectedCompanyLabel = companySelect?.value
             ? companySelect.selectedOptions?.[0]?.textContent?.trim() || '—'
             : '—';
@@ -8968,7 +8995,7 @@
           approvalReviewModal.classList.remove('hidden');
           approvalReviewModal.setAttribute('aria-hidden', 'false');
           document.body.classList.add('overflow-hidden');
-          requestAnimationFrame(() => approvalConfirmButton.focus());
+          requestAnimationFrame(() => (readiness.recipientMismatch ? consent : approvalConfirmButton).focus());
           return new Promise((resolve) => {
             approvalReviewResolver = resolve;
           });
@@ -20531,6 +20558,11 @@ ${'</ht' + 'ml>'}`;
 
             const approvalConfirmed = await requestApprovalReview(readiness);
             if (!approvalConfirmed) return;
+            const currentReadiness = getApprovalReadiness();
+            if (currentReadiness.issues.length || JSON.stringify(currentReadiness.recipientMismatch) !== JSON.stringify(readiness.recipientMismatch)) {
+              notify('Os dados foram alterados. Revise e confirme novamente.', 'warning');
+              return;
+            }
 
             isApprovingDraft = true;
             isStockMovementFinalizing = true;
@@ -20568,6 +20600,7 @@ ${'</ht' + 'ml>'}`;
               const approvalHeaders = buildAuthHeaders();
               approvalHeaders.set('Content-Type', 'application/json');
               const approvalEndpoint = `${nfeDraftsEndpoint}/${currentDraftId}`;
+              payload.recipientMismatchConfirmation = readiness.recipientMismatch;
               const approvalResponse = await fetch(`${approvalEndpoint}/approve`, {
                 method: 'POST',
                 headers: approvalHeaders,

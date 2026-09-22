@@ -787,6 +787,7 @@ router.post('/:id/approve', async (req, res) => {
         company,
         supplier,
         isReciboEntry,
+        recipientMismatchConfirmation: req.body?.recipientMismatchConfirmation,
       });
       if (!approvalValidation.valid) {
         const firstIssue = approvalValidation.issues[0];
@@ -1146,6 +1147,24 @@ router.post('/:id/approve', async (req, res) => {
       const metadata = draft.metadata && typeof draft.metadata === 'object' ? draft.metadata : {};
       metadata.accountPayableId = accountPayableRecord?._id || null;
       metadata.approvedAt = new Date().toISOString();
+      // Somente a confirmação desta requisição, validada para os documentos atuais.
+      delete metadata.recipientMismatchConfirmation;
+      const approvalImportedData = draft.importedData && Object.keys(draft.importedData).length
+        ? draft.importedData : draft.payload?.importedData || {};
+      const approvalCompanyDocument = String(company.cnpj || '').replace(/\D/g, '');
+      const approvalDestinationDocument = String(approvalImportedData.dest?.document || '').replace(/\D/g, '');
+      if (!isReciboEntry && approvalDestinationDocument !== approvalCompanyDocument &&
+          req.body?.recipientMismatchConfirmation?.confirmed === true) {
+        metadata.recipientMismatchConfirmation = {
+          confirmed: true,
+          companyId: String(company._id),
+          companyDocument: approvalCompanyDocument,
+          destinationDocument: approvalDestinationDocument,
+          accessKey: String(draft.xml?.accessKey || approvalImportedData.accessKey || '').replace(/\D/g, ''),
+          confirmedAt: metadata.approvedAt,
+          confirmedBy: String(req.user?.id || req.user?._id || ''),
+        };
+      }
       metadata.stockMovement = {
         completed: true,
         products: stockMovementProducts,

@@ -55,7 +55,7 @@ const getImportedData = (draft = {}) => {
   return payloadData && typeof payloadData === 'object' ? payloadData : {};
 };
 
-const validatePurchaseNfeApproval = ({ draft = {}, company = {}, supplier = {}, isReciboEntry = false } = {}) => {
+const validatePurchaseNfeApproval = ({ draft = {}, company = {}, supplier = {}, isReciboEntry = false, recipientMismatchConfirmation = null } = {}) => {
   const issues = [];
   const addIssue = (message, focusTab, field) => {
     issues.push({ message, focusTab, ...(field ? { field } : {}) });
@@ -106,7 +106,15 @@ const validatePurchaseNfeApproval = ({ draft = {}, company = {}, supplier = {}, 
   } else if (!companyDocument) {
     addIssue('A empresa selecionada não possui CNPJ cadastrado.', 'dados', 'company');
   } else if (destinationDocument !== companyDocument) {
-    addIssue('O CNPJ da empresa selecionada diverge do destinatário da NF-e.', 'dados', 'company');
+    const confirmation = recipientMismatchConfirmation;
+    const confirmed = confirmation?.confirmed === true &&
+      cleanString(confirmation.companyId) === cleanString(company._id) &&
+      digitsOnly(confirmation.companyDocument) === companyDocument &&
+      digitsOnly(confirmation.destinationDocument) === destinationDocument &&
+      digitsOnly(confirmation.accessKey) === accessKey;
+    if (!confirmed) {
+      addIssue('Confirme a entrada com CNPJ da empresa divergente do destinatário da NF-e.', 'dados', 'company');
+    }
   }
 
   const issuerDocument = digitsOnly(importedData?.emit?.document);

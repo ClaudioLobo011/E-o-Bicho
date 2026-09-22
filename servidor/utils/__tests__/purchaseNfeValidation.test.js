@@ -81,6 +81,45 @@ test('bloqueia parcelas cuja soma difere do total oficial', () => {
   assert.ok(result.issues.some((issue) => issue.focusTab === 'duplicatas' && issue.field === 'value'));
 });
 
+const confirmedMismatchInput = () => {
+  const input = buildValidInput();
+  input.company = { _id: 'company-a', cnpj: '11111111000111' };
+  input.recipientMismatchConfirmation = {
+    confirmed: true, companyId: 'company-a', companyDocument: '11111111000111',
+    destinationDocument: input.draft.importedData.dest.document, accessKey,
+  };
+  return input;
+};
+
+test('permite destinatário divergente apenas com confirmação específica desta entrada', () => {
+  assert.equal(validatePurchaseNfeApproval(confirmedMismatchInput()).valid, true);
+});
+
+test('rejeita confirmação antiga, genérica ou de outra empresa/documento', () => {
+  for (const [field, value] of [['confirmed', 'true'], ['companyId', 'company-b'],
+    ['companyDocument', '22222222000122'], ['destinationDocument', '33333333000133'], ['accessKey', '']]) {
+    const input = confirmedMismatchInput();
+    input.recipientMismatchConfirmation[field] = value;
+    assert.equal(validatePurchaseNfeApproval(input).valid, false, field);
+  }
+  const input = confirmedMismatchInput();
+  input.draft.metadata = { recipientMismatchConfirmation: input.recipientMismatchConfirmation };
+  delete input.recipientMismatchConfirmation;
+  assert.equal(validatePurchaseNfeApproval(input).valid, false);
+});
+
+test('confirmação de destinatário não libera fornecedor, documentos ausentes ou parcelas incorretas', () => {
+  for (const mutate of [
+    input => { input.supplier.cnpj = '22222222000122'; },
+    input => { input.draft.importedData.dest.document = ''; },
+    input => { input.company.cnpj = ''; },
+    input => { input.draft.duplicates[0].value = 1; },
+  ]) {
+    const input = confirmedMismatchInput(); mutate(input);
+    assert.equal(validatePurchaseNfeApproval(input).valid, false);
+  }
+});
+
 test('exige tipo de entrada também para recibo', () => {
   const input = buildValidInput();
   input.isReciboEntry = true;
