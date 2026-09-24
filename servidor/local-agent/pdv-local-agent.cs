@@ -15,7 +15,7 @@ namespace PdvLocalAgent
 {
     public class Program
     {
-        private static readonly string Version = "1.1.10";
+        private static readonly string Version = "1.1.11";
         private static readonly JavaScriptSerializer Serializer = new JavaScriptSerializer();
         private static AgentConfig Config;
         private static Logger Log;
@@ -132,6 +132,7 @@ namespace PdvLocalAgent
                         ok = true,
                         version = Version,
                         supportsMultipleFiscalQr = true,
+                        rasterBuild = "bands128-20260924",
                         queue = new
                         {
                             pending = Queue.Count,
@@ -2457,30 +2458,34 @@ try {
             int width = bitmap.Width;
             int height = bitmap.Height;
             int bytesPerRow = (width + 7) / 8;
-            var data = new byte[bytesPerRow * height];
-
-            for (int y = 0; y < height; y++)
+            // GS v 0 has a model-specific height limit (e.g. 2303 dots on
+            // TM-T20/TM-T88V). An oversized command can expose its bitmap bytes
+            // as text. Bound every command, including long multi-QR receipts.
+            const int maxBandHeight = 128;
+            for (int top = 0; top < height; top += maxBandHeight)
             {
-                for (int x = 0; x < width; x++)
+                int bandHeight = Math.Min(maxBandHeight, height - top);
+                var data = new byte[bytesPerRow * bandHeight];
+                for (int row = 0; row < bandHeight; row++)
                 {
-                    Color color = bitmap.GetPixel(x, y);
-                    int luminance = (color.R + color.G + color.B) / 3;
-                    bool isBlack = luminance < 128;
-                    if (!isBlack)
+                    for (int x = 0; x < width; x++)
                     {
-                        continue;
+                        Color color = bitmap.GetPixel(x, top + row);
+                        int luminance = (color.R + color.G + color.B) / 3;
+                        if (luminance < 128)
+                        {
+                            int index = row * bytesPerRow + (x / 8);
+                            data[index] |= (byte)(0x80 >> (x % 8));
+                        }
                     }
-                    int index = y * bytesPerRow + (x / 8);
-                    data[index] |= (byte)(0x80 >> (x % 8));
                 }
+                byte xL = (byte)(bytesPerRow % 256);
+                byte xH = (byte)(bytesPerRow / 256);
+                byte yL = (byte)(bandHeight % 256);
+                byte yH = (byte)(bandHeight / 256);
+                AppendBytes(new byte[] { 0x1D, 0x76, 0x30, 0x00, xL, xH, yL, yH });
+                AppendBytes(data);
             }
-
-            byte xL = (byte)(bytesPerRow % 256);
-            byte xH = (byte)(bytesPerRow / 256);
-            byte yL = (byte)(height % 256);
-            byte yH = (byte)(height / 256);
-            AppendBytes(new byte[] { 0x1D, 0x76, 0x30, 0x00, xL, xH, yL, yH });
-            AppendBytes(data);
         }
 
         private void AddSeparator()
