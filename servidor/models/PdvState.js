@@ -209,4 +209,21 @@ const pdvStateSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// State snapshots can arrive after a desktop reservation. Never let a stale
+// snapshot/cash-register update roll the next-number high-water mark backwards.
+pdvStateSchema.pre(['updateOne', 'updateMany', 'findOneAndUpdate'], function preserveSequenceHighWater() {
+  const update = this.getUpdate();
+  if (!update || Array.isArray(update)) return;
+  for (const field of ['saleCodeSequence', 'budgetSequence']) {
+    const value = update.$set?.[field] ?? update[field];
+    if (value !== undefined && Number.isSafeInteger(Number(value)) && Number(value) >= 1) {
+      update.$max = { ...update.$max, [field]: Math.max(Number(value), Number(update.$max?.[field]) || 1) };
+      delete update[field];
+      if (update.$set) delete update.$set[field];
+    }
+    if (update.$max?.[field] !== undefined && update.$setOnInsert) delete update.$setOnInsert[field];
+  }
+  this.setUpdate(update);
+});
+
 module.exports = mongoose.model('PdvState', pdvStateSchema, 'pdvstates_normalized');

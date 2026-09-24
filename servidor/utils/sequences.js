@@ -12,7 +12,7 @@ const buildReference = (...parts) => parts.map((part) => normalizePart(part)).jo
 const ensureScopedSequenceAtLeast = async ({ scope, reference, value }) => {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return 0;
-  await SequenceCounter.updateOne(
+  const update = () => SequenceCounter.updateOne(
     { scope: normalizePart(scope), reference: normalizePart(reference) },
     {
       $max: { seq: parsed },
@@ -23,16 +23,27 @@ const ensureScopedSequenceAtLeast = async ({ scope, reference, value }) => {
     },
     { upsert: true }
   );
+  try { await update(); } catch (error) {
+    if (error?.code !== 11000) throw error;
+    await update();
+  }
   return parsed;
 };
 
-const nextScopedSequence = async ({ scope, reference }) => {
+const reserveScopedSequence = async ({ scope, reference, size = 1 }) => {
   const normalizedScope = normalizePart(scope);
   const normalizedReference = normalizePart(reference);
-  const counter = await SequenceCounter.findOneAndUpdate(
+  if (!Number.isSafeInteger(size) || size < 1 || size > 100000) throw new Error('Tamanho de reserva inválido.');
+  await SequenceCounter.init();
+  if (['pdv_sale', 'pdv_budget'].includes(normalizedScope)) {
+    const { pdvAllocationFloor } = require('./pdvCodeSequences');
+    const floor = await pdvAllocationFloor({ scope: normalizedScope, reference: normalizedReference });
+    await ensureScopedSequenceAtLeast({ scope: normalizedScope, reference: normalizedReference, value: floor });
+  }
+  const increment = () => SequenceCounter.findOneAndUpdate(
     { scope: normalizedScope, reference: normalizedReference },
     {
-      $inc: { seq: 1 },
+      $inc: { seq: size },
       $setOnInsert: {
         scope: normalizedScope,
         reference: normalizedReference,
@@ -40,7 +51,36 @@ const nextScopedSequence = async ({ scope, reference }) => {
     },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   ).lean();
-  return Number.parseInt(counter?.seq, 10) || 1;
+  let counter;
+  try { counter = await increment(); } catch (error) {
+    if (error?.code !== 11000) throw error;
+    counter = await increment();
+  }
+  const end = Number(counter?.seq);
+  if (!Number.isSafeInteger(end) || end < size) throw new Error('Contador de sequência inválido.');
+  return { start: end - size + 1, end };
+};
+
+const nextScopedSequence = async (key) => (await reserveScopedSequence({ ...key, size: 1 })).end;
+
+// Legacy offline codes without a persisted reservation can only be claimed if
+// no other allocator has already advanced over them. The unique scoped index
+// makes this conditional claim mutually exclusive with a concurrent reservation.
+const claimScopedSequence = async ({ scope, reference, value }) => {
+  if (!Number.isSafeInteger(value) || value < 1) return false;
+  const key = { scope: normalizePart(scope), reference: normalizePart(reference) };
+  await SequenceCounter.init();
+  const { pdvAllocationFloor } = require('./pdvCodeSequences');
+  await ensureScopedSequenceAtLeast({ ...key, value: await pdvAllocationFloor(key) });
+  try {
+    return Boolean(await SequenceCounter.findOneAndUpdate(
+      { ...key, seq: { $lt: value } }, { $set: { seq: value }, $setOnInsert: key },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    ).lean());
+  } catch (error) {
+    if (error?.code === 11000) return false;
+    throw error;
+  }
 };
 
 const getScopedSequence = async ({ scope, reference }) => {
@@ -71,6 +111,8 @@ const pdvBudgetSequenceKey = (pdvId) => ({
 module.exports = {
   ensureScopedSequenceAtLeast,
   nextScopedSequence,
+  reserveScopedSequence,
+  claimScopedSequence,
   getScopedSequence,
   customerSequenceKey,
   pdvSaleSequenceKey,

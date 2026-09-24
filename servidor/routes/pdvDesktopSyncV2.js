@@ -16,6 +16,7 @@ const Store = require('../models/Store');
 const Deposit = require('../models/Deposit');
 const ProfessionalCommissionConfig = require('../models/ProfessionalCommissionConfig');
 const PdvDesktopSyncTombstone = require('../models/PdvDesktopSyncTombstone');
+const { canonicalSaleCodeIdentifier } = require('../utils/pdvCodeSequences');
 
 const router = express.Router();
 const clean = (value) => String(value || '').trim();
@@ -245,7 +246,7 @@ router.get('/bootstrap', async (req, res) => {
     protocol: { version: 2, legacyCompatible: true, cursorFormat: 'updatedAt+_id' },
     generatedAt: new Date().toISOString(),
     pdv,
-    state: state || null,
+    state: state ? { ...state, saleCodeIdentifier: canonicalSaleCodeIdentifier(pdv) } : null,
     paymentMethods,
     versions: {
       configuration: configurationVersion,

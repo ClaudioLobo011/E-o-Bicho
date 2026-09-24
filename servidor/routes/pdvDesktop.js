@@ -34,6 +34,8 @@ const { deriveAppointmentStatus } = require('../services/appointmentStatus');
 const { normalizeBrazilPhone, phoneLookupQuery, effectiveWebAccountStatus } = require('../utils/customerIdentity');
 const { isR2Configured, uploadBufferToR2, buildPublicUrl } = require('../utils/cloudflareR2');
 const createDesktopSyncV2Router = require('./pdvDesktopSyncV2');
+const { reserveScopedSequence, pdvSaleSequenceKey, pdvBudgetSequenceKey } = require('../utils/sequences');
+const { canonicalSaleCodeIdentifier, historicalPdvSequence } = require('../utils/pdvCodeSequences');
 
 const router = express.Router();
 require('../services/desktopPetHistory').registerPetHistory(router, authenticateHost);
@@ -1358,6 +1360,7 @@ async function materializeDesktopEvent(event, pdv, host) {
     idempotencyKey: event.eventId,
     correlationId: event.eventId,
     user: desktopEventActor(source, host),
+    desktopHost: host,
   }), { action, requestId: event.eventId, idempotencyKey: event.eventId });
   if (['sale.completed', 'delivery.finalized'].includes(event.type)) {
     await syncDesktopSaleReceivables(source, pdv, host);
@@ -1665,7 +1668,7 @@ router.get('/bootstrap', authenticateHost, async (req, res) => {
     version: 1,
     generatedAt: new Date().toISOString(),
     pdv: { ...pdv, nfseConfiguration: (pdv.empresaEmitenteFiscal || pdv.empresa)?.nfse || { enabled: false } },
-    state: state || null,
+    state: state ? { ...state, saleCodeIdentifier: canonicalSaleCodeIdentifier(pdv) } : null,
     paymentMethods,
     // Informe explicitamente o feed sem cache do CDN do site. Assim uma nova
     // versão fica disponível mesmo enquanto a implantação estática da Vercel
@@ -2205,6 +2208,35 @@ router.get('/fiscal/config', authenticateHost, async (req, res) => {
   });
 });
 
+// Proof of ownership for older local databases. This endpoint neither reserves
+// numbers nor changes consumption; the local cursor is only advanced, never reset.
+router.get('/ranges/meta', authenticateHost, async (req, res) => {
+  const ids = typeof req.query.rangeIds === 'string' ? [...new Set(req.query.rangeIds.split(',').map(clean).filter(Boolean))] : [];
+  if (!ids.length || ids.length > 100 || ids.some((id) => !/^[a-f\d]{24}$/i.test(id))) {
+    return res.status(400).json({ message: 'Informe de 1 a 100 identificadores de faixa válidos.' });
+  }
+  const host = req.desktopHost;
+  const pdv = await Pdv.findById(host.pdv).select('codigo apelido nome desktop').lean();
+  if (!pdv || pdv.desktop?.status === 'suspenso') return res.status(409).json({ message: 'PDV não disponível.' });
+  const identifier = canonicalSaleCodeIdentifier(pdv);
+  const candidates = await PdvCodeRange.find({
+    _id: { $in: ids }, pdv: host.pdv, host: host._id, status: { $in: ['active', 'exhausted'] },
+  }).select('_id pdv host kind start end next status expiresAt').lean();
+  const ranges = candidates.filter((range) => !range.expiresAt || new Date(range.expiresAt).getTime() > Date.now());
+  const consumed = {};
+  await Promise.all([...new Set(ranges.map((range) => range.kind).filter((kind) => kind !== 'nfce'))].map(async (kind) => {
+    consumed[kind] = await historicalPdvSequence({ pdvId: pdv._id, kind, identifier });
+  }));
+  return res.json({ pdvId: String(pdv._id), hostId: String(host._id), saleCodeIdentifier: identifier,
+    ranges: ranges.map((range) => ({
+      rangeId: String(range._id), pdvId: String(range.pdv), hostId: String(range.host), kind: range.kind,
+      start: range.start, end: range.end, next: range.next, status: range.status,
+      ...(range.expiresAt ? { expiresAt: range.expiresAt } : {}),
+      ...(range.kind !== 'nfce' ? { minimumNext: Math.min(range.end + 1, Math.max(range.start, consumed[range.kind] + 1)) } : {}),
+    })),
+  });
+});
+
 router.post('/ranges/:kind/reserve', authenticateHost, async (req, res) => {
   const kind = clean(req.params.kind);
   if (!['sale', 'budget', 'nfce'].includes(kind)) return res.status(400).json({ message: 'Tipo de sequência inválido.' });
@@ -2213,14 +2245,17 @@ router.post('/ranges/:kind/reserve', authenticateHost, async (req, res) => {
   if (!pdv || pdv.tipoUso !== 'executavel' || pdv.desktop?.status !== 'ativo') {
     return res.status(409).json({ message: 'PDV Executável não está ativo.' });
   }
-  const size = Math.min(Math.max(Number(req.body?.size || pdv.desktop?.codeRangeSize || 10000), 100), 100000);
+  const requestedSize = Number(req.body?.size ?? pdv.desktop?.codeRangeSize ?? 10000);
+  if (!Number.isSafeInteger(requestedSize) || requestedSize < 1) return res.status(400).json({ message: 'Tamanho de faixa inválido.' });
+  const size = Math.min(Math.max(requestedSize, 100), 100000);
+  const ownership = { pdvId: String(pdv._id), hostId: String(host._id), saleCodeIdentifier: canonicalSaleCodeIdentifier(pdv) };
   if (kind === 'nfce') {
     const initial = Number.isInteger(pdv.numeroNfceInicial) && pdv.numeroNfceInicial > 0 ? pdv.numeroNfceInicial : 1;
     await Pdv.updateOne({ _id: pdv._id, numeroNfceAtual: null }, { $set: { numeroNfceAtual: initial - 1 } });
     const updatedPdv = await Pdv.findOneAndUpdate({ _id: pdv._id }, { $inc: { numeroNfceAtual: size } }, { new: true }).lean();
     const end = Number(updatedPdv.numeroNfceAtual); const start = end - size + 1;
     const range = await PdvCodeRange.create({ pdv: pdv._id, host: host._id, kind, start, end, next: start });
-    return res.status(201).json({ rangeId: range._id, kind, start, end });
+    return res.status(201).json({ rangeId: range._id, kind, start, end, ...ownership });
   }
   const field = kind === 'sale' ? 'saleCodeSequence' : 'budgetSequence';
   try {
@@ -2232,15 +2267,14 @@ router.post('/ranges/:kind/reserve', authenticateHost, async (req, res) => {
   } catch (error) {
     if (error?.code !== 11000) throw error;
   }
-  const updated = await PdvState.findOneAndUpdate(
+  const key = kind === 'sale' ? pdvSaleSequenceKey(pdv._id) : pdvBudgetSequenceKey(pdv._id);
+  const { start, end } = await reserveScopedSequence({ ...key, size });
+  await PdvState.updateOne(
     { pdv: pdv._id },
-    { $inc: { [field]: size } },
-    { new: true }
-  ).lean();
-  const end = Math.max(size, Number(updated?.[field] || size + 1) - 1);
-  const start = end - size + 1;
+    { $max: { [field]: end + 1 }, $set: { saleCodeIdentifier: ownership.saleCodeIdentifier } }
+  );
   const range = await PdvCodeRange.create({ pdv: pdv._id, host: host._id, kind, start, end, next: start });
-  return res.status(201).json({ rangeId: range._id, kind, start: range.start, end: range.end });
+  return res.status(201).json({ rangeId: range._id, kind, start: range.start, end: range.end, ...ownership });
 });
 
 router.post('/events/batch', authenticateHost, async (req, res) => {
@@ -2258,6 +2292,11 @@ router.post('/events/batch', authenticateHost, async (req, res) => {
     const occurredAt = new Date(event?.occurredAt || Date.now());
     if (!eventId || !type || Number.isNaN(occurredAt.getTime())) {
       results.push({ eventId, accepted: false, error: 'Evento inválido.' });
+      continue;
+    }
+    if (event?.payload?.pdvId && clean(event.payload.pdvId) !== String(host.pdv)) {
+      results.push({ eventId, accepted: false, code: 'PDV_CONTEXT_CHANGED', disposition: 'requires_action', retryable: false,
+        error: 'O evento pertence a outro PDV. Restaure o pareamento de origem para sincronizar.' });
       continue;
     }
     try {

@@ -49,6 +49,7 @@ const {
 } = require('../utils/sequences');
 const { createSerialTaskQueue } = require('../utils/serialTaskQueue');
 const { isComplimentaryServiceSale } = require('../utils/pdvComplimentaryServices');
+const { mayPreserveProvidedCode } = require('../utils/pdvCodeSequences');
 const PDV_IDEMPOTENCY_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 const PDV_STATE_WRITE_QUEUE_STALE_MS = Math.max(
   30_000,
@@ -2879,7 +2880,7 @@ const dedupeSalesById = (sales) => {
   return sortRecordsByDateDesc([...byId.values(), ...withoutId], 'sale');
 };
 
-const ensureUniquePdvCodes = async ({ pdvId, pdvDoc, sales, budgets, existingSales, existingBudgets }) => {
+const ensureUniquePdvCodes = async ({ pdvId, pdvDoc, sales, budgets, existingSales, existingBudgets, desktopHost }) => {
   const resolvedPdvId = normalizeString(pdvId || pdvDoc?._id);
   if (!resolvedPdvId) {
     return { sales, budgets, nextSaleSequence: 1, nextBudgetSequence: 1 };
@@ -2904,6 +2905,7 @@ const ensureUniquePdvCodes = async ({ pdvId, pdvDoc, sales, budgets, existingSal
 
   let maxSaleSequence = 0;
   salesList.forEach((sale) => {
+    if (!existingSaleIdSet.has(normalizeString(sale?.id || sale?._id))) return;
     const currentCode = normalizeString(sale?.saleCode || sale?.saleCodeLabel);
     if (!currentCode.toUpperCase().startsWith(`${saleIdentifier}-`)) return;
     maxSaleSequence = Math.max(maxSaleSequence, parseTrailingSequence(currentCode));
@@ -2932,7 +2934,8 @@ const ensureUniquePdvCodes = async ({ pdvId, pdvDoc, sales, budgets, existingSal
       Boolean(code) &&
       code.startsWith(`${saleIdentifier}-`) &&
       parseTrailingSequence(code) > 0 &&
-      !usedSaleCodes.has(code);
+      !usedSaleCodes.has(code) &&
+      (!isNewSale || await mayPreserveProvidedCode({ pdvId: resolvedPdvId, kind: 'sale', sequence: parseTrailingSequence(code), desktopHost }));
     if (!hasValidProvidedCode) {
       let nextSeq = await nextScopedSequence({
         scope: saleCounterKey.scope,
@@ -2973,6 +2976,7 @@ const ensureUniquePdvCodes = async ({ pdvId, pdvDoc, sales, budgets, existingSal
 
   let maxBudgetSequence = 0;
   budgetsList.forEach((budget) => {
+    if (!existingBudgetIdSet.has(normalizeString(budget?.id || budget?._id))) return;
     const code = normalizeString(budget?.code).toUpperCase();
     if (!code.startsWith(`${BUDGET_CODE_PREFIX}-`)) return;
     maxBudgetSequence = Math.max(maxBudgetSequence, parseTrailingSequence(code));
@@ -3001,7 +3005,8 @@ const ensureUniquePdvCodes = async ({ pdvId, pdvDoc, sales, budgets, existingSal
       Boolean(code) &&
       code.startsWith(`${BUDGET_CODE_PREFIX}-`) &&
       parseTrailingSequence(code) > 0 &&
-      !usedBudgetCodes.has(code);
+      !usedBudgetCodes.has(code) &&
+      (!isNewBudget || await mayPreserveProvidedCode({ pdvId: resolvedPdvId, kind: 'budget', sequence: parseTrailingSequence(code), desktopHost }));
     if (!hasValidProvidedCode) {
       let nextSeq = await nextScopedSequence({
         scope: budgetCounterKey.scope,
@@ -5193,6 +5198,7 @@ const runPdvCommand = async ({
   idempotencyKey,
   correlationId,
   user,
+  desktopHost,
 }) => {
   const shouldTraceCommand = action === PDV_COMMANDS.SALE_FINALIZE;
   const perf = createPdvPerfTracer({
@@ -5282,8 +5288,7 @@ const runPdvCommand = async ({
       timestamp: openingDate,
     };
 
-    const saleCodeIdentifier =
-      normalizeString(existingState?.saleCodeIdentifier) || resolveSaleCodeIdentifierForPdv(pdvDoc);
+    const saleCodeIdentifier = resolveSaleCodeIdentifierForPdv(pdvDoc);
 
     const nextMutationKeys = getNextRecentMutationKeys(
       existingState?.recentStateMutationKeys || [],
@@ -5891,7 +5896,8 @@ const runPdvCommand = async ({
       Boolean(incomingSaleCode) &&
       incomingSaleCode.startsWith(`${saleIdentifier}-`) &&
       providedSequence > 0 &&
-      !existingSaleCodes.has(incomingSaleCode);
+      !existingSaleCodes.has(incomingSaleCode) &&
+      await mayPreserveProvidedCode({ pdvId, kind: 'sale', sequence: providedSequence, desktopHost });
     let nextSaleSequence = Math.max(1, Number.parseInt(existingState?.saleCodeSequence, 10) || 1);
 
     if (hasValidProvidedCode) {
@@ -6053,8 +6059,7 @@ const runPdvCommand = async ({
       deliveryOrders: Array.isArray(existingState?.deliveryOrders) ? existingState.deliveryOrders : [],
       accountsReceivable: nextAccountsReceivable,
       inventoryMovements: nextInventoryMovements,
-      saleCodeIdentifier:
-        normalizeString(existingState?.saleCodeIdentifier) || resolveSaleCodeIdentifierForPdv(pdvDoc),
+      saleCodeIdentifier: resolveSaleCodeIdentifierForPdv(pdvDoc),
       saleCodeSequence: nextSaleSequence,
       budgetSequence: Math.max(1, Number.parseInt(existingState?.budgetSequence, 10) || 1),
       printPreferences: {
@@ -6811,6 +6816,7 @@ const runPdvCommand = async ({
       budgets: nextBudgets,
       existingSales,
       existingBudgets,
+      desktopHost,
     });
     nextBudgets = ensuredCodes.budgets;
 
@@ -7124,6 +7130,7 @@ const runPdvCommand = async ({
         budgets: existingBudgets,
         existingSales,
         existingBudgets,
+        desktopHost,
       });
       nextSales = ensuredCodes.sales;
       const savedSale = nextSales.find(
@@ -7288,6 +7295,7 @@ const runPdvCommand = async ({
       budgets: existingBudgets,
       existingSales,
       existingBudgets,
+      desktopHost,
     });
     nextSales = ensuredCodes.sales;
     const saleForOrder = nextSales.find((sale) => {
