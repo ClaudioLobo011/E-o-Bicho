@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { hasAdminMasterGlobalAccess } = require('../utils/adminMasterMode');
+const { getPdvNfseConfiguration } = require('../utils/nfseEnvironment');
 
 const idOf = (value) => String(value?._id || value || '').trim();
 const staffRoles = new Set(['funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master']);
@@ -57,13 +58,16 @@ function createPdvNfseHandlers(overrides = {}) {
       if (operation !== 'list' && ['cancelled', 'cancelado'].includes(ctx.sale.status)) {
         return res.status(409).json({ message: 'Não é possível emitir NFS-e para uma venda cancelada.' });
       }
-      const configuredEnvironment = ctx.store.nfse?.environment;
       const requested = req.body?.environment;
-      if (operation !== 'list' && requested && requested !== configuredEnvironment) {
-        return res.status(422).json({ message: 'O ambiente deve ser alterado no cadastro da empresa antes de emitir.' });
+      const pdvEnvironment = getPdvNfseConfiguration(ctx.pdv, ctx.store).environment;
+      if (operation !== 'list' && requested && (!['homologacao', 'producao'].includes(requested)
+        || (requested === 'producao' && pdvEnvironment !== 'producao'))) {
+        return res.status(422).json({ message: 'O ambiente solicitado não está habilitado para NFS-e neste PDV.' });
       }
       const fn = { list: 'listSaleNfse', preview: 'previewSaleNfse', emit: 'emitSaleNfse' }[operation];
-      const result = await service()[fn]({ ...ctx, environment: configuredEnvironment });
+      // O serviço resolve o ambiente pela venda/documento; o cadastro atual não
+      // pode esconder o histórico nem promover uma venda de teste para produção.
+      const result = await service()[fn]({ ...ctx, ...(operation !== 'list' && requested ? { environment: requested } : {}) });
       for (const document of result.documents || []) {
         if (document.status === 'authorized' && /^https:\/\//.test(document.consultationUrl || '')) {
           document.qrCodeImage = await require('qrcode').toDataURL(document.consultationUrl, { width: 240, margin: 2, errorCorrectionLevel: 'M' });
@@ -76,6 +80,7 @@ function createPdvNfseHandlers(overrides = {}) {
         message: error.message || 'Não foi possível processar a NFS-e.',
         code: error.code || 'NFSE_ERROR',
         ...(Array.isArray(error.issues) ? { issues: error.issues } : {}),
+        ...(error.progress ? { progress: error.progress } : {}),
       });
     }
   };

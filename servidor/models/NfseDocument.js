@@ -30,6 +30,7 @@ const schema = new mongoose.Schema({
   errorCodes: [String],
   attempts: { type: Number, default: 0 },
   lastAttemptAt: Date,
+  progress: { type: mongoose.Schema.Types.Mixed, default: null },
   lockToken: { type: String, select: false },
   lockUntil: { type: Date, default: null },
   cancelledAt: Date,
@@ -48,5 +49,6 @@ const saleLockSchema = new mongoose.Schema({
   _id: { type: String },
   token: { type: String, required: true },
   until: { type: Date, required: true },
+  progress: { type: mongoose.Schema.Types.Mixed, default: null },
 }, { versionKey: false });
 module.exports.SaleLock = mongoose.models.NfseSaleLock || mongoose.model('NfseSaleLock', saleLockSchema);

@@ -20,6 +20,7 @@ const regimeTributarioEnum = [
 const nfseSchema = new mongoose.Schema({
     enabled: { type: Boolean, default: false },
     environment: { type: String, enum: ['homologacao', 'producao'], default: 'homologacao' },
+    productionEnabledAt: { type: Date, default: null },
     serieDps: { type: String, trim: true, default: '' },
     regimeEspecialTributacao: { type: String, trim: true, default: '' },
     opSimpNac: { type: String, trim: true, default: '' },

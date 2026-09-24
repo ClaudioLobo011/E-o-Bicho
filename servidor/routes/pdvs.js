@@ -51,6 +51,7 @@ const {
 const { createSerialTaskQueue } = require('../utils/serialTaskQueue');
 const { isComplimentaryServiceSale } = require('../utils/pdvComplimentaryServices');
 const { mayPreserveProvidedCode } = require('../utils/pdvCodeSequences');
+const { getNfseEnvironmentSnapshot, preserveNfseEnvironmentSnapshot } = require('../utils/pdvNfseSaleSnapshot');
 const PDV_IDEMPOTENCY_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 const PDV_STATE_WRITE_QUEUE_STALE_MS = Math.max(
   30_000,
@@ -1774,6 +1775,7 @@ const normalizeSaleRecordPayload = (record) => {
     customerName,
     customerDocument,
     nfseCustomerIdentification: record.nfseCustomerIdentification === 'not_informed' ? 'not_informed' : 'identified',
+    nfseEnvironment: getNfseEnvironmentSnapshot(record),
     seller: sellerSource && typeof sellerSource === 'object' ? { ...sellerSource } : null,
     sellerName: sellerName || '',
     sellerCode,
@@ -2799,9 +2801,12 @@ const mergeRecordsByKey = (existingRecords, incomingRecords, kind = 'generic') =
   };
 
   const mergeSaleRecordConflict = (existingRecord, incomingRecord) => {
-    const existing = existingRecord && typeof existingRecord === 'object' ? existingRecord : {};
+    const existing = typeof existingRecord?.toObject === 'function' ? existingRecord.toObject()
+      : existingRecord && typeof existingRecord === 'object' ? existingRecord : {};
     const incoming = incomingRecord && typeof incomingRecord === 'object' ? incomingRecord : {};
-    const merged = { ...existing, ...incoming };
+    // A snapshot update cannot move a historical sale to another fiscal environment,
+    // including filling an unstamped legacy sale after production was enabled.
+    const merged = preserveNfseEnvironmentSnapshot({ ...existing, ...incoming }, existing);
     const existingPaymentStrength = getSalePaymentStrength(existing);
     const incomingPaymentStrength = getSalePaymentStrength(incoming);
     const paymentSource = existingPaymentStrength > incomingPaymentStrength ? existing : incoming;
@@ -3195,7 +3200,9 @@ const applyNormalizedArraysToSerializedState = (serializedState, normalizedArray
         return;
       }
       if (source === 'legacy') {
-        merged[existingIndex] = entry;
+        merged[existingIndex] = kind === 'sale'
+          ? preserveNfseEnvironmentSnapshot(entry, getNfseEnvironmentSnapshot(entry) ? entry : merged[existingIndex])
+          : entry;
       }
     };
     (Array.isArray(normalizedList) ? normalizedList : []).forEach((entry) => push(entry, 'normalized'));
@@ -5866,6 +5873,7 @@ const runPdvCommand = async ({
       customerName: customerName || 'Cliente não informado',
       customerDocument,
       nfseCustomerIdentification: payload.nfseCustomerIdentification === 'not_informed' ? 'not_informed' : 'identified',
+      nfseEnvironment: getNfseEnvironmentSnapshot(payload),
       seller,
       paymentTags,
       items,
@@ -7109,6 +7117,7 @@ const runPdvCommand = async ({
     }
 
     if (action === PDV_COMMANDS.DELIVERY_REGISTER) {
+      const originalSale = nextSales.find((sale) => incomingSaleId && normalizeString(sale?.id || sale?._id) === incomingSaleId);
       const saleRecord = normalizeSaleRecordPayload({
         id: incomingSaleId || `sale-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
         type: 'delivery',
@@ -7118,6 +7127,7 @@ const runPdvCommand = async ({
         customerName,
         customerDocument,
         nfseCustomerIdentification: payload.nfseCustomerIdentification === 'not_informed' ? 'not_informed' : 'identified',
+        nfseEnvironment: getNfseEnvironmentSnapshot(originalSale || payload),
         items,
         paymentTags: buildPaymentTagsFromPayments(payments),
         discountValue,
@@ -7126,10 +7136,7 @@ const runPdvCommand = async ({
         totalLiquido,
         totalBruto,
         createdAt: safeDate(payload?.createdAt) || now,
-        receiptSnapshot:
-          payload?.receiptSnapshot && typeof payload.receiptSnapshot === 'object'
-            ? payload.receiptSnapshot
-            : null,
+        receiptSnapshot: (originalSale ? preserveNfseEnvironmentSnapshot(payload, originalSale).receiptSnapshot : payload.receiptSnapshot) || null,
         status: 'completed',
         cashContributions: [],
       });
@@ -7284,6 +7291,7 @@ const runPdvCommand = async ({
         nfseCustomerIdentification: payload.nfseCustomerIdentification === undefined
           ? existingSale.nfseCustomerIdentification
           : payload.nfseCustomerIdentification === 'not_informed' ? 'not_informed' : 'identified',
+        nfseEnvironment: getNfseEnvironmentSnapshot(existingSale),
         saleCodeLabel: normalizeString(payload?.saleCode || existingSale?.saleCodeLabel || targetOrder?.saleCode || ''),
         items: items.length ? items : Array.isArray(existingSale?.items) ? existingSale.items : [],
         payments: payments.length ? payments : [],

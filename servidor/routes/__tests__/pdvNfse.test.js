@@ -8,13 +8,13 @@ const pdvId = 'aaaaaaaaaaaaaaaaaaaaaaaa';
 const storeId = 'bbbbbbbbbbbbbbbbbbbbbbbb';
 const query = (value) => ({ lean: async () => value, select() { return this; } });
 
-function fixture({ role = 'funcionario', stores = [storeId], cancelled = false, host = null, alias = false, issuerId = storeId } = {}) {
+function fixture({ role = 'funcionario', stores = [storeId], cancelled = false, host = null, alias = false, issuerId = storeId, companyEnvironment = 'homologacao', pdvEnvironment } = {}) {
   const calls = [];
   const sale = { id: 'canonical-sale', saleCode: 'VENDA-01', status: cancelled ? 'cancelled' : 'completed', items: [{ itemType: 'service', serviceId: 'service', total: 80 }] };
   const result = { documents: [{ id: 'doc', status: 'authorized', consultationUrl: 'https://www.nfse.gov.br/EmissorNacional/Notas/Consultar?chave=123', total: 80 }], nfseStatus: 'authorized' };
   const handlers = createPdvNfseHandlers({
-    Pdv: { findById: () => query({ _id: pdvId, empresa: storeId, empresaEmitenteFiscal: issuerId }) },
-    Store: { findById: (id) => { assert.equal(String(id), issuerId); return query({ _id: issuerId, nfse: { enabled: true, environment: 'homologacao' } }); } },
+    Pdv: { findById: () => query({ _id: pdvId, empresa: storeId, empresaEmitenteFiscal: issuerId, ambientePadrao: pdvEnvironment }) },
+    Store: { findById: (id) => { assert.equal(String(id), issuerId); return query({ _id: issuerId, nfse: { enabled: true, environment: companyEnvironment } }); } },
     Sale: { findOne: (filter) => query(alias && !filter.saleCode ? null : { payload: sale }) },
     State: { findOne: () => query(null) },
     service: Object.fromEntries(['emitSaleNfse', 'previewSaleNfse', 'listSaleNfse'].map((operation) => [operation, async (ctx) => { calls.push({ operation, ctx }); return structuredClone(result); }])),
@@ -42,6 +42,20 @@ test('GET only reads documents and creates QR; preview never transmits', async (
   assert.equal(f.calls[0].operation, 'listSaleNfse');
   await f.request.post(`/${pdvId}/sales/sale/nfse/preview`).send({}).expect(200);
   assert.equal(f.calls[1].operation, 'previewSaleNfse');
+});
+test('GET não oculta homologação após ativar produção e preview delega ambiente da venda', async () => {
+  const f = fixture({ companyEnvironment: 'producao', pdvEnvironment: 'producao' });
+  await f.request.get(`/${pdvId}/sales/sale/nfse`).expect(200);
+  assert.equal(Object.hasOwn(f.calls[0].ctx, 'environment'), false);
+  await f.request.post(`/${pdvId}/sales/sale/nfse/preview`).send({}).expect(200);
+  assert.equal(Object.hasOwn(f.calls[1].ctx, 'environment'), false);
+});
+test('empresa produtiva não autoriza pedido produção de um PDV de testes', async () => {
+  const f = fixture({ companyEnvironment: 'producao', pdvEnvironment: 'homologacao' });
+  await f.request.post(`/${pdvId}/sales/sale/nfse`).send({ environment: 'producao' }).expect(422);
+  assert.equal(f.calls.length, 0);
+  await f.request.post(`/${pdvId}/sales/sale/nfse`).send({ environment: 'homologacao' }).expect(200);
+  assert.equal(f.calls[0].ctx.environment, 'homologacao');
 });
 test('desktop aliases use canonical sale id and reject another PDV host', async () => {
   const f = fixture({ alias: true, host: { pdv: pdvId, empresa: storeId } });

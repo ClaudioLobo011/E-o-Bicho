@@ -113,6 +113,69 @@ test('cliques repetidos não reservam outra DPS nem retransmitem', async () => {
   assert.equal(first.documents[0].id, second.documents[0].id); assert.equal(sequence, 1); assert.deepEqual(fake.calls, ['POST']); assert.equal(await Model.countDocuments(), 1);
 });
 
+test('ativar produção preserva NFS-e homologada e não cria outra nota ao repetir a venda', async () => {
+  const input = saleInput();
+  const first = await engine.emitSaleNfse(input);
+  store.nfse.environment = 'producao';
+  store.nfse.productionEnabledAt = new Date(date.getTime() + 1000);
+  input.pdv.ambientePadrao = 'producao';
+  const preview = await engine.previewSaleNfse(input);
+  assert.equal(preview.ready, true, preview.issues.join('; '));
+  assert.equal(preview.environment, 'homologacao');
+  const replay = await engine.emitSaleNfse(input);
+  assert.equal(replay.documents[0].id, first.documents[0].id);
+  assert.equal(replay.documents[0].environment, 'homologacao');
+  assert.equal((await engine.listSaleNfse(input)).documents.length, 1);
+  assert.deepEqual(fake.calls, ['POST']);
+  await assert.rejects(engine.emitSaleNfse({ ...input, environment: 'producao' }), /ambiente desta venda é homologacao/);
+  assert.equal(await Model.countDocuments(), 1);
+});
+
+test('empresa produtiva mantém PDV de testes e prova NFC-e homologada em homologação', async () => {
+  store.nfse.environment = 'producao';
+  store.nfse.productionEnabledAt = new Date(date.getTime() - 1000);
+  const input = saleInput(); input.pdv.ambientePadrao = 'homologacao';
+  let preview = await engine.previewSaleNfse(input);
+  assert.equal(preview.ready, true, preview.issues.join('; ')); assert.equal(preview.environment, 'homologacao');
+  preview = await engine.previewSaleNfse({ ...input, environment: 'producao' });
+  assert.equal(preview.ready, false); assert.match(preview.issues.join('; '), /não é permitido alterá-lo/);
+  input.pdv.ambientePadrao = 'producao'; input.sale.fiscalEnvironment = 'homologacao';
+  const result = await engine.emitSaleNfse(input);
+  assert.equal(result.documents[0].environment, 'homologacao');
+  assert.match(result.documents[0].xmlContent, /<tpAmb>2<\/tpAmb>/);
+});
+
+test('legado sem ambiente NFS-e não é promovido a produção mesmo com NFC-e produtiva antiga', async () => {
+  store.nfse.environment = 'producao'; store.nfse.productionEnabledAt = new Date(date.getTime() + 1000);
+  const input = saleInput({ fiscalEnvironment: 'producao' }); input.pdv.ambientePadrao = 'producao';
+  const preview = await engine.previewSaleNfse(input);
+  assert.equal(preview.ready, false); assert.match(preview.issues.join('; '), /anterior à ativação/);
+  await assert.rejects(engine.emitSaleNfse(input), /anterior à ativação/);
+  assert.equal(await Model.countDocuments(), 0); assert.equal(sequence, 0); assert.deepEqual(fake.calls, []);
+});
+
+test('venda nova posterior ao corte usa produção e ambiente não pode ser sobrescrito pela chamada', async () => {
+  store.nfse.environment = 'producao'; store.nfse.productionEnabledAt = new Date(date.getTime() - 1000);
+  const input = saleInput(); input.pdv.ambientePadrao = 'producao';
+  const preview = await engine.previewSaleNfse(input);
+  assert.equal(preview.ready, true, preview.issues.join('; ')); assert.equal(preview.environment, 'producao');
+  await assert.rejects(engine.emitSaleNfse({ ...input, environment: 'homologacao' }), /ambiente desta venda é producao/);
+  const result = await engine.emitSaleNfse(input);
+  assert.equal(result.documents[0].environment, 'producao');
+  assert.match(result.documents[0].xmlContent, /<tpAmb>1<\/tpAmb>/);
+  assert.equal(await Model.countDocuments(), 1);
+});
+
+test('snapshot NFS-e homologação sobrevive ao corte e rejeita prova contraditória', async () => {
+  store.nfse.environment = 'producao'; store.nfse.productionEnabledAt = new Date(date.getTime() + 1000);
+  const input = saleInput({ nfseEnvironment: 'homologacao' }); input.pdv.ambientePadrao = 'producao';
+  assert.equal((await engine.previewSaleNfse(input)).environment, 'homologacao');
+  input.sale.nfseEnvironment = 'producao'; input.sale.fiscalEnvironment = 'homologacao';
+  const conflict = await engine.previewSaleNfse(input);
+  assert.equal(conflict.ready, false); assert.match(conflict.issues.join('; '), /prova de homologação/);
+  assert.equal(await Model.countDocuments(), 0); assert.deepEqual(fake.calls, []);
+});
+
 test('concorrência entre dois emissores mantém um documento e apenas um POST', async () => {
   const results = await Promise.allSettled([engine.emitSaleNfse(saleInput()), engine.emitSaleNfse(saleInput())]);
   assert.equal(await Model.countDocuments(), 1); assert.equal(fake.calls.filter((v) => v === 'POST').length, 1);
@@ -122,7 +185,7 @@ test('concorrência entre dois emissores mantém um documento e apenas um POST',
 
 test('renova a trava do documento durante transporte demorado e impede consulta concorrente', async () => {
   let currentTime = new Date(date);
-  engine = createNfseService({ ...engineOptions, now: () => new Date(currentTime), documentHeartbeatMs: 5 });
+  engine = createNfseService({ ...engineOptions, now: () => new Date(currentTime), documentHeartbeatMs: 5, saleHeartbeatMs: 5 });
   let releaseTransport;
   const waiting = new Promise((resolve) => { releaseTransport = resolve; });
   let enteredTransport;
@@ -137,7 +200,8 @@ test('renova a trava do documento durante transporte demorado e impede consulta 
     let renewed;
     for (let attempt = 0; attempt < 100; attempt += 1) {
       renewed = await Model.findById(document._id).lean();
-      if (new Date(renewed.lockUntil).getTime() > date.getTime() + 180000) break;
+      const saleLease = await Model.SaleLock.findById(`${PDV_ID}:test-sale`).lean();
+      if (new Date(renewed.lockUntil).getTime() > date.getTime() + 180000 && new Date(saleLease.until).getTime() > date.getTime() + 180000) break;
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
     assert.ok(new Date(renewed.lockUntil).getTime() > date.getTime() + 180000);
@@ -147,6 +211,61 @@ test('renova a trava do documento durante transporte demorado e impede consulta 
   } finally { releaseTransport(); }
   assert.equal((await emission).nfseStatus, 'authorized');
   assert.equal((await Model.findOne().lean()).lockUntil, null);
+});
+
+test('progresso reflete montagem e assinatura reais e consulta não retransmite enquanto transporte aguarda', async (t) => {
+  const input = saleInput();
+  const observed = [];
+  const originalUpdate = Model.SaleLock.updateOne.bind(Model.SaleLock);
+  t.mock.method(Model.SaleLock, 'updateOne', async (filter, update, options) => {
+    const result = await originalUpdate(filter, update, options);
+    if (update.$set?.progress) observed.push((await engine.listSaleNfse(input)).progress);
+    return result;
+  });
+  let entered; const insideTransport = new Promise(resolve => { entered = resolve; });
+  let release; const pause = new Promise(resolve => { release = resolve; });
+  const originalEmit = fake.emit.bind(fake);
+  fake.emit = async (...args) => { entered(); await pause; return originalEmit(...args); };
+  const emission = engine.emitSaleNfse(input);
+  try {
+    await insideTransport;
+    for (let n = 0; n < 3; n++) {
+      const reading = await engine.listSaleNfse(input);
+      assert.equal(reading.progress.stage, 'transmitting');
+      assert.ok(reading.progress.steps.building_xml.completedAt);
+      assert.ok(reading.progress.steps.signing.completedAt);
+      assert.ok(reading.progress.steps.transmitting.startedAt);
+      assert.equal(reading.progress.steps.transmitting.completedAt, undefined);
+      assert.equal(reading.documents[0].progressStage, 'transmitting');
+      assert.equal(reading.documents[0].status, 'processing');
+      assert.ok(!JSON.stringify(reading.progress).includes('token'));
+    }
+    assert.deepEqual(fake.calls, []);
+  } finally { release(); }
+  const result = await emission;
+  assert.equal(result.nfseStatus, 'authorized');
+  assert.equal(result.documents[0].progressStage, 'authorized');
+  assert.ok(result.documents[0].progress.steps.transmitting.completedAt);
+  assert.deepEqual(observed.map(p => `${p.stage}:${Boolean(p.steps[p.stage].completedAt)}`), [
+    'building_xml:false', 'building_xml:true', 'signing:false', 'signing:true', 'transmitting:false', 'transmitting:true',
+  ]);
+  const observedCount = observed.length;
+  await engine.emitSaleNfse(input);
+  assert.equal(observed.length, observedCount, 'replay autorizado não refaz etapas');
+  assert.deepEqual(fake.calls, ['POST']);
+});
+
+test('falha real de assinatura não informa transmissão nem reserva um documento falso', async () => {
+  engine = createNfseService({ ...engineOptions, certificateLoader: async () => ({ ...pair, privateKeyPem: 'INVALID TEST KEY' }) });
+  await assert.rejects(engine.emitSaleNfse(saleInput()), error => {
+    assert.equal(error.progress.stage, 'signing');
+    assert.ok(error.progress.steps.building_xml.completedAt);
+    assert.ok(error.progress.steps.signing.startedAt);
+    assert.equal(error.progress.steps.signing.completedAt, undefined);
+    assert.equal(error.progress.steps.transmitting, undefined);
+    return true;
+  });
+  assert.equal(await Model.countDocuments(), 0); assert.deepEqual(fake.calls, []);
 });
 
 test('perda de propriedade da trava bloqueia retransmissão e cancelamento antes do POST', async () => {
@@ -502,9 +621,11 @@ test('prévia bloqueia divergência monetária e competência ausente de atendim
 });
 
 test('resposta pública não inclui chave privada, senha, certificado cifrado, snapshot ou trava', () => {
-  const data = publicDocument({ _id: SERVICE_ID, store: STORE_ID, pdv: PDV_ID, total: 80, dpsXml: 'SENSITIVE_DPS', snapshot: { issuer: { name: 'Emitente de teste', cnpj: '11.222.333/0001-81', certificatePassword: 'SECRET_PASSWORD' }, customer: { name: 'SECRET_CUSTOMER' } }, privateKeyPem: 'SECRET_PRIVATE_KEY', certificadoArquivoCriptografado: 'SECRET_CIPHER', lockToken: 'SECRET_LOCK' });
+  const data = publicDocument({ _id: SERVICE_ID, store: STORE_ID, pdv: PDV_ID, total: 80, dpsXml: 'SENSITIVE_DPS', snapshot: { issuer: { name: 'Emitente de teste', cnpj: '11.222.333/0001-81', certificatePassword: 'SECRET_PASSWORD' }, customer: { name: 'SECRET_CUSTOMER' } }, privateKeyPem: 'SECRET_PRIVATE_KEY', certificadoArquivoCriptografado: 'SECRET_CIPHER', lockToken: 'SECRET_LOCK',
+    progress: { stage: 'signing', privateKey: 'SECRET_NESTED_KEY', lockToken: 'SECRET_NESTED_LOCK', steps: { signing: { startedAt: date, privateKey: 'SECRET_STEP_KEY' } } } });
   const json = JSON.stringify(data); assert.doesNotMatch(json, /SECRET_|SENSITIVE_DPS|snapshot|lockToken|privateKey/);
   assert.equal(data.issuerName, 'Emitente de teste'); assert.equal(data.issuerCnpj, '11222333000181');
+  assert.equal(data.progress.stage, 'signing'); assert.equal(data.progress.steps.signing.startedAt, date.toISOString());
 });
 
 test('nome do emitente no XML oficial prevalece sobre cadastro antigo sem alterar snapshot', async () => {

@@ -616,6 +616,94 @@ test.describe('PDV commands endpoint', () => {
     }
   });
 
+  test('sale environment survives canonical persistence, mirror, replay and legacy state updates', async () => {
+    const base = await createFixture();
+    const request = supertest(createApp());
+    const send = (payload, key) => request.post(`/pdvs/${base.pdv._id}/commands`)
+      .set('Authorization', 'Bearer token').set('X-Idempotency-Key', key)
+      .send({ action: 'pdv.sale.finalize', payload });
+    const payload = {
+      saleId: 'environment-sale', nfseEnvironment: 'homologacao',
+      items: [{ itemType: 'servico', serviceId: String(new mongoose.Types.ObjectId()), quantidade: 1, valor: 30, subtotal: 30 }],
+      payments: [{ id: 'dinheiro', label: 'Dinheiro', type: 'avista', valor: 30 }], totalBruto: 30, totalLiquido: 30,
+      receiptSnapshot: { nfseEnvironment: 'homologacao', pagamentos: { items: [{ valor: 30 }] } },
+    };
+    const first = await send(payload, 'environment-sale-first');
+    assert.equal(first.status, 200, first.text);
+    assert.equal(first.body.state.completedSales[0].nfseEnvironment, 'homologacao');
+    const mirror = await mongoose.connection.collection('pdvstatesales').findOne({ pdv: base.pdv._id, saleId: payload.saleId });
+    assert.equal(mirror.payload.nfseEnvironment, 'homologacao');
+    const replay = await send({ ...payload, nfseEnvironment: 'producao' }, 'environment-sale-replay');
+    assert.equal(replay.status, 200, replay.text);
+    assert.equal(replay.body.state.completedSales[0].nfseEnvironment, 'homologacao');
+
+    const stale = await request.put(`/pdvs/${base.pdv._id}/state`)
+      .set('Authorization', 'Bearer token').set('X-Idempotency-Key', 'environment-sale-stale')
+      .send({ ...first.body.state, _meta: { expectedUpdatedAt: replay.body.state.updatedAt }, completedSales: first.body.state.completedSales.map(sale => ({
+        ...sale, nfseEnvironment: 'producao', receiptSnapshot: { ...sale.receiptSnapshot, nfseEnvironment: 'producao' },
+      })) });
+    assert.equal(stale.status, 200, stale.text);
+    assert.equal(stale.body.completedSales[0].nfseEnvironment, 'homologacao');
+    assert.equal(stale.body.completedSales[0].receiptSnapshot.nfseEnvironment, 'homologacao');
+    const current = await request.get(`/pdvs/${base.pdv._id}?lightweight=1`).set('Authorization', 'Bearer token');
+    assert.equal(current.status, 200, current.text);
+    assert.equal(current.body.completedSales[0].nfseEnvironment, 'homologacao');
+    assert.equal(current.body.summary.recebido, 30);
+  });
+
+  test('new sales preserve production and legacy sales cannot gain a fiscal environment through state merge', async () => {
+    const base = await createFixture();
+    const request = supertest(createApp());
+    let last;
+    for (const [index, environment] of ['producao', undefined, 'PRODUCAO'].entries()) {
+      last = await request.post(`/pdvs/${base.pdv._id}/commands`)
+        .set('Authorization', 'Bearer token').set('X-Idempotency-Key', `environment-cases-${index}`)
+        .send({ action: 'pdv.sale.finalize', payload: {
+          saleId: `environment-case-${index}`, nfseEnvironment: environment,
+          items: [{ itemType: 'servico', serviceId: String(new mongoose.Types.ObjectId()), quantidade: 1, valor: 30, subtotal: 30 }],
+          payments: [{ id: 'dinheiro', valor: 30 }], totalBruto: 30, totalLiquido: 30,
+        } });
+      assert.equal(last.status, 200, last.text);
+      assert.equal(last.body.state.completedSales.find(sale => sale.id === `environment-case-${index}`).nfseEnvironment, index === 0 ? 'producao' : undefined);
+    }
+    const attempt = await request.put(`/pdvs/${base.pdv._id}/state`)
+      .set('Authorization', 'Bearer token').set('X-Idempotency-Key', 'legacy-environment-assignment')
+      .send({ ...last.body.state, _meta: { expectedUpdatedAt: last.body.state.updatedAt }, completedSales: last.body.state.completedSales.map(sale => ({
+        ...sale, nfseEnvironment: 'producao', receiptSnapshot: { nfseEnvironment: 'producao', meta: { marker: 'incoming' } },
+      })) });
+    assert.equal(attempt.status, 200, attempt.text);
+    for (const sale of attempt.body.completedSales) {
+      assert.equal(sale.nfseEnvironment, sale.id === 'environment-case-0' ? 'producao' : undefined);
+      assert.equal(sale.receiptSnapshot.nfseEnvironment, sale.id === 'environment-case-0' ? 'producao' : undefined);
+      assert.equal(sale.receiptSnapshot.meta.marker, 'incoming');
+    }
+  });
+
+  test('delivery keeps its original NFS-e environment through finalization and replay', async () => {
+    const base = await createFixture();
+    const request = supertest(createApp());
+    for (const [index, environment] of ['homologacao', 'producao', undefined].entries()) {
+      const common = { orderId: `environment-delivery-${index}`, saleId: `environment-delivery-sale-${index}`,
+        items: [{ itemType: 'servico', serviceId: String(new mongoose.Types.ObjectId()), quantidade: 1, valor: 30, subtotal: 30 }],
+        payments: [{ id: 'dinheiro', valor: 30 }], totalBruto: 30, totalLiquido: 30,
+        receiptSnapshot: { nfseEnvironment: environment } };
+      const send = (action, suffix, overrides) => request.post(`/pdvs/${base.pdv._id}/commands`)
+        .set('Authorization', 'Bearer token').set('X-Idempotency-Key', `environment-delivery-${index}-${suffix}`)
+        .send({ action, payload: { ...common, ...overrides } });
+      const registered = await send('pdv.delivery.register', 'register', { nfseEnvironment: environment });
+      assert.equal(registered.status, 200, registered.text);
+      for (let replay = 0; replay < 2; replay += 1) {
+        const finalized = await send('pdv.delivery.finalize', 'finalize', { nfseEnvironment: environment === 'producao' ? 'homologacao' : 'producao' });
+        assert.equal(finalized.status, 200, finalized.text);
+        assert.equal(finalized.body.state.completedSales.find(sale => sale.id === common.saleId).nfseEnvironment, environment);
+      }
+      const persisted = await PdvState.findOne({ pdv: base.pdv._id }).lean();
+      const sale = persisted.completedSales.find(sale => sale.id === common.saleId);
+      assert.equal(sale.nfseEnvironment, environment);
+      assert.equal(sale.receiptSnapshot.nfseEnvironment, environment);
+    }
+  });
+
   test('finalizes sale through pdv.sale.finalize and updates state', async () => {
     const base = await createFixture({ caixaAberto: false });
     const app = createApp();

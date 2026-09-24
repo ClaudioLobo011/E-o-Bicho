@@ -17,6 +17,7 @@ const Deposit = require('../models/Deposit');
 const ProfessionalCommissionConfig = require('../models/ProfessionalCommissionConfig');
 const PdvDesktopSyncTombstone = require('../models/PdvDesktopSyncTombstone');
 const { canonicalSaleCodeIdentifier } = require('../utils/pdvCodeSequences');
+const { getPdvNfseConfiguration } = require('../utils/nfseEnvironment');
 
 const router = express.Router();
 const clean = (value) => String(value || '').trim();
@@ -245,7 +246,7 @@ router.get('/bootstrap', async (req, res) => {
     version: 2,
     protocol: { version: 2, legacyCompatible: true, cursorFormat: 'updatedAt+_id' },
     generatedAt: new Date().toISOString(),
-    pdv: { ...pdv, nfseConfiguration: (pdv.empresaEmitenteFiscal || pdv.empresa)?.nfse || { enabled: false } },
+    pdv: { ...pdv, nfseConfiguration: getPdvNfseConfiguration(pdv, pdv.empresaEmitenteFiscal || pdv.empresa) },
     state: state ? { ...state, saleCodeIdentifier: canonicalSaleCodeIdentifier(pdv) } : null,
     paymentMethods,
     versions: {

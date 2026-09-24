@@ -37,6 +37,7 @@ const { isR2Configured, uploadBufferToR2, buildPublicUrl } = require('../utils/c
 const createDesktopSyncV2Router = require('./pdvDesktopSyncV2');
 const { reserveScopedSequence, pdvSaleSequenceKey, pdvBudgetSequenceKey } = require('../utils/sequences');
 const { canonicalSaleCodeIdentifier, historicalPdvSequence } = require('../utils/pdvCodeSequences');
+const { getPdvNfseConfiguration } = require('../utils/nfseEnvironment');
 
 const router = express.Router();
 require('../services/desktopPetHistory').registerPetHistory(router, authenticateHost);
@@ -1268,6 +1269,7 @@ async function materializeDesktopEvent(event, pdv, host) {
     action = 'pdv.delivery.register';
     payload = {
       nfseCustomerIdentification: source.nfseCustomerIdentification === 'not_informed' ? 'not_informed' : 'identified',
+      nfseEnvironment: ['homologacao', 'producao'].includes(source.nfseEnvironment) ? source.nfseEnvironment : '',
       orderId: source.orderId || source.deliveryOrderId || source.id,
       saleId: source.saleRecordId || source.saleId || '',
       saleRecordId: source.saleRecordId || source.saleId || '',
@@ -1291,6 +1293,7 @@ async function materializeDesktopEvent(event, pdv, host) {
     const payments = await hydratePayments(source.payments || []);
     payload = {
       ...(Object.prototype.hasOwnProperty.call(source, 'nfseCustomerIdentification') ? { nfseCustomerIdentification: source.nfseCustomerIdentification === 'not_informed' ? 'not_informed' : 'identified' } : {}),
+      ...(['homologacao', 'producao'].includes(source.nfseEnvironment) ? { nfseEnvironment: source.nfseEnvironment } : {}),
       orderId: source.orderId || source.deliveryOrderId,
       saleId: source.id,
       saleRecordId: source.saleRecordId || '',
@@ -1315,6 +1318,7 @@ async function materializeDesktopEvent(event, pdv, host) {
     const payments = await hydratePayments(source.payments || []);
     payload = {
       nfseCustomerIdentification: source.nfseCustomerIdentification === 'not_informed' ? 'not_informed' : 'identified',
+      nfseEnvironment: ['homologacao', 'producao'].includes(source.nfseEnvironment) ? source.nfseEnvironment : '',
       saleId: source.id,
       saleCode: source.saleCode,
       createdAt: source.createdAt || event.occurredAt,
@@ -1359,6 +1363,7 @@ async function materializeDesktopEvent(event, pdv, host) {
   if (['sale.completed', 'delivery.finalized'].includes(event.type)) {
     payload.receiptSnapshot = {
       nfseCustomerIdentification: payload.nfseCustomerIdentification,
+      nfseEnvironment: payload.nfseEnvironment || '',
       meta: { saleCode: payload.saleCode },
       items: payload.items,
       cliente: { id: source.customerId || '', nome: source.customerName || '', documento: source.customerDocument || '' },
@@ -1681,7 +1686,7 @@ router.get('/bootstrap', authenticateHost, async (req, res) => {
   return res.json({
     version: 1,
     generatedAt: new Date().toISOString(),
-    pdv: { ...pdv, nfseConfiguration: (pdv.empresaEmitenteFiscal || pdv.empresa)?.nfse || { enabled: false } },
+    pdv: { ...pdv, nfseConfiguration: getPdvNfseConfiguration(pdv, pdv.empresaEmitenteFiscal || pdv.empresa) },
     state: state ? { ...state, saleCodeIdentifier: canonicalSaleCodeIdentifier(pdv) } : null,
     paymentMethods,
     // Informe explicitamente o feed sem cache do CDN do site. Assim uma nova
@@ -2194,7 +2199,7 @@ router.get('/nfse/config', authenticateHost, async (req, res) => {
   const pdv = await Pdv.findById(req.desktopHost.pdv).lean();
   if (!pdv || pdv.desktop?.status === 'suspenso') return res.status(403).json({ message: 'PDV indisponível.' });
   const store = await Store.findById(pdv.empresaEmitenteFiscal || pdv.empresa).select('nfse nome razaoSocial inscricaoMunicipal codigoIbgeMunicipio').lean();
-  return res.json({ nfseConfiguration: store?.nfse || { enabled: false }, fiscalIssuerStoreId: String(store?._id || '') });
+  return res.json({ nfseConfiguration: getPdvNfseConfiguration(pdv, store), fiscalIssuerStoreId: String(store?._id || '') });
 });
 
 router.get('/fiscal/config', authenticateHost, async (req, res) => {

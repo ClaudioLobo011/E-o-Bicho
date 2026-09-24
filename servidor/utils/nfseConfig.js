@@ -27,6 +27,27 @@ function normalizeStoreNfse(value = {}) {
     throw invalid('Para habilitar NFS-e, informe série da DPS, regime especial e opção pelo Simples Nacional.');
   }
   if (config.enabled && config.opSimpNac === '3' && !config.regApTribSN) throw invalid('Informe o regime de apuração do Simples Nacional.');
+  if (input.productionEnabledAt != null && input.productionEnabledAt !== '') {
+    const timestamp = new Date(input.productionEnabledAt);
+    if (!Number.isFinite(timestamp.getTime())) throw invalid('Data de ativação da produção da NFS-e inválida.');
+    config.productionEnabledAt = timestamp.toISOString();
+  }
+  return config;
+}
+
+// The activation boundary is server-owned. Editing company settings must not
+// erase it or backdate it and thereby promote old test sales into production.
+function prepareStoreNfseForSave(value, previous = {}, now = new Date()) {
+  const { productionEnabledAt: ignored, ...input } = object(value);
+  const config = normalizeStoreNfse(input);
+  const existing = object(previous);
+  if (existing.productionEnabledAt) {
+    const timestamp = new Date(existing.productionEnabledAt);
+    if (!Number.isFinite(timestamp.getTime())) throw invalid('Data de ativação da produção da NFS-e inválida.');
+    config.productionEnabledAt = timestamp.toISOString();
+  } else if (config.enabled && config.environment === 'producao') {
+    config.productionEnabledAt = new Date(now).toISOString();
+  }
   return config;
 }
 
@@ -118,4 +139,4 @@ function normalizeServiceFiscalMap(value) {
   return output;
 }
 
-module.exports = { normalizeStoreNfse, normalizeNfseFiscal, validateNfseFiscal, normalizeServiceFiscalMap };
+module.exports = { normalizeStoreNfse, prepareStoreNfseForSave, normalizeNfseFiscal, validateNfseFiscal, normalizeServiceFiscalMap };

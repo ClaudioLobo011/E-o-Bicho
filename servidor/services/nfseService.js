@@ -26,6 +26,19 @@ const sum = (items, field) => items.reduce((total, item) => total + cents(item[f
 const isService = (item) => ['service', 'servico', 'serviço'].includes(text(item.itemType || item.tipoItem || item.type || item.kind).toLowerCase()) || !!(item.serviceId || item.servicoId || item.servico);
 const documentFields = '+dpsXml +xmlContent +lockToken +cancelRequestXml +cancelEventXml';
 const LOCK_MS = 180000;
+const PROGRESS_STAGES = ['building_xml', 'signing', 'transmitting'];
+function publicProgress(value) {
+  if (!value || !PROGRESS_STAGES.includes(value.stage)) return null;
+  const timestamp = input => Number.isFinite(Date.parse(input || '')) ? new Date(input).toISOString() : undefined;
+  const steps = {};
+  for (const stage of PROGRESS_STAGES) {
+    const startedAt = timestamp(value.steps?.[stage]?.startedAt);
+    const completedAt = timestamp(value.steps?.[stage]?.completedAt);
+    if (startedAt) steps[stage] = { startedAt, ...(completedAt ? { completedAt } : {}) };
+  }
+  return { stage: value.stage, updatedAt: timestamp(value.updatedAt),
+    documentIndex: Number(value.documentIndex) || 1, documentCount: Number(value.documentCount) || 1, steps };
+}
 const cancelledSale = (sale) => ['cancelled', 'cancelado', 'cancelada', 'canceled'].includes(text(sale?.status).toLowerCase());
 const FREE_SERVICES_NOTICE = 'Os serviços desta venda são gratuitos; não há valor de serviço para emitir NFS-e.';
 // Leiaute nacional v1.01, MUN.INCID_INFO.SERV.: grupo 05 tem incidência no
@@ -153,7 +166,9 @@ async function loadCertificate(store) {
 
 const publicDocument = (document) => {
   const d = plain(document);
-  return { id: id(d), pdv: id(d.pdv), saleId: d.saleId, saleCode: d.saleCode, store: id(d.store), issuerName: text(d.issuerName || d.snapshot?.issuer?.name), issuerCnpj: digits(d.issuerCnpj || d.snapshot?.issuer?.cnpj), approximateTaxes: approximateTaxes(d.snapshot?.group?.rule, d.total), status: d.status, number: d.number || '', accessKey: d.accessKey || '', verificationCode: d.verificationCode || '', consultationUrl: d.consultationUrl || '', xmlContent: d.xmlContent || '', total: d.total, environment: d.environment, issuedAt: d.issuedAt || null, error: d.error || '', dpsId: d.dpsId, dpsNumber: d.dpsNumber, dpsSerie: d.dpsSerie, cancellationReason: d.cancellationReason || '', cancelledAt: d.cancelledAt || null };
+  const progress = publicProgress(d.progress);
+  return { id: id(d), pdv: id(d.pdv), saleId: d.saleId, saleCode: d.saleCode, store: id(d.store), issuerName: text(d.issuerName || d.snapshot?.issuer?.name), issuerCnpj: digits(d.issuerCnpj || d.snapshot?.issuer?.cnpj), approximateTaxes: approximateTaxes(d.snapshot?.group?.rule, d.total), status: d.status, number: d.number || '', accessKey: d.accessKey || '', verificationCode: d.verificationCode || '', consultationUrl: d.consultationUrl || '', xmlContent: d.xmlContent || '', total: d.total, environment: d.environment, issuedAt: d.issuedAt || null, error: d.error || '', dpsId: d.dpsId, dpsNumber: d.dpsNumber, dpsSerie: d.dpsSerie, cancellationReason: d.cancellationReason || '', cancelledAt: d.cancelledAt || null,
+    ...(progress ? { progress, progressStage: d.status === 'authorized' ? 'authorized' : ['rejected', 'unknown'].includes(d.status) ? 'error' : progress.stage } : {}) };
 };
 function approximateTaxes(rule, total) {
   if (!rule || rule.totalTributosModo === 'nao_informar' || !Number.isFinite(Number(total))) return null;
@@ -204,6 +219,8 @@ function findCancellationEvent(payload, accessKey, environment) {
   return null;
 }
 
+const { resolveSaleNfseEnvironment } = require('../utils/nfseEnvironment');
+
 function createNfseService(dependencies = {}) {
   const Model = dependencies.Model || NfseDocument;
   const SaleLock = dependencies.SaleLock || NfseDocument.SaleLock;
@@ -236,10 +253,14 @@ function createNfseService(dependencies = {}) {
     if (!pricedServiceItems.length) return { ready: !issues.length, issues, groups: [], serviceTotal: 0, itemCount: serviceItems.length, freeServiceCount: freeServiceItems.length, warning: FREE_SERVICES_NOTICE, environment: environment || store?.nfse?.environment };
     const issuerStore = await resolveStore(store, pdv);
     const config = plain(issuerStore.nfse);
-    const env = environment || config.environment;
+    const previousDocuments = await Model.find({ pdv: id(pdv), saleId: sale.id, status: { $ne: 'superseded' } }).select('environment').lean();
+    let env = config.environment;
+    try {
+      env = resolveSaleNfseEnvironment({ sale, pdv, store: issuerStore, requestedEnvironment: environment,
+        documentEnvironments: previousDocuments.map(document => document.environment) });
+    } catch (error) { issues.push(error.message); }
     if (!config.enabled) issues.push('Habilite a emissão de NFS-e no cadastro da empresa.');
     if (!['homologacao', 'producao'].includes(env)) issues.push('Selecione o ambiente da NFS-e no cadastro da empresa.');
-    if (environment && environment !== config.environment) issues.push('O ambiente solicitado difere do configurado para NFS-e na empresa.');
     if (!/^\d{1,5}$/.test(text(config.serieDps)) || Number(config.serieDps) < 1 || Number(config.serieDps) > 49999) issues.push('Informe uma série DPS entre 1 e 49999.');
     const issuer = { cnpj: digits(issuerStore.cnpj), municipality: digits(issuerStore.codigoIbgeMunicipio), im: text(issuerStore.inscricaoMunicipal), includeIm: config.incluirInscricaoMunicipal === true, opSimpNac: text(config.opSimpNac), regApTribSN: text(config.regApTribSN), regimeEspecialTributacao: text(config.regimeEspecialTributacao), name: text(issuerStore.razaoSocial || issuerStore.nome) };
     if (!cnpj.isValid(issuer.cnpj)) issues.push('Informe um CNPJ válido para a empresa emitente.');
@@ -329,12 +350,14 @@ function createNfseService(dependencies = {}) {
     if (environment) query.environment = environment;
     const found = await Model.find(query).select('+xmlContent').sort({ createdAt: 1 }).lean();
     const documents = found.map(publicDocument);
+    const lease = await SaleLock.findById(`${id(pdv)}:${text(sale?.id || sale)}`).select('progress until').lean();
+    const progress = lease?.until > now() ? publicProgress(lease.progress) : null;
     if (!documents.length && sale && typeof sale === 'object') {
       const services = projectItems(sale).filter(isService);
       if (!services.length && sourceItems(sale).length) return { documents, nfseStatus: 'not_applicable' };
       if (services.length && services.every(isComplimentaryService)) return { documents, nfseStatus: 'not_applicable', freeServiceCount: services.length, warning: FREE_SERVICES_NOTICE };
     }
-    return { documents, nfseStatus: aggregateStatus(documents) };
+    return { documents, nfseStatus: aggregateStatus(documents), ...(progress ? { progress } : {}) };
   }
 
   async function claim(document) {
@@ -379,14 +402,19 @@ function createNfseService(dependencies = {}) {
     return cancellation ? { ...result, status: 'cancelled', cancelledAt: cancellation.cancelledAt || now(), cancelEventXml: cancellation.xml } : result;
   }
 
-  async function createDocument({ sale, pdv, plan, group, revision }) {
+  async function createDocument({ sale, pdv, plan, group, revision, progress }) {
     const number = await nextNumber({ scope: 'nfse_dps', reference: `${group.snapshot.issuer.cnpj}:${plan.environment}:${Number(group.snapshot.serie)}` });
     if (!Number.isSafeInteger(number) || number < 1 || number > 999999999999999) throw new NfseValidationError(['A sequência de DPS ultrapassou o limite de 15 dígitos. Configure outra série livre.']);
     const issuedAt = now();
     const dpsId = buildDpsId({ municipality: group.snapshot.issuer.municipality, cnpj: group.snapshot.issuer.cnpj, serie: group.snapshot.serie, number });
-    const dpsXml = signXml(buildDpsXml({ snapshot: group.snapshot, number, issuedAt }), plan.pair);
+    await progress.step('building_xml');
+    const unsignedXml = buildDpsXml({ snapshot: group.snapshot, number, issuedAt });
+    await progress.step('building_xml', true);
+    await progress.step('signing');
+    const dpsXml = signXml(unsignedXml, plan.pair);
+    await progress.step('signing', true);
     try {
-      return plain(await Model.create({ pdv: id(pdv), store: id(plan.store), saleId: sale.id, saleCode: text(sale.saleCode), environment: plan.environment, groupKey: group.groupKey, revision, sourceHash: group.sourceHash, snapshot: group.snapshot, dpsId, dpsNumber: number, dpsSerie: group.snapshot.serie, dpsXml, total: group.total }));
+      return plain(await Model.create({ pdv: id(pdv), store: id(plan.store), saleId: sale.id, saleCode: text(sale.saleCode), environment: plan.environment, groupKey: group.groupKey, revision, sourceHash: group.sourceHash, snapshot: group.snapshot, dpsId, dpsNumber: number, dpsSerie: group.snapshot.serie, dpsXml, total: group.total, progress: progress.snapshot() }));
     } catch (error) {
       if (error.code !== 11000) throw error;
       const existing = await Model.findOne({ pdv: id(pdv), saleId: sale.id, environment: plan.environment, groupKey: group.groupKey, revision }).select(documentFields).lean();
@@ -396,7 +424,7 @@ function createNfseService(dependencies = {}) {
     }
   }
 
-  async function processDocument(document, transport) {
+  async function processDocument(document, transport, progress) {
     if (['authorized', 'cancelled', 'superseded'].includes(document.status)) return document;
     const locked = await claim(document);
     if (!locked) return { ...document, status: 'processing', error: 'Emissão em andamento em outro terminal. Consulte novamente.' };
@@ -409,23 +437,26 @@ function createNfseService(dependencies = {}) {
         if (recovered) return await update(locked, { ...recovered, error: '', errorCodes: [] });
       }
       await update(locked, { status: 'processing', attempts: locked.attempts + 1, lastAttemptAt: now(), error: '' });
+      await progress.step('transmitting');
+      await update(locked, { progress: progress.snapshot() });
       stage = 'post';
       const response = await transport.emit(locked.environment, locked.dpsXml);
+      await progress.step('transmitting', true);
       stage = 'response';
       let authorized;
       if (response.nfseXmlGZipB64) authorized = parseAuthorizedXml(decompressXml(response.nfseXmlGZipB64), locked);
       else authorized = await queryIssued(locked, transport);
       if (!authorized) throw new Error('Emissor Nacional não retornou a NFS-e autorizada; consulte antes de tentar novamente.');
-      return await update(locked, { ...authorized, error: '', errorCodes: [] });
+      return await update(locked, { ...authorized, error: '', errorCodes: [], progress: progress.snapshot() });
     } catch (error) {
       // Só uma rejeição fiscal explícita confirma que não houve autorização.
       const rejected = stage === 'post' && error.statusCode === 400 && Array.isArray(error.codes) && error.codes.length > 0 && !error.uncertain;
-      return await update(locked, { status: rejected ? 'rejected' : 'unknown', error: text(error.message).slice(0, 2500), errorCodes: error.codes || [] });
+      return await update(locked, { status: rejected ? 'rejected' : 'unknown', error: text(error.message).slice(0, 2500), errorCodes: error.codes || [], progress: progress.snapshot() });
     } finally { await release(locked); }
   }
 
   async function emitSaleNfse(input) {
-    return withSaleFiscalLock(input, async (assertLease) => {
+    return withSaleFiscalLock(input, async (assertLease, progress) => {
       const canonicalSale = await reloadSale(input);
       if (!canonicalSale) throw Object.assign(new Error('Venda não encontrada para revalidar a emissão. Aguarde a sincronização.'), { status: 404 });
       const freshInput = { ...input, sale: plain(canonicalSale) };
@@ -437,7 +468,7 @@ function createNfseService(dependencies = {}) {
       }
       // A primeira emissão espera a criação dos índices únicos antes de gravar/transmitir.
       await Model.init();
-      return emitPlan(freshInput, plan, assertLease);
+      return emitPlan(freshInput, plan, assertLease, progress);
     });
   }
 
@@ -450,22 +481,44 @@ function createNfseService(dependencies = {}) {
     const saleLockId = `${resolvedPdv}:${resolvedSale}`;
     const token = crypto.randomUUID();
     try {
-      await SaleLock.findOneAndUpdate({ _id: saleLockId, until: { $lt: now() } }, { $set: { token, until: new Date(now().getTime() + LOCK_MS) } }, { upsert: true, new: true });
+      await SaleLock.findOneAndUpdate({ _id: saleLockId, until: { $lt: now() } }, { $set: { token, until: new Date(now().getTime() + LOCK_MS), progress: null } }, { upsert: true, new: true });
     } catch (error) {
       if (error.code !== 11000) throw error;
       throw Object.assign(new Error('Venda em processamento fiscal ou cancelamento. Aguarde e consulte novamente.'), { status: 409, statusCode: 409, code: 'NFSE_SALE_BUSY' });
     }
     let lostLease = false;
+    let progressValue = null;
+    const progress = {
+      reset(documentIndex, documentCount, previous) {
+        progressValue = { ...(publicProgress(previous) || {}), documentIndex, documentCount };
+      },
+      snapshot: () => publicProgress(progressValue),
+      async step(stage, completed = false) {
+        if (!PROGRESS_STAGES.includes(stage)) throw new Error('Etapa de emissão NFS-e inválida.');
+        const at = now().toISOString();
+        const steps = { ...(progressValue?.steps || {}) };
+        steps[stage] = completed ? { ...steps[stage], completedAt: at } : { startedAt: at };
+        progressValue = { ...progressValue, stage, updatedAt: at, steps };
+        const result = await SaleLock.updateOne({ _id: saleLockId, token, until: { $gt: now() } }, { $set: { progress: publicProgress(progressValue) } });
+        if (!result.matchedCount) {
+          lostLease = true;
+          throw Object.assign(new Error('A trava da emissão expirou. Consulte a venda antes de continuar.'), { status: 409, statusCode: 409 });
+        }
+      },
+    };
     const heartbeat = setInterval(() => {
       SaleLock.updateOne({ _id: saleLockId, token }, { $set: { until: new Date(now().getTime() + LOCK_MS) } }).then((result) => { if (!result.matchedCount) lostLease = true; }).catch(() => { lostLease = true; });
-    }, 30000);
+    }, dependencies.saleHeartbeatMs || 30000);
     heartbeat.unref();
     try {
-      return await operation(() => { if (lostLease) throw Object.assign(new Error('A trava da emissão expirou. Consulte a venda antes de continuar.'), { status: 409, statusCode: 409 }); });
+      return await operation(() => { if (lostLease) throw Object.assign(new Error('A trava da emissão expirou. Consulte a venda antes de continuar.'), { status: 409, statusCode: 409 }); }, progress);
+    } catch (error) {
+      if (progress.snapshot()) error.progress = progress.snapshot();
+      throw error;
     } finally { clearInterval(heartbeat); await SaleLock.deleteOne({ _id: saleLockId, token }); }
   }
 
-  async function emitPlan(input, plan, assertLease) {
+  async function emitPlan(input, plan, assertLease, progress) {
     const { sale, pdv } = input;
     const transport = transportFactory(plan.pair);
     let existing = await Model.find({ pdv: id(pdv), saleId: sale.id, environment: plan.environment, status: { $ne: 'superseded' } }).select(documentFields).sort({ revision: -1 }).lean();
@@ -492,6 +545,7 @@ function createNfseService(dependencies = {}) {
     for (const group of plan.groups) {
       assertLease();
       let document = existing.find((d) => d.groupKey === group.groupKey);
+      progress.reset(output.length + 1, plan.groups.length, document?.progress);
       if (document && id(document.store) !== id(plan.store)) throw new NfseValidationError(['Já existe uma DPS desta venda para outra empresa. Consulte a emissão original.']);
       if (document && document.sourceHash !== group.sourceHash) {
         if (document.status !== 'rejected') throw new NfseValidationError(['Os dados da venda ou do cadastro fiscal foram alterados após iniciar a emissão. Consulte a DPS original; não será criada uma nota duplicada.']);
@@ -500,17 +554,17 @@ function createNfseService(dependencies = {}) {
         try {
           const recovered = await queryIssued(locked, transport);
           if (recovered) { output.push(publicDocument(await update(locked, { ...recovered, error: '' }))); continue; }
-          document = await createDocument({ sale, pdv, plan, group, revision: locked.revision + 1 });
+          document = await createDocument({ sale, pdv, plan, group, revision: locked.revision + 1, progress });
           await update(locked, { status: 'superseded', error: 'Rejeição corrigida em uma nova DPS; histórico preservado.' });
         } finally { await release(locked); }
       }
       if (!document) {
         const previous = await Model.findOne({ pdv: id(pdv), saleId: sale.id, environment: plan.environment, groupKey: group.groupKey }).sort({ revision: -1 }).lean();
-        document = await createDocument({ sale, pdv, plan, group, revision: (previous?.revision || 0) + 1 });
+        document = await createDocument({ sale, pdv, plan, group, revision: (previous?.revision || 0) + 1, progress });
       }
-      output.push(publicDocument(await processDocument(document, transport)));
+      output.push(publicDocument(await processDocument(document, transport, progress)));
     }
-    return { documents: output, nfseStatus: aggregateStatus(output) };
+    return { documents: output, nfseStatus: aggregateStatus(output), ...(progress.snapshot() ? { progress: progress.snapshot() } : {}) };
   }
 
   async function consultDocument(documentId) {

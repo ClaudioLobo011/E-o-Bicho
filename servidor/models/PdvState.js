@@ -74,6 +74,7 @@ const receivableSchema = new mongoose.Schema(
     customerName: { type: String, trim: true },
     customerDocument: { type: String, trim: true },
     nfseCustomerIdentification: { type: String, enum: ['identified', 'not_informed'], default: 'identified' },
+    nfseEnvironment: { type: String, enum: ['homologacao', 'producao'] },
     seller: { type: mongoose.Schema.Types.Mixed, default: null },
     sellerName: { type: String, trim: true },
     sellerCode: { type: String, trim: true },

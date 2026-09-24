@@ -21,6 +21,19 @@ test('sincronização desktop preserva escolha explícita do tomador e cliente c
   }
 });
 
+test('sincronização desktop mantém o ambiente fiscal congelado em venda e delivery sem inferir produção para legado', async () => {
+  const start = source.indexOf("  if (event.type === 'cash.opened')", source.indexOf('async function materializeDesktopEvent('));
+  const end = source.indexOf('  await pdvDomain.enqueuePdvStateWrite(', start);
+  for (const type of ['sale.completed', 'delivery.registered', 'delivery.finalized']) {
+    for (const environment of ['homologacao', 'producao', undefined]) {
+      const context = vm.createContext({ source: { nfseEnvironment: environment }, event: { type }, clean: value => String(value || '').trim(), hydrateSaleItems: async items => items, hydratePayments: async payments => payments });
+      const result = await vm.runInContext(`(async () => { let action, payload; ${source.slice(start, end)} return { action, payload }; })()`, context);
+      assert.equal(result.payload.nfseEnvironment || '', environment || '', `${type}/${environment}`);
+      if (type !== 'delivery.registered') assert.equal(result.payload.receiptSnapshot.nfseEnvironment, environment || '');
+    }
+  }
+});
+
 function dateContext() {
   const context = vm.createContext({ clean: (value) => String(value ?? '').trim(), Intl, Date, userName: () => 'Cliente teste', deriveAppointmentStatus: () => 'finalizado' });
   const start = source.indexOf('function desktopServiceDate(');

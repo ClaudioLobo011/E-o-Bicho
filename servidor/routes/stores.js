@@ -1,7 +1,7 @@
 ﻿const express = require('express');
 const router = express.Router();
 const Store = require('../models/Store');
-const { normalizeStoreNfse } = require('../utils/nfseConfig');
+const { normalizeStoreNfse, prepareStoreNfseForSave } = require('../utils/nfseConfig');
 const { recordDesktopSyncDeletion } = require('../services/desktopSyncTombstones');
 const multer = require('multer');
 const path = require('path');
@@ -696,6 +696,7 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
         } else {
             payload.codigo = await resolveNextStoreCode();
         }
+        if (payload.nfse) payload.nfse = prepareStoreNfseForSave(payload.nfse);
         const newStore = new Store(payload);
         const savedStore = await newStore.save();
         res.status(201).json(savedStore);
@@ -726,12 +727,13 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
             payload.codigo = existingStore.codigo || (await resolveNextStoreCode(existingStore._id));
         }
 
-        const updatedStore = await Store.findByIdAndUpdate(
-            existingStore._id,
+        if (payload.nfse) payload.nfse = prepareStoreNfseForSave(payload.nfse, existingStore.nfse);
+        const updatedStore = await Store.findOneAndUpdate(
+            { _id: existingStore._id, updatedAt: existingStore.updatedAt || { $exists: false } },
             payload,
             { new: true, runValidators: true }
         );
-        if (!updatedStore) return res.status(404).json({ message: 'Loja nÃ£o encontrada.' });
+        if (!updatedStore) return res.status(409).json({ message: 'O cadastro da empresa foi alterado durante o salvamento. Recarregue os dados e tente novamente.' });
         res.json(updatedStore);
     } catch (error) {
         console.error("Erro ao atualizar loja:", error);

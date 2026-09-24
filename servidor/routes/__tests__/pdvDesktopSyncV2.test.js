@@ -103,6 +103,29 @@ test.describe('sincronização incremental do PDV Desktop v2', () => {
     }
   });
 
+  test('empresa em produção mantém PDV de teste em homologação e caixa operacional no ambiente produtivo', async () => {
+    const base = await pairedFixture('nfse-production-isolation');
+    const activation = '2026-09-24T12:00:00.000Z';
+    const issuer = await Store.create({ codigo: 'NFSE-PRODUCTION', nome: 'Emitente Produção Teste',
+      nfse: { enabled: true, environment: 'producao', serieDps: '49997', regimeEspecialTributacao: '0', opSimpNac: '1', productionEnabledAt: activation } });
+    for (const environment of ['homologacao', 'producao']) {
+      await Pdv.updateOne({ _id: base.pdv._id }, { $set: { empresaEmitenteFiscal: issuer._id, ambientePadrao: environment, ambientesHabilitados: [environment], serieNfce: '104' } });
+      const configuration = await base.request.get('/desktop/nfse/config').set(base.headers);
+      assert.equal(configuration.status, 200, configuration.text);
+      assert.equal(configuration.body.nfseConfiguration.environment, environment);
+      for (const endpoint of ['/desktop/bootstrap', '/desktop/sync/v2/bootstrap']) {
+        const response = await base.request.get(endpoint).set(base.headers);
+        assert.equal(response.status, 200, response.text);
+        assert.equal(response.body.pdv.empresa._id, String(base.company._id));
+        assert.equal(response.body.pdv.empresaEmitenteFiscal._id, String(issuer._id));
+        assert.deepEqual(response.body.pdv.nfseConfiguration, configuration.body.nfseConfiguration);
+        assert.equal(response.body.pdv.serieNfce, '104');
+        assert.equal(response.body.pdv.ambientePadrao, environment);
+        assert.equal(response.body.pdv.nfseConfiguration.productionEnabledAt, activation);
+      }
+    }
+  });
+
   test('emitente NFS-e desabilitado não herda habilitação da loja operacional', async () => {
     const base = await pairedFixture('nfse-disabled-issuer');
     await Store.updateOne({ _id: base.company._id }, { $set: { 'nfse.enabled': true } });
