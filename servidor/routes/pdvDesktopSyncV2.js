@@ -215,8 +215,8 @@ router.get('/bootstrap', async (req, res) => {
   const [pdv, state, paymentMethods, versions] = await Promise.all([
     Pdv.findById(host.pdv)
       .select('codigo nome apelido ativo tipoUso modoTerminais empresa empresaEmitenteFiscal serieNfe serieNfce numeroNfeInicial numeroNfceInicial numeroNfeAtual numeroNfceAtual ambientesHabilitados ambientePadrao sincronizacaoAutomatica permitirModoOffline mostrarParaFuncionarios limiteOffline configuracoesImpressao configuracoesVenda configuracoesFiscal configuracoesEstoque configuracoesFinanceiro desktop updatedAt')
-      .populate('empresa', '_id codigo nome nomeFantasia razaoSocial cnpj inscricaoEstadual telefone whatsapp imagem endereco cep municipio uf logradouro bairro numero complemento codigoIbgeMunicipio codigoUf updatedAt')
-      .populate('empresaEmitenteFiscal', '_id codigo nome nomeFantasia razaoSocial cnpj inscricaoEstadual telefone whatsapp imagem endereco cep municipio uf logradouro bairro numero complemento codigoIbgeMunicipio codigoUf updatedAt')
+      .populate('empresa', '_id codigo nome nomeFantasia razaoSocial cnpj inscricaoEstadual telefone whatsapp imagem endereco cep municipio uf logradouro bairro numero complemento codigoIbgeMunicipio codigoUf nfse updatedAt')
+      .populate('empresaEmitenteFiscal', '_id codigo nome nomeFantasia razaoSocial cnpj inscricaoEstadual telefone whatsapp imagem endereco cep municipio uf logradouro bairro numero complemento codigoIbgeMunicipio codigoUf nfse updatedAt')
       .lean(),
     PdvState.findOne({ pdv: host.pdv })
       // Somente o estado corrente indispensável. Históricos, vendas, deliveries,
@@ -245,7 +245,7 @@ router.get('/bootstrap', async (req, res) => {
     version: 2,
     protocol: { version: 2, legacyCompatible: true, cursorFormat: 'updatedAt+_id' },
     generatedAt: new Date().toISOString(),
-    pdv,
+    pdv: { ...pdv, nfseConfiguration: (pdv.empresaEmitenteFiscal || pdv.empresa)?.nfse || { enabled: false } },
     state: state ? { ...state, saleCodeIdentifier: canonicalSaleCodeIdentifier(pdv) } : null,
     paymentMethods,
     versions: {

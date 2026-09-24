@@ -65,6 +65,59 @@ test.describe('sincronização incremental do PDV Desktop v2', () => {
   test.after(async () => { await mongoose.disconnect(); if (mongo) await mongo.stop(); });
   test.beforeEach(async () => { await mongoose.connection.db.dropDatabase(); });
 
+  test('bootstrap v1/v2 e configuração NFS-e usam emitente fiscal mesmo com loja operacional desabilitada', async () => {
+    const base = await pairedFixture('nfse-other-issuer');
+    const issuer = await Store.create({ codigo: 'NFSE-ISSUER', nome: 'Emitente NFS-e Teste', cnpj: '00000000000000',
+      nfse: { enabled: true, environment: 'homologacao', serieDps: '49997', regimeEspecialTributacao: '0', opSimpNac: '1', incluirInscricaoMunicipal: false },
+      certificadoArquivoCriptografado: 'test-certificate-not-for-bootstrap', certificadoSenhaCriptografada: 'test-password-not-for-bootstrap' });
+    await Pdv.updateOne({ _id: base.pdv._id }, { $set: { empresaEmitenteFiscal: issuer._id } });
+    const configuration = await base.request.get('/desktop/nfse/config').set(base.headers);
+    assert.equal(configuration.status, 200, configuration.text);
+    assert.equal(configuration.body.fiscalIssuerStoreId, String(issuer._id));
+    for (const endpoint of ['/desktop/bootstrap', '/desktop/sync/v2/bootstrap']) {
+      const response = await base.request.get(endpoint).set(base.headers);
+      assert.equal(response.status, 200, response.text);
+      assert.equal(response.body.pdv.empresa._id, String(base.company._id));
+      assert.equal(response.body.pdv.empresa.nfse.enabled, false);
+      assert.equal(response.body.pdv.empresaEmitenteFiscal._id, String(issuer._id));
+      assert.deepEqual(response.body.pdv.nfseConfiguration, configuration.body.nfseConfiguration);
+      assert.equal(response.body.pdv.nfseConfiguration.enabled, true);
+      assert.equal(response.body.pdv.nfseConfiguration.environment, 'homologacao');
+      assert.equal(response.body.pdv.nfseConfiguration.serieDps, '49997');
+      assert.equal(JSON.stringify(response.body).includes('test-certificate-not-for-bootstrap'), false);
+      assert.equal(JSON.stringify(response.body).includes('test-password-not-for-bootstrap'), false);
+    }
+  });
+
+  test('bootstrap v1/v2 usa configuração NFS-e da própria loja quando não há emitente alternativo', async () => {
+    const base = await pairedFixture('nfse-same-issuer');
+    await Store.updateOne({ _id: base.company._id }, { $set: { nfse: { enabled: true, environment: 'homologacao', serieDps: '49997', regimeEspecialTributacao: '0', opSimpNac: '1' } } });
+    const configuration = await base.request.get('/desktop/nfse/config').set(base.headers);
+    assert.equal(configuration.status, 200, configuration.text);
+    assert.equal(configuration.body.fiscalIssuerStoreId, String(base.company._id));
+    for (const endpoint of ['/desktop/bootstrap', '/desktop/sync/v2/bootstrap']) {
+      const response = await base.request.get(endpoint).set(base.headers);
+      assert.equal(response.status, 200, response.text);
+      assert.deepEqual(response.body.pdv.nfseConfiguration, configuration.body.nfseConfiguration);
+      assert.equal(response.body.pdv.nfseConfiguration.enabled, true);
+    }
+  });
+
+  test('emitente NFS-e desabilitado não herda habilitação da loja operacional', async () => {
+    const base = await pairedFixture('nfse-disabled-issuer');
+    await Store.updateOne({ _id: base.company._id }, { $set: { 'nfse.enabled': true } });
+    const issuer = await Store.create({ codigo: 'NFSE-DISABLED', nome: 'Emitente Desabilitado Teste', nfse: { enabled: false } });
+    await Pdv.updateOne({ _id: base.pdv._id }, { $set: { empresaEmitenteFiscal: issuer._id } });
+    const configuration = await base.request.get('/desktop/nfse/config').set(base.headers);
+    assert.equal(configuration.status, 200, configuration.text);
+    for (const endpoint of ['/desktop/bootstrap', '/desktop/sync/v2/bootstrap']) {
+      const response = await base.request.get(endpoint).set(base.headers);
+      assert.equal(response.status, 200, response.text);
+      assert.deepEqual(response.body.pdv.nfseConfiguration, configuration.body.nfseConfiguration);
+      assert.equal(response.body.pdv.nfseConfiguration.enabled, false);
+    }
+  });
+
   test('cliente editado atualiza deliveries ativos e espelho incremental sem mudar pedidos finalizados', async () => {
     const base = await pairedFixture('delivery-customer-edit');
     const { syncActiveDeliveryCustomer } = require('../../services/desktopDeliveryCustomer');
