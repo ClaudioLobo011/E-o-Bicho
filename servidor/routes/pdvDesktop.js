@@ -2139,8 +2139,11 @@ router.post('/clinical-files/:fileId', authenticateHost, express.raw({ type: 'ap
 });
 
 router.get('/deliveries', authenticateHost, async (req, res) => {
+  const owner = await Pdv.findById(req.desktopHost.pdv).select('_id codigo').lean();
+  if (!owner) return res.status(404).json({ message: 'PDV não encontrado.' });
   const state = await PdvState.findOne({ pdv: req.desktopHost.pdv }).select('deliveryOrders').lean();
-  const deliveries = Array.isArray(state?.deliveryOrders) ? state.deliveryOrders : [];
+  const deliveries = (Array.isArray(state?.deliveryOrders) ? state.deliveryOrders : [])
+    .map((entry) => ({ ...entry, pdvId: String(owner._id), pdvCode: owner.codigo || '' }));
   return res.json({ deliveries, generatedAt: new Date().toISOString() });
 });
 

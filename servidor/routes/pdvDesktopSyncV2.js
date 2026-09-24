@@ -450,6 +450,8 @@ router.get('/appointments', async (req, res) => {
 router.get('/deliveries', async (req, res) => {
   const cursor = decodeCursor(req.query.cursor);
   if (req.query.cursor && !cursor) return res.status(400).json({ message: 'Cursor de deliveries inválido.' });
+  const owner = await Pdv.findById(req.desktopHost.pdv).select('_id codigo').lean();
+  if (!owner) return res.status(404).json({ message: 'PDV não encontrado.' });
   const limit = pageLimit(req);
   const documents = await PdvStateDeliveryOrder.find({ pdv: req.desktopHost.pdv, ...cursorQuery(cursor) })
     .sort({ updatedAt: 1, _id: 1 }).select('deliveryId payload updatedAt').limit(limit + 1).lean();
@@ -467,7 +469,7 @@ router.get('/deliveries', async (req, res) => {
   const next = cursorFor(rawPage[rawPage.length - 1], cursor && { id: String(cursor.id), updatedAt: cursor.updatedAt.toISOString() });
   const ignoredDuplicates = rawPage.length - page.length;
   return res.json({
-    deliveries: page.map((entry) => ({ ...(entry.payload || {}), cloudUpdatedAt: entry.updatedAt })),
+    deliveries: page.map((entry) => ({ ...(entry.payload || {}), pdvId: String(owner._id), pdvCode: owner.codigo || '', cloudUpdatedAt: entry.updatedAt })),
     nextCursor: next ? encodeCursor(next) : '', hasMore, ignoredDuplicates,
   });
 });

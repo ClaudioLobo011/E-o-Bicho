@@ -65,6 +65,25 @@ test.describe('sincronização incremental do PDV Desktop v2', () => {
   test.after(async () => { await mongoose.disconnect(); if (mongo) await mongo.stop(); });
   test.beforeEach(async () => { await mongoose.connection.db.dropDatabase(); });
 
+  test('deliveries v1/v2 incluem o pareamento canonico mesmo quando o payload legado omite ou informa outro PDV', async () => {
+    const base = await pairedFixture('delivery-context');
+    const orders = [{ id: 'missing-context', saleCode: 'DEL-1', status: 'emRota', total: 90 },
+      { id: 'stale-context', saleCode: 'DEL-2', status: 'registrado', total: 20, pdvId: 'old', pdvCode: 'OLD' }];
+    await PdvState.updateOne({ _id: base.state._id }, { $set: { deliveryOrders: orders } });
+    await PdvStateDeliveryOrder.create(orders.map(payload => ({ pdv: base.pdv._id, empresa: base.company._id, sourceState: base.state._id, deliveryId: payload.id, payload })));
+    await PdvStateDeliveryOrder.create({ pdv: new mongoose.Types.ObjectId(), sourceState: base.state._id, deliveryId: 'foreign', payload: { id: 'foreign' } });
+    for (const endpoint of ['/desktop/deliveries', '/desktop/sync/v2/deliveries']) {
+      const response = await base.request.get(endpoint).set(base.headers);
+      assert.equal(response.status, 200, response.text);
+      assert.equal(response.body.deliveries.length, 2);
+      for (const entry of response.body.deliveries) {
+        assert.equal(entry.pdvId, String(base.pdv._id));
+        assert.equal(entry.pdvCode, base.pdv.codigo);
+        assert.equal(entry.total, orders.find(order => order.id === entry.id).total);
+      }
+    }
+  });
+
   test('bootstrap v1/v2 e configuração NFS-e usam emitente fiscal mesmo com loja operacional desabilitada', async () => {
     const base = await pairedFixture('nfse-other-issuer');
     const issuer = await Store.create({ codigo: 'NFSE-ISSUER', nome: 'Emitente NFS-e Teste', cnpj: '00000000000000',
