@@ -7,6 +7,28 @@ document.addEventListener('DOMContentLoaded', () => {
     const modal = document.getElementById('store-modal');
     const modalCard = document.querySelector('[data-store-modal-card]');
     const form = document.getElementById('store-form');
+    const nfseInputs = Array.from(document.querySelectorAll('[data-store-nfse]'));
+    const collectNfse = () => Object.fromEntries(nfseInputs.map(input => [input.dataset.storeNfse, input.type === 'checkbox' ? input.checked : input.value.trim()]));
+    const updateNfseStatus = () => {
+        const config = collectNfse();
+        document.getElementById('store-nfse-simples-fields')?.classList.toggle('hidden', config.opSimpNac !== '3');
+        const status = document.getElementById('store-nfse-status');
+        if (status) status.textContent = !config.enabled
+            ? 'Emissão desabilitada. Configure os dados acima antes de habilitar a NFS-e.'
+            : config.environment === 'producao'
+                ? 'Produção selecionada. A emissão no PDV gera documento fiscal real após as validações do emissor.'
+                : 'Homologação selecionada. As notas de teste não possuem valor fiscal.';
+    };
+    const fillNfse = (config = {}) => {
+        nfseInputs.forEach(input => {
+            const value = config[input.dataset.storeNfse];
+            if (input.type === 'checkbox') input.checked = value === true;
+            else input.value = value ?? (input.dataset.storeNfse === 'environment' ? 'homologacao' : '');
+        });
+        updateNfseStatus();
+    };
+    nfseInputs.forEach(input => input.addEventListener('change', updateNfseStatus));
+    fillNfse();
     const cancelBtn = document.getElementById('cancel-store-modal-btn');
     const modalTitle = document.getElementById('store-modal-title');
     const hiddenStoreId = document.getElementById('store-id');
@@ -620,6 +642,7 @@ document.addEventListener('DOMContentLoaded', () => {
         modalTitle.textContent = 'Adicionar Nova Loja';
         hiddenStoreId.value = '';
         form.reset();
+        fillNfse();
         if (codigoInput) codigoInput.value = '';
         selectedServices = [];
         renderServiceTags();
@@ -727,6 +750,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateCscTokenClearButton(cscTokenHomologacaoClearBtn, false);
             }
             if (cnaeInput) {
+                fillNfse(store.nfse || {});
                 const cnaePrincipalValue = store.cnaePrincipal || store.cnae || '';
                 cnaeInput.value = formatSingleCnaeValue(cnaePrincipalValue);
             }
@@ -1808,6 +1832,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const codigo = codigoValue ? codigoValue.replace(/\D/g, '') : '';
 
         const storeData = {
+            nfse: collectNfse(),
             nome: nomeFantasiaInput.value,
             nomeFantasia: nomeFantasiaInput.value,
             razaoSocial: razaoSocialInput.value,
@@ -1934,6 +1959,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Carga Inicial ---
     createHorarioInputs();
-    fetchAndDisplayStores();
+    fetchAndDisplayStores().then(async () => {
+        const requestedStore = new URLSearchParams(window.location.search).get('editStore');
+        const requestedTab = new URLSearchParams(window.location.search).get('tab');
+        if (/^[a-f\d]{24}$/i.test(requestedStore || '')) {
+            await openModalForEdit(requestedStore);
+            if (requestedTab === 'nfse') activateTab('nfse');
+        }
+    });
     initializeLocationPicker();
 });

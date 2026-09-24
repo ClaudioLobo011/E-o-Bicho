@@ -9,6 +9,9 @@
   const form = document.getElementById('fiscal-rule-form');
   const codeInput = document.getElementById('fiscal-rule-code');
   const nameInput = document.getElementById('fiscal-rule-name');
+  const typeSelect = document.getElementById('fiscal-rule-type');
+  const serviceFields = document.getElementById('fiscal-rule-service-fields');
+  const productFields = document.getElementById('fiscal-rule-product-fields');
   const saveButton = document.getElementById('fiscal-rule-save');
   const cancelButton = document.getElementById('fiscal-rule-cancel');
 
@@ -196,9 +199,47 @@
     setValue('ibsCbs.pIBSUF', fiscal?.ibsCbs?.pIBSUF ?? '');
     setValue('ibsCbs.pIBSMun', fiscal?.ibsCbs?.pIBSMun ?? '');
     setValue('ibsCbs.pCBS', fiscal?.ibsCbs?.pCBS ?? '');
+    serviceFields?.querySelectorAll('[data-field]').forEach((input) => {
+      const value = input.dataset.field.split('.').reduce((result, key) => result?.[key], fiscal);
+      if (input.type === 'checkbox') input.checked = value === true;
+      else input.value = value ?? '';
+    });
+    updateFiscalType();
+  };
+
+  const updateFiscalType = () => {
+    const isService = typeSelect?.value === 'servico';
+    productFields?.classList.toggle('hidden', isService);
+    serviceFields?.classList.toggle('hidden', !isService);
+    productFields?.querySelectorAll('input, select, textarea').forEach(input => { input.disabled = isService; });
+    serviceFields?.querySelectorAll('input, select, textarea').forEach(input => { input.disabled = !isService; });
+    const value = (key) => form?.querySelector(`[data-field="nfse.${key}"]`)?.value;
+    const conditions = {
+      imunidade: value('tributacaoIss') === '2',
+      simples: value('totalTributosModo') === 'simples',
+      percentual: value('totalTributosModo') === 'percentual',
+      ibscbs: form?.querySelector('[data-field="nfse.ibsCbs.enabled"]')?.checked,
+    };
+    serviceFields?.querySelectorAll('[data-nfse-condition]').forEach(block => {
+      const visible = Boolean(conditions[block.dataset.nfseCondition]);
+      block.classList.toggle('hidden', !visible);
+      block.querySelectorAll('input, select, textarea').forEach(input => { input.disabled = !isService || !visible; });
+    });
+    if (typeSelect) typeSelect.disabled = Boolean(editingCode);
   };
 
   const collectFiscalFromForm = () => {
+    if (typeSelect?.value === 'servico') {
+      const nfse = {};
+      serviceFields.querySelectorAll('[data-field]').forEach(input => {
+        const keys = input.dataset.field.split('.').slice(1);
+        const target = keys.length === 2 ? (nfse[keys[0]] ||= {}) : nfse;
+        target[keys.at(-1)] = input.type === 'checkbox' ? input.checked
+          : input.type === 'number' ? (input.value === '' ? null : Number(input.value))
+          : input.value.trim();
+      });
+      return { nfse };
+    }
     const getValue = (selector) => {
       const input = form?.querySelector(`[data-field="${selector}"]`);
       if (!input) return '';
@@ -277,6 +318,7 @@
 
   const resetForm = () => {
     editingCode = null;
+    if (typeSelect) typeSelect.value = 'produto';
     if (nameInput) nameInput.value = '';
     if (codeInput) codeInput.value = currentStoreId ? String(nextCode) : '';
     fillFormFields({});
@@ -288,6 +330,7 @@
     editingCode = Number(rule.code) || null;
     if (codeInput) codeInput.value = rule.code ? String(rule.code) : '';
     if (nameInput) nameInput.value = rule.name || '';
+    if (typeSelect) typeSelect.value = rule.tipo || 'produto';
     fillFormFields(rule.fiscal || {});
     setSaveState();
   };
@@ -311,7 +354,14 @@
       const cfopNfe = fiscal?.cfop?.nfe || {};
       const cfopNfce = fiscal?.cfop?.nfce || {};
 
-      const chips = [
+      const chips = rule.tipo === 'servico' ? [
+        'Serviço — NFS-e',
+        `Código nacional: ${fiscal?.nfse?.codigoTributacaoNacional || '-'}`,
+        `NBS: ${fiscal?.nfse?.codigoNbs || '-'}`,
+        `ISS: ${fiscal?.nfse?.aliquotaIss == null ? 'Conforme enquadramento' : `${fiscal.nfse.aliquotaIss}%`}`,
+        `IBS/CBS: ${fiscal?.nfse?.ibsCbs?.enabled ? 'Informado' : 'Não informado'}`,
+      ] : [
+        'Mercadoria — NF-e / NFC-e',
         `Origem: ${fiscal?.origem || '-'}`,
         `CSOSN: ${fiscal?.csosn || '-'}`,
         `CST: ${fiscal?.cst || '-'}`,
@@ -472,11 +522,15 @@
         body: JSON.stringify({
           storeId: currentStoreId,
           name: trimmedName,
+          tipo: typeSelect?.value || 'produto',
           fiscal: fiscalPayload,
         }),
       });
 
-      if (!response.ok) throw new Error('Nao foi possivel salvar a regra fiscal padrao.');
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => ({}));
+        throw new Error(errorPayload.message || 'Não foi possível salvar a regra fiscal.');
+      }
       await response.json();
 
       showModal({
@@ -517,7 +571,10 @@
           method: 'DELETE',
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
-        if (!response.ok) throw new Error('Nao foi possivel remover a regra fiscal padrao.');
+        if (!response.ok) {
+          const errorPayload = await response.json().catch(() => ({}));
+          throw new Error(errorPayload.message || 'Não foi possível remover a regra fiscal.');
+        }
         await response.json();
         await loadRules();
       } catch (error) {
@@ -542,6 +599,8 @@
   };
 
   const initEvents = () => {
+    typeSelect?.addEventListener('change', updateFiscalType);
+    serviceFields?.addEventListener('change', updateFiscalType);
     storeSelect?.addEventListener('change', () => {
       currentStoreId = storeSelect.value || '';
       loadRules();

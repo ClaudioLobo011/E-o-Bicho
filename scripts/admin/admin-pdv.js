@@ -191,6 +191,7 @@
     selectedItemUnitValueOverride: null,
     itens: [],
     vendaCliente: null,
+    nfseCustomerIdentification: 'identified',
     vendaPet: null,
     paymentMethods: [],
     paymentMethodsLoading: false,
@@ -2927,6 +2928,8 @@
       const baseSubtotal = getSaleItemBaseSubtotal(item);
       return {
         index: String(index + 1).padStart(2, '0'),
+        itemType: window.EoBichoNfse?.isService(item) ? 'servico' : 'produto',
+        serviceId: item.serviceId || item.servicoId || '',
         nome: item.nome || 'Item da venda',
         codigo: code,
         quantidade: normalizeQuantity(item.quantidade || 0),
@@ -3658,6 +3661,13 @@
       createdAt: createdAt.toISOString(),
       createdAtLabel: record.createdAtLabel ? String(record.createdAtLabel) : '',
       receiptSnapshot: record.receiptSnapshot || null,
+      nfseDocuments: Array.isArray(record.nfseDocuments)
+        ? record.nfseDocuments.filter((document) => document && typeof document === 'object').map((document) => ({ ...document }))
+        : [],
+      nfseStatus: record.nfseStatus === 'emitting' ? 'pending' : String(record.nfseStatus || ''),
+      nfseError: String(record.nfseError || ''),
+      nfseWarning: String(record.nfseWarning || ''),
+      nfseCustomerIdentification: record.nfseCustomerIdentification === 'not_informed' ? 'not_informed' : 'identified',
       fiscalStatus: normalizedFiscalStatus,
       fiscalEmittedAt: record.fiscalEmittedAt ? new Date(record.fiscalEmittedAt).toISOString() : null,
       fiscalEmittedAtLabel: record.fiscalEmittedAtLabel ? String(record.fiscalEmittedAtLabel) : '',
@@ -4073,6 +4083,20 @@
       const current = currentRecord && typeof currentRecord === 'object' ? currentRecord : {};
       const incoming = incomingRecord && typeof incomingRecord === 'object' ? incomingRecord : {};
       const merged = { ...current, ...incoming };
+      if (!Object.prototype.hasOwnProperty.call(incoming, 'nfseCustomerIdentification')) {
+        merged.nfseCustomerIdentification = current.nfseCustomerIdentification || 'identified';
+      }
+      // NFS-e vem do repositório fiscal próprio; snapshots legados sem esses
+      // campos não devem apagar o resultado já consultado pelo caixa.
+      const hasNfseState = (record) => Boolean(record?.nfseStatus || record?.nfseError || record?.nfseDocuments?.length);
+      const nfseSource = current.nfseDocuments?.length && !incoming.nfseDocuments?.length
+        ? current : hasNfseState(incoming) ? incoming : hasNfseState(current) ? current : null;
+      if (nfseSource) {
+        merged.nfseDocuments = Array.isArray(nfseSource.nfseDocuments) ? nfseSource.nfseDocuments.map((document) => ({ ...document })) : [];
+        merged.nfseStatus = nfseSource.nfseStatus || '';
+        merged.nfseError = nfseSource.nfseError || '';
+        merged.nfseWarning = nfseSource.nfseWarning || '';
+      }
       const getPaymentStrength = (record) => {
         if (!record || typeof record !== 'object') return 0;
         const cashTotal = (Array.isArray(record.cashContributions) ? record.cashContributions : []).reduce(
@@ -5203,6 +5227,10 @@
     elements.customerOpenButtonLabel = document.getElementById('pdv-open-customer-label');
     elements.customerSummaryEmpty = document.getElementById('pdv-customer-summary-empty');
     elements.customerSummaryInfo = document.getElementById('pdv-customer-summary-info');
+    elements.nfseCustomerHint = document.getElementById('pdv-nfse-customer-hint');
+    elements.nfseFinalizeHint = document.getElementById('pdv-nfse-finalize-hint');
+    elements.nfseUnidentified = document.getElementById('pdv-nfse-unidentified');
+    elements.nfseUnidentifiedPanel = document.getElementById('pdv-nfse-unidentified-panel');
     elements.customerName = document.getElementById('pdv-customer-name');
     elements.customerDoc = document.getElementById('pdv-customer-doc');
     elements.customerContact = document.getElementById('pdv-customer-contact');
@@ -6102,7 +6130,46 @@
     }
   };
 
+  const getNfseCustomerIssue = (customer = state.vendaCliente) => {
+    const name = String(resolveCustomerName(customer) || '').trim();
+    const doc = String(resolveCustomerDocument(customer) || '').replace(/\D/g, '');
+    const digit = (base, weights) => {
+      const remainder = [...base].reduce((sum, value, index) => sum + Number(value) * weights[index], 0) % 11;
+      return remainder < 2 ? 0 : 11 - remainder;
+    };
+    let validDocument = false;
+    if (/^\d{11}$/.test(doc) && !/^(\d)\1+$/.test(doc)) {
+      validDocument = digit(doc.slice(0, 9), [10, 9, 8, 7, 6, 5, 4, 3, 2]) === Number(doc[9])
+        && digit(doc.slice(0, 10), [11, 10, 9, 8, 7, 6, 5, 4, 3, 2]) === Number(doc[10]);
+    } else if (/^\d{14}$/.test(doc) && !/^(\d)\1+$/.test(doc)) {
+      validDocument = digit(doc.slice(0, 12), [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]) === Number(doc[12])
+        && digit(doc.slice(0, 13), [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]) === Number(doc[13]);
+    }
+    return name.length < 2 || name.length > 150 || !validDocument
+      ? 'Para emitir a NFS-e neste fluxo, informe o nome ou razão social e um CPF/CNPJ válido do cliente antes de finalizar.' : '';
+  };
+
+  const updateNfseCustomerHints = () => {
+    const services = window.EoBichoNfse?.hasChargeableServices({ items: state.itens, discountValue: state.vendaDesconto, additionValue: state.vendaAcrescimo });
+    const fiscal = resolvePrintVariant(normalizePrintMode(state.printPreferences?.venda, 'PM')) === 'fiscal';
+    const unidentified = state.nfseCustomerIdentification === 'not_informed';
+    const issue = services && !unidentified ? getNfseCustomerIssue() : '';
+    const message = unidentified ? 'NFS-e sem identificação do tomador selecionada. A emissão depende da permissão fiscal do serviço; os dados comerciais do cliente são preservados.'
+      : issue || 'Cliente identificado para a NFS-e. Confira os dados antes de finalizar a venda.';
+    elements.nfseUnidentifiedPanel?.classList.toggle('hidden', !(services && fiscal && state.activeFinalizeContext === 'sale'));
+    if (elements.nfseUnidentified) elements.nfseUnidentified.checked = unidentified;
+    for (const [element, visible] of [
+      [elements.nfseCustomerHint, services],
+      [elements.nfseFinalizeHint, services && fiscal && state.activeFinalizeContext === 'sale'],
+    ]) {
+      if (!element) continue;
+      element.classList.toggle('hidden', !visible);
+      element.textContent = message;
+    }
+  };
+
   const updateSaleCustomerSummary = () => {
+    updateNfseCustomerHints();
     if (elements.customerOpenButtonLabel) {
       elements.customerOpenButtonLabel.textContent = state.vendaCliente
         ? 'Trocar cliente'
@@ -12420,6 +12487,10 @@
 
   const renderSalePaymentMethods = () => {
     if (!elements.saleMethods) return;
+    if (state.activeFinalizeContext === 'sale' && isComplimentaryCart()) {
+      elements.saleMethods.innerHTML = '<li class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">Atendimento gratuito. Finalize sem informar pagamento; não será gerada cobrança nem NFS-e.</li>';
+      return;
+    }
     if (state.paymentMethodsLoading) {
       elements.saleMethods.innerHTML =
         '<li class="rounded-xl border border-dashed border-gray-300 bg-white px-4 py-3 text-sm text-gray-500">Carregando meios de pagamento...</li>';
@@ -13898,6 +13969,7 @@
     quantidade: state.quantidade,
     selectedItemUnitValueOverride: state.selectedItemUnitValueOverride,
     vendaCliente: state.vendaCliente ? { ...state.vendaCliente } : null,
+    nfseCustomerIdentification: state.nfseCustomerIdentification,
     vendaPet: state.vendaPet ? { ...state.vendaPet } : null,
     seller: state.selectedSeller ? { ...state.selectedSeller } : null,
     sellerCode: state.selectedSeller ? getSellerCode(state.selectedSeller) : '',
@@ -13914,6 +13986,7 @@
     state.vendaPagamentos = normalizeSalePaymentsForUi(pagamentos);
     state.vendaDesconto = safeNumber(snapshot.vendaDesconto);
     state.vendaAcrescimo = safeNumber(snapshot.vendaAcrescimo);
+    state.nfseCustomerIdentification = snapshot.nfseCustomerIdentification === 'not_informed' ? 'not_informed' : 'identified';
     state.selectedProduct = snapshot.selectedProduct
       ? { ...snapshot.selectedProduct }
       : null;
@@ -14123,6 +14196,7 @@
   const openFinalizeModal = (context = 'sale') => {
     const isBudget = context === 'orcamento';
     const isReceivables = context === 'receivables';
+    const complimentary = context === 'sale' && isComplimentaryCart();
     if (!isBudget && !state.caixaAberto) {
       notify(`Abra o caixa para ${getFinalizeContextActionLabel(context)}.`, 'warning');
       return;
@@ -14131,11 +14205,11 @@
       notify(`Adicione itens para ${getFinalizeContextActionLabel(context)}.`, 'warning');
       return;
     }
-    if (!isBudget && !isReceivables && state.paymentMethodsLoading) {
+    if (!isBudget && !isReceivables && !complimentary && state.paymentMethodsLoading) {
       notify('Aguarde o carregamento dos meios de pagamento.', 'info');
       return;
     }
-    if (!isBudget && !isReceivables && !state.paymentMethods.length) {
+    if (!isBudget && !isReceivables && !complimentary && !state.paymentMethods.length) {
       notify('Cadastre meios de pagamento para concluir a operação.', 'warning');
       return;
     }
@@ -14186,6 +14260,7 @@
     const shouldOfferCreditAutomatically =
       context !== 'orcamento' &&
       context !== 'receivables' &&
+      !complimentary &&
       Boolean(state.vendaCliente);
     if (shouldOfferCreditAutomatically) {
       state.finalizeCreditAutoPrompted = false;
@@ -16294,12 +16369,115 @@
     void persistReceivablesOnServer();
   };
 
+  const nfseClient = window.EoBichoNfse;
+  const nfseStateBySale = new Map();
+  const nfseLookupChecked = new Set();
+  const nfseLookupsInFlight = new Set();
+  const nfseLookupQueue = [];
+  const nfseEmissionVersions = new Map();
+  let nfseLookupWorkers = 0;
+  const nfseSaleKey = (saleId, pdvId = state.selectedPdv) => `${pdvId}:${saleId}`;
+  const rememberSaleNfse = (sale, pdvId = state.selectedPdv) => {
+    if (sale?.id) {
+      const key = nfseSaleKey(sale.id, pdvId);
+      nfseStateBySale.set(key, { nfseDocuments: sale.nfseDocuments || [], nfseStatus: sale.nfseStatus, nfseError: sale.nfseError || '', nfseWarning: sale.nfseWarning || '' });
+      nfseLookupChecked.add(key);
+    }
+  };
+  const saleFiscalKinds = (sale) => nfseClient?.classify(sale) || { products: true, services: false };
+  const isComplimentaryCart = () => state.itens.length > 0
+    && state.itens.every((item) => nfseClient?.complimentaryService(item))
+    && Number(state.vendaDesconto || 0) === 0 && Number(state.vendaAcrescimo || 0) === 0
+    && getSaleTotalLiquido() === 0;
+
+  const loadSaleNfse = async (saleId) => {
+    const sale = findCompletedSaleById(saleId);
+    if (!sale || !saleFiscalKinds(sale).services || !state.selectedPdv) return null;
+    const pdvId = state.selectedPdv;
+    const key = nfseSaleKey(saleId, pdvId);
+    const emissionVersion = nfseEmissionVersions.get(key) || 0;
+    const data = await nfseClient.request({ baseUrl: API_BASE, pdvId, saleId, token: getToken() });
+    // Uma consulta iniciada antes da emissão não pode apagar seu resultado.
+    if (sale.nfseStatus === 'emitting' || emissionVersion !== (nfseEmissionVersions.get(key) || 0)) return data;
+    sale.nfseDocuments = data.documents || [];
+    sale.nfseStatus = data.nfseStatus || 'not_requested';
+    sale.nfseError = '';
+    sale.nfseWarning = data.warning || '';
+    rememberSaleNfse(sale, pdvId);
+    return data;
+  };
+
+  const scheduleSalesNfseStatusSync = (sales) => {
+    if (!state.selectedPdv || !nfseClient) return;
+    for (const sale of sales) {
+      const key = nfseSaleKey(sale.id);
+      if (!saleFiscalKinds(sale).services || sale.nfseStatus === 'emitting' || nfseLookupChecked.has(key)) continue;
+      nfseLookupChecked.add(key);
+      nfseLookupsInFlight.add(key);
+      nfseLookupQueue.push({ saleId: sale.id, pdvId: state.selectedPdv, key });
+    }
+    const drain = () => {
+      while (nfseLookupWorkers < 3 && nfseLookupQueue.length) {
+        const entry = nfseLookupQueue.shift();
+        if (entry.pdvId !== state.selectedPdv) {
+          nfseLookupChecked.delete(entry.key);
+          nfseLookupsInFlight.delete(entry.key);
+          continue;
+        }
+        nfseLookupWorkers += 1;
+        void loadSaleNfse(entry.saleId).catch((error) => {
+          const sale = entry.pdvId === state.selectedPdv ? findCompletedSaleById(entry.saleId) : null;
+          if (sale) sale.nfseError = `Não foi possível consultar a NFS-e: ${error.message}`;
+        }).finally(() => {
+          nfseLookupWorkers -= 1;
+          nfseLookupsInFlight.delete(entry.key);
+          drain();
+          renderSalesList();
+        });
+      }
+    };
+    drain();
+  };
+
+  const emitNfseForSale = async (saleId) => {
+    let sale = findCompletedSaleById(saleId);
+    if (!sale || !saleFiscalKinds(sale).services || sale.status === 'cancelled' || sale.nfseStatus === 'emitting') return { success: false };
+    sale.nfseStatus = 'emitting';
+    const pdvId = state.selectedPdv;
+    const key = nfseSaleKey(saleId, pdvId);
+    nfseEmissionVersions.set(key, (nfseEmissionVersions.get(key) || 0) + 1);
+    rememberSaleNfse(sale);
+    renderSalesList();
+    try {
+      const data = await nfseClient.request({ baseUrl: API_BASE, pdvId, saleId, token: getToken(), method: 'POST', body: { saleCode: sale.saleCode } });
+      sale = (state.selectedPdv === pdvId ? findCompletedSaleById(saleId) : null) || sale;
+      sale.nfseDocuments = data.documents || [];
+      sale.nfseStatus = data.nfseStatus || 'pending';
+      sale.nfseError = data.message || sale.nfseDocuments.find((doc) => doc.error)?.error || '';
+      sale.nfseWarning = data.warning || '';
+      const complimentary = sale.nfseStatus === 'not_applicable';
+      const success = complimentary || ['authorized', 'emitted'].includes(sale.nfseStatus);
+      if (complimentary) sale.nfseError = '';
+      notify(complimentary ? (sale.nfseWarning || 'Serviços gratuitos: não há valor para emitir NFS-e.') : success ? 'NFS-e autorizada e vinculada à venda.' : (sale.nfseError || 'A NFS-e está pendente. Confira os documentos da venda.'), complimentary ? 'info' : success ? 'success' : 'warning');
+      return { success, data };
+    } catch (error) {
+      sale.nfseStatus = 'pending';
+      sale.nfseError = error.message;
+      notify(error.message, 'error');
+      return { success: false, error };
+    } finally {
+      nfseEmissionVersions.set(key, (nfseEmissionVersions.get(key) || 0) + 1);
+      rememberSaleNfse(sale, pdvId);
+      renderSalesList();
+    }
+  };
+
   const emitFiscalForSale = async (
     saleId,
     { notifyOnSuccess = true, correlationId = '' } = {}
   ) => {
     const sale = findCompletedSaleById(saleId);
-    if (!sale || sale.fiscalStatus === 'emitted' || sale.fiscalStatus === 'emitting') {
+    if (!sale || !saleFiscalKinds(sale).products || sale.fiscalStatus === 'emitted' || sale.fiscalStatus === 'emitting') {
       return { success: false, reason: 'unavailable' };
     }
     if (sale.status === 'cancelled') {
@@ -16469,6 +16647,7 @@
       'success'
     );
     state.itens = [];
+    state.nfseCustomerIdentification = 'identified';
     state.vendaPagamentos = [];
     state.vendaDesconto = 0;
     state.vendaAcrescimo = 0;
@@ -16697,7 +16876,25 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
       
       return;
     }
-    const usedCustomerCreditValue = await tryApplyCustomerCreditPayment({
+    const complimentary = isComplimentaryCart();
+    if (total <= 0 && !complimentary) {
+      notify('Somente serviços com preço zero e sem ajustes podem ser finalizados sem cobrança.', 'warning');
+      return;
+    }
+    if (complimentary && state.vendaPagamentos.length) {
+      notify('Remova os pagamentos para finalizar o atendimento gratuito.', 'warning');
+      return;
+    }
+    const requestsServiceInvoice = nfseClient?.hasChargeableServices({ items: state.itens, discountValue: state.vendaDesconto, additionValue: state.vendaAcrescimo })
+      && resolvePrintVariant(normalizePrintMode(state.printPreferences?.venda, 'PM')) === 'fiscal';
+    const customerIssue = requestsServiceInvoice && state.nfseCustomerIdentification !== 'not_informed' ? getNfseCustomerIssue() : '';
+    if (customerIssue) {
+      notify(customerIssue, 'warning');
+      closeFinalizeModal();
+      openCustomerModal('sale');
+      return;
+    }
+    const usedCustomerCreditValue = complimentary ? 0 : await tryApplyCustomerCreditPayment({
       totalValue: total,
       customer: state.vendaCliente,
     });
@@ -16747,6 +16944,7 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
       customer: state.vendaCliente ? { ...state.vendaCliente } : null,
       customerName: resolveCustomerName(state.vendaCliente) || '',
       customerDocument: resolveCustomerDocument(state.vendaCliente) || '',
+      nfseCustomerIdentification: state.nfseCustomerIdentification === 'not_informed' ? 'not_informed' : 'identified',
       seller: state.selectedSeller ? { ...state.selectedSeller } : null,
       createdAt: saleReceivables.saleDate,
       receiptSnapshot: saleSnapshot,
@@ -16764,7 +16962,7 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
     const saleRecord =
       findCompletedSaleById(commandSaleId) ||
       (Array.isArray(state.completedSales) ? state.completedSales[0] : null);
-    if (saleRecord) {
+    if (saleRecord && !complimentary) {
       saleRecord.receivables = saleReceivables.entries.map((entry) => ({ ...entry }));
       await syncAccountsReceivableForSale(
         saleRecord,
@@ -16805,6 +17003,7 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
     state.activeBudgetId = '';
     state.pendingBudgetValidityDays = null;
     state.itens = [];
+    state.nfseCustomerIdentification = 'identified';
     state.vendaPagamentos = [];
     state.vendaDesconto = 0;
     state.vendaAcrescimo = 0;
@@ -16824,18 +17023,23 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
     const mode = normalizePrintMode(preferences.venda, 'PM');
     const shouldEmitFiscal = resolvePrintVariant(mode) === 'fiscal';
     if (shouldEmitFiscal && saleRecord) {
-      const emissionResult = await emitFiscalForSale(saleRecord.id, { correlationId });
+      const fiscalKinds = saleFiscalKinds(saleRecord);
+      const emissionResult = fiscalKinds.products
+        ? await emitFiscalForSale(saleRecord.id, { correlationId })
+        : { success: true };
+      if (fiscalKinds.services) await emitNfseForSale(saleRecord.id);
       const updatedSale = findCompletedSaleById(saleRecord.id) || saleRecord;
       if (emissionResult?.success) {
         handleConfiguredPrint('venda', {
           snapshot: updatedSale.receiptSnapshot || saleSnapshot,
+          sale: updatedSale,
           xmlContent: updatedSale.fiscalXmlContent || '',
           qrCodeDataUrl: updatedSale.fiscalQrCodeImage || '',
           qrCodePayload: updatedSale.fiscalQrCodeData || '',
           customer: updatedSale.customer || saleRecord?.customer || null,
         });
       } else {
-        handleConfiguredPrint('venda', { snapshot: saleSnapshot, customer: saleRecord?.customer || null });
+        handleConfiguredPrint('venda', { snapshot: saleSnapshot, sale: updatedSale, customer: saleRecord?.customer || null });
       }
     } else {
       handleConfiguredPrint('venda', { snapshot: saleSnapshot, customer: saleRecord?.customer || null });
@@ -17050,6 +17254,7 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
     await syncAppointmentsAfterDeliveryRegistration(appointmentIdsForDelivery, registeredSaleCode);
     setActiveSaleAppointments([]);
     state.itens = [];
+    state.nfseCustomerIdentification = 'identified';
     state.vendaPagamentos = [];
     state.vendaDesconto = 0;
     state.vendaAcrescimo = 0;
@@ -17498,12 +17703,14 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
   };
 
   const updateSaleSummary = () => {
+    updateNfseCustomerHints();
     const totalLiquido = getSaleTotalLiquido();
     const pago = getSalePagoTotal();
     const desconto =
       Math.max(0, state.vendaDesconto) + Math.max(0, getSaleItemsDiscountTotal(state.itens));
     const isBudgetContext = state.activeFinalizeContext === 'orcamento';
     const isReceivablesContext = state.activeFinalizeContext === 'receivables';
+    const complimentary = state.activeFinalizeContext === 'sale' && isComplimentaryCart();
     if (elements.saleTotal) {
       elements.saleTotal.textContent = formatCurrency(totalLiquido);
     }
@@ -17525,7 +17732,7 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
       const isProcessing = state.finalizeProcessing;
       let canFinalize = false;
       if (!totalLiquido) {
-        canFinalize = false;
+        canFinalize = complimentary && !hasPayments;
       } else if (isBudgetContext) {
         canFinalize = true;
       } else if (isReceivablesContext) {
@@ -17541,7 +17748,9 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
       elements.finalizeConfirm.classList.toggle('cursor-not-allowed', shouldDisable);
       if (elements.finalizeDifference) {
         if (totalLiquido === 0) {
-          elements.finalizeDifference.textContent = 'Adicione itens para finalizar a venda.';
+          elements.finalizeDifference.textContent = complimentary
+            ? hasPayments ? 'Remova os pagamentos para finalizar o atendimento gratuito.' : 'Atendimento gratuito: sem cobrança e sem emissão de NFS-e.'
+            : 'Adicione itens com valor para finalizar a venda.';
         } else if (isBudgetContext) {
           if (!state.vendaPagamentos.length) {
             elements.finalizeDifference.textContent = 'Pagamentos são opcionais para o orçamento.';
@@ -19886,6 +20095,8 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
       return '<main class="receipt"><p class="receipt-empty">Nenhuma venda disponível para impressão.</p></main>';
     }
 
+    const receiptKinds = nfseClient?.classify({ receiptSnapshot: snapshot }) || { products: true, services: false };
+    const itemsTitle = receiptKinds.services ? (receiptKinds.products ? 'Produtos e serviços' : 'Serviços') : 'Produtos';
     const store = findStoreById(state.selectedStore);
     const storeCompany = store?.empresa && typeof store.empresa === 'object' ? store.empresa : {};
     const pickValue = (...candidates) => {
@@ -20178,7 +20389,7 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
           ${headerDivider}
         </header>
         <section class="nfce-compact__section nfce-compact__section--items">
-          <h2 class="nfce-compact__section-title">Produtos</h2>
+          <h2 class="nfce-compact__section-title">${itemsTitle}</h2>
           <table class="nfce-compact__items-table">
             <thead>
               <tr>
@@ -22819,6 +23030,14 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
       return false;
     }
     void (async () => {
+      if (Array.isArray(jsonPayload?.qrCodes) && jsonPayload.qrCodes.length) {
+        const health = await fetchLocalAgentHealth();
+        if (!health?.supportsMultipleFiscalQr) {
+          notify('A impressão com as duas notas será aberta no navegador. Atualize o agente de impressão para imprimir diretamente.', 'info');
+          if (htmlDocument) printHtmlDocument(htmlDocument, { logPrefix });
+          return;
+        }
+      }
       const agentPrinters = await fetchLocalAgentPrinters();
       const hasAgentCatalog = Array.isArray(agentPrinters) && agentPrinters.length > 0;
       const resolvedCandidates = hasAgentCatalog
@@ -22909,7 +23128,7 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
   const printReceipt = (
     type,
     variant,
-    { snapshot, budget, fallbackText, xmlContent, qrCodeDataUrl, qrCodePayload, customer } = {}
+    { snapshot, budget, fallbackText, xmlContent, qrCodeDataUrl, qrCodePayload, customer, sale } = {}
   ) => {
     const resolvedVariant = variant || 'matricial';
     let bodyHtml = '';
@@ -22977,11 +23196,36 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
       return false;
     }
 
+    const combined = type === 'venda' && sale && saleFiscalKinds(sale).services;
+    if (combined) {
+      title = 'Comprovante de venda e documentos fiscais';
+      bodyHtml = buildSaleReceiptMarkup(receiptSnapshot, 'matricial', { title, badgeLabel: 'Venda' })
+        + nfseClient.receiptMarkup(sale);
+    }
     const documentHtml = createReceiptDocument({ title, variant: resolvedVariant, body: bodyHtml });
     const printerConfig = resolvePrinterConfigForType(type);
     if (printerConfig?.nome) {
       const paperWidth = printerConfig.larguraPapel || '80mm';
       const printerType = printerConfig.tipoImpressora || 'bematech';
+      if (combined) {
+        const jsonPayload = buildSaleReceiptJson(receiptSnapshot, { title, variant: 'matricial', paperWidth, printerType, useDanfeLayout: false });
+        if (jsonPayload) {
+          jsonPayload.qrCodes = nfseClient.receiptDocuments(sale);
+          jsonPayload.qrCode = null;
+          jsonPayload.nfseStatus = sale.nfseStatus || 'pending';
+          jsonPayload.nfseError = sale.nfseError || '';
+          jsonPayload.nfseWarning = sale.nfseWarning || '';
+          jsonPayload.footer = { lines: [
+            ...(jsonPayload.footer?.lines || []),
+            ...(saleFiscalKinds(sale).products && sale.fiscalStatus !== 'emitted' ? ['NFC-e dos produtos pendente.'] : []),
+            ...(!['authorized', 'emitted', 'not_applicable'].includes(sale.nfseStatus) ? ['NFS-e dos serviços pendente.'] : []),
+            ...(sale.nfseStatus === 'not_applicable' ? [sale.nfseWarning || 'Serviços gratuitos: não há valor para emitir NFS-e.'] : []),
+            'Comprovante conjunto. Documentos fiscais individualizados nas consultas acima.',
+          ] };
+        }
+        dispatchPrintToConfiguredPrinters({ printerConfig, jsonPayload, htmlDocument: documentHtml, title, logPrefix: title });
+        return true;
+      }
       if (resolvedVariant === 'fiscal') {
         const nfcePayload = buildNfceReceiptJson(fiscalData, {
           title,
@@ -23266,6 +23510,8 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
         exchangeCode,
         serviceId: item?.serviceId || item?.servicoId || '',
         servicoId: item?.servicoId || item?.serviceId || '',
+        appointmentId: item?.appointmentId || '',
+        serviceDate: item?.serviceDate || item?.dataPrestacao || item?.appointmentDate || item?.date || item?.data || '',
       };
     });
     const fiscalItemsSnapshot = saleItems.map((item) => {
@@ -23299,6 +23545,8 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
         tipoItem: normalizedItemType,
         type: normalizedItemType === 'servico' ? 'service' : normalizedItemType === 'produto' ? 'product' : '',
         serviceId: item?.serviceId || item?.servicoId || null,
+        appointmentId: item?.appointmentId || '',
+        serviceDate: item?.serviceDate || item?.dataPrestacao || item?.appointmentDate || item?.date || item?.data || '',
         quantity: safeNumber(item?.quantidade ?? item?.qtd ?? 0),
         unitPrice: safeNumber(item?.valor ?? item?.valorUnitario ?? item?.preco ?? 0),
         totalPrice: safeNumber(item?.subtotal ?? item?.total ?? 0),
@@ -23469,8 +23717,11 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
       return;
     }
     scheduleSalesFiscalStatusSync(sales);
+    scheduleSalesNfseStatusSync(sales);
     const fragment = document.createDocumentFragment();
     sales.forEach((sale) => {
+      const nfseKey = nfseSaleKey(sale.id);
+      if (nfseStateBySale.has(nfseKey)) Object.assign(sale, nfseStateBySale.get(nfseKey));
       const saleId = sale.id;
       const chevronIcon = sale.expanded ? 'fa-chevron-up' : 'fa-chevron-down';
       const salePaymentTags = Array.isArray(sale.paymentTags) && sale.paymentTags.length
@@ -23573,6 +23824,12 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
           saleId
         )}"><i class="fas fa-file-invoice text-[11px]"></i><span>Emitir Fiscal</span></button>`;
       }
+      if (!saleFiscalKinds(sale).products) fiscalControl = '';
+      const nfseLoading = nfseLookupsInFlight.has(nfseKey);
+      const nfseControl = !isCancelled && saleFiscalKinds(sale).services
+        ? `<button type="button" class="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-3 py-1 text-xs font-semibold text-primary" data-sale-nfse data-sale-id="${escapeHtml(saleId)}" ${sale.nfseStatus === 'emitting' || nfseLoading ? 'disabled' : ''}><i class="fas fa-file-invoice"></i><span>${nfseLoading ? 'Consultando NFS-e...' : sale.nfseStatus === 'emitting' ? 'Emitindo NFS-e...' : sale.nfseStatus === 'not_applicable' ? 'Serviços gratuitos' : ['authorized', 'emitted'].includes(sale.nfseStatus) ? 'Consultar NFS-e' : 'Emitir NFS-e'}</span></button>` : '';
+      const nfseDetail = saleFiscalKinds(sale).services
+        ? `<div class="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs"><div class="flex flex-wrap items-center justify-between gap-2"><strong>Notas de serviço</strong><button type="button" class="font-semibold text-primary" data-sale-nfse-refresh data-sale-id="${escapeHtml(saleId)}">Atualizar situação</button></div>${sale.nfseError ? `<p class="mt-2 text-amber-700">${escapeHtml(sale.nfseError)}</p>` : ''}${sale.nfseWarning ? `<p class="mt-2 text-gray-600">${escapeHtml(sale.nfseWarning)}</p>` : ''}${(sale.nfseDocuments || []).map((doc) => `<div class="mt-2 flex flex-wrap items-center gap-2"><span>NFS-e ${escapeHtml(doc.number || 'aguardando número')} · ${escapeHtml(({ authorized: 'Autorizada', cancelled: 'Cancelada', rejected: 'Rejeitada', processing: 'Processando', unknown: 'Aguardando consulta' })[doc.status] || 'Pendente')}</span>${nfseClient.authorized(doc) && nfseClient.safeUrl(doc.consultationUrl) ? `<a href="${escapeHtml(doc.consultationUrl)}" target="_blank" rel="noopener" class="font-semibold text-primary">Visualizar</a>` : ''}${doc.xmlContent ? `<button type="button" class="font-semibold text-primary" data-sale-nfse-xml="${escapeHtml(doc.id)}" data-sale-id="${escapeHtml(saleId)}">Baixar XML</button>` : ''}${doc.error ? `<span class="w-full text-amber-700">${escapeHtml(typeof doc.error === 'string' ? doc.error : doc.error.message || 'Confira a rejeição')}</span>` : ''}</div>`).join('') || (sale.nfseStatus === 'not_applicable' ? '' : '<p class="mt-2 text-gray-500">Consulte a situação fiscal dos serviços desta venda.</p>')}</div>` : '';
       const cancelControl = isCancelled
         ? `<span class="inline-flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700"><i class="fas fa-ban text-[11px]"></i><span>Cancelada</span></span>`
         : `<button type="button" class="inline-flex items-center gap-2 rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-600 transition hover:border-rose-300 hover:text-rose-700" data-sale-cancel data-sale-id="${escapeHtml(
@@ -23607,14 +23864,16 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
                   <i class="fas ${chevronIcon}"></i>
                 </div>
               </button>
-              <div class="flex items-center gap-2">
+              <div class="flex flex-wrap items-center gap-2">
                 ${printControl}
                 ${fiscalControl}
+                ${nfseControl}
                 ${cancelControl}
               </div>
             </div>
             <div class="${sale.expanded ? '' : 'hidden'} border-t border-gray-100 pt-4" data-sale-details>
               ${cancellationInfo}
+              ${nfseDetail}
               <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-gray-200 text-xs text-gray-600">
                   <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
@@ -24023,6 +24282,7 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
           quantidade,
           valor: unitValue,
           subtotal: unitValue * quantidade,
+          serviceDate: service?.serviceDate || service?.dataPrestacao || service?.appointmentDate || service?.date || service?.data || appointment.scheduledAt || appointment.data || '',
         };
       })
       .filter(Boolean);
@@ -25086,6 +25346,8 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
         type: 'service',
         serviceId: service.id || '',
         servicoId: service.id || '',
+        appointmentId: appointment.id || '',
+        serviceDate: service.serviceDate || service.dataPrestacao || service.appointmentDate || service.date || service.data || appointment.scheduledAt || appointment.data || '',
         codigo: service.id || '',
         codigoInterno: service.id || '',
         codigoBarras: '',
@@ -25126,8 +25388,10 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
         tipoItem: 'servico',
         itemType: 'servico',
         type: 'service',
-        serviceId: appointment.id,
-        servicoId: appointment.id,
+        serviceId: '',
+        servicoId: '',
+        appointmentId: appointment.id || '',
+        serviceDate: appointment.scheduledAt || '',
         codigo: appointment.id,
         codigoInterno: appointment.id,
         codigoBarras: '',
@@ -26076,7 +26340,7 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
     renderSalesList();
   };
 
-  const handleSalePrint = (saleId) => {
+  const handleSalePrint = async (saleId) => {
     const sale = findCompletedSaleById(saleId);
     if (!sale) return;
     if (sale.status === 'cancelled') {
@@ -26085,6 +26349,12 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
     }
     if (!sale.receiptSnapshot) {
       notify('Não foi possível localizar o comprovante desta venda para impressão.', 'warning');
+      return;
+    }
+    if (saleFiscalKinds(sale).services) {
+      try { await loadSaleNfse(saleId); }
+      catch (error) { notify(error.message, 'error'); return; }
+      printReceipt('venda', 'matricial', { sale, snapshot: sale.receiptSnapshot, customer: sale.customer || null });
       return;
     }
     if (sale.fiscalStatus === 'emitted') {
@@ -26606,6 +26876,26 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
       }
       return;
     }
+    const nfseButton = event.target.closest('[data-sale-nfse], [data-sale-nfse-refresh], [data-sale-nfse-xml]');
+    if (nfseButton) {
+      const saleId = nfseButton.getAttribute('data-sale-id');
+      const sale = findCompletedSaleById(saleId);
+      if (!sale) return;
+      if (nfseButton.hasAttribute('data-sale-nfse-xml')) {
+        const doc = sale.nfseDocuments?.find((entry) => entry.id === nfseButton.getAttribute('data-sale-nfse-xml'));
+        if (doc?.xmlContent) {
+          const url = URL.createObjectURL(new Blob([doc.xmlContent], { type: 'application/xml' }));
+          const anchor = document.createElement('a'); anchor.href = url; anchor.download = `NFS-e-${String(doc.number || doc.id).replace(/[^a-z0-9-]/gi, '')}.xml`; anchor.click();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        }
+      } else {
+        sale.expanded = true;
+        const action = nfseButton.hasAttribute('data-sale-nfse-refresh') || ['authorized', 'emitted', 'not_applicable'].includes(sale.nfseStatus)
+          ? loadSaleNfse(saleId) : emitNfseForSale(saleId);
+        void action.then(() => renderSalesList()).catch((error) => notify(error.message, 'error'));
+      }
+      return;
+    }
     const fiscalResetButton = event.target.closest('[data-sale-fiscal-reset]');
     if (fiscalResetButton) {
       const saleId = fiscalResetButton.getAttribute('data-sale-id');
@@ -26826,6 +27116,7 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
     state.quantidade = 1;
     state.selectedItemUnitValueOverride = null;
     state.itens = [];
+    state.nfseCustomerIdentification = 'identified';
     state.vendaCliente = null;
     state.vendaPet = null;
     state.accountsReceivable = [];
@@ -28844,6 +29135,10 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
   };
 
   const bindEvents = () => {
+    elements.nfseUnidentified?.addEventListener('change', () => {
+      state.nfseCustomerIdentification = elements.nfseUnidentified.checked ? 'not_informed' : 'identified';
+      updateNfseCustomerHints();
+    });
     if (!window.__pdvFinalizeDebugCaptureAttached) {
       window.__pdvFinalizeDebugCaptureAttached = true;
       document.addEventListener(
@@ -30384,7 +30679,5 @@ const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) 
     closeIfoodStreamConnection();
   });
 })();
-
-
 
 

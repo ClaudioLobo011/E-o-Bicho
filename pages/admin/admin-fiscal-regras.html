@@ -21,7 +21,7 @@
           <header class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <h1 class="text-2xl font-bold text-gray-800">Cadastro de Regra de Imposto</h1>
-              <p class="text-gray-600">Cadastre regras padrao com CFOP, CSOSN/CST e tributos para usar como base fiscal.</p>
+              <p class="text-gray-600">Cadastre a tributação de mercadorias e serviços por empresa para emissão no PDV.</p>
             </div>
             <div class="flex flex-wrap items-center gap-3">
               <button id="fiscal-rule-new" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50">
@@ -64,7 +64,15 @@
                 </div>
               </div>
 
-              <div class="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+              <div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <label for="fiscal-rule-type" class="block text-sm font-semibold text-gray-700">Tipo da regra</label>
+                <select id="fiscal-rule-type" class="mt-2 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 sm:max-w-sm">
+                  <option value="produto">Mercadoria — NF-e / NFC-e</option>
+                  <option value="servico">Serviço — NFS-e</option>
+                </select>
+                <p class="mt-2 text-xs text-gray-500">O tipo fica vinculado à regra após salvar. Cadastre outra regra para mudar de mercadoria para serviço.</p>
+              </div>
+              <div id="fiscal-rule-product-fields" class="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
                 <div class="rounded-lg border border-gray-200 p-4">
                 <h3 class="text-sm font-semibold text-gray-700">Base fiscal</h3>
                 <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -229,6 +237,89 @@
                   </div>
                 </div>
               </div>
+
+<section id="fiscal-rule-service-fields" class="hidden space-y-5 rounded-xl border border-emerald-200 bg-emerald-50/30 p-4 sm:p-5">
+                <div><h3 class="font-semibold text-gray-800">Tributação de serviços — NFS-e</h3>
+<p class="mt-1 text-sm text-gray-600">Preencha os códigos e percentuais do enquadramento fiscal do serviço. Nenhuma alíquota é preenchida automaticamente.</p>
+</div>
+
+                <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><label class="block text-sm font-medium text-gray-700">Código de tributação nacional<input data-field="nfse.codigoTributacaoNacional" type="text" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="6 dígitos" class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus:border-primary focus:ring-primary"></label>
+<label class="block text-sm font-medium text-gray-700">Código municipal (quando aplicável)<input data-field="nfse.codigoTributacaoMunicipal" type="text" inputmode="numeric" maxlength="3" pattern="[0-9]{3}" placeholder="3 dígitos" class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus:border-primary focus:ring-primary"></label>
+<label class="block text-sm font-medium text-gray-700">NBS (obrigatório para IBS/CBS)<input data-field="nfse.codigoNbs" type="text" inputmode="numeric" maxlength="9" pattern="[0-9]{9}" placeholder="9 dígitos" class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus:border-primary focus:ring-primary"></label>
+<label class="block text-sm font-medium text-gray-700">Tributação do ISS<select data-field="nfse.tributacaoIss" class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus:border-primary focus:ring-primary"><option value="">Selecione</option>
+<option value="1">Operação tributável</option>
+<option value="2">Imunidade</option>
+<option value="4">Não incidência</option>
+</select>
+</label>
+<label class="block text-sm font-medium text-gray-700">Alíquota do ISS (%) — se aplicável<input data-field="nfse.aliquotaIss" type="number" min="0" max="5" step="0.01" placeholder="Conforme enquadramento" class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus:border-primary focus:ring-primary"><span class="mt-1 block text-xs font-normal text-gray-500">Deixe em branco quando o município calcular a alíquota, como no Rio para prestador não optante pelo Simples. Não confundir com os tributos aproximados.</span></label>
+<label class="block text-sm font-medium text-gray-700">Retenção do ISS<select data-field="nfse.tipoRetencaoIss" class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus:border-primary focus:ring-primary"><option value="">Selecione</option>
+<option value="1">Não retido</option>
+<option value="2">Retido pelo tomador</option>
+</select>
+</label>
+<label class="block text-sm font-medium text-gray-700">Município da prestação (IBGE)<input data-field="nfse.municipioPrestacao" type="text" inputmode="numeric" maxlength="7" pattern="[0-9]{7}" placeholder="Vazio: município da empresa" class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus:border-primary focus:ring-primary"></label>
+<div data-nfse-condition="imunidade" class="hidden"><label class="block text-sm font-medium text-gray-700">Tipo de imunidade<select data-field="nfse.tipoImunidade" class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus:border-primary focus:ring-primary"><option value="">Selecione</option>
+<option value="1">Patrimônio, renda ou serviços entre entes</option>
+<option value="2">Templos de qualquer culto</option>
+<option value="3">Partidos, sindicatos e instituições</option>
+<option value="4">Livros, jornais e periódicos</option>
+<option value="5">Fonogramas e videofonogramas</option>
+</select>
+</label>
+</div>
+</div>
+<label class="block text-sm font-medium text-gray-700">Descrição fiscal padrão<textarea data-field="nfse.descricao" maxlength="2000" rows="2" class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus:border-primary focus:ring-primary" placeholder="Descrição objetiva da prestação, sem dados de prontuário"></textarea>
+</label>
+<div class="border-t border-emerald-200 pt-4"><h4 class="mb-3 text-sm font-semibold text-gray-800">Total aproximado dos tributos</h4>
+<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><label class="block text-sm font-medium text-gray-700">Forma de informação<select data-field="nfse.totalTributosModo" class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus:border-primary focus:ring-primary"><option value="">Selecione</option>
+<option value="nao_informar">Não informar (somente MEI)</option>
+<option value="simples">Percentual do Simples Nacional</option>
+<option value="percentual">Percentuais federal, estadual e municipal</option>
+</select>
+</label>
+<div data-nfse-condition="simples" class="hidden"><label class="block text-sm font-medium text-gray-700">Total de tributos do Simples (%)<input data-field="nfse.pTotTribSN" type="number" min="0" max="100" step="0.01" class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus:border-primary focus:ring-primary"></label>
+</div>
+<div data-nfse-condition="percentual" class="hidden"><label class="block text-sm font-medium text-gray-700">Tributos federais (%)<input data-field="nfse.pTotTribFed" type="number" min="0" max="100" step="0.01" class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus:border-primary focus:ring-primary"></label>
+</div>
+<div data-nfse-condition="percentual" class="hidden"><label class="block text-sm font-medium text-gray-700">Tributos estaduais (%)<input data-field="nfse.pTotTribEst" type="number" min="0" max="100" step="0.01" class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus:border-primary focus:ring-primary"></label>
+</div>
+<div data-nfse-condition="percentual" class="hidden"><label class="block text-sm font-medium text-gray-700">Tributos municipais (%)<input data-field="nfse.pTotTribMun" type="number" min="0" max="100" step="0.01" class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus:border-primary focus:ring-primary"></label>
+</div>
+</div>
+<details class="mt-4 rounded-lg border border-emerald-200 bg-white p-3">
+<summary class="cursor-pointer text-sm font-semibold text-gray-800">Fonte dos tributos aproximados (opcional)</summary>
+<p class="mt-2 text-xs text-gray-500">Registre a tabela consultada para permitir a conferência dos percentuais. Quando a vigência for informada, a emissão exige uma referência vigente.</p>
+<div class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+<label class="block text-sm font-medium text-gray-700 sm:col-span-2">Fonte<input data-field="nfse.tributosFonte" maxlength="200" placeholder="Instituição ou tabela consultada" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-normal focus:border-primary focus:ring-primary"></label>
+<label class="block text-sm font-medium text-gray-700">Versão<input data-field="nfse.tributosVersao" maxlength="60" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-normal focus:border-primary focus:ring-primary"></label>
+<label class="block text-sm font-medium text-gray-700">Vigência — início<input data-field="nfse.tributosVigenciaInicio" type="date" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-normal focus:border-primary focus:ring-primary"></label>
+<label class="block text-sm font-medium text-gray-700">Vigência — fim<input data-field="nfse.tributosVigenciaFim" type="date" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-normal focus:border-primary focus:ring-primary"></label>
+<label class="block text-sm font-medium text-gray-700">Código de referência<input data-field="nfse.tributosCodigoReferencia" maxlength="60" placeholder="Código do serviço na tabela" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-normal focus:border-primary focus:ring-primary"></label>
+</div>
+</details>
+</div>
+<div class="border-t border-emerald-200 pt-4"><label class="flex items-center gap-2 text-sm font-semibold text-gray-800">
+<input type="checkbox" data-field="nfse.ibsCbs.enabled" class="h-4 w-4 rounded border-gray-300 text-primary">Informar IBS/CBS na NFS-e</label>
+<div data-nfse-condition="ibscbs" class="mt-4 hidden grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><label class="block text-sm font-medium text-gray-700">Finalidade<select data-field="nfse.ibsCbs.finNFSe" class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus:border-primary focus:ring-primary"><option value="">Selecione</option>
+<option value="0">NFS-e regular</option>
+</select>
+</label>
+<label class="block text-sm font-medium text-gray-700">Consumidor final<select data-field="nfse.ibsCbs.indFinal" class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus:border-primary focus:ring-primary"><option value="">Selecione</option>
+<option value="0">Não</option>
+<option value="1">Sim</option>
+</select>
+</label>
+<label class="block text-sm font-medium text-gray-700">Indicador da operação (código)<input data-field="nfse.ibsCbs.cIndOp" type="text" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus:border-primary focus:ring-primary"></label>
+<label class="block text-sm font-medium text-gray-700">Destinatário<select data-field="nfse.ibsCbs.indDest" class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus:border-primary focus:ring-primary"><option value="">Selecione</option>
+<option value="0">O tomador é o destinatário</option>
+</select>
+</label>
+<label class="block text-sm font-medium text-gray-700">CST IBS/CBS<input data-field="nfse.ibsCbs.CST" type="text" inputmode="numeric" maxlength="3" pattern="[0-9]{3}" class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus:border-primary focus:ring-primary"></label>
+<label class="block text-sm font-medium text-gray-700">Classificação tributária IBS/CBS<input data-field="nfse.ibsCbs.cClassTrib" type="text" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus:border-primary focus:ring-primary"></label>
+</div>
+</div>
+</section>
 
               <div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
                 <button type="button" id="fiscal-rule-cancel" class="hidden inline-flex items-center justify-center gap-2 rounded-md border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-50">

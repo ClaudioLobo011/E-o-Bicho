@@ -69,7 +69,9 @@ export async function fetchJSON(url, opts = {}) {
   });
   if (!res.ok) {
     const t = await res.text().catch(() => '');
-    throw new Error(t || `Erro HTTP ${res.status}`);
+    let message = t;
+    try { message = JSON.parse(t).message || t; } catch (_) { /* response may be plain text */ }
+    throw new Error(message || `Erro HTTP ${res.status}`);
   }
   return res.json();
 }

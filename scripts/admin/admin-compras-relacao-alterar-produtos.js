@@ -1715,7 +1715,7 @@
     }
 
     const response = await fetchWithAuth(
-      `${API_CONFIG.BASE_URL}/fiscal/default-rules?storeId=${encodeURIComponent(normalizedStoreId)}`,
+      `${API_CONFIG.BASE_URL}/fiscal/default-rules?tipo=produto&storeId=${encodeURIComponent(normalizedStoreId)}`,
     );
     if (!response) return [];
     if (!response.ok) {

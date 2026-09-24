@@ -1,5 +1,6 @@
 import { els, getSelectedValues, setSelectedValues, selectOnlyTodos } from './core.js';
 import { getSelectedCategories, setSelectedCategories } from './categories.js';
+import { collectServiceFiscal, fillServiceFiscal } from './fiscal.js';
 
 export function validarESerializar() {
   const nome = (els.inputNome?.value || '').trim();
@@ -21,11 +22,12 @@ export function validarESerializar() {
 
   const categorias = getSelectedCategories();
 
-  const payload = { nome, grupo, duracaoMinutos: dur, custo, valor, porte: portes, categorias };
+  const payload = { nome, grupo, duracaoMinutos: dur, custo, valor, porte: portes, categorias, fiscalPorEmpresa: collectServiceFiscal() };
   return { ok: erros.length === 0, erros, payload };
 }
 
 export function resetForm() {
+  fillServiceFiscal({});
   if (!els.form) return;
   els.inputId.value = '';
   els.inputNome.value = '';
@@ -41,6 +43,7 @@ export function resetForm() {
 
 export function fillForm(item) {
   if (!els.form || !item) return;
+  fillServiceFiscal(item.fiscalPorEmpresa || {});
   els.inputId.value = item._id || '';
   els.inputNome.value = item.nome || '';
   if (els.selectGrupo) els.selectGrupo.value = item.grupo?._id || item.grupo || '';

@@ -41,6 +41,7 @@ function normalizeCategorias(value) {
 }
 
 const ServiceSchema = new Schema({
+  fiscalPorEmpresa: { type: Schema.Types.Mixed, default: () => ({}) },
   nome: {
     type: String,
     required: true,

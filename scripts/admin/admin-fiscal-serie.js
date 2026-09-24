@@ -67,6 +67,11 @@
     store?.nome || store?.nomeFantasia || store?.razaoSocial || 'Empresa sem nome';
 
   const populateCompanies = () => {
+    const nfseTable = document.getElementById('fiscal-nfse-series');
+    if (nfseTable) nfseTable.innerHTML = state.stores.map(store => {
+      const config = store.nfse || {};
+      return `<tr><td class="px-3 py-3 text-gray-700">${escapeHtml(getStoreLabel(store))}</td><td class="px-3 py-3 text-gray-700">${config.environment === 'producao' ? 'Produção' : 'Homologação'}</td><td class="px-3 py-3 text-gray-700">${escapeHtml(config.serieDps || 'Não definida')}</td><td class="px-3 py-3 text-gray-700">${config.enabled ? 'Habilitada' : 'Desabilitada'}</td><td class="px-3 py-3"><a href="admin-nossas-lojas.html?editStore=${encodeURIComponent(store._id)}&amp;tab=nfse" class="font-semibold text-emerald-700 underline">Configurar na empresa</a></td></tr>`;
+    }).join('') || '<tr><td colspan="5" class="px-3 py-4 text-gray-500">Nenhuma empresa disponível.</td></tr>';
     if (!elements.empresa) return;
     const current = elements.empresa.value;
     elements.empresa.innerHTML = '<option value="">Selecione uma empresa</option>';
@@ -340,6 +345,8 @@
       populateCompanies();
     } catch (error) {
       console.error('Erro ao carregar empresas:', error);
+      const nfseTable = document.getElementById('fiscal-nfse-series');
+      if (nfseTable) nfseTable.innerHTML = '<tr><td colspan="5" class="px-3 py-4 text-amber-700">Não foi possível consultar as séries de NFS-e. Recarregue a página.</td></tr>';
       showMessage('Erro ao carregar empresas', error.message || 'Nao foi possivel carregar as empresas.');
     }
   };

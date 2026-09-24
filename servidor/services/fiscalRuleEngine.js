@@ -110,7 +110,10 @@ const normalizeStatus = (status = {}) => {
   };
 };
 
+const { normalizeNfseFiscal } = require('../utils/nfseConfig');
+
 const normalizeFiscalData = (fiscal = {}) => ({
+  ...(fiscal.nfse ? { nfse: normalizeNfseFiscal(fiscal.nfse) } : {}),
   fiscalRuleCode: toStringSafe(fiscal.fiscalRuleCode || fiscal.regraFiscalCodigo),
   fiscalRuleName: toStringSafe(fiscal.fiscalRuleName || fiscal.regraFiscalNome),
   origem: toStringSafe(fiscal.origem, '0') || '0',

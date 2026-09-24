@@ -17,6 +17,16 @@ const regimeTributarioEnum = [
     'normal',
 ];
 
+const nfseSchema = new mongoose.Schema({
+    enabled: { type: Boolean, default: false },
+    environment: { type: String, enum: ['homologacao', 'producao'], default: 'homologacao' },
+    serieDps: { type: String, trim: true, default: '' },
+    regimeEspecialTributacao: { type: String, trim: true, default: '' },
+    opSimpNac: { type: String, trim: true, default: '' },
+    regApTribSN: { type: String, trim: true, default: '' },
+    incluirInscricaoMunicipal: { type: Boolean, default: false },
+}, { _id: false });
+
 const storeSchema = new mongoose.Schema({
     codigo: { type: String, trim: true, unique: true, sparse: true },
     nome: { type: String, required: true, trim: true },
@@ -35,6 +45,7 @@ const storeSchema = new mongoose.Schema({
     inscricaoMunicipal: { type: String, trim: true },
     regimeTributario: { type: String, enum: [...regimeTributarioEnum, ''], default: '' },
     emailFiscal: { type: String, trim: true },
+    nfse: { type: nfseSchema, default: () => ({}) },
     telefone: { type: String, trim: true },
     whatsapp: { type: String, trim: true },
     imagem: { type: String, default: '/image/placeholder.svg' },

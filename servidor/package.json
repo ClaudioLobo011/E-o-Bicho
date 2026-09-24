@@ -12,6 +12,8 @@
     "category:import": "node categorySeeder.js",
     "category:destroy": "node categorySeeder.js -d",
     "nfce:status": "node scripts/test-status-servico.js",
+    "nfse:readiness": "node scripts/check-nfse-readiness.js",
+    "nfse:test": "node --test services/__tests__/nfseService.test.js services/__tests__/nfseCadastros.test.js routes/__tests__/pdvNfse.test.js routes/__tests__/pdvNfseConfiguration.test.js utils/__tests__/productFiscalRuleSafety.test.js",
     "nfce:envio:hom": "node scripts/test-autorizacao-hom.js",
     "drive:reorganize-fiscals": "node scripts/reorganize-fiscal-drive-folders.js",
     "drive:reorganize-fiscals:dry-run": "node scripts/reorganize-fiscal-drive-folders.js --dry-run",

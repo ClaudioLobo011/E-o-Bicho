@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin: Notas de serviço</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="../../src/output.css">
+</head>
+<body class="bg-gray-100">
+  <div id="admin-header-placeholder"></div>
+  <main class="w-full px-4 sm:px-6 lg:px-8 pt-1 pb-8 min-h-screen">
+    <div id="admin-sidebar-placeholder" class="mb-8"></div>
+    <section class="rounded-xl bg-white p-6 shadow">
+      <header class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div><h1 class="text-2xl font-bold text-gray-800">Notas de serviço</h1><p class="mt-1 text-sm text-gray-600">Acompanhe a emissão de NFS-e e consulte os documentos vinculados às vendas.</p></div>
+        <button id="nfse-refresh" type="button" class="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700"><i class="fas fa-sync-alt mr-2"></i>Atualizar</button>
+      </header>
+      <form id="nfse-filters" class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <label class="text-sm font-medium text-gray-700">Empresa<select id="nfse-store" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"><option value="">Selecione uma empresa</option></select></label>
+        <label class="text-sm font-medium text-gray-700">Situação<select id="nfse-status" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"><option value="">Todas</option><option value="authorized">Autorizadas</option><option value="rejected">Rejeitadas</option><option value="pending">Pendentes</option><option value="unknown">Aguardando consulta</option><option value="cancelled">Canceladas</option></select></label>
+        <label class="text-sm font-medium text-gray-700">Ambiente<select id="nfse-environment" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"><option value="">Todos</option><option value="producao">Produção</option><option value="homologacao">Homologação</option></select></label>
+      </form>
+      <p id="nfse-message" role="status" class="mt-4 text-sm text-gray-600">Selecione uma empresa para consultar.</p>
+      <div class="mt-4 overflow-x-auto"><table class="w-full text-left text-sm"><thead class="border-b border-gray-200 bg-gray-50 text-xs uppercase text-gray-500"><tr><th class="p-3">Nota / venda</th><th class="p-3">Emissão</th><th class="p-3">Valor</th><th class="p-3">Situação</th><th class="p-3">Ações</th></tr></thead><tbody id="nfse-list" class="divide-y divide-gray-100"></tbody></table></div>
+    </section>
+    <section id="nfse-detail" class="hidden mt-6 rounded-xl bg-white p-6 shadow" aria-live="polite"></section>
+    <dialog id="nfse-cancel-dialog" class="w-full max-w-lg rounded-xl p-6 shadow-xl">
+      <form id="nfse-cancel-form"><h2 class="text-lg font-bold text-gray-800">Cancelar NFS-e</h2><p class="mt-2 text-sm text-gray-600">O pedido será enviado ao emissor. O cancelamento fiscal não estorna o pagamento da venda.</p><label class="mt-4 block text-sm font-medium text-gray-700">Motivo<select id="nfse-cancel-code" required class="mt-1 block w-full rounded-md border border-gray-300 p-3"><option value="">Selecione o motivo</option><option value="1">Erro na emissão</option><option value="2">Serviço não prestado</option><option value="9">Outros</option></select></label><label class="mt-4 block text-sm font-medium text-gray-700">Justificativa<textarea id="nfse-cancel-reason" required minlength="15" maxlength="255" rows="4" class="mt-1 block w-full rounded-md border border-gray-300 p-3"></textarea></label><p id="nfse-cancel-error" class="mt-2 text-sm text-red-600" role="alert"></p><div class="mt-4 flex justify-end gap-3"><button type="button" id="nfse-cancel-close" class="rounded-lg border border-gray-200 px-4 py-2 text-sm">Voltar</button><button type="submit" class="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white">Solicitar cancelamento</button></div></form>
+    </dialog>
+  </main>
+  <div id="admin-footer-placeholder"></div>
+  <script>var basePath = '../../';</script>
+  <script src="../../scripts/core/config.js?v=20260812-2"></script><script src="../../scripts/core/ui.js"></script><script src="../../scripts/core/main.js"></script><script src="../../scripts/admin/admin.js"></script>
+  <script src="../../scripts/admin/admin-fiscal-nfse.js"></script><script src="/scripts/common/modal-bridge.js"></script>
+</body>
+</html>

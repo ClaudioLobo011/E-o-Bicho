@@ -1,6 +1,7 @@
 ﻿const express = require('express');
 const router = express.Router();
 const Store = require('../models/Store');
+const { normalizeStoreNfse } = require('../utils/nfseConfig');
 const { recordDesktopSyncDeletion } = require('../services/desktopSyncTombstones');
 const multer = require('multer');
 const path = require('path');
@@ -513,6 +514,8 @@ const sanitizeStorePayload = (body = {}) => {
         servicos
     };
 
+    if (Object.prototype.hasOwnProperty.call(body, 'nfse')) payload.nfse = normalizeStoreNfse(body.nfse);
+
     if (hasCscTokenProducao) {
         if (cscTokenProducao) {
             payload.cscTokenProducaoCriptografado = encryptText(cscTokenProducao);
@@ -698,7 +701,7 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
         res.status(201).json(savedStore);
     } catch (error) {
         console.error("Erro ao criar loja:", error);
-        res.status(500).json({ message: 'Erro ao criar loja.' });
+        res.status(error.status || 500).json({ message: error.status === 400 ? error.message : 'Erro ao criar loja.' });
     }
 });
 
@@ -732,7 +735,7 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
         res.json(updatedStore);
     } catch (error) {
         console.error("Erro ao atualizar loja:", error);
-        res.status(500).json({ message: 'Erro ao atualizar loja.' });
+        res.status(error.status || 500).json({ message: error.status === 400 ? error.message : 'Erro ao atualizar loja.' });
     }
 });
 

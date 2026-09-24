@@ -530,6 +530,92 @@ test.describe('PDV commands endpoint', () => {
     assert.equal(close.body.state.caixaInfo.fechamentoPrevisto, 93);
   });
 
+  test('finalizes complimentary services without payments, inventory or receivables and remains idempotent', async () => {
+    const base = await createFixture();
+    await Pdv.updateOne({ _id: base.pdv._id }, { $set: { 'configuracoesEstoque.depositoPadrao': new mongoose.Types.ObjectId() } });
+    const request = supertest(createApp());
+    const payload = {
+      saleId: 'complimentary-service-sale',
+      items: [{ serviceId: String(new mongoose.Types.ObjectId()), itemType: 'servico', nome: 'Retorno gratuito', quantidade: 1, valor: 0, subtotal: 0 }],
+      payments: [], receivables: [], totalBruto: 0, totalLiquido: 0,
+    };
+    const finalize = () => request.post(`/pdvs/${base.pdv._id}/commands`)
+      .set('Authorization', 'Bearer token').set('X-Idempotency-Key', 'complimentary-service-1')
+      .send({ action: 'pdv.sale.finalize', payload });
+    const response = await finalize();
+    assert.equal(response.status, 200, response.text);
+    const repeated = await finalize();
+    assert.equal(repeated.status, 200, repeated.text);
+    const persisted = await PdvState.findOne({ pdv: base.pdv._id }).lean();
+    assert.equal(persisted.completedSales.length, 1);
+    assert.equal(persisted.completedSales[0].totalLiquido, 0);
+    assert.equal(persisted.completedSales[0].items[0].valor, 0);
+    assert.equal(persisted.completedSales[0].cashContributions.length, 0);
+    assert.equal(persisted.accountsReceivable.length, 0);
+    assert.equal(persisted.inventoryMovements.length, 0);
+    assert.equal(persisted.summary.recebido, 0);
+    assert.equal(persisted.summary.saldo, 100);
+  });
+
+  test('rejects zero products, discounted paid services, negative values and financial entries for complimentary services', async () => {
+    const base = await createFixture();
+    const request = supertest(createApp());
+    const item = { serviceId: String(new mongoose.Types.ObjectId()), itemType: 'servico', quantidade: 1, valor: 0, subtotal: 0 };
+    const payload = { items: [item], payments: [], totalBruto: 0, totalLiquido: 0 };
+    const invalid = [
+      { items: [{ itemType: 'produto', quantidade: 1, valor: 0 }] },
+      { items: [{ ...item, valor: 10, itemDiscountValue: 10 }] },
+      { items: [{ ...item, valor: -1 }] }, { totalLiquido: -1 },
+      { items: [{ ...item, valor: '' }] },
+      { payments: [{ id: 'dinheiro', valor: 0 }] },
+      { receivables: [{ id: 'test', amount: 1 }] },
+    ];
+    for (const [index, changes] of invalid.entries()) {
+      const response = await request.post(`/pdvs/${base.pdv._id}/commands`)
+        .set('Authorization', 'Bearer token').set('X-Idempotency-Key', `invalid-free-${index}`)
+        .send({ action: 'pdv.sale.finalize', payload: { ...payload, ...changes } });
+      assert.equal(response.status, 400, response.text);
+    }
+    const persisted = await PdvState.findOne({ pdv: base.pdv._id }).lean();
+    assert.equal(persisted.completedSales.length, 0);
+    assert.equal(persisted.summary.recebido, 0);
+  });
+
+  test('keeps free services in a paid mixed sale without changing its received total', async () => {
+    const base = await createFixture();
+    const response = await supertest(createApp()).post(`/pdvs/${base.pdv._id}/commands`)
+      .set('Authorization', 'Bearer token').set('X-Idempotency-Key', 'mixed-free-1')
+      .send({ action: 'pdv.sale.finalize', payload: {
+        items: [{ itemType: 'produto', nome: 'Produto teste', quantidade: 1, preco: 30 }, { itemType: 'servico', serviceId: String(new mongoose.Types.ObjectId()), nome: 'Retorno gratuito', quantidade: 1, valor: 0, subtotal: 0 }],
+        payments: [{ id: 'dinheiro', label: 'Dinheiro', type: 'avista', valor: 30 }], totalBruto: 30, totalLiquido: 30,
+      } });
+    assert.equal(response.status, 200, response.text);
+    assert.equal(response.body.state.completedSales[0].items.length, 2);
+    assert.equal(response.body.state.completedSales[0].totalLiquido, 30);
+    assert.equal(response.body.state.summary.recebido, 30);
+  });
+
+  test('persists explicit NFS-e recipient choice without removing commercial customer details', async () => {
+    const base = await createFixture();
+    const request = supertest(createApp());
+    for (const [index, choice] of ['not_informed', '', 'NOT_INFORMED'].entries()) {
+      const response = await request.post(`/pdvs/${base.pdv._id}/commands`)
+        .set('Authorization', 'Bearer token').set('X-Idempotency-Key', `recipient-choice-${index}`)
+        .send({ action: 'pdv.sale.finalize', payload: {
+          saleId: `recipient-choice-${index}`, nfseCustomerIdentification: choice,
+          customerName: 'Cliente Comercial Teste', customerDocument: '52998224725',
+          items: [{ itemType: 'servico', serviceId: String(new mongoose.Types.ObjectId()), quantidade: 1, valor: 30, subtotal: 30 }],
+          payments: [{ id: 'dinheiro', label: 'Dinheiro', type: 'avista', valor: 30 }], totalBruto: 30, totalLiquido: 30,
+        } });
+      assert.equal(response.status, 200, response.text);
+      const persisted = await PdvState.findOne({ pdv: base.pdv._id }).lean();
+      const sale = persisted.completedSales.find(s => s.id === `recipient-choice-${index}`);
+      assert.equal(sale.nfseCustomerIdentification, choice === 'not_informed' ? 'not_informed' : 'identified');
+      assert.equal(sale.customerName, 'Cliente Comercial Teste');
+      assert.equal(sale.customerDocument, '52998224725');
+    }
+  });
+
   test('finalizes sale through pdv.sale.finalize and updates state', async () => {
     const base = await createFixture({ caixaAberto: false });
     const app = createApp();
@@ -912,6 +998,60 @@ test.describe('PDV commands endpoint', () => {
     assert.equal(register.body.state.summary.recebido, 0);
   });
 
+  test('delivery preserves explicit recipient choice from registration or finalization', async () => {
+    const base = await createFixture();
+    const request = supertest(createApp());
+    for (const [index, initialChoice] of ['not_informed', 'identified'].entries()) {
+      const common = { orderId: `recipient-delivery-${index}`, saleId: `recipient-delivery-sale-${index}`, customerName: 'Cliente Comercial', customerDocument: '52998224725', items: [{ itemType: 'servico', serviceId: String(new mongoose.Types.ObjectId()), quantidade: 1, valor: 30, subtotal: 30 }], payments: [{ id: 'dinheiro', valor: 30 }], totalBruto: 30, totalLiquido: 30 };
+      const registered = await request.post(`/pdvs/${base.pdv._id}/commands`).set('Authorization', 'Bearer token').set('X-Idempotency-Key', `recipient-delivery-register-${index}`)
+        .send({ action: 'pdv.delivery.register', payload: { ...common, nfseCustomerIdentification: initialChoice } });
+      assert.equal(registered.status, 200, registered.text);
+      assert.equal(registered.body.state.completedSales[0].nfseCustomerIdentification, initialChoice);
+      const finalized = await request.post(`/pdvs/${base.pdv._id}/commands`).set('Authorization', 'Bearer token').set('X-Idempotency-Key', `recipient-delivery-finalize-${index}`)
+        .send({ action: 'pdv.delivery.finalize', payload: { ...common, ...(index ? { nfseCustomerIdentification: 'not_informed' } : {}) } });
+      assert.equal(finalized.status, 200, finalized.text);
+      const persisted = await PdvState.findOne({ pdv: base.pdv._id }).lean();
+      const sale = persisted.completedSales.find(entry => entry.id === common.saleId);
+      assert.equal(sale.nfseCustomerIdentification, 'not_informed');
+      assert.equal(sale.customerName, common.customerName);
+      assert.equal(sale.customerDocument, common.customerDocument);
+    }
+  });
+
+  test('delivery complimentary services finalize once without financial or inventory effects and reject false gratuity', async () => {
+    const base = await createFixture();
+    await Pdv.updateOne({ _id: base.pdv._id }, { $set: { 'configuracoesEstoque.depositoPadrao': new mongoose.Types.ObjectId() } });
+    const request = supertest(createApp());
+    const item = { itemType: 'servico', serviceId: String(new mongoose.Types.ObjectId()), quantidade: 1, valor: 0, subtotal: 0 };
+    const payload = { orderId: 'complimentary-delivery', saleId: 'complimentary-delivery-sale', items: [item], payments: [], totalBruto: 0, totalLiquido: 0 };
+    const send = (action, key, changes = {}) => request.post(`/pdvs/${base.pdv._id}/commands`).set('Authorization', 'Bearer token').set('X-Idempotency-Key', key).send({ action, payload: { ...payload, ...changes } });
+    const registered = await send('pdv.delivery.register', 'complimentary-delivery-register');
+    assert.equal(registered.status, 200, registered.text);
+    for (const [index, changes] of [
+      { items: [{ itemType: 'produto', quantidade: 1, valor: 0 }] },
+      { items: [{ ...item, valor: -1 }] }, { totalLiquido: -1 },
+      { items: [{ ...item, valor: 10, itemDiscountValue: 10 }] },
+      { payments: [{ id: 'dinheiro', valor: 0 }] }, { receivables: [{ id: 'x', value: 1 }] },
+    ].entries()) {
+      const invalid = await send('pdv.delivery.finalize', `complimentary-delivery-invalid-${index}`, changes);
+      assert.equal(invalid.status, 400, invalid.text);
+    }
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const finalized = await send('pdv.delivery.finalize', 'complimentary-delivery-finalize');
+      assert.equal(finalized.status, 200, finalized.text);
+    }
+    const persisted = await PdvState.findOne({ pdv: base.pdv._id }).lean();
+    assert.equal(persisted.completedSales.length, 1);
+    assert.equal(persisted.deliveryOrders[0].status, 'finalizado');
+    assert.equal(persisted.completedSales[0].totalLiquido, 0);
+    assert.equal(persisted.completedSales[0].totalBruto, 0);
+    assert.equal(persisted.completedSales[0].cashContributions.length, 0);
+    assert.equal(persisted.accountsReceivable.length, 0);
+    assert.equal(persisted.inventoryMovements.length, 0);
+    assert.equal(persisted.summary.recebido, 0);
+    assert.equal(persisted.summary.saldo, 100);
+  });
+
   test('registers and finalizes delivery through commands', async () => {
     const base = await createFixture({ caixaAberto: false });
     const app = createApp();
@@ -1241,6 +1381,42 @@ test.describe('PDV commands endpoint', () => {
     assert.equal(cancel.status, 200, cancel.text);
     assert.equal(cancel.body.state.completedSales[0].status, 'cancelled');
     assert.equal(cancel.body.state.completedSales[0].cancellationReason, 'Cliente desistiu');
+  });
+
+  test('blocks commercial cancellation while NFS-e is authorized or uncertain without changing cash', async () => {
+    const base = await createFixture();
+    const NfseDocument = require('../../models/NfseDocument');
+    await PdvState.updateOne({ _id: base.state._id }, { $set: {
+      completedSales: [{ id: 'service-sale', saleCode: 'TESTE-NFSE', status: 'completed', total: 30, cashContributions: [{ paymentId: 'dinheiro', amount: 30 }] }],
+      'summary.recebido': 30,
+    } });
+    const document = await NfseDocument.collection.insertOne({ pdv: base.pdv._id, saleId: 'service-sale', status: 'authorized' });
+    for (const status of ['authorized', 'unknown', 'processing']) {
+      await NfseDocument.collection.updateOne({ _id: document.insertedId }, { $set: { status } });
+      const response = await supertest(createApp()).post(`/pdvs/${base.pdv._id}/commands`)
+        .set('Authorization', 'Bearer token').set('X-Idempotency-Key', `nfse-cancel-${status}`)
+        .send({ action: 'pdv.sale.cancel', payload: { saleId: 'service-sale', reason: 'Cancelamento de teste' } });
+      assert.equal(response.status, 409, response.text);
+      assert.match(response.body.message, /NFS-e/);
+      const current = await PdvState.findById(base.state._id).lean();
+      assert.equal(current.completedSales[0].status, 'completed');
+      assert.equal(current.summary.recebido, 30);
+      assert.equal(current.history.length, 0);
+    }
+  });
+
+  test('commercial cancellation shares the fiscal lock even before a DPS exists', async () => {
+    const base = await createFixture();
+    await PdvState.updateOne({ _id: base.state._id }, { $set: { completedSales: [{ id: 'service-sale', status: 'completed', total: 30 }], 'summary.recebido': 30 } });
+    const { SaleLock } = require('../../models/NfseDocument');
+    await SaleLock.create({ _id: `${base.pdv._id}:service-sale`, token: 'emitter-holding-lock', until: new Date(Date.now() + 60000) });
+    const response = await supertest(createApp()).post(`/pdvs/${base.pdv._id}/commands`)
+      .set('Authorization', 'Bearer token').set('X-Idempotency-Key', 'nfse-cancel-while-emitting')
+      .send({ action: 'pdv.sale.cancel', payload: { saleId: 'service-sale', reason: 'Cancelamento concorrente de teste' } });
+    assert.equal(response.status, 409, response.text);
+    const current = await PdvState.findById(base.state._id).lean();
+    assert.equal(current.completedSales[0].status, 'completed');
+    assert.equal(current.summary.recebido, 30);
   });
 
   test('resets fiscal status through pdv.sale.reset_fiscal_status', async () => {

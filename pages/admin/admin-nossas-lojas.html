@@ -171,6 +171,7 @@
                                     <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="funcionamento">Funcionamento</button>
                                     <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="atividade-economica">Atividade Econômica</button>
                                     <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="certificado">Certificado</button>
+                                    <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="nfse">NFS-e</button>
                                 </nav>
                             </div>
 
@@ -353,6 +354,50 @@
                                         </div>
                                     </div>
                                 </div>
+
+<div class="tab-panel hidden space-y-4" data-tab-panel="nfse">
+  <div class="rounded-lg border border-emerald-200 bg-emerald-50 p-3"><h3 class="text-sm font-semibold text-emerald-800">Nota fiscal de serviços</h3>
+<p class="mt-1 text-xs text-emerald-800">Integração com o Emissor Nacional. Usa o certificado digital da empresa cadastrado na aba Certificado.</p>
+</div>
+
+  <label class="flex items-center gap-2 font-semibold">
+<input id="store-nfse-enabled" data-store-nfse="enabled" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-emerald-600">Habilitar emissão de NFS-e nesta empresa</label>
+
+  <div id="store-nfse-fields" class="grid gap-3 sm:grid-cols-2">
+<label class="block font-medium">Ambiente<select data-store-nfse="environment" class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus:border-primary focus:ring-primary"><option value="homologacao">Homologação — testes sem valor fiscal</option>
+<option value="producao">Produção — documentos com valor fiscal</option>
+</select>
+</label>
+<label class="block font-medium">Série da DPS<input data-store-nfse="serieDps" type="text" inputmode="numeric" maxlength="5" placeholder="1 a 49999" class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus:border-primary focus:ring-primary"></label>
+<label class="block font-medium">Regime especial de tributação<select data-store-nfse="regimeEspecialTributacao" class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus:border-primary focus:ring-primary"><option value="">Selecione</option>
+<option value="0">Nenhum</option>
+<option value="1">Ato cooperado</option>
+<option value="2">Estimativa</option>
+<option value="3">Microempresa municipal</option>
+<option value="4">Notário ou registrador</option>
+<option value="5">Profissional autônomo</option>
+<option value="6">Sociedade de profissionais</option>
+<option value="9">Outros</option>
+</select>
+</label>
+<label class="block font-medium">Opção pelo Simples Nacional<select data-store-nfse="opSimpNac" class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus:border-primary focus:ring-primary"><option value="">Selecione</option>
+<option value="1">Não optante</option>
+<option value="2">Optante — MEI</option>
+<option value="3">Optante — ME / EPP</option>
+</select>
+</label>
+<div id="store-nfse-simples-fields" class="hidden sm:col-span-2"><label class="block font-medium">Regime de apuração dos tributos no Simples<select data-store-nfse="regApTribSN" class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus:border-primary focus:ring-primary"><option value="">Selecione</option>
+<option value="1">Tributos federais e ISS pelo Simples Nacional</option>
+<option value="2">Tributos federais pelo Simples e ISS fora do Simples</option>
+<option value="3">Tributos federais e ISS fora do Simples Nacional</option>
+</select>
+</label>
+</div>
+</div>
+<label class="flex items-start gap-2 text-xs text-gray-600">
+<input type="checkbox" data-store-nfse="incluirInscricaoMunicipal" class="mt-0.5 h-4 w-4 rounded border-gray-300 text-emerald-600">Enviar inscrição municipal na DPS, somente se registrada no cadastro nacional complementar (CNC).</label>
+<p id="store-nfse-status" class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600" role="status"></p>
+</div>
 
                                 <div class="tab-panel hidden space-y-3" data-tab-panel="certificado">
                                     <div class="grid grid-cols-12 gap-2">

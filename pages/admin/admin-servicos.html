@@ -116,6 +116,24 @@
                   </div>
                 </div>
 
+                <section class="space-y-4 rounded-xl border border-emerald-200 bg-emerald-50/30 p-4 sm:p-5">
+                  <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div><h2 class="text-base font-semibold text-gray-900">Fiscal por empresa — NFS-e</h2><p class="mt-1 text-sm text-gray-600">Vincule o serviço à regra fiscal de cada empresa em que ele será emitido.</p></div>
+                    <span id="serv-fiscal-summary" class="text-xs font-medium text-emerald-700">Nenhuma regra vinculada</span>
+                  </div>
+                  <div class="grid gap-4 md:grid-cols-2">
+                    <label class="block text-sm font-medium text-gray-700" for="serv-fiscal-store">Empresa emitente
+                      <select id="serv-fiscal-store" class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40"><option value="">Carregando empresas…</option></select>
+                    </label>
+                    <label class="block text-sm font-medium text-gray-700" for="serv-fiscal-rule">Regra fiscal de serviço
+                      <select id="serv-fiscal-rule" disabled class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40"><option value="">Selecione uma empresa</option></select>
+                    </label>
+                  </div>
+                  <label class="block text-sm font-medium text-gray-700" for="serv-fiscal-description">Descrição na nota (opcional)
+                    <textarea id="serv-fiscal-description" rows="2" maxlength="2000" disabled class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40" placeholder="Se vazio, usa a descrição da regra ou o nome do serviço."></textarea>
+                  </label>
+                  <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><p id="serv-fiscal-status" role="status" class="text-xs text-gray-600">Selecione uma empresa para configurar a emissão deste serviço.</p><a href="admin-fiscal-regras.html" target="_blank" rel="noopener" class="shrink-0 text-sm font-medium text-emerald-700 underline">Cadastrar regra de serviço</a></div>
+                </section>
               </form>
 
               <div class="space-y-4">
@@ -146,6 +164,7 @@
 
             <!-- Tab: Clubinho -->
             <section id="tab-clubinho" class="hidden space-y-6">
+              <p class="rounded-lg border border-emerald-200 bg-emerald-50/30 p-3 text-sm text-gray-600">A tributação do Clubinho vem de cada serviço que compõe o pacote, na empresa emitente. Configure os vínculos em <strong>Cadastro → Fiscal por empresa</strong> e mantenha os serviços identificados ao faturar no PDV.</p>
               <div class="inline-flex rounded-lg bg-gray-200 p-1">
                 <button id="clubinho-subtab-btn-dados" type="button" class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/40">
                   Dados do Clubinho
@@ -244,6 +263,7 @@
             </section>
             <!-- Tab: Alteração de preços -->
             <section id="tab-precos" class="hidden space-y-6">
+              <p class="rounded-lg border border-emerald-200 bg-emerald-50/30 p-3 text-sm text-gray-600">Os preços por raça usam a regra fiscal do serviço na empresa emitente. Ajuste a tributação em <strong>Cadastro → Fiscal por empresa</strong>; não é necessário repetir os impostos por raça ou porte.</p>
               <div class="flex items-center gap-3">
                 <i class="fas fa-tags text-gray-400"></i>
                 <h2 class="text-xl font-semibold text-gray-900">Alteração de preços por raça</h2>

@@ -259,6 +259,17 @@
   const updateCompanySummary = () => {
     if (!elements.companySummary) return;
     const store = getSelectedStore();
+    const nfseSummary = document.getElementById('pdv-nfse-summary');
+    const nfseLink = document.getElementById('pdv-nfse-config-link');
+    if (nfseSummary) {
+      const config = store?.nfse;
+      nfseSummary.textContent = !store ? 'Selecione o emitente fiscal para consultar a configuração.'
+        : !config?.enabled ? 'Emissão desabilitada nesta empresa. Configure a NFS-e antes de emitir serviços pelo PDV.'
+          : `Emissão habilitada · ${config.environment === 'producao' ? 'Produção' : 'Homologação (testes)'} · Série DPS ${config.serieDps || 'pendente'}`;
+    }
+    if (nfseLink) nfseLink.href = store
+      ? `admin-nossas-lojas.html?editStore=${encodeURIComponent(normalizeId(store._id))}&tab=nfse`
+      : 'admin-nossas-lojas.html';
     if (!store) {
       elements.companySummary.innerHTML = '<p class="text-gray-500">Selecione uma empresa para visualizar seus dados.</p>';
       return;
@@ -275,7 +286,7 @@
       const names = unavailable.map((item) => ambientesLabels[item.env]).join(' e ');
       availabilityMessage = `
         <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">
-          Configure o CSC de ${names} na empresa para liberar este ambiente para o PDV.
+          Configure o CSC de ${names} na empresa para liberar a NFC-e neste ambiente.${store.nfse?.enabled ? ' A NFS-e permanece disponível conforme a configuração da empresa.' : ''}
         </div>
       `;
     }
@@ -791,8 +802,8 @@
     const tipoOperacao = elements.operationType?.value || 'fiscal';
     const exigeConfiguracaoFiscal = tipoOperacao === 'fiscal';
     const ambientesHabilitados = getEnabledEnvironments();
-    if (exigeConfiguracaoFiscal && !ambientesHabilitados.length) {
-      notify('Habilite ao menos um ambiente fiscal para o PDV.', 'warning');
+    if (exigeConfiguracaoFiscal && !ambientesHabilitados.length && fiscalStore.nfse?.enabled !== true) {
+      notify('Habilite um ambiente de NFC-e ou configure a NFS-e na empresa emitente para operar somente com serviços.', 'warning');
       return null;
     }
 

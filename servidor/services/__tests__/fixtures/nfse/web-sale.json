@@ -1,0 +1,166 @@
+{
+  "id": "mixed",
+  "saleCode": "TESTE-mixed",
+  "status": "completed",
+  "customerName": "CLIENTE FICTÍCIO",
+  "customerDocument": "",
+  "total": 180,
+  "totalLiquido": 180,
+  "totalBruto": 180,
+  "discountValue": 0,
+  "additionValue": 0,
+  "createdAt": "2026-09-23T23:44:35.940Z",
+  "expanded": true,
+  "paymentTags": [
+    "Pagamento simulado"
+  ],
+  "fiscalStatus": "emitted",
+  "fiscalNumber": 123,
+  "fiscalSerie": "1",
+  "fiscalEnvironment": "homologacao",
+  "fiscalAccessKey": "11111111111111111111111111111111111111111111",
+  "fiscalQrCodeData": "https://www.nfce.fazenda.rj.gov.br/consulta?teste=isolado",
+  "items": [
+    {
+      "id": "produto",
+      "itemType": "produto",
+      "name": "Produto de teste",
+      "product": "Produto de teste",
+      "quantity": 1,
+      "unitValue": 100,
+      "totalValue": 100,
+      "nome": "Produto de teste",
+      "quantidade": 1,
+      "valor": 100,
+      "subtotal": 100,
+      "subtotalSemAjuste": 100,
+      "valorSemAjuste": 100,
+      "itemDiscountValue": 0,
+      "itemAdditionValue": 0,
+      "descontoItemValor": 0,
+      "acrescimoItemValor": 0,
+      "itemDiscountLabel": "R$ 0,00",
+      "itemAdditionLabel": "R$ 0,00"
+    },
+    {
+      "id": "cccccccccccccccccccccccc",
+      "serviceId": "cccccccccccccccccccccccc",
+      "itemType": "servico",
+      "name": "Serviço de teste",
+      "product": "Serviço de teste",
+      "quantity": 1,
+      "unitValue": 80,
+      "totalValue": 80,
+      "nome": "Serviço de teste",
+      "quantidade": 1,
+      "valor": 80,
+      "subtotal": 80,
+      "subtotalSemAjuste": 80,
+      "valorSemAjuste": 80,
+      "itemDiscountValue": 0,
+      "itemAdditionValue": 0,
+      "descontoItemValor": 0,
+      "acrescimoItemValor": 0,
+      "itemDiscountLabel": "R$ 0,00",
+      "itemAdditionLabel": "R$ 0,00"
+    }
+  ],
+  "receiptSnapshot": {
+    "meta": {
+      "store": "EMPRESA FICTÍCIA — TESTE VISUAL",
+      "pdv": "PDV DE TESTE",
+      "data": "23/09/2026, 20:44",
+      "operador": "TESTE VISUAL",
+      "saleCode": "TESTE-mixed",
+      "appointmentId": "",
+      "appointmentIds": []
+    },
+    "cliente": null,
+    "delivery": null,
+    "itens": [
+      {
+        "index": "01",
+        "itemType": "produto",
+        "serviceId": "",
+        "nome": "Produto de teste",
+        "codigo": "",
+        "quantidade": "1",
+        "unitario": "R$ 100,00",
+        "subtotal": "R$ 100,00",
+        "subtotalOriginal": "R$ 100,00",
+        "descontoItem": "",
+        "descontoItemValor": 0,
+        "acrescimoItem": "",
+        "acrescimoItemValor": 0
+      },
+      {
+        "index": "02",
+        "itemType": "servico",
+        "serviceId": "cccccccccccccccccccccccc",
+        "nome": "Serviço de teste",
+        "codigo": "",
+        "quantidade": "1",
+        "unitario": "R$ 80,00",
+        "subtotal": "R$ 80,00",
+        "subtotalOriginal": "R$ 80,00",
+        "descontoItem": "",
+        "descontoItemValor": 0,
+        "acrescimoItem": "",
+        "acrescimoItemValor": 0
+      }
+    ],
+    "totais": {
+      "bruto": "R$ 180,00",
+      "desconto": "R$ 0,00",
+      "descontoValor": 0,
+      "acrescimo": "R$ 0,00",
+      "acrescimoValor": 0,
+      "liquido": "R$ 180,00",
+      "pago": "R$ 180,00",
+      "troco": "R$ 0,00",
+      "trocoValor": 0
+    },
+    "descontosPromocao": {
+      "total": 0,
+      "entries": []
+    },
+    "pagamentos": {
+      "items": [
+        {
+          "label": "Pagamento simulado",
+          "formatted": "R$ 180,00",
+          "valor": 180
+        }
+      ],
+      "total": 180,
+      "formattedTotal": "R$ 180,00"
+    }
+  },
+  "nfseStatus": "authorized",
+  "nfseDocuments": [
+    {
+      "id": "dddddddddddddddddddddddd",
+      "number": "456",
+      "status": "authorized",
+      "environment": "homologacao",
+      "accessKey": "22222222222222222222222222222222222222222222222222",
+      "verificationCode": "TESTE",
+      "approximateTaxes": {
+        "mode": "percentual",
+        "federal": 10.76,
+        "state": 0,
+        "municipal": 1.89,
+        "total": 12.65,
+        "source": "IBPT/empresometro.com.br",
+        "version": "26.2.A"
+      },
+      "consultationUrl": "https://www.producaorestrita.nfse.gov.br/ConsultaPublica/?teste=isolado",
+      "total": 80,
+      "qrCodeImage": "data:image/png;base64,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",
+      "xmlContent": "<NFSe>DOCUMENTO FICTÍCIO</NFSe>"
+    }
+  ],
+  "fiscalQrCodeImage": "data:image/png;base64,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",
+  "nfseError": "",
+  "nfseWarning": ""
+}

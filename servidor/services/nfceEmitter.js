@@ -1151,6 +1151,7 @@ const normalizeFiscalItem = (item = {}) => {
   );
   return {
     productId,
+    serviceId: item.serviceId || item.servicoId || item.servico || null,
     itemType,
     type: itemType,
     quantity,
@@ -1208,7 +1209,8 @@ const allocateFiscalAmount = (items = [], total = 0, field = 'discount') => {
 };
 
 const isServiceFiscalItem = (item = {}) =>
-  ['service', 'servico', 'serviço'].includes(String(item.itemType || item.type || '').trim().toLowerCase());
+  ['service', 'servico', 'serviço'].includes(String(item.itemType || item.type || '').trim().toLowerCase())
+  || Boolean(item.serviceId || item.servicoId || item.servico);
 
 const allocatePaymentAmounts = (payments = [], total = 0) => {
   const targetCents = Math.max(0, Math.round(safeNumber(total, 0) * 100));
@@ -1383,7 +1385,7 @@ const resolveFiscalRuleForProduct = async ({ product, storeObject, ruleCache }) 
   const cacheKey = String(storeId);
   let storeRules = ruleCache.get(cacheKey);
   if (!storeRules) {
-    storeRules = await FiscalDefaultRule.find({ empresa: storeId }).sort({ code: 1 }).lean();
+    storeRules = await FiscalDefaultRule.find({ empresa: storeId, tipo: { $ne: 'servico' } }).sort({ code: 1 }).lean();
     ruleCache.set(cacheKey, storeRules);
   }
 

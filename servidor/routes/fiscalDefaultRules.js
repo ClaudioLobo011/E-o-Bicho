@@ -4,6 +4,9 @@ const authorizeRoles = require('../middlewares/authorizeRoles');
 const Store = require('../models/Store');
 const FiscalDefaultRule = require('../models/FiscalDefaultRule');
 const Product = require('../models/Product');
+const Service = require('../models/Service');
+const { validateNfseFiscal } = require('../utils/nfseConfig');
+const { assertFiscalStoreAccess } = require('../utils/fiscalStoreAccess');
 const { normalizeFiscalData } = require('../services/fiscalRuleEngine');
 
 const router = express.Router();
@@ -14,6 +17,7 @@ const parseRuleCode = (value) => {
 };
 
 const toRulePayload = (rule) => ({
+  tipo: rule?.tipo || 'produto',
   code: Number(rule?.code) || 0,
   name: rule?.name || '',
   fiscal: rule?.fiscal || {},
@@ -45,6 +49,17 @@ const touchProductsUsingRule = async (storeId, ruleCode) => {
   );
 };
 
+const touchServicesUsingRule = (storeId, ruleCode) => Service.updateMany(
+  { [`fiscalPorEmpresa.${storeId}.fiscalRuleCode`]: String(ruleCode) },
+  { $set: { updatedAt: new Date() } },
+  { timestamps: false }
+);
+
+const normalizeRuleFiscal = (tipo, fiscal) => {
+  if (!['produto', 'servico'].includes(tipo)) throw Object.assign(new Error('Tipo de regra fiscal inválido.'), { status: 400 });
+  return tipo === 'servico' ? { nfse: validateNfseFiscal(fiscal?.nfse || {}) } : normalizeFiscalData(fiscal || {});
+};
+
 router.get('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
   try {
     const { storeId } = req.query;
@@ -52,12 +67,16 @@ router.get('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (req
       return res.status(400).json({ message: 'Informe a empresa (storeId).' });
     }
 
+    assertFiscalStoreAccess(req, storeId);
     const storeExists = await ensureStoreExists(storeId);
     if (!storeExists) {
       return res.status(404).json({ message: 'Empresa nao encontrada.' });
     }
 
-    const rules = await FiscalDefaultRule.find({ empresa: storeId })
+    const query = { empresa: storeId };
+    if (req.query.tipo === 'servico') query.tipo = 'servico';
+    if (req.query.tipo === 'produto') query.tipo = { $ne: 'servico' };
+    const rules = await FiscalDefaultRule.find(query)
       .sort({ code: 1 })
       .lean();
 
@@ -71,7 +90,7 @@ router.get('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (req
     });
   } catch (error) {
     console.error('Erro ao carregar regras fiscais padrao:', error);
-    return res.status(500).json({ message: 'Erro ao carregar regras fiscais padrao.' });
+    return res.status(error.status || 500).json({ message: [400, 403].includes(error.status) ? error.message : 'Erro ao carregar regras fiscais padrao.' });
   }
 });
 
@@ -87,12 +106,14 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
       return res.status(400).json({ message: 'Informe o nome da regra.' });
     }
 
+    assertFiscalStoreAccess(req, storeId);
     const storeExists = await ensureStoreExists(storeId);
     if (!storeExists) {
       return res.status(404).json({ message: 'Empresa nao encontrada.' });
     }
 
-    const fiscalNormalized = normalizeFiscalData(fiscal || {});
+    const tipo = req.body.tipo || 'produto';
+    const fiscalNormalized = normalizeRuleFiscal(tipo, fiscal);
     const updatedBy = req.user?.id || '';
 
     let created = null;
@@ -107,6 +128,7 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
           empresa: storeId,
           code: nextCode,
           name: trimmedName,
+          tipo,
           fiscal: fiscalNormalized,
           updatedBy,
         });
@@ -128,7 +150,7 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
     });
   } catch (error) {
     console.error('Erro ao criar regra fiscal padrao:', error);
-    return res.status(500).json({ message: 'Erro ao criar regra fiscal padrao.' });
+    return res.status(error.status || 500).json({ message: [400, 403].includes(error.status) ? error.message : 'Erro ao criar regra fiscal padrao.' });
   }
 });
 
@@ -149,17 +171,23 @@ router.put('/:code', requireAuth, authorizeRoles('admin', 'admin_master'), async
       return res.status(400).json({ message: 'Informe o nome da regra.' });
     }
 
+    assertFiscalStoreAccess(req, storeId);
     const storeExists = await ensureStoreExists(storeId);
     if (!storeExists) {
       return res.status(404).json({ message: 'Empresa nao encontrada.' });
     }
 
+    const existingRule = await FiscalDefaultRule.findOne({ empresa: storeId, code: ruleCode }).lean();
+    if (!existingRule) return res.status(404).json({ message: 'Regra não encontrada.' });
+    const tipo = req.body.tipo || existingRule.tipo || 'produto';
+    if (tipo !== (existingRule.tipo || 'produto')) return res.status(400).json({ message: 'O tipo de uma regra existente não pode ser alterado. Cadastre outra regra para preservar os vínculos.' });
     const updatedRule = await FiscalDefaultRule.findOneAndUpdate(
       { empresa: storeId, code: ruleCode },
       {
         $set: {
           name: trimmedName,
-          fiscal: normalizeFiscalData(fiscal || {}),
+          tipo,
+          fiscal: normalizeRuleFiscal(tipo, fiscal),
           updatedBy: req.user?.id || '',
         },
       },
@@ -170,13 +198,14 @@ router.put('/:code', requireAuth, authorizeRoles('admin', 'admin_master'), async
       return res.status(404).json({ message: 'Regra nao encontrada.' });
     }
 
-    await touchProductsUsingRule(storeId, ruleCode);
+    if (tipo === 'servico') await touchServicesUsingRule(storeId, ruleCode);
+    else await touchProductsUsingRule(storeId, ruleCode);
 
     const total = await FiscalDefaultRule.countDocuments({ empresa: storeId });
     return res.json({ rule: toRulePayload(updatedRule), total });
   } catch (error) {
     console.error('Erro ao atualizar regra fiscal padrao:', error);
-    return res.status(500).json({ message: 'Erro ao atualizar regra fiscal padrao.' });
+    return res.status(error.status || 500).json({ message: [400, 403].includes(error.status) ? error.message : 'Erro ao atualizar regra fiscal padrao.' });
   }
 });
 
@@ -192,11 +221,14 @@ router.delete('/:code', requireAuth, authorizeRoles('admin', 'admin_master'), as
       return res.status(400).json({ message: 'Informe a empresa (storeId).' });
     }
 
+    assertFiscalStoreAccess(req, storeId);
     const storeExists = await ensureStoreExists(storeId);
     if (!storeExists) {
       return res.status(404).json({ message: 'Empresa nao encontrada.' });
     }
 
+    const ruleInUse = await Service.exists({ [`fiscalPorEmpresa.${storeId}.fiscalRuleCode`]: String(ruleCode) });
+    if (ruleInUse) return res.status(409).json({ message: 'Esta regra está vinculada a serviços. Altere os vínculos antes de excluir.' });
     const removed = await FiscalDefaultRule.findOneAndDelete({ empresa: storeId, code: ruleCode }).lean();
     if (!removed) {
       return res.status(404).json({ message: 'Regra nao encontrada.' });
@@ -212,7 +244,7 @@ router.delete('/:code', requireAuth, authorizeRoles('admin', 'admin_master'), as
     });
   } catch (error) {
     console.error('Erro ao remover regra fiscal padrao:', error);
-    return res.status(500).json({ message: 'Erro ao remover regra fiscal padrao.' });
+    return res.status(error.status || 500).json({ message: [400, 403].includes(error.status) ? error.message : 'Erro ao remover regra fiscal padrao.' });
   }
 });
 

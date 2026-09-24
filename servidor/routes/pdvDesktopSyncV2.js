@@ -335,14 +335,14 @@ async function loadDirectoryUpserts(entity, host, cursor, limit) {
     } };
   }
   if (entity === 'services') {
-    documents = await Service.find(cursorQuery(cursor)).select('_id nome valor duracaoMinutos grupo categorias porte ativo updatedAt')
+    documents = await Service.find(cursorQuery(cursor)).select('_id nome valor duracaoMinutos grupo categorias porte ativo fiscalPorEmpresa updatedAt')
       .populate({ path: 'grupo', select: 'nome tiposPermitidos comissaoPercent' })
       .sort({ updatedAt: 1, _id: 1 }).limit(limit + 1).lean();
     return { documents, map: (page) => page.map((service) => ({
       id: String(service._id), name: service.nome || '', price: Number(service.valor || 0), durationMinutes: Number(service.duracaoMinutos || 0),
       active: service.ativo !== false, groupId: String(service.grupo?._id || service.grupo || ''),
       groupCommissionPercent: Number(service.grupo?.comissaoPercent || 0), allowedStaffTypes: service.grupo?.tiposPermitidos || [],
-      categories: service.categorias || [], sizes: service.porte || [], updatedAt: service.updatedAt || null,
+      categories: service.categorias || [], sizes: service.porte || [], fiscalPorEmpresa: service.fiscalPorEmpresa || {}, updatedAt: service.updatedAt || null,
     })) };
   }
   if (entity === 'stores') {

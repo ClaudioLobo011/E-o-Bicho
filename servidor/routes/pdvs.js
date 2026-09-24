@@ -48,6 +48,7 @@ const {
   pdvBudgetSequenceKey,
 } = require('../utils/sequences');
 const { createSerialTaskQueue } = require('../utils/serialTaskQueue');
+const { isComplimentaryServiceSale } = require('../utils/pdvComplimentaryServices');
 const PDV_IDEMPOTENCY_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 const PDV_STATE_WRITE_QUEUE_STALE_MS = Math.max(
   30_000,
@@ -1770,6 +1771,7 @@ const normalizeSaleRecordPayload = (record) => {
     saleCodeLabel,
     customerName,
     customerDocument,
+    nfseCustomerIdentification: record.nfseCustomerIdentification === 'not_informed' ? 'not_informed' : 'identified',
     seller: sellerSource && typeof sellerSource === 'object' ? { ...sellerSource } : null,
     sellerName: sellerName || '',
     sellerCode,
@@ -2262,8 +2264,8 @@ const buildPdvPayload = ({ body, store }) => {
     throw createValidationError('A operação do PDV deve ser Fiscal ou Matricial.');
   }
 
-  if (tipoOperacao === 'fiscal' && !ambientesHabilitados.length) {
-    throw new Error('Informe ao menos um ambiente fiscal habilitado.');
+  if (tipoOperacao === 'fiscal' && !ambientesHabilitados.length && store?.nfse?.enabled !== true) {
+    throw new Error('Habilite um ambiente de NFC-e ou configure a NFS-e na empresa emitente para operar somente com serviços.');
   }
 
   if (ambientesHabilitados.length && !ambientePadrao) {
@@ -4525,6 +4527,11 @@ const emitSaleFiscalHandler = async (req, res) => {
 
 router.post('/:id/sales/:saleId/fiscal', requireAuth, emitSaleFiscalHandler);
 
+const nfseHandlers = require('./pdvNfse').createPdvNfseHandlers();
+router.get('/:id/sales/:saleId/nfse', requireAuth, nfseHandlers.list);
+router.post('/:id/sales/:saleId/nfse/preview', requireAuth, nfseHandlers.preview);
+router.post('/:id/sales/:saleId/nfse', requireAuth, nfseHandlers.emit);
+
 router.put('/:id/configuracoes', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
   try {
     const pdvId = req.params.id;
@@ -5756,9 +5763,18 @@ const runPdvCommand = async ({
     const totalLiquido =
       safeNumber(payload?.totalLiquido, NaN) ||
       Math.max(0, totalBruto - discountValue + additionValue);
+    const complimentaryServiceSale = isComplimentaryServiceSale({ ...payload, items });
 
-    if (!(totalLiquido > 0)) {
+    if (!(totalLiquido > 0) && !complimentaryServiceSale) {
       const error = new Error('Informe o valor total da venda.');
+      error.statusCode = 400;
+      throw error;
+    }
+    if (complimentaryServiceSale && (
+      (payload.payments != null && (!Array.isArray(payload.payments) || payload.payments.length)) ||
+      (payload.receivables != null && (!Array.isArray(payload.receivables) || payload.receivables.length))
+    )) {
+      const error = new Error('Serviços gratuitos devem ser finalizados sem pagamentos ou contas a receber.');
       error.statusCode = 400;
       throw error;
     }
@@ -5833,6 +5849,7 @@ const runPdvCommand = async ({
       saleCodeLabel: normalizeString(payload?.saleCodeLabel),
       customerName: customerName || 'Cliente não informado',
       customerDocument,
+      nfseCustomerIdentification: payload.nfseCustomerIdentification === 'not_informed' ? 'not_informed' : 'identified',
       seller,
       paymentTags,
       items,
@@ -5920,7 +5937,7 @@ const runPdvCommand = async ({
     let nextSales = [incomingSale, ...existingSales];
     perf.mark('sale_finalize.codes_ensured');
 
-    const productIds = collectProductIdsFromSales([incomingSale]);
+    const productIds = complimentaryServiceSale ? [] : collectProductIdsFromSales([incomingSale]);
     if (productIds.length) {
       const products = await Product.find({ _id: { $in: productIds } })
         .select('custo custoMedio custoCalculado precoCusto precoCustoUnitario')
@@ -5938,7 +5955,7 @@ const runPdvCommand = async ({
       : [];
     const depositConfig = pdvDoc?.configuracoesEstoque?.depositoPadrao || null;
     let nextInventoryMovements = existingInventoryMovements;
-    if (depositConfig) {
+    if (depositConfig && !complimentaryServiceSale) {
       const salesToProcess = PDV_SALE_FINALIZE_PROCESS_ALL_SALES
         ? nextSales
         : nextSales.filter((sale) => normalizeString(sale?.id || sale?._id) === normalizeString(incomingSale.id));
@@ -6050,7 +6067,7 @@ const runPdvCommand = async ({
       ),
     };
 
-    reconcileCashStateFromSales({ existingState, updatePayload });
+    if (!complimentaryServiceSale) reconcileCashStateFromSales({ existingState, updatePayload });
     const clampedUpdatePayload = clampPdvStatePayloadArrays(updatePayload);
     perf.mark('sale_finalize.cash_reconciled');
 
@@ -6197,7 +6214,34 @@ const runPdvCommand = async ({
       };
     }
 
+    const canonicalSaleId = normalizeString(saleRecord.id || saleRecord._id);
+    return require('../services/nfseService').withSaleFiscalLock(
+      { pdv: pdvId, sale: { id: canonicalSaleId } },
+      async (assertLease) => {
+    // Releitura sob a mesma trava da emissão: o cancelamento pode ter ocorrido
+    // enquanto a requisição aguardava, e o espelho PdvStateSale é assíncrono.
+    const existingStateDoc = await PdvState.findOne({ pdv: pdvId });
+    const existingState = existingStateDoc?.toObject?.() || existingStateDoc;
+    const existingSales = (existingState?.completedSales || []).map((sale) => ({ ...sale }));
+    const saleIndex = existingSales.findIndex((sale) => normalizeString(sale.id || sale._id) === canonicalSaleId);
+    const saleRecord = existingSales[saleIndex];
+    if (!saleRecord) throw Object.assign(new Error('Venda não encontrada para cancelamento.'), { statusCode: 404 });
+    if (normalizeString(saleRecord.status).toLowerCase() === 'cancelled'
+      || existingState?.recentStateMutationKeys?.includes(idempotencyKey)) {
+      return { state: serializeStateForResponse(existingStateDoc), shouldEmit: false };
+    }
+    assertLease();
     const cancellationAt = safeDate(payload?.cancellationAt || payload?.cancelledAt) || new Date();
+    const hasOpenServiceDocument = await require('../models/NfseDocument').exists({
+      pdv: pdvId,
+      saleId: normalizeString(saleRecord.id || saleRecord._id),
+      status: { $in: ['pending', 'processing', 'authorized', 'unknown'] },
+    });
+    if (hasOpenServiceDocument) {
+      const error = new Error('Consulte e cancele a NFS-e na central de notas de serviço antes de cancelar esta venda.');
+      error.statusCode = 409;
+      throw error;
+    }
     const saleCode = normalizeString(saleRecord?.saleCode || saleRecord?.saleCodeLabel || '');
     const saleTotal = safeNumber(
       saleRecord?.totalLiquido ?? saleRecord?.total ?? saleRecord?.totalBruto ?? 0,
@@ -6343,6 +6387,7 @@ const runPdvCommand = async ({
       nextInventoryMovements = combinedMovements;
     }
 
+    assertLease();
     const updatedState = await PdvState.findOneAndUpdate(
       { pdv: pdvId },
       {
@@ -6383,6 +6428,8 @@ const runPdvCommand = async ({
       state: serializeStateForResponse(updatedState),
       shouldEmit: true,
     };
+      }
+    );
   }
 
   if (action === PDV_COMMANDS.SALE_RESET_FISCAL_STATUS) {
@@ -7053,6 +7100,7 @@ const runPdvCommand = async ({
         saleCodeLabel: normalizeString(payload?.saleCodeLabel || ''),
         customerName,
         customerDocument,
+        nfseCustomerIdentification: payload.nfseCustomerIdentification === 'not_informed' ? 'not_informed' : 'identified',
         items,
         paymentTags: buildPaymentTagsFromPayments(payments),
         discountValue,
@@ -7161,8 +7209,17 @@ const runPdvCommand = async ({
       error.statusCode = 404;
       throw error;
     }
-    if (!(totalLiquido > 0)) {
+    const complimentaryDelivery = isComplimentaryServiceSale({ ...payload, items });
+    if (!(totalLiquido > 0) && !complimentaryDelivery) {
       const error = new Error('Informe o valor total para finalizar o delivery.');
+      error.statusCode = 400;
+      throw error;
+    }
+    if (complimentaryDelivery && (
+      (payload.payments != null && (!Array.isArray(payload.payments) || payload.payments.length)) ||
+      (payload.receivables != null && (!Array.isArray(payload.receivables) || payload.receivables.length))
+    )) {
+      const error = new Error('Serviços gratuitos devem ser finalizados sem pagamentos ou contas a receber.');
       error.statusCode = 400;
       throw error;
     }
@@ -7196,18 +7253,28 @@ const runPdvCommand = async ({
 
     if (saleIndex >= 0) {
       const existingSale = nextSales[saleIndex];
+      if (complimentaryDelivery && (
+        existingSale.receivables?.length || (existingState.accountsReceivable || []).some((entry) => normalizeString(entry.saleId) === normalizeString(existingSale.id))
+      )) {
+        const error = new Error('Remova as contas a receber vinculadas antes de finalizar o atendimento gratuito.');
+        error.statusCode = 400;
+        throw error;
+      }
       nextSales[saleIndex] = normalizeSaleRecordPayload({
         ...existingSale,
         saleCode: normalizeString(payload?.saleCode || existingSale?.saleCode || targetOrder?.saleCode || ''),
+        nfseCustomerIdentification: payload.nfseCustomerIdentification === undefined
+          ? existingSale.nfseCustomerIdentification
+          : payload.nfseCustomerIdentification === 'not_informed' ? 'not_informed' : 'identified',
         saleCodeLabel: normalizeString(payload?.saleCode || existingSale?.saleCodeLabel || targetOrder?.saleCode || ''),
         items: items.length ? items : Array.isArray(existingSale?.items) ? existingSale.items : [],
         payments: payments.length ? payments : [],
         paymentTags: buildPaymentTagsFromPayments(payments),
-        discountValue: discountValue || safeNumber(existingSale?.discountValue, 0),
-        additionValue: additionValue || safeNumber(existingSale?.additionValue, 0),
+        discountValue: complimentaryDelivery ? 0 : discountValue || safeNumber(existingSale?.discountValue, 0),
+        additionValue: complimentaryDelivery ? 0 : additionValue || safeNumber(existingSale?.additionValue, 0),
         total: totalLiquido,
         totalLiquido,
-        totalBruto: totalBruto || safeNumber(existingSale?.totalBruto, totalLiquido),
+        totalBruto: complimentaryDelivery ? 0 : totalBruto || safeNumber(existingSale?.totalBruto, totalLiquido),
         customerName,
         customerDocument,
         cashContributions: contributions,
@@ -7268,7 +7335,7 @@ const runPdvCommand = async ({
       : [];
     let nextInventoryMovements = existingInventoryMovements;
     const depositConfig = pdvDoc?.configuracoesEstoque?.depositoPadrao || null;
-    if (depositConfig) {
+    if (depositConfig && !complimentaryDelivery) {
       const inventoryResult = await applyInventoryMovementsToSales({
         sales: nextSales,
         depositId: depositConfig,
@@ -7321,7 +7388,7 @@ const runPdvCommand = async ({
       caixaAberto: true,
     };
 
-    reconcileCashStateFromSales({ existingState, updatePayload: deliveryFinalizeUpdatePayload });
+    if (!complimentaryDelivery) reconcileCashStateFromSales({ existingState, updatePayload: deliveryFinalizeUpdatePayload });
     const { caixaAberto: _ignoredCaixaAberto, ...deliveryFinalizeSetPayload } = deliveryFinalizeUpdatePayload;
     const limitedStateSetPayload = clampPdvStateSetPayloadArrays(deliveryFinalizeSetPayload);
 

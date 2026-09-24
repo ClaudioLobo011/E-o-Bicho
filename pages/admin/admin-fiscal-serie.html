@@ -20,7 +20,7 @@
         <section class="bg-white rounded-xl shadow p-5">
           <header class="mb-6">
             <h1 class="text-xl font-semibold text-gray-800">Cadastro de Serie Fiscal</h1>
-            <p class="text-sm text-gray-600">Cadastre series fiscais por empresa e acompanhe os ultimos registros emitidos.</p>
+            <p class="text-sm text-gray-600">Cadastre séries de NF-e/NFC-e por empresa e consulte abaixo a série da DPS usada para NFS-e.</p>
           </header>
 
           <form class="space-y-6">
@@ -55,6 +55,14 @@
               </div>
             </div>
           </form>
+        </section>
+
+        <section class="rounded-xl border border-emerald-200 bg-white p-5 shadow-sm space-y-4">
+          <header class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div><h2 class="text-base font-semibold text-gray-800">Serviços — série da DPS</h2><p class="mt-1 text-xs text-gray-600">A série é configurada na aba NFS-e da empresa. O sistema controla a sequência por emitente, ambiente e série; o número da nota vem do Emissor Nacional.</p></div>
+            <a href="admin-fiscal-nfse.html" class="shrink-0 text-sm font-semibold text-emerald-700 underline">Consultar NFS-e emitidas</a>
+          </header>
+          <div class="overflow-x-auto"><table class="min-w-full divide-y divide-gray-200 text-xs"><thead class="bg-gray-50"><tr><th class="px-3 py-2 text-left font-semibold text-gray-600">Empresa</th><th class="px-3 py-2 text-left font-semibold text-gray-600">Ambiente</th><th class="px-3 py-2 text-left font-semibold text-gray-600">Série DPS</th><th class="px-3 py-2 text-left font-semibold text-gray-600">Situação</th><th class="px-3 py-2 text-left font-semibold text-gray-600">Configuração</th></tr></thead><tbody id="fiscal-nfse-series" class="divide-y divide-gray-100"><tr><td colspan="5" class="px-3 py-4 text-gray-500">Carregando empresas…</td></tr></tbody></table></div>
         </section>
 
         <section class="bg-white rounded-xl shadow p-5 space-y-5">

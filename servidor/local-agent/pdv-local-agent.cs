@@ -15,7 +15,7 @@ namespace PdvLocalAgent
 {
     public class Program
     {
-        private static readonly string Version = "1.1.6";
+        private static readonly string Version = "1.1.10";
         private static readonly JavaScriptSerializer Serializer = new JavaScriptSerializer();
         private static AgentConfig Config;
         private static Logger Log;
@@ -131,6 +131,7 @@ namespace PdvLocalAgent
                     {
                         ok = true,
                         version = Version,
+                        supportsMultipleFiscalQr = true,
                         queue = new
                         {
                             pending = Queue.Count,
@@ -766,6 +767,7 @@ try {
         public ReceiptSection previsto { get; set; }
         public ReceiptSection apurado { get; set; }
         public ReceiptQrCode qrCode { get; set; }
+        public List<ReceiptQrCode> qrCodes { get; set; }
         public ReceiptFooter footer { get; set; }
         public BudgetInfo budget { get; set; }
         public string fallbackText { get; set; }
@@ -908,10 +910,35 @@ try {
 
     public class ReceiptQrCode
     {
+        public string label { get; set; }
+        public string issuerName { get; set; }
+        public string issuerCnpj { get; set; }
+        public ReceiptApproximateTaxes approximateTaxes { get; set; }
+        public string number { get; set; }
+        public string series { get; set; }
+        public string accessKey { get; set; }
+        public string protocol { get; set; }
+        public string verificationCode { get; set; }
+        public string total { get; set; }
+        public string environment { get; set; }
         public string payload { get; set; }
         public string image { get; set; }
         public int moduleSize { get; set; }
         public string errorCorrection { get; set; }
+    }
+
+    public class ReceiptApproximateTaxes
+    {
+        public string mode { get; set; }
+        public double? federal { get; set; }
+        public double? state { get; set; }
+        public double? municipal { get; set; }
+        public double total { get; set; }
+        public string source { get; set; }
+        public string version { get; set; }
+        public string referenceCode { get; set; }
+        public string validFrom { get; set; }
+        public string validUntil { get; set; }
     }
 
     public class ReceiptFooter
@@ -1010,6 +1037,10 @@ try {
             {
                 RenderFechamento(doc);
             }
+            else if (type == "agenda_comissoes")
+            {
+                RenderAgendaComissoes(doc);
+            }
             else if (type == "orcamento")
             {
                 RenderBudget(doc);
@@ -1024,7 +1055,10 @@ try {
 
         public byte[] RenderPreviewPng(ReceiptDocument doc)
         {
-            using (var bitmap = RasterReceiptBuilder.Build(doc, Width <= 32 ? 384 : 576))
+            int previewWidth = string.Equals(doc != null ? doc.paperWidth : null, "58mm", StringComparison.OrdinalIgnoreCase)
+                ? 384
+                : 576;
+            using (var bitmap = RasterReceiptBuilder.Build(doc, previewWidth))
             using (var stream = new MemoryStream())
             {
                 bitmap.Save(stream, System.Drawing.Imaging.ImageFormat.Png);
@@ -1213,6 +1247,10 @@ try {
             using (var bitmap = RasterReceiptBuilder.Build(doc, Width <= 32 ? 384 : 576))
             {
                 PrintRasterImage(bitmap);
+            }
+            if (doc.qrCodes != null) foreach (ReceiptQrCode code in doc.qrCodes)
+            {
+                if (HasQr(code) && !HasUsableQrImage(code)) { AddLineCentered(code.label ?? "DOCUMENTO FISCAL", true); PrintQrCodeDanfe(code); }
             }
         }
 
@@ -1795,6 +1833,17 @@ try {
                 }
             }
         }
+        private void RenderAgendaComissoes(ReceiptDocument doc)
+        {
+            int pixelWidth = string.Equals(doc != null ? doc.paperWidth : null, "58mm", StringComparison.OrdinalIgnoreCase)
+                ? 384
+                : 576;
+            using (var bitmap = RasterReceiptBuilder.Build(doc, pixelWidth))
+            {
+                PrintRasterImage(bitmap);
+            }
+        }
+
         private void RenderFechamento(ReceiptDocument doc)
         {
             var meta = doc.meta;
@@ -2657,12 +2706,17 @@ try {
         public static Bitmap Build(ReceiptDocument doc, int pixelWidth)
         {
             pixelWidth = pixelWidth <= 384 ? 384 : 576;
+            if (doc != null && string.Equals(doc.type, "agenda_comissoes", StringComparison.OrdinalIgnoreCase))
+            {
+                return BuildAgendaComissoes(doc, pixelWidth);
+            }
             int estimatedItems = doc != null && doc.items != null ? doc.items.Count : 0;
             string documentType = doc != null ? (doc.type ?? string.Empty) : string.Empty;
             string documentVariant = doc != null ? (doc.variant ?? string.Empty) : string.Empty;
             bool isFiscal = string.Equals(documentType, "nfce", StringComparison.OrdinalIgnoreCase) || string.Equals(documentType, "danfe", StringComparison.OrdinalIgnoreCase) || documentVariant.IndexOf("fiscal", StringComparison.OrdinalIgnoreCase) >= 0 || documentVariant.IndexOf("danfe", StringComparison.OrdinalIgnoreCase) >= 0;
             bool isDelivery = doc != null && (string.Equals(documentType, "delivery", StringComparison.OrdinalIgnoreCase) || doc.delivery != null);
-            int canvasHeight = Math.Max(1800, 1500 + (estimatedItems * 150) + (isDelivery ? 600 : 0) + (isFiscal ? 450 : 0));
+            int fiscalDocumentCount = doc != null && doc.qrCodes != null ? doc.qrCodes.Count : 0;
+            int canvasHeight = (fiscalDocumentCount * 900) + Math.Max(1800, 1500 + (estimatedItems * 150) + (isDelivery ? 600 : 0) + (isFiscal ? 450 : 0));
             var canvas = new Bitmap(pixelWidth, canvasHeight, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
             float y = 22f;
             int margin = pixelWidth <= 384 ? 16 : 22;
@@ -2718,7 +2772,7 @@ try {
                 y += 7f;
                 DrawSeparator(graphics, dashed, margin, y, contentWidth); y += 13f;
                 y = DrawCentered(graphics, "EXTRATO " + (string.IsNullOrWhiteSpace(saleCode) ? (isDelivery ? "DELIVERY" : "VENDA") : saleCode), titleFont, black, margin, y, contentWidth, 2f);
-                y = DrawCentered(graphics, isFiscal ? "DANFE NFC-e" : isDelivery ? "COMANDA DE DELIVERY" : "CUPOM NÃO FISCAL", titleFont, black, margin, y, contentWidth, 3f);
+                y = DrawCentered(graphics, isFiscal ? "DANFE NFC-e" : isDelivery ? "COMANDA DE DELIVERY" : fiscalDocumentCount > 0 ? "COMPROVANTE DA VENDA" : "CUPOM NÃO FISCAL", titleFont, black, margin, y, contentWidth, 3f);
                 y += 5f;
                 DrawSeparator(graphics, dashed, margin, y, contentWidth); y += 13f;
 
@@ -2834,7 +2888,90 @@ try {
                     y = DrawCentered(graphics, isDelivery ? "COMANDA DE ENTREGA - SEM VALOR FISCAL" : "DOCUMENTO SEM VALOR FISCAL", smallBold, black, margin, y + 8f, contentWidth, 2f);
                 }
 
+                if (doc != null && doc.qrCodes != null)
+                {
+                    foreach (ReceiptQrCode code in doc.qrCodes)
+                    {
+                        if (code == null) continue;
+                        y += 7f; DrawSeparator(graphics, dashed, margin, y, contentWidth); y += 12f;
+                        y = DrawCentered(graphics, code.label ?? "DOCUMENTO FISCAL", bodyBold, black, margin, y, contentWidth, 3f);
+                        if (!string.IsNullOrWhiteSpace(code.issuerName)) y = DrawCentered(graphics, "Emitente: " + code.issuerName, smallFont, black, margin, y, contentWidth, 2f);
+                        if (!string.IsNullOrWhiteSpace(code.issuerCnpj)) y = DrawCentered(graphics, "CNPJ: " + code.issuerCnpj, smallFont, black, margin, y, contentWidth, 2f);
+                        if (!string.IsNullOrWhiteSpace(code.number)) y = DrawCentered(graphics, "Nº " + code.number + (string.IsNullOrWhiteSpace(code.series) ? "" : "  Série " + code.series), bodyBold, black, margin, y, contentWidth, 3f);
+                        if (!string.IsNullOrWhiteSpace(code.total)) y = DrawCentered(graphics, "Valor da nota: " + code.total, smallFont, black, margin, y, contentWidth, 2f);
+                        if (code.approximateTaxes != null)
+                        {
+                            ReceiptApproximateTaxes tax = code.approximateTaxes;
+                            var culture = new System.Globalization.CultureInfo("pt-BR");
+                            y = DrawCentered(graphics, "Tributos aprox. serviço: R$ " + tax.total.ToString("F2", culture), smallFont, black, margin, y, contentWidth, 2f);
+                            var amounts = new List<string>();
+                            if (tax.federal.HasValue) amounts.Add("Federal R$ " + tax.federal.Value.ToString("F2", culture));
+                            if (tax.state.HasValue) amounts.Add("Estadual R$ " + tax.state.Value.ToString("F2", culture));
+                            if (tax.municipal.HasValue) amounts.Add("Municipal R$ " + tax.municipal.Value.ToString("F2", culture));
+                            if (amounts.Count > 0) y = DrawCentered(graphics, string.Join(" / ", amounts), smallFont, black, margin, y, contentWidth, 2f);
+                            var sources = new List<string>();
+                            if (!string.IsNullOrWhiteSpace(tax.source)) sources.Add(tax.source);
+                            if (!string.IsNullOrWhiteSpace(tax.version)) sources.Add(tax.version);
+                            if (!string.IsNullOrWhiteSpace(tax.referenceCode)) sources.Add(tax.referenceCode);
+                            if (sources.Count > 0) y = DrawCentered(graphics, "Fonte: " + string.Join(" / ", sources), smallFont, black, margin, y, contentWidth, 2f);
+                        }
+                        if (!string.IsNullOrWhiteSpace(code.accessKey)) y = DrawCentered(graphics, "Chave: " + GroupAccessKey(code.accessKey), smallFont, black, margin, y, contentWidth, 2f);
+                        if (!string.IsNullOrWhiteSpace(code.protocol)) y = DrawCentered(graphics, "Protocolo: " + code.protocol, smallFont, black, margin, y, contentWidth, 2f);
+                        if (!string.IsNullOrWhiteSpace(code.verificationCode)) y = DrawCentered(graphics, "Verificação: " + code.verificationCode, smallFont, black, margin, y, contentWidth, 2f);
+                        if (code.environment == "2" || (!string.IsNullOrWhiteSpace(code.environment) && code.environment.IndexOf("homolog", StringComparison.OrdinalIgnoreCase) >= 0))
+                            y = DrawCentered(graphics, "HOMOLOGAÇÃO - SEM VALOR FISCAL", smallBold, black, margin, y, contentWidth, 3f);
+                        if (!string.IsNullOrWhiteSpace(code.image)) y = DrawQrImage(graphics, code.image, margin, y + 4f, contentWidth);
+                        else if (!string.IsNullOrWhiteSpace(code.payload)) y = DrawCentered(graphics, code.payload, smallFont, black, margin, y, contentWidth, 4f);
+                    }
+                    if (doc.footer != null && doc.footer.lines != null)
+                        foreach (string line in doc.footer.lines) y = DrawCentered(graphics, line, smallFont, black, margin, y + 3f, contentWidth, 2f);
+                }
+
                 int finalHeight = Math.Min(canvas.Height, Math.Max(240, (int)Math.Ceiling(y + 24f)));
+                var result = new Bitmap(pixelWidth, finalHeight, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+                using (var finalGraphics = Graphics.FromImage(result))
+                {
+                    finalGraphics.Clear(Color.White);
+                    finalGraphics.DrawImageUnscaled(canvas, 0, 0);
+                }
+                canvas.Dispose();
+                return result;
+            }
+        }
+
+        private static Bitmap BuildAgendaComissoes(ReceiptDocument doc, int pixelWidth)
+        {
+            int itemCount = doc.recebimentos != null && doc.recebimentos.items != null ? doc.recebimentos.items.Count : 0;
+            int canvasHeight = Math.Max(260, 180 + (itemCount * 32));
+            var canvas = new Bitmap(pixelWidth, canvasHeight, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+            int margin = pixelWidth <= 384 ? 16 : 22;
+            float contentWidth = pixelWidth - (margin * 2);
+            float y = 20f;
+            using (var graphics = Graphics.FromImage(canvas))
+            using (var black = new SolidBrush(Color.Black))
+            using (var titleFont = new Font("Arial", pixelWidth <= 384 ? 22f : 27f, FontStyle.Bold, GraphicsUnit.Pixel))
+            using (var bodyFont = new Font("Arial", pixelWidth <= 384 ? 14f : 16f, FontStyle.Regular, GraphicsUnit.Pixel))
+            using (var totalFont = new Font("Arial", pixelWidth <= 384 ? 18f : 21f, FontStyle.Bold, GraphicsUnit.Pixel))
+            using (var separator = new Pen(Color.Black, 1f))
+            {
+                graphics.Clear(Color.White);
+                graphics.PageUnit = GraphicsUnit.Pixel;
+                graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.SingleBitPerPixelGridFit;
+                y = DrawCentered(graphics, (doc.title ?? string.Empty).ToUpperInvariant(), FitFont(graphics, doc.title ?? string.Empty, titleFont, contentWidth), black, margin, y, contentWidth, 3f);
+                string date = doc.meta != null ? (doc.meta.date ?? string.Empty) : string.Empty;
+                if (!string.IsNullOrWhiteSpace(date)) y = DrawCentered(graphics, date, bodyFont, black, margin, y, contentWidth, 4f);
+                DrawSeparator(graphics, separator, margin, y, contentWidth); y += 12f;
+                if (doc.recebimentos != null && doc.recebimentos.items != null)
+                {
+                    foreach (var row in doc.recebimentos.items)
+                    {
+                        if (row == null) continue;
+                        y = DrawValueRow(graphics, row.label ?? string.Empty, row.value ?? string.Empty, bodyFont, black, margin, y, contentWidth, 4f);
+                    }
+                }
+                y += 2f; DrawSeparator(graphics, separator, margin, y, contentWidth); y += 11f;
+                y = DrawValueRow(graphics, "TOTAL", doc.recebimentos != null ? (doc.recebimentos.formattedTotal ?? string.Empty) : string.Empty, totalFont, black, margin, y, contentWidth, 4f);
+                int finalHeight = Math.Min(canvas.Height, Math.Max(220, (int)Math.Ceiling(y + 20f)));
                 var result = new Bitmap(pixelWidth, finalHeight, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
                 using (var finalGraphics = Graphics.FromImage(result))
                 {
@@ -2893,7 +3030,13 @@ try {
                 using (var bitmap = new Bitmap(stream))
                 {
                     float size = Math.Min(maxWidth * .58f, 280f);
+                    var previousInterpolation = graphics.InterpolationMode;
+                    var previousPixelOffset = graphics.PixelOffsetMode;
+                    graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
+                    graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
                     graphics.DrawImage(bitmap, x + ((maxWidth - size) / 2f), y, size, size);
+                    graphics.InterpolationMode = previousInterpolation;
+                    graphics.PixelOffsetMode = previousPixelOffset;
                     return y + size + 5f;
                 }
             }

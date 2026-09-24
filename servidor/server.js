@@ -202,6 +202,7 @@ const routes = [
   { path: '/api/fiscal/icms-simples', file: './routes/fiscalIcmsSimples' },
   { path: '/api/fiscal/rules', file: './routes/fiscalRules' },
   { path: '/api/fiscal/default-rules', file: './routes/fiscalDefaultRules' },
+  { path: '/api/nfse', file: './routes/nfse' },
   { path: '/api/fiscal/series', file: './routes/fiscalSeries' },
   { path: '/api/fiscal/cfop', file: './routes/fiscalCfop' },
   { path: '/api/profile', file: './routes/profile' },

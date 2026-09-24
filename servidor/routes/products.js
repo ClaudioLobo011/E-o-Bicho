@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const express = require('express');
 const router = express.Router();
 const Product = require('../models/Product');
+const { assertProductFiscalRuleTypes } = require('../utils/productFiscalRuleSafety');
 const { validateProductEdit, productEditFilter } = require('../utils/productEditSafety');
 const {
     recalculateFractionalStockForProduct,
@@ -717,6 +718,8 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
             });
         }
 
+        try { await assertProductFiscalRuleTypes(productData.fiscalPorEmpresa); }
+        catch (error) { return res.status(error.statusCode || 400).json({ message: error.message }); }
         let createdProduct = null;
         let attempts = 0;
 
@@ -1876,6 +1879,8 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
                     );
                 });
             }
+            try { await assertProductFiscalRuleTypes(fiscalPorEmpresaPayload); }
+            catch (error) { return res.status(error.statusCode || 400).json({ message: error.message }); }
             updatePayload.fiscalPorEmpresa = fiscalPorEmpresaPayload;
         }
 

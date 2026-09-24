@@ -149,6 +149,20 @@ describe('nfceEmitter itens fiscais do PDV', () => {
     assert.equal(projection.totalLiquido, 10);
   });
 
+  test('servico legado com identificador e sem tipo nunca entra na NFC-e', () => {
+    for (const field of ['serviceId', 'servicoId', 'servico']) {
+      const items = [
+        _test.normalizeFiscalItem({ [field]: '68c495aa32e7d9326182050c', quantity: 1, unitPrice: 70 }),
+        _test.normalizeFiscalItem({ productId: '696f8c460afa280e65021e80', quantity: 1, unitPrice: 20 }),
+      ];
+      const projected = _test.buildFiscalProjection({ items, payments: [{ forma: '01', valor: 90 }] });
+      assert.equal(projected.excludedServices, 1, field);
+      assert.equal(projected.fiscalItems.length, 1, field);
+      assert.equal(projected.totalLiquido, 20, field);
+      assert.equal(projected.payments[0].valor, 20, field);
+    }
+  });
+
   test('recupera a forma de pagamento pelo movimento de caixa quando o snapshot antigo possui somente o id', () => {
     const metadata = _test.resolveSalePaymentMetadata(
       {

@@ -1012,7 +1012,7 @@
 
         try {
             const token = getToken();
-            const response = await fetch(`${API_CONFIG.BASE_URL}/fiscal/default-rules?storeId=${encodeURIComponent(storeId)}`, {
+            const response = await fetch(`${API_CONFIG.BASE_URL}/fiscal/default-rules?tipo=produto&storeId=${encodeURIComponent(storeId)}`, {
                 headers: token ? { Authorization: `Bearer ${token}` } : {},
             });
             if (!response.ok) {
@@ -1057,7 +1057,7 @@
         fiscalRulesLoading.add(storeId);
         try {
             const token = getToken();
-            const response = await fetch(`${API_CONFIG.BASE_URL}/fiscal/default-rules?storeId=${encodeURIComponent(storeId)}`, {
+            const response = await fetch(`${API_CONFIG.BASE_URL}/fiscal/default-rules?tipo=produto&storeId=${encodeURIComponent(storeId)}`, {
                 headers: token ? { Authorization: `Bearer ${token}` } : {},
             });
             if (!response.ok) {

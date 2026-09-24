@@ -2,6 +2,7 @@
 
 const fiscalDefaultRuleSchema = new mongoose.Schema(
   {
+    tipo: { type: String, enum: ['produto', 'servico'], default: 'produto' },
     empresa: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Store',

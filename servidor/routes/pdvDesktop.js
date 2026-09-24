@@ -292,6 +292,14 @@ function desktopAppointmentItemDate(item, fallback) {
   return Number.isNaN(fallbackDate.getTime()) ? null : fallbackDate;
 }
 
+function desktopServiceDate(item = {}, fallback) {
+  const source = clean(item.serviceDate || item.dataPrestacao || item.appointmentDate || item.date || item.data);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(source)) return source;
+  const date = new Date(source || fallback || '');
+  if (Number.isNaN(date.getTime())) return source;
+  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+}
+
 function appointmentForDesktop(appointment, occurrence = null) {
   const customer = appointment?.cliente && typeof appointment.cliente === 'object' ? appointment.cliente : null;
   const pet = appointment?.pet && typeof appointment.pet === 'object' ? appointment.pet : null;
@@ -309,7 +317,8 @@ function appointmentForDesktop(appointment, occurrence = null) {
       professionalId: clean(itemProfessional?._id || item?.profissional),
       professionalName: userName(itemProfessional),
       time: item?.hora || '',
-      date: item?.data || '',
+      date: desktopServiceDate(item, occurrence?.scheduledAt || appointment.scheduledAt),
+      serviceDate: desktopServiceDate(item, occurrence?.scheduledAt || appointment.scheduledAt),
       status: item?.status || appointment.status || 'agendado',
       notes: item?.observacao || '',
     };
@@ -652,7 +661,7 @@ async function desktopAppointmentPayload(source, host) {
     if (professionalId && !mongoose.Types.ObjectId.isValid(professionalId)) throw new Error('Profissional inválido no agendamento.');
     const entry = {
       servico: serviceId, valor: Math.max(0, Number(item.unitPrice ?? item.price ?? 0)), status: DESKTOP_APPOINTMENT_STATUSES.has(clean(item.status).toLowerCase()) ? clean(item.status).toLowerCase() : status,
-      data: clean(item.date) || scheduledAt.toISOString().slice(0, 10), hora: clean(item.time), observacao: clean(item.notes),
+      data: desktopServiceDate(item, scheduledAt), hora: clean(item.time), observacao: clean(item.notes),
     };
     if (professionalId) entry.profissional = professionalId;
     return entry;
@@ -1080,10 +1089,16 @@ async function materializeDesktopEvent(event, pdv, host) {
     });
   };
   const hydrateSaleItems = async (entries = []) => {
-    const productIds = entries.map((entry) => entry?.productId || entry?.id).filter(mongoose.Types.ObjectId.isValid);
-    const codes = entries.map((entry) => clean(entry?.code || entry?.cod)).filter(Boolean);
-    const barcodes = entries.map((entry) => clean(entry?.barcode || entry?.codbarras)).filter(Boolean);
-    const names = entries.map((entry) => clean(entry?.name || entry?.nome)).filter(Boolean);
+    entries = entries.map((item) => ({
+      ...(item?.payload && typeof item.payload === 'object' && !Array.isArray(item.payload) ? item.payload : {}),
+      ...item,
+    }));
+    const isServiceEntry = (entry) => ['service', 'servico', 'serviço'].includes(clean(entry?.itemType || entry?.type).toLowerCase()) || Boolean(entry?.serviceId || entry?.servicoId);
+    const merchandise = entries.filter((entry) => !isServiceEntry(entry));
+    const productIds = merchandise.map((entry) => entry?.productId || entry?.id).filter(mongoose.Types.ObjectId.isValid);
+    const codes = merchandise.map((entry) => clean(entry?.code || entry?.cod)).filter(Boolean);
+    const barcodes = merchandise.map((entry) => clean(entry?.barcode || entry?.codbarras)).filter(Boolean);
+    const names = merchandise.map((entry) => clean(entry?.name || entry?.nome)).filter(Boolean);
     const conditions = [];
     if (productIds.length) conditions.push({ _id: { $in: productIds } });
     if (codes.length) conditions.push({ cod: { $in: codes } });
@@ -1097,10 +1112,10 @@ async function materializeDesktopEvent(event, pdv, host) {
     const byBarcode = new Map(products.filter((product) => product.codbarras).map((product) => [clean(product.codbarras), product]));
     const byName = new Map(products.filter((product) => product.nome).map((product) => [clean(product.nome), product]));
     return entries.map((item) => {
-      const product = byId.get(String(item?.productId || item?.id || ''))
+      const product = isServiceEntry(item) ? null : (byId.get(String(item?.productId || item?.id || ''))
         || byCode.get(clean(item?.code || item?.cod))
         || byBarcode.get(clean(item?.barcode || item?.codbarras))
-        || byName.get(clean(item?.name || item?.nome));
+        || byName.get(clean(item?.name || item?.nome)));
       const productId = product?._id || item.productId || item.id;
       return {
         ...item,
@@ -1246,6 +1261,7 @@ async function materializeDesktopEvent(event, pdv, host) {
   } else if (event.type === 'delivery.registered') {
     action = 'pdv.delivery.register';
     payload = {
+      nfseCustomerIdentification: source.nfseCustomerIdentification === 'not_informed' ? 'not_informed' : 'identified',
       orderId: source.orderId || source.deliveryOrderId || source.id,
       saleId: source.saleRecordId || source.saleId || '',
       saleRecordId: source.saleRecordId || source.saleId || '',
@@ -1268,6 +1284,7 @@ async function materializeDesktopEvent(event, pdv, host) {
     action = 'pdv.delivery.finalize';
     const payments = await hydratePayments(source.payments || []);
     payload = {
+      ...(Object.prototype.hasOwnProperty.call(source, 'nfseCustomerIdentification') ? { nfseCustomerIdentification: source.nfseCustomerIdentification === 'not_informed' ? 'not_informed' : 'identified' } : {}),
       orderId: source.orderId || source.deliveryOrderId,
       saleId: source.id,
       saleRecordId: source.saleRecordId || '',
@@ -1291,6 +1308,7 @@ async function materializeDesktopEvent(event, pdv, host) {
     action = 'pdv.sale.finalize';
     const payments = await hydratePayments(source.payments || []);
     payload = {
+      nfseCustomerIdentification: source.nfseCustomerIdentification === 'not_informed' ? 'not_informed' : 'identified',
       saleId: source.id,
       saleCode: source.saleCode,
       createdAt: source.createdAt || event.occurredAt,
@@ -1646,7 +1664,7 @@ router.get('/bootstrap', authenticateHost, async (req, res) => {
   return res.json({
     version: 1,
     generatedAt: new Date().toISOString(),
-    pdv,
+    pdv: { ...pdv, nfseConfiguration: (pdv.empresaEmitenteFiscal || pdv.empresa)?.nfse || { enabled: false } },
     state: state || null,
     paymentMethods,
     // Informe explicitamente o feed sem cache do CDN do site. Assim uma nova
@@ -1682,7 +1700,7 @@ router.get('/catalog/products', authenticateHost, async (req, res) => {
     .select('_id cod codbarras codigosComplementares nome descricao venda unidade stock estoques inativo precoClube promocao promocaoCondicional fracionado ncm fiscal fiscalPorEmpresa updatedAt')
     .sort({ updatedAt: 1, _id: 1 })
     .limit(limit + 1)
-    .lean(), FiscalDefaultRule.find({ empresa: pdv.empresa }).select('code fiscal').lean()]);
+    .lean(), FiscalDefaultRule.find({ empresa: pdv.empresa, tipo: { $ne: 'servico' } }).select('code fiscal').lean()]);
   const hasMore = documents.length > limit;
   const page = hasMore ? documents.slice(0, limit) : documents;
   const last = page[page.length - 1];
@@ -1723,7 +1741,7 @@ router.get('/directory/snapshot', authenticateHost, async (req, res) => {
       .lean(),
     Store.find({}).select('_id codigo nome nomeFantasia uf').sort({ nomeFantasia: 1, nome: 1 }).lean(),
     Deposit.find({}).select('_id codigo nome empresa').sort({ nome: 1 }).lean(),
-    Service.find({ ativo: { $ne: false } }).select('_id nome valor duracaoMinutos grupo categorias porte comissaoPercent updatedAt')
+    Service.find({ ativo: { $ne: false } }).select('_id nome valor duracaoMinutos grupo categorias porte comissaoPercent fiscalPorEmpresa updatedAt')
       .populate({ path: 'grupo', select: 'nome tiposPermitidos comissaoPercent' }).sort({ nome: 1 }).lean(),
   ]);
   const addressByUser = new Map();
@@ -1835,6 +1853,7 @@ router.get('/directory/snapshot', authenticateHost, async (req, res) => {
       groupCommissionPercent: Number(service.grupo?.comissaoPercent || 0),
       allowedStaffTypes: Array.isArray(service.grupo?.tiposPermitidos) ? service.grupo.tiposPermitidos : [],
       categories: Array.isArray(service.categorias) ? service.categorias : [], sizes: Array.isArray(service.porte) ? service.porte : [],
+      fiscalPorEmpresa: service.fiscalPorEmpresa || {},
     })),
     stores: stores.map((store) => ({ id: String(store._id), code: store.codigo || '', name: store.nomeFantasia || store.nome || '' })),
     deposits: deposits.map((deposit) => ({ id: String(deposit._id), code: deposit.codigo || '', name: deposit.nome || '', companyId: String(deposit.empresa) })),
@@ -2146,6 +2165,17 @@ router.get('/reconciliation', authenticateHost, async (req, res) => {
 router.post('/sales/:saleId/fiscal', authenticateHost, async (req, res) => {
   req.params.id = String(req.desktopHost.pdv);
   return pdvDomain.emitSaleFiscalHandler(req, res);
+});
+
+const nfseHandlers = require('./pdvNfse').createPdvNfseHandlers();
+router.get('/sales/:saleId/nfse', authenticateHost, nfseHandlers.list);
+router.post('/sales/:saleId/nfse/preview', authenticateHost, nfseHandlers.preview);
+router.post('/sales/:saleId/nfse', authenticateHost, nfseHandlers.emit);
+router.get('/nfse/config', authenticateHost, async (req, res) => {
+  const pdv = await Pdv.findById(req.desktopHost.pdv).lean();
+  if (!pdv || pdv.desktop?.status === 'suspenso') return res.status(403).json({ message: 'PDV indisponível.' });
+  const store = await Store.findById(pdv.empresaEmitenteFiscal || pdv.empresa).select('nfse nome razaoSocial inscricaoMunicipal codigoIbgeMunicipio').lean();
+  return res.json({ nfseConfiguration: store?.nfse || { enabled: false }, fiscalIssuerStoreId: String(store?._id || '') });
 });
 
 router.get('/fiscal/config', authenticateHost, async (req, res) => {

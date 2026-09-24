@@ -3,6 +3,10 @@ const router = express.Router();
 
 const ServiceModel = require('../models/Service');
 const ServiceGroup = require('../models/ServiceGroup');
+const FiscalDefaultRule = require('../models/FiscalDefaultRule');
+const Store = require('../models/Store');
+const { normalizeServiceFiscalMap } = require('../utils/nfseConfig');
+const { canAccessFiscalStore, assertFiscalStoreAccess, visibleServiceFiscal } = require('../utils/fiscalStoreAccess');
 const authMiddleware = require('../middlewares/authMiddleware');
 const { recordDesktopSyncDeletion } = require('../services/desktopSyncTombstones');
 
@@ -54,7 +58,7 @@ router.get('/', authMiddleware, requireAdmin, async (req, res) => {
       .populate('grupo')
       .sort({ nome: 1 })
       .lean();
-    res.json(items);
+    res.json(items.map(item => visibleServiceFiscal(req, item)));
   } catch (e) {
     console.error('GET /admin/servicos', e);
     res.status(500).json({ message: 'Erro ao listar serviços' });
@@ -66,7 +70,7 @@ router.get('/:id', authMiddleware, requireAdmin, async (req, res) => {
   try {
     const item = await Service.findById(req.params.id).populate('grupo').lean();
     if (!item) return res.status(404).json({ message: 'Serviço não encontrado' });
-    res.json(item);
+    res.json(visibleServiceFiscal(req, item));
   } catch (e) {
     console.error('GET /admin/servicos/:id', e);
     res.status(500).json({ message: 'Erro ao carregar serviço' });
@@ -76,6 +80,10 @@ router.get('/:id', authMiddleware, requireAdmin, async (req, res) => {
 function validarPayload(body, isUpdate = false) {
   const erros = [];
   const out = {};
+  if (Object.prototype.hasOwnProperty.call(body, 'fiscalPorEmpresa')) {
+    try { out.fiscalPorEmpresa = normalizeServiceFiscalMap(body.fiscalPorEmpresa); }
+    catch (error) { erros.push(error.message); }
+  }
 
   if (!isUpdate || typeof body.nome !== 'undefined') {
     const nome = String(body.nome || '').trim();
@@ -127,6 +135,15 @@ function validarPayload(body, isUpdate = false) {
 }
 
 // CRIAR
+async function validateServiceFiscalRules(fiscalPorEmpresa) {
+  for (const [storeId, config] of Object.entries(fiscalPorEmpresa || {})) {
+    if (!(await Store.exists({ _id: storeId }))) throw Object.assign(new Error('Empresa inexistente na configuração fiscal do serviço.'), { status: 400 });
+    if (!config.fiscalRuleCode) continue;
+    const rule = await FiscalDefaultRule.findOne({ empresa: storeId, code: Number(config.fiscalRuleCode) }).lean();
+    if (!rule || rule.tipo !== 'servico') throw Object.assign(new Error('Selecione uma regra fiscal de serviço pertencente à empresa informada.'), { status: 400 });
+  }
+}
+
 router.post('/', authMiddleware, requireAdmin, async (req, res) => {
   try {
     const v = validarPayload(req.body, false);
@@ -135,12 +152,14 @@ router.post('/', authMiddleware, requireAdmin, async (req, res) => {
     const grpExists = await ServiceGroup.exists({ _id: v.out.grupo });
     if (!grpExists) return res.status(400).json({ message: 'Grupo inexistente.' });
 
+    for (const storeId of Object.keys(req.body.fiscalPorEmpresa || {})) assertFiscalStoreAccess(req, storeId);
+    await validateServiceFiscalRules(v.out.fiscalPorEmpresa);
     const created = await Service.create(v.out);
     const full = await Service.findById(created._id).populate('grupo').lean();
-    res.status(201).json(full);
+    res.status(201).json(visibleServiceFiscal(req, full));
   } catch (e) {
     console.error('POST /admin/servicos', e);
-    res.status(500).json({ message: 'Erro ao criar serviço' });
+    res.status(e.status || 500).json({ message: [400, 403].includes(e.status) ? e.message : 'Erro ao criar serviço' });
   }
 });
 
@@ -155,17 +174,42 @@ router.put('/:id', authMiddleware, requireAdmin, async (req, res) => {
       if (!grpExists) return res.status(400).json({ message: 'Grupo inexistente.' });
     }
 
+    let update = v.out;
+    if (Object.prototype.hasOwnProperty.call(v.out, 'fiscalPorEmpresa')) {
+      const existing = await Service.findById(req.params.id).select('fiscalPorEmpresa').lean();
+      if (!existing) return res.status(404).json({ message: 'Serviço não encontrado' });
+      const existingMap = existing.fiscalPorEmpresa || {};
+      const proposed = v.out.fiscalPorEmpresa;
+      for (const storeId of Object.keys(req.body.fiscalPorEmpresa || {})) {
+        if (canAccessFiscalStore(req, storeId)) continue;
+        const previous = normalizeServiceFiscalMap({ [storeId]: existingMap[storeId] })[storeId] || null;
+        if (JSON.stringify(previous) !== JSON.stringify(proposed[storeId] || null)) assertFiscalStoreAccess(req, storeId);
+      }
+      const allowed = Object.fromEntries(Object.entries(proposed).filter(([storeId]) => canAccessFiscalStore(req, storeId)));
+      await validateServiceFiscalRules(allowed);
+      const commercial = { ...v.out };
+      delete commercial.fiscalPorEmpresa;
+      const set = { ...commercial };
+      const unset = {};
+      for (const [storeId, config] of Object.entries(allowed)) set[`fiscalPorEmpresa.${storeId}`] = config;
+      for (const storeId of Object.keys(existingMap)) {
+        if (canAccessFiscalStore(req, storeId) && !Object.hasOwn(proposed, storeId)) unset[`fiscalPorEmpresa.${storeId}`] = 1;
+      }
+      // Atualiza apenas os caminhos autorizados para não sobrescrever vínculos
+      // de outras empresas, inclusive em edições simultâneas do serviço global.
+      update = { $set: set, ...(Object.keys(unset).length ? { $unset: unset } : {}) };
+    }
     const updated = await Service.findByIdAndUpdate(
       req.params.id,
-      v.out,
+      update,
       { new: true, runValidators: true }
     ).populate('grupo');
 
     if (!updated) return res.status(404).json({ message: 'Serviço não encontrado' });
-    res.json(updated);
+    res.json(visibleServiceFiscal(req, updated));
   } catch (e) {
     console.error('PUT /admin/servicos/:id', e);
-    res.status(500).json({ message: 'Erro ao atualizar serviço' });
+    res.status(e.status || 500).json({ message: [400, 403].includes(e.status) ? e.message : 'Erro ao atualizar serviço' });
   }
 });
 
