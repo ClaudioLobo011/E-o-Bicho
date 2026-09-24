@@ -57,8 +57,17 @@ beforeEach(async () => {
   engine = createNfseService(engineOptions);
 });
 
+test('projeção NFS-e rateia descontos e acréscimos sem depender de pagamentos NFC-e', () => {
+  const input = saleInput({ total: 175, discountValue: 10, additionValue: 5 });
+  const projected = _test.projectItems(input.sale);
+  assert.deepEqual(projected.map(item => item.netTotal), [97.22, 77.78]);
+  const withUnrelatedPayment = _test.projectItems({ ...input.sale, payments: [{ forma: 'inválida para NFC-e', valor: 999 }] });
+  assert.deepEqual(withUnrelatedPayment.map(item => item.netTotal), projected.map(item => item.netTotal));
+});
+
 test('prévia identifica somente serviços, emite com o valor correto e preserva uma venda mista', async () => {
   const input = saleInput();
+  assert.equal(Object.hasOwn(input.sale, 'payments'), false);
   const preview = await engine.previewSaleNfse(input);
   assert.equal(preview.ready, true, preview.issues.join('; ')); assert.equal(preview.documentCount, 1); assert.equal(preview.serviceTotal, 80);
   const result = await engine.emitSaleNfse(input);

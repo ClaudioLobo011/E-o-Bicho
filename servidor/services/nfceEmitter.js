@@ -266,21 +266,38 @@ const PAYMENT_TYPE_MAP = {
   '03': '03',
   credito: '03',
   cartaocredito: '03',
+  cartaodecredito: '03', creditcard: '03',
   '04': '04',
   debito: '04',
   cartaodebito: '04',
+  cartaodedebito: '04', debitcard: '04',
   '05': '05',
-  crediario: '05',
+  crediario: '05', crediariodigital: '05', outroscrediarios: '05',
   loja: '05',
+  creditoloja: '05',
+  cartaoloja: '05', cartaodaloja: '05', privatelabel: '05',
+  '10': '10', valealimentacao: '10',
+  '11': '11', valerefeicao: '11',
+  '12': '12', valepresente: '12',
+  '13': '13', valecombustivel: '13',
+  '14': '14', duplicata: '14', duplicatamercantil: '14',
   '15': '15',
   boleto: '15',
   '16': '16',
   deposito: '16',
   '17': '17',
-  pix: '17',
+  pixdinamico: '17', pixqrcodedinamico: '17',
   '18': '18',
   transferencia: '18',
   transferenciabancaria: '18',
+  ted: '18',
+  '19': '19', cashback: '19', fidelidade: '19', programadefidelidade: '19', creditovirtual: '19',
+  '20': '20', pix: '20', pixmanual: '20', pixestatico: '20', pixqrcodeestatico: '20', pixchave: '20', chavepix: '20', pixcopiaecola: '20',
+  '21': '21', creditoemloja: '21', creditofinanceiro: '21',
+  '22': '22',
+  '23': '23', pixautomatico: '23',
+  '24': '24', tef: '24', transferenciaeletronicadefundos: '24',
+  '91': '91', pagamentoposterior: '91',
   '90': '90',
   semdinheiro: '90',
   sempagamento: '90',
@@ -289,32 +306,102 @@ const PAYMENT_TYPE_MAP = {
 };
 
 const resolvePaymentCode = (raw) => {
+  if (raw != null && !['string', 'number'].includes(typeof raw)) throw new Error('Forma de pagamento inválida.');
   const source = String(raw ?? '').trim();
   if (!source) {
-    return '01';
+    throw new Error('Informe a forma de pagamento da venda antes de emitir a NFC-e.');
   }
 
-  const digits = onlyDigits(source).padStart(2, '0');
+  const digits = /^\d{1,2}$/.test(source) ? source.padStart(2, '0') : '';
   if (PAYMENT_TYPE_MAP[digits]) {
     return PAYMENT_TYPE_MAP[digits];
   }
 
   const normalizedSource =
     typeof source.normalize === 'function' ? source.normalize('NFD') : source;
-  const normalized = normalizedSource.replace(/[^\p{Letter}\p{Number}]+/gu, '').toLowerCase();
+  const normalized = normalizedSource.replace(/\s*\(\d+x\)\s*$/i, '').replace(/[^\p{Letter}\p{Number}]+/gu, '').toLowerCase();
   if (PAYMENT_TYPE_MAP[normalized]) {
     return PAYMENT_TYPE_MAP[normalized];
   }
 
+  if (digits) throw new Error(`Código fiscal de pagamento não suportado: ${digits}.`);
   return '99';
 };
 
 const resolveIndPag = (raw) => {
-  const digits = onlyDigits(raw);
-  return digits === '0' || digits === '1' || digits === '2' ? digits : '';
+  if (raw === undefined || raw === null || raw === '') return '';
+  const digits = String(raw).trim();
+  if (!['0', '1'].includes(digits)) throw new Error('Indicador de pagamento inválido: informe 0 (à vista) ou 1 (a prazo).');
+  return digits;
 };
 
-const CARD_PAYMENT_CODES = new Set(['03', '04']);
+const CARD_PAYMENT_CODES = new Set(['03', '04', '17']);
+const ALLOWED_CARD_PAYMENT_CODES = new Set(['03', '04', '10', '11', '12', '13', '15', '17', '18']);
+
+const paymentCents = (value, field = 'valor do pagamento') => {
+  if (!['string', 'number'].includes(typeof value) || String(value).trim() === '') throw new Error(`Informe ${field} válido.`);
+  const raw = String(value).trim();
+  const number = /^(?:R\$\s*)?(?:\d{1,3}(?:\.\d{3})+|\d+),\d{2}$/.test(raw)
+    ? Number(raw.replace(/^R\$\s*/, '').replace(/\./g, '').replace(',', '.')) : Number(raw);
+  if (!Number.isFinite(number) || number < 0 || !Number.isSafeInteger(Math.round(number * 100))) throw new Error(`Informe ${field} válido.`);
+  return Math.round(number * 100);
+};
+
+const firstPaymentValue = (...values) => values.find((value) => value != null && String(value).trim() !== '');
+const paymentMethodCode = (payment) => resolvePaymentCode(firstPaymentValue(payment.fiscalCode, payment.tPag, payment.forma, payment.paymentCode, payment.type, payment.descricao, payment.label, payment.name));
+
+const serializeFiscalPayments = ({ payments = [], change = 0, total = 0 } = {}) => {
+  if (!payments.length) throw new Error('NFC-e inválida: informe os pagamentos reais da venda.');
+  const changeCents = paymentCents(change, 'troco');
+  if (changeCents > 30000000) throw new Error('O troco excede o limite fiscal de R$ 300.000,00.');
+  const totalCents = paymentCents(total, 'total da NFC-e');
+  const details = payments.map((payment) => {
+    const tPag = paymentMethodCode(payment);
+    if (['14', '90'].includes(tPag)) throw new Error(`A NFC-e não permite a forma ${tPag} (${tPag === '14' ? 'Duplicata Mercantil' : 'Sem Pagamento'}). Informe o meio real da operação, sem substituí-lo artificialmente.`);
+    if (tPag === '22') throw new Error('O pagamento 22 exige o fluxo específico de falha de hardware e não pode ser usado como forma comum de pagamento.');
+    const recordedValue = paymentCents(payment.valor ?? payment.amount, 'valor do pagamento');
+    const value = tPag === '91' ? 0 : recordedValue;
+    const isCredit = tPag === '05' && [payment.type, payment.forma, payment.descricao, payment.label, payment.name].some((value) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes('crediario'));
+    const indPag = resolveIndPag(payment.indPag ?? payment.indicador ?? payment.indicadorPagamento ?? (tPag === '91' || isCredit ? '1' : undefined));
+    const rawDescription = String(payment.xPag ?? payment.descricao ?? payment.label ?? payment.name ?? '').trim();
+    if (tPag === '99' && rawDescription.length < 2) throw new Error('Descreva a forma de pagamento Outros para preencher xPag.');
+    const cardSource = payment.card || payment.cartao || {};
+    const integration = firstPaymentValue(payment.tpIntegra, payment.integracao, payment.tipoIntegracao, cardSource.tpIntegra, cardSource.integracao);
+    const hasElectronicDetails = Object.values(cardSource).some((value) => firstPaymentValue(value) !== undefined) || integration != null
+      || payment.cnpjCredenciadora || payment.cnpj || payment.tBand || payment.cAut;
+    if (hasElectronicDetails && !ALLOWED_CARD_PAYMENT_CODES.has(tPag)) throw new Error(`A forma de pagamento ${tPag} não permite o grupo card.`);
+    let card = '';
+    if (CARD_PAYMENT_CODES.has(tPag) || hasElectronicDetails) {
+      const tpIntegra = integration == null || integration === '' ? '2' : String(integration).trim();
+      if (!['1', '2'].includes(tpIntegra)) throw new Error('Tipo de integração de pagamento inválido.');
+      const cnpj = onlyDigits(cardSource.CNPJ || cardSource.cnpj || cardSource.cnpjCredenciadora || payment.cnpjCredenciadora || payment.cnpj);
+      const band = String(cardSource.tBand || cardSource.bandeira || payment.tBand || payment.bandeira || '').trim();
+      const authorization = String(cardSource.cAut || cardSource.autorizacao || payment.cAut || payment.autorizacao || '').trim();
+      if (cnpj && cnpj.length !== 14) throw new Error('CNPJ da instituição de pagamento inválido.');
+      if (band && !/^\d{1,2}$/.test(band)) throw new Error('Código da bandeira do cartão inválido.');
+      if (authorization.length > 128) throw new Error('Código de autorização do pagamento excede 128 caracteres.');
+      if (tpIntegra === '1' && (!cnpj || !authorization)) throw new Error('Pagamento integrado requer CNPJ da instituição e autorização reais.');
+      card = `<card><tpIntegra>${tpIntegra}</tpIntegra>${cnpj ? `<CNPJ>${cnpj}</CNPJ>` : ''}${band ? `<tBand>${band.padStart(2, '0')}</tBand>` : ''}${authorization ? `<cAut>${sanitize(authorization)}</cAut>` : ''}</card>`;
+    }
+    return { tPag, value, xml: `<detPag>${indPag ? `<indPag>${indPag}</indPag>` : ''}<tPag>${tPag}</tPag>${tPag === '99' ? `<xPag>${sanitize(rawDescription.slice(0, 60))}</xPag>` : ''}<vPag>${dec(value / 100)}</vPag>${card}</detPag>` };
+  });
+  const paid = details.reduce((sum, payment) => sum + payment.value, 0);
+  const hasUnpaid = details.some((payment) => payment.tPag === '91');
+  if (paid - changeCents !== totalCents && !(hasUnpaid && paid - changeCents >= 0 && paid - changeCents < totalCents)) throw new Error('NFC-e inválida: soma dos pagamentos não confere com o vNF em centavos.');
+  if (changeCents > details.filter((payment) => payment.tPag === '01').reduce((sum, payment) => sum + payment.value, 0)) throw new Error('O troco não pode exceder o valor recebido em dinheiro.');
+  return `    <pag>\n      ${details.map((payment) => payment.xml).join('\n      ')}${changeCents ? `\n      <vTroco>${dec(changeCents / 100)}</vTroco>` : ''}\n    </pag>`;
+};
+
+const sefazFailureMetadata = (error) => {
+  const status = String(error?.details?.protocolStatus || error?.details?.loteStatus || error?.sefazStatus || '').trim();
+  if (!/^\d{3}$/.test(status)) return {};
+  const temporary = new Set(['103', '104', '105', '108', '109', '656', '999']);
+  const permanent = !temporary.has(status) && !['100', '150'].includes(status);
+  return { sefazStatus: status, permanent, retryable: !permanent,
+    ...(permanent ? { statusCode: 422 } : {}),
+    ...(['204', '539'].includes(status) ? { requiresConsultation: true } : {}),
+  };
+};
 
 const resolveStoreUf = (store = {}) => {
   const ufSource = store.uf || store.estado || store.state || '';
@@ -1233,28 +1320,102 @@ const resolveSalePaymentMetadata = (sale = {}, payment = {}, index = 0) => {
   const matchingContribution = contributions.find((entry) => {
     const contributionId = normalizeStringSafe(entry?.paymentId || entry?.id || entry?._id);
     return paymentId && contributionId === paymentId;
-  }) || contributions[index] || null;
+  }) || (!paymentId ? contributions[index] : null) || null;
   const paymentTags = Array.isArray(sale?.paymentTags) ? sale.paymentTags : [];
   const label = String(
     payment?.descricao ||
       payment?.label ||
       payment?.nome ||
+      payment?.name ||
+      payment?.paymentLabel ||
       matchingContribution?.paymentLabel ||
       matchingContribution?.label ||
       paymentTags[index] ||
       ''
   ).trim();
   const paymentCode = String(
-    payment?.forma || payment?.codigo || payment?.tipo || matchingContribution?.paymentCode
+    payment?.fiscalCode || payment?.tPag || payment?.forma || payment?.paymentCode || payment?.tipo
+      || matchingContribution?.fiscalCode || matchingContribution?.tPag || matchingContribution?.paymentCode
       || ''
   ).trim();
+  const knownLabel = label && !/^\d+$/.test(label) && resolvePaymentCode(label) !== '99';
   return {
-    label: label || 'Pagamento',
-    code: paymentCode || label || '01',
+    label,
+    code: paymentCode || (knownLabel ? label : '') || (['credito', 'debito', 'crediario'].includes(payment?.type) ? payment.type : '') || label,
   };
 };
 
-const buildFiscalProjection = ({ items = [], discount = 0, addition = 0, payments = [], change = 0 } = {}) => {
+const resolveSaleFiscalPayments = (sale = {}) => {
+  const snapshot = sale.receiptSnapshot || {};
+  const raw = [snapshot?.pagamentos?.items, sale.payments, sale.cashContributions]
+    .find((entries) => Array.isArray(entries) && entries.length) || [];
+  const payments = raw.map((payment, index) => {
+    const metadata = resolveSalePaymentMetadata(sale, payment, index);
+    return {
+      ...payment, descricao: metadata.label, valor: payment.valor ?? payment.amount ?? payment.formatted,
+      forma: metadata.code, indPag: payment.indPag ?? payment.indicador ?? payment.indicadorPagamento,
+      integracao: payment.tpIntegra ?? payment.integracao ?? payment.tipoIntegracao,
+      card: payment.card || payment.cartao || null,
+      cnpj: payment.cnpjCredenciadora || payment.cnpj || null,
+      tBand: payment.tBand || payment.bandeira || null,
+      cAut: payment.cAut || payment.autorizacao || null,
+    };
+  });
+  const change = snapshot?.totais?.trocoValor ?? sale.changeTotal ?? sale.change ?? snapshot?.totais?.troco
+    ?? payments.reduce((sum, payment) => sum + paymentCents(payment.change ?? payment.troco ?? 0, 'troco do pagamento') / 100, 0);
+  return { payments, change };
+};
+
+const normalizeFiscalPaymentAmounts = ({ payments = [], total = 0, change = 0 } = {}) => {
+  const totalCents = paymentCents(total, 'total da venda');
+  const changeCents = paymentCents(change, 'troco');
+  if (changeCents > 30000000) throw new Error('O troco excede o limite fiscal de R$ 300.000,00.');
+  if (!payments.length) throw new Error('Informe os pagamentos reais da venda antes de emitir a NFC-e.');
+  const entries = payments.map((payment) => {
+    const code = paymentMethodCode(payment);
+    if (['14', '90'].includes(code)) throw new Error(`A NFC-e não permite a forma de pagamento ${code}. Informe o meio real da operação.`);
+    const value = paymentCents(payment.valor ?? payment.amount, 'valor do pagamento');
+    const perChange = payment.change ?? payment.troco;
+    const individualChange = perChange == null ? 0 : paymentCents(perChange, 'troco do pagamento');
+    const tendered = payment.tenderedAmount ?? payment.receivedAmount ?? payment.valorRecebido;
+    if (individualChange > 0 && code !== '01') throw new Error('Troco só pode ser registrado em pagamento em dinheiro.');
+    let gross = value;
+    let explicit = false;
+    if (tendered != null) {
+      gross = paymentCents(tendered, 'valor recebido');
+      if (gross - individualChange !== value) throw new Error('Valor recebido menos troco difere do pagamento líquido registrado.');
+      explicit = true;
+    } else if (individualChange && payment.amount != null) {
+      gross = value + individualChange;
+      explicit = true;
+    }
+    return { payment, code, value, gross, individualChange, explicit };
+  });
+  const cash = entries.map((entry, index) => entry.code === '01' ? index : -1).filter((index) => index >= 0);
+  if (changeCents && !cash.length) throw new Error('A venda informa troco sem pagamento em dinheiro.');
+  const declaredChange = entries.reduce((sum, entry) => sum + entry.individualChange, 0);
+  if (declaredChange > changeCents) throw new Error('Troco dos pagamentos difere do troco total registrado.');
+  const grossSum = entries.reduce((sum, entry) => sum + entry.gross, 0);
+  // Web receipt values are tendered amounts; desktop canonical amounts are net.
+  // Select the interpretation by exact cents, never scale an inconsistent sale.
+  const cashAmountsAreNet = cash.length > 0 && cash.every((index) => entries[index].payment.amount != null);
+  if (!entries.some((entry) => entry.explicit) && cashAmountsAreNet && grossSum === totalCents && changeCents) {
+    const cashChanges = distributeCents(changeCents, cash.map((index) => entries[index].gross));
+    cash.forEach((index, offset) => { entries[index].gross += cashChanges[offset]; entries[index].individualChange = cashChanges[offset]; });
+  } else {
+    const hasDeferred = entries.some((entry) => entry.code === '91');
+    if (grossSum - changeCents !== totalCents && !(hasDeferred && grossSum - changeCents >= 0 && grossSum - changeCents < totalCents)) throw new Error('Pagamentos e troco não conferem com o total da venda em centavos.');
+    const remainingChange = changeCents - declaredChange;
+    const cashWeights = cash.map((index) => entries[index].gross - entries[index].individualChange);
+    if (remainingChange > cashWeights.reduce((sum, value) => sum + value, 0)) throw new Error('O troco excede o valor recebido em dinheiro.');
+    const additions = distributeCents(remainingChange, cashWeights);
+    cash.forEach((index, offset) => { entries[index].individualChange += additions[offset]; });
+  }
+  if (entries.some((entry) => entry.individualChange > entry.gross)) throw new Error('O troco excede o valor recebido em dinheiro.');
+  return entries.map((entry) => ({ ...entry.payment, valor: entry.gross / 100, netValue: (entry.gross - entry.individualChange) / 100, changeValue: entry.individualChange / 100 }));
+};
+
+const buildFiscalProjection = ({ items = [], discount = 0, addition = 0, payments = [], change = 0 } = {}, { itemsOnly = false } = {}) => {
   const allocatedDiscounts = allocateFiscalAmount(items, discount, 'discount');
   const allocatedAdditions = allocateFiscalAmount(items, addition, 'addition');
   const adjustedItems = items.map((item, index) => {
@@ -1277,6 +1438,22 @@ const buildFiscalProjection = ({ items = [], discount = 0, addition = 0, payment
   const fiscalAddition = centsSum('addition') / 100;
   const totalLiquido = Math.max(0, (centsSum('total') - centsSum('discount') + centsSum('addition')) / 100);
   const excludedServices = adjustedItems.length - fiscalItems.length;
+  // NFS-e compartilha apenas o rateio de itens; seu leiaute não contém o grupo pag da NFC-e.
+  // A opção pertence à chamada interna, nunca aos dados da venda recebidos do cliente.
+  if (itemsOnly === true) return {
+    adjustedItems, fiscalItems, totalProducts, discount: fiscalDiscount, addition: fiscalAddition, totalLiquido, excludedServices,
+  };
+  const saleTotal = adjustedItems.reduce((sum, item) => sum + Math.round(item.netTotal * 100), 0) / 100;
+  const normalizedPayments = normalizeFiscalPaymentAmounts({ payments, total: saleTotal, change });
+  let projectedPayments = normalizedPayments.map((payment) => ({ ...payment, valor: payment.valor }));
+  if (excludedServices > 0) {
+    const weights = normalizedPayments.map((payment) => Math.round(payment.netValue * 100));
+    const recordedNet = weights.reduce((sum, value) => sum + value, 0);
+    const targetCents = saleTotal > 0 ? Math.round(totalLiquido * recordedNet / saleTotal) : 0;
+    const netAmounts = distributeCents(targetCents, weights);
+    projectedPayments = normalizedPayments.map((payment, index) => ({ ...payment, valor: (netAmounts[index] + Math.round(payment.changeValue * 100)) / 100 }))
+      .filter((payment) => payment.valor > 0 || paymentMethodCode(payment) === '91');
+  }
   return {
     adjustedItems,
     fiscalItems,
@@ -1284,8 +1461,8 @@ const buildFiscalProjection = ({ items = [], discount = 0, addition = 0, payment
     discount: fiscalDiscount,
     addition: fiscalAddition,
     totalLiquido,
-    payments: excludedServices > 0 ? allocatePaymentAmounts(payments, totalLiquido) : payments,
-    change: excludedServices > 0 ? 0 : Math.max(0, safeNumber(change, 0)),
+    payments: projectedPayments.map(({ netValue, changeValue, ...payment }) => payment),
+    change: paymentCents(change, 'troco') / 100,
     excludedServices,
   };
 };
@@ -1489,7 +1666,12 @@ const validateFiscalXmlTotals = (xmlSource) => {
   const vNf = cents(firstText("./*[local-name()='vNF']", icmsTot));
   const paymentTotal = totalCents("//*[local-name()='pag']/*[local-name()='detPag']/*[local-name()='vPag']");
   const change = cents(firstText("//*[local-name()='pag']/*[local-name()='vTroco']"));
-  if (paymentTotal - change !== vNf) {
+  const paymentNodes = select("//*[local-name()='pag']/*[local-name()='detPag']");
+  if (paymentNodes.some((node) => ['14', '90'].includes(firstText("./*[local-name()='tPag']", node)))) issues.push('NFC-e não permite pagamento 14 ou 90.');
+  const deferredPayments = paymentNodes.filter((node) => firstText("./*[local-name()='tPag']", node) === '91');
+  const validDeferred = deferredPayments.length > 0 && deferredPayments.every((node) => cents(firstText("./*[local-name()='vPag']", node)) === 0);
+  if (deferredPayments.some((node) => cents(firstText("./*[local-name()='vPag']", node)) !== 0)) issues.push('Pagamentos 90/91 devem informar vPag zero.');
+  if (paymentTotal - change !== vNf && !(validDeferred && paymentTotal - change >= 0 && paymentTotal - change < vNf)) {
     issues.push(`Pagamentos líquidos (${((paymentTotal - change) / 100).toFixed(2)}) diferem do vNF (${(vNf / 100).toFixed(2)}).`);
   }
   return {
@@ -1590,37 +1772,7 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     snapshot?.totais?.acrescimoValor ?? snapshot?.totais?.acrescimo ?? sale.additionValue ?? 0,
     0
   );
-  const fallbackSaleTotal = Math.max(
-    0,
-    safeNumber(
-      snapshot?.totais?.totalLiquido ?? snapshot?.totais?.liquido ?? sale.totalLiquido ?? sale.total,
-      normalizedSaleItems.reduce((sum, item) => sum + item.total, 0) - requestedDiscount + requestedAddition
-    )
-  );
-  const pagamentosRaw = Array.isArray(snapshot?.pagamentos?.items) ? snapshot.pagamentos.items : [];
-  const sourcePayments = pagamentosRaw.length
-    ? pagamentosRaw.map((payment, index) => {
-      const metadata = resolveSalePaymentMetadata(sale, payment, index);
-      return {
-        descricao: metadata.label,
-        valor: safeNumber(payment?.valor ?? payment?.formatted ?? 0, 0),
-        forma: metadata.code,
-        indPag: payment?.indPag ?? payment?.indicador ?? payment?.indicadorPagamento,
-        integracao: payment?.tpIntegra ?? payment?.integracao ?? payment?.tipoIntegracao,
-        card: payment?.card || payment?.cartao || null,
-        cnpj: payment?.cnpjCredenciadora || payment?.cnpj || null,
-        tBand: payment?.tBand || payment?.bandeira || null,
-        cAut: payment?.cAut || payment?.autorizacao || null,
-      };
-    })
-    : [
-        {
-          descricao: 'Dinheiro',
-          valor: fallbackSaleTotal,
-          forma: '01',
-        },
-      ];
-  const sourceChange = safeNumber(snapshot?.totais?.trocoValor ?? snapshot?.totais?.troco ?? 0, 0);
+  const { payments: sourcePayments, change: sourceChange } = resolveSaleFiscalPayments(sale);
   const fiscalProjection = buildFiscalProjection({
     items: normalizedSaleItems,
     discount: requestedDiscount,
@@ -2196,71 +2348,7 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   infNfeLines.push('      <modFrete>9</modFrete>');
   infNfeLines.push('    </transp>');
 
-  const paymentDetails = pagamentos.map((payment) => {
-    const valor = safeNumber(payment.valor, 0);
-    const tPag = resolvePaymentCode(payment.forma);
-    const indPag = resolveIndPag(payment.indPag);
-    let card = null;
-
-    if (CARD_PAYMENT_CODES.has(tPag)) {
-      const cardSource = payment.card || {};
-      const integraRaw = payment.integracao ?? cardSource.tpIntegra ?? cardSource.integracao;
-      const integraDigits = onlyDigits(integraRaw);
-      const tpIntegra = integraDigits === '1' ? '1' : '2';
-      const cnpjCred = onlyDigits(
-        cardSource.cnpj || cardSource.cnpjCredenciadora || payment.cnpj || payment.cnpjCredenciadora
-      );
-      const bandDigits = onlyDigits(cardSource.tBand || cardSource.bandeira || payment.tBand);
-      const cAutValue = sanitize(cardSource.cAut || cardSource.autorizacao || payment.cAut);
-      card = {
-        tpIntegra,
-        cnpj: cnpjCred.length === 14 ? cnpjCred : '',
-        tBand: bandDigits ? bandDigits.padStart(2, '0').slice(-2) : '',
-        cAut: cAutValue ? cAutValue.slice(0, 20) : '',
-      };
-    }
-
-    return { valor, tPag, indPag, card };
-  });
-
-  if (!paymentDetails.length) {
-    throw new Error('NFC-e inválida: grupo <pag> requer ao menos um <detPag>.');
-  }
-
-  const totalPagamentos = paymentDetails.reduce((sum, item) => sum + item.valor, 0);
-  const difference = Math.abs(totalPagamentos - troco - totalLiquido);
-  if (difference > 0.01) {
-    throw new Error('NFC-e inválida: soma dos pagamentos não confere com o vNF.');
-  }
-
-  infNfeLines.push('    <pag>');
-  paymentDetails.forEach((payment) => {
-    infNfeLines.push('      <detPag>');
-    if (payment.indPag) {
-      infNfeLines.push(`        <indPag>${payment.indPag}</indPag>`);
-    }
-    infNfeLines.push(`        <tPag>${payment.tPag}</tPag>`);
-    infNfeLines.push(`        <vPag>${dec(payment.valor)}</vPag>`);
-    if (payment.card) {
-      infNfeLines.push('        <card>');
-      infNfeLines.push(`          <tpIntegra>${payment.card.tpIntegra}</tpIntegra>`);
-      if (payment.card.cnpj) {
-        infNfeLines.push(`          <CNPJ>${payment.card.cnpj}</CNPJ>`);
-      }
-      if (payment.card.tBand) {
-        infNfeLines.push(`          <tBand>${payment.card.tBand}</tBand>`);
-      }
-      if (payment.card.cAut) {
-        infNfeLines.push(`          <cAut>${payment.card.cAut}</cAut>`);
-      }
-      infNfeLines.push('        </card>');
-    }
-    infNfeLines.push('      </detPag>');
-  });
-  if (Math.abs(troco) > 0.009) {
-    infNfeLines.push(`      <vTroco>${dec(troco)}</vTroco>`);
-  }
-  infNfeLines.push('    </pag>');
+  infNfeLines.push(serializeFiscalPayments({ payments: pagamentos, change: troco, total: totalLiquido }));
 
   const obs = buildInfAdicObservations({ pdv, sale, environmentLabel });
   const infAdicLines = [];
@@ -2469,6 +2557,7 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
       enriched.xmlContent = xml;
       enriched.xmlAccessKey = accessKey;
       enriched.xmlFileBaseName = fileNameHint;
+      Object.assign(enriched, sefazFailureMetadata(error));
       return enriched;
     };
 
@@ -2506,6 +2595,7 @@ module.exports = {
   emitPdvSaleFiscal,
   extractCertificatePair,
   validateFiscalXmlTotals,
+  sefazFailureMetadata,
   _test: {
     collectFiscalItemCandidates,
     buildIcmsGroup,
@@ -2514,6 +2604,11 @@ module.exports = {
     allocateFiscalAmount,
     allocatePaymentAmounts,
     resolveSalePaymentMetadata,
+    resolveSaleFiscalPayments,
+    resolvePaymentCode,
+    normalizeFiscalPaymentAmounts,
+    serializeFiscalPayments,
+    sefazFailureMetadata,
     buildFiscalProjection,
     validateFiscalXmlTotals,
     resolveGtinForXml,

@@ -89,6 +89,31 @@ const NFE_CONSULTA_PROTOCOLO_ENDPOINTS = {
   },
 };
 
+// NFC-e (modelo 65) usa autorizadores próprios; nunca reutilizar o host da NF-e 55.
+// Fonte: https://dfe-portal.svrs.rs.gov.br/Nfce/Servicos (24/09/2026).
+const NFCE_CONSULTA_PROTOCOLO_ENDPOINTS = {
+  homologacao: {
+    AM: 'https://homnfce.sefaz.am.gov.br/nfce-services/services/NfeConsulta4',
+    GO: 'https://homolog.sefaz.go.gov.br/nfe/services/NFeConsultaProtocolo4',
+    MS: 'https://hom.nfce.sefaz.ms.gov.br/ws/NFeConsultaProtocolo4',
+    MT: 'https://homologacao.sefaz.mt.gov.br/nfcews/services/NfeConsulta4',
+    PR: 'https://homologacao.nfce.sefa.pr.gov.br/nfce/NFeConsultaProtocolo4',
+    RS: 'https://nfce-homologacao.sefazrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx',
+    SP: 'https://homologacao.nfce.fazenda.sp.gov.br/ws/NFeConsultaProtocolo4.asmx',
+    default: 'https://nfce-homologacao.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx',
+  },
+  producao: {
+    AM: 'https://nfce.sefaz.am.gov.br/nfce-services/services/NfeConsulta4',
+    GO: 'https://nfe.sefaz.go.gov.br/nfe/services/NFeConsultaProtocolo4',
+    MS: 'https://nfce.sefaz.ms.gov.br/ws/NFeConsultaProtocolo4',
+    MT: 'https://nfce.sefaz.mt.gov.br/nfcews/services/NfeConsulta4',
+    PR: 'https://nfce.sefa.pr.gov.br/nfce/NFeConsultaProtocolo4',
+    RS: 'https://nfce.sefazrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx',
+    SP: 'https://nfce.fazenda.sp.gov.br/ws/NFeConsultaProtocolo4.asmx',
+    default: 'https://nfce.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx',
+  },
+};
+
 const STATUS_SOAP_ACTION =
   'http://www.portalfiscal.inf.br/nfe/wsdl/NFeStatusServico4/nfeStatusServicoNF';
 const CONSULTA_PROTOCOLO_SOAP_ACTION =
@@ -554,6 +579,17 @@ const resolveNfeConsultaProtocoloEndpoint = (uf, environment) => {
     throw new SefazTransmissionError('Endpoint de consulta de protocolo da SEFAZ não configurado para o estado informado.');
   }
   return endpoint;
+};
+
+const resolveNfceConsultaProtocoloEndpoint = (uf, environment) => {
+  const envKey = environment === 'producao' ? 'producao' : 'homologacao';
+  const ufCode = resolveUfCode(uf);
+  const acronym = Object.keys(UF_CODE_BY_ACRONYM).find((key) => UF_CODE_BY_ACRONYM[key] === ufCode);
+  if (!acronym && String(uf || '').toUpperCase().trim() !== 'SVRS') {
+    throw new SefazTransmissionError('UF inválida para consulta de protocolo da NFC-e.');
+  }
+  const map = NFCE_CONSULTA_PROTOCOLO_ENDPOINTS[envKey];
+  return map[acronym] || map.default;
 };
 
 const resolveNfeEventoEndpoint = (uf, environment) => {
@@ -1257,20 +1293,28 @@ const consultNfceStatusServico = async ({
   };
 };
 
-const consultNfeProtocolOnSefaz = async ({
+const consultProtocolOnSefaz = async ({
   accessKey,
   uf,
   environment,
   certificate,
   certificateChain,
   privateKey,
-}) => {
+}, { model, resolveEndpoint }) => {
   const chave = String(accessKey || '').replace(/\D+/g, '');
+  const documentName = model === '65' ? 'NFC-e' : 'NF-e';
   if (chave.length !== 44) {
-    throw new SefazTransmissionError('Chave de acesso da NF-e inválida para consulta de status.');
+    throw new SefazTransmissionError(`Chave de acesso da ${documentName} inválida para consulta de status.`);
+  }
+  if (chave.slice(20, 22) !== model) {
+    throw new SefazTransmissionError(`A consulta de ${documentName} exige uma chave do modelo ${model}.`);
+  }
+  const ufCode = resolveUfCode(uf);
+  if (ufCode !== '00' && chave.slice(0, 2) !== ufCode) {
+    throw new SefazTransmissionError('A UF informada não corresponde à chave de acesso para consulta.');
   }
 
-  const endpoint = resolveNfeConsultaProtocoloEndpoint(uf, environment);
+  const endpoint = resolveEndpoint(uf, environment);
   const payload = buildConsultaProtocoloPayload({ accessKey: chave, environment });
   const envelope = buildConsultaProtocoloSoapEnvelope({ payloadXml: payload, uf });
 
@@ -1288,6 +1332,13 @@ const consultNfeProtocolOnSefaz = async ({
     throw new SefazTransmissionError('Resposta da SEFAZ não contém retorno da consulta de protocolo.', {
       response: responseXml,
     });
+  }
+
+  const returnedKey = extractTagContent(retSection, 'chNFe');
+  const returnedEnvironment = extractTagContent(retSection, 'tpAmb');
+  if ((returnedKey && returnedKey !== chave)
+    || (returnedEnvironment && returnedEnvironment !== (environment === 'producao' ? '1' : '2'))) {
+    throw new SefazTransmissionError('O retorno da consulta SEFAZ não corresponde à chave ou ao ambiente solicitado.');
   }
 
   const consultaStatus = extractTagContent(retSection, 'cStat');
@@ -1311,6 +1362,14 @@ const consultNfeProtocolOnSefaz = async ({
     processedAt: processedAt || '',
   };
 };
+
+const consultNfeProtocolOnSefaz = (args) => consultProtocolOnSefaz(args, {
+  model: '55', resolveEndpoint: resolveNfeConsultaProtocoloEndpoint,
+});
+
+const consultNfceProtocolOnSefaz = (args) => consultProtocolOnSefaz(args, {
+  model: '65', resolveEndpoint: resolveNfceConsultaProtocoloEndpoint,
+});
 
 const transmitNfeEventToSefaz = async ({
   eventXml,
@@ -1397,6 +1456,8 @@ module.exports = {
   transmitNfeToSefaz,
   transmitNfeEventToSefaz,
   consultNfeProtocolOnSefaz,
+  consultNfceProtocolOnSefaz,
+  resolveNfceConsultaProtocoloEndpoint,
   consultNfceStatusServico,
   performSoapRequest,
   resolveUfCode,
@@ -1424,6 +1485,7 @@ module.exports = {
     resolveNfeEndpoint,
     resolveNfeStatusEndpoint,
     resolveNfeConsultaProtocoloEndpoint,
+    resolveNfceConsultaProtocoloEndpoint,
     resolveNfeEventoEndpoint,
   },
 };

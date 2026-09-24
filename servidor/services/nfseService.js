@@ -86,7 +86,7 @@ function projectItems(sale) {
   });
   const discount = sale.receiptSnapshot?.totais?.descontoValor ?? sale.receiptSnapshot?.totais?.desconto ?? sale.discountValue ?? 0;
   const addition = sale.receiptSnapshot?.totais?.acrescimoValor ?? sale.receiptSnapshot?.totais?.acrescimo ?? sale.additionValue ?? 0;
-  return fiscalHelpers.buildFiscalProjection({ items: normalized, discount, addition }).adjustedItems;
+  return fiscalHelpers.buildFiscalProjection({ items: normalized, discount, addition }, { itemsOnly: true }).adjustedItems;
 }
 
 function statedSaleTotal(sale) {

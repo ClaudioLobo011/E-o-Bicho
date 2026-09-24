@@ -8,6 +8,7 @@ const Pdv = require('../models/Pdv');
 const PdvState = require('../models/PdvState');
 const PdvStateSale = require('../models/PdvStateSale');
 const PaymentMethod = require('../models/PaymentMethod');
+const paymentMetadata = require('../utils/pdvPaymentMetadata');
 const Product = require('../models/Product');
 const User = require('../models/User');
 const Pet = require('../models/Pet');
@@ -1081,12 +1082,15 @@ async function materializeDesktopEvent(event, pdv, host) {
     const methodMap = new Map(methods.map((method) => [String(method._id), method]));
     return entries.map((entry) => {
       const method = methodMap.get(String(entry?.paymentMethodId));
+      const payment = paymentMetadata.merge(entry, method);
       return {
+        ...payment,
         id: String(entry?.paymentMethodId || ''),
-        label: method?.name || entry?.label || 'Pagamento',
-        type: method?.type || entry?.type || 'avista',
+        label: payment.label || payment.name || 'Pagamento',
+        type: payment.type || 'avista',
         valor: Number(entry?.amount ?? entry?.valor ?? 0),
-        parcelas: Number(entry?.installments || 1),
+        amount: Number(entry?.amount ?? entry?.valor ?? 0),
+        parcelas: Number(entry?.installments || entry?.parcelas || 1),
       };
     });
   };
@@ -1350,6 +1354,16 @@ async function materializeDesktopEvent(event, pdv, host) {
         origin: 'desktop-sale',
         locked: true,
       })),
+    };
+  }
+  if (['sale.completed', 'delivery.finalized'].includes(event.type)) {
+    payload.receiptSnapshot = {
+      nfseCustomerIdentification: payload.nfseCustomerIdentification,
+      meta: { saleCode: payload.saleCode },
+      items: payload.items,
+      cliente: { id: source.customerId || '', nome: source.customerName || '', documento: source.customerDocument || '' },
+      totais: { totalBruto: payload.totalBruto, totalLiquido: payload.totalLiquido, desconto: payload.discountValue, acrescimo: payload.additionValue, trocoValor: Number(source.change || 0) },
+      pagamentos: { items: payload.payments },
     };
   }
   await pdvDomain.enqueuePdvStateWrite(String(pdv._id), () => pdvDomain.runPdvCommand({
@@ -2169,6 +2183,8 @@ router.post('/sales/:saleId/fiscal', authenticateHost, async (req, res) => {
   req.params.id = String(req.desktopHost.pdv);
   return pdvDomain.emitSaleFiscalHandler(req, res);
 });
+
+router.post('/sales/:saleId/fiscal/consult', authenticateHost, require('./pdvFiscalConsult').createPdvFiscalConsultHandler());
 
 const nfseHandlers = require('./pdvNfse').createPdvNfseHandlers();
 router.get('/sales/:saleId/nfse', authenticateHost, nfseHandlers.list);

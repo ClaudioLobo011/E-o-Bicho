@@ -5,6 +5,172 @@ const path = require('node:path');
 
 const { _test } = require('../nfceEmitter');
 
+describe('NFC-e pagamentos, Pix e troco', () => {
+  const mixedItems = [{ itemType: 'product', total: 219.9 }, { itemType: 'service', total: 130 }];
+  const xmlPayment = (payment, total = 10, change = 0) => _test.serializeFiscalPayments({ payments: [payment], total, change });
+
+  test('projeção interna de itens dispensa pagamentos sem enfraquecer a emissão NFC-e', () => {
+    const input = { items: [{ total: 100 }, { itemType: 'service', total: 80 }], discount: 10, addition: 5 };
+    const projection = _test.buildFiscalProjection(input, { itemsOnly: true });
+    assert.deepEqual(projection.adjustedItems.map(item => item.netTotal), [97.22, 77.78]);
+    assert.equal(projection.totalLiquido, 97.22); assert.equal(projection.payments, undefined);
+    assert.throws(() => _test.buildFiscalProjection(input), /pagamentos reais/);
+    assert.throws(() => _test.buildFiscalProjection({ ...input, itemsOnly: true }), /pagamentos reais/);
+    assert.throws(() => _test.buildFiscalProjection(input, { itemsOnly: 'true' }), /pagamentos reais/);
+    assert.throws(() => _test.buildFiscalProjection({ ...input, payments: [{ forma: '01', valor: 174.99 }] }), /centavos/);
+  });
+
+  test('preserva códigos explícitos suportados e diferencia Pix manual/dinâmico, crediário e cartão loja', () => {
+    for (const code of ['01', '02', '03', '04', '05', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '90', '91', '99']) assert.equal(_test.resolvePaymentCode(code), code);
+    for (const [label, code] of [['Dinheiro', '01'], ['Crédito (3x)', '03'], ['Débito', '04'], ['Cartão da Loja', '05'], ['Crediário', '05'], ['Pix', '20'], ['Pix estático', '20'], ['Chave Pix', '20'], ['Pix dinâmico', '17'], ['Pix automático', '23'], ['TEF', '24'], ['Transferência bancária', '18'], ['Vale alimentação', '10'], ['Vale refeição', '11']]) assert.equal(_test.resolvePaymentCode(label), code, label);
+    assert.throws(() => _test.resolvePaymentCode(''), /Informe a forma/);
+    assert.throws(() => _test.resolvePaymentCode('80'), /não suportado/);
+  });
+
+  test('cartões 03/04 e Pix dinâmico17 incluem card/tpIntegra2 sem inventar adquirente ou autorização', () => {
+    for (const code of ['03', '04', '17']) {
+      const xml = xmlPayment({ forma: code, valor: 10 });
+      assert.match(xml, /<card><tpIntegra>2<\/tpIntegra><\/card>/);
+      assert.doesNotMatch(xml, /<CNPJ>|<cAut>|<tBand>/);
+    }
+  });
+
+  test('Pix manual20 e formas sem dados eletrônicos não recebem grupo card', () => {
+    for (const code of ['01', '02', '05', '10', '11', '12', '13', '15', '16', '18', '19', '20', '21', '23', '24']) assert.doesNotMatch(xmlPayment({ forma: code, valor: 10 }), /<card>/);
+    assert.throws(() => xmlPayment({ forma: '20', valor: 10, card: { tpIntegra: '1' } }), /não permite/);
+    assert.throws(() => xmlPayment({ forma: '01', valor: 10, card: { tpIntegra: '2' } }), /não permite/);
+    assert.throws(() => xmlPayment({ forma: '22', valor: 10 }), /falha de hardware/);
+  });
+
+  test('preserva integração declarada e autorização longa sem truncar nem preencher campos ausentes', () => {
+    const authorization = 'A'.repeat(64);
+    const xml = xmlPayment({ forma: '03', valor: 10, card: { tpIntegra: '1', CNPJ: '12345678000195', tBand: '01', cAut: authorization } });
+    assert.match(xml, /<tpIntegra>1<\/tpIntegra>/);
+    assert.ok(xml.includes(`<cAut>${authorization}</cAut>`));
+    assert.throws(() => xmlPayment({ forma: '03', valor: 10, card: { tpIntegra: '1' } }), /autorização reais/);
+    assert.throws(() => xmlPayment({ forma: '03', valor: 10, card: { tpIntegra: '3' } }), /integração.*inválido/);
+  });
+
+  test('Outros exige xPag na ordem correta e escapa a descrição; indPag aceita apenas0/1', () => {
+    const xml = xmlPayment({ forma: '99', valor: 10, descricao: 'Vale & convênio', indPag: 1 });
+    assert.match(xml, /<indPag>1<\/indPag><tPag>99<\/tPag><xPag>Vale &amp; convênio<\/xPag><vPag>10.00<\/vPag>/);
+    assert.throws(() => xmlPayment({ forma: '99', valor: 10 }), /Descreva/);
+    assert.throws(() => xmlPayment({ forma: '01', valor: 10, indPag: 2 }), /Indicador.*inválido/);
+  });
+
+  test('caso misto349.90 Pixmanual projeta somente produto219.90 sem card e conservaorigem', () => {
+    const original = { receiptSnapshot: { pagamentos: { items: [{ label: 'Pix', valor: 349.9 }] }, totais: { trocoValor: 0 } } };
+    const before = JSON.stringify(original);
+    const projected = _test.buildFiscalProjection({ items: mixedItems, ..._test.resolveSaleFiscalPayments(original) });
+    assert.equal(projected.totalLiquido, 219.9);
+    assert.equal(projected.payments[0].valor, 219.9);
+    const xml = _test.serializeFiscalPayments({ payments: projected.payments, change: projected.change, total: projected.totalLiquido });
+    assert.match(xml, /<tPag>20<\/tPag><vPag>219.90<\/vPag>/);
+    assert.doesNotMatch(xml, /<card>|<vTroco>/);
+    assert.equal(JSON.stringify(original), before);
+  });
+
+  test('misto com dinheiro400 preserva troco50.10 integral e projeta recebido270', () => {
+    for (const payments of [[{ forma: '01', valor: 400 }], [{ forma: '01', amount: 349.9, tenderedAmount: 400, change: 50.1 }]]) {
+      const original = JSON.stringify(payments);
+      const projected = _test.buildFiscalProjection({ items: mixedItems, payments, change: 50.1 });
+      assert.equal(projected.payments[0].valor, 270);
+      assert.equal(projected.change, 50.1);
+      const xml = _test.serializeFiscalPayments({ payments: projected.payments, total: 219.9, change: projected.change });
+      assert.match(xml, /<vPag>270.00<\/vPag>/);
+      assert.match(xml, /<vTroco>50.10<\/vTroco>/);
+      assert.equal(JSON.stringify(payments), original);
+    }
+  });
+
+  test('troco não é rateado sobre cartão/Pix e cashlíquidozero mantém a linha de devolução', () => {
+    const projected = _test.buildFiscalProjection({ items: mixedItems,
+      payments: [{ forma: '04', valor: 349.9 }, { forma: '01', valor: 50.1 }], change: 50.1 });
+    assert.deepEqual(projected.payments.map((p) => [p.forma, p.valor]), [['04', 219.9], ['01', 50.1]]);
+    assert.doesNotThrow(() => _test.serializeFiscalPayments({ payments: projected.payments, total: 219.9, change: 50.1 }));
+    assert.throws(() => _test.buildFiscalProjection({ items: mixedItems, payments: [{ forma: '20', valor: 400 }], change: 50.1 }), /sem pagamento em dinheiro/);
+    assert.throws(() => _test.buildFiscalProjection({ items: mixedItems, payments: [{ forma: '03', amount: 349.9, tenderedAmount: 400, change: 50.1 }], change: 50.1 }), /só pode ser registrado/);
+  });
+
+  test('troco em venda só de produtos preserva bruto/líquido e metadados Desktop', () => {
+    const result = _test.buildFiscalProjection({ items: [{ total: 10 }], payments: [{ forma: '01', amount: 10, tenderedAmount: 20, change: 10 }], change: 10 });
+    assert.equal(result.payments[0].valor, 20);
+    assert.equal(result.payments[0].amount, 10);
+    assert.equal(result.change, 10);
+    assert.match(_test.serializeFiscalPayments({ payments: result.payments, total: 10, change: 10 }), /<vPag>20.00<\/vPag>/);
+  });
+
+  test('rateia múltiplas formas em centavos exatos sem preencher pagamento faltante', () => {
+    const projected = _test.buildFiscalProjection({ items: [{ total: 0.03 }, { itemType: 'service', total: 0.02 }], payments: [{ forma: '01', valor: 0.02 }, { forma: '20', valor: 0.03 }] });
+    assert.deepEqual(projected.payments.map((p) => p.valor), [0.01, 0.02]);
+    assert.throws(() => _test.buildFiscalProjection({ items: mixedItems, payments: [{ forma: '01', valor: 349.89 }] }), /centavos/);
+    assert.throws(() => _test.buildFiscalProjection({ items: mixedItems, payments: [{ forma: '01', valor: 349.9 }], change: 50.1 }), /centavos/);
+    assert.throws(() => _test.buildFiscalProjection({ items: mixedItems, payments: [] }), /pagamentos reais/);
+    assert.throws(() => _test.serializeFiscalPayments({ payments: [{ forma: '01', valor: 9.99 }], total: 10 }), /centavos/);
+  });
+
+  test('desconto, acréscimo e troco em venda mista mantêm rateio de pagamentos exato', () => {
+    const result = _test.buildFiscalProjection({ items: [{ total: 100 }, { itemType: 'service', total: 80 }], discount: 10, addition: 5,
+      payments: [{ forma: '01', valor: 70 }, { forma: '20', valor: 125 }], change: 20 });
+    assert.equal(result.totalLiquido, 97.22);
+    assert.equal(result.discount, 5.56);
+    assert.equal(result.addition, 2.78);
+    assert.deepEqual(result.payments.map((payment) => payment.valor), [47.78, 69.44]);
+    assert.doesNotThrow(() => _test.serializeFiscalPayments({ payments: result.payments, total: result.totalLiquido, change: result.change }));
+  });
+
+  test('14 e 90 são bloqueados na NFC-e; pagamento posterior explícito91 tem valor zero', () => {
+    for (const forma of ['14', '90']) assert.throws(() => xmlPayment({ forma, valor: 0 }), /NFC-e não permite/);
+    const projected = _test.buildFiscalProjection({ items: mixedItems, payments: [{ forma: '91', valor: 349.9 }] });
+    assert.equal(projected.payments[0].valor, 219.9);
+    assert.match(_test.serializeFiscalPayments({ payments: projected.payments, total: 219.9 }), /<indPag>1<\/indPag><tPag>91<\/tPag><vPag>0.00<\/vPag>/);
+    const partial = _test.buildFiscalProjection({ items: [{ total: 40 }, { itemType: 'service', total: 60 }], payments: [{ forma: '01', valor: 50 }, { forma: '91', valor: 0 }] });
+    assert.deepEqual(partial.payments.map((payment) => payment.valor), [20, 0]);
+    assert.doesNotThrow(() => _test.serializeFiscalPayments({ payments: partial.payments, total: 40 }));
+    const credit = _test.buildFiscalProjection({ items: mixedItems, payments: [{ forma: 'Crediário', valor: 349.9 }] });
+    assert.match(_test.serializeFiscalPayments({ payments: credit.payments, total: 219.9 }), /<indPag>1<\/indPag><tPag>05<\/tPag><vPag>219.90<\/vPag>/);
+  });
+
+  test('limite vigente do troco é 300 mil, sem aplicar o limite antigo de mil reais', () => {
+    assert.doesNotThrow(() => xmlPayment({ forma: '01', valor: 2010 }, 10, 2000));
+    assert.throws(() => xmlPayment({ forma: '01', valor: 300010.01 }, 10, 300000.01), /300.000/);
+  });
+
+  test('não fabrica dinheiro sem snapshot e preserva fallback comprovado de pagamentos', () => {
+    assert.deepEqual(_test.resolveSaleFiscalPayments({}), { payments: [], change: 0 });
+    const resolved = _test.resolveSaleFiscalPayments({ payments: [{ fiscalCode: '17', name: 'Pix dinâmico', amount: 10, card: { tpIntegra: '2' } }] });
+    assert.equal(resolved.payments[0].forma, '17');
+    assert.equal(resolved.payments[0].valor, 10);
+    assert.match(_test.serializeFiscalPayments({ payments: resolved.payments, total: 10 }), /<tPag>17<\/tPag>/);
+    assert.deepEqual(resolved.payments[0].card, { tpIntegra: '2' });
+  });
+
+  test('campos fiscais opcionais vazios não apagam a forma real e valores formatados antigos mantêm troco', () => {
+    const source = _test.resolveSaleFiscalPayments({ receiptSnapshot: { pagamentos: { items: [{ label: 'Dinheiro', formatted: 'R$ 400,00', fiscalCode: '', tPag: '', tpIntegra: '', card: { tpIntegra: '', cnpj: '' } }] }, totais: { troco: 'R$ 50,10' } } });
+    const result = _test.buildFiscalProjection({ items: mixedItems, ...source });
+    const xml = _test.serializeFiscalPayments({ payments: result.payments, change: result.change, total: result.totalLiquido });
+    assert.match(xml, /<tPag>01<\/tPag><vPag>270.00<\/vPag>/);
+    assert.match(xml, /<vTroco>50.10<\/vTroco>/);
+    assert.doesNotMatch(xml, /<card>/);
+    for (const value of [false, [10], {}, -1, 'invalid']) assert.throws(() => xmlPayment({ forma: '01', valor: value }), /válido/);
+  });
+
+  test('validação do XML admite saldo futuro91 e recusa valor indevido em90/91', () => {
+    const document = (paymentXml) => `<NFe><infNFe><ide><tpEmis>1</tpEmis></ide><det><prod><qCom>1</qCom><vUnCom>100</vUnCom><vProd>100</vProd></prod></det><total><ICMSTot><vProd>100</vProd><vNF>100</vNF></ICMSTot></total>${paymentXml}</infNFe></NFe>`;
+    const valid = _test.serializeFiscalPayments({ payments: [{ forma: '01', valor: 50 }, { forma: '91', valor: 50 }], total: 100 });
+    assert.equal(_test.validateFiscalXmlTotals(document(valid)).valid, true);
+    assert.equal(_test.validateFiscalXmlTotals(document('<pag><detPag><tPag>91</tPag><vPag>50</vPag></detPag></pag>')).valid, false);
+    assert.equal(_test.validateFiscalXmlTotals(document('<pag><detPag><tPag>91</tPag><vPag>100</vPag></detPag></pag>')).valid, false);
+  });
+
+  test('rejeição391 propaga classificação permanente sem transformar falha de rede em rejeição', () => {
+    assert.deepEqual(_test.sefazFailureMetadata({ details: { protocolStatus: '391', loteStatus: '104' } }), { sefazStatus: '391', permanent: true, retryable: false, statusCode: 422 });
+    assert.deepEqual(_test.sefazFailureMetadata(new Error('ETIMEDOUT')), {});
+    assert.equal(_test.sefazFailureMetadata({ details: { loteStatus: '108' } }).retryable, true);
+    assert.equal(_test.sefazFailureMetadata({ details: { protocolStatus: '204' } }).requiresConsultation, true);
+  });
+});
+
 test('mantém desconto e acréscimo na ordem exigida pelo schema do produto', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'nfceEmitter.js'), 'utf8');
   const productBlockStart = source.indexOf("infNfeLines.push(`        <vProd>");

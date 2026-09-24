@@ -35,6 +35,7 @@ const {
   emitPdvSaleFiscal,
   extractCertificatePair,
   validateFiscalXmlTotals,
+  sefazFailureMetadata,
 } = require('../services/nfceEmitter');
 const { transmitNfceToSefaz } = require('../services/sefazTransmitter');
 const { decryptBuffer, decryptText } = require('../utils/certificates');
@@ -4510,7 +4511,12 @@ const emitSaleFiscalHandler = async (req, res) => {
       error?.message && typeof error.message === 'string'
         ? error.message
         : 'Erro ao emitir nota fiscal.';
-    if (error?.xmlContent) {
+    const failureMetadata = { ...sefazFailureMetadata(error),
+      ...(error?.sefazStatus ? { sefazStatus: String(error.sefazStatus) } : {}),
+      ...(typeof error?.retryable === 'boolean' ? { retryable: error.retryable } : {}),
+      ...(typeof error?.permanent === 'boolean' ? { permanent: error.permanent } : {}),
+    };
+    if (error?.xmlContent && !req.desktopHost) {
       const referenceDate =
         emissionDate instanceof Date && !Number.isNaN(emissionDate.getTime())
           ? emissionDate
@@ -4524,9 +4530,14 @@ const emitSaleFiscalHandler = async (req, res) => {
       if (message) {
         res.set('X-Error-Message', encodeURIComponent(message));
       }
-      return res.status(500).send(error.xmlContent);
+      if (failureMetadata.sefazStatus) res.set('X-Sefaz-Status', failureMetadata.sefazStatus);
+      return res.status(failureMetadata.permanent === true ? 422 : 500).send(error.xmlContent);
     }
-    res.status(500).json({ message });
+    const fiscalFailure = {
+      message,
+      ...failureMetadata,
+    };
+    res.status(failureMetadata.permanent === true ? 422 : 500).json(fiscalFailure);
   }
 };
 

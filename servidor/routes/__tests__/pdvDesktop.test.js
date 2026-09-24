@@ -385,6 +385,7 @@ test.describe('integração do PDV Desktop', () => {
       { eventId: 'cash-1', type: 'cash.opened', occurredAt: new Date().toISOString(), payload: { openingAmount: 50 } },
       { eventId: 'event-1', type: 'sale.completed', occurredAt: new Date().toISOString(), payload: { id: 'local-sale-1', saleCode: `${base.pdv.codigo.replace(/[^A-Za-z0-9]/g, '')}-000001`, appointmentId: `local:${appointmentMutationId}`, appointmentIds: [`local:${appointmentMutationId}`, `${billingRecurringAppointment._id}:occurrence:2026-08-15T12:00:00.000Z`], grossTotal: 20, netTotal: 20, items: [{ productId: String(new mongoose.Types.ObjectId()), code: base.product.cod, name: base.product.nome, quantity: 1, unitPrice: 20 }], payments: [{ paymentMethodId: String(base.payment._id), amount: 20 }] } },
     ];
+    Object.assign(events[1].payload.payments[0], { fiscalCode: '17', card: { tpIntegra: 2, idTermPag: 'CAIXA-TESTE' }, tenderedAmount: 20, change: 0 });
     const first = await request.post('/desktop/events/batch').set(headers).send({ events });
     const duplicateOpen = await request.post('/desktop/events/batch').set(headers).send({ events: [{ eventId: 'cash-open-duplicate-state', type: 'cash.opened', occurredAt: new Date().toISOString(), payload: { openingAmount: 999 } }] });
     assert.equal(duplicateOpen.body.results[0].status, 'processed', duplicateOpen.text);
@@ -396,6 +397,11 @@ test.describe('integração do PDV Desktop', () => {
     const cloudState = await PdvState.findOne({ pdv: base.pdv._id }).lean();
     assert.equal(cloudState.completedSales.length, 1);
     assert.equal(cloudState.completedSales[0].id, 'local-sale-1');
+    const fiscalPayment = cloudState.completedSales[0].receiptSnapshot.pagamentos.items[0];
+    assert.equal(fiscalPayment.fiscalCode, '17'); assert.equal(fiscalPayment.card.tpIntegra, 2);
+    assert.equal(fiscalPayment.card.idTermPag, 'CAIXA-TESTE'); assert.equal(fiscalPayment.tenderedAmount, 20);
+    const fiscalMirror = await PdvStateSale.findOne({ pdv: base.pdv._id, saleId: 'local-sale-1' }).lean();
+    assert.equal(fiscalMirror.payload.receiptSnapshot.pagamentos.items[0].card.idTermPag, 'CAIXA-TESTE');
     assert.equal(cloudState.completedSales[0].appointmentId, `local:${appointmentMutationId}`);
     assert.deepEqual(cloudState.completedSales[0].appointmentIds, [`local:${appointmentMutationId}`, `${billingRecurringAppointment._id}:occurrence:2026-08-15T12:00:00.000Z`]);
     assert.equal(String(cloudState.completedSales[0].items[0].productId), String(base.product._id));
