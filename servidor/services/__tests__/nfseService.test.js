@@ -655,6 +655,31 @@ test('parser de HTTP reconhece erro singular E2404 e consulta os endpoints ofici
   } finally { await new Promise((resolve) => server.close(resolve)); }
 });
 
+test('hora de produção aceita metadados opcionais vazios observados no E2404 real', async () => {
+  let payload = { tipoAmbiente: 0, versaoAplicativo: '', dataHoraProcessamento: '2026-09-26T11:46:01.9525756-03:00', erro: { codigo: 'E2404', descricao: 'DPS não encontrada' } };
+  const methods = [];
+  const server = https.createServer({ key: pair.privateKeyPem, cert: pair.certificatePem }, (req, res) => {
+    methods.push(req.method); res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(payload));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const transport = createTransport(pair, { requestImpl: (url, options, callback) => {
+    assert.equal(url.hostname, 'sefin.nfse.gov.br'); assert.equal(options.rejectUnauthorized, true);
+    return https.request(new URL(`https://127.0.0.1:${server.address().port}${url.pathname}`), { ...options, ca: pair.certificatePem }, callback);
+  } });
+  try {
+    assert.equal((await transport.emissionTime('producao', 'DPS123')).toISOString(), '2026-09-26T14:46:01.952Z');
+    delete payload.tipoAmbiente; delete payload.versaoAplicativo;
+    assert.equal((await transport.emissionTime('producao', 'DPS123')).toISOString(), '2026-09-26T14:46:01.952Z');
+    payload.tipoAmbiente = 2;
+    await assert.rejects(transport.emissionTime('producao', 'DPS123'), /validar a hora/);
+    payload.tipoAmbiente = 0; payload.dataHoraProcessamento = '2026-09-26T11:46:01';
+    await assert.rejects(transport.emissionTime('producao', 'DPS123'), /validar a hora/);
+    payload.dataHoraProcessamento = 'inválido';
+    await assert.rejects(transport.emissionTime('producao', 'DPS123'), /validar a hora/);
+    assert.ok(methods.every(method => method === 'GET'));
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});
+
 test('erro fiscal da consulta nunca transforma uma emissão incerta em rejeitada', async () => {
   fake.emit = async () => { throw new NfseApiError('timeout', { uncertain: true }); };
   await engine.emitSaleNfse(saleInput());

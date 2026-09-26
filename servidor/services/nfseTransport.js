@@ -79,9 +79,15 @@ function createTransport(pair, options = {}) {
         const validTime = typeof value === 'string'
           && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)
           && Number.isFinite(Date.parse(value));
+        // Produção retorna E2404 com tipoAmbiente=0 e versaoAplicativo vazio.
+        // A origem é o endpoint oficial fixo, autenticado por TLS/mTLS.
+        // Metadados ausentes não invalidam dhProc; divergência explícita invalida.
+        const reportedEnvironment = error.responseEnvironment;
+        const environmentMatches = !Number.isFinite(reportedEnvironment) || reportedEnvironment === 0
+          || reportedEnvironment === (environment === 'producao' ? 1 : 2);
+        const applicationMatches = !error.responseApplication || /^SefinNacional_/.test(error.responseApplication);
         if (error.statusCode === 404 && error.codes?.includes('E2404')
-            && error.responseEnvironment === (environment === 'producao' ? 1 : 2)
-            && /^SefinNacional_/.test(error.responseApplication) && validTime) {
+            && environmentMatches && applicationMatches && validTime) {
           return new Date(value);
         }
         // Sem uma resposta fiscal válida, não assinar com uma hora presumida.
