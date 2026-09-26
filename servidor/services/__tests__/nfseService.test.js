@@ -694,6 +694,49 @@ test('prévia bloqueia divergência monetária e competência ausente de atendim
   input.sale.items[1].serviceDate = '2026-08-15'; preview = await engine.previewSaleNfse(input); assert.equal(preview.ready, true); assert.equal(preview.groups[0].competence, '2026-08-15');
 });
 
+test('clubinho agrupa tosa e três banhos na data do pagamento, sem alterar datas da agenda', async () => {
+  const dates = ['2026-09-23', '2026-09-30', '2026-10-07', '2026-10-14'];
+  const items = dates.map((day, index) => ({ serviceId: SERVICE_ID, itemType: 'servico', quantity: 1,
+    unitValue: index ? 50 : 110, totalValue: index ? 50 : 110, product: index ? 'Banho' : 'Tosa tesoura',
+    appointmentId: `clubinho:occurrence:${day}T12:00:00Z`, serviceDate: day }));
+  items.push({ itemType: 'produto', quantity: 5, unitValue: 3, totalValue: 15, product: 'Ração' });
+  const input = saleInput({ items, total: 275, appointmentIds: items.slice(0, 4).map(item => item.appointmentId) });
+  const before = JSON.stringify(input);
+  const preview = await engine.previewSaleNfse(input);
+  assert.equal(preview.ready, true, preview.issues.join('; '));
+  assert.equal(preview.documentCount, 1); assert.equal(preview.serviceTotal, 260);
+  assert.equal(preview.groups[0].competence, '2026-09-23');
+  const result = await engine.emitSaleNfse(input);
+  assert.equal(result.documents.length, 1); assert.equal(result.nfseStatus, 'authorized');
+  assert.equal(result.documents[0].total, 260);
+  assert.equal(JSON.stringify(input), before);
+  const doc = await Model.findById(result.documents[0].id).lean();
+  assert.equal(doc.snapshot.group.items[3].scheduledServiceDate, '2026-10-14');
+  const replay = await engine.emitSaleNfse(input);
+  assert.equal(replay.documents[0].id, result.documents[0].id);
+  assert.equal(fake.calls.filter(call => call === 'POST').length, 1);
+});
+
+test('serviço futuro isolado não é convertido em clubinho nem tem competência alterada', async () => {
+  const input = saleInput();
+  input.sale.items[1].appointmentId = 'isolado:occurrence:2026-10-01T12:00:00Z';
+  input.sale.items[1].serviceDate = '2026-10-01';
+  const preview = await engine.previewSaleNfse(input);
+  assert.equal(preview.ready, false); assert.match(preview.issues.join(), /sem data futura/);
+});
+
+test('clubinho não mistura classificação veterinária com banho e tosa', async () => {
+  services.push({ _id: SERVICE2_ID, nome: 'Consulta veterinária', fiscalPorEmpresa: { [STORE_ID]: { fiscalRuleCode: '2' } } });
+  rules.push({ ...clone(rules[0]), code: 2, fiscal: { nfse: { ...rules[0].fiscal.nfse, codigoTributacaoNacional: '050101' } } });
+  const input = saleInput({ total: 130, items: [
+    { serviceId: SERVICE_ID, itemType: 'servico', quantity: 1, unitValue: 50, totalValue: 50, appointmentId: 'grupo:occurrence:2026-10-01T12:00:00Z', serviceDate: '2026-10-01' },
+    { serviceId: SERVICE2_ID, itemType: 'servico', quantity: 1, unitValue: 80, totalValue: 80, appointmentId: 'grupo:occurrence:2026-10-08T12:00:00Z', serviceDate: '2026-10-08' },
+  ] });
+  const preview = await engine.previewSaleNfse(input);
+  assert.equal(preview.ready, true, preview.issues.join('; ')); assert.equal(preview.documentCount, 2);
+  assert.ok(preview.groups.every(group => group.competence === '2026-09-23'));
+});
+
 test('resposta pública não inclui chave privada, senha, certificado cifrado, snapshot ou trava', () => {
   const data = publicDocument({ _id: SERVICE_ID, store: STORE_ID, pdv: PDV_ID, total: 80, dpsXml: 'SENSITIVE_DPS', snapshot: { issuer: { name: 'Emitente de teste', cnpj: '11.222.333/0001-81', certificatePassword: 'SECRET_PASSWORD' }, customer: { name: 'SECRET_CUSTOMER' } }, privateKeyPem: 'SECRET_PRIVATE_KEY', certificadoArquivoCriptografado: 'SECRET_CIPHER', lockToken: 'SECRET_LOCK',
     progress: { stage: 'signing', privateKey: 'SECRET_NESTED_KEY', lockToken: 'SECRET_NESTED_LOCK', steps: { signing: { startedAt: date, privateKey: 'SECRET_STEP_KEY' } } } });

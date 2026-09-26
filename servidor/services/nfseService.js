@@ -120,6 +120,28 @@ function literalDate(value) {
   return new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
 }
 
+// Clubinho: datas operacionais permanecem na agenda; a cobrança antecipada
+// do grupo usa a data da venda/pagamento, conforme regra aprovada pelo emitente.
+function prepaidAppointmentGroups(sale, items) {
+  const references = [...(Array.isArray(sale.appointmentIds) ? sale.appointmentIds : []), sale.appointmentId,
+    ...items.map(item => item.source.appointmentId || item.source.atendimentoId)].filter(Boolean).map(String);
+  const rootOf = reference => text(reference).split(':occurrence:')[0];
+  const roots = [...new Set(references.map(rootOf))];
+  const dates = new Map();
+  const add = (root, date) => {
+    if (!root || !date) return;
+    if (!dates.has(root)) dates.set(root, new Set());
+    dates.get(root).add(date);
+  };
+  for (const reference of references) {
+    const occurrence = reference.split(':occurrence:')[1];
+    if (occurrence) add(rootOf(reference), literalDate(occurrence));
+  }
+  const itemRoot = item => rootOf(item.source.appointmentId || item.source.atendimentoId || (roots.length === 1 ? roots[0] : ''));
+  for (const item of items) add(itemRoot(item), literalDate(item.source.serviceDate || item.source.dataPrestacao || item.source.appointmentDate));
+  return { includes: item => (dates.get(itemRoot(item))?.size || 0) > 1 };
+}
+
 function normalizeCustomer(sale, registered = {}) {
   const source = { ...plain(registered), ...plain(sale.receiptSnapshot?.cliente), ...plain(sale.receiptSnapshot?.customer), ...plain(sale.customer) };
   const document = digits(sale.customerDocument || source.documento || source.document || source.cpf || source.cnpj);
@@ -247,13 +269,17 @@ function createNfseService(dependencies = {}) {
     if (!serviceItems.length) return { ready: true, issues: [], groups: [], serviceTotal: 0, itemCount: 0 };
     const freeServiceItems = serviceItems.filter(isComplimentaryService);
     const pricedServiceItems = serviceItems.filter((item) => !isComplimentaryService(item));
+    const prepaidGroups = prepaidAppointmentGroups(sale, serviceItems);
     const statedTotal = statedSaleTotal(sale);
     if (statedTotal !== null && statedTotal !== undefined && (!Number.isFinite(Number(statedTotal)) || cents(statedTotal) !== cents(sum(allItems, 'netTotal')))) issues.push('O total da venda difere da soma dos itens após descontos e acréscimos. Corrija os valores antes de emitir NFS-e.');
     if (cancelledSale(sale)) issues.push('A venda está cancelada.');
     if (!pricedServiceItems.length) return { ready: !issues.length, issues, groups: [], serviceTotal: 0, itemCount: serviceItems.length, freeServiceCount: freeServiceItems.length, warning: FREE_SERVICES_NOTICE, environment: environment || store?.nfse?.environment };
     const issuerStore = await resolveStore(store, pdv);
     const config = plain(issuerStore.nfse);
-    const previousDocuments = await Model.find({ pdv: id(pdv), saleId: sale.id, status: { $ne: 'superseded' } }).select('environment').lean();
+    const previousDocuments = await Model.find({ pdv: id(pdv), saleId: sale.id, status: { $ne: 'superseded' } }).select('environment status snapshot.group.items.competenceBasis').lean();
+    // Não reinterpretar a competência de uma DPS antiga autorizada ou incerta.
+    const preserveLegacyCompetence = previousDocuments.some(document => document.status !== 'rejected')
+      && !previousDocuments.some(document => (document.snapshot?.group?.items || []).some(item => item.competenceBasis === 'package_payment'));
     let env = config.environment;
     try {
       env = resolveSaleNfseEnvironment({ sale, pdv, store: issuerStore, requestedEnvironment: environment,
@@ -307,7 +333,8 @@ function createNfseService(dependencies = {}) {
       const explicitServiceDate = item.source.serviceDate || item.source.dataPrestacao || item.source.appointmentDate || sale.serviceDate || sale.dataPrestacao;
       const fromAppointment = item.source.appointmentId || item.source.atendimentoId || sale.appointmentId || sale.appointmentIds?.length;
       if (fromAppointment && !explicitServiceDate) { issues.push(`${name}: data da prestação ausente no atendimento. Reimporte o atendimento com a data correta antes de emitir NFS-e.`); continue; }
-      const competence = literalDate(explicitServiceDate || sale.createdAt);
+      const prepaid = !preserveLegacyCompetence && prepaidGroups.includes(item);
+      const competence = literalDate(prepaid ? sale.createdAt : explicitServiceDate || sale.createdAt);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(competence) || competence > literalDate(now())) { issues.push(`${name}: informe a data válida da prestação, sem data futura.`); continue; }
       const municipality = digits(item.source.municipioPrestacao || rule.municipioPrestacao || issuer.municipality);
       if (!/^\d{7}$/.test(municipality)) { issues.push(`${name}: município da prestação inválido.`); continue; }
@@ -316,7 +343,8 @@ function createNfseService(dependencies = {}) {
       const key = hash({ rule, competence, municipality });
       if (!groups.has(key)) groups.set(key, { rule, competence, municipality, items: [], descriptions: [] });
       const group = groups.get(key);
-      group.items.push({ index: item.index, serviceId: item.serviceId, quantity: item.quantity, gross: item.total, discount: item.discount, addition: item.addition, total: item.netTotal });
+      group.items.push({ index: item.index, serviceId: item.serviceId, quantity: item.quantity, gross: item.total, discount: item.discount, addition: item.addition, total: item.netTotal,
+        ...(prepaid ? { competenceBasis: 'package_payment', scheduledServiceDate: literalDate(explicitServiceDate) } : {}) });
       group.descriptions.push(`${description} — quantidade ${item.quantity}; valor R$ ${item.netTotal.toFixed(2).replace('.', ',')}`);
     }
     const complimentaryServices = freeServiceItems.map((item) => ({ index: item.index, serviceId: item.serviceId, name: text(item.name || 'Serviço sem cobrança'), quantity: item.quantity, total: 0 }));
