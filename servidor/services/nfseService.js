@@ -405,9 +405,9 @@ function createNfseService(dependencies = {}) {
   async function createDocument({ sale, pdv, plan, group, revision, progress }) {
     const number = await nextNumber({ scope: 'nfse_dps', reference: `${group.snapshot.issuer.cnpj}:${plan.environment}:${Number(group.snapshot.serie)}` });
     if (!Number.isSafeInteger(number) || number < 1 || number > 999999999999999) throw new NfseValidationError(['A sequência de DPS ultrapassou o limite de 15 dígitos. Configure outra série livre.']);
-    const issuedAt = now();
     const dpsId = buildDpsId({ municipality: group.snapshot.issuer.municipality, cnpj: group.snapshot.issuer.cnpj, serie: group.snapshot.serie, number });
     await progress.step('building_xml');
+    const issuedAt = await transportFactory(plan.pair).emissionTime(plan.environment, dpsId);
     const unsignedXml = buildDpsXml({ snapshot: group.snapshot, number, issuedAt });
     await progress.step('building_xml', true);
     await progress.step('signing');
@@ -547,7 +547,9 @@ function createNfseService(dependencies = {}) {
       let document = existing.find((d) => d.groupKey === group.groupKey);
       progress.reset(output.length + 1, plan.groups.length, document?.progress);
       if (document && id(document.store) !== id(plan.store)) throw new NfseValidationError(['Já existe uma DPS desta venda para outra empresa. Consulte a emissão original.']);
-      if (document && document.sourceHash !== group.sourceHash) {
+      const rejectedFutureTime = document?.status === 'rejected'
+        && document.errorCodes?.length === 1 && document.errorCodes[0] === 'E0008';
+      if (document && (document.sourceHash !== group.sourceHash || rejectedFutureTime)) {
         if (document.status !== 'rejected') throw new NfseValidationError(['Os dados da venda ou do cadastro fiscal foram alterados após iniciar a emissão. Consulte a DPS original; não será criada uma nota duplicada.']);
         const locked = await claim(document);
         if (!locked) { output.push(publicDocument({ ...document, status: 'processing' })); continue; }

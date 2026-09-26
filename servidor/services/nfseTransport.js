@@ -68,6 +68,27 @@ function request({ environment, path, method = 'GET', body, pair, requestImpl = 
 function createTransport(pair, options = {}) {
   const call = (environment, path, method, body) => request({ environment, path, method, body, pair, ...options });
   return {
+    // Consulta somente leitura com a identidade que será usada na emissão.
+    // Não usar Date.now(): o relógio do host pode estar adiantado (E0008).
+    emissionTime: async (environment, dpsId) => {
+      try {
+        await call(environment, `/dps/${dpsId}`, 'GET');
+        throw new Error('A DPS reservada já existe no Emissor Nacional. Consulte a numeração antes de emitir.');
+      } catch (error) {
+        const value = error.responseProcessedAt;
+        const validTime = typeof value === 'string'
+          && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)
+          && Number.isFinite(Date.parse(value));
+        if (error.statusCode === 404 && error.codes?.includes('E2404')
+            && error.responseEnvironment === (environment === 'producao' ? 1 : 2)
+            && /^SefinNacional_/.test(error.responseApplication) && validTime) {
+          return new Date(value);
+        }
+        // Sem uma resposta fiscal válida, não assinar com uma hora presumida.
+        if (error.codes?.includes('E2404')) throw new Error('Não foi possível validar a hora do Emissor Nacional. Nenhuma DPS foi transmitida; tente novamente após normalizar a consulta.');
+        throw error;
+      }
+    },
     emit: (environment, xml) => call(environment, '/nfse', 'POST', { dpsXmlGZipB64: compressXml(xml) }),
     queryDps: (environment, dpsId) => call(environment, `/dps/${dpsId}`, 'GET'),
     queryNfse: (environment, accessKey) => call(environment, `/nfse/${accessKey}`, 'GET'),

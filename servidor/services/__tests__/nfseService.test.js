@@ -48,6 +48,7 @@ beforeEach(async () => {
   services = [{ _id: SERVICE_ID, nome: 'Banho de teste', fiscalPorEmpresa: { [STORE_ID]: { fiscalRuleCode: '1', descricao: 'Banho & secagem' } } }];
   rules = [{ empresa: STORE_ID, code: 1, tipo: 'servico', fiscal: { nfse: { codigoTributacaoNacional: '050801', tributacaoIss: '1', tipoRetencaoIss: '1', totalTributosModo: 'simples', pTotTribSN: 6 } } }];
   fake = { calls: [], issued: new Map(),
+    async emissionTime() { return new Date(date); },
     async emit(env, xml) { this.calls.push('POST'); const dpsId = xpath.select1("string(//*[local-name()='infDPS']/@Id)", parseXml(xml)); const content = authorized(xml); this.issued.set(dpsId, content); return { nfseXmlGZipB64: compressXml(content) }; },
     async queryDps(env, dpsId) { this.calls.push('GET DPS'); if (!this.issued.has(dpsId)) throw new NfseApiError('Não encontrada', { statusCode: 404, codes: ['E2404'] }); return { chaveAcesso: KEY }; },
     async queryNfse() { this.calls.push('GET NFSE'); return { nfseXmlGZipB64: compressXml([...this.issued.values()].at(-1)) }; },
@@ -111,6 +112,52 @@ test('PDV de outra empresa usa certificado, regra e identificação congelada do
 test('cliques repetidos não reservam outra DPS nem retransmitem', async () => {
   const input = saleInput(); const first = await engine.emitSaleNfse(input); const second = await engine.emitSaleNfse(input);
   assert.equal(first.documents[0].id, second.documents[0].id); assert.equal(sequence, 1); assert.deepEqual(fake.calls, ['POST']); assert.equal(await Model.countDocuments(), 1);
+});
+
+test('relógio local adiantado não produz DPS futura: usa hora oficial na primeira emissão', async () => {
+  engine = createNfseService({ ...engineOptions, now: () => new Date(date.getTime() + 120000) });
+  const result = await engine.emitSaleNfse(saleInput());
+  assert.equal(result.nfseStatus, 'authorized');
+  const xml = parseXml(result.documents[0].xmlContent);
+  assert.equal(Date.parse(xpath.select1("string(//*[local-name()='dhEmi'])", xml)), date.getTime());
+  assert.equal(xpath.select1("string(//*[local-name()='dCompet'])", xml), '2026-09-23');
+  assert.deepEqual(fake.calls, ['POST']);
+});
+
+test('DPS rejeitada E0008 é consultada antes de nova revisão, mantendo histórico', async () => {
+  const emit = fake.emit;
+  fake.emit = async () => { throw new NfseApiError('Horário futuro', { statusCode: 400, codes: ['E0008'] }); };
+  const input = saleInput();
+  const first = await engine.emitSaleNfse(input);
+  assert.equal(first.nfseStatus, 'rejected');
+  fake.emit = emit;
+  const second = await engine.emitSaleNfse(input);
+  assert.equal(second.nfseStatus, 'authorized');
+  assert.deepEqual(fake.calls, ['GET DPS', 'POST']);
+  assert.equal(sequence, 2);
+  const original = await Model.findById(first.documents[0].id).lean();
+  assert.equal(original.status, 'superseded');
+  assert.equal(await Model.countDocuments(), 2);
+  await engine.emitSaleNfse(input);
+  assert.equal(sequence, 2);
+});
+
+test('sem relógio oficial disponível não transmite DPS com hora presumida', async () => {
+  fake.emissionTime = async () => { throw new Error('Hora oficial indisponível'); };
+  await assert.rejects(engine.emitSaleNfse(saleInput()), /Hora oficial indisponível/);
+  assert.deepEqual(fake.calls, []);
+  assert.equal(await Model.countDocuments(), 0);
+});
+
+test('E0008 local desatualizado não recria uma DPS já autorizada no emissor', async () => {
+  const input = saleInput();
+  const first = await engine.emitSaleNfse(input);
+  await Model.updateOne({ _id: first.documents[0].id }, { $set: { status: 'rejected', errorCodes: ['E0008'] } });
+  const recovered = await engine.emitSaleNfse(input);
+  assert.equal(recovered.nfseStatus, 'authorized');
+  assert.equal(recovered.documents[0].id, first.documents[0].id);
+  assert.equal(sequence, 1);
+  assert.equal(fake.calls.filter(call => call === 'POST').length, 1);
 });
 
 test('ativar produção preserva NFS-e homologada e não cria outra nota ao repetir a venda', async () => {
@@ -598,6 +645,8 @@ test('parser de HTTP reconhece erro singular E2404 e consulta os endpoints ofici
   const transport = createTransport(pair, { requestImpl: (url, options, callback) => https.request(new URL(`https://127.0.0.1:${server.address().port}${url.pathname}`), { ...options, ca: pair.certificatePem }, callback) });
   try {
     await assert.rejects(transport.queryDps('homologacao', 'DPS123'), (error) => error.statusCode === 404 && error.codes.includes('E2404'));
+    assert.equal((await transport.emissionTime('homologacao', 'DPS123')).toISOString(), '2026-09-23T18:00:00.000Z');
+    await assert.rejects(transport.emissionTime('producao', 'DPS123'), /validar a hora/);
     await transport.events('homologacao', KEY);
     assert.ok(seen.some((value) => value.endsWith('/eventos/101101/1'))); assert.ok(seen.some((value) => value.endsWith('/eventos/305101/1')));
     assert.ok(seen.every((value) => value.startsWith('/SefinNacional/')));
