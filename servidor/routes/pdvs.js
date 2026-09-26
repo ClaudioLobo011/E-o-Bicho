@@ -4169,7 +4169,7 @@ const emitSaleFiscalHandler = async (req, res) => {
       : null;
 
     if (!sale) {
-      return res.status(404).json({ message: 'Venda informada nÃ£o foi encontrada.' });
+      return res.status(404).json({ message: 'Venda informada não foi encontrada. Aguarde a sincronização antes de emitir.', code: 'SALE_NOT_FOUND' });
     }
 
     if (sale.status === 'cancelled') {
