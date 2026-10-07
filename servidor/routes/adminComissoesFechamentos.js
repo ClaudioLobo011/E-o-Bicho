@@ -143,56 +143,7 @@ const normalizeObjectId = (value) => {
   return raw ? String(raw) : '';
 };
 
-const buildProfessionalCommissionContext = (config = null) => {
-  const serviceRuleMap = new Map();
-  const groupRuleMap = new Map();
-
-  (Array.isArray(config?.serviceRules) ? config.serviceRules : []).forEach((rule) => {
-    const serviceId = normalizeObjectId(rule?.service);
-    const percent = parseNumber(rule?.percent);
-    if (!serviceId || percent === null) return;
-    serviceRuleMap.set(serviceId, percent);
-  });
-
-  (Array.isArray(config?.groupRules) ? config.groupRules : []).forEach((rule) => {
-    const groupId = normalizeObjectId(rule?.group);
-    const percent = parseNumber(rule?.percent);
-    if (!groupId || percent === null) return;
-    groupRuleMap.set(groupId, percent);
-  });
-
-  return { serviceRuleMap, groupRuleMap };
-};
-
-const firstNumericValue = (...values) => {
-  for (const value of values) {
-    const parsed = parseNumber(value);
-    if (parsed !== null) return parsed;
-  }
-  return null;
-};
-
-const resolveServiceCommissionPercent = ({
-  professionalCommission = null,
-  serviceId = '',
-  groupId = '',
-  servicePercent = null,
-  groupPercent = null,
-  itemPercent = null,
-  fallbackPercent = 0,
-} = {}) => {
-  const normalizedServiceId = normalizeObjectId(serviceId);
-  const normalizedGroupId = normalizeObjectId(groupId);
-
-  if (normalizedServiceId && professionalCommission?.serviceRuleMap?.has(normalizedServiceId)) {
-    return professionalCommission.serviceRuleMap.get(normalizedServiceId);
-  }
-  if (normalizedGroupId && professionalCommission?.groupRuleMap?.has(normalizedGroupId)) {
-    return professionalCommission.groupRuleMap.get(normalizedGroupId);
-  }
-
-  return firstNumericValue(servicePercent, groupPercent, itemPercent, fallbackPercent) ?? 0;
-};
+const { buildProfessionalCommissionContext, resolveServiceCommissionPercent, resolveServiceCommission, commissionAmount, dateKey: commissionDateKey } = require('../../scripts/common/professional-commission-engine');
 
 const normalizeCalendarDateKey = (value) => {
   if (!value) return '';
@@ -966,7 +917,7 @@ const resolveServicoItemsForUser = (appointment = {}, userId = '') => {
     String(appointment.profissional?._id || appointment.profissional) === normalizedId;
 
   if (assigned.length) return { items: assigned, matchedByTopLevel: topMatches };
-  if (topMatches) return { items, matchedByTopLevel: true };
+  if (topMatches) return { items: items.filter((item) => !item.profissional), matchedByTopLevel: true };
   return { items: [], matchedByTopLevel: false };
 };
 
@@ -991,9 +942,10 @@ const mapAppointmentToServicoRecords = (
   if (!isPago) return [];
 
   const fallbackPercent = Number.isFinite(defaultPercent) ? defaultPercent : 0;
-  const getItemPercent = (item) =>
-    resolveServiceCommissionPercent({
+  const getItemResolution = (item) =>
+    resolveServiceCommission({
       professionalCommission,
+      serviceDate: item?.data,
       serviceId: item?.servico?._id || item?.servico || appointment?.servico?._id || appointment?.servico,
       groupId:
         item?.servico?.grupo?._id ||
@@ -1019,9 +971,10 @@ const mapAppointmentToServicoRecords = (
     ))
     .map(({ item, itemIndex, schedule }) => {
       const valorServico = parseNumber(item?.valor) || 0;
-      const percent = getItemPercent(item);
+      const commissionRule = getItemResolution(item);
+      const percent = commissionRule.percent;
       const appliedPercent = percent !== null ? percent : fallbackPercent;
-      const comissaoServico = valorServico * (appliedPercent / 100);
+      const comissaoServico = commissionAmount(valorServico, appliedPercent);
       const appointmentId = normalizeObjectId(appointment?._id);
       const itemId = normalizeObjectId(item?._id) || String(itemIndex);
       const serviceName =
@@ -1043,6 +996,7 @@ const mapAppointmentToServicoRecords = (
         saleCode: String(appointment?.codigoVenda || '').trim(),
         value: valorServico,
         percent: appliedPercent,
+        commissionRule,
         commission: comissaoServico,
         _scheduleDate: schedule.dateKey,
         _scheduleTime: schedule.timeKey,
@@ -1166,8 +1120,9 @@ const buildSaleRecord = (
       if (excludeServiceItems) return;
       valorServicos += total;
       const serviceMeta = oid ? serviceMetaMap.get(oid) : null;
-      const percent = resolveServiceCommissionPercent({
+      const commissionRule = resolveServiceCommission({
         professionalCommission,
+        serviceDate: item?.data || dateKey,
         serviceId: serviceMeta?.serviceId || oid,
         groupId:
           serviceMeta?.groupId ||
@@ -1183,9 +1138,10 @@ const buildSaleRecord = (
         itemPercent: resolvePercent(item),
         fallbackPercent: comissaoServicoPercent,
       });
+      const percent = commissionRule.percent;
       const applied = percent !== null ? percent : comissaoServicoPercent;
       if (percent !== null) hasItemSvcPercent = true;
-      const itemCommission = total * (applied / 100);
+      const itemCommission = commissionAmount(total, applied);
       comissaoServicos += itemCommission;
       detailRows.push({
         key: `pdv:${saleId || 'legacy'}:item:${itemIndex}:service`,
@@ -1206,6 +1162,7 @@ const buildSaleRecord = (
         saleCode,
         value: total,
         percent: applied,
+        commissionRule,
         commission: itemCommission,
         status: normalizeStatus(sale.status),
         paid: normalizeStatus(sale.status) === 'pago',
@@ -1605,8 +1562,9 @@ const buildServiceCommissionRows = ({
         const schedule = getAppointmentItemSchedule(item);
         if (!schedule || !isCalendarDateInRange(schedule.dateKey, startDateKey, endDateKey)) return;
         const valor = parseNumber(item?.valor) || 0;
-        const percentual = resolveServiceCommissionPercent({
+        const commissionRule = resolveServiceCommission({
           professionalCommission,
+          serviceDate: item?.data,
           serviceId: item?.servico?._id || item?.servico || appointment?.servico?._id || appointment?.servico,
           groupId:
             item?.servico?.grupo?._id ||
@@ -1623,8 +1581,8 @@ const buildServiceCommissionRows = ({
           itemPercent: item?.comissaoPercent,
           fallbackPercent,
         });
-        const appliedPercent = percentual !== null ? percentual : fallbackPercent;
-        const comissao = valor * (appliedPercent / 100);
+        const appliedPercent = commissionRule.percent;
+        const comissao = commissionAmount(valor, appliedPercent);
         rows.push({
           petNome,
           servicoNome:
@@ -1637,6 +1595,7 @@ const buildServiceCommissionRows = ({
           dataRaw: schedule.sortKey,
           valor,
           percentual: appliedPercent,
+          commissionRule,
           comissao,
         });
       });
@@ -1694,7 +1653,7 @@ const computeCommissionSummaryForUser = async ({
     professionalCommissionConfig = ctx.professionalCommissionByUserId.get(userIdKey);
   } else {
     professionalCommissionConfig = await ProfessionalCommissionConfig.findOne({ user: user._id })
-      .select('groupRules serviceRules')
+      .select('groupRules serviceRules weekdayRules history effectiveFrom revision')
       .lean();
     if (ctx && userIdKey) {
       ctx.professionalCommissionByUserId.set(userIdKey, professionalCommissionConfig || null);
@@ -1905,6 +1864,7 @@ const sanitizeSnapshotItem = (item = {}) => ({
   saleCode: String(item.saleCode || '').trim(),
   value: roundCurrency(item.value),
   percent: Number(item.percent || 0),
+  commissionRule: item.commissionRule || null,
   commission: roundCurrency(item.commission),
   status: String(item.status || '').trim(),
   paid: item.paid === true,
@@ -3471,7 +3431,7 @@ router.get(
       }
 
       const professionalCommissionConfig = await ProfessionalCommissionConfig.findOne({ user: profissional._id })
-        .select('groupRules serviceRules')
+        .select('groupRules serviceRules weekdayRules history effectiveFrom revision')
         .lean();
       const professionalCommission = buildProfessionalCommissionContext(professionalCommissionConfig);
       const defaultPercent = Number(
@@ -3494,6 +3454,7 @@ router.get(
             data: `${formatCalendarDate(item.date)}${item.time ? ` ${item.time}` : ''}`,
             valor: item.value,
             percentual: item.percent,
+            commissionRule: item.commissionRule || null,
             comissao: item.commission,
             origem: item.source,
             codigoVenda: item.saleCode,

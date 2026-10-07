@@ -1,3 +1,4 @@
+const { resolveServiceCommission, commissionAmount } = require('../../scripts/common/professional-commission-engine');
 const express = require('express');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
@@ -1837,7 +1838,7 @@ router.get('/directory/snapshot', authenticateHost, async (req, res) => {
   const professionalUsers = users.filter((user) => Array.isArray(user.grupos) && user.grupos.some((group) => ['esteticista', 'veterinario'].includes(group)));
   const commissionConfigs = professionalUsers.length
     ? await ProfessionalCommissionConfig.find({ user: { $in: professionalUsers.map((user) => user._id) } })
-      .select('user groupRules serviceRules').lean()
+      .select('user groupRules serviceRules weekdayRules history effectiveFrom revision').lean()
     : [];
   const commissionConfigByUser = new Map(commissionConfigs.map((config) => [String(config.user), config]));
   const professionals = professionalUsers
@@ -1846,6 +1847,10 @@ router.get('/directory/snapshot', authenticateHost, async (req, res) => {
       type: user.grupos.includes('veterinario') ? 'veterinario' : 'esteticista', groups: user.grupos || [],
       commission: {
         fallbackPercent: Number(user.userGroup?.comissaoServicoPercent || 0),
+            weekdayRules: commissionConfigByUser.get(String(user._id))?.weekdayRules || [],
+            history: commissionConfigByUser.get(String(user._id))?.history || [],
+            effectiveFrom: commissionConfigByUser.get(String(user._id))?.effectiveFrom || '',
+            revision: Number(commissionConfigByUser.get(String(user._id))?.revision || 0),
         groupRules: (commissionConfigByUser.get(String(user._id))?.groupRules || []).map((rule) => ({
           groupId: String(rule.group || ''), percent: Number(rule.percent || 0),
         })),
@@ -2037,13 +2042,10 @@ router.get('/agenda/commission-report', authenticateHost, async (req, res) => {
       .populate('pet', 'nome')
       .populate({ path: 'itens.servico', select: 'nome valor grupo comissaoPercent', populate: { path: 'grupo', select: 'comissaoPercent' } })
       .lean(),
-    ProfessionalCommissionConfig.findOne({ user: professionalId }).select('groupRules serviceRules').lean(),
+    ProfessionalCommissionConfig.findOne({ user: professionalId }).select('groupRules serviceRules weekdayRules history effectiveFrom revision').lean(),
   ]);
 
-  const serviceRules = new Map((config?.serviceRules || []).map((rule) => [String(rule.service || ''), Number(rule.percent)]));
-  const groupRules = new Map((config?.groupRules || []).map((rule) => [String(rule.group || ''), Number(rule.percent)]));
   const fallbackPercent = Number(professional.userGroup?.comissaoServicoPercent || 0);
-  const validPercent = (value) => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
   const groupedRows = new Map();
 
   appointments.forEach((appointment) => {
@@ -2056,15 +2058,9 @@ router.get('/agenda/commission-report', authenticateHost, async (req, res) => {
 
       const serviceId = String(item.servico?._id || item.servico || '');
       const groupId = String(item.servico?.grupo?._id || item.servico?.grupo || '');
-      const candidates = [
-        serviceRules.get(serviceId),
-        groupRules.get(groupId),
-        item.servico?.comissaoPercent,
-        item.servico?.grupo?.comissaoPercent,
-        item.comissaoPercent,
-        fallbackPercent,
-      ];
-      const percent = Number(candidates.find(validPercent) ?? 0);
+      const commissionRule = resolveServiceCommission({ professionalCommission: config, serviceDate: item.data || itemDay, serviceId, groupId,
+        servicePercent: item.servico?.comissaoPercent, groupPercent: item.servico?.grupo?.comissaoPercent, itemPercent: item.comissaoPercent, fallbackPercent });
+      const percent = commissionRule.percent;
       const value = Number(item.valor ?? item.servico?.valor ?? 0);
       const key = `${appointment._id}:${scheduledAt ? scheduledAt.toISOString() : day}`;
       const current = groupedRows.get(key) || {
@@ -2075,7 +2071,8 @@ router.get('/agenda/commission-report', authenticateHost, async (req, res) => {
         commission: 0,
         serviceCount: 0,
       };
-      current.commission += value * (percent / 100);
+      current.commission += commissionAmount(value, percent);
+      current.rules = [...(current.rules || []), commissionRule];
       current.serviceCount += 1;
       groupedRows.set(key, current);
     });
@@ -2086,7 +2083,7 @@ router.get('/agenda/commission-report', authenticateHost, async (req, res) => {
     .sort((left, right) => new Date(left.scheduledAt) - new Date(right.scheduledAt));
   const total = Math.round((rows.reduce((sum, row) => sum + row.commission, 0) + Number.EPSILON) * 100) / 100;
   return res.json({
-    report: { date: day, professionalId, professionalName: userName(professional), rows, total },
+    report: { date: day, professionalId, professionalName: userName(professional), rows, total, calculationBasis: "finalized_services", paymentNotice: "Estimativa de serviços finalizados. O fechamento exige pagamento confirmado." },
     source: 'professional_commission_config',
     generatedAt: new Date().toISOString(),
   });

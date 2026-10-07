@@ -190,6 +190,7 @@
         `<td class="px-4 py-3">
           <p class="font-semibold text-gray-900">${item.codigo || '--'}</p>
           <p class="text-xs text-gray-500">${item.descricao || ''}</p>
+          ${item.commissionRule ? `<p class="text-xs text-gray-500">${Number(item.commissionRule.percent || 0).toFixed(2)}% · ${String(item.commissionRule.label || '').replace(/[&<>"]/g, '')}</p>` : ''}
           ${referencia}
         </td>`,
         `<td class="px-4 py-3">${item.cliente || '--'}</td>`,

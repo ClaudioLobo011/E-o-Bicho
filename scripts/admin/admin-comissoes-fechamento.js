@@ -1064,7 +1064,7 @@
     return items
       .map(
         (item) =>
-          `<article class="commission-detail-row p-3 text-sm"><div><p class="font-semibold">${escapeHtml(formatDate(item.date))}${item.time ? ` ${escapeHtml(item.time)}` : ""}</p><p class="text-[11px] text-gray-500">${item.source === "appointment_service" ? "Agenda" : "PDV"}</p></div><div><p class="font-semibold">${escapeHtml(item.petName || (item.source === "pdv_product" ? "Venda PDV" : "--"))}</p><p class="text-[11px] text-gray-500">Venda ${escapeHtml(item.saleCode || "--")}</p></div><div data-detail-wide class="min-w-0"><p class="break-words">${escapeHtml(item.description || "--")}</p>${excluded ? `<p class="text-xs text-red-700">${escapeHtml(item.reason || "--")}</p>` : `<p class="text-[11px] text-gray-500">${numberValue(item.percent).toFixed(2)}%</p>`}</div><div class="text-right"><p class="text-[10px] uppercase text-gray-500">Valor</p><p>${formatMoney(item.value)}</p></div><div class="text-right"><p class="text-[10px] uppercase text-gray-500">${excluded ? "Situação" : "Comissão"}</p><p class="font-bold ${excluded ? "text-red-700" : ""}">${excluded ? "Excluído" : formatMoney(item.commission)}</p></div></article>`,
+          `<article class="commission-detail-row p-3 text-sm"><div><p class="font-semibold">${escapeHtml(formatDate(item.date))}${item.time ? ` ${escapeHtml(item.time)}` : ""}</p><p class="text-[11px] text-gray-500">${item.source === "appointment_service" ? "Agenda" : "PDV"}</p></div><div><p class="font-semibold">${escapeHtml(item.petName || (item.source === "pdv_product" ? "Venda PDV" : "--"))}</p><p class="text-[11px] text-gray-500">Venda ${escapeHtml(item.saleCode || "--")}</p></div><div data-detail-wide class="min-w-0"><p class="break-words">${escapeHtml(item.description || "--")}</p>${excluded ? `<p class="text-xs text-red-700">${escapeHtml(item.reason || "--")}</p>` : `<p class="text-[11px] text-gray-500">${numberValue(item.percent).toFixed(2)}%${item.commissionRule?.label ? ` · ${escapeHtml(item.commissionRule.label)} · v${numberValue(item.commissionRule.revision)}` : ""}</p>`}</div><div class="text-right"><p class="text-[10px] uppercase text-gray-500">Valor</p><p>${formatMoney(item.value)}</p></div><div class="text-right"><p class="text-[10px] uppercase text-gray-500">${excluded ? "Situação" : "Comissão"}</p><p class="font-bold ${excluded ? "text-red-700" : ""}">${excluded ? "Excluído" : formatMoney(item.commission)}</p></div></article>`,
       )
       .join("");
   }
@@ -1384,6 +1384,8 @@
       item.saleCode || "",
       numberValue(item.value).toFixed(2).replace(".", ","),
       numberValue(item.percent).toFixed(2).replace(".", ","),
+      item.commissionRule?.label || "",
+      item.commissionRule?.revision ?? "",
       numberValue(item.commission).toFixed(2).replace(".", ","),
     ]);
     const slug = `itens-comissao-${toYmd(items[0]?.date) || "periodo"}`;
@@ -1422,7 +1424,7 @@
     const rows = items
       .map(
         (item) =>
-          `<tr><td>${escapeHtml(formatDate(item.date))} ${escapeHtml(item.time || "")}</td><td>${escapeHtml(item.petName || "PDV")}</td><td>${escapeHtml(item.description || "--")}</td><td>${escapeHtml(item.saleCode || "--")}</td><td class="num">${formatMoney(item.value)}</td><td class="num">${numberValue(item.percent).toFixed(2)}%</td><td class="num">${formatMoney(item.commission)}</td></tr>`,
+          `<tr><td>${escapeHtml(formatDate(item.date))} ${escapeHtml(item.time || "")}</td><td>${escapeHtml(item.petName || "PDV")}</td><td>${escapeHtml(item.description || "--")}</td><td>${escapeHtml(item.saleCode || "--")}</td><td class="num">${formatMoney(item.value)}</td><td class="num">${numberValue(item.percent).toFixed(2)}%${item.commissionRule?.label ? `<br><small>${escapeHtml(item.commissionRule.label)}</small>` : ""}</td><td class="num">${formatMoney(item.commission)}</td></tr>`,
       )
       .join("");
     popup.document.open();

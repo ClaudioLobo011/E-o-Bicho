@@ -18,6 +18,7 @@ const snapshotItemSchema = new Schema(
     saleCode: { type: String, trim: true, default: '' },
     value: { type: Number, min: 0, default: 0 },
     percent: { type: Number, min: 0, default: 0 },
+    commissionRule: { type: Schema.Types.Mixed, default: null },
     commission: { type: Number, min: 0, default: 0 },
     status: { type: String, trim: true, default: '' },
     paid: { type: Boolean, default: false },

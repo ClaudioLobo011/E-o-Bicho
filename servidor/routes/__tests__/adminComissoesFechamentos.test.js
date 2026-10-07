@@ -1018,4 +1018,31 @@ test.describe('fechamento de comissões por data literal do agendamento', () => 
     assert.equal(analytics.body.byDay[0].date, '2026-09-01');
     assert.equal(analytics.body.byDay.at(-1).date, '2026-09-12');
   });
+  test('regra semanal usa ocorrência, é igual no funcionário e congela a origem no fechamento', async () => {
+    const fixture = await createFixture();
+    await ProfessionalCommissionConfig.updateOne({user:fixture.professional._id}, {$set:{revision:1, weekdayRules:[{id:'domingo',weekdays:[0],defaultPercent:50,groupRules:[],serviceRules:[{service:fixture.service._id,percent:60}]}]}});
+    await createAppointment({fixture,scheduledAt:'2026-09-01T12:00:00Z',items:[
+      {valor:100,data:'2026-09-06',hora:'10:00',status:'finalizado'},
+      {valor:100,data:'2026-09-07',hora:'10:00',status:'finalizado'},
+      {valor:100,data:'2026-09-13',hora:'10:00',status:'agendado'}
+    ]});
+    const app=createApp(); app.use('/api/func',require('../funcComissoes'));
+    const request=supertest(app); const headers=authorizationFor(fixture.admin);
+    const preview=await request.get('/api/admin/comissoes/fechamentos/preview').query({profissionalId:String(fixture.professional._id),start:'2026-09-06',end:'2026-09-07',store:String(fixture.store._id),details:1}).set(headers);
+    assert.equal(preview.status,200,preview.text); assert.equal(preview.body.totals.totalServicos,100);
+    const staff=await request.get('/api/func/comissoes').query({profissionalId:String(fixture.professional._id),start:'2026-09-06',end:'2026-09-07',store:String(fixture.store._id)}).set(headers);
+    assert.equal(staff.status,200,staff.text);
+    assert.deepEqual(staff.body.servicos.historico.map(r=>r.comissaoServico).sort((a,b)=>a-b),[40,60]);
+    const closing=await createClosingRequest({request,headers,fixture,start:'2026-09-06',end:'2026-09-07'});
+    assert.equal(closing.status,201,closing.text);
+    const frozen=await CommissionClosing.findOne({profissional:fixture.professional._id}).lean();
+    assert.equal(frozen.snapshotItems.find(r=>r.date==='2026-09-06').commissionRule.source,'weekday_service');
+    await ProfessionalCommissionConfig.updateOne({user:fixture.professional._id},{$set:{weekdayRules:[]}});
+    const unchanged=await CommissionClosing.findById(frozen._id).lean();
+    assert.equal(unchanged.snapshotItems.find(r=>r.date==='2026-09-06').percent,60);
+    const staffFrozen=await request.get('/api/func/comissoes').query({profissionalId:String(fixture.professional._id),start:'2026-09-06',end:'2026-09-07',store:String(fixture.store._id)}).set(headers);
+    assert.equal(staffFrozen.status,200,staffFrozen.text);
+    assert.deepEqual(staffFrozen.body.servicos.historico.map(r=>r.comissaoServico).sort((a,b)=>a-b),[40,60]);
+  });
+
 });

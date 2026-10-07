@@ -313,7 +313,7 @@ async function loadDirectoryUpserts(entity, host, cursor, limit) {
     return { documents, map: async (page) => {
       const professionalIds = page.filter((user) => Array.isArray(user.grupos) && user.grupos.some((group) => ['esteticista', 'veterinario'].includes(group))).map((user) => user._id);
       const configs = professionalIds.length
-        ? await ProfessionalCommissionConfig.find({ user: { $in: professionalIds } }).select('user groupRules serviceRules').lean()
+        ? await ProfessionalCommissionConfig.find({ user: { $in: professionalIds } }).select('user groupRules serviceRules weekdayRules history effectiveFrom revision').lean()
         : [];
       const byUser = new Map(configs.map((config) => [String(config.user), config]));
       return page.map((user) => {
@@ -328,6 +328,10 @@ async function loadDirectoryUpserts(entity, host, cursor, limit) {
           professionalType: groups.includes('veterinario') ? 'veterinario' : groups.includes('esteticista') ? 'esteticista' : '',
           commission: groups.some((group) => ['esteticista', 'veterinario'].includes(group)) ? {
             fallbackPercent: Number(user.userGroup?.comissaoServicoPercent || 0),
+            weekdayRules: config?.weekdayRules || [],
+            history: config?.history || [],
+            effectiveFrom: config?.effectiveFrom || '',
+            revision: Number(config?.revision || 0),
             groupRules: (config?.groupRules || []).map((rule) => ({ groupId: String(rule.group || ''), percent: Number(rule.percent || 0) })),
             serviceRules: (config?.serviceRules || []).map((rule) => ({ serviceId: String(rule.service || ''), percent: Number(rule.percent || 0) })),
           } : null,
@@ -337,12 +341,13 @@ async function loadDirectoryUpserts(entity, host, cursor, limit) {
     } };
   }
   if (entity === 'services') {
-    documents = await Service.find(cursorQuery(cursor)).select('_id nome valor duracaoMinutos grupo categorias porte ativo fiscalPorEmpresa updatedAt')
+    documents = await Service.find(cursorQuery(cursor)).select('_id nome valor duracaoMinutos grupo categorias porte ativo comissaoPercent fiscalPorEmpresa updatedAt')
       .populate({ path: 'grupo', select: 'nome tiposPermitidos comissaoPercent' })
       .sort({ updatedAt: 1, _id: 1 }).limit(limit + 1).lean();
     return { documents, map: (page) => page.map((service) => ({
       id: String(service._id), name: service.nome || '', price: Number(service.valor || 0), durationMinutes: Number(service.duracaoMinutos || 0),
       active: service.ativo !== false, groupId: String(service.grupo?._id || service.grupo || ''),
+      commissionPercent: service.comissaoPercent == null ? null : Number(service.comissaoPercent),
       groupCommissionPercent: Number(service.grupo?.comissaoPercent || 0), allowedStaffTypes: service.grupo?.tiposPermitidos || [],
       categories: service.categorias || [], sizes: service.porte || [], fiscalPorEmpresa: service.fiscalPorEmpresa || {}, updatedAt: service.updatedAt || null,
     })) };

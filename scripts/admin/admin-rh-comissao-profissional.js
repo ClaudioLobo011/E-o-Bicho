@@ -1,430 +1,130 @@
 (() => {
+  'use strict';
+  const engine = window.ProfessionalCommissionEngine;
   const API = `${API_CONFIG.BASE_URL}/admin/comissoes-profissionais`;
-
-  const elements = {
-    search: document.getElementById('commission-professional-search'),
-    list: document.getElementById('commission-professionals-list'),
-    listCounter: document.getElementById('commission-professionals-counter'),
-    listEmpty: document.getElementById('commission-professionals-empty'),
-    selectedBadge: document.getElementById('commission-selected-badge'),
-    roleBadge: document.getElementById('commission-role-badge'),
-    saveButton: document.getElementById('commission-save-btn'),
-    selectionPlaceholder: document.getElementById('commission-selection-placeholder'),
-    editor: document.getElementById('commission-editor'),
-    professionalName: document.getElementById('commission-professional-name'),
-    professionalRole: document.getElementById('commission-professional-role'),
-    servicesCount: document.getElementById('commission-services-count'),
-    groupsBody: document.getElementById('commission-groups-body'),
-    serviceSearch: document.getElementById('commission-service-search'),
-    servicesBody: document.getElementById('commission-services-body'),
-  };
-
-  const state = {
-    professionals: [],
-    groups: [],
-    services: [],
-    configsByUser: new Map(),
-    selectedProfessionalId: '',
-    selectedProfessionalType: '',
-    professionalSearch: '',
-    serviceSearch: '',
-    dirty: false,
-  };
-
-  const getToken = () => {
+  const $ = (id) => document.getElementById(`commission-${id}`);
+  const escape = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const normalize = (value) => String(value || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+  const clone = (value) => JSON.parse(JSON.stringify(value));
+  const today = engine.dateKey(new Date());
+  const days = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+  const percentLabel = (value) => `${Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`;
+  const state = { professionals: [], groups: [], services: [], configs: new Map(), selected: '', draft: null, dirty: false, saving: false };
+  const selected = () => state.professionals.find((p) => p._id === state.selected);
+  const config = () => state.configs.get(state.selected) || {};
+  const eligibleGroups = () => state.groups.filter((g) => g.tiposPermitidos?.includes(state.draft?.professionalType));
+  const eligibleServices = () => state.services.filter((s) => s.grupo?.tiposPermitidos?.includes(state.draft?.professionalType));
+  function feedback(message, error = false) { $('feedback').textContent = message; $('feedback').dataset.error = String(error); }
+  function dirty() { state.dirty = true; $('dirty').textContent = 'Alterações não salvas'; }
+  function token() { try { return JSON.parse(localStorage.getItem('loggedInUser') || 'null')?.token || ''; } catch { return ''; } }
+  async function request(url, options = {}) {
+    const response = await fetch(url, { ...options, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` } });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || `Erro ${response.status}`);
+    return data;
+  }
+  function loadDraft() {
+    const saved = config();
+    state.draft = { professionalType: saved.professionalType || selected()?.professionalType,
+      groupRules: clone(saved.groupRules || []), serviceRules: clone(saved.serviceRules || []), weekdayRules: clone(saved.weekdayRules || []),
+      effectiveFrom: saved.effectiveFrom > today ? saved.effectiveFrom : today, expectedRevision: Number(saved.revision || 0) };
+    state.dirty = false; $('dirty').textContent = '';
+  }
+  function selectProfessional(id) {
+    if (state.saving) return;
+    if (state.dirty && !window.confirm('Descartar as alterações não salvas deste profissional?')) return;
+    state.selected = id; loadDraft(); renderProfessionals(); renderEditor(); feedback('');
+  }
+  function renderProfessionals() {
+    const term = normalize($('professional-search').value);
+    const people = state.professionals.filter((p) => normalize(`${p.nome} ${p.cargoCarteira || ''}`).includes(term));
+    $('professionals-counter').textContent = `${people.length} profissional(is)`;
+    $('professionals-list').innerHTML = people.map((p) => `<button class="commission-person" type="button" data-initials="${escape((p.nome || "?").trim().split(/\s+/).filter(Boolean).slice(0, 2).map(word => word[0]).join("").toUpperCase())}" data-professional="${escape(p._id)}" aria-pressed="${p._id === state.selected}"><span>${escape(p.nome)}</span><small>${p.professionalType === 'veterinario' ? 'Veterinário' : 'Esteticista'}</small></button>`).join('') || '<p class="commission-empty">Nenhum profissional encontrado.</p>';
+  }
+  function ruleInput(kind, item) {
+    const key = kind === 'group' ? 'group' : 'service';
+    const rules = state.draft[`${key}Rules`];
+    const rule = rules.find((r) => r[key] === item._id);
+    const base = kind === 'group' ? item.comissaoPercent : item.comissaoPercent ?? item.grupo?.comissaoPercent ?? 0;
+    return `<div class="commission-rule-row"><div>${escape(item.nome)}<small>${escape(item.grupo?.nome || 'Grupo de serviço')}</small></div><span>Base: ${percentLabel(base)}</span><label><span class="commission-muted">Comissão (%)</span><input aria-label="Comissão de ${escape(item.nome)}" type="number" min="0" max="100" step="0.01" placeholder="Herdar" value="${escape(rule?.percent ?? '')}" data-rule-kind="${key}" data-rule-ref="${escape(item._id)}"></label></div>`;
+  }
+  function renderGeneral() {
+    const groups = eligibleGroups().filter((g) => normalize(g.nome).includes(normalize($('group-search').value)));
+    const services = eligibleServices().filter((s) => normalize(`${s.nome} ${s.grupo?.nome}`).includes(normalize($('service-search').value)));
+    $('groups-body').innerHTML = groups.map((g) => ruleInput('group', g)).join('') || '<p class="commission-empty">Nenhum grupo encontrado.</p>';
+    $('services-body').innerHTML = services.map((s) => ruleInput('service', s)).join('') || '<p class="commission-empty">Nenhum serviço encontrado.</p>';
+  }
+  function exceptionRows(rule, kind, index) {
+    const items = kind === 'group' ? eligibleGroups() : eligibleServices();
+    return rule[`${kind}Rules`].map((r, i) => `<div class="commission-exception"><select aria-label="${kind === 'group' ? 'Grupo' : 'Serviço'} da exceção" data-exception="${index}:${kind}:${i}:ref"><option value="">Selecionar...</option>${!items.some((item) => item._id === r[kind]) && r[kind] ? `<option value="${escape(r[kind])}" selected>Cadastro indisponível (${escape(r[kind])})</option>` : ''}${items.map((item) => `<option value="${escape(item._id)}" ${item._id === r[kind] ? 'selected' : ''}>${escape(item.nome)}</option>`).join('')}</select><input type="number" min="0" max="100" step="0.01" aria-label="Percentual da exceção" placeholder="%" value="${escape(r.percent)}" data-exception="${index}:${kind}:${i}:percent"><button class="commission-remove" type="button" data-remove-exception="${index}:${kind}:${i}">Remover</button></div>`).join('');
+  }
+  function renderWeekdays() {
+    const rules = state.draft.weekdayRules;
+    $('weekday-count').textContent = rules.filter((r) => r.enabled !== false).length;
+    $('weekday-rules').innerHTML = rules.map((rule, index) => `<article class="commission-weekday-card"><div class="commission-weekday-top"><h3>Regra ${index + 1}</h3><label><input type="checkbox" data-weekday-enabled="${index}" ${rule.enabled !== false ? 'checked' : ''}> Ativa</label><button class="commission-remove" type="button" data-remove-weekday="${index}">Excluir</button></div><div class="commission-days">${[1,2,3,4,5,6,0].map((day) => `<label><input type="checkbox" data-weekday="${index}:${day}" ${rule.weekdays.includes(day) ? 'checked' : ''}>${days[day]}</label>`).join('')}</div><label>Comissão padrão desses dias (%)<input type="number" min="0" max="100" step="0.01" placeholder="Herdar regras gerais" value="${escape(rule.defaultPercent ?? '')}" data-weekday-percent="${index}"></label><details ${rule.groupRules.length ? 'open' : ''}><summary>Comissão por grupo de serviço (${rule.groupRules.length})</summary>${exceptionRows(rule, 'group', index)}<button class="commission-secondary" type="button" data-add-exception="${index}:group">+ Exceção por grupo</button></details><details ${rule.serviceRules.length ? 'open' : ''}><summary>Comissão por serviço (${rule.serviceRules.length})</summary>${exceptionRows(rule, 'service', index)}<button class="commission-secondary" type="button" data-add-exception="${index}:service">+ Exceção por serviço</button></details></article>`).join('') || '<div class="commission-empty">Nenhuma regra cadastrada.</div>';
+  }
+  function renderEditor() {
+    const person = selected();
+    $('editor').hidden = !person; $('selection-placeholder').hidden = Boolean(person); $('save-btn').disabled = !person;
+    if (!person) return;
+    $('professional-name').textContent = person.nome; $('selected-badge').textContent = person.nome;
+    $('role-badge').textContent = state.draft.professionalType === 'veterinario' ? 'Veterinário' : 'Esteticista';
+    $('effective-from').value = state.draft.effectiveFrom; $('effective-from').min = state.draft.effectiveFrom > today ? state.draft.effectiveFrom : today;
+    renderGeneral(); renderWeekdays();
+  }
+  function validate() {
+    if (!engine.dateKey(state.draft.effectiveFrom) || state.draft.effectiveFrom < today || state.draft.effectiveFrom < (config().effectiveFrom || '')) throw new Error('Escolha uma vigência a partir de hoje e da última configuração.');
+    const check = (rules, key) => { const seen = new Set(); for (const r of rules) { if (!r[key] || seen.has(r[key])) throw new Error('Selecione cada grupo ou serviço uma única vez por regra.'); if (engine.numeric(r.percent) === null) throw new Error('Informe percentuais entre 0 e 100%.'); seen.add(r[key]); } };
+    check(state.draft.groupRules, 'group'); check(state.draft.serviceRules, 'service');
+    const occupied = new Set();
+    for (const r of state.draft.weekdayRules) {
+      if (!r.weekdays.length) throw new Error('Selecione pelo menos um dia em cada regra.');
+      if (r.enabled !== false) for (const day of r.weekdays) { if (occupied.has(day)) throw new Error(`${days[day]} está em duas regras ativas. Ajuste os dias para não haver conflito.`); occupied.add(day); }
+      if (r.defaultPercent !== null && r.defaultPercent !== '' && engine.numeric(r.defaultPercent) === null) throw new Error('O percentual do dia deve estar entre 0 e 100%.');
+      check(r.groupRules, 'group'); check(r.serviceRules, 'service');
+      if ((r.defaultPercent === null || r.defaultPercent === '') && !r.groupRules.length && !r.serviceRules.length) throw new Error('Defina o percentual do dia ou uma exceção.');
+    }
+    if ([...document.querySelectorAll('.commission-page input[type=number]')].some((input) => !input.validity.valid)) throw new Error('Confira os valores numéricos do formulário.');
+  }
+  async function save() {
     try {
-      const cached = JSON.parse(localStorage.getItem('loggedInUser') || 'null');
-      return cached?.token || '';
-    } catch {
-      return '';
-    }
-  };
-
-  const notifyUser = (message, type = 'info') => {
-    if (typeof window.showToast === 'function') {
-      window.showToast(message, type);
-      return;
-    }
-    alert(message);
-  };
-
-  const fetchJSON = async (url, options = {}) => {
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${getToken()}`,
-        ...(options.headers || {}),
-      },
-    });
-
-    if (!response.ok) {
-      const payload = await response.json().catch(() => null);
-      const message =
-        (payload && typeof payload.message === 'string' && payload.message) ||
-        `Erro HTTP ${response.status}`;
-      throw new Error(message);
-    }
-
-    return response.json();
-  };
-
-  const normalizeText = (value) =>
-    String(value || '')
-      .normalize('NFD')
-      .replace(/\p{Diacritic}/gu, '')
-      .toLowerCase()
-      .trim();
-
-  const formatPercent = (value) =>
-    `${Number(value || 0).toLocaleString('pt-BR', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}%`;
-
-  const formatProfessionalType = (value) => {
-    switch (String(value || '').toLowerCase()) {
-      case 'esteticista':
-        return 'Esteticista';
-      case 'veterinario':
-        return 'Veterinário';
-      default:
-        return 'Não definido';
-    }
-  };
-
-  const getSelectedProfessional = () =>
-    state.professionals.find((item) => item._id === state.selectedProfessionalId) || null;
-
-  const getSelectedConfig = () => state.configsByUser.get(state.selectedProfessionalId) || null;
-
-  const getSelectedType = () => {
-    const selected = getSelectedProfessional();
-    if (!selected) return '';
-    if (
-      state.selectedProfessionalType &&
-      Array.isArray(selected.professionalTypes) &&
-      selected.professionalTypes.includes(state.selectedProfessionalType)
-    ) {
-      return state.selectedProfessionalType;
-    }
-    return selected.professionalType || (selected.professionalTypes || [])[0] || '';
-  };
-
-  const getEligibleGroups = () => {
-    const professionalType = getSelectedType();
-    return state.groups.filter((group) =>
-      Array.isArray(group.tiposPermitidos) && group.tiposPermitidos.includes(professionalType)
-    );
-  };
-
-  const getEligibleServices = () => {
-    const professionalType = getSelectedType();
-    const term = normalizeText(state.serviceSearch);
-    return state.services.filter((service) => {
-      const allowed = Array.isArray(service?.grupo?.tiposPermitidos)
-        ? service.grupo.tiposPermitidos.includes(professionalType)
-        : false;
-      if (!allowed) return false;
-      if (!term) return true;
-      return normalizeText(`${service.nome} ${service?.grupo?.nome || ''}`).includes(term);
-    });
-  };
-
-  const getGroupRuleMap = () => {
-    const config = getSelectedConfig();
-    const map = new Map();
-    (config?.groupRules || []).forEach((rule) => {
-      if (rule?.group) map.set(rule.group, Number(rule.percent || 0));
-    });
-    return map;
-  };
-
-  const getServiceRuleMap = () => {
-    const config = getSelectedConfig();
-    const map = new Map();
-    (config?.serviceRules || []).forEach((rule) => {
-      if (rule?.service) map.set(rule.service, Number(rule.percent || 0));
-    });
-    return map;
-  };
-
-  const collectDraftRules = (selector, keyName) =>
-    Array.from(document.querySelectorAll(selector))
-      .map((input) => {
-        const ref = String(input.dataset[keyName] || '').trim();
-        const rawValue = String(input.value || '').trim().replace(',', '.');
-        if (!ref || rawValue === '') return null;
-        const percent = Number(rawValue);
-        if (!Number.isFinite(percent)) return null;
-        return {
-          [keyName === 'groupId' ? 'group' : 'service']: ref,
-          percent: Number(percent.toFixed(2)),
-        };
-      })
-      .filter(Boolean);
-
-  const updateHeaderState = () => {
-    const selected = getSelectedProfessional();
-    const professionalType = getSelectedType();
-    const selectedLabel = selected ? selected.nome : 'Nenhum profissional selecionado';
-
-    elements.selectedBadge.innerHTML = `
-      <i class="fas fa-user-check"></i>
-      ${selectedLabel}
-    `;
-
-    elements.roleBadge.innerHTML = `
-      <i class="fas fa-briefcase"></i>
-      ${formatProfessionalType(professionalType)}
-    `;
-
-    const canEdit = Boolean(selected);
-    elements.saveButton.disabled = !canEdit;
-    elements.selectionPlaceholder.classList.toggle('hidden', canEdit);
-    elements.editor.classList.toggle('hidden', !canEdit);
-
-    if (canEdit) {
-      elements.professionalName.textContent = selected.nome || '-';
-      elements.professionalRole.textContent = formatProfessionalType(professionalType);
-      elements.servicesCount.textContent = String(getEligibleServices().length);
-    }
-  };
-
-  const renderProfessionals = () => {
-    const term = normalizeText(state.professionalSearch);
-    const filtered = state.professionals.filter((professional) => {
-      if (!term) return true;
-      const content = [
-        professional.nome,
-        professional.email,
-        professional.cargoCarteira,
-        ...(professional.professionalTypes || []),
-      ].join(' ');
-      return normalizeText(content).includes(term);
-    });
-
-    elements.list.innerHTML = '';
-    elements.listCounter.textContent = `${filtered.length} profissional(is) elegível(is)`;
-    elements.listEmpty.classList.toggle('hidden', filtered.length > 0);
-
-    filtered.forEach((professional) => {
-      const isActive = professional._id === state.selectedProfessionalId;
-      const card = document.createElement('button');
-      card.type = 'button';
-      card.className = [
-        'w-full rounded-xl border px-4 py-3 text-left transition',
-        isActive
-          ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
-          : 'border-gray-200 bg-white hover:border-primary/50 hover:bg-gray-50',
-      ].join(' ');
-      card.innerHTML = `
-        <div class="flex items-start justify-between gap-3">
-          <div>
-            <p class="text-sm font-semibold text-gray-800">${professional.nome || 'Profissional sem nome'}</p>
-            <p class="mt-1 text-xs text-gray-500">${professional.email || professional.cargoCarteira || 'Sem contato'}</p>
-          </div>
-          <div class="flex flex-wrap justify-end gap-1">
-            ${(professional.professionalTypes || [])
-              .map(
-                (type) =>
-                  `<span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600">${formatProfessionalType(
-                    type
-                  )}</span>`
-              )
-              .join('')}
-          </div>
-        </div>
-      `;
-      card.addEventListener('click', () => {
-        state.selectedProfessionalId = professional._id;
-        state.selectedProfessionalType =
-          state.configsByUser.get(professional._id)?.professionalType ||
-          professional.professionalType ||
-          professional.professionalTypes?.[0] ||
-          '';
-        state.dirty = false;
-        renderProfessionals();
-        renderEditor();
-      });
-      elements.list.appendChild(card);
-    });
-  };
-
-  const renderGroups = () => {
-    const groups = getEligibleGroups();
-    const ruleMap = getGroupRuleMap();
-    elements.groupsBody.innerHTML = '';
-
-    if (!groups.length) {
-      elements.groupsBody.innerHTML =
-        '<tr><td colspan="4" class="px-4 py-6 text-center text-sm text-gray-500">Nenhum grupo de serviço compatível com este profissional.</td></tr>';
-      return;
-    }
-
-    groups.forEach((group) => {
-      const row = document.createElement('tr');
-      row.innerHTML = `
-        <td class="px-4 py-3 font-medium text-gray-800">${group.nome}</td>
-        <td class="px-4 py-3 text-gray-600">${(group.tiposPermitidos || []).map(formatProfessionalType).join(', ')}</td>
-        <td class="px-4 py-3 text-right font-semibold text-gray-700">${formatPercent(group.comissaoPercent)}</td>
-        <td class="px-4 py-3">
-          <div class="flex justify-end">
-            <div class="relative w-28">
-              <input type="number" min="0" max="100" step="0.01" value="${ruleMap.has(group._id) ? ruleMap.get(group._id) : group.comissaoPercent}" data-group-id="${group._id}" class="w-full rounded-lg border border-gray-200 px-3 py-2 pr-8 text-right text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-              <span class="absolute inset-y-0 right-3 flex items-center text-xs text-gray-400">%</span>
-            </div>
-          </div>
-        </td>
-      `;
-      row.querySelector('input[data-group-id]')?.addEventListener('input', () => {
-        state.dirty = true;
-      });
-      elements.groupsBody.appendChild(row);
-    });
-  };
-
-  const renderServices = () => {
-    const services = getEligibleServices();
-    const ruleMap = getServiceRuleMap();
-    elements.servicesBody.innerHTML = '';
-
-    if (!services.length) {
-      elements.servicesBody.innerHTML =
-        '<tr><td colspan="4" class="px-4 py-6 text-center text-sm text-gray-500">Nenhum serviço compatível com este profissional.</td></tr>';
-      return;
-    }
-
-    services.forEach((service) => {
-      const row = document.createElement('tr');
-      const currentValue = ruleMap.has(service._id) ? ruleMap.get(service._id) : '';
-      row.innerHTML = `
-        <td class="px-4 py-3 font-medium text-gray-800">${service.nome}</td>
-        <td class="px-4 py-3 text-gray-600">${service?.grupo?.nome || '-'}</td>
-        <td class="px-4 py-3 text-right font-semibold text-gray-700">${formatPercent(service?.grupo?.comissaoPercent || 0)}</td>
-        <td class="px-4 py-3">
-          <div class="flex justify-end">
-            <div class="relative w-28">
-              <input type="number" min="0" max="100" step="0.01" value="${currentValue}" placeholder="${Number(service?.grupo?.comissaoPercent || 0).toFixed(2)}" data-service-id="${service._id}" class="w-full rounded-lg border border-gray-200 px-3 py-2 pr-8 text-right text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-              <span class="absolute inset-y-0 right-3 flex items-center text-xs text-gray-400">%</span>
-            </div>
-          </div>
-        </td>
-      `;
-      row.querySelector('input[data-service-id]')?.addEventListener('input', () => {
-        state.dirty = true;
-      });
-      elements.servicesBody.appendChild(row);
-    });
-  };
-
-  const renderEditor = () => {
-    updateHeaderState();
-    if (!getSelectedProfessional()) return;
-    renderGroups();
-    renderServices();
-  };
-
-  const validateDraft = ({ groupRules, serviceRules }) => {
-    const errors = [];
-    [...groupRules, ...serviceRules].forEach((rule) => {
-      const value = Number(rule.percent);
-      if (!Number.isFinite(value) || value < 0 || value > 100) {
-        errors.push('Todas as comissões devem estar entre 0 e 100%.');
-      }
-    });
-    return errors;
-  };
-
-  const handleSave = async () => {
-    const selected = getSelectedProfessional();
-    if (!selected) {
-      notifyUser('Selecione um profissional.', 'warning');
-      return;
-    }
-
-    const payload = {
-      professionalType: getSelectedType(),
-      groupRules: collectDraftRules('input[data-group-id]', 'groupId'),
-      serviceRules: collectDraftRules('input[data-service-id]', 'serviceId'),
-    };
-
-    const errors = validateDraft(payload);
-    if (errors.length) {
-      notifyUser(errors[0], 'warning');
-      return;
-    }
-
-    try {
-      elements.saveButton.disabled = true;
-      const saved = await fetchJSON(`${API}/${selected._id}`, {
-        method: 'PUT',
-        body: JSON.stringify(payload),
-      });
-      state.configsByUser.set(selected._id, saved);
-      state.dirty = false;
-      renderEditor();
-      notifyUser('Configuração de comissão salva com sucesso.', 'success');
-    } catch (error) {
-      console.error(error);
-      notifyUser(error.message || 'Não foi possível salvar a configuração.', 'error');
-    } finally {
-      elements.saveButton.disabled = !getSelectedProfessional();
-    }
-  };
-
-  const loadBootstrap = async () => {
-    const payload = await fetchJSON(`${API}/bootstrap`);
-    state.professionals = Array.isArray(payload.professionals) ? payload.professionals : [];
-    state.groups = Array.isArray(payload.groups) ? payload.groups : [];
-    state.services = Array.isArray(payload.services) ? payload.services : [];
-    state.configsByUser = new Map(
-      (Array.isArray(payload.configs) ? payload.configs : [])
-        .filter((config) => config?.user)
-        .map((config) => [config.user, config])
-    );
-
-    const firstProfessional = state.professionals[0] || null;
-    if (firstProfessional) {
-      state.selectedProfessionalId = firstProfessional._id;
-      state.selectedProfessionalType =
-        state.configsByUser.get(firstProfessional._id)?.professionalType ||
-        firstProfessional.professionalType ||
-        firstProfessional.professionalTypes?.[0] ||
-        '';
-    }
-
-    renderProfessionals();
-    renderEditor();
-  };
-
-  const initEvents = () => {
-    elements.search?.addEventListener('input', (event) => {
-      state.professionalSearch = event.target.value || '';
-      renderProfessionals();
-    });
-
-    elements.serviceSearch?.addEventListener('input', (event) => {
-      state.serviceSearch = event.target.value || '';
-      renderServices();
-      updateHeaderState();
-    });
-
-    elements.saveButton?.addEventListener('click', handleSave);
-  };
-
-  const init = async () => {
-    if (!elements.list) return;
-    initEvents();
-    try {
-      await loadBootstrap();
-    } catch (error) {
-      console.error(error);
-      notifyUser(error.message || 'Não foi possível carregar a tela de comissão por profissional.', 'error');
-      elements.listCounter.textContent = 'Erro ao carregar profissionais';
-      elements.listEmpty.classList.remove('hidden');
-    }
-  };
-
-  init();
+      validate(); state.saving = true; $('save-btn').disabled = true;
+      // Keep a stable draft while the request is in flight.
+      $('editor').inert = true;
+      const saved = await request(`${API}/${state.selected}`, { method: 'PUT', body: JSON.stringify(state.draft) });
+      state.configs.set(state.selected, saved); loadDraft(); renderEditor(); feedback('Configuração salva.');
+    } catch (error) { feedback(error.message, true); }
+    finally { state.saving = false; $('editor').inert = false; $('save-btn').disabled = !selected(); }
+  }
+  $('professional-search').addEventListener('input', renderProfessionals);
+  $('professionals-list').addEventListener('click', (event) => { const button = event.target.closest('[data-professional]'); if (button) selectProfessional(button.dataset.professional); });
+  $('group-search').addEventListener('input', renderGeneral); $('service-search').addEventListener('input', renderGeneral);
+  $('save-btn').addEventListener('click', save);
+  $('add-weekday').addEventListener('click', () => { state.draft.weekdayRules.push({ id: crypto.randomUUID(), weekdays: [], enabled: true, defaultPercent: null, groupRules: [], serviceRules: [] }); dirty(); renderWeekdays(); });
+  for (const name of ['general', 'weekdays']) $('tab-' + name).addEventListener('click', () => { for (const tab of ['general', 'weekdays']) { $(tab).hidden = tab !== name; $('tab-' + tab).setAttribute('aria-selected', String(tab === name)); } });
+  $('editor').addEventListener('input', (event) => {
+    const input = event.target; const d = input.dataset;
+    if (input.type === 'search') return;
+    if (input.id === 'commission-effective-from') state.draft.effectiveFrom = input.value;
+    if (d.ruleKind) { const key = d.ruleKind; const rules = state.draft[`${key}Rules`]; const index = rules.findIndex((r) => r[key] === d.ruleRef); if (index >= 0) rules.splice(index, 1); if (input.value !== '' || input.validity.badInput) rules.push({ [key]: d.ruleRef, percent: input.validity.badInput ? 'invalid' : input.value }); }
+    if (d.weekday !== undefined) { const [index, day] = d.weekday.split(':').map(Number); const rule = state.draft.weekdayRules[index]; rule.weekdays = input.checked ? [...new Set([...rule.weekdays, day])] : rule.weekdays.filter((v) => v !== day); }
+    if (d.weekdayEnabled !== undefined) state.draft.weekdayRules[Number(d.weekdayEnabled)].enabled = input.checked;
+    if (d.weekdayPercent !== undefined) state.draft.weekdayRules[Number(d.weekdayPercent)].defaultPercent = input.validity.badInput ? 'invalid' : input.value === '' ? null : input.value;
+    if (d.exception) { const [index, kind, row, field] = d.exception.split(':'); state.draft.weekdayRules[index][`${kind}Rules`][row][field === 'ref' ? kind : 'percent'] = input.validity.badInput ? 'invalid' : input.value; }
+    dirty(); $('weekday-count').textContent = state.draft.weekdayRules.filter((r) => r.enabled !== false).length;
+  });
+  $('weekday-rules').addEventListener('click', (event) => {
+    const button = event.target.closest('button'); if (!button) return;
+    const d = button.dataset;
+    if (d.removeWeekday !== undefined) state.draft.weekdayRules.splice(Number(d.removeWeekday), 1);
+    if (d.addException) { const [index, kind] = d.addException.split(':'); state.draft.weekdayRules[index][`${kind}Rules`].push({ [kind]: '', percent: '' }); }
+    if (d.removeException) { const [index, kind, row] = d.removeException.split(':'); state.draft.weekdayRules[index][`${kind}Rules`].splice(Number(row), 1); }
+    dirty(); renderWeekdays();
+  });
+  window.addEventListener('beforeunload', (event) => { if (state.dirty) { event.preventDefault(); event.returnValue = ''; } });
+  request(`${API}/bootstrap`).then((data) => {
+    state.professionals = data.professionals || []; state.groups = data.groups || []; state.services = data.services || [];
+    state.configs = new Map((data.configs || []).map((c) => [c.user, c]));
+    state.selected = state.professionals[0]?._id || ''; if (state.selected) loadDraft(); renderProfessionals(); renderEditor();
+  }).catch((error) => feedback(error.message, true));
 })();

@@ -67,59 +67,7 @@ const normalizeObjectId = (value) => {
   return raw ? String(raw) : '';
 };
 
-const buildProfessionalCommissionContext = (config = null) => {
-  const serviceRuleMap = new Map();
-  const groupRuleMap = new Map();
-
-  (Array.isArray(config?.serviceRules) ? config.serviceRules : []).forEach((rule) => {
-    const serviceId = normalizeObjectId(rule?.service);
-    const percent = parseNumber(rule?.percent);
-    if (!serviceId || percent === null) return;
-    serviceRuleMap.set(serviceId, percent);
-  });
-
-  (Array.isArray(config?.groupRules) ? config.groupRules : []).forEach((rule) => {
-    const groupId = normalizeObjectId(rule?.group);
-    const percent = parseNumber(rule?.percent);
-    if (!groupId || percent === null) return;
-    groupRuleMap.set(groupId, percent);
-  });
-
-  return { serviceRuleMap, groupRuleMap };
-};
-
-const firstNumericValue = (...values) => {
-  for (const value of values) {
-    const parsed = parseNumber(value);
-    if (parsed !== null) return parsed;
-  }
-  return null;
-};
-
-const resolveServiceCommissionPercent = ({
-  professionalCommission = null,
-  serviceId = '',
-  groupId = '',
-  servicePercent = null,
-  groupPercent = null,
-  itemPercent = null,
-  fallbackPercent = 0,
-} = {}) => {
-  const normalizedServiceId = normalizeObjectId(serviceId);
-  const normalizedGroupId = normalizeObjectId(groupId);
-
-  if (normalizedServiceId && professionalCommission?.serviceRuleMap?.has(normalizedServiceId)) {
-    return professionalCommission.serviceRuleMap.get(normalizedServiceId);
-  }
-  if (normalizedGroupId && professionalCommission?.groupRuleMap?.has(normalizedGroupId)) {
-    return professionalCommission.groupRuleMap.get(normalizedGroupId);
-  }
-
-  return (
-    firstNumericValue(servicePercent, groupPercent, itemPercent, fallbackPercent) ??
-    0
-  );
-};
+const { buildProfessionalCommissionContext, resolveServiceCommissionPercent, resolveServiceCommission, commissionAmount, dateKey: commissionDateKey } = require('../../scripts/common/professional-commission-engine');
 
 const normalizeStatus = (status) => {
   const value = (status || '').toString().toLowerCase();
@@ -572,83 +520,56 @@ const resolveServicoItemsForUser = (appointment = {}, userId = '') => {
     String(appointment.profissional?._id || appointment.profissional) === normalizedId;
 
   if (assigned.length) return { items: assigned, matchedByTopLevel: topMatches };
-  if (topMatches) return { items, matchedByTopLevel: true };
+  if (topMatches) return { items: items.filter((item) => !item.profissional), matchedByTopLevel: true };
   return { items: [], matchedByTopLevel: false };
-};
-
-const mapAppointmentToServicoRecord = (
-  appointment = {},
-  { userId, professionalCommission = null, defaultPercent = 0 } = {},
-) => {
-  const normalizedUserId = userId ? String(userId) : '';
-  const { items, matchedByTopLevel } = resolveServicoItemsForUser(appointment, normalizedUserId);
-  if (!items.length && !matchedByTopLevel) return null;
-
-  const getItemPercent = (item) =>
-    resolveServiceCommissionPercent({
-      professionalCommission,
-      serviceId: item?.servico?._id || item?.servico || appointment?.servico?._id || appointment?.servico,
-      groupId:
-        item?.servico?.grupo?._id ||
-        item?.servico?.grupo ||
-        item?.grupo?._id ||
-        item?.grupo ||
-        appointment?.servico?.grupo?._id ||
-        appointment?.servico?.grupo,
-      servicePercent: item?.servico?.comissaoPercent ?? appointment?.servico?.comissaoPercent,
-      groupPercent:
-        item?.servico?.grupo?.comissaoPercent ??
-        item?.grupo?.comissaoPercent ??
-        appointment?.servico?.grupo?.comissaoPercent,
-      itemPercent: item?.comissaoPercent,
-      fallbackPercent: defaultPercent,
-    });
-
-  const valorServico = items.length
-    ? items.reduce((sum, item) => sum + (parseNumber(item.valor) || 0), 0)
-    : parseNumber(appointment.valor) || 0;
-
-  const comissaoServico = items.length
-    ? items.reduce((sum, item) => {
-        const base = parseNumber(item.valor) || 0;
-        const percent = getItemPercent(item);
-        return sum + base * (percent / 100);
-      }, 0)
-    : valorServico *
-      (getItemPercent(null) / 100);
-  const isFinalizado = items.length
-    ? items.every((it) => isServicoFinalizado(it.status))
-    : isServicoFinalizado(appointment.status);
-  const isPago = !!(appointment.pago || appointment.codigoVenda);
-  const aReceber = (isFinalizado && !isPago) || (isPago && !isFinalizado);
-  const servicoNomes = collectServicoNomes(appointment, items);
-  const createdAt = appointment.scheduledAt || appointment.createdAt || appointment._createdAt;
-
-  return {
-    _createdAt: createdAt ? new Date(createdAt) : null,
-    data: formatDate(createdAt),
-    codigo: pickAppointmentCode(appointment),
-    descricao: servicoNomes.join(', '),
-    cliente: pickCustomerName(appointment.cliente),
-    origem: 'Agenda de Servicos',
-    status: isFinalizado ? 'finalizado' : normalizeServiceStatus(appointment.status || 'agendado'),
-    comissaoVenda: 0,
-    comissaoServico,
-    comissaoTotal: comissaoServico,
-    valorVenda: valorServico,
-    pagamento: isPago ? 'Pago' : 'Pendente',
-    isFinalizado,
-    pago: isPago,
-    aReceber,
-  };
 };
 
 const buildServicosRecords = (appointments = [], opts = {}) => {
   const records = [];
-  appointments.forEach((appt) => {
-    const mapped = mapAppointmentToServicoRecord(appt, opts);
-    if (mapped) records.push(mapped);
-  });
+  const snapshots = (opts.snapshotItems || []).filter((item) => item.source === 'appointment_service');
+  const frozenKeys = new Set(snapshots.map((item) => `${item.sourceDocumentId}:${item.sourceItemId}`));
+  for (const appointment of appointments) {
+    if (normalizeServiceStatus(appointment.status) === 'cancelado') continue;
+    const { items } = resolveServicoItemsForUser(appointment, opts.userId);
+    for (const item of items) {
+      if (frozenKeys.has(`${appointment._id}:${item._id}`)) continue;
+      const day = commissionDateKey(item.data);
+      if (!day || (opts.startDateKey && day < opts.startDateKey) || (opts.endDateKey && day > opts.endDateKey)) continue;
+      if (normalizeServiceStatus(item.status) === 'cancelado') continue;
+      const commissionRule = resolveServiceCommission({
+        professionalCommission: opts.professionalCommission, serviceDate: day,
+        serviceId: item.servico?._id || item.servico || appointment.servico?._id || appointment.servico,
+        groupId: item.servico?.grupo?._id || item.servico?.grupo || appointment.servico?.grupo?._id,
+        servicePercent: item.servico?.comissaoPercent ?? appointment.servico?.comissaoPercent,
+        groupPercent: item.servico?.grupo?.comissaoPercent ?? appointment.servico?.grupo?.comissaoPercent,
+        itemPercent: item.comissaoPercent, fallbackPercent: opts.defaultPercent,
+      });
+      const value = parseNumber(item.valor) || 0;
+      const amount = commissionAmount(value, commissionRule.percent);
+      const isFinalizado = isServicoFinalizado(item.status);
+      const paid = appointment.pago === true;
+      const date = new Date(day + 'T12:00:00-03:00');
+      records.push({
+        _createdAt: date, data: formatDate(date), codigo: pickAppointmentCode(appointment),
+        descricao: item.servico?.nome || item.nome || appointment.servico?.nome || 'Serviço',
+        cliente: pickCustomerName(appointment.cliente), origem: 'Agenda de Servicos',
+        status: isFinalizado ? 'finalizado' : normalizeServiceStatus(item.status || appointment.status),
+        comissaoVenda: 0, comissaoServico: amount, comissaoTotal: amount, valorVenda: value,
+        pagamento: paid ? 'Pago' : 'Pendente', isFinalizado, pago: paid,
+        aReceber: !isFinalizado || !paid, commissionRule,
+      });
+    }
+  }
+  for (const item of snapshots) {
+    const day = commissionDateKey(item.date);
+    if (!day || (opts.startDateKey && day < opts.startDateKey) || (opts.endDateKey && day > opts.endDateKey)) continue;
+    const date = new Date(`${day}T12:00:00-03:00`);
+    records.push({ _createdAt: date, data: formatDate(date), codigo: item.saleCode || '', descricao: item.description,
+      cliente: '', origem: 'Fechamento de serviços', status: 'finalizado', comissaoVenda: 0,
+      comissaoServico: item.commission, comissaoTotal: item.commission, valorVenda: item.value,
+      pagamento: 'Pago', isFinalizado: true, pago: true, aReceber: false,
+      commissionRule: item.commissionRule || null });
+  }
   return records;
 };
 
@@ -996,7 +917,7 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
   const comissaoPercent = Number(userGroup?.comissaoPercent ?? 0);
   const comissaoServicoPercent = Number(userGroup?.comissaoServicoPercent ?? 0);
   const professionalCommissionConfig = await ProfessionalCommissionConfig.findOne({ user: user._id })
-    .select('groupRules serviceRules')
+    .select('groupRules serviceRules weekdayRules history effectiveFrom revision')
     .lean();
   const professionalCommission = buildProfessionalCommissionContext(professionalCommissionConfig);
 
@@ -1175,6 +1096,7 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
         const percent = isServico
           ? resolveServiceCommissionPercent({
               professionalCommission,
+              serviceDate: item?.data || createdAt,
               serviceId: serviceMeta?.serviceId || oid,
               groupId:
                 serviceMeta?.groupId ||
@@ -1247,7 +1169,7 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
     }
 
     const closings = await CommissionClosing.find(closingFilter)
-      .select('periodoInicio periodoFim totalPeriodo totalPendente totalPago previsaoPagamento status createdAt updatedAt')
+      .select('periodoInicio periodoFim totalPeriodo totalPendente totalPago previsaoPagamento status createdAt updatedAt snapshotItems snapshotVersion')
       .sort({ previsaoPagamento: 1, periodoFim: 1, createdAt: 1 })
       .lean();
     const extraProximos = mapClosingsToProximos(closings);
@@ -1257,8 +1179,8 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
     const produtosView = buildViewPayload(historicoBase, { mode: 'produtos', extraProximos, closingsKpi });
 
     const serviceDateMatch = {};
-    if (startDate) serviceDateMatch.$gte = startDate;
-    if (endDate) serviceDateMatch.$lte = endDate;
+    if (startDate) serviceDateMatch.$gte = commissionDateKey(req.query?.start) || commissionDateKey(startDate);
+    if (endDate) serviceDateMatch.$lte = commissionDateKey(req.query?.end) || commissionDateKey(endDate);
 
     const profissionalId =
       mongoose.Types.ObjectId.isValid(String(user._id))
@@ -1266,7 +1188,7 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
         : null;
 
     const serviceQuery = {};
-    if (Object.keys(serviceDateMatch).length) serviceQuery.scheduledAt = serviceDateMatch;
+    if (Object.keys(serviceDateMatch).length) serviceQuery['itens.data'] = serviceDateMatch;
     if (profissionalId) {
       serviceQuery.$or = [
         { profissional: profissionalId },
@@ -1274,6 +1196,7 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
       ];
     }
 
+    if (req.query?.store && mongoose.Types.ObjectId.isValid(String(req.query.store))) serviceQuery.store = req.query.store;
     const appointments = profissionalId
       ? await Appointment.find(serviceQuery)
           .select(
@@ -1294,6 +1217,8 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
       : [];
 
     const servicoRecords = buildServicosRecords(appointments, {
+      snapshotItems: closings.flatMap((closing) => closing.snapshotVersion >= 1 ? closing.snapshotItems || [] : []),
+      startDateKey: serviceDateMatch.$gte, endDateKey: serviceDateMatch.$lte,
       userId: user._id,
       professionalCommission,
       comissaoServicoPercent,

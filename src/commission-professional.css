@@ -1,0 +1,144 @@
+.commission-page{width:100%;max-width:none;margin:auto;padding:12px clamp(12px,2vw,32px) 32px;color:#243a35}.commission-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:22px 0}.commission-heading h1{font-size:clamp(24px,2.3vw,32px);font-weight:750;letter-spacing:-.025em}.commission-heading p:not(.commission-eyebrow),.commission-muted,.commission-section-title p{color:#64756f;font-size:13px}.commission-eyebrow{font-size:10px;letter-spacing:.13em;font-weight:700;color:#588274;margin-bottom:7px}.commission-badge{background:#e2f1e9;padding:9px 14px;border-radius:24px;color:#246344;font-size:13px;font-weight:600}.commission-workspace{display:grid;grid-template-columns:290px minmax(0,1fr);align-items:start;gap:20px}.commission-panel{background:#fff;border:1px solid #dee8e2;border-radius:16px;padding:22px;min-width:0;box-shadow:0 3px 12px #173e2905}.commission-page h2{font-size:18px;font-weight:700}.commission-page h3{font-size:16px;font-weight:700}.commission-page input,.commission-page select{min-width:0;max-width:100%;border:1px solid #ccd9d2;border-radius:8px;padding:9px 11px;background:#fff;font-size:14px;color:#273d34}.commission-page label{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600}.commission-page input:focus,.commission-page select:focus,.commission-page button:focus-visible{outline:2px solid #519b73;outline-offset:2px}.commission-page button{cursor:pointer;font-size:13px;font-weight:600}.commission-primary{border:1px solid #266646;background:#266646;color:#fff;padding:10px 16px;border-radius:9px;white-space:nowrap}.commission-page button:disabled{opacity:.5;cursor:default}.commission-people{position:sticky;top:14px}.commission-people>label{margin:16px 0 6px}.commission-people>input{width:100%}#commission-professionals-counter{margin:12px 0}#commission-professionals-list{max-height:65vh;overflow:auto;display:grid;gap:8px}.commission-person{display:flex;flex-direction:column;text-align:left;gap:4px;padding:12px;border:1px solid #e3e9e5;border-radius:10px;overflow-wrap:anywhere}.commission-person[aria-pressed=true]{background:#edf6ef;border-color:#579b70}.commission-person small{font-weight:400;color:#698073}.commission-toolbar{display:flex;gap:14px;justify-content:space-between;align-items:center;background:#fff;position:sticky;top:0;z-index:2;padding:0 0 18px;border-bottom:1px solid #edf0ee}.commission-save{display:flex;align-items:center;gap:10px}#commission-dirty{font-size:12px;color:#996821}.commission-effective{display:flex;gap:20px;align-items:center;margin:18px 0}.commission-tabs{display:flex;gap:4px;border-bottom:1px solid #dce6df;margin:22px 0}.commission-tabs button{padding:12px 15px;border-bottom:3px solid transparent;color:#64756f}.commission-tabs button[aria-selected=true]{border-bottom-color:#266646;color:#266646}.commission-tabs span{background:#e8eee9;border-radius:15px;padding:2px 7px;font-size:11px}.commission-section-title{display:flex;gap:16px;justify-content:space-between;align-items:center;margin:24px 0 14px}.commission-section-title p{margin-top:4px}.commission-rule-list{border:1px solid #e2e9e4;border-radius:10px;max-height:380px;overflow:auto}.commission-rule-row{display:grid;grid-template-columns:minmax(0,1fr) 150px 130px;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid #edf1ee;font-size:13px}.commission-rule-row:last-child{border-bottom:0}.commission-rule-row small{display:block;color:#75857c;margin-top:3px;font-size:11px}.commission-rule-row input{width:100%}.commission-rule-row>span{color:#6b7e70;font-size:12px}.commission-empty{padding:25px;color:#708277;font-size:13px;text-align:center}.commission-weekday-card{border:1px solid #dce6df;border-radius:12px;padding:20px;margin:16px 0}.commission-weekday-top{display:flex;justify-content:space-between;align-items:center;gap:14px}.commission-weekday-top label{flex-direction:row;align-items:center}.commission-remove{color:#9d3d3d;padding:7px 10px;border:1px solid #ead6d6;border-radius:8px}.commission-days{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}.commission-days label{display:flex;flex-direction:row;align-items:center;border:1px solid #d8e1dc;border-radius:8px;padding:9px 11px;cursor:pointer}.commission-days label:has(input:checked){background:#e7f3e9;border-color:#5e9b71;color:#235d3c}.commission-days input{accent-color:#266646}.commission-weekday-card>label{max-width:240px;margin-bottom:15px}.commission-weekday-card details{margin:12px 0;border-top:1px solid #e7ede9;padding-top:12px}.commission-weekday-card summary{cursor:pointer;font-size:13px;font-weight:600;margin-bottom:12px}.commission-exception{display:grid;grid-template-columns:minmax(0,1fr) 100px auto;gap:10px;margin:9px 0;align-items:center}.commission-secondary{color:#266646;background:#f0f6f2;border:1px solid #d4e3d9;border-radius:8px;padding:8px 12px}#commission-feedback:not(:empty){padding:12px 16px;background:#e6f3e8;border:1px solid #b9d6bd;border-radius:10px;margin-bottom:16px;font-size:14px}#commission-feedback[data-error=true]{background:#fff2e9;color:#923d21;border-color:#e8c4ae}.commission-page [hidden]{display:none!important}
+@media(min-width:1600px){.commission-workspace{grid-template-columns:310px minmax(0,1fr)}}
+@media(max-width:1000px){.commission-workspace{grid-template-columns:230px minmax(0,1fr);gap:14px}.commission-panel{padding:16px}.commission-toolbar,.commission-section-title{align-items:flex-start;flex-direction:column}.commission-rule-row{grid-template-columns:minmax(0,1fr) 110px}.commission-rule-row>span{display:none}}
+@media(max-width:700px){.commission-workspace{grid-template-columns:minmax(0,1fr)}.commission-people{position:static}#commission-professionals-list{max-height:150px;grid-template-columns:repeat(2,minmax(0,1fr))}.commission-heading{align-items:flex-start;flex-direction:column}.commission-toolbar{top:0}.commission-save{width:100%;justify-content:space-between}.commission-effective{flex-direction:column;align-items:flex-start;gap:8px}.commission-tabs button{padding:10px 8px;font-size:12px}.commission-weekday-card{padding:14px}.commission-exception{grid-template-columns:minmax(0,1fr) 85px}.commission-exception button{grid-column:1/-1;justify-self:end}.commission-rule-row{padding:10px;gap:8px}.commission-tabs{justify-content:space-between}.commission-section-title>input{width:100%}}
+
+/* Palette and visual hierarchy, scoped to the commission workspace. */
+.commission-page {
+  --commission-forest: #304b36;
+  --commission-olive: #5f7a41;
+  --commission-gold: #c09a49;
+  min-height: 100vh;
+  background: radial-gradient(ellipse at 5% 10%, #dce8d8 0, transparent 45%), #f2f3ed;
+}
+.commission-heading {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: 126px;
+  padding: 28px 32px;
+  border: 1px solid #405c3c;
+  border-radius: 20px;
+  color: #fffef7;
+  background: linear-gradient(115deg, #2c4432, #4b6333 72%, #667d45);
+  box-shadow: 0 12px 28px #304b361a;
+}
+.commission-heading::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  right: -65px;
+  top: -120px;
+  width: 340px;
+  height: 340px;
+  border: 48px solid #ffffff07;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.commission-heading h1 { color: #fffef7; }
+.commission-eyebrow { color: #d5e3bc; letter-spacing: .16em; }
+.commission-badge {
+  color: #fff8df;
+  background: #ffffff16;
+  border: 1px solid #ffffff35;
+  box-shadow: inset 0 1px 0 #ffffff12;
+  overflow-wrap: anywhere;
+}
+.commission-panel { border-color: #d8e0d0; box-shadow: 0 6px 22px #304b3609; }
+.commission-people { background: #e8eee1; border-top: 4px solid var(--commission-olive); }
+.commission-people h2 { color: var(--commission-forest); }
+.commission-person {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  column-gap: 10px;
+  align-items: center;
+  background: #f8faf5;
+  border-color: #d5dfcd;
+  transition: background .15s, border-color .15s, box-shadow .15s;
+}
+.commission-person::before {
+  content: attr(data-initials);
+  grid-row: 1 / 3;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: #e2e9d8;
+  color: #4b6333;
+  font-size: 12px;
+  font-weight: 750;
+}
+.commission-person > span, .commission-person > small { grid-column: 2; min-width: 0; }
+.commission-person:hover { background: #f1f6e9; border-color: #9daf87; }
+.commission-person[aria-pressed=true] {
+  background: var(--commission-forest);
+  color: #fff;
+  border-color: var(--commission-forest);
+  box-shadow: 0 4px 10px #304b3620;
+}
+.commission-person[aria-pressed=true] small { color: #d6e3cb; }
+.commission-person[aria-pressed=true]::before { background: #dce6bb; color: #35472b; }
+.commission-main { background: #fcfdf9; border-top: 4px solid var(--commission-gold); }
+.commission-toolbar { background: #fcfdf9; border-bottom-color: #dce5d5; padding-top: 4px; }
+#commission-role-badge {
+  display: inline-block;
+  margin-top: 6px;
+  border-radius: 6px;
+  padding: 3px 8px;
+  color: #506337;
+  background: #eaf0df;
+  font-size: 11px;
+  font-weight: 600;
+}
+.commission-primary {
+  background: var(--commission-olive);
+  border-color: #516b36;
+  box-shadow: 0 3px 0 #405729, 0 4px 10px #4b63331a;
+  transition: background .15s, box-shadow .15s;
+}
+.commission-primary:hover:not(:disabled) { background: #4b6333; box-shadow: 0 3px 0 #354b20, 0 5px 14px #4b633329; }
+.commission-effective {
+  background: #f2efdf;
+  border: 1px solid #e2dcc0;
+  border-radius: 12px;
+  padding: 13px 16px;
+}
+.commission-effective label { color: #6b5b32; flex-direction: row; align-items: center; gap: 14px; flex-wrap: wrap; }
+.commission-effective input { border-color: #d5cca7; background: #fffef8; }
+.commission-tabs { gap: 6px; padding: 5px; border: 1px solid #dbe3d2; border-radius: 12px; background: #e9efdf; }
+.commission-tabs button { flex: 1; border: 0; border-radius: 8px; color: #56664a; }
+.commission-tabs button:hover { background: #dfe9d1; }
+.commission-tabs button[aria-selected=true] { background: var(--commission-forest); color: #fff; box-shadow: 0 2px 5px #304b3620; }
+.commission-tabs span { background: #d4dfc5; color: #3f5231; margin-left: 5px; }
+.commission-tabs button[aria-selected=true] span { background: #e5d6a2; color: #4c4121; }
+.commission-section-title h3 { display: flex; align-items: center; gap: 10px; color: var(--commission-forest); }
+.commission-section-title h3::before { content: ''; width: 5px; height: 21px; flex-shrink: 0; border-radius: 3px; background: var(--commission-olive); }
+#commission-weekdays .commission-section-title h3::before { background: var(--commission-gold); }
+.commission-rule-list { background: #fff; border-color: #dce4d5; }
+.commission-rule-row:nth-child(even) { background: #f0f4e9; }
+.commission-rule-row:hover { background: #e8efdf; }
+.commission-rule-row input { color: #3c572e; border-color: #bacda9; background: #fffef9; font-weight: 650; }
+.commission-weekday-card { background: #f5f7ee; border-color: #d5dfc7; border-left: 4px solid var(--commission-gold); box-shadow: 0 3px 10px #304b3607; }
+.commission-weekday-top h3 { color: #4c6038; }
+.commission-weekday-top > label { color: #526641; background: #e4ecd9; padding: 5px 9px; border-radius: 20px; font-size: 11px; }
+.commission-days label { background: #fff; border-color: #cad7bf; color: #4d6242; }
+.commission-days label:hover { background: #eaf1df; }
+.commission-days label:has(input:checked) { background: var(--commission-olive); color: #fff; border-color: #516b36; box-shadow: 0 2px 5px #4b633326; }
+.commission-days input { accent-color: #304b36; }
+.commission-weekday-card details { border-color: #d7e1cb; }
+.commission-weekday-card summary { color: #50643b; }
+.commission-secondary { background: #e7edda; border-color: #c9d7b7; color: #405c2e; }
+.commission-secondary:hover { background: #dce7cb; }
+.commission-remove { background: #fff6f2; border-color: #e7cec4; color: #8d4331; }
+.commission-remove:hover { background: #fae9e1; }
+.commission-empty { background: #f0f4e9; border: 1px dashed #c5d3b8; border-radius: 10px; margin: 12px; }
+@media(max-width:700px) {
+  .commission-heading { padding: 22px; gap: 16px; min-height: 0; border-radius: 16px; }
+  .commission-heading h1 { font-size: 25px; line-height: 1.2; }
+  .commission-heading::after { width: 240px; height: 240px; top: -70px; }
+  .commission-effective label { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .commission-person { grid-template-columns: 28px minmax(0, 1fr); column-gap: 7px; padding: 10px 8px; }
+  .commission-person::before { width: 28px; height: 32px; font-size: 10px; border-radius: 8px; }
+}
+@media(prefers-reduced-motion:reduce) { .commission-page button { transition: none; } }
