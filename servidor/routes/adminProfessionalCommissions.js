@@ -249,8 +249,8 @@ router.put('/:userId', authMiddleware, requireAdmin, async (req, res) => {
       return res.status(409).json({ message: 'A configuração mudou. Recarregue a página antes de salvar.' });
     }
     const effectiveFrom = dateKey(req.body?.effectiveFrom);
-    if (!effectiveFrom || effectiveFrom !== req.body.effectiveFrom || effectiveFrom < dateKey(new Date()) || effectiveFrom < (existing?.effectiveFrom || '')) {
-      return res.status(400).json({ message: 'A vigência deve começar hoje ou depois, sem anteceder a última configuração.' });
+    if (!effectiveFrom || effectiveFrom !== req.body.effectiveFrom) {
+      return res.status(400).json({ message: 'Informe uma data de vigência válida.' });
     }
     let groupRules, serviceRules, weekdayRules;
     try {

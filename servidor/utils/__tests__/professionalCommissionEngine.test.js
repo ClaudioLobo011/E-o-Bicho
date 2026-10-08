@@ -32,3 +32,20 @@ test('vigência preserva passado, troca de versão e formato desktop', () => {
   assert.equal(resolve(config, { serviceDate: '2026-10-18' }).revision, 2);
   assert.equal(engine.commissionAmount(19.99, 33.33), 6.66);
 });
+
+
+test('correção retroativa prevalece após sua vigência, preserva passado e aceita mudança futura', () => {
+  const config = { revision: 2, effectiveFrom: '2026-10-04', weekdayRules: [{ id: 'domingo', weekdays: [0], defaultPercent: 50 }], groupRules: [{ group: 'g', percent: 30 }], history: [
+    { revision: 0, groupRules: [{ group: 'g', percent: 30 }] },
+    { revision: 1, effectiveFrom: '2026-10-08', weekdayRules: [{ id: 'domingo', weekdays: [0], defaultPercent: 60 }] }
+  ] };
+  assert.equal(resolve(config, { serviceDate: '2026-09-27' }).percent, 30);
+  for (const serviceDate of ['2026-10-04', '2026-10-11']) {
+    assert.equal(resolve(config, { serviceDate }).percent, 50);
+    assert.equal(resolve(config, { serviceDate }).revision, 2);
+  }
+  const { history, ...previous } = config;
+  const next = { ...config, revision: 3, effectiveFrom: '2026-11-01', weekdayRules: [{ id: 'domingo', weekdays: [0], defaultPercent: 70 }], history: [...history, previous] };
+  assert.equal(resolve(next, { serviceDate: '2026-10-11' }).percent, 50);
+  assert.equal(resolve(next, { serviceDate: '2026-11-01' }).percent, 70);
+});

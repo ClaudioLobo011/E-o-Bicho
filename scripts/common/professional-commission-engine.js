@@ -26,7 +26,9 @@
   function versionForDate(config, day) {
     if (!config?.effectiveFrom && !config?.history?.length) return config || {};
     const versions = [...(config.history || []), config].filter((v) => !v.effectiveFrom || (day && v.effectiveFrom <= day));
-    versions.sort((a, b) => String(a.effectiveFrom || '').localeCompare(String(b.effectiveFrom || '')) || Number(a.revision || 0) - Number(b.revision || 0));
+    // A later correction supersedes older revisions from its effective date onward.
+    // Keeping superseded revisions still allows reconstructing dates before that correction.
+    versions.sort((a, b) => Number(a.revision || 0) - Number(b.revision || 0) || String(a.effectiveFrom || '').localeCompare(String(b.effectiveFrom || '')));
     return versions.at(-1) || {};
   }
   const findPercent = (rules, key, reference) => {

@@ -43,14 +43,14 @@ test('salva, retorna e calcula exceções semanais, preservando versão anterior
   res = await request(app).get('/config/bootstrap').set(auth);
   assert.equal(res.status, 200, res.text); assert.equal(res.body.configs[0].revision, 2);
 });
-test('rejeita sobreposição, referência inválida, duplicidade, percentual inválido e retroatividade', async () => {
+test('rejeita sobreposição, referência inválida, duplicidade, percentual inválido e data inválida', async () => {
   const invalid = [];
   let b = body(); b.weekdayRules.push({ ...b.weekdayRules[0], id: 'overlap' }); invalid.push(b);
   b = body(); b.weekdayRules[0].serviceRules[0].service = new mongoose.Types.ObjectId().toString(); invalid.push(b);
   b = body(); b.groupRules.push(b.groupRules[0]); invalid.push(b);
   b = body(); b.weekdayRules[0].defaultPercent = 101; invalid.push(b);
   b = body(); b.weekdayRules[0].weekdays = []; invalid.push(b);
-  b = body(); b.effectiveFrom = '2020-01-01'; invalid.push(b);
+  b = body(); b.effectiveFrom = '2026-02-30'; invalid.push(b);
   for (const payload of invalid) { const res = await request(app).put(`/config/${user._id}`).set(auth).send(payload); assert.equal(res.status, 400, res.text); }
   assert.equal(await Config.countDocuments(), 0);
 });
@@ -58,4 +58,21 @@ test('bloqueia atualização concorrente sem perder regras ou histórico', async
   await request(app).put(`/config/${user._id}`).set(auth).send(body()).expect(200);
   const res = await request(app).put(`/config/${user._id}`).set(auth).send(body());
   assert.equal(res.status, 409); assert.equal((await Config.findOne()).revision, 1);
+});
+
+
+test('permite corrigir vigência passada sem perder auditoria nem aceitar revisão desatualizada', async () => {
+  const initial = body(); initial.effectiveFrom = '2026-10-08';
+  await request(app).put(`/config/${user._id}`).set(auth).send(initial).expect(200);
+  const correction = { ...initial, expectedRevision: 1, effectiveFrom: '2026-10-04' };
+  correction.weekdayRules[0].serviceRules[0].percent = 50;
+  const res = await request(app).put(`/config/${user._id}`).set(auth).send(correction).expect(200);
+  assert.equal(res.body.revision, 2);
+  assert.equal(res.body.history.length, 2);
+  assert.equal(res.body.history[1].effectiveFrom, '2026-10-08');
+  const options = { professionalCommission: res.body, serviceId: String(service._id), groupId: String(group._id), servicePercent: 30 };
+  assert.equal(engine.resolveServiceCommission({ ...options, serviceDate: '2026-10-04' }).percent, 50);
+  assert.equal(engine.resolveServiceCommission({ ...options, serviceDate: '2026-10-11' }).percent, 50);
+  assert.equal(engine.resolveServiceCommission({ ...options, serviceDate: '2026-09-27' }).percent, 30);
+  await request(app).put(`/config/${user._id}`).set(auth).send(correction).expect(409);
 });

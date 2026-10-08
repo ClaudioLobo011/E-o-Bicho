@@ -1168,10 +1168,17 @@ router.get('/comissoes', authMiddleware, requireStaff, async (req, res) => {
       closingFilter.store = new mongoose.Types.ObjectId(String(req.query.store));
     }
 
-    const closings = await CommissionClosing.find(closingFilter)
-      .select('periodoInicio periodoFim totalPeriodo totalPendente totalPago previsaoPagamento status createdAt updatedAt snapshotItems snapshotVersion')
+    const allClosings = await CommissionClosing.find(closingFilter)
+      .select('periodoInicio periodoFim periodoInicioData periodoFimData totalPeriodo totalPendente totalPago previsaoPagamento status createdAt updatedAt snapshotItems snapshotVersion')
       .sort({ previsaoPagamento: 1, periodoFim: 1, createdAt: 1 })
       .lean();
+    const periodStart = commissionDateKey(req.query?.start) || commissionDateKey(startDate);
+    const periodEnd = commissionDateKey(req.query?.end) || commissionDateKey(endDate);
+    const closings = allClosings.filter(closing => {
+      const start = closing.periodoInicioData || commissionDateKey(closing.periodoInicio);
+      const end = closing.periodoFimData || commissionDateKey(closing.periodoFim);
+      return (!periodStart || end >= periodStart) && (!periodEnd || start <= periodEnd);
+    });
     const extraProximos = mapClosingsToProximos(closings);
     const closingsKpi = summarizeClosingsForKpi(closings);
 

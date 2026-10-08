@@ -1045,4 +1045,43 @@ test.describe('fechamento de comissões por data literal do agendamento', () => 
     assert.deepEqual(staffFrozen.body.servicos.historico.map(r=>r.comissaoServico).sort((a,b)=>a-b),[40,60]);
   });
 
+  test('corrigir vigência de domingo atualiza prévia, funcionário e indicadores sem misturar outro período', async () => {
+    const fixture = await createFixture();
+    const config = await ProfessionalCommissionConfig.findOne({ user: fixture.professional._id }).lean();
+    const legacy = { revision: 0, serviceRules: [{ service: fixture.service._id, percent: 30 }] };
+    const sunday = [{ id: 'domingo', weekdays: [0], defaultPercent: 50, groupRules: [], serviceRules: [] }];
+    await ProfessionalCommissionConfig.updateOne({ _id: config._id }, { $set: {
+      revision: 1, effectiveFrom: '2026-10-08', serviceRules: legacy.serviceRules,
+      weekdayRules: sunday, history: [legacy]
+    } });
+    await createAppointment({ fixture, scheduledAt: '2026-10-04T12:00:00Z', items: [
+      { valor: 50, data: '2026-10-04', hora: '10:15', status: 'finalizado' },
+      { valor: 150, data: '2026-10-04', hora: '11:00', status: 'finalizado' },
+      { valor: 100, data: '2026-10-05', hora: '11:00', status: 'finalizado' }
+    ] });
+    await CommissionClosing.create({ profissional: fixture.professional._id, store: fixture.store._id,
+      periodoInicio: new Date('2026-03-01T12:00:00Z'), periodoFim: new Date('2026-03-31T12:00:00Z'),
+      periodoInicioData: '2026-03-01', periodoFimData: '2026-03-31', totalPeriodo: 693, totalPago: 693, status: 'pago', createdBy: fixture.admin._id });
+    const app = createApp(); app.use('/api/func', require('../funcComissoes'));
+    app.use('/api/config', require('../adminProfessionalCommissions'));
+    const request = supertest(app), headers = authorizationFor(fixture.admin);
+    const query = { profissionalId: String(fixture.professional._id), store: String(fixture.store._id), start: '2026-10-04', end: '2026-10-05', details: 1 };
+    const before = await request.get('/api/admin/comissoes/fechamentos/preview').query(query).set(headers).expect(200);
+    assert.equal(before.body.totals.totalServicos, 90);
+    await request.put(`/api/config/${fixture.professional._id}`).set(headers).send({
+      expectedRevision: 1, professionalType: 'esteticista', effectiveFrom: '2026-10-04',
+      groupRules: [], serviceRules: legacy.serviceRules, weekdayRules: sunday
+    }).expect(200);
+    const after = await request.get('/api/admin/comissoes/fechamentos/preview').query(query).set(headers).expect(200);
+    assert.equal(after.body.totals.totalServicos, 130);
+    assert.deepEqual(after.body.items.map(r => r.percent), [50,50,30]);
+    const staff = await request.get('/api/func/comissoes').query(query).set(headers).expect(200);
+    assert.equal(staff.body.servicos.resumo.totalGerado, 130);
+    assert.equal(staff.body.servicos.resumo.aReceber, 130);
+    assert.equal(staff.body.servicos.resumo.pagas, 0);
+    assert.deepEqual(staff.body.servicos.historico.map(r => r.comissaoServico).sort((a,b) => a-b), [25,30,75]);
+    const analytics = await request.get('/api/admin/comissoes/fechamentos/analytics').query(query).set(headers).expect(200);
+    assert.equal(analytics.body.totals.commission, 130);
+  });
+
 });

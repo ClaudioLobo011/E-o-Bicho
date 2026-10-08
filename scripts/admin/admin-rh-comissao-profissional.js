@@ -53,7 +53,7 @@
     const saved = config();
     state.draft = { professionalType: saved.professionalType || selected()?.professionalType,
       groupRules: clone(saved.groupRules || []), serviceRules: clone(saved.serviceRules || []), weekdayRules: clone(saved.weekdayRules || []),
-      effectiveFrom: saved.effectiveFrom > today ? saved.effectiveFrom : today, expectedRevision: Number(saved.revision || 0) };
+      effectiveFrom: saved.effectiveFrom || today, expectedRevision: Number(saved.revision || 0) };
     state.dirty = false; $('dirty').textContent = ''; pages.group = pages.service = pages.weekday = 0; Object.keys(exceptionPages).forEach(key => delete exceptionPages[key]);
   }
   function selectProfessional(id) {
@@ -107,11 +107,11 @@
     if (!person) return;
     $('professional-name').textContent = person.nome; $('selected-badge').textContent = person.nome;
     $('role-badge').textContent = state.draft.professionalType === 'veterinario' ? 'Veterinário' : 'Esteticista';
-    $('effective-from').value = state.draft.effectiveFrom; $('effective-from').min = state.draft.effectiveFrom > today ? state.draft.effectiveFrom : today;
+    $('effective-from').value = state.draft.effectiveFrom; $('effective-from').removeAttribute('min');
     renderGeneral(); renderWeekdays(); scheduleFit();
   }
   function validate() {
-    if (!engine.dateKey(state.draft.effectiveFrom) || state.draft.effectiveFrom < today || state.draft.effectiveFrom < (config().effectiveFrom || '')) throw new Error('Escolha uma vigência a partir de hoje e da última configuração.');
+    if (!engine.dateKey(state.draft.effectiveFrom)) throw new Error('Informe uma data de vigência válida.');
     const check = (rules, key) => { const seen = new Set(); for (const r of rules) { if (!r[key] || seen.has(r[key])) throw new Error('Selecione cada grupo ou serviço uma única vez por regra.'); if (engine.numeric(r.percent) === null) throw new Error('Informe percentuais entre 0 e 100%.'); seen.add(r[key]); } };
     check(state.draft.groupRules, 'group'); check(state.draft.serviceRules, 'service');
     const occupied = new Set();
