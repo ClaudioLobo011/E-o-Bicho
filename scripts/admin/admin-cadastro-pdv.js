@@ -1234,7 +1234,7 @@
           const pdv = state.pdvs.find((item) => normalizeId(item._id) === normalizeId(id));
           if (pdv) {
             startEditFlow(pdv);
-            window.scrollTo({ top: elements.form?.offsetTop || 0, behavior: 'smooth' });
+            elements.form?.scrollIntoView({ block: 'start', behavior: 'smooth' });
           }
         } else if (action === 'delete') {
           handleDelete(id);

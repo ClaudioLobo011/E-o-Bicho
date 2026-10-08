@@ -1,0 +1,82 @@
+/* Shared responsive foundation. Business-page styles and data remain independent. */
+html:has(body.responsive-site){overflow-x:clip}
+body.responsive-site{margin:0;max-width:100%;overflow-x:clip}
+.responsive-site main :where(div,section,article,form,fieldset){min-width:0}
+.responsive-site main :where(input,select,textarea){max-width:100%;min-width:0}
+.responsive-site main :where(img,video,canvas){max-width:100%}
+.responsive-site main :where(h1,h2,h3,p,label){overflow-wrap:anywhere}
+.responsive-site fieldset{min-inline-size:0}
+.responsive-workspace{height:100vh;height:100dvh;min-height:0!important;display:flex!important;flex-direction:column;overflow:hidden!important;padding:0!important;background:#f2f3ed}
+.responsive-workspace>main{flex:1 1 0!important;min-height:0!important;height:auto!important;max-height:none!important;min-width:0;width:100%!important;max-width:none!important;margin:0!important;padding:10px clamp(10px,1.25vw,24px) calc(14px + var(--workspace-actions-height,0px))!important;overflow:auto!important;overscroll-behavior:contain;scroll-padding:16px 0 calc(20px + var(--workspace-actions-height,0px));scrollbar-gutter:stable}
+.responsive-workspace>#admin-header-placeholder,.responsive-workspace>#func-header-placeholder{flex:0 0 auto;min-width:0}
+.responsive-workspace :is(#admin-footer-placeholder,#func-footer-placeholder){display:none}
+.responsive-workspace :is(#admin-header-placeholder,#func-header-placeholder) header{margin:0}
+.responsive-workspace :is(#admin-header-placeholder,#func-header-placeholder) header>.container{max-width:none;padding:6px 14px;gap:12px;flex-direction:row;align-items:center;flex-wrap:wrap}
+.responsive-workspace :is(#admin-header-placeholder,#func-header-placeholder) img{height:44px;width:auto}
+.responsive-workspace #admin-header-placeholder [data-admin-screen-search]{min-width:140px;flex:1;width:auto}
+.responsive-workspace #admin-header-placeholder header>.container>div:last-child{margin-left:auto}
+.responsive-workspace main> .grid>aside:has(>#admin-sidebar-placeholder:only-child),.responsive-workspace main> .grid>aside:has(>#func-sidebar-placeholder:only-child){height:0;margin:0;position:absolute}
+.responsive-workspace main>.grid{min-height:0;gap:12px}
+.responsive-workspace main :is(.space-y-6,.space-y-8)>:not([hidden])~:not([hidden]){margin-top:12px}
+.responsive-workspace main :is(header,section,article).p-6{padding:16px}
+.responsive-workspace main h1{font-size:clamp(20px,1.65vw,28px);line-height:1.25}
+.responsive-workspace main :is(.rounded-xl,.rounded-2xl).bg-white{border-color:#d8e0d0;box-shadow:0 3px 12px #304b3609}
+.responsive-workspace .responsive-table-region{overflow:auto;max-height:min(55vh,620px);max-height:min(55dvh,620px);scrollbar-gutter:stable;overscroll-behavior:contain;border-radius:8px}
+.responsive-workspace .responsive-table-region thead{position:sticky;top:0;z-index:2;background:#edf2e6}
+.responsive-workspace .responsive-table-region:focus-visible{outline:2px solid #5f7a41;outline-offset:2px}
+.workspace-section-nav{flex:none;display:flex;align-items:center;gap:10px;padding:6px 16px;background:#e8eee1;border-block:1px solid #d4dfc9;font-size:12px;color:#304b36}
+.workspace-section-nav select{min-width:0;max-width:460px;flex:1;border:1px solid #bacda9;background:#fff;border-radius:7px;padding:6px 9px;font-size:13px}
+.workspace-section-nav[hidden]{display:none}
+.responsive-workspace main :is(h1,h2,h3){scroll-margin-block:12px}
+/* Date pairs must shrink or wrap inside their own column. */
+.responsive-site main .flex:has(>input[type=date]){flex-wrap:wrap}
+.responsive-site main .flex>input[type=date]{flex:1 1 125px;width:0;min-width:110px}
+.responsive-site main :is(nav,[role=tablist]){max-width:100%}
+.responsive-site main nav.flex{flex-wrap:wrap}
+/* Dedicated workspace fixes for clinical forms and agenda controls. */
+.responsive-site main .flex:has(>.min-w-\[280px\]){flex-wrap:wrap}
+.responsive-site main .min-w-\[280px\]{min-width:min(280px,100%)!important;flex-basis:280px}
+.responsive-workspace .agenda-toolbar{flex-wrap:wrap;position:relative!important;gap:10px;padding:12px}
+.responsive-workspace .agenda-toolbar>.flex{flex-wrap:wrap;min-width:0;gap:8px}
+.responsive-workspace .agenda-toolbar :is(input,select,button){max-width:100%;margin-left:0}
+.responsive-workspace .agenda-main,.responsive-workspace .agenda-section,.responsive-workspace .agenda-shell{min-height:0!important}
+.responsive-workspace .agenda-summary{padding:8px 12px}
+.responsive-workspace #agenda-wrapper{max-height:65dvh;overflow:auto;min-height:180px}
+.responsive-workspace #promotion-v2-fields-panel>.flex{flex-wrap:wrap}
+.responsive-workspace #promotion-v2-fields-panel>.flex>.flex{flex-wrap:wrap}
+/* Modal content scrolls within the dialog instead of extending behind the viewport. */
+.responsive-site [role=dialog]{max-width:100%;max-height:calc(100dvh - 16px);overflow-y:auto;overscroll-behavior:contain}
+@media(max-width:1100px){
+ .responsive-workspace #billing-insights-grid,.responsive-workspace #billing-overview-grid,.responsive-workspace #billing-ranking-grid,.responsive-workspace #billing-actions-grid{grid-template-columns:minmax(0,1fr)!important}
+}
+@media(max-width:767px){
+ .responsive-workspace :is(#admin-header-placeholder,#func-header-placeholder) header>.container{padding:5px 10px;gap:6px}
+ .responsive-workspace :is(#admin-header-placeholder,#func-header-placeholder) img{height:32px}
+ .responsive-workspace #admin-header-placeholder [data-admin-sidebar-trigger]{width:32px;height:32px}
+ .responsive-workspace #admin-header-placeholder [data-admin-screen-search]{order:3;flex-basis:100%}
+ .responsive-workspace #admin-header-placeholder [data-admin-screen-search] input{padding-block:6px}
+ .responsive-workspace #admin-header-placeholder header>.container>div:last-child{font-size:11px;gap:4px}
+ .responsive-workspace main :is(header,section,article).p-6{padding:12px}
+ .responsive-workspace main :is(.gap-6,.gap-8){gap:12px}
+ .responsive-site main .flex:has(>#tab-condicional){flex-wrap:wrap;gap:10px}
+ .responsive-site main :is(input,select,textarea):not([type=checkbox]):not([type=radio]){font-size:16px}
+ .responsive-site main :is(button,a){overflow-wrap:anywhere}
+ .responsive-workspace .agenda-toolbar>.flex{width:100%}
+ .responsive-workspace .agenda-toolbar label{margin-left:0}
+ .responsive-workspace .agenda-toolbar> .flex:has(#agenda-date){display:grid;grid-template-columns:auto minmax(0,1fr)}
+ .responsive-workspace .agenda-toolbar #agenda-date{width:100%}
+ .responsive-workspace .agenda-toolbar button{grid-column:auto;white-space:normal}
+ .responsive-workspace .responsive-table-region{max-height:50dvh}
+ .workspace-section-nav{padding:5px 10px}
+}
+@media print{
+ html:has(body.responsive-site),body.responsive-site{height:auto!important;overflow:visible!important;display:block!important}
+ .responsive-workspace>main{height:auto!important;overflow:visible!important;padding:0!important;display:block!important}
+ .workspace-section-nav{display:none!important}
+ .responsive-workspace .responsive-table-region,.responsive-workspace #agenda-wrapper{max-height:none!important;overflow:visible!important}
+ .responsive-workspace .responsive-table-region thead{position:static}
+}
+.responsive-workspace>main{position:relative}
+.responsive-workspace main header .flex:not(.flex-col):has(>span){flex-wrap:wrap}
+.responsive-workspace main header span{min-width:0;overflow-wrap:anywhere}
+.responsive-site #modal-search-user>div{width:calc(100% - 32px);max-height:calc(100dvh - 24px);overflow:auto}

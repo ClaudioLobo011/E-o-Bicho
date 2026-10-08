@@ -1681,9 +1681,7 @@
       const target = body.querySelector(`div[data-profissional-id="${firstProfId}"][data-hh="${hh}"]`);
 
       if (target) {
-        const top = target.getBoundingClientRect().top + window.pageYOffset;
-        const offset = 80; // sobe um pouco para contexto
-        window.scrollTo({ top: Math.max(0, top - offset), behavior: 'smooth' });
+        target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
       }
   }
 

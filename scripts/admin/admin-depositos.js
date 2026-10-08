@@ -155,7 +155,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         submitLabel.textContent = 'Salvar alterações';
         cancelEditButton.classList.remove('hidden');
-        window.scrollTo({ top: form.offsetTop - 120, behavior: 'smooth' });
+        form.scrollIntoView({ block: 'start', behavior: 'smooth' });
     };
 
     const handleDeleteDeposit = (depositId) => {

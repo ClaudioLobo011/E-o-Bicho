@@ -866,8 +866,7 @@ function startEditing(id) {
     }
   }
   if (form) {
-    const top = form.getBoundingClientRect().top + window.scrollY;
-    window.scrollTo({ top: Math.max(0, top - 100), behavior: 'smooth' });
+    form.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }
 }
 
