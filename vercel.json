@@ -13,13 +13,604 @@
     }
   ],
   "builds": [
-    { "src": "index.html", "use": "@vercel/static" },
-    { "src": "pages/**", "use": "@vercel/static" },
-    { "src": "public/**", "use": "@vercel/static" },
-    { "src": "src/**", "use": "@vercel/static" },
-    { "src": "components/**", "use": "@vercel/static" },
-    { "src": "scripts/**", "use": "@vercel/static" },
-    { "src": "data/**", "use": "@vercel/static" },
-    { "src": "nfeschema_v400.zip", "use": "@vercel/static" }
+    {
+      "src": "index.html",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "pages/**",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "public/**",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "src/**",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "components/**",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "scripts/**",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "data/**",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "nfeschema_v400.zip",
+      "use": "@vercel/static"
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/public/downloads/E-o-Bicho-PDV-0.8.0-Instalador-Personalizado.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/E-o-Bicho-PDV-0.8.0-Instalador-Personalizado.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/E-o-Bicho-PDV-0.8.1-Instalador-Personalizado.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/E-o-Bicho-PDV-0.8.1-Instalador-Personalizado.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/E-o-Bicho-PDV-0.8.10-Instalador-Personalizado.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/E-o-Bicho-PDV-0.8.10-Instalador-Personalizado.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/E-o-Bicho-PDV-0.8.11-Instalador-Personalizado.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/E-o-Bicho-PDV-0.8.11-Instalador-Personalizado.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/E-o-Bicho-PDV-0.8.12-Instalador-Personalizado.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/E-o-Bicho-PDV-0.8.12-Instalador-Personalizado.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/E-o-Bicho-PDV-0.8.13-Instalador-Personalizado.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/E-o-Bicho-PDV-0.8.13-Instalador-Personalizado.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/E-o-Bicho-PDV-0.8.14-Instalador-Personalizado.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/E-o-Bicho-PDV-0.8.14-Instalador-Personalizado.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/E-o-Bicho-PDV-0.8.15-Instalador-Personalizado.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/E-o-Bicho-PDV-0.8.15-Instalador-Personalizado.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/E-o-Bicho-PDV-0.8.2-Instalador-Personalizado.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/E-o-Bicho-PDV-0.8.2-Instalador-Personalizado.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/E-o-Bicho-PDV-0.8.3-Instalador-Personalizado.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/E-o-Bicho-PDV-0.8.3-Instalador-Personalizado.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/E-o-Bicho-PDV-0.8.4-Instalador-Personalizado.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/E-o-Bicho-PDV-0.8.4-Instalador-Personalizado.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/E-o-Bicho-PDV-0.8.5-Instalador-Personalizado.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/E-o-Bicho-PDV-0.8.5-Instalador-Personalizado.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/E-o-Bicho-PDV-0.8.6-Instalador-Personalizado.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/E-o-Bicho-PDV-0.8.6-Instalador-Personalizado.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/E-o-Bicho-PDV-0.8.7-Instalador-Personalizado.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/E-o-Bicho-PDV-0.8.7-Instalador-Personalizado.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/E-o-Bicho-PDV-0.8.8-Instalador-Personalizado.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/E-o-Bicho-PDV-0.8.8-Instalador-Personalizado.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/E-o-Bicho-PDV-0.8.9-Instalador-Personalizado.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/E-o-Bicho-PDV-0.8.9-Instalador-Personalizado.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/EoBicho-Funcionarios-1.0.0-Setup.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/EoBicho-Funcionarios-1.0.0-Setup.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/EoBicho-Funcionarios-1.0.1-Setup.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/EoBicho-Funcionarios-1.0.1-Setup.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/EoBicho-Funcionarios-1.0.10-Setup.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/EoBicho-Funcionarios-1.0.10-Setup.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/EoBicho-Funcionarios-1.0.13-Setup.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/EoBicho-Funcionarios-1.0.13-Setup.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/EoBicho-Funcionarios-1.0.14-Setup.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/EoBicho-Funcionarios-1.0.14-Setup.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/EoBicho-Funcionarios-1.0.15-Setup.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/EoBicho-Funcionarios-1.0.15-Setup.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/EoBicho-Funcionarios-1.0.16-Setup.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/EoBicho-Funcionarios-1.0.16-Setup.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/EoBicho-Funcionarios-1.0.17-Setup.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/EoBicho-Funcionarios-1.0.17-Setup.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/EoBicho-Funcionarios-1.0.18-Setup.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/EoBicho-Funcionarios-1.0.18-Setup.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/EoBicho-Funcionarios-1.0.2-Setup.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/EoBicho-Funcionarios-1.0.2-Setup.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/EoBicho-Funcionarios-1.0.20-Setup.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/EoBicho-Funcionarios-1.0.20-Setup.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/EoBicho-Funcionarios-1.0.21-Setup.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/EoBicho-Funcionarios-1.0.21-Setup.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/EoBicho-Funcionarios-1.0.22-Setup.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/EoBicho-Funcionarios-1.0.22-Setup.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/EoBicho-Funcionarios-1.0.23-Setup.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/EoBicho-Funcionarios-1.0.23-Setup.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/EoBicho-Funcionarios-1.0.3-Setup.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/EoBicho-Funcionarios-1.0.3-Setup.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/EoBicho-Funcionarios-1.0.4-Setup.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/EoBicho-Funcionarios-1.0.4-Setup.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/EoBicho-Funcionarios-1.0.5-Setup.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/EoBicho-Funcionarios-1.0.5-Setup.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/EoBicho-Funcionarios-1.0.6-Setup.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/EoBicho-Funcionarios-1.0.6-Setup.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/EoBicho-Funcionarios-1.0.7-Setup.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/EoBicho-Funcionarios-1.0.7-Setup.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/EoBicho-Funcionarios-1.0.8-Setup.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/EoBicho-Funcionarios-1.0.8-Setup.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/downloads/EoBicho-Funcionarios-1.0.9-Setup.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/downloads/EoBicho-Funcionarios-1.0.9-Setup.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.21-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.21-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.22-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.22-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.23-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.23-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.24-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.24-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.25-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.25-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.26-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.26-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.27-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.27-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.28-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.28-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.29-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.29-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.30-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.30-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.31-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.31-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.32-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.32-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.33-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.33-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.34-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.34-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.35-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.35-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.36-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.36-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.37-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.37-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.38-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.38-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.39-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.39-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.40-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.40-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.41-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.41-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.42-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.42-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.44-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.44-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.45-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.45-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.46-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.46-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.47-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.47-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.48-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.48-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.49-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.49-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.50-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.50-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.51-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.51-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.52-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.52-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.53-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.53-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.54-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.54-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.55-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.55-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.56-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.56-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.57-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.57-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.58-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.58-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.59-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.59-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.60-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.60-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.61-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.61-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.62-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.62-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.63-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.63-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.64-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.64-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.65-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.65-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.66-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.66-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.67-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.67-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.68-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.68-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.69-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.69-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.70-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.70-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.71-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.71-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.72-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.72-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.73-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.73-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.74-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.74-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.75-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.75-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.76-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.76-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.77-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.77-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.78-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.78-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.79-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.79-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.80-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.80-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.81-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.81-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.82-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.82-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.84-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.84-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-0.8.86-Atualizacao.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-0.8.86-Atualizacao.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-PDV-0.8.10-Instalador.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-PDV-0.8.10-Instalador.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-PDV-0.8.11-Instalador.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-PDV-0.8.11-Instalador.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-PDV-0.8.12-Instalador.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-PDV-0.8.12-Instalador.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-PDV-0.8.13-Instalador.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-PDV-0.8.13-Instalador.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-PDV-0.8.14-Instalador.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-PDV-0.8.14-Instalador.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-PDV-0.8.15-Instalador.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-PDV-0.8.15-Instalador.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-PDV-0.8.16-Instalador.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-PDV-0.8.16-Instalador.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-PDV-0.8.4-Instalador.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-PDV-0.8.4-Instalador.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-PDV-0.8.5-Instalador.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-PDV-0.8.5-Instalador.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-PDV-0.8.6-Instalador.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-PDV-0.8.6-Instalador.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-PDV-0.8.7-Instalador.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-PDV-0.8.7-Instalador.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-PDV-0.8.8-Instalador.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-PDV-0.8.8-Instalador.exe",
+      "permanent": false
+    },
+    {
+      "source": "/public/updates/pdv/E-o-Bicho-PDV-0.8.9-Instalador.exe",
+      "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-PDV-0.8.9-Instalador.exe",
+      "permanent": false
+    }
   ]
 }
