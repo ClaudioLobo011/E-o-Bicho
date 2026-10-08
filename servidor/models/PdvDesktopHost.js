@@ -13,6 +13,7 @@ const schema = new mongoose.Schema({
   initialSyncCompletedAt: { type: Date, default: null },
   lastHeartbeatAt: { type: Date, default: null, index: true },
   appVersion: { type: String, trim: true, default: '' },
+  remoteBackupVersion: { type: Number, default: 0 },
   syncProtocolVersion: { type: Number, min: 1, default: 1 },
   pendingEvents: { type: Number, min: 0, default: 0 },
   pendingFiscal: { type: Number, min: 0, default: 0 },

@@ -1620,6 +1620,7 @@ router.post('/heartbeat', authenticateHost, async (req, res) => {
   host.lastHeartbeatAt = new Date();
   host.localDbReady = Boolean(req.body?.localDbReady);
   host.appVersion = clean(req.body?.appVersion);
+  host.remoteBackupVersion = req.body?.remoteBackupVersion === 1 ? 1 : 0;
   host.syncProtocolVersion = Math.max(1, Number.parseInt(req.body?.syncProtocolVersion, 10) || 1);
   host.pendingEvents = Math.max(0, Number(req.body?.pendingEvents || 0));
   host.pendingFiscal = Math.max(0, Number(req.body?.pendingFiscal || 0));
@@ -1632,7 +1633,8 @@ router.post('/heartbeat', authenticateHost, async (req, res) => {
     'desktop.pendingEvents': host.pendingEvents,
     'desktop.pendingFiscal': host.pendingFiscal,
   } });
-  return res.json({ ok: true, serverTime: new Date().toISOString() });
+  const backupJob = await require('../services/remoteBackup').claim(host, host.remoteBackupVersion === 1, Boolean(req.body?.remoteBackupBusy)).catch(() => null);
+  return res.json({ ok: true, serverTime: new Date().toISOString(), ...(backupJob ? { backupJob } : {}) });
 });
 
 router.post('/operator-login', authenticateHost, async (req, res) => {
@@ -2462,4 +2464,5 @@ router.post('/pdvs/:id/revert', ...adminOnly, async (req, res) => {
   return res.json({ ok: true, pdv });
 });
 
+require('../services/remoteBackup').register(router, requireAuth, authenticateHost);
 module.exports = router;
