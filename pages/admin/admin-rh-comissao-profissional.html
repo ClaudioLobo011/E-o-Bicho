@@ -7,9 +7,9 @@
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <link rel="stylesheet" href="../../src/output.css">
-  <link rel="stylesheet" href="../../src/commission-professional.css">
+  <link rel="stylesheet" href="../../src/commission-professional.css?v=20261008-compact1">
 </head>
-<body class="bg-gray-100">
+<body class="bg-gray-100 commission-screen">
   <div id="admin-header-placeholder"></div>
 
 
@@ -18,15 +18,21 @@
     <header class="commission-heading"><div><p class="commission-eyebrow">RECURSOS HUMANOS / COMISSÕES</p><h1>Comissão por profissional</h1></div><span id="commission-selected-badge" class="commission-badge">Selecione um profissional</span></header>
     <div id="commission-feedback" role="status" aria-live="polite"></div>
     <div class="commission-workspace">
-      <aside class="commission-panel commission-people"><h2>Profissionais</h2><label for="commission-professional-search">Buscar profissional</label><input id="commission-professional-search" type="search" placeholder="Nome ou cargo"><p id="commission-professionals-counter" class="commission-muted"></p><div id="commission-professionals-list"></div></aside>
+      <aside class="commission-panel commission-people"><h2>Profissionais</h2><label for="commission-professional-search">Buscar profissional</label><input id="commission-professional-search" type="search" placeholder="Nome ou cargo"><p id="commission-professionals-counter" class="commission-muted"></p><div id="commission-professionals-list"></div><nav id="commission-people-pager" class="commission-pagination" aria-label="Páginas de profissionais"></nav></aside>
       <section class="commission-panel commission-main">
-        <div class="commission-toolbar"><div><h2 id="commission-professional-name">Configuração do profissional</h2><span id="commission-role-badge" class="commission-muted"></span></div><div class="commission-save"><span id="commission-dirty" aria-live="polite"></span><button id="commission-save-btn" type="button" class="commission-primary" disabled>Salvar configuração</button></div></div>
+        <label class="commission-mobile-person">Profissional<select id="commission-professional-select" aria-label="Selecionar profissional"></select></label><div class="commission-toolbar"><div><h2 id="commission-professional-name">Configuração do profissional</h2><span id="commission-role-badge" class="commission-muted"></span></div><div class="commission-save"><span id="commission-dirty" aria-live="polite"></span><button id="commission-save-btn" type="button" class="commission-primary" disabled>Salvar configuração</button></div></div>
         <p id="commission-selection-placeholder">Nenhum profissional selecionado.</p>
         <div id="commission-editor" hidden>
           <div class="commission-effective"><label>Aplicar alterações a partir de<input id="commission-effective-from" type="date" required></label></div>
           <div class="commission-tabs" role="tablist" aria-label="Configuração de comissões"><button type="button" role="tab" id="commission-tab-general" aria-controls="commission-general" aria-selected="true">Regras gerais</button><button type="button" role="tab" id="commission-tab-weekdays" aria-controls="commission-weekdays" aria-selected="false">Dias da semana <span id="commission-weekday-count">0</span></button></div>
-          <section id="commission-general" role="tabpanel" aria-labelledby="commission-tab-general"><div class="commission-section-title"><div><h3>Comissão por grupo de serviço</h3></div><input type="search" id="commission-group-search" placeholder="Filtrar grupos" aria-label="Filtrar grupos"></div><div id="commission-groups-body" class="commission-rule-list"></div><div class="commission-section-title"><div><h3>Comissão por serviço</h3></div><input id="commission-service-search" type="search" placeholder="Filtrar serviços" aria-label="Filtrar serviços"></div><div id="commission-services-body" class="commission-rule-list"></div></section>
-          <section id="commission-weekdays" role="tabpanel" aria-labelledby="commission-tab-weekdays" hidden><div class="commission-section-title"><div><h3>Dias com comissão especial</h3></div><button id="commission-add-weekday" type="button" class="commission-primary">+ Adicionar regra</button></div><div id="commission-weekday-rules"></div></section>
+          <section id="commission-general" role="tabpanel" aria-labelledby="commission-tab-general">
+            <div class="commission-kind-tabs" role="tablist" aria-label="Tipo de comissão"><button type="button" role="tab" data-kind="group" aria-selected="true" aria-controls="commission-group-panel">Por grupo</button><button type="button" role="tab" data-kind="service" aria-selected="false" aria-controls="commission-service-panel">Por serviço</button></div>
+            <div class="commission-general-grid">
+              <section id="commission-group-panel" class="commission-list-panel"><div class="commission-section-title"><h3>Por grupo de serviço</h3><input type="search" id="commission-group-search" placeholder="Filtrar grupos" aria-label="Filtrar grupos"></div><div id="commission-groups-body" class="commission-rule-list"></div><nav id="commission-group-pager" class="commission-pagination" aria-label="Páginas de grupos"></nav></section>
+              <section id="commission-service-panel" class="commission-list-panel"><div class="commission-section-title"><h3>Por serviço</h3><input type="search" id="commission-service-search" placeholder="Filtrar serviços" aria-label="Filtrar serviços"></div><div id="commission-services-body" class="commission-rule-list"></div><nav id="commission-service-pager" class="commission-pagination" aria-label="Páginas de serviços"></nav></section>
+            </div>
+          </section>
+          <section id="commission-weekdays" role="tabpanel" aria-labelledby="commission-tab-weekdays" hidden><div class="commission-section-title"><div><h3>Dias com comissão especial</h3></div><nav id="commission-weekday-pager" class="commission-pagination" aria-label="Páginas de regras por dia"></nav><button id="commission-add-weekday" type="button" class="commission-primary">+ Adicionar regra</button></div><div id="commission-weekday-rules"></div></section>
         </div>
       </section>
     </div>
@@ -42,7 +48,7 @@
   <script src="../../scripts/core/main.js"></script>
   <script src="../../scripts/admin/admin.js"></script>
   <script src="../../scripts/common/professional-commission-engine.js"></script>
-  <script src="../../scripts/admin/admin-rh-comissao-profissional.js"></script>
+  <script src="../../scripts/admin/admin-rh-comissao-profissional.js?v=20261008-compact1"></script>
   <script src="/scripts/common/modal-bridge.js"></script>
 </body>
 </html>
