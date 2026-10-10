@@ -321,8 +321,9 @@ async function loadDirectoryUpserts(entity, host, cursor, limit) {
         const config = byUser.get(String(user._id));
         return {
           id: String(user._id), code: user.codigoCliente ? String(user.codigoCliente) : '', name: userName(user),
-          document: user.cpf || user.cnpj || '', role: user.role || '', groups, companies: userCompanies(user),
-          active: staffRoles.has(String(user.role || '').toLowerCase()) && !user.dataDemissao && !['inativo', 'bloqueado', 'demitido', 'desligado'].includes(clean(user.situacao).toLowerCase()),
+          document: user.cpf || user.cnpj || '', role: user.role || '', groups, companies: (user.empresas || []).map(String),
+          active: (user.empresas || []).some(company => String(company) === String(host.empresa))
+            && staffRoles.has(String(user.role || '').toLowerCase()) && !user.dataDemissao && !['inativo', 'bloqueado', 'demitido', 'desligado'].includes(clean(user.situacao).toLowerCase()),
           seller: groups.includes('vendedor'), courier: groups.some((group) => ['entregador', 'gerente'].includes(group)),
           responsible: true,
           professionalType: groups.includes('veterinario') ? 'veterinario' : groups.includes('esteticista') ? 'esteticista' : '',

@@ -1755,7 +1755,8 @@ router.get('/directory/snapshot', authenticateHost, async (req, res) => {
       ],
     }).select(userFields).populate('userGroup', 'comissaoServicoPercent').limit(50000).lean(),
   ]);
-  const users = companyUsers.filter(desktopOperatorIsActive);
+  const users = companyUsers.filter(user => desktopOperatorIsActive(user)
+    && (user.empresas || []).some(company => String(company) === String(host.empresa)));
   const customerIds = customersUsers.map((user) => user._id);
   const [pets, addresses, stores, deposits, services] = await Promise.all([
     Pet.find({ owner: { $in: customerIds }, obito: { $ne: true } })

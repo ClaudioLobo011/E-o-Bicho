@@ -84,6 +84,24 @@ test.describe('sincronização incremental do PDV Desktop v2', () => {
     assert.ok(full.body.customers.some(row=>row.id===String(user._id)));
   });
 
+  test('empresa principal antiga nao habilita profissional fora das empresas selecionadas', async () => {
+    const old = await pairedFixture('staff-old-company');
+    const current = await pairedFixture('staff-current-company');
+    const user = await User.create({tipoConta:'pessoa_fisica',email:'company-scope@example.com',senha:'hash',celular:'21912345678',nomeCompleto:'Profissional Transferido',role:'funcionario',grupos:['esteticista','vendedor','gerente'],empresas:[current.company._id],empresaPrincipal:old.company._id,empresaContratual:current.company._id});
+    for (const [base, expected] of [[old, false], [current, true]]) {
+      const delta = await base.request.get('/desktop/sync/v2/directory/employees').set(base.headers);
+      assert.equal(delta.status,200,delta.text);
+      const row = delta.body.upserts.find(row=>row.id===String(user._id));
+      assert.equal(row?.active,expected);
+      assert.deepEqual(row.companies,[String(current.company._id)]);
+      const full = await base.request.get('/desktop/directory/snapshot').set(base.headers);
+      assert.equal(full.status,200,full.text);
+      for (const key of ['professionals','sellers','couriers','responsibles']) {
+        assert.equal(full.body[key].some(row=>row.id===String(user._id)),expected,key);
+      }
+    }
+  });
+
   test('deliveries v1/v2 incluem o pareamento canonico mesmo quando o payload legado omite ou informa outro PDV', async () => {
     const base = await pairedFixture('delivery-context');
     const orders = [{ id: 'missing-context', saleCode: 'DEL-1', status: 'emRota', total: 90 },
