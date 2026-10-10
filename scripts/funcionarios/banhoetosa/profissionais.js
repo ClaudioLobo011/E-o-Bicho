@@ -111,7 +111,7 @@ export async function populateModalProfissionais(storeId, preselectId) {
   }
 }
 
-export async function loadProfissionais() {
+export async function loadProfissionais({ refreshModal = true } = {}) {
   const endpoint = buildProfissionaisEndpoint(state.selectedStoreId);
   if (!endpoint) {
     state.profissionais = [];
@@ -121,8 +121,11 @@ export async function loadProfissionais() {
     return;
   }
   const resp = await api(endpoint);
-  const list = await resp.json().catch(() => []);
+  if (!resp.ok) throw new Error('Não foi possível atualizar os profissionais.');
+  const list = await resp.json();
+  if (!Array.isArray(list)) throw new Error('Resposta inválida ao atualizar os profissionais.');
   state.profissionais = normalizeProfissionais(list);
+  if (!refreshModal) return; // Never overwrite an open form during background refresh.
   modalProfissionais = [buildNoPreferenceProfessional(), ...state.profissionais];
   if (els.profSelect) {
     const prevValue = els.profSelect.value;

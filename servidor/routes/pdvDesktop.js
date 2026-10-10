@@ -1742,8 +1742,8 @@ router.get('/catalog/products', authenticateHost, async (req, res) => {
 
 router.get('/directory/snapshot', authenticateHost, async (req, res) => {
   const host = req.desktopHost;
-  const userFields = '_id codigoCliente nomeCompleto nomeContato razaoSocial email cpf cnpj inscricaoEstadual celular telefone celularSecundario telefoneSecundario tipoConta genero dataNascimento criadoEm observacao observacoes role grupos userGroup empresas empresaPrincipal empresaContratual limiteCredito valorPendente';
-  const [customersUsers, users] = await Promise.all([
+  const userFields = '_id codigoCliente nomeCompleto nomeContato razaoSocial email cpf cnpj inscricaoEstadual celular telefone celularSecundario telefoneSecundario tipoConta genero dataNascimento criadoEm observacao observacoes role grupos userGroup empresas empresaPrincipal empresaContratual limiteCredito valorPendente situacao dataDemissao';
+  const [customersUsers, companyUsers] = await Promise.all([
     // O cadastro de clientes é compartilhado entre todas as lojas.
     User.find({ $or: [{ role: 'cliente' }, { codigoCliente: { $exists: true, $ne: null } }] }).select(userFields).limit(50000).lean(),
     // Funcionários, vendedores e entregadores continuam restritos à loja atual.
@@ -1755,6 +1755,7 @@ router.get('/directory/snapshot', authenticateHost, async (req, res) => {
       ],
     }).select(userFields).populate('userGroup', 'comissaoServicoPercent').limit(50000).lean(),
   ]);
+  const users = companyUsers.filter(desktopOperatorIsActive);
   const customerIds = customersUsers.map((user) => user._id);
   const [pets, addresses, stores, deposits, services] = await Promise.all([
     Pet.find({ owner: { $in: customerIds }, obito: { $ne: true } })

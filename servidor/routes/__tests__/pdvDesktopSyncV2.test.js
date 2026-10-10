@@ -65,6 +65,25 @@ test.describe('sincronização incremental do PDV Desktop v2', () => {
   test.after(async () => { await mongoose.disconnect(); if (mongo) await mongo.stop(); });
   test.beforeEach(async () => { await mongoose.connection.db.dropDatabase(); });
 
+  test('remoção do quadro envia inativação incremental e limpa todas as listas do snapshot', async () => {
+    const base = await pairedFixture('removed-employee');
+    const user = await User.create({tipoConta:'pessoa_fisica',email:'removed@example.com',senha:'hash',celular:'21912345678',nomeCompleto:'Profissional Removido',role:'funcionario',grupos:['esteticista','vendedor','gerente'],empresas:[base.company._id]});
+    const first = await base.request.get('/desktop/sync/v2/directory/employees').set(base.headers);
+    assert.ok(first.body.upserts.some(row=>row.id===String(user._id)&&row.active));
+    const before = await base.request.get('/desktop/sync/v2/changes').set(base.headers);
+    await new Promise(resolve=>setTimeout(resolve,20));
+    user.role='cliente'; await user.save();
+    const delta = await base.request.get(`/desktop/sync/v2/directory/employees?cursor=${encodeURIComponent(first.body.nextCursor)}`).set(base.headers);
+    assert.equal(delta.status,200,delta.text);
+    assert.equal(delta.body.upserts.find(row=>row.id===String(user._id))?.active,false);
+    const after = await base.request.get('/desktop/sync/v2/changes').set(base.headers);
+    assert.notEqual(after.body.versions.employees,before.body.versions.employees);
+    const full = await base.request.get('/desktop/directory/snapshot').set(base.headers);
+    assert.equal(full.status,200,full.text);
+    for(const key of ['professionals','sellers','couriers','responsibles']) assert.ok(!full.body[key].some(row=>row.id===String(user._id)),key);
+    assert.ok(full.body.customers.some(row=>row.id===String(user._id)));
+  });
+
   test('deliveries v1/v2 incluem o pareamento canonico mesmo quando o payload legado omite ou informa outro PDV', async () => {
     const base = await pairedFixture('delivery-context');
     const orders = [{ id: 'missing-context', saleCode: 'DEL-1', status: 'emRota', total: 90 },

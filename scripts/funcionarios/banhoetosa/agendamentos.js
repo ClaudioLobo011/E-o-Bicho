@@ -13,6 +13,7 @@ import {
 } from './core.js';
 import { renderGrid } from './grid.js';
 import { enhanceAgendaUI } from './ui.js';
+import { loadProfissionais } from './profissionais.js';
 
 export async function loadAgendamentos() {
   const base = normalizeDate(els.dateInput?.value || todayStr());
@@ -74,9 +75,11 @@ export function snapshotHash(items) {
 
 export async function refreshAgendaIfChanged() {
   const prev = state.lastSnapshotHash || '';
+  const previousProfessionals = JSON.stringify(state.profissionais || []);
+  try { await loadProfissionais({ refreshModal: false }); } catch (error) { console.warn(error); }
   await loadAgendamentos();
   const next = snapshotHash(state.agendamentos);
-  if (next !== prev) {
+  if (next !== prev || previousProfessionals !== JSON.stringify(state.profissionais || [])) {
     state.lastSnapshotHash = next;
     renderGrid();
     enhanceAgendaUI();

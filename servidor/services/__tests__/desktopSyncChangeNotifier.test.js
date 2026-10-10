@@ -39,6 +39,10 @@ test('mudança sem documento completo usa aviso global como proteção', () => {
   assert.deepEqual(scopesForChange({ ns: { coll: 'appointments' } }), ['all']);
 });
 
+test('remoção do quadro invalida funcionários mesmo quando role já virou cliente', () => {
+  assert.deepEqual(domainsForChange({ns:{coll:'users'},fullDocument:{role:'cliente'},updateDescription:{updatedFields:{role:'cliente'}}}), ['customers','employees']);
+});
+
 test('alteração de usuário avisa somente o diretório correspondente', () => {
   assert.deepEqual(domainsForChange({ ns: { coll: 'users' }, fullDocument: { role: 'cliente', codigoCliente: 10 } }), ['customers']);
   assert.deepEqual(domainsForChange({ ns: { coll: 'users' }, fullDocument: { role: 'funcionario', grupos: ['esteticista'] } }), ['employees']);

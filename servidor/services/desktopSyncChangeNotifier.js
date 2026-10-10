@@ -34,7 +34,10 @@ function domainsForChange(change = {}) {
   const role = String(user.role || '').toLowerCase();
   const domains = [];
   if (role === 'cliente' || user.codigoCliente !== null && user.codigoCliente !== undefined) domains.push('customers');
-  if (STAFF_ROLES.has(role)) domains.push('employees');
+  const employmentChanged = ['role', 'grupos', 'empresas', 'empresaPrincipal', 'empresaContratual', 'dataDemissao', 'situacao']
+    .some(field => Object.keys(change.updateDescription?.updatedFields || {}).some(key => key === field || key.startsWith(`${field}.`))
+      || (change.updateDescription?.removedFields || []).includes(field));
+  if (STAFF_ROLES.has(role) || employmentChanged) domains.push('employees');
   return domains.length ? domains : defaults;
 }
 

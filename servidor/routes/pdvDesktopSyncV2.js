@@ -186,7 +186,7 @@ function latestVersion(values = []) {
 async function changeVersionsForHost(host) {
   const customerQuery = { $or: [{ role: 'cliente' }, { codigoCliente: { $exists: true, $ne: null } }] };
   const employeeQuery = {
-    role: { $in: [...staffRoles] },
+    // Include demoted employees so removal advances the directory version.
     $or: [{ empresaPrincipal: host.empresa }, { empresaContratual: host.empresa }, { empresas: host.empresa }],
   };
   const transferQuery = { $or: [{ originCompany: host.empresa }, { destinationCompany: host.empresa }] };
@@ -303,7 +303,7 @@ async function loadDirectoryUpserts(entity, host, cursor, limit) {
   if (entity === 'employees') {
     query = {
       $and: [
-        { role: { $in: [...staffRoles] } },
+        // Former staff are mapped to active:false within their company scope.
         { $or: [{ empresaPrincipal: host.empresa }, { empresaContratual: host.empresa }, { empresas: host.empresa }] },
         cursorQuery(cursor),
       ],
