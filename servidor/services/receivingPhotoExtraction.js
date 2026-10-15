@@ -3,6 +3,8 @@ const fs = require('fs/promises');
 const path = require('path');
 const sharp = require('sharp');
 const { createWorker } = require('tesseract.js');
+const localOcr = require('./receivingLocalOcr');
+const EXTRACTION_VERSION = '20261015-local-v2';
 
 const cachePath = path.resolve(process.env.RECEIVING_OCR_CACHE || path.join(__dirname, '../.receiving-ocr-cache'));
 const normalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
@@ -57,14 +59,19 @@ function detectDuplicatePages(pages) {
   return pages.map(page => {
     const signature = new Set(page.lines.map(line => normalize(`${line.supplierCode} ${line.description}`).split(' ').filter(token => token.length > 2).join(' ')));
     const tokens = new Set(page.lines.flatMap(line => normalize(line.description).split(' ').filter(token => token.length > 3)));
+    const codes = new Set(page.lines.map(line => String(line.supplierCode || '')).filter(Boolean));
     const duplicate = included.find(previous => {
       const a = previous.signature, b = previous.tokens;
       const overlap = [...signature].filter(value => a.has(value)).length / Math.max(1, Math.min(a.size, signature.size));
       const tokenOverlap = [...tokens].filter(value => b.has(value)).length / Math.max(1, Math.min(b.size, tokens.size));
-      return signature.size >= 3 && a.size >= 3 && (overlap >= 0.7 || (page.page && previous.page.page === page.page && page.reference && previous.page.reference === page.reference && tokenOverlap >= 0.65));
+      const sharedCodes = [...codes].filter(code => previous.codes.has(code)).length;
+      const similarRowCount = Math.min(page.lines.length, previous.page.lines.length) / Math.max(1, page.lines.length, previous.page.lines.length) >= 0.75;
+      const compatibleReference = !page.reference || !previous.page.reference || page.reference === previous.page.reference;
+      const noisyDuplicate = compatibleReference && similarRowCount && signature.size >= 20 && a.size >= 20 && sharedCodes >= 5 && tokenOverlap >= 0.55;
+      return signature.size >= 3 && a.size >= 3 && (overlap >= 0.7 || noisyDuplicate || (page.page && previous.page.page === page.page && page.reference && previous.page.reference === page.reference && tokenOverlap >= 0.65));
     });
     if (duplicate) return { ...page, duplicateOf: duplicate.page.photoId, selected: false, warnings: [...page.warnings, 'Possível foto repetida da mesma página. Desmarcada da proposta; confira antes de incluir.'] };
-    included.push({ page, signature, tokens });
+    included.push({ page, signature, tokens, codes });
     return { ...page, selected: true, duplicateOf: null };
   });
 }
@@ -84,7 +91,7 @@ async function imageMetadata(buffer) {
   return { width: metadata.width, height: metadata.height, contentType: `image/${metadata.format === 'jpeg' ? 'jpeg' : metadata.format}` };
 }
 
-async function extractPhoto(buffer, photoId) {
+async function extractTesseractPhoto(buffer, photoId) {
   await fs.mkdir(cachePath, { recursive: true });
   const metadata = await imageMetadata(buffer);
   let worker, timer, expired = false;
@@ -114,4 +121,27 @@ async function extractPhoto(buffer, photoId) {
   } finally { clearTimeout(timer); if (worker) await worker.terminate(); }
 }
 
-module.exports = { parseDocumentText, detectDuplicatePages, extractPhoto, imageMetadata, cachePath };
+function extractorInfo() {
+  return { provider: localOcr.available() ? 'rapidocr-local-v6' : 'tesseract-local', version: EXTRACTION_VERSION };
+}
+
+function isCurrentExtraction(page) {
+  const info = extractorInfo();
+  return page?.extractionVersion === info.version && page?.provider === info.provider;
+}
+
+async function extractPhoto(buffer, photoId) {
+  await imageMetadata(buffer);
+  if (!localOcr.available()) return { ...await extractTesseractPhoto(buffer, photoId), extractionVersion: EXTRACTION_VERSION };
+  const recognized = await localOcr.recognizePhoto(buffer);
+  const parsed = parseDocumentText(recognized.rawText, photoId);
+  // Local OCR remains a transcription aid. High character confidence does not
+  // establish product identity or verify quantities, supplier codes and costs.
+  return { photoId: String(photoId), ...parsed,
+    lines: parsed.lines.map(line => ({ ...line, requiresManualReview: true })),
+    warnings: [...new Set([...parsed.warnings, ...(recognized.warnings || []), 'Leitura local: confira todas as descrições, códigos, quantidades e valores. Mesmo números com aparência correta podem ter sido lidos incorretamente.'])],
+    confidence: recognized.confidence, rotation: recognized.rotation || 0,
+    provider: 'rapidocr-local-v6', extractionVersion: EXTRACTION_VERSION, reviewed: false };
+}
+
+module.exports = { parseDocumentText, detectDuplicatePages, extractPhoto, imageMetadata, cachePath, extractorInfo, isCurrentExtraction, EXTRACTION_VERSION };

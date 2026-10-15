@@ -91,6 +91,7 @@
       line.sourcePage = text(line.sourcePage); line.sourceItem = text(line.sourceItem);
       line.sourcePhotoId = text(line.sourcePhotoId); line.sourceText = text(line.sourceText);
       line.warnings = Array.isArray(sourceRow.warnings) ? sourceRow.warnings.map(text) : [];
+      line.requiresManualReview = row.requiresmanualreview === true || row.requiresmanualreview === 'true';
       line.receivedQuantity = 0; line.stockFactor = 1; line.conversionConfirmed = false; line.reviewed = false;
       return line;
     });
@@ -98,6 +99,80 @@
   }
   function fingerprint(line) {
     return [normalize(line.description), text(line.supplierCode).trim(), text(line.expectedQuantity), normalize(line.unit), text(line.unitCost)].join('|');
+  }
+  function prepareImportProposal(lines, existingLines = [], qualitySource = null) {
+    const prepared = Array.isArray(lines) && lines.length ? prepareImport(lines) : { lines: [], warnings: [] };
+    const needsReview = (quality) => ['unusable', 'review_required'].includes(quality?.status);
+    const pages = Array.isArray(qualitySource?.pages) ? qualitySource.pages : [];
+    const uncertainPages = pages.filter((page) => needsReview(page.quality));
+    const existing = new Set(existingLines.map(fingerprint)), seen = new Set();
+    const proposal = prepared.lines.map((line) => {
+      const sourcePage = line.sourcePhotoId ? pages.find((page) => text(page.photoId) === line.sourcePhotoId) :
+        line.sourcePage ? pages.find((page, index) => text(page.sourcePage || page.pageNumber || page.page || index + 1) === line.sourcePage) : null;
+      const requiresManualReview = line.requiresManualReview || needsReview(qualitySource?.quality) ||
+        (sourcePage ? needsReview(sourcePage.quality) : uncertainPages.length > 0);
+      const key = fingerprint(line), duplicate = existing.has(key) || seen.has(key); seen.add(key);
+      return { line: { ...line, requiresManualReview }, duplicate, requiresManualReview, selected: !duplicate && !requiresManualReview };
+    });
+    return {
+      proposal, warnings: prepared.warnings,
+      hasUnusablePages: qualitySource?.quality?.status === 'unusable' || pages.some((page) => page.quality?.status === 'unusable'),
+      needsManualReview: needsReview(qualitySource?.quality) || uncertainPages.length > 0 || proposal.some((row) => row.requiresManualReview),
+    };
+  }
+  function importSelectionState(proposal, reviewConfirmed) {
+    const selected = (proposal || []).filter((row) => row.selected);
+    const needsReview = selected.some((row) => row.requiresManualReview);
+    return { count: selected.length, needsReview, canApply: selected.length > 0 && (!needsReview || reviewConfirmed === true) };
+  }
+  const chatGptReceivingPrompt = `Transcreva os produtos das fotos deste romaneio para eu importar no meu sistema de recebimento. Responda somente com JSON válido, sem Markdown e sem texto antes ou depois.
+
+Regras:
+- Leia as fotos originais. Se houver duas fotos da mesma página, use apenas uma ocorrência dessa página; não duplique os produtos. Fotos de páginas diferentes são complementares.
+- Copie os nomes como aparecem. Não invente produtos, não complete nomes por semelhança e não tente identificar o cadastro da loja.
+- Preserve os códigos do fornecedor como texto, incluindo zeros à esquerda. Eles não são códigos de barras nem EAN.
+- Não deduza preços, quantidades ou códigos. Campo ausente ou ilegível deve ser null. Se nem a descrição puder ser lida, omita a linha e indique isso em warnings na raiz, citando a página/item quando possível.
+- Use números JSON para quantidade e valor unitário, com ponto decimal e sem separador de milhar. Preserve a unidade do documento. Uma embalagem C/30 não transforma automaticamente a quantidade em 30 unidades.
+- Não transforme totais, parcelas, boletos, peso ou volumes em produtos.
+- sourcePage e sourceItem são textos com a página e o item originais, ou null quando não estiverem legíveis.
+- Em warnings de cada linha, descreva dúvidas ou campos ilegíveis. Use requiresManualReview: true em todas as linhas. Não atribua produtos do catálogo nem quantidades recebidas.
+
+Formato obrigatório (o objeto abaixo descreve os campos, não é um produto para copiar):
+{
+  "lines": [
+    {
+      "description": "descrição lida na foto",
+      "supplierCode": null,
+      "expectedQuantity": null,
+      "unit": null,
+      "unitCost": null,
+      "sourcePage": null,
+      "sourceItem": null,
+      "warnings": [],
+      "requiresManualReview": true
+    }
+  ],
+  "warnings": []
+}
+
+Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use os valores explicativos do modelo como dados.`;
+  function parseChatGptResponse(source) {
+    let input = text(source);
+    if (new TextEncoder().encode(input).length > 5 * 1024 * 1024) throw new Error('A resposta excede 5 MB. Divida o documento em partes menores.');
+    input = input.trim().replace(/^\uFEFF/, '');
+    if (!input) throw new Error('Cole o JSON que recebeu na conversa antes de conferir as linhas.');
+    const fenced = input.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/i);
+    if (fenced) input = fenced[1].trim();
+    let parsed;
+    try { parsed = JSON.parse(input); }
+    catch (_) { throw new Error('Não foi possível ler o JSON. Cole a resposta completa, sem comentários antes ou depois.'); }
+    const prepared = prepareImport(JSON.stringify(parsed), 'json');
+    return { ...prepared, lines: prepared.lines.map((line) => ({ ...line, requiresManualReview: true })),
+      warnings: [...(Array.isArray(parsed.warnings) ? parsed.warnings.map(text) : []), ...prepared.warnings] };
+  }
+  function assertImportReceipt(receiptId, receipt) {
+    if (!receiptId || text(receipt?._id) !== text(receiptId)) throw new Error('O recebimento aberto mudou. Volte ao recebimento original e prepare a importação novamente.');
+    if (receipt.status !== 'draft') throw new Error('Este recebimento já foi encerrado. Abra um recebimento em conferência para importar linhas.');
   }
   function csvCell(value) {
     let cell = text(value);
@@ -136,7 +211,7 @@
     result.acknowledged = [...acknowledged];
     return result;
   }
-  const helpers = { parseCsv, prepareImport, fingerprint, csvCell, number, isPermanentReceivingFailure, transmitReceivingEvents };
+  const helpers = { parseCsv, prepareImport, prepareImportProposal, importSelectionState, parseChatGptResponse, assertImportReceipt, chatGptReceivingPrompt, fingerprint, csvCell, number, isPermanentReceivingFailure, transmitReceivingEvents };
   if (typeof module !== 'undefined' && module.exports) module.exports = helpers;
   if (typeof document === 'undefined') return;
   root.ReceivingImport = helpers;
@@ -152,6 +227,7 @@
     capabilities: null, proposal: null, refreshing: false, saving: false, sending: false, extracting: false,
     online: navigator.onLine, lastSync: null, noticeTimer: null, recovering: false, queue: [],
     extraction: null, extractionJobs: new Map(), reviewVersion: null, lastPhotoSync: 0,
+    importReceiptId: null, chatGptReceiptId: null,
   };
   function user() { try { return JSON.parse(localStorage.getItem('loggedInUser') || '{}'); } catch (_) { return {}; } }
   const token = () => user().token || '';
@@ -387,7 +463,7 @@
     $('scan-line').innerHTML = '<option value="">Identificar automaticamente</option>' + receipt.lines.map((line, index) => `<option value="${escape(line.id)}">${index + 1}. ${escape(line.description || line.productName || line.barcode || 'Sem descrição')}</option>`).join('');
     $('scan-line').value = selected;
     renderStats(); renderLines(); renderEvents(); renderConflicts(); updateSaveState();
-    ['add-line', 'scan-barcode', 'scan-quantity', 'scan-mode', 'scan-line', 'photo-upload', 'lines-import'].forEach((id) => { $(id).disabled = isClosed(); });
+    ['add-line', 'scan-barcode', 'scan-quantity', 'scan-mode', 'scan-line', 'photo-upload', 'lines-import', 'prepare-chatgpt'].forEach((id) => { $(id).disabled = isClosed(); });
     $('scan-form').querySelector('button').disabled = isClosed();
     renderOcrStatus();
   }
@@ -626,24 +702,56 @@
     await api(`/receipts/${encodeURIComponent(state.receipt._id)}/photos`, { method: 'POST', body, timeout: 90000 });
     await loadPhotos(); await refreshReceipt(); notify('Fotos anexadas ao recebimento.');
   }
-  function showImport(lines, warnings, title, extraction = null) {
-    const prepared = lines.length ? prepareImport(lines) : { lines: [], warnings: ['Nenhuma linha foi separada automaticamente. Confira o texto lido, corrija e prepare uma nova proposta, ou importe um CSV.'] };
-    const existing = new Set(state.receipt.lines.map(fingerprint)), seen = new Set();
-    state.proposal = prepared.lines.map((line) => { const key = fingerprint(line), duplicate = existing.has(key) || seen.has(key); seen.add(key); return { line, duplicate, selected: !duplicate }; });
+  function showImport(lines, warnings, title, extraction = null, qualitySource = extraction) {
+    assertImportReceipt(state.receipt?._id, state.receipt);
+    state.importReceiptId = text(state.receipt._id);
+    let prepared;
+    try { prepared = prepareImportProposal(lines, state.receipt.lines, qualitySource); }
+    catch (error) {
+      if (!extraction?.pages?.length) throw error;
+      prepared = { proposal: [], warnings: [error.message], hasUnusablePages: true, needsManualReview: true };
+    }
+    state.proposal = prepared.proposal;
     const notes = [...(warnings || []), ...prepared.warnings];
+    if (!state.proposal.length) notes.push('Nenhuma linha utilizável foi separada automaticamente. Confira a foto e corrija o texto abaixo, ou importe um arquivo CSV/JSON com os dados conferidos.');
     if (state.proposal.some((row) => row.duplicate)) notes.push('Há linhas idênticas às existentes ou repetidas nesta proposta. Elas começaram desmarcadas; confira as páginas antes de selecionar.');
-    $('import-title').textContent = title || 'Preparar linhas';
+    $('import-title').textContent = prepared.hasUnusablePages ? 'Leitura da foto insuficiente' : title || 'Conferir linhas';
+    $('import-quality-warning').hidden = !prepared.needsManualReview;
+    $('import-quality-warning').textContent = prepared.hasUnusablePages ?
+      'A leitura automática não conseguiu reconhecer esta foto com qualidade suficiente. O texto pode conter nomes, códigos e quantidades errados. As linhas incertas estão desmarcadas: corrija o texto ou confira cada dado com a foto antes de selecionar.' :
+      'A leitura contém dados incertos. As linhas que precisam de revisão estão desmarcadas. Confira os nomes, códigos, quantidades e valores com a foto antes de selecionar.';
+    $('confirm-import-review').checked = false;
+    const rawIndex = state.extraction?.pages === extraction?.pages ? Number($('ocr-raw-page').value) || 0 : 0;
     state.extraction = extraction;
     $('ocr-raw-section').hidden = !extraction?.pages?.length;
+    $('ocr-raw-section').open = prepared.needsManualReview || !state.proposal.length;
     if (extraction?.pages?.length) {
       $('ocr-raw-page').innerHTML = extraction.pages.map((page, index) => `<option value="${index}">Foto ${index + 1}${page.duplicateOf ? ' · possível repetição' : ''}</option>`).join('');
-      $('ocr-raw-text').value = extraction.pages[0].rawText || '';
+      $('ocr-raw-page').value = String(Math.min(rawIndex, extraction.pages.length - 1));
+      $('ocr-raw-text').value = extraction.pages[Number($('ocr-raw-page').value)].rawText || '';
+      updateOcrPhotoButton();
     }
     $('import-warnings').innerHTML = notes.map((warning) => `<p>${escape(typeof warning === 'object' ? warning.message || JSON.stringify(warning) : warning)}</p>`).join('');
-    $('import-preview').innerHTML = state.proposal.map(({ line, duplicate, selected }, index) => `<label class="rr-import-row"><input type="checkbox" data-import-index="${index}"${selected ? ' checked' : ''}><div><strong>${escape(line.description)}</strong><p>Cód. fornecedor: ${escape(line.supplierCode || '—')}${line.sourcePage ? ` · Pág. ${escape(line.sourcePage)}` : ''}${duplicate ? ' · POSSÍVEL REPETIÇÃO' : ''}</p></div><span>${fmt(line.expectedQuantity)} ${escape(line.unit)}</span><span>${line.unitCost == null ? '—' : money(line.unitCost)}</span></label>`).join('');
+    $('import-preview').innerHTML = state.proposal.map(({ line, duplicate, requiresManualReview, selected }, index) => `<label class="rr-import-row${requiresManualReview ? ' needs-review' : ''}"><input type="checkbox" data-import-index="${index}"${selected ? ' checked' : ''}><div><strong>${escape(line.description)}</strong><p>Cód. fornecedor: ${escape(line.supplierCode || '—')}${line.sourcePage ? ` · Pág. ${escape(line.sourcePage)}` : ''}${duplicate ? ' · POSSÍVEL REPETIÇÃO' : ''}${requiresManualReview ? ' · LEITURA INCERTA: CONFERIR COM A FOTO' : ''}</p></div><span>${fmt(line.expectedQuantity)} ${escape(line.unit)}</span><span>${line.unitCost == null ? '—' : money(line.unitCost)}</span></label>`).join('');
     updateImportCount(); showDialog('import-dialog');
   }
-  function updateImportCount() { const count = state.proposal?.filter((row) => row.selected).length || 0; $('import-count').textContent = `${count} linha(s) selecionada(s)`; $('apply-import').disabled = count === 0; }
+  function updateImportCount() {
+    const selection = importSelectionState(state.proposal, $('confirm-import-review').checked);
+    $('import-selection-controls').hidden = !state.proposal?.length;
+    $('import-count').textContent = `${selection.count} linha(s) selecionada(s)${selection.needsReview && !selection.canApply ? ' · confirme a conferência abaixo' : ''}`;
+    $('import-review-confirmation').hidden = !selection.needsReview;
+    $('apply-import').disabled = !selection.canApply;
+  }
+  function selectAllImportRows(selected) {
+    for (const row of state.proposal || []) row.selected = selected;
+    for (const checkbox of document.querySelectorAll('[data-import-index]')) checkbox.checked = selected;
+    $('confirm-import-review').checked = false;
+    updateImportCount();
+  }
+  function updateOcrPhotoButton() {
+    const photoId = state.extraction?.pages?.[Number($('ocr-raw-page').value)]?.photoId;
+    $('ocr-view-photo').disabled = !photoId || !state.photos.some((photo) => photo.id === photoId);
+  }
   async function extractPhotos() {
     const photoIds = [...document.querySelectorAll('[data-photo-check]:checked')].map((node) => node.dataset.photoCheck);
     if (!photoIds.length) throw new Error('Selecione pelo menos uma foto para preparar as linhas.');
@@ -682,22 +790,57 @@
     } finally { state.extractionJobs.delete(receiptId); state.extracting = false; renderOcrStatus(); }
   }
   async function reparseOcrText() {
+    const receiptId = state.importReceiptId;
+    assertImportReceipt(receiptId, state.receipt);
     const index = Number($('ocr-raw-page').value), page = state.extraction?.pages?.[index];
     if (!page) return;
     page.rawText = $('ocr-raw-text').value;
-    const result = await api(`/receipts/${encodeURIComponent(state.receipt._id)}/parse-text`, { method: 'POST', body: { text: page.rawText, photoId: page.photoId || undefined } });
+    const result = await api(`/receipts/${encodeURIComponent(receiptId)}/parse-text`, { method: 'POST', body: { text: page.rawText, photoId: page.photoId || undefined } });
+    assertImportReceipt(receiptId, state.receipt);
     const extraction = { ...state.extraction, lines: result.extraction?.lines || [] };
-    showImport(extraction.lines, result.extraction?.warnings || [], 'Linhas do texto corrigido · foto selecionada', extraction);
+    // The corrected text is a new proposal. Do not inherit the original photo's failed OCR quality.
+    showImport(extraction.lines, result.extraction?.warnings || [], 'Linhas do texto corrigido · foto selecionada', extraction, result.extraction || {});
   }
   function addLine(source = {}) {
     const line = { id: uuid(), description: '', supplierCode: '', expectedQuantity: null, receivedQuantity: 0, unit: 'UN', unitCost: null, productName: '', barcode: '', stockFactor: 1, conversionConfirmed: false, reviewed: false, ...source };
     state.receipt.lines.push(line); state.dirty.set(line.id, new Set(Object.keys(line))); return line;
   }
   async function applyImport() {
+    assertImportReceipt(state.importReceiptId, state.receipt);
     const selected = state.proposal?.filter((row) => row.selected) || []; if (!selected.length) return;
+    if (!importSelectionState(state.proposal, $('confirm-import-review').checked).canApply) throw new Error('Confira os dados das linhas selecionadas com a foto e marque a confirmação antes de adicionar.');
     if (selected.some((row) => row.duplicate) && !confirm('Você selecionou linhas possivelmente repetidas. Confirma que representam mercadorias adicionais, e não outra foto da mesma página?')) return;
     selected.forEach(({ line }) => addLine(clone(line))); persistDraft(); renderDetail(); $('import-dialog').close();
     await saveReceipt(); notify(`${selected.length} linha(s) adicionada(s). Confira os vínculos e as embalagens antes de concluir.`);
+  }
+  function openChatGptImport() {
+    assertImportReceipt(state.receipt?._id, state.receipt);
+    if (state.chatGptReceiptId !== text(state.receipt._id)) $('chatgpt-response').value = '';
+    state.chatGptReceiptId = text(state.receipt._id);
+    $('chatgpt-receipt-reference').textContent = `Recebimento: ${state.receipt.reference || 'Sem referência'}`;
+    $('chatgpt-prompt').value = chatGptReceivingPrompt;
+    $('chatgpt-copy-status').textContent = '';
+    $('chatgpt-import-error').textContent = '';
+    showDialog('chatgpt-dialog');
+  }
+  async function copyChatGptPrompt() {
+    try {
+      await navigator.clipboard.writeText(chatGptReceivingPrompt);
+      $('chatgpt-copy-status').textContent = 'Pedido copiado. Cole na conversa junto das fotos.';
+    } catch (_) {
+      $('chatgpt-prompt-details').open = true;
+      $('chatgpt-prompt').focus(); $('chatgpt-prompt').select();
+      $('chatgpt-copy-status').textContent = 'O navegador não permitiu copiar automaticamente. Copie o texto selecionado e cole na conversa.';
+    }
+  }
+  function importChatGptResponse() {
+    $('chatgpt-import-error').textContent = '';
+    try {
+      assertImportReceipt(state.chatGptReceiptId, state.receipt);
+      const prepared = parseChatGptResponse($('chatgpt-response').value);
+      showImport(prepared.lines, prepared.warnings, 'Linhas da conversa · confira com o documento');
+      $('chatgpt-dialog').close();
+    } catch (error) { $('chatgpt-import-error').textContent = error.message; }
   }
   function download(name, content, type) {
     const url = URL.createObjectURL(new Blob([content], { type })); const anchor = document.createElement('a'); anchor.href = url; anchor.download = name; document.body.appendChild(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1500);
@@ -805,11 +948,24 @@
     $('photo-rotate').addEventListener('click', () => { state.photoRotation = (state.photoRotation + 90) % 360; if ($('current-photo')) $('current-photo').style.transform = `rotate(${state.photoRotation}deg)`; });
     $('photo-open').addEventListener('click', () => { if (state.photoUrl) { $('photo-large').src = state.photoUrl; showDialog('photo-dialog'); } });
     $('extract-photos').addEventListener('click', (event) => action(event.currentTarget, extractPhotos));
+    $('prepare-chatgpt').addEventListener('click', () => action(null, openChatGptImport));
+    $('chatgpt-copy-prompt').addEventListener('click', (event) => action(event.currentTarget, copyChatGptPrompt));
+    $('chatgpt-preview-response').addEventListener('click', importChatGptResponse);
+    $('chatgpt-response').addEventListener('input', () => { $('chatgpt-import-error').textContent = ''; });
     $('lines-import').addEventListener('change', (event) => { const file = event.target.files[0]; action(null, async () => { if (!file) return; if (file.size > 5 * 1024 * 1024) throw new Error('O arquivo de linhas excede 5 MB.'); const prepared = prepareImport(await file.text(), file.name.toLowerCase().endsWith('.json') ? 'json' : 'csv'); showImport(prepared.lines, prepared.warnings, 'Linhas do arquivo ' + file.name); }).finally(() => { event.target.value = ''; }); });
-    $('import-preview').addEventListener('change', (event) => { if (event.target.dataset.importIndex !== undefined) { state.proposal[Number(event.target.dataset.importIndex)].selected = event.target.checked; updateImportCount(); } });
+    $('import-preview').addEventListener('change', (event) => { if (event.target.dataset.importIndex !== undefined) { state.proposal[Number(event.target.dataset.importIndex)].selected = event.target.checked; $('confirm-import-review').checked = false; updateImportCount(); } });
+    $('confirm-import-review').addEventListener('change', updateImportCount);
+    $('select-all-import').addEventListener('click', () => selectAllImportRows(true));
+    $('clear-import-selection').addEventListener('click', () => selectAllImportRows(false));
     $('apply-import').addEventListener('click', (event) => action(event.currentTarget, applyImport));
-    $('ocr-raw-page').addEventListener('change', () => { $('ocr-raw-text').value = state.extraction?.pages?.[Number($('ocr-raw-page').value)]?.rawText || ''; });
-    $('ocr-raw-text').addEventListener('input', () => { const page = state.extraction?.pages?.[Number($('ocr-raw-page').value)]; if (page) page.rawText = $('ocr-raw-text').value; });
+    $('ocr-raw-page').addEventListener('change', () => { $('ocr-raw-text').value = state.extraction?.pages?.[Number($('ocr-raw-page').value)]?.rawText || ''; updateOcrPhotoButton(); });
+    $('ocr-raw-text').addEventListener('input', () => { const page = state.extraction?.pages?.[Number($('ocr-raw-page').value)]; if (page) page.rawText = $('ocr-raw-text').value; $('confirm-import-review').checked = false; updateImportCount(); });
+    $('ocr-view-photo').addEventListener('click', () => action($('ocr-view-photo'), async () => {
+      const photoId = state.extraction?.pages?.[Number($('ocr-raw-page').value)]?.photoId;
+      if (!photoId) return;
+      await selectPhoto(photoId);
+      if (state.photoUrl) { $('photo-large').src = state.photoUrl; showDialog('photo-dialog'); }
+    }));
     $('reparse-ocr-text').addEventListener('click', (event) => action(event.currentTarget, reparseOcrText));
     $('download-ocr-text').addEventListener('click', () => download('texto-romaneio.txt', $('ocr-raw-text').value, 'text/plain;charset=utf-8'));
     $('download-template').addEventListener('click', () => download('modelo-romaneio.csv', '\uFEFFdescricao;codigoFornecedor;quantidadeEsperada;unidade;custoUnitario;codigoDeBarras;pagina;item\r\n', 'text/csv;charset=utf-8'));

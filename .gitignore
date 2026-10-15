@@ -33,3 +33,5 @@ _tmp_*.js
 servidor/tmp_*.js
 servidor/tmp_*.js.bak
 tmp_node_exchange/
+
+servidor/.receiving-ocr-local/

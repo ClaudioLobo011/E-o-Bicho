@@ -30,6 +30,14 @@ Na proposta, confira descrições, códigos do fornecedor, quantidades, unidades
 
 Impressão fraca, foto inclinada, dobras e trechos cortados podem impedir a leitura correta. Use **Conferir e corrigir o texto lido**, selecione a foto, corrija o texto e clique em **Preparar linhas do texto corrigido**. Também é possível adicionar uma linha manualmente.
 
+Resultados de baixa qualidade são identificados como leitura insuficiente. A prévia abre mesmo sem produtos reconhecidos, preservando o texto bruto e o acesso à foto. Linhas incertas começam desmarcadas e só podem ser adicionadas após seleção e confirmação explícita da conferência. O reconhecimento local não comprova códigos, valores ou produtos, mesmo quando apresenta confiança alta.
+
+### Usar a conversa do ChatGPT sem API paga
+
+Em **Preparar com o ChatGPT**, copie o pedido pronto e envie-o junto das fotos na conversa que você já utiliza. Cole a resposta JSON no campo da tela e clique para conferir as linhas. Também é possível importar o arquivo JSON recebido. Essa opção é manual: não conecta sua conta, não lê suas conversas, não envia fotos automaticamente e não chama uma API paga. O uso da conversa continua sujeito aos limites do seu plano.
+
+O pedido orienta deixar campos ilegíveis em branco e separar códigos do fornecedor dos códigos de barras. A importação mantém recebimento, conversão e revisão pendentes; a bipagem e a conferência continuam necessárias.
+
 Como alternativa, importe CSV ou JSON. O botão **Baixar modelo de CSV** fornece os cabeçalhos:
 
 ```text
@@ -76,6 +84,12 @@ Na aprovação real há duas opções, inicialmente desmarcadas:
 - **Lembrar códigos bipados:** guarda uma associação própria dos recebimentos. Não troca o código principal nem modifica os códigos do catálogo ou do PDV.
 
 O recebimento pode ser exportado em JSON ou CSV para conferência. As fotos originais permanecem anexadas.
+
+## Motor de reconhecimento local
+
+O servidor pode usar RapidOCR/PP-OCRv6 com modelos instalados localmente, sem serviço de IA pago. A instalação usa Python 3.10 em `servidor/.receiving-ocr-local`, o arquivo `servidor/scripts/requirements-receiving-ocr.txt` e o comando `servidor/scripts/receiving-ocr.py --prepare`. O arquivo `ready.json` só deve ser criado após a preparação e a verificação dos modelos. A implementação usa processos com janela oculta e limita tempo, saída e paralelismo. Imagens temporárias são removidas ao terminar.
+
+Sem esse runtime pronto, permanece disponível o Tesseract local anterior. A versão do motor é registrada na extração. Ao solicitar nova leitura, resultados de uma versão anterior são reprocessados; a consulta dos resultados antigos também aplica os avisos de qualidade atuais. Nenhum desses motores dispensa revisão.
 
 ## Verificação no aparelho
 

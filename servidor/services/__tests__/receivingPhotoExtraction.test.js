@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseDocumentText, detectDuplicatePages, imageMetadata } = require('../receivingPhotoExtraction');
+const { parseDocumentText, detectDuplicatePages, imageMetadata, extractorInfo, isCurrentExtraction } = require('../receivingPhotoExtraction');
 
 test('OCR preserves package unit, supplier reference and leading zeros without claiming catalog identity', () => {
   const result = parseDocumentText('PAG: 001\nORCAMENTO: 849.919\n54 1 CX RATOEIRA ADESIVA COLA RATO C/50 091449 114,9900 114,99 S\n1 120 UN TAPETE HIG 60X60CM C/30 CLUB PET 86014 36,9900 4.438,80 S', 'photo');
@@ -28,4 +28,22 @@ test('duplicate pages are excluded from default proposal, but evidence stays ava
 });
 test('invalid upload bytes are rejected by actual image decoder', async () => {
   await assert.rejects(() => imageMetadata(Buffer.from('<svg>not a photo</svg>')));
+});
+
+test('old OCR caches are invalidated when the installed provider or extraction version changes', () => {
+  const info = extractorInfo();
+  assert.equal(isCurrentExtraction({ provider: info.provider, extractionVersion: info.version }), true);
+  assert.equal(isCurrentExtraction({ provider: info.provider }), false);
+  assert.equal(isCurrentExtraction({ provider: 'other-engine', extractionVersion: info.version }), false);
+});
+
+test('two noisy photos can be flagged as a possible duplicate using multiple shared references', () => {
+  const common = ['VERMELHO', 'AMARELO', 'AZULADO', 'VERDINHO', 'BRANQUINHO', 'PRETINHO'];
+  const first = Array.from({ length: 24 }, (_, index) => ({ supplierCode: `0${10000 + index}`, description: `${common[index % common.length]} MODELO${index} PRIMEIRO${index}` }));
+  const second = first.map((line, index) => ({ supplierCode: index < 5 ? line.supplierCode : '', description: `${common[index % common.length]} MODELO${index} SEGUNDO${index}` }));
+  const pages = detectDuplicatePages([{ photoId: 'a', lines: first, warnings: [] }, { photoId: 'b', lines: second, warnings: [] }]);
+  assert.equal(pages[1].selected, false);
+  assert.equal(pages[1].duplicateOf, 'a');
+  const distinct = detectDuplicatePages([{ photoId: 'a', reference: 'ORDER1', lines: first, warnings: [] }, { photoId: 'b', reference: 'ORDER2', lines: second, warnings: [] }]);
+  assert.equal(distinct[1].selected, true);
 });

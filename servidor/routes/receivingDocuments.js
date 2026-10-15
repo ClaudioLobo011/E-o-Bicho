@@ -4,7 +4,8 @@ const crypto = require('crypto');
 const mongoose = require('mongoose');
 const Photo = require('../models/ReceivingPhoto');
 const Extraction = require('../models/ReceivingExtraction');
-const { extractPhoto, detectDuplicatePages, imageMetadata, parseDocumentText } = require('../services/receivingPhotoExtraction');
+const { extractPhoto, detectDuplicatePages, imageMetadata, parseDocumentText, extractorInfo, isCurrentExtraction } = require('../services/receivingPhotoExtraction');
+const { withPageQuality, withExtractionQuality } = require('../services/receivingOcrQuality');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024, files: 8, fields: 2 } });
 const asyncRoute = handler => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
@@ -31,7 +32,7 @@ function createRouter({ authenticateReceiving, findReceipt, PhotoModel = Photo, 
     if (req.receivingReceipt.status !== 'draft') return res.status(409).json({ message: 'Recebimento encerrado. As fotos existentes continuam disponíveis.' });
     next();
   };
-  router.get('/capabilities', authenticateReceiving, (_req, res) => res.json({ photoImport: { available: true, provider: 'tesseract-local', requiresReview: true, maxPhotos: 8, maxPhotoBytes: 8 * 1024 * 1024 } }));
+  router.get('/capabilities', authenticateReceiving, (_req, res) => res.json({ photoImport: { available: true, ...extractorInfo(), requiresReview: true, maxPhotos: 8, maxPhotoBytes: 8 * 1024 * 1024 } }));
   router.post('/receipts/:id/parse-text', authenticateReceiving, access, editable, asyncRoute(async (req, res) => {
     if (typeof req.body?.text !== 'string' || req.body.text.length > 120000) return res.status(400).json({ message: 'Informe um texto com até 120 mil caracteres.' });
     const photoId = req.body.photoId || '';
@@ -79,13 +80,14 @@ function createRouter({ authenticateReceiving, findReceipt, PhotoModel = Photo, 
         for (const id of ids) {
           const photo = await PhotoModel.findById(id).select('+data').lean();
           if (!photo) throw new Error('Foto indisponível durante a leitura.');
-          const page = photo.extraction || await extractor(imageBytes(photo.data), id);
-          if (!photo.extraction) await PhotoModel.updateOne({ _id: id }, { $set: { extraction: page } });
-          pages.push(page);
+          const cached = photo.extraction && (extractor !== extractPhoto || isCurrentExtraction(photo.extraction));
+          const page = cached ? photo.extraction : await extractor(imageBytes(photo.data), id);
+          if (!cached) await PhotoModel.updateOne({ _id: id }, { $set: { extraction: page } });
+          pages.push(withPageQuality(page));
         }
         const checkedPages = detectDuplicatePages(pages);
-        const extraction = { pages: checkedPages, lines: checkedPages.filter(page => page.selected).flatMap(page => page.lines),
-          warnings: ['Confira se todas as páginas e linhas do documento foram fotografadas. Fotos repetidas não devem ser importadas duas vezes.', ...new Set(checkedPages.flatMap(page => page.warnings))] };
+        const extraction = withExtractionQuality({ pages: checkedPages, lines: checkedPages.filter(page => page.selected).flatMap(page => page.lines),
+          warnings: ['Confira se todas as páginas e linhas do documento foram fotografadas. Fotos repetidas não devem ser importadas duas vezes.', ...new Set(checkedPages.flatMap(page => page.warnings))] });
         await ExtractionModel.updateOne({ _id: job._id }, { $set: { status: 'completed', extraction } });
       } catch (error) {
         await ExtractionModel.updateOne({ _id: job._id }, { $set: { status: 'failed', message: error.status === 422 ? error.message : 'Não foi possível ler a foto. Tente novamente ou importe uma lista revisada.' } }).catch(() => {});
@@ -101,7 +103,7 @@ function createRouter({ authenticateReceiving, findReceipt, PhotoModel = Photo, 
       await ExtractionModel.updateOne({ _id: job._id, status: 'processing' }, { $set: { status: 'failed', message: 'Leitura interrompida. Solicite a leitura novamente.' } });
       job = await ExtractionModel.findById(job._id).lean();
     }
-    res.json({ jobId: String(job._id), status: job.status, extraction: job.extraction, message: job.message });
+    res.json({ jobId: String(job._id), status: job.status, extraction: withExtractionQuality(job.extraction), message: job.message });
   }));
   router.use((error, _req, res, _next) => {
     const status = error instanceof multer.MulterError ? 400 : (error.status || error.statusCode || 500);

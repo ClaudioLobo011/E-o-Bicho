@@ -184,4 +184,20 @@ describe('receiving document persistence and access', { concurrency: false }, ()
     assert.match(response.body.message, /foto.*inválida/i);
     assert.equal(await Photo.countDocuments(), 0);
   });
+
+  test('legacy completed OCR jobs surface unusable quality without modifying saved evidence', async () => {
+    const photo = (await upload(fixture.receipt._id).expect(201)).body.photos[0];
+    const parsed = parseDocumentText(sampleText, photo.id);
+    const extraction = { pages: [{ photoId: photo.id, ...parsed, confidence: 28, provider: 'tesseract-local', selected: true }], lines: parsed.lines, warnings: [] };
+    const job = await Extraction.create({ receiptId: fixture.receipt._id, photoIds: [photo.id], status: 'completed', extraction });
+    const result = await api('get', `/receipts/${fixture.receipt._id}/extractions/${job._id}`).expect(200);
+    assert.equal(result.body.status, 'completed');
+    assert.equal(result.body.extraction.quality.status, 'unusable');
+    assert.equal(result.body.extraction.lines[0].requiresManualReview, true);
+    assert.equal(result.body.extraction.pages[0].rawText, parsed.rawText);
+    assert.equal((await Extraction.findById(job._id).lean()).extraction.quality, undefined);
+    const corrected = await api('post', `/receipts/${fixture.receipt._id}/parse-text`).send({ photoId: photo.id, text: sampleText }).expect(200);
+    assert.equal(corrected.body.extraction.lines[0].requiresManualReview, undefined);
+    assert.equal((await Receipt.findById(fixture.receipt._id).lean()).lines.length, 0);
+  });
 });

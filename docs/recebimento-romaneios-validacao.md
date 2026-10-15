@@ -38,3 +38,15 @@ node --test servidor/routes/__tests__/receiving.test.js servidor/routes/__tests_
 ```
 
 O arquivo `stockCounter.test.js` pertence à integração local anterior e pode não existir em clones que não incluam essa integração. Os testes novos são os três arquivos `receiving*` acima.
+
+## Atualização da leitura de fotos e uso da conversa — 15/10/2026
+
+- Nenhuma API paga foi utilizada ou configurada. A opção **Preparar com o ChatGPT** copia um pedido e recebe JSON colado pelo usuário; não conecta nem automatiza sua conta.
+- RapidOCR 3.10.0/PP-OCRv6 instalado localmente, com três modelos preparados e verificados. Reconhecimento limitado a dois threads de CPU; downloads de modelos desativados durante as solicitações.
+- As fotos completas, sem recorte específico do fornecedor, produziram 40 linhas candidatas na primeira página mais nítida e 10 na continuação. A rotação de 270° da continuação foi identificada automaticamente. A foto alternativa da primeira página produziu 36 linhas.
+- O adapter de produção Node → Python → parser foi verificado nas fotos: 21,9 s e 13,8 s. Todas as linhas exigem revisão; códigos, descrições, quantidades e valores ainda podem estar incorretos. Contagem de linhas não mede precisão da transcrição.
+- Novas solicitações reprocessam caches de motores antigos. Consultas aos trabalhos antigos passam a informar qualidade insuficiente quando aplicável, preservando a evidência armazenada.
+- Resultados vazios ou corrompidos abrem a prévia com texto bruto e foto. Linhas incertas começam desmarcadas e exigem confirmação explícita antes de adicionar.
+- 46 testes Node passaram (documentos, qualidade, cache, duplicidade, importação e fila). Quatro testes Python de agrupamento geométrico passaram.
+- No Chrome isolado, passaram os fluxos de texto ilegível, resultado vazio, correção real pelo endpoint, colagem de JSON, cópia do pedido, seleção geral, confirmação e persistência de linhas com quantidade recebida zero. Sem erro JavaScript.
+- Rascunho visual separado: 54 produtos visíveis, sem duplicar a primeira página; 30 linhas com dúvidas explícitas. O documento não foi aprovado e nenhum estoque comercial foi movimentado.
