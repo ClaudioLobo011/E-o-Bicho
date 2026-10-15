@@ -1,6 +1,16 @@
 const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
+const kitComponentSchema = new Schema({
+  id: { type: String, required: true },
+  label: { type: String, default: '' },
+  quantityPerKit: { type: Number, required: true },
+  productId: { type: Schema.Types.ObjectId, ref: 'Product', default: null },
+  productName: { type: String, default: '' },
+  barcode: { type: String, default: '' },
+}, { _id: false });
+const kitSchema = new Schema({ components: { type: [kitComponentSchema], default: [] } }, { _id: false });
+
 const lineSchema = new Schema({
   id: { type: String, required: true },
   description: { type: String, default: '' },
@@ -19,6 +29,7 @@ const lineSchema = new Schema({
   sourceText: { type: String, default: '' },
   sourcePage: { type: String, default: '' },
   warnings: { type: [String], default: [] },
+  kit: { type: kitSchema, default: null },
 }, { _id: false });
 
 const eventSchema = new Schema({
@@ -26,7 +37,8 @@ const eventSchema = new Schema({
   payloadHash: { type: String, required: true },
   barcode: { type: String, default: '' },
   quantity: { type: Number, default: 0 },
-  mode: { type: String, enum: ['count', 'identify', 'undo', 'adjust'], required: true },
+  mode: { type: String, enum: ['count', 'identify', 'kit_count', 'undo', 'adjust'], required: true },
+  componentId: { type: String, default: '' },
   lineId: { type: String, default: '' },
   requestedLineId: { type: String, default: '' },
   createdAt: { type: Date, required: true },

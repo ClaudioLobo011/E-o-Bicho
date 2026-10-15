@@ -74,7 +74,7 @@ router.get('/meta', wrap(async (req, res) => {
     Supplier.find({ 'flags.inactive': { $ne: true }, ...(companyIds ? { $or: [{ companies: { $in: companyIds } }, { companies: { $size: 0 } }, { companies: { $exists: false } }] } : {}) })
       .select('_id code legalName fantasyName cnpj companies').sort({ legalName: 1 }).limit(20000).lean(),
   ]);
-  res.json({ companies, deposits, suppliers, canApproveStock: service.canApproveStock(req), limits: { maxLines: service.MAX_LINES, maxEvents: service.MAX_EVENTS, maxBatch: 200 } });
+  res.json({ companies, deposits, suppliers, canApproveStock: service.canApproveStock(req), capabilities: { kit: true }, limits: { maxLines: service.MAX_LINES, maxEvents: service.MAX_EVENTS, maxBatch: 200, maxKitComponents: 50 } });
 }));
 router.get('/catalog', wrap(async (req, res) => {
   const products = await Product.find({}).select(service.productFields).sort({ _id: 1 }).limit(200001).lean();

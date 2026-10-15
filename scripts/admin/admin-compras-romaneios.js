@@ -7,6 +7,7 @@
   const escape = (value) => text(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
   const idOf = (value) => text(value && typeof value === 'object' ? value._id || value.id : value);
   const same = (a, b) => JSON.stringify(a == null ? null : a) === JSON.stringify(b == null ? null : b);
+  const uuid = () => crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = crypto.getRandomValues(new Uint8Array(1))[0] % 16; return (c === 'x' ? r : ((r & 3) | 8)).toString(16); });
   const number = (value) => {
     if (value === '' || value == null) return null;
     if (typeof value === 'number') return Number.isFinite(value) ? value : NaN;
@@ -47,6 +48,62 @@
       if (values.length !== headers.length) throw new Error(`A linha ${index + 2} tem ${values.length} colunas; eram esperadas ${headers.length}.`);
       return Object.fromEntries(headers.map((header, column) => [header, values[column]]));
     });
+  }
+  const isKit = (line) => !!line?.kit && Array.isArray(line.kit.components);
+  function prepareKit(components) {
+    if (!Array.isArray(components) || !components.length || components.length > 50) throw new Error('O kit precisa de 1 a 50 componentes.');
+    const ids = new Set(), barcodes = new Set();
+    return { components: components.map((source, index) => {
+      const id = text(source.id || uuid()), label = text(source.label).trim(), quantityPerKit = number(source.quantityPerKit);
+      if (ids.has(id)) throw new Error('Há componentes repetidos no kit.');
+      ids.add(id);
+      if (!label || label.length > 80) throw new Error(`Informe um nome de até 80 caracteres para a peça ${index + 1}.`);
+      if (!Number.isSafeInteger(quantityPerKit) || quantityPerKit <= 0) throw new Error(`Informe uma quantidade inteira maior que zero para ${label}.`);
+      if (typeof source.barcode === 'number') throw new Error(`O código de barras de ${label} precisa ser texto para preservar zeros à esquerda.`);
+      const barcode = text(source.barcode).trim();
+      if (barcode && (barcodes.has(barcode) || /[\u0000-\u001f\u007f]/.test(barcode))) throw new Error('Cada tipo de peça precisa de um código diferente. Para 3 P iguais, use uma peça P com quantidade 3.');
+      if (barcode) barcodes.add(barcode);
+      return { id, label, quantityPerKit, productId: source.productId || null, productName: text(source.productName), barcode: text(source.barcode).trim() };
+    }) };
+  }
+  const kitPieces = (line) => (line.kit?.components || []).reduce((sum, component) => sum + Number(component.quantityPerKit || 0), 0);
+  const kitFormula = (line) => (line.kit?.components || []).map((component) => `${component.quantityPerKit} ${component.label}`).join(' + ');
+  function kitIssues(line) {
+    if (!isKit(line)) return [];
+    const issues = [];
+    try { prepareKit(line.kit.components); } catch (error) { issues.push(error.message); }
+    if (line.kit.components.some((component) => !component.productId)) issues.push('Peças sem cadastro vinculado');
+    if (line.kit.components.some((component) => !component.barcode)) issues.push('Peças sem código de barras');
+    if (!Number.isSafeInteger(Number(line.receivedQuantity)) || Number(line.receivedQuantity) < 0) issues.push('Quantidade de kits deve ser inteira');
+    return issues;
+  }
+  function stockProjection(line) {
+    if (!isKit(line)) return [{ productId: line.productId, productName: line.productName, quantity: Number(line.receivedQuantity || 0) * Number(line.stockFactor || 0) }];
+    const products = new Map();
+    for (const component of line.kit.components) {
+      const key = component.productId || component.id, quantity = Number(line.receivedQuantity || 0) * Number(component.quantityPerKit || 0);
+      const existing = products.get(key);
+      if (existing) existing.quantity += quantity;
+      else products.set(key, { productId: component.productId, productName: component.productName || component.label, quantity });
+    }
+    return [...products.values()];
+  }
+  function prepareScan({ barcode, quantity, mode, lineId, componentId }, line) {
+    barcode = text(barcode).trim(); quantity = number(quantity);
+    if (quantity == null || !Number.isFinite(quantity) || quantity <= 0) throw new Error('Informe uma quantidade maior que zero.');
+    if (mode === 'kit_count') {
+      if (!lineId || !isKit(line)) throw new Error('Selecione um kit configurado para contar kits completos.');
+      if (!Number.isSafeInteger(quantity)) throw new Error('A quantidade de kits completos deve ser inteira.');
+      return { quantity, mode, lineId };
+    }
+    if (!barcode) throw new Error('Informe o código de barras.');
+    if (mode === 'identify' && !lineId) throw new Error('Selecione a linha do documento para identificar pelo código.');
+    if (isKit(line)) {
+      if (mode !== 'identify') throw new Error('Para este kit, identifique cada peça ou use “Contar kits completos”.');
+      if (!line.kit.components.some((component) => component.id === componentId)) throw new Error('Selecione a peça do kit que será identificada.');
+      return { barcode, quantity, mode, lineId, componentId };
+    }
+    return { barcode, quantity, mode, ...(lineId ? { lineId } : {}) };
   }
   const aliases = {
     description: ['description', 'descricao', 'produto', 'nome', 'descricaooriginal'],
@@ -93,6 +150,7 @@
       line.warnings = Array.isArray(sourceRow.warnings) ? sourceRow.warnings.map(text) : [];
       line.requiresManualReview = row.requiresmanualreview === true || row.requiresmanualreview === 'true';
       line.receivedQuantity = 0; line.stockFactor = 1; line.conversionConfirmed = false; line.reviewed = false;
+      if (sourceRow.kit) { const kit = typeof sourceRow.kit === 'string' ? JSON.parse(sourceRow.kit) : sourceRow.kit; line.kit = prepareKit(kit.components); }
       return line;
     });
     return { lines, warnings };
@@ -211,7 +269,7 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
     result.acknowledged = [...acknowledged];
     return result;
   }
-  const helpers = { parseCsv, prepareImport, prepareImportProposal, importSelectionState, parseChatGptResponse, assertImportReceipt, chatGptReceivingPrompt, fingerprint, csvCell, number, isPermanentReceivingFailure, transmitReceivingEvents };
+  const helpers = { parseCsv, prepareImport, prepareImportProposal, importSelectionState, parseChatGptResponse, assertImportReceipt, chatGptReceivingPrompt, fingerprint, csvCell, number, isPermanentReceivingFailure, transmitReceivingEvents, isKit, prepareKit, kitPieces, kitFormula, kitIssues, stockProjection, prepareScan };
   if (typeof module !== 'undefined' && module.exports) module.exports = helpers;
   if (typeof document === 'undefined') return;
   root.ReceivingImport = helpers;
@@ -227,7 +285,7 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
     capabilities: null, proposal: null, refreshing: false, saving: false, sending: false, extracting: false,
     online: navigator.onLine, lastSync: null, noticeTimer: null, recovering: false, queue: [],
     extraction: null, extractionJobs: new Map(), reviewVersion: null, lastPhotoSync: 0,
-    importReceiptId: null, chatGptReceiptId: null,
+    importReceiptId: null, chatGptReceiptId: null, kitEditor: null, productComponentId: null,
   };
   function user() { try { return JSON.parse(localStorage.getItem('loggedInUser') || '{}'); } catch (_) { return {}; } }
   const token = () => user().token || '';
@@ -238,7 +296,6 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
     return subject ? text(subject) : null;
   }
   const storagePrefix = accountKey() ? `receiving:${accountKey()}:` : null;
-  const uuid = () => crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = crypto.getRandomValues(new Uint8Array(1))[0] % 16; return (c === 'x' ? r : ((r & 3) | 8)).toString(16); });
   const fmt = (value) => value == null || value === '' ? '—' : Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 4 });
   const money = (value) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   const date = (value) => value ? new Date(value).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' }) : '—';
@@ -336,7 +393,7 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
     if (!state.dirty.has(id)) state.dirty.set(id, new Set());
     state.dirty.get(id).add(field);
     if (!['reviewed', 'conversionConfirmed'].includes(field)) { line.reviewed = false; state.dirty.get(id).add('reviewed'); }
-    if (['unit', 'stockFactor', 'productId'].includes(field)) { line.conversionConfirmed = false; state.dirty.get(id).add('conversionConfirmed'); }
+    if (['unit', 'stockFactor', 'productId', 'kit'].includes(field)) { line.conversionConfirmed = false; state.dirty.get(id).add('conversionConfirmed'); }
     state.conflicts.delete(`${id}:${field}`); persistDraft(); renderStats(); updateSaveState();
   }
   function markHeader(field, value) {
@@ -420,8 +477,9 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
   }
   function lineIssues(line) {
     const issues = [];
-    if (!line.productId) issues.push('Sem produto');
-    if (!line.conversionConfirmed) issues.push('Conversão');
+    if (isKit(line)) issues.push(...kitIssues(line));
+    else if (!line.productId) issues.push('Sem produto');
+    if (!line.conversionConfirmed) issues.push(isKit(line) ? 'Composição' : 'Conversão');
     if (!line.reviewed) issues.push('Revisão');
     if (line.stockFactor == null || !Number.isFinite(Number(line.stockFactor)) || Number(line.stockFactor) <= 0) issues.push('Fator inválido');
     if (line.receivedQuantity == null || !Number.isFinite(Number(line.receivedQuantity)) || Number(line.receivedQuantity) < 0) issues.push('Quantidade inválida');
@@ -434,7 +492,7 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
     const lines = state.receipt.lines || [];
     const stats = [
       ['fa-list-check', lines.length, 'Linhas no recebimento'],
-      ['fa-box-open', lines.filter((line) => !!line.productId).length, 'Produtos identificados'],
+      ['fa-box-open', lines.filter((line) => isKit(line) ? line.kit.components.every((part) => part.productId) : !!line.productId).length, 'Linhas identificadas'],
       ['fa-triangle-exclamation', lines.filter((line) => lineIssues(line).length).length, 'Linhas com pendências'],
       ['fa-arrows-left-right', lines.filter(hasDifference).length, 'Faltas ou sobras'],
     ];
@@ -462,9 +520,11 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
     const selected = $('scan-line').value;
     $('scan-line').innerHTML = '<option value="">Identificar automaticamente</option>' + receipt.lines.map((line, index) => `<option value="${escape(line.id)}">${index + 1}. ${escape(line.description || line.productName || line.barcode || 'Sem descrição')}</option>`).join('');
     $('scan-line').value = selected;
+    renderScanOptions();
     renderStats(); renderLines(); renderEvents(); renderConflicts(); updateSaveState();
     ['add-line', 'scan-barcode', 'scan-quantity', 'scan-mode', 'scan-line', 'photo-upload', 'lines-import', 'prepare-chatgpt'].forEach((id) => { $(id).disabled = isClosed(); });
     $('scan-form').querySelector('button').disabled = isClosed();
+    renderScanOptions();
     renderOcrStatus();
   }
   function renderLines() {
@@ -473,14 +533,18 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
     const focus = active?.dataset.lineField ? { id: active.closest('[data-line-id]')?.dataset.lineId, field: active.dataset.lineField, start: active.selectionStart, end: active.selectionEnd } : null;
     const query = normalize($('line-search').value), filter = $('line-filter').value;
     const rows = state.receipt.lines.map((line, index) => ({ line, index })).filter(({ line }) => {
-      if (!normalize([line.description, line.productName, line.supplierCode, line.barcode].join(' ')).includes(query)) return false;
-      return filter === 'all' || (filter === 'pending' && lineIssues(line).length) || (filter === 'unknown' && !line.productId) || (filter === 'difference' && hasDifference(line)) || (filter === 'conversion' && !line.conversionConfirmed) || (filter === 'ready' && !lineIssues(line).length);
+      if (!normalize([line.description, line.productName, line.supplierCode, line.barcode, ...(line.kit?.components || []).flatMap((part) => [part.label, part.productName, part.barcode])].join(' ')).includes(query)) return false;
+      return filter === 'all' || (filter === 'pending' && lineIssues(line).length) || (filter === 'unknown' && (isKit(line) ? line.kit.components.some((part) => !part.productId) : !line.productId)) || (filter === 'difference' && hasDifference(line)) || (filter === 'conversion' && !line.conversionConfirmed) || (filter === 'ready' && !lineIssues(line).length);
     });
     const disabled = isClosed() ? ' disabled' : '';
-    const input = (line, field, label, type = 'text') => `<label>${label}<input data-line-field="${field}" type="${type}" value="${escape(line[field] ?? '')}"${type === 'number' ? ` min="${field === 'stockFactor' ? '0.000001' : '0'}" step="any"` : ''}${disabled}></label>`;
+    const input = (line, field, label, type = 'text') => `<label>${label}<input data-line-field="${field}" type="${type}" value="${escape(line[field] ?? '')}"${type === 'number' ? ` min="${field === 'stockFactor' ? '0.000001' : '0'}" step="${isKit(line) && field === 'receivedQuantity' ? '1' : 'any'}"` : ''}${disabled}></label>`;
     $('receipt-lines').innerHTML = rows.length ? rows.map(({ line, index }) => {
       const diff = Number(line.receivedQuantity || 0) - Number(line.expectedQuantity || 0);
       const difference = hasDifference(line) ? `<span class="rr-badge is-amber">${diff > 0 ? 'Sobra' : 'Falta'}: ${fmt(Math.abs(diff))}</span>` : '';
+      if (isKit(line)) {
+        const linked = line.kit.components.every((part) => part.productId && part.barcode);
+        return `<article class="rr-line rr-kit-line${state.dirty.has(text(line.id)) ? ' is-dirty' : ''}" data-line-id="${escape(line.id)}"><div class="rr-line-header"><span class="rr-line-number">${String(index + 1).padStart(2, '0')}</span><div class="rr-line-description"><input aria-label="Descrição original da linha ${index + 1}" data-line-field="description" value="${escape(line.description)}"${disabled}><div class="rr-line-tags"><span class="rr-badge is-blue">Kit · ${fmt(kitPieces(line))} peças</span><span class="rr-badge ${linked ? 'is-green' : 'is-amber'}">${linked ? 'Peças identificadas' : 'Identificar peças'}</span>${difference}</div></div><button class="rr-icon-button" data-delete-line="${escape(line.id)}" aria-label="Remover linha ${index + 1}"${disabled}><i class="fas fa-trash-can" aria-hidden="true"></i></button></div><div class="rr-kit-summary"><div><strong>1 kit = ${escape(kitFormula(line))}</strong><p>Confira a composição deste recebimento.</p></div><button class="rr-button rr-small" data-kit-line="${escape(line.id)}"${disabled}>Editar composição</button></div><div class="rr-line-fields rr-kit-fields">${input(line, 'supplierCode', 'Código fornecedor')}${input(line, 'expectedQuantity', 'Kits esperados', 'number')}${input(line, 'receivedQuantity', 'Kits recebidos', 'number')}${input(line, 'unitCost', 'Custo de 1 kit (R$)', 'number')}</div><div class="rr-kit-parts">${line.kit.components.map((part) => `<div class="rr-kit-part"><b>${escape(part.label)} <span>× ${fmt(part.quantityPerKit)}</span></b><div><strong>${escape(part.productName || 'Sem cadastro vinculado')}</strong><span>${escape(part.barcode || 'Sem código de barras')} · ${fmt(Number(line.receivedQuantity || 0) * part.quantityPerKit)} un. para estoque</span></div><button class="rr-button rr-small" data-identify-kit="${escape(line.id)}" data-component-id="${escape(part.id)}"${disabled}>Bipar ${escape(part.label)}</button></div>`).join('')}</div><div class="rr-line-review"><label class="rr-check"><input type="checkbox" data-line-field="conversionConfirmed"${line.conversionConfirmed ? ' checked' : ''}${disabled}> Conferi a composição</label><label class="rr-check"><input type="checkbox" data-line-field="reviewed"${line.reviewed ? ' checked' : ''}${disabled}> Linha revisada</label><button class="rr-button rr-small" data-count-kit="${escape(line.id)}"${disabled}>Contar kits completos</button></div><p class="rr-kit-cost-note">O custo é do kit inteiro. A entrada distribui as peças; não rateia custo nem muda preços dos cadastros.</p></article>`;
+      }
       return `<article class="rr-line${state.dirty.has(text(line.id)) ? ' is-dirty' : ''}" data-line-id="${escape(line.id)}"><div class="rr-line-header"><span class="rr-line-number">${String(index + 1).padStart(2, '0')}</span><div class="rr-line-description"><input aria-label="Descrição original da linha ${index + 1}" data-line-field="description" value="${escape(line.description || '')}" placeholder="Descrição original do documento"${disabled}><div class="rr-line-tags">${line.productId ? '<span class="rr-badge is-green">Identificado</span>' : '<span class="rr-badge is-amber">Sem produto vinculado</span>'}${difference}${!lineIssues(line).length ? '<span class="rr-badge is-green">Revisado</span>' : ''}${line.sourcePage ? `<span class="rr-badge">Pág. ${escape(line.sourcePage)}</span>` : ''}</div></div><button class="rr-icon-button" data-delete-line="${escape(line.id)}" aria-label="Remover linha ${index + 1}"${disabled}><i class="fas fa-trash-can" aria-hidden="true"></i></button></div><div class="rr-line-fields">${input(line, 'supplierCode', 'Código fornecedor')}${input(line, 'barcode', 'Código de barras')}${input(line, 'unit', 'Unidade recebida')}${input(line, 'expectedQuantity', 'Esperado', 'number')}${input(line, 'receivedQuantity', 'Recebido', 'number')}</div><div class="rr-line-product"><i class="fas ${line.productId ? 'fa-box' : 'fa-link'}" aria-hidden="true"></i><div><strong>${escape(line.productName || 'Selecione o produto do catálogo')}</strong><p>${line.productId ? 'Vínculo com o cadastro existente' : 'O código desconhecido fica guardado até você identificar o produto.'}</p></div><button class="rr-button rr-small" data-match-line="${escape(line.id)}"${disabled}>${line.productId ? 'Trocar produto' : 'Vincular produto'}</button>${line.productId ? `<button class="rr-button rr-small" data-unlink-line="${escape(line.id)}" aria-label="Desvincular produto"${disabled}><i class="fas fa-link-slash" aria-hidden="true"></i></button>` : ''}</div><div class="rr-line-fields rr-line-secondary">${input(line, 'stockFactor', 'Unidades de estoque por unidade recebida', 'number')}${input(line, 'unitCost', 'Custo por unidade recebida (R$)', 'number')}</div><div class="rr-line-review"><label class="rr-check"><input type="checkbox" data-line-field="conversionConfirmed"${line.conversionConfirmed ? ' checked' : ''}${disabled}> Conferi a conversão</label><label class="rr-check"><input type="checkbox" data-line-field="reviewed"${line.reviewed ? ' checked' : ''}${disabled}> Linha revisada</label><span>${fmt(Number(line.receivedQuantity || 0) * Number(line.stockFactor || 0))} un. para o estoque</span></div></article>`;
     }).join('') : `<div class="rr-line-placeholder">${state.receipt.lines.length ? 'Nenhum item corresponde a este filtro.' : '<i class="fas fa-barcode" aria-hidden="true"></i><br>As linhas aparecerão aqui.<br>Prepare uma foto, importe uma planilha ou comece a bipar.'}</div>`;
     if (focus) {
@@ -494,6 +558,13 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
       const warning = document.createElement('p'); warning.className = 'rr-line-warnings'; warning.textContent = line.warnings.join(' · ');
       article.querySelector('.rr-line-header').insertAdjacentElement('afterend', warning);
     }
+    if (state.meta.capabilities?.kit === true) for (const { line } of rows) {
+      if (isKit(line)) continue;
+      const article = [...$('receipt-lines').querySelectorAll('[data-line-id]')].find((node) => node.dataset.lineId === text(line.id));
+      const button = document.createElement('button'); button.className = 'rr-button rr-small rr-kit-configure'; button.dataset.kitLine = line.id; button.disabled = isClosed();
+      button.textContent = /^(KT|KIT)$/i.test(line.unit || '') || /\bKIT\b/i.test(line.description || '') ? 'Configurar peças deste kit' : 'Separar em peças (kit)';
+      article?.querySelector('.rr-line-product').insertAdjacentElement('beforebegin', button);
+    }
   }
   function renderEvents() {
     const events = state.receipt?.events || [];
@@ -501,9 +572,10 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
     const undone = new Set(events.map((event) => event.undoOf).filter(Boolean));
     $('receipt-events').innerHTML = events.length ? events.slice().reverse().slice(0, 100).map((event) => {
       const id = event.eventId || event.id;
-      const status = event.undoOf ? 'Leitura desfeita' : undone.has(id) || event.undoneBy ? 'Desfeito' : event.status === 'conflict' ? 'Conflito · conferir código' : event.status === 'unknown' ? 'Produto não identificado' : event.mode === 'identify' ? 'Identificação' : event.mode === 'adjust' ? 'Ajuste manual' : 'Leitura registrada';
-      const canUndo = !isClosed() && id && !event.undoOf && !event.undoneBy && !undone.has(id) && event.mode === 'count';
-      return `<div class="rr-event-row"><span>${date(event.createdAt || event.receivedAt)}</span><div><strong>${escape(event.barcode || event.productName || 'Ajuste')}</strong> · ${fmt(event.quantity)}<br><span class="rr-muted">${escape(status)}</span></div>${canUndo ? `<button class="rr-button rr-small" data-undo-event="${escape(id)}">Desfazer</button>` : '<span></span>'}</div>`;
+      const status = event.undoOf ? 'Leitura desfeita' : undone.has(id) || event.undoneBy ? 'Desfeito' : event.status === 'conflict' ? 'Conflito · conferir código' : event.status === 'unknown' ? 'Produto não identificado' : event.mode === 'identify' ? 'Identificação' : event.mode === 'adjust' ? 'Ajuste manual' : event.mode === 'kit_count' ? 'Kits completos registrados' : 'Leitura registrada';
+      const canUndo = !isClosed() && id && !event.undoOf && !event.undoneBy && !undone.has(id) && ['count', 'kit_count'].includes(event.mode);
+      const component = lineById(event.lineId)?.kit?.components.find((part) => part.id === event.componentId);
+      return `<div class="rr-event-row"><span>${date(event.createdAt || event.receivedAt)}</span><div><strong>${escape(event.barcode || event.productName || (event.mode === 'kit_count' ? lineById(event.lineId)?.description || 'Kit' : 'Ajuste'))}</strong> · ${fmt(event.quantity)}${event.mode === 'kit_count' ? ' kit(s)' : ''}<br><span class="rr-muted">${escape(status)}${component ? ' · ' + escape(component.label) : ''}</span></div>${canUndo ? `<button class="rr-button rr-small" data-undo-event="${escape(id)}">Desfazer</button>` : '<span></span>'}</div>`;
     }).join('') : '<p class="rr-line-placeholder">Nenhuma leitura registrada ainda.</p>';
   }
   function updateSaveState() {
@@ -523,6 +595,7 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
   }
   function validateLines() {
     for (const line of state.receipt.lines) {
+      if (isKit(line)) { prepareKit(line.kit.components); if (!Number.isSafeInteger(Number(line.receivedQuantity || 0))) throw new Error(`Informe kits inteiros em “${line.description}”.`); }
       for (const field of numericFields) {
         const value = line[field];
         if (value != null && (!Number.isFinite(value) || value < 0 || (field === 'stockFactor' && value <= 0))) throw new Error(`Confira ${labels[field]} em “${line.description || line.barcode || 'linha sem descrição'}”.`);
@@ -579,9 +652,80 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
   }
   async function matchLine(id) {
     const line = lineById(id); if (!line) return;
-    state.productLineId = id; $('product-line-label').textContent = `Documento: ${line.description || line.barcode || 'Produto sem descrição'}`;
+    state.productLineId = id; state.productComponentId = null; $('product-line-label').textContent = `Documento: ${line.description || line.barcode || 'Produto sem descrição'}`;
     $('product-search').value = line.barcode || ''; showDialog('product-dialog'); renderProductResults();
     await loadProducts(); renderProductResults(); $('product-search').focus();
+  }
+  function assertKitEditor() {
+    const editor = state.kitEditor, line = lineById(editor?.lineId);
+    if (!editor || state.receipt?._id !== editor.receiptId || !line || isClosed()) throw new Error('O recebimento mudou. Abra a composição novamente.');
+    if (!same(line.kit || null, editor.sourceKit)) throw new Error('A composição foi alterada em outra sessão. Feche e abra novamente para conferir.');
+    return line;
+  }
+  const newKitComponent = (label = '') => ({ id: uuid(), label, quantityPerKit: 1, productId: null, productName: '', barcode: '' });
+  function openKitEditor(id) {
+    const line = lineById(id); if (!line || isClosed()) return;
+    state.kitEditor = { receiptId: state.receipt._id, lineId: id, sourceKit: clone(line.kit || null), components: clone(line.kit?.components || [newKitComponent()]) };
+    $('kit-line-label').textContent = line.description || 'Kit do recebimento'; $('kit-editor-error').textContent = '';
+    $('remove-kit').hidden = !isKit(line); renderKitEditor(); showDialog('kit-dialog');
+  }
+  function renderKitEditor() {
+    const editor = state.kitEditor; if (!editor) return;
+    $('kit-components').innerHTML = editor.components.map((part, index) => `<div class="rr-kit-editor-part" data-kit-component="${escape(part.id)}"><div class="rr-kit-editor-fields"><label>Tamanho / peça<input data-kit-field="label" maxlength="80" placeholder="P, G, Tam 1…" value="${escape(part.label)}" aria-label="Tamanho da peça ${index + 1}"></label><label>Peças por kit<input data-kit-field="quantityPerKit" type="number" min="1" step="1" value="${escape(part.quantityPerKit)}" aria-label="Quantidade da peça ${index + 1}"></label><button class="rr-icon-button" data-remove-component="${escape(part.id)}" aria-label="Remover peça ${index + 1}"${editor.components.length === 1 ? ' disabled' : ''}>×</button></div><label class="rr-kit-barcode">Código de barras da peça<input data-kit-field="barcode" maxlength="128" inputmode="numeric" autocomplete="off" value="${escape(part.barcode)}" placeholder="Bipe ou digite o código" aria-label="Código de barras da peça ${index + 1}"></label><div class="rr-kit-editor-link"><span>${escape(part.productName || (part.barcode ? 'O código será consultado ao salvar.' : 'Vincule o cadastro ou identifique pelo código.'))}</span><button class="rr-button rr-small" data-match-component="${escape(part.id)}">${part.productId ? 'Trocar cadastro' : 'Buscar cadastro'}</button>${part.productId ? `<button class="rr-button rr-small" data-unlink-component="${escape(part.id)}" aria-label="Desvincular cadastro de ${escape(part.label)}">×</button>` : ''}</div></div>`).join('');
+    $('add-kit-component').disabled = editor.components.length >= 50; renderKitFormula();
+  }
+  function renderKitFormula() {
+    const components = state.kitEditor?.components || [], total = components.reduce((sum, part) => sum + (Number(part.quantityPerKit) || 0), 0);
+    $('kit-formula').textContent = `1 kit = ${components.map((part) => `${part.quantityPerKit || '?'} ${part.label || '(tamanho)'}`).join(' + ')} · ${fmt(total)} peças`;
+  }
+  async function kitAction(button, callback) {
+    $('kit-editor-error').textContent = ''; button.disabled = true;
+    try { await callback(); } catch (error) { $('kit-editor-error').textContent = error.message; }
+    finally { button.disabled = false; }
+  }
+  async function applyKit(remove = false) {
+    const line = assertKitEditor(), receiptId = state.receipt._id;
+    const kit = remove ? null : prepareKit(state.kitEditor.components);
+    const baselineLine = state.baseline.lines.find((row) => row.id === line.id);
+    if (Boolean(kit) !== isKit(baselineLine) && (Number(baselineLine?.receivedQuantity || 0) !== 0 || state.receipt.events?.some((event) => event.lineId === line.id && ['count', 'kit_count'].includes(event.mode) && !event.undoneBy))) throw new Error('Desfaça as contagens desta linha antes de mudar entre produto único e kit. Depois, abra a composição novamente.');
+    if (!Number.isSafeInteger(Number(line.receivedQuantity || 0)) && kit) throw new Error('Corrija a quantidade recebida: kits completos devem ser inteiros.');
+    if (kit && line.expectedQuantity != null && !Number.isSafeInteger(Number(line.expectedQuantity))) throw new Error('Corrija a quantidade esperada: kits completos devem ser inteiros.');
+    markLine(line.id, 'kit', kit); markLine(line.id, 'productId', null); markLine(line.id, 'productName', ''); markLine(line.id, 'stockFactor', 1);
+    // Keep the editor usable if saving fails; the source snapshot now matches its local draft.
+    state.kitEditor.sourceKit = clone(kit); renderDetail(); await saveReceipt();
+    if (state.receipt?._id !== receiptId) throw new Error('Composição salva no recebimento anterior. Abra-o novamente para conferir.');
+    $('kit-dialog').close(); state.kitEditor = null;
+    notify(remove ? 'Kit desfeito. Vincule o produto e confira a conversão desta linha.' : 'Composição salva. Identifique as peças, confira a composição e conte os kits completos.');
+  }
+  async function matchComponent(id) {
+    assertKitEditor(); const part = state.kitEditor.components.find((row) => row.id === id); if (!part) return;
+    state.productLineId = state.kitEditor.lineId; state.productComponentId = id;
+    $('product-line-label').textContent = `Peça ${part.label || 'sem tamanho'} · ${lineById(state.productLineId).description}`;
+    $('product-search').value = part.barcode || ''; showDialog('product-dialog'); renderProductResults();
+    await loadProducts(); renderProductResults(); $('product-search').focus();
+  }
+  function renderScanOptions() {
+    const line = lineById($('scan-line').value), kit = isKit(line), mode = $('scan-mode');
+    mode.querySelector('[value="count"]').disabled = kit;
+    if (kit && mode.value === 'count') mode.value = 'identify';
+    const previous = $('scan-component').value;
+    $('scan-component').innerHTML = '<option value="">Selecione a peça</option>' + (line?.kit?.components || []).map((part) => `<option value="${escape(part.id)}">${escape(part.label)} · ${fmt(part.quantityPerKit)} por kit</option>`).join('');
+    $('scan-component').value = previous;
+    $('scan-component-label').hidden = !kit || mode.value !== 'identify'; $('scan-component').disabled = isClosed();
+    const countKits = mode.value === 'kit_count';
+    $('scan-barcode').required = !countKits; $('scan-barcode').disabled = isClosed() || countKits;
+    $('scan-barcode').placeholder = countKits ? 'Informe a quantidade de kits completos' : kit ? 'Bipe o código da peça selecionada' : 'Bipe ou digite o código de barras';
+    $('scan-quantity').step = countKits ? '1' : 'any'; $('scan-quantity').min = countKits ? '1' : '0.001';
+    $('scan-submit-label').textContent = countKits ? 'Registrar kits' : 'Registrar';
+    $('scan-kit-hint').hidden = !kit && !countKits;
+    $('scan-kit-hint').textContent = kit ? `1 kit = ${kitFormula(line)}. Identificar peças não soma quantidades; conte apenas kits completos.` : 'Selecione a linha de um kit configurado.';
+  }
+  async function selectKitScan(lineId, componentId) {
+    if (hasDirty()) await saveReceipt();
+    $('scan-line').value = lineId; $('scan-mode').value = componentId ? 'identify' : 'kit_count'; renderScanOptions();
+    $('scan-component').value = componentId || ''; $('scan-quantity').value = '1';
+    $('scan-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    $(componentId ? 'scan-barcode' : 'scan-quantity').focus({ preventScroll: true });
   }
   function persistQueue() {
     if (!storagePrefix) throw new Error('Não foi possível identificar sua conta para guardar leituras com segurança. Entre novamente no sistema.');
@@ -622,7 +766,8 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
         renderDetail();
         const last = batch.slice().reverse().find((entry) => acknowledged.has(entry.event.eventId))?.event;
         const line = last && state.receipt.lines.find((row) => row.barcode === last.barcode || row.id === last.lineId);
-        $('scan-feedback').textContent = rejected.size ? `${rejected.size} leitura(s) precisam de revisão abaixo. As demais continuam sendo enviadas.` : last ? (line?.productName ? `Registrado: ${line.productName}` : 'Leitura registrada. Os códigos sem cadastro identificado ficam nas pendências.') : 'As leituras continuam guardadas, aguardando confirmação do servidor.';
+        const component = line?.kit?.components.find((part) => part.id === last?.componentId);
+        $('scan-feedback').textContent = rejected.size ? `${rejected.size} leitura(s) precisam de revisão abaixo. As demais continuam sendo enviadas.` : last?.undoOf ? 'Contagem desfeita. O histórico foi preservado.' : last?.mode === 'kit_count' ? `${fmt(last.quantity)} kit(s) completos registrados. Confira a distribuição das peças abaixo.` : last ? (component ? `${component.label}: ${component.productName || 'código guardado; cadastro pendente'}. A quantidade de kits não mudou.` : line?.productName ? `Registrado: ${line.productName}` : 'Leitura registrada. Os códigos sem cadastro identificado ficam nas pendências.') : 'As leituras continuam guardadas, aguardando confirmação do servidor.';
       }
       if (result.error) throw result.error;
       if (!acknowledged.size && !rejected.size && batch.length) notify('O servidor não confirmou as leituras. Elas continuam guardadas neste navegador.', 'warning', true);
@@ -656,11 +801,12 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
   }
   async function submitScan(event) {
     event.preventDefault(); if (!state.receipt || isClosed()) return;
-    const barcode = $('scan-barcode').value.trim(), quantity = number($('scan-quantity').value), lineId = $('scan-line').value, mode = $('scan-mode').value;
-    if (!barcode || quantity == null || !Number.isFinite(quantity) || quantity <= 0) throw new Error('Informe o código e uma quantidade maior que zero.');
-    if (mode === 'identify' && !lineId) throw new Error('Selecione a linha do documento para identificar pelo código.');
+    const lineId = $('scan-line').value, receiptId = state.receipt._id;
+    const scan = prepareScan({ barcode: $('scan-barcode').value, quantity: $('scan-quantity').value, lineId, mode: $('scan-mode').value, componentId: $('scan-component').value }, lineById(lineId));
+    if (hasDirty()) await saveReceipt();
+    if (state.receipt?._id !== receiptId || isClosed()) throw new Error('O recebimento mudou. Confira a linha antes de registrar.');
     if (lineId && !state.baseline.lines.some((line) => line.id === lineId)) throw new Error('Salve a nova linha antes de associar uma leitura a ela.');
-    enqueue({ eventId: uuid(), barcode, quantity, mode, ...(lineId ? { lineId } : {}), createdAt: new Date().toISOString() });
+    enqueue({ eventId: uuid(), ...scan, createdAt: new Date().toISOString() });
     $('scan-barcode').value = ''; $('scan-barcode').focus(); $('scan-feedback').textContent = 'Leitura guardada. Enviando para o recebimento…';
   }
   function renderOcrStatus() {
@@ -849,8 +995,8 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
     const receipt = state.receipt; if (!receipt) return;
     const file = (receipt.code || receipt._id).replace(/[^a-zA-Z0-9_-]/g, '_');
     if (kind === 'json') return download(`${file}.json`, JSON.stringify({ exportedAt: new Date().toISOString(), hasUnsavedChanges: hasDirty(), receipt, localReadHistory: state.queue.filter((entry) => entry.receiptId === receipt._id) }, null, 2), 'application/json;charset=utf-8');
-    const keys = ['description', 'supplierCode', 'barcode', 'productName', 'expectedQuantity', 'receivedQuantity', 'unit', 'stockFactor', 'unitCost', 'conversionConfirmed', 'reviewed'];
-    const csv = [keys.map(csvCell).join(';'), ...receipt.lines.map((line) => keys.map((key) => csvCell(line[key])).join(';'))].join('\r\n');
+    const keys = ['description', 'supplierCode', 'barcode', 'productName', 'expectedQuantity', 'receivedQuantity', 'unit', 'stockFactor', 'unitCost', 'conversionConfirmed', 'reviewed', 'kit'];
+    const csv = [keys.map(csvCell).join(';'), ...receipt.lines.map((line) => keys.map((key) => csvCell(key === 'kit' && line.kit ? JSON.stringify(line.kit) : line[key])).join(';'))].join('\r\n');
     download(`${file}.csv`, '\uFEFF' + csv, 'text/csv;charset=utf-8');
   }
   function reviewIssues() {
@@ -874,6 +1020,8 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
     const deposit = state.meta.deposits.find((row) => idOf(row) === idOf(receipt.depositId));
     const total = lines.reduce((sum, line) => sum + Number(line.receivedQuantity || 0) * Number(line.unitCost || 0), 0);
     $('review-summary').innerHTML = `<div class="rr-review-card"><strong>${escape(receipt.code || 'Recebimento')} · ${receipt.testMode ? 'MODO DE TESTE' : 'ENTRADA REAL'}</strong><p>Depósito: ${escape((deposit && nameOf(deposit)) || receipt.depositId)}</p><p>${lines.length} linha(s) · ${differences.length} diferença(s) de quantidade · Custo informado: ${money(total)}</p><p>${receipt.testMode ? 'A conclusão registra o teste e não movimenta o estoque.' : 'As quantidades recebidas, multiplicadas pelas conversões conferidas, serão adicionadas ao estoque do depósito selecionado.'}</p><p>O recebimento não altera o preço de venda nem cria contas a pagar.</p></div>`;
+    const kits = lines.filter(isKit);
+    if (kits.length) $('review-summary').insertAdjacentHTML('beforeend', `<div class="rr-review-card"><strong>Peças dos kits para o estoque</strong>${kits.map((line) => `<p><b>${escape(line.description)}</b> · ${fmt(line.receivedQuantity)} kit(s)<br>${stockProjection(line).map((part) => `${fmt(part.quantity)} × ${escape(part.productName)}`).join(' · ')}</p>`).join('')}<p>O kit não entra como produto separado. O custo permanece no documento, sem rateio nos cadastros.</p></div>`);
     $('review-issues').innerHTML = issues.length ? `<div class="rr-review-issues"><strong>Resolva estas pendências antes de concluir:</strong>${issues.slice(0, 30).map((issue) => `<p>${escape(issue)}</p>`).join('')}${issues.length > 30 ? `<p>E mais ${issues.length - 30} pendência(s).</p>` : ''}</div>` : differences.length ? `<div class="rr-review-issues">${differences.map((line) => `<p>${escape(line.description)}: esperado ${fmt(line.expectedQuantity)}, recebido ${fmt(line.receivedQuantity)}.</p>`).join('')}</div>` : '';
     $('accept-differences').checked = false; $('accept-differences').closest('label').hidden = differences.length === 0;
     $('learn-supplier-links').checked = false; $('learn-supplier-links').disabled = receipt.testMode || !receipt.supplierId;
@@ -914,9 +1062,15 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
       const id = node.closest('[data-line-id]').dataset.lineId, field = node.dataset.lineField;
       markLine(id, field, node.type === 'checkbox' ? node.checked : numericFields.has(field) ? number(node.value) : node.value);
     });
-    $('receipt-lines').addEventListener('change', (event) => { if (event.target.matches('[data-line-field]')) { renderLines(); renderConflicts(); } });
+    // Let focus move to the next input before replacing row elements. Rebuilding during
+    // blur/change can detach that next input while its first edit is being dispatched.
+    $('receipt-lines').addEventListener('change', (event) => { if (event.target.matches('[data-line-field]')) requestAnimationFrame(() => { renderLines(); renderConflicts(); }); });
     $('receipt-lines').addEventListener('click', (event) => {
       const match = event.target.closest('[data-match-line]'), remove = event.target.closest('[data-delete-line]'), unlink = event.target.closest('[data-unlink-line]');
+      const kit = event.target.closest('[data-kit-line]'), identify = event.target.closest('[data-identify-kit]'), count = event.target.closest('[data-count-kit]');
+      if (kit) openKitEditor(kit.dataset.kitLine);
+      if (identify) action(identify, () => selectKitScan(identify.dataset.identifyKit, identify.dataset.componentId));
+      if (count) action(count, () => selectKitScan(count.dataset.countKit));
       if (match) action(match, () => matchLine(match.dataset.matchLine));
       if (unlink) { const id = unlink.dataset.unlinkLine; markLine(id, 'productId', null); markLine(id, 'productName', ''); renderLines(); }
       if (remove && confirm('Remover esta linha do recebimento? Linhas com leituras podem precisar ser desfeitas no histórico primeiro.')) { const id = remove.dataset.deleteLine; state.receipt.lines = state.receipt.lines.filter((line) => text(line.id) !== id); if (state.baseline.lines.some((line) => text(line.id) === id)) state.deleted.add(id); state.dirty.delete(id); persistDraft(); renderDetail(); }
@@ -924,7 +1078,34 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
     $('add-line').addEventListener('click', () => { addLine(); persistDraft(); renderDetail(); const rows = document.querySelectorAll('[data-line-id]'); rows[rows.length - 1]?.querySelector('input')?.focus(); });
     $('product-search').addEventListener('input', renderProductResults);
     $('reload-catalog').addEventListener('click', (event) => action(event.currentTarget, async () => { state.products = null; await loadProducts(); renderProductResults(); }));
-    $('product-results').addEventListener('click', (event) => { const button = event.target.closest('[data-select-product]'); if (!button) return; const product = state.products.find((row) => text(row._id) === button.dataset.selectProduct); if (!product) return; const id = state.productLineId; markLine(id, 'productId', product._id); markLine(id, 'productName', product.nome); $('product-dialog').close(); renderDetail(); });
+    $('product-results').addEventListener('click', (event) => { const button = event.target.closest('[data-select-product]'); if (!button) return; const product = state.products.find((row) => text(row._id) === button.dataset.selectProduct); if (!product) return;
+      if (state.productComponentId) { try { assertKitEditor(); const part = state.kitEditor.components.find((row) => row.id === state.productComponentId); if (!part) throw new Error('Esta peça foi removida.'); part.productId = product._id; part.productName = product.nome; renderKitEditor(); } catch (error) { $('kit-editor-error').textContent = error.message; } }
+      else { const id = state.productLineId; markLine(id, 'productId', product._id); markLine(id, 'productName', product.nome); }
+      $('product-dialog').close(); renderDetail();
+    });
+    $('kit-components').addEventListener('input', (event) => {
+      const input = event.target.closest('[data-kit-field]'); if (!input || !state.kitEditor) return;
+      const part = state.kitEditor.components.find((row) => row.id === input.closest('[data-kit-component]').dataset.kitComponent); if (!part) return;
+      part[input.dataset.kitField] = input.dataset.kitField === 'quantityPerKit' ? number(input.value) : input.value;
+      if (input.dataset.kitField === 'barcode') { part.productId = null; part.productName = ''; input.closest('[data-kit-component]').querySelector('.rr-kit-editor-link span').textContent = 'O código será consultado ao salvar.'; }
+      $('kit-editor-error').textContent = ''; renderKitFormula();
+    });
+    $('kit-components').addEventListener('keydown', (event) => { if (event.key === 'Enter' && event.target.matches('[data-kit-field="barcode"]')) { event.preventDefault(); const fields = [...$('kit-components').querySelectorAll('[data-kit-field="barcode"]')]; fields[fields.indexOf(event.target) + 1]?.focus(); } });
+    $('kit-components').addEventListener('click', (event) => {
+      const remove = event.target.closest('[data-remove-component]'), match = event.target.closest('[data-match-component]'), unlink = event.target.closest('[data-unlink-component]');
+      if (remove && state.kitEditor.components.length > 1) { state.kitEditor.components = state.kitEditor.components.filter((part) => part.id !== remove.dataset.removeComponent); renderKitEditor(); }
+      if (match) kitAction(match, () => matchComponent(match.dataset.matchComponent));
+      if (unlink) { const part = state.kitEditor.components.find((row) => row.id === unlink.dataset.unlinkComponent); part.productId = null; part.productName = ''; renderKitEditor(); }
+    });
+    document.querySelectorAll('[data-kit-preset]').forEach((button) => button.addEventListener('click', () => {
+      if (!state.kitEditor) return;
+      const meaningful = state.kitEditor.components.some((part) => part.barcode || part.productId || part.label);
+      if (meaningful && !confirm('Substituir a composição em edição por este modelo? Os códigos e vínculos anteriores serão removidos.')) return;
+      state.kitEditor.components = (button.dataset.kitPreset === 'pmg' ? ['P', 'M', 'G'] : button.dataset.kitPreset === 'numbered' ? ['Tam 1', 'Tam 2', 'Tam 3'] : ['']).map((label) => newKitComponent(label)); renderKitEditor();
+    }));
+    $('add-kit-component').addEventListener('click', () => { if (!state.kitEditor || state.kitEditor.components.length >= 50) return; state.kitEditor.components.push(newKitComponent()); renderKitEditor(); $('kit-components').lastElementChild.querySelector('input').focus(); });
+    $('save-kit').addEventListener('click', (event) => kitAction(event.currentTarget, () => applyKit()));
+    $('remove-kit').addEventListener('click', (event) => { if (confirm('Voltar esta linha para um produto único? Os componentes e seus códigos serão removidos deste recebimento.')) kitAction(event.currentTarget, () => applyKit(true)); });
     $('save-receipt').addEventListener('click', (event) => action(event.currentTarget, saveReceipt));
     $('refresh-receipt').addEventListener('click', (event) => action(event.currentTarget, refreshReceipt));
     $('receipt-conflicts').addEventListener('click', (event) => {
@@ -938,6 +1119,7 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
       state.conflicts.delete(key); persistDraft(); renderDetail();
     });
     $('scan-form').addEventListener('submit', (event) => { event.preventDefault(); action(null, () => submitScan(event)); });
+    $('scan-mode').addEventListener('change', renderScanOptions); $('scan-line').addEventListener('change', renderScanOptions);
     $('scan-local-history-list').addEventListener('click', (event) => {
       const retry = event.target.closest('[data-retry-local-event]'), discard = event.target.closest('[data-discard-local-event]');
       const button = retry || discard; if (button) action(button, async () => changeRejectedEntry(retry?.dataset.retryLocalEvent || discard.dataset.discardLocalEvent, !!discard));

@@ -50,3 +50,16 @@ O arquivo `stockCounter.test.js` pertence à integração local anterior e pode 
 - 46 testes Node passaram (documentos, qualidade, cache, duplicidade, importação e fila). Quatro testes Python de agrupamento geométrico passaram.
 - No Chrome isolado, passaram os fluxos de texto ilegível, resultado vazio, correção real pelo endpoint, colagem de JSON, cópia do pedido, seleção geral, confirmação e persistência de linhas com quantidade recebida zero. Sem erro JavaScript.
 - Rascunho visual separado: 54 produtos visíveis, sem duplicar a primeira página; 30 linhas com dúvidas explícitas. O documento não foi aprovado e nenhum estoque comercial foi movimentado.
+
+## Kits variáveis — 15/10/2026
+
+- Composição por recebimento: rótulo livre, quantidade inteira por tipo, código de barras e produto individual por componente. Exemplos: P/M/G, 3 P, 4 G, Tam 1/2/3.
+- Identificar componentes não conta mercadoria. `kit_count` registra kits completos em evento separado, com reenvio idempotente e estorno. Eventos antigos conservam seu hash de identificação.
+- Aprovação multiplica kits recebidos pelas peças de cada tipo e movimenta apenas os SKUs individuais, com transação e histórico. Não duplica entrada no produto kit, não aplica outra conversão fracionada às peças e não altera preços, custos ou contas a pagar.
+- 93 testes Node passaram: 32 de recebimentos, 31 da interface/importação/fila e regressões de documentos, OCR e coletor anterior. Os testes de estoque usaram exclusivamente MongoDB temporário.
+- Cenários de estoque verificados: P/M/G, 3 P, 4 G, tamanhos numerados, aliases do mesmo SKU, produto presente em kit e linha comum, aprovação concorrente, repetição, estorno, catálogo alterado e rollback após a primeira movimentação.
+- 17 verificações no Chrome isolado passaram: configurar, preservar custo 219,99, identificar sem contar, código conhecido/desconhecido, `2 × (3 P + 4 G) = 6 P + 8 G`, desfazer, revisão e conclusão em teste. Modal de 360 px sem transbordamento horizontal, sem erros JavaScript.
+- 86 testes Android passaram, incluindo 11 novos testes de kits. Sete testes de telas Compose passaram: quatro de kits e três do espaço de recebimento; um teste auxiliar do renderizador também passou. Renderização nativa em 360×640 e 360×480, incluindo fonte ampliada.
+- Android preserva o alvo do bipe na fila, bloqueia edição com leituras/estornos pendentes, rejeita salvar uma composição antiga após mudança remota e impede novas seleções/contagens do kit enquanto sua composição é salva. Fechar o kit não ativa contagem automaticamente.
+- JSON e CSV preservam a composição. Composição alterada exige nova confirmação no site. Nenhum cadastro novo foi inventado e nenhum recebimento comercial foi aprovado nesta validação.
+- Não havia TC57 conectado; instalação sobre a versão anterior e leitura com os gatilhos físicos continuam dependendo do teste no aparelho.

@@ -17,6 +17,7 @@ const Movement = require('../../models/InventoryMovementLog');
 const BarcodeLink = require('../../models/ReceivingBarcodeLink');
 const AccountPayable = require('../../models/AccountPayable');
 const router = require('../receiving');
+const receivingService = require('../../services/receivingService');
 
 let replica; let fixture;
 const app = express(); app.use(express.json()); app.use('/api/receiving', router);
@@ -30,6 +31,23 @@ async function readyReceipt({ testMode = true, quantity = 2, factor = 1, expecte
   receipt = (await api('patch', `/receipts/${receipt._id}`).send({ version: receipt.version,
     lines: [{ id: line.id, stockFactor: factor, expectedQuantity, supplierCode, reviewed: true, conversionConfirmed: true }] }).expect(200)).body.receipt;
   return receipt;
+}
+const component = (label, quantityPerKit = 1, product = null, barcode = product?.codbarras || '') => ({
+  id: crypto.randomUUID(), label, quantityPerKit, productId: product ? String(product._id) : null, barcode,
+});
+const kitEvent = (lineId, quantity = 1) => ({ eventId: crypto.randomUUID(), mode: 'kit_count', lineId, quantity });
+async function kitReceipt(components, { testMode = true, quantity = 0, ...lineFields } = {}) {
+  let receipt = await create({ testMode });
+  receipt = (await api('patch', `/receipts/${receipt._id}`).send({ version: receipt.version, lines: [{
+    id: crypto.randomUUID(), description: 'Kit de camas', unit: 'KT', kit: { components }, ...lineFields,
+  }] }).expect(200)).body.receipt;
+  if (quantity) receipt = (await api('post', `/receipts/${receipt._id}/events`).send({ events: [kitEvent(receipt.lines[0].id, quantity)] }).expect(200)).body.receipt;
+  return receipt;
+}
+async function reviewKit(receipt) {
+  return (await api('patch', `/receipts/${receipt._id}`).send({ version: receipt.version,
+    lines: receipt.lines.map(line => ({ id: line.id, reviewed: true, conversionConfirmed: true })),
+  }).expect(200)).body.receipt;
 }
 
 describe('receiving persisted integration', { concurrency: false }, () => {
@@ -272,5 +290,216 @@ describe('receiving persisted integration', { concurrency: false }, () => {
     assert.deepEqual(await AccountPayable.collection.find({}).toArray(), beforeFinance);
     const saved = await Receipt.findById(receipt._id).lean();
     assert.equal(saved.lines[0].unitCost, 87.65);
+  });
+
+  test('legacy event hashes stay compatible while component identity participates in new hashes', () => {
+    const input = event('000123', 2, { lineId: crypto.randomUUID() });
+    const legacy = crypto.createHash('sha256').update(JSON.stringify({ barcode: input.barcode, mode: input.mode, lineId: input.lineId, undoOf: '', quantity: 2 })).digest('hex');
+    assert.equal(receivingService.normalizeEvent(input).payloadHash, legacy);
+    assert.equal(receivingService.normalizeEvent({ ...input, componentId: '' }).payloadHash, legacy);
+    const a = receivingService.normalizeEvent({ ...input, mode: 'identify', componentId: crypto.randomUUID() });
+    const b = receivingService.normalizeEvent({ ...input, mode: 'identify', componentId: crypto.randomUUID() });
+    assert.notEqual(a.payloadHash, b.payloadHash);
+  });
+
+  test('kits persist incomplete compositions and expose capability without assuming sizes or quantities', async () => {
+    const meta = await api('get', '/meta').expect(200);
+    assert.equal(meta.body.capabilities.kit, true); assert.equal(meta.body.limits.maxKitComponents, 50);
+    const receipt = await kitReceipt([component('P', 3), component('G', 4), component('Tam 1', 2), component('Tam 27', 1), component('')], {
+      productId: String(fixture.product._id), stockFactor: 99, reviewed: true, conversionConfirmed: true,
+    });
+    const line = receipt.lines[0];
+    assert.equal(line.productId, null); assert.equal(line.productName, ''); assert.equal(line.stockFactor, 1);
+    assert.equal(line.reviewed, false); assert.equal(line.conversionConfirmed, false); assert.equal(receipt.pendingCount, 1);
+    assert.deepEqual(line.kit.components.map(item => [item.label, item.quantityPerKit]), [['P', 3], ['G', 4], ['Tam 1', 2], ['Tam 27', 1], ['', 1]]);
+    const counted = await api('post', `/receipts/${receipt._id}/events`).send({ events: [kitEvent(line.id, 2)] }).expect(200);
+    assert.equal(counted.body.receipt.lines[0].receivedQuantity, 2);
+    await api('post', `/receipts/${receipt._id}/approve`).send({ version: counted.body.receipt.version }).expect(400);
+    assert.equal(await Product.countDocuments(), 2); assert.equal(await Movement.countDocuments(), 0);
+  });
+
+  test('kit inputs reject fractional pieces, duplicated barcodes and invalid composition sizes', async () => {
+    const receipt = await create(); const lineId = crypto.randomUUID();
+    for (const components of [[], Array.from({ length: 51 }, () => component('P')), [component('P', 0)], [component('P', 1.5)],
+      [component('P', 1, null, 'DUP'), component('M', 1, null, 'DUP')], [component('P', 1, null, 'bad\ncode')]]) {
+      await api('patch', `/receipts/${receipt._id}`).send({ version: receipt.version, lines: [{ id: lineId, kit: { components } }] }).expect(400);
+    }
+    await api('patch', `/receipts/${receipt._id}`).send({ version: receipt.version, lines: [{ id: lineId, kit: { components: [component('P')] }, expectedQuantity: 1.5 }] }).expect(400);
+    assert.equal((await Receipt.findById(receipt._id).lean()).lines.length, 0);
+  });
+
+  test('component scans identify only the selected piece and enforce conflicts without counting kits', async () => {
+    let receipt = await kitReceipt([component('P'), component('M'), component('G')]);
+    const lineId = receipt.lines[0].id; const [p, m, g] = receipt.lines[0].kit.components;
+    const identify = event('000123', 99, { mode: 'identify', lineId, componentId: p.id });
+    receipt = (await api('post', `/receipts/${receipt._id}/events`).send({ events: [identify] }).expect(200)).body.receipt;
+    assert.equal(receipt.lines[0].receivedQuantity, 0); assert.equal(receipt.lines[0].productId, null);
+    assert.equal(receipt.lines[0].kit.components[0].productId, String(fixture.product._id));
+    assert.equal(receipt.lines[0].kit.components[0].productName, fixture.product.nome);
+    assert.equal(receipt.lines[0].kit.components[1].barcode, '');
+    const retry = (await api('post', `/receipts/${receipt._id}/events`).send({ events: [identify] }).expect(200)).body.receipt;
+    assert.equal(retry.version, receipt.version);
+    await api('post', `/receipts/${receipt._id}/events`).send({ events: [{ ...identify, componentId: m.id }] }).expect(409);
+    for (const blocked of [event('000123', 1, { lineId }), event('000123', 1, { mode: 'identify', lineId }),
+      event('000123', 1, { mode: 'identify', lineId, componentId: m.id }), event('999888', 1, { mode: 'identify', lineId, componentId: p.id })]) {
+      await api('post', `/receipts/${receipt._id}/events`).send({ events: [blocked] }).expect(409);
+    }
+    receipt = (await api('post', `/receipts/${receipt._id}/events`).send({ events: [event('NEW-G', 1, { mode: 'identify', lineId, componentId: g.id })] }).expect(200)).body.receipt;
+    assert.equal(receipt.lines[0].kit.components[2].barcode, 'NEW-G'); assert.equal(receipt.events.at(-1).status, 'unknown');
+    assert.equal(receipt.lines[0].receivedQuantity, 0);
+  });
+
+  test('kit counts, concurrent batches, network retries and repeated undo persist exactly once', async () => {
+    let receipt = await kitReceipt([component('P', 3)]); const lineId = receipt.lines[0].id;
+    const counts = Array.from({ length: 8 }, () => kitEvent(lineId));
+    const responses = await Promise.all(counts.map(item => api('post', `/receipts/${receipt._id}/events`).send({ events: [item] })));
+    assert.ok(responses.every(response => response.status === 200), JSON.stringify(responses.map(response => response.body)));
+    receipt = (await api('post', `/receipts/${receipt._id}/events`).send({ events: counts }).expect(200)).body.receipt;
+    assert.equal(receipt.lines[0].receivedQuantity, 8); assert.equal(receipt.events.length, 8);
+    for (const invalid of [{ ...kitEvent(lineId), barcode: '000123' }, kitEvent(lineId, 0), kitEvent(lineId, 0.5), { ...kitEvent(lineId), componentId: crypto.randomUUID() }]) {
+      await api('post', `/receipts/${receipt._id}/events`).send({ events: [invalid] }).expect(400);
+    }
+    const undo = { eventId: crypto.randomUUID(), undoOf: counts[0].eventId };
+    receipt = (await api('post', `/receipts/${receipt._id}/events`).send({ events: [undo, undo] }).expect(200)).body.receipt;
+    assert.equal(receipt.lines[0].receivedQuantity, 7);
+    receipt = (await api('post', `/receipts/${receipt._id}/events`).send({ events: [{ eventId: crypto.randomUUID(), undoOf: counts[0].eventId }] }).expect(200)).body.receipt;
+    assert.equal(receipt.lines[0].receivedQuantity, 7); assert.equal(receipt.events.at(-1).status, 'already_undone');
+    assert.equal(receipt.events[0].mode, 'kit_count');
+  });
+
+  test('a new unknown component barcode clears its prior SKU but preserves an intentional first alias', async () => {
+    let receipt = await kitReceipt([component('P', 1, fixture.product)]);
+    const line = receipt.lines[0]; const part = line.kit.components[0];
+    const identify = barcode => event(barcode, 1, { mode: 'identify', lineId: line.id, componentId: part.id });
+    receipt = (await api('post', `/receipts/${receipt._id}/events`).send({ events: [identify('NEW-UNKNOWN')] }).expect(200)).body.receipt;
+    assert.equal(receipt.lines[0].kit.components[0].productId, null); assert.equal(receipt.lines[0].kit.components[0].productName, '');
+    assert.equal(receipt.events.at(-1).status, 'unknown'); assert.equal(receipt.lines[0].receivedQuantity, 0);
+    const explicit = [{ ...receipt.lines[0].kit.components[0], barcode: '', productId: String(fixture.product._id) }];
+    receipt = (await api('patch', `/receipts/${receipt._id}`).send({ version: receipt.version, lines: [{ id: line.id, kit: { components: explicit } }] }).expect(200)).body.receipt;
+    receipt = (await api('post', `/receipts/${receipt._id}/events`).send({ events: [identify('INTENDED-ALIAS'), identify('INTENDED-ALIAS')] }).expect(200)).body.receipt;
+    assert.equal(receipt.lines[0].kit.components[0].productId, String(fixture.product._id));
+    assert.equal(receipt.events.at(-1).status, 'identified');
+    receipt = (await api('post', `/receipts/${receipt._id}/events`).send({ events: [identify('ANOTHER-UNKNOWN')] }).expect(200)).body.receipt;
+    assert.equal(receipt.lines[0].kit.components[0].productId, null); assert.equal(receipt.events.at(-1).status, 'unknown');
+  });
+
+  test('composition edits reset confirmations and a counted kit cannot be reinterpreted as units', async () => {
+    let receipt = await kitReceipt([component('P', 3, fixture.product)], { quantity: 1 });
+    receipt = await reviewKit(receipt); const line = receipt.lines[0];
+    await api('patch', `/receipts/${receipt._id}`).send({ version: receipt.version, lines: [{ id: line.id, kit: null, receivedQuantity: 0 }] }).expect(409);
+    const components = line.kit.components.map(item => ({ ...item, quantityPerKit: 4, label: 'Tam 1' }));
+    receipt = (await api('patch', `/receipts/${receipt._id}`).send({ version: receipt.version, lines: [{ id: line.id, kit: { components }, reviewed: true, conversionConfirmed: true }] }).expect(200)).body.receipt;
+    assert.equal(receipt.lines[0].reviewed, false); assert.equal(receipt.lines[0].conversionConfirmed, false); assert.equal(receipt.lines[0].receivedQuantity, 1);
+    await api('post', `/receipts/${receipt._id}/approve`).send({ version: receipt.version }).expect(400);
+    receipt = (await api('patch', `/receipts/${receipt._id}`).send({ version: receipt.version, lines: [{ id: line.id, receivedQuantity: 0 }] }).expect(200)).body.receipt;
+    await api('patch', `/receipts/${receipt._id}`).send({ version: receipt.version, lines: [{ id: line.id, kit: null }] }).expect(409);
+    const ordinary = await readyReceipt({ quantity: 1 });
+    await api('patch', `/receipts/${ordinary._id}`).send({ version: ordinary.version, lines: [{ id: ordinary.lines[0].id, kit: { components } }] }).expect(409);
+  });
+
+  test('PMG kits expand once into individual SKUs, preserve prices and never create a parent or supplier aliases', async () => {
+    const large = await Product.create({ cod: '3', codbarras: 'LARGE', nome: 'Cama G', custo: 11, venda: 20, unidade: 'UN', estoques: [{ deposito: fixture.deposit._id, quantidade: 6 }] });
+    let receipt = await kitReceipt([component('P', 1, fixture.product, 'PIECE-P'), component('M', 1, fixture.otherProduct, 'PIECE-M'), component('G', 1, large, 'PIECE-G')], {
+      testMode: false, quantity: 2, expectedQuantity: 2, unitCost: 219.99, supplierCode: 'KITREF', barcode: 'KIT-PARENT',
+    });
+    receipt = await reviewKit(receipt);
+    const approvals = await Promise.all(Array.from({ length: 2 }, () => api('post', `/receipts/${receipt._id}/approve`).send({ version: receipt.version, learnBarcodes: true, learnSupplierLinks: true })));
+    assert.ok(approvals.every(response => [200, 409].includes(response.status)), JSON.stringify(approvals.map(response => response.body)));
+    await api('post', `/receipts/${receipt._id}/approve`).send({ version: receipt.version }).expect(200);
+    const products = await Product.find({}).sort({ cod: 1 }).lean();
+    assert.deepEqual(products.map(item => item.stock), [12, 6, 8]);
+    assert.deepEqual(products.map(item => [item.custo, item.venda]), [[9, 15], [5, 10], [11, 20]]);
+    assert.ok(products.every(item => item.fornecedores.length === 0));
+    assert.equal(await BarcodeLink.countDocuments(), 3); assert.equal(await BarcodeLink.countDocuments({ barcode: 'KIT-PARENT' }), 0);
+    assert.equal(await Movement.countDocuments(), 3); assert.equal(await Movement.countDocuments({ 'metadata.fromKit': true }), 3);
+    assert.equal(await AccountPayable.countDocuments(), 0); assert.equal(await Product.countDocuments(), 3);
+    const saved = await Receipt.findById(receipt._id).lean();
+    assert.equal(saved.lines[0].receivedQuantity, 2); assert.equal(saved.lines[0].productId, null); assert.equal(saved.approval.appliedProducts, 3);
+  });
+
+  test('3P, 4G and numbered aliases aggregate correctly alongside a regular line of the same SKU', async () => {
+    let receipt = await kitReceipt([component('P', 3, fixture.product)], { testMode: false, quantity: 2 });
+    receipt = (await api('patch', `/receipts/${receipt._id}`).send({ version: receipt.version, lines: [
+      { id: crypto.randomUUID(), unit: 'KT', receivedQuantity: 2, kit: { components: [component('G', 4, fixture.otherProduct)] } },
+      { id: crypto.randomUUID(), unit: 'KT', receivedQuantity: 1, kit: { components: [component('Tam 1', 1, fixture.product, '000123'), component('Tam 2', 2, fixture.product, '000456')] } },
+      { id: crypto.randomUUID(), productId: String(fixture.product._id), barcode: '000123', receivedQuantity: 1, stockFactor: 1 },
+    ] }).expect(200)).body.receipt;
+    receipt = await reviewKit(receipt);
+    const approved = await api('post', `/receipts/${receipt._id}/approve`).send({ version: receipt.version }).expect(200);
+    assert.equal(approved.body.receipt.approval.appliedProducts, 2);
+    assert.equal((await Product.findById(fixture.product._id).lean()).stock, 20);
+    assert.equal((await Product.findById(fixture.otherProduct._id).lean()).stock, 12);
+    assert.equal(await Movement.countDocuments(), 3);
+    assert.equal(await Movement.countDocuments({ 'metadata.fromKit': true }), 2);
+  });
+
+  test('kit test approval checks differences but leaves inventory and barcode mappings untouched', async () => {
+    const beforeProducts = await Product.find({}).sort({ _id: 1 }).lean();
+    let receipt = await kitReceipt([component('Tam 1', 3, fixture.product, 'NEW-P')], { quantity: 2, expectedQuantity: 3 });
+    receipt = await reviewKit(receipt);
+    await api('post', `/receipts/${receipt._id}/approve`).send({ version: receipt.version }).expect(400);
+    const result = await api('post', `/receipts/${receipt._id}/approve`).send({ version: receipt.version, acceptDifferences: true, learnBarcodes: true }).expect(200);
+    assert.equal(result.body.receipt.status, 'test_approved');
+    assert.deepEqual(await Product.find({}).sort({ _id: 1 }).lean(), beforeProducts);
+    assert.equal(await Movement.countDocuments(), 0); assert.equal(await BarcodeLink.countDocuments(), 0);
+  });
+
+  test('kit components reject nested fractional products during setup, scan, review and approval', async () => {
+    let receipt = await kitReceipt([component('P', 3, fixture.product)], { testMode: false, quantity: 1 });
+    receipt = await reviewKit(receipt); const line = receipt.lines[0];
+    await Product.updateOne({ _id: fixture.product._id }, { $set: { 'fracionado.ativo': true } });
+    for (const fields of [{ kit: line.kit }, { reviewed: true, conversionConfirmed: true }]) {
+      const response = await api('patch', `/receipts/${receipt._id}`).send({ version: receipt.version, lines: [{ id: line.id, ...fields }] }).expect(400);
+      assert.equal(response.body.code, 'KIT_NESTED_FRACTIONAL');
+    }
+    const scan = await api('post', `/receipts/${receipt._id}/events`).send({ events: [event('000123', 1, { mode: 'identify', lineId: line.id, componentId: line.kit.components[0].id })] }).expect(400);
+    assert.equal(scan.body.code, 'KIT_NESTED_FRACTIONAL');
+    const approval = await api('post', `/receipts/${receipt._id}/approve`).send({ version: receipt.version }).expect(400);
+    assert.equal(approval.body.code, 'KIT_NESTED_FRACTIONAL');
+    assert.equal(await Movement.countDocuments(), 0); assert.equal((await Product.findById(fixture.product._id).lean()).stock, 10);
+  });
+
+  test('catalog changes to inactive products or conflicting barcodes block the whole kit approval', async () => {
+    let receipt = await kitReceipt([component('P', 1, fixture.product), component('M', 1, fixture.otherProduct)], { testMode: false, quantity: 1 });
+    receipt = await reviewKit(receipt);
+    await Product.updateOne({ _id: fixture.otherProduct._id }, { $set: { inativo: true } });
+    let result = await api('post', `/receipts/${receipt._id}/approve`).send({ version: receipt.version }).expect(400);
+    assert.equal(result.body.code, 'PRODUCT_UNAVAILABLE');
+    await Product.updateOne({ _id: fixture.otherProduct._id }, { $set: { inativo: false }, $push: { codigosComplementares: '000123' } });
+    result = await api('post', `/receipts/${receipt._id}/approve`).send({ version: receipt.version }).expect(409);
+    assert.equal(result.body.code, 'BARCODE_CONFLICT');
+    assert.equal(await Movement.countDocuments(), 0); assert.equal(await BarcodeLink.countDocuments(), 0);
+    assert.equal((await Product.findById(fixture.product._id).lean()).stock, 10); assert.equal((await Receipt.findById(receipt._id).lean()).status, 'draft');
+  });
+
+  test('a failed second component stock write rolls back first stock, audit and learned barcode', async () => {
+    let receipt = await kitReceipt([component('P', 1, fixture.product, 'NEW-P'), component('M', 1, fixture.otherProduct, 'NEW-M')], { testMode: false, quantity: 1 });
+    receipt = await reviewKit(receipt);
+    const originalSave = Product.prototype.save; let sawFirstWrite = false;
+    Product.prototype.save = async function (options) {
+      if (options?.session && String(this._id) === String(fixture.otherProduct._id)) {
+        const prior = await Product.findById(fixture.product._id).session(options.session).lean();
+        sawFirstWrite = prior.stock === 11;
+        const error = new Error('Falha controlada para testar rollback.'); error.status = 500; error.code = 'TEST_ROLLBACK'; throw error;
+      }
+      return originalSave.call(this, options);
+    };
+    try {
+      await api('post', `/receipts/${receipt._id}/approve`).send({ version: receipt.version, learnBarcodes: true }).expect(500);
+    } finally { Product.prototype.save = originalSave; }
+    assert.equal(sawFirstWrite, true);
+    assert.equal((await Product.findById(fixture.product._id).lean()).stock, 10);
+    assert.equal((await Product.findById(fixture.otherProduct._id).lean()).stock, 4);
+    assert.equal(await Movement.countDocuments(), 0); assert.equal(await BarcodeLink.countDocuments(), 0);
+    assert.equal((await Receipt.findById(receipt._id).lean()).status, 'draft');
+  });
+
+  test('concurrent kit confirmations cannot assign a shared unknown barcode to different SKUs', async () => {
+    const receipts = [];
+    for (const product of [fixture.product, fixture.otherProduct]) receipts.push(await reviewKit(await kitReceipt([component('Tam 1', 3, product, 'SHARED-KIT')], { testMode: false, quantity: 1 })));
+    const responses = await Promise.all(receipts.map(receipt => api('post', `/receipts/${receipt._id}/approve`).send({ version: receipt.version, learnBarcodes: true })));
+    assert.deepEqual(responses.map(response => response.status).sort(), [200, 409]);
+    assert.equal(await BarcodeLink.countDocuments({ barcode: 'SHARED-KIT' }), 1); assert.equal(await Movement.countDocuments(), 1);
+    assert.equal(await Receipt.countDocuments({ status: 'approved' }), 1); assert.equal(await Receipt.countDocuments({ status: 'draft' }), 1);
   });
 });

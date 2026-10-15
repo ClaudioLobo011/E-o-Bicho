@@ -4,7 +4,7 @@ Este fluxo prepara o documento, guarda as leituras do coletor e permite conferir
 
 ## Atualizar o TC57
 
-Instale `ContagemEstoque-TC57-v1.1.0.apk` sobre o aplicativo de contagem existente. Esta distribuição usa o pacote `br.com.eobicho.contagem.debug` e mantém a assinatura da distribuição anterior 1.0.6. **Não desinstale o aplicativo nem limpe seus dados.** Se o Android recusar a atualização por incompatibilidade de assinatura ou se o pacote instalado for diferente, obtenha o APK compatível antes de continuar.
+Instale `ContagemEstoque-TC57-v1.2.0.apk` sobre o aplicativo de contagem existente. Esta distribuição usa o pacote `br.com.eobicho.contagem.debug` e mantém a assinatura das distribuições anteriores. **Não desinstale o aplicativo nem limpe seus dados.** Se o Android recusar a atualização por incompatibilidade de assinatura ou se o pacote instalado for diferente, obtenha o APK compatível antes de continuar.
 
 Abra **Romaneios** no aplicativo, informe o usuário e a senha do sistema e toque em **Autorizar recebimentos**. A autorização do coletor é própria para recebimentos. Toque em **Sincronizar** para carregar os recebimentos e o catálogo disponíveis para sua conta.
 
@@ -63,6 +63,23 @@ Confira a **unidade recebida** e as **unidades de estoque por unidade recebida**
 Quantidade esperada e recebida ficam separadas. Os filtros mostram produtos sem vínculo, conversões pendentes, faltas e sobras. Ajustes manuais da quantidade recebida ficam registrados no histórico. Uma leitura errada pode ser desfeita; o registro original é preservado.
 
 O site atualiza as leituras automaticamente e preserva as edições locais. Se outra pessoa alterar o mesmo campo, escolha o valor correto no aviso de conflito antes de salvar. Novas leituras durante a revisão final exigem abrir novamente a revisão para conferir os valores atualizados.
+
+## Kits com tamanhos e quantidades diferentes
+
+Uma linha `KT` pode ter uma composição própria neste recebimento. Toque nela no TC57 para definir as peças. No site, use o botão de configurar o kit na linha. A unidade `KT` apenas sugere a configuração: a composição precisa ser informada e salva.
+
+1. Escolha um atalho **P · M · G**, **3 P**, **4 G** ou **Tam 1 · 2 · 3** no coletor, ou informe seus próprios tamanhos/tipos e quantidades. Cada quantidade corresponde às peças daquele tipo que vêm em **um kit**.
+2. Salve a composição com conexão disponível. Exemplo: `P = 1`, `M = 1`, `G = 1`. Para três peças iguais, basta uma linha `P = 3`.
+3. Toque no tamanho; ele fica verde. Use o gatilho do TC57 para vincular o código àquela peça. A seleção permanece naquele tamanho até você escolher outro. **Esse bipe não conta kits nem peças.**
+4. Se o código ainda não tiver vínculo, use **Cadastro** para selecionar o produto individual existente. Não selecione outro produto fracionado como peça do kit.
+5. Informe quantos kits completos chegaram e toque em **Registrar kits**. Essa é uma contagem separada da identificação dos códigos; registros errados podem ser desfeitos.
+6. No site, confira a composição, os códigos, os produtos e a quantidade recebida, confirme a composição e marque a linha revisada antes de concluir.
+
+Na entrada real, o sistema multiplica os kits recebidos pela quantidade de cada peça. **2 kits P/M/G** geram **2 P + 2 M + 2 G**; **2 kits de 3 P** geram **6 P**. O kit não recebe também um lançamento de estoque. Tamanhos podem ter nomes livres, como `Tam 1`, `Tam 2`, `PP`, `GG` ou uma descrição de cor/modelo.
+
+A composição fica salva neste recebimento e pode ser diferente em outro documento. Alterá-la exige nova revisão. Sincronize ou resolva as leituras pendentes antes de mudar as peças. Identificação e registro de kits já configurados podem ficar na fila offline; criar ou editar composição e vincular o cadastro requer conexão. Dois códigos iguais não podem representar peças diferentes na mesma composição; quando forem peças iguais, use uma linha com a quantidade correspondente.
+
+O custo do kit permanece no documento; esta função não distribui custos entre tamanhos e não altera preços ou custos dos cadastros. A opção de lembrar códigos bipados inclui as peças. O código do fornecedor referente ao kit não é aprendido como se fosse o código de uma única peça.
 
 ## Sem internet
 
