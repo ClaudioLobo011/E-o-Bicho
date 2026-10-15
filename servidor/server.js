@@ -156,6 +156,7 @@ app.use('/api/funcionarios', require('./routes/adminFuncionarios'));
 
 // Rotas da API (mapeadas dinamicamente)
 const routes = [
+  { path: '/api/receiving', file: './routes/receivingModule' },
   { path: '/api/products', file: './routes/products' },
   { path: '/api/categories', file: './routes/categories' },
   { path: '/api/auth', file: './routes/auth' },
