@@ -54,6 +54,8 @@ Deixe valores desconhecidos em branco. Preserve códigos como texto para manter 
 
 No site, **Vincular produto** busca por nome, código interno ou código de barras. Se for necessário cadastrar um produto, abra **Cadastro de produtos**, conclua o cadastro com dados conferidos, volte ao recebimento e use **Atualizar catálogo** para vinculá-lo. O fluxo não inventa custo ou preço de venda.
 
+Cadastros inativos também podem ser vinculados e identificados durante a conferência. A tela indica **Vinculado · Cadastro inativo**, mantendo a pendência visível. Vincular não ativa o produto, não define preço e não movimenta estoque. Para concluir o recebimento, todos os produtos vinculados precisam estar ativos; o servidor verifica novamente essa condição na aprovação.
+
 Uma referência impressa na coluna “Código” do fornecedor não é automaticamente o código de barras da embalagem. Os dois campos permanecem separados.
 
 ## Embalagens, diferenças e correções

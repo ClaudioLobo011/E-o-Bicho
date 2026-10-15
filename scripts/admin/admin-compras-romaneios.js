@@ -50,6 +50,18 @@
     });
   }
   const isKit = (line) => !!line?.kit && Array.isArray(line.kit.components);
+  function catalogIssues(line, index) {
+    const targets = (isKit(line) ? line.kit.components : [line]).filter((target) => target.productId);
+    if (!targets.length) return [];
+    if (!index) return ['Verificando cadastro'];
+    const issues = new Set();
+    for (const target of targets) {
+      const product = index.get(idOf(target.productId));
+      if (!product) issues.add('Cadastro não encontrado');
+      else if (product.inativo) issues.add('Cadastro inativo');
+    }
+    return [...issues];
+  }
   function prepareKit(components) {
     if (!Array.isArray(components) || !components.length || components.length > 50) throw new Error('O kit precisa de 1 a 50 componentes.');
     const ids = new Set(), barcodes = new Set();
@@ -269,7 +281,7 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
     result.acknowledged = [...acknowledged];
     return result;
   }
-  const helpers = { parseCsv, prepareImport, prepareImportProposal, importSelectionState, parseChatGptResponse, assertImportReceipt, chatGptReceivingPrompt, fingerprint, csvCell, number, isPermanentReceivingFailure, transmitReceivingEvents, isKit, prepareKit, kitPieces, kitFormula, kitIssues, stockProjection, prepareScan };
+  const helpers = { parseCsv, prepareImport, prepareImportProposal, importSelectionState, parseChatGptResponse, assertImportReceipt, chatGptReceivingPrompt, fingerprint, csvCell, number, isPermanentReceivingFailure, transmitReceivingEvents, isKit, prepareKit, kitPieces, kitFormula, kitIssues, stockProjection, prepareScan, catalogIssues };
   if (typeof module !== 'undefined' && module.exports) module.exports = helpers;
   if (typeof document === 'undefined') return;
   root.ReceivingImport = helpers;
@@ -280,7 +292,7 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
   const labels = { description: 'descrição', supplierCode: 'código do fornecedor', expectedQuantity: 'quantidade esperada', receivedQuantity: 'quantidade recebida', unit: 'unidade', unitCost: 'custo', productId: 'produto', barcode: 'código de barras', stockFactor: 'conversão', conversionConfirmed: 'conversão conferida', reviewed: 'revisão', reference: 'referência', companyId: 'loja', depositId: 'depósito', supplierId: 'fornecedor', testMode: 'modo de teste', notes: 'observações' };
   const state = {
     meta: { companies: [], deposits: [], suppliers: [] }, receipts: [], receipt: null, baseline: null,
-    products: null, productPromise: null, productLineId: null, dirty: new Map(), headerDirty: new Set(),
+    products: null, productIndex: null, productPromise: null, productLineId: null, dirty: new Map(), headerDirty: new Set(),
     deleted: new Set(), conflicts: new Map(), photos: [], photoId: null, photoUrl: null, photoRotation: 0,
     capabilities: null, proposal: null, refreshing: false, saving: false, sending: false, extracting: false,
     online: navigator.onLine, lastSync: null, noticeTimer: null, recovering: false, queue: [],
@@ -459,7 +471,10 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
     }
     $('receipt-list-view').hidden = true; $('receipt-detail-view').hidden = false;
     const url = new URL(location.href); url.searchParams.set('id', id); history.replaceState({}, '', url);
-    renderDetail(); await loadPhotos().catch((error) => notify(error.message, 'warning'));
+    renderDetail(); await Promise.all([
+      loadPhotos().catch((error) => notify(error.message, 'warning')),
+      loadProducts().then(() => renderDetail()).catch((error) => notify(error.message, 'warning')),
+    ]);
     if (storagePrefix) {
       const jobId = sessionStorage.getItem(storagePrefix + 'ocr:' + id);
       if (jobId && !state.extractionJobs.has(id)) pollExtraction(id, jobId).catch((error) => notify(error.message, 'warning', true));
@@ -476,7 +491,7 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
     } finally { state.refreshing = false; }
   }
   function lineIssues(line) {
-    const issues = [];
+    const issues = catalogIssues(line, state.productIndex);
     if (isKit(line)) issues.push(...kitIssues(line));
     else if (!line.productId) issues.push('Sem produto');
     if (!line.conversionConfirmed) issues.push(isKit(line) ? 'Composição' : 'Conversão');
@@ -543,9 +558,10 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
       const difference = hasDifference(line) ? `<span class="rr-badge is-amber">${diff > 0 ? 'Sobra' : 'Falta'}: ${fmt(Math.abs(diff))}</span>` : '';
       if (isKit(line)) {
         const linked = line.kit.components.every((part) => part.productId && part.barcode);
-        return `<article class="rr-line rr-kit-line${state.dirty.has(text(line.id)) ? ' is-dirty' : ''}" data-line-id="${escape(line.id)}"><div class="rr-line-header"><span class="rr-line-number">${String(index + 1).padStart(2, '0')}</span><div class="rr-line-description"><input aria-label="Descrição original da linha ${index + 1}" data-line-field="description" value="${escape(line.description)}"${disabled}><div class="rr-line-tags"><span class="rr-badge is-blue">Kit · ${fmt(kitPieces(line))} peças</span><span class="rr-badge ${linked ? 'is-green' : 'is-amber'}">${linked ? 'Peças identificadas' : 'Identificar peças'}</span>${difference}</div></div><button class="rr-icon-button" data-delete-line="${escape(line.id)}" aria-label="Remover linha ${index + 1}"${disabled}><i class="fas fa-trash-can" aria-hidden="true"></i></button></div><div class="rr-kit-summary"><div><strong>1 kit = ${escape(kitFormula(line))}</strong><p>Confira a composição deste recebimento.</p></div><button class="rr-button rr-small" data-kit-line="${escape(line.id)}"${disabled}>Editar composição</button></div><div class="rr-line-fields rr-kit-fields">${input(line, 'supplierCode', 'Código fornecedor')}${input(line, 'expectedQuantity', 'Kits esperados', 'number')}${input(line, 'receivedQuantity', 'Kits recebidos', 'number')}${input(line, 'unitCost', 'Custo de 1 kit (R$)', 'number')}</div><div class="rr-kit-parts">${line.kit.components.map((part) => `<div class="rr-kit-part"><b>${escape(part.label)} <span>× ${fmt(part.quantityPerKit)}</span></b><div><strong>${escape(part.productName || 'Sem cadastro vinculado')}</strong><span>${escape(part.barcode || 'Sem código de barras')} · ${fmt(Number(line.receivedQuantity || 0) * part.quantityPerKit)} un. para estoque</span></div><button class="rr-button rr-small" data-identify-kit="${escape(line.id)}" data-component-id="${escape(part.id)}"${disabled}>Bipar ${escape(part.label)}</button></div>`).join('')}</div><div class="rr-line-review"><label class="rr-check"><input type="checkbox" data-line-field="conversionConfirmed"${line.conversionConfirmed ? ' checked' : ''}${disabled}> Conferi a composição</label><label class="rr-check"><input type="checkbox" data-line-field="reviewed"${line.reviewed ? ' checked' : ''}${disabled}> Linha revisada</label><button class="rr-button rr-small" data-count-kit="${escape(line.id)}"${disabled}>Contar kits completos</button></div><p class="rr-kit-cost-note">O custo é do kit inteiro. A entrada distribui as peças; não rateia custo nem muda preços dos cadastros.</p></article>`;
+        const catalogPending = catalogIssues(line, state.productIndex).join(', ');
+        return `<article class="rr-line rr-kit-line${state.dirty.has(text(line.id)) ? ' is-dirty' : ''}" data-line-id="${escape(line.id)}"><div class="rr-line-header"><span class="rr-line-number">${String(index + 1).padStart(2, '0')}</span><div class="rr-line-description"><input aria-label="Descrição original da linha ${index + 1}" data-line-field="description" value="${escape(line.description)}"${disabled}><div class="rr-line-tags"><span class="rr-badge is-blue">Kit · ${fmt(kitPieces(line))} peças</span><span class="rr-badge ${linked && !catalogPending ? 'is-green' : 'is-amber'}">${linked ? (catalogPending || 'Peças identificadas') : 'Identificar peças'}</span>${difference}</div></div><button class="rr-icon-button" data-delete-line="${escape(line.id)}" aria-label="Remover linha ${index + 1}"${disabled}><i class="fas fa-trash-can" aria-hidden="true"></i></button></div><div class="rr-kit-summary"><div><strong>1 kit = ${escape(kitFormula(line))}</strong><p>Confira a composição deste recebimento.</p></div><button class="rr-button rr-small" data-kit-line="${escape(line.id)}"${disabled}>Editar composição</button></div><div class="rr-line-fields rr-kit-fields">${input(line, 'supplierCode', 'Código fornecedor')}${input(line, 'expectedQuantity', 'Kits esperados', 'number')}${input(line, 'receivedQuantity', 'Kits recebidos', 'number')}${input(line, 'unitCost', 'Custo de 1 kit (R$)', 'number')}</div><div class="rr-kit-parts">${line.kit.components.map((part) => `<div class="rr-kit-part"><b>${escape(part.label)} <span>× ${fmt(part.quantityPerKit)}</span></b><div><strong>${escape(part.productName || 'Sem cadastro vinculado')}</strong><span>${escape(part.barcode || 'Sem código de barras')} · ${fmt(Number(line.receivedQuantity || 0) * part.quantityPerKit)} un. para estoque</span></div><button class="rr-button rr-small" data-identify-kit="${escape(line.id)}" data-component-id="${escape(part.id)}"${disabled}>Bipar ${escape(part.label)}</button></div>`).join('')}</div><div class="rr-line-review"><label class="rr-check"><input type="checkbox" data-line-field="conversionConfirmed"${line.conversionConfirmed ? ' checked' : ''}${disabled}> Conferi a composição</label><label class="rr-check"><input type="checkbox" data-line-field="reviewed"${line.reviewed ? ' checked' : ''}${disabled}> Linha revisada</label><button class="rr-button rr-small" data-count-kit="${escape(line.id)}"${disabled}>Contar kits completos</button></div><p class="rr-kit-cost-note">O custo é do kit inteiro. A entrada distribui as peças; não rateia custo nem muda preços dos cadastros.</p></article>`;
       }
-      return `<article class="rr-line${state.dirty.has(text(line.id)) ? ' is-dirty' : ''}" data-line-id="${escape(line.id)}"><div class="rr-line-header"><span class="rr-line-number">${String(index + 1).padStart(2, '0')}</span><div class="rr-line-description"><input aria-label="Descrição original da linha ${index + 1}" data-line-field="description" value="${escape(line.description || '')}" placeholder="Descrição original do documento"${disabled}><div class="rr-line-tags">${line.productId ? '<span class="rr-badge is-green">Identificado</span>' : '<span class="rr-badge is-amber">Sem produto vinculado</span>'}${difference}${!lineIssues(line).length ? '<span class="rr-badge is-green">Revisado</span>' : ''}${line.sourcePage ? `<span class="rr-badge">Pág. ${escape(line.sourcePage)}</span>` : ''}</div></div><button class="rr-icon-button" data-delete-line="${escape(line.id)}" aria-label="Remover linha ${index + 1}"${disabled}><i class="fas fa-trash-can" aria-hidden="true"></i></button></div><div class="rr-line-fields">${input(line, 'supplierCode', 'Código fornecedor')}${input(line, 'barcode', 'Código de barras')}${input(line, 'unit', 'Unidade recebida')}${input(line, 'expectedQuantity', 'Esperado', 'number')}${input(line, 'receivedQuantity', 'Recebido', 'number')}</div><div class="rr-line-product"><i class="fas ${line.productId ? 'fa-box' : 'fa-link'}" aria-hidden="true"></i><div><strong>${escape(line.productName || 'Selecione o produto do catálogo')}</strong><p>${line.productId ? 'Vínculo com o cadastro existente' : 'O código desconhecido fica guardado até você identificar o produto.'}</p></div><button class="rr-button rr-small" data-match-line="${escape(line.id)}"${disabled}>${line.productId ? 'Trocar produto' : 'Vincular produto'}</button>${line.productId ? `<button class="rr-button rr-small" data-unlink-line="${escape(line.id)}" aria-label="Desvincular produto"${disabled}><i class="fas fa-link-slash" aria-hidden="true"></i></button>` : ''}</div><div class="rr-line-fields rr-line-secondary">${input(line, 'stockFactor', 'Unidades de estoque por unidade recebida', 'number')}${input(line, 'unitCost', 'Custo por unidade recebida (R$)', 'number')}</div><div class="rr-line-review"><label class="rr-check"><input type="checkbox" data-line-field="conversionConfirmed"${line.conversionConfirmed ? ' checked' : ''}${disabled}> Conferi a conversão</label><label class="rr-check"><input type="checkbox" data-line-field="reviewed"${line.reviewed ? ' checked' : ''}${disabled}> Linha revisada</label><span>${fmt(Number(line.receivedQuantity || 0) * Number(line.stockFactor || 0))} un. para o estoque</span></div></article>`;
+      return `<article class="rr-line${state.dirty.has(text(line.id)) ? ' is-dirty' : ''}" data-line-id="${escape(line.id)}"><div class="rr-line-header"><span class="rr-line-number">${String(index + 1).padStart(2, '0')}</span><div class="rr-line-description"><input aria-label="Descrição original da linha ${index + 1}" data-line-field="description" value="${escape(line.description || '')}" placeholder="Descrição original do documento"${disabled}><div class="rr-line-tags">${line.productId ? (catalogIssues(line, state.productIndex).length ? `<span class="rr-badge is-amber">Vinculado · ${escape(catalogIssues(line, state.productIndex).join(', '))}</span>` : '<span class="rr-badge is-green">Identificado</span>') : '<span class="rr-badge is-amber">Sem produto vinculado</span>'}${difference}${!lineIssues(line).length ? '<span class="rr-badge is-green">Revisado</span>' : ''}${line.sourcePage ? `<span class="rr-badge">Pág. ${escape(line.sourcePage)}</span>` : ''}</div></div><button class="rr-icon-button" data-delete-line="${escape(line.id)}" aria-label="Remover linha ${index + 1}"${disabled}><i class="fas fa-trash-can" aria-hidden="true"></i></button></div><div class="rr-line-fields">${input(line, 'supplierCode', 'Código fornecedor')}${input(line, 'barcode', 'Código de barras')}${input(line, 'unit', 'Unidade recebida')}${input(line, 'expectedQuantity', 'Esperado', 'number')}${input(line, 'receivedQuantity', 'Recebido', 'number')}</div><div class="rr-line-product"><i class="fas ${line.productId ? 'fa-box' : 'fa-link'}" aria-hidden="true"></i><div><strong>${escape(line.productName || 'Selecione o produto do catálogo')}</strong><p>${line.productId ? (catalogIssues(line, state.productIndex).includes('Cadastro inativo') ? 'Vínculo salvo. Conclua e ative o cadastro antes de confirmar a entrada.' : 'Vínculo com o cadastro existente') : 'O código desconhecido fica guardado até você identificar o produto.'}</p></div><button class="rr-button rr-small" data-match-line="${escape(line.id)}"${disabled}>${line.productId ? 'Trocar produto' : 'Vincular produto'}</button>${line.productId ? `<button class="rr-button rr-small" data-unlink-line="${escape(line.id)}" aria-label="Desvincular produto"${disabled}><i class="fas fa-link-slash" aria-hidden="true"></i></button>` : ''}</div><div class="rr-line-fields rr-line-secondary">${input(line, 'stockFactor', 'Unidades de estoque por unidade recebida', 'number')}${input(line, 'unitCost', 'Custo por unidade recebida (R$)', 'number')}</div><div class="rr-line-review"><label class="rr-check"><input type="checkbox" data-line-field="conversionConfirmed"${line.conversionConfirmed ? ' checked' : ''}${disabled}> Conferi a conversão</label><label class="rr-check"><input type="checkbox" data-line-field="reviewed"${line.reviewed ? ' checked' : ''}${disabled}> Linha revisada</label><span>${fmt(Number(line.receivedQuantity || 0) * Number(line.stockFactor || 0))} un. para o estoque</span></div></article>`;
     }).join('') : `<div class="rr-line-placeholder">${state.receipt.lines.length ? 'Nenhum item corresponde a este filtro.' : '<i class="fas fa-barcode" aria-hidden="true"></i><br>As linhas aparecerão aqui.<br>Prepare uma foto, importe uma planilha ou comece a bipar.'}</div>`;
     if (focus) {
       const node = [...document.querySelectorAll('[data-line-id]')].find((el) => el.dataset.lineId === focus.id)?.querySelector(`[data-line-field="${focus.field}"]`);
@@ -636,7 +652,11 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
   async function loadProducts() {
     if (state.products) return state.products;
     if (state.productPromise) return state.productPromise;
-    state.productPromise = api('/catalog').then((result) => { state.products = (result.products || []).filter((product) => !product.inativo); return state.products; }).finally(() => { state.productPromise = null; });
+    state.productPromise = api('/catalog').then((result) => {
+      state.products = result.products || [];
+      state.productIndex = new Map(state.products.map((product) => [idOf(product), product]));
+      return state.products;
+    }).finally(() => { state.productPromise = null; });
     return state.productPromise;
   }
   function renderProductResults() {
@@ -648,7 +668,7 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
       const haystack = normalize([product.nome, product.cod, product.codbarras, ...(product.codigosComplementares || []).map((value) => typeof value === 'object' ? value.codigo || value.codbarras || value.barcode : value)].join(' '));
       return terms.every((term) => haystack.includes(term));
     }).slice(0, 60);
-    $('product-results').innerHTML = matches.length ? matches.map((product) => `<button class="rr-product-option" data-select-product="${escape(product._id)}"><i class="fas fa-box" aria-hidden="true"></i><div><strong>${escape(product.nome)}</strong><p>Cód. ${escape(product.cod || '—')} · Barras ${escape(product.codbarras || '—')} · ${escape(product.unidade || 'UN')}</p></div><i class="fas fa-plus" aria-hidden="true"></i></button>`).join('') : '<p class="rr-line-placeholder">Nenhum cadastro corresponde à busca. Tente outro nome ou código; a linha pode continuar pendente.</p>';
+    $('product-results').innerHTML = matches.length ? matches.map((product) => `<button class="rr-product-option" data-select-product="${escape(product._id)}"><i class="fas fa-box" aria-hidden="true"></i><div><strong>${escape(product.nome)}</strong><p>Cód. ${escape(product.cod || '—')} · Barras ${escape(product.codbarras || '—')} · ${escape(product.unidade || 'UN')}</p>${product.inativo ? '<span class="rr-badge is-amber">Inativo · pode vincular à conferência</span>' : ''}</div><i class="fas fa-plus" aria-hidden="true"></i></button>`).join('') : '<p class="rr-line-placeholder">Nenhum cadastro corresponde à busca. Tente outro nome ou código; a linha pode continuar pendente.</p>';
   }
   async function matchLine(id) {
     const line = lineById(id); if (!line) return;
@@ -1014,6 +1034,8 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
   }
   async function openReview() {
     await saveReceipt(); await refreshReceipt();
+    state.products = null; state.productIndex = null;
+    await loadProducts(); renderDetail();
     const receipt = state.receipt, lines = receipt.lines, differences = lines.filter(hasDifference), issues = reviewIssues();
     state.reviewVersion = receipt.version;
     $('review-title').textContent = receipt.testMode ? 'Concluir teste do recebimento' : 'Confirmar entrada no estoque';
@@ -1077,7 +1099,7 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
     });
     $('add-line').addEventListener('click', () => { addLine(); persistDraft(); renderDetail(); const rows = document.querySelectorAll('[data-line-id]'); rows[rows.length - 1]?.querySelector('input')?.focus(); });
     $('product-search').addEventListener('input', renderProductResults);
-    $('reload-catalog').addEventListener('click', (event) => action(event.currentTarget, async () => { state.products = null; await loadProducts(); renderProductResults(); }));
+    $('reload-catalog').addEventListener('click', (event) => action(event.currentTarget, async () => { state.products = null; state.productIndex = null; await loadProducts(); renderProductResults(); renderDetail(); }));
     $('product-results').addEventListener('click', (event) => { const button = event.target.closest('[data-select-product]'); if (!button) return; const product = state.products.find((row) => text(row._id) === button.dataset.selectProduct); if (!product) return;
       if (state.productComponentId) { try { assertKitEditor(); const part = state.kitEditor.components.find((row) => row.id === state.productComponentId); if (!part) throw new Error('Esta peça foi removida.'); part.productId = product._id; part.productName = product.nome; renderKitEditor(); } catch (error) { $('kit-editor-error').textContent = error.message; } }
       else { const id = state.productLineId; markLine(id, 'productId', product._id); markLine(id, 'productName', product.nome); }

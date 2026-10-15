@@ -122,13 +122,13 @@ async function normalizeKit(input, lineId) {
     if (component.barcode && (/\p{Cc}/u.test(component.barcode) || barcodes.has(component.barcode))) fail(400, 'Cada componente deve ter um código de barras diferente. Para peças iguais, aumente a quantidade por kit.', 'KIT_BARCODE_DUPLICATE');
     if (component.barcode) barcodes.add(component.barcode);
     const matches = component.barcode ? await lookupBarcode(component.barcode) : [];
-    if (matches.length > 1 || matches[0]?.inativo || (component.productId && matches.some(product => String(product._id) !== component.productId))) {
-      fail(409, 'O código do componente está associado a outro produto ou a um cadastro indisponível.', 'BARCODE_CONFLICT', { lineId, componentId: component.id });
+    if (matches.length > 1 || (component.productId && matches.some(product => String(product._id) !== component.productId))) {
+      fail(409, 'O código do componente está associado a outro produto ou a mais de um cadastro.', 'BARCODE_CONFLICT', { lineId, componentId: component.id });
     }
     if (!component.productId && matches.length === 1) component.productId = String(matches[0]._id);
     if (component.productId) {
       const product = await Product.findById(component.productId).select(productFields).lean();
-      if (!product || product.inativo) fail(400, 'O produto do componente não existe ou está inativo.', 'PRODUCT_UNAVAILABLE', { lineId, componentId: component.id });
+      if (!product) fail(400, 'O produto do componente não existe.', 'PRODUCT_UNAVAILABLE', { lineId, componentId: component.id });
       if (product.fracionado?.ativo) fail(400, 'Escolha o produto individual para o componente, e não outro cadastro fracionado.', 'KIT_NESTED_FRACTIONAL', { lineId, componentId: component.id });
       component.productName = product.nome;
     }
@@ -231,7 +231,8 @@ async function patchReceipt(req, id, payload = {}) {
       }
       let autoMatched = false;
       if (!isKit(line) && !line.productId && !('productId' in input) && supplier && line.supplierCode) {
-        const candidates = await Product.find({ inativo: { $ne: true }, 'fornecedores.codigoProduto': line.supplierCode }).select(productFields).lean();
+        // Drafts may identify inactive products. Include them when detecting ambiguous supplier references too.
+        const candidates = await Product.find({ 'fornecedores.codigoProduto': line.supplierCode }).select(productFields).lean();
         const matches = candidates.flatMap(product => product.fornecedores.filter(link => link.codigoProduto === line.supplierCode && sameSupplier(link, supplier)).map(link => ({ product, link })));
         if (matches.length === 1) {
           line.productId = matches[0].product._id; autoMatched = true;
@@ -241,7 +242,7 @@ async function patchReceipt(req, id, payload = {}) {
       }
       if (line.productId) {
         const product = await Product.findById(line.productId).select(productFields).lean();
-        if (!product || product.inativo) fail(400, 'O produto vinculado não existe ou está inativo.');
+        if (!product) fail(400, 'O produto vinculado não existe.', 'PRODUCT_UNAVAILABLE', { lineId });
         line.productName = product.nome;
         if (line.barcode) {
           const matches = await lookupBarcode(line.barcode);
@@ -343,8 +344,9 @@ async function applyEvent(receipt, input, req, barcodeCache) {
   }
   if (!barcodeCache.has(input.barcode)) barcodeCache.set(input.barcode, await lookupBarcode(input.barcode));
   const matches = barcodeCache.get(input.barcode);
-  const product = matches.length === 1 && !matches[0].inativo ? matches[0] : null;
-  let conflict = matches.length > 1 ? 'Código associado a mais de um produto no catálogo.' : matches[0]?.inativo ? 'Produto inativo no catálogo.' : '';
+  // Identification does not publish a product or move stock; approval still requires an active catalog record.
+  const product = matches.length === 1 ? matches[0] : null;
+  let conflict = matches.length > 1 ? 'Código associado a mais de um produto no catálogo.' : '';
   if (isKit(line)) {
     const component = line.kit.components.find(item => item.id === input.componentId);
     if (!component) fail(409, 'O componente escolhido não existe mais. Atualize o kit.', 'COMPONENT_NOT_FOUND');
