@@ -18,6 +18,8 @@
 - Preços, custos, promoções, regras fiscais e contas a pagar permanecem intactos na aprovação.
 - Fotos passam por decodificação, limite de tamanho, SHA-256 e autorização da loja; download mantém bytes exatos.
 - Teste visual em Chrome isolado: login, criação de teste, código conhecido, quantidade, perda de conexão, reenvio, preservação de descrição editada e bloqueio de conflito de quantidade.
+- Mais 12 testes da fila web: isolamento de rejeições, reenvio idempotente e preservação de falhas temporárias.
+- Testes adicionais no navegador: foto real anexada e ampliada, importação CSV, vínculo com catálogo, identificação da linha, revisão da conversão e conclusão de teste; rejeição isolada sem travar leituras seguintes, descarte explícito e histórico preservado após recarregar.
 - Tela revisada em 1440×1080 e 390×844. Nenhum erro JavaScript nesses fluxos.
 
 ## Limites verificados
@@ -25,6 +27,7 @@
 - Nenhum TC57 esteve conectado. Instalação, gatilhos físicos, DataWedge e Keystore precisam ser conferidos no aparelho real.
 - O leitor usado é o integrado do TC57 via DataWedge Intent; a câmera não é usada para bipagem.
 - O OCR local foi experimentado nas imagens fornecidas. A impressão fraca produz leitura de baixa confiança; o sistema apresenta proposta, avisos e texto corrigível. Não há garantia de transcrição integral dessas fotos.
+- No teste integrado de upload/processamento/consulta da primeira foto, o trabalho terminou em 107 segundos, com 2 linhas reconhecidas e confiança 28/100. Essa foto exige complementação manual; o processamento concluído não significa documento integralmente transcrito.
 - Fotos 1 e 2 do exemplo repetem a mesma página; a continuação possui uma área encoberta. Essas lacunas precisam ser resolvidas ao preparar o documento.
 - Nenhum recebimento comercial foi aprovado durante esta validação.
 

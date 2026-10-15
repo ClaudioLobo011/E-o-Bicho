@@ -104,7 +104,39 @@
     if (typeof value !== 'number' && /^[=+\-@\t\r]/.test(cell)) cell = "'" + cell;
     return '"' + cell.replace(/"/g, '""') + '"';
   }
-  const helpers = { parseCsv, prepareImport, fingerprint, csvCell, number };
+  function isPermanentReceivingFailure(error) {
+    // Authentication, throttling, concurrency and transport failures must remain pending.
+    return [400, 403, 404, 409, 410, 413, 422].includes(Number(error?.status)) && error?.code !== 'VERSION_CONFLICT';
+  }
+  async function transmitReceivingEvents(events, send) {
+    const result = { acknowledged: [], rejected: [], responses: [], error: null };
+    const acknowledged = new Set();
+    const recordResponse = (response, attempted) => {
+      const allowed = new Set(attempted.map((event) => event.eventId));
+      for (const id of response.acknowledged || []) if (allowed.has(id)) acknowledged.add(id);
+      result.responses.push(response);
+    };
+    const recordRejection = (event, error) => result.rejected.push({ eventId: event.eventId, status: error.status, code: error.code || '', message: error.message || 'Leitura recusada pelo servidor.' });
+    try { recordResponse(await send(events), events); }
+    catch (error) {
+      if (!isPermanentReceivingFailure(error)) result.error = error;
+      else if (events.length === 1) recordRejection(events[0], error);
+      else {
+        // The endpoint rejects a whole batch if one event is invalid. Reuse every UUID
+        // while isolating the failure; a previously accepted event remains idempotent.
+        for (const event of events) {
+          try { recordResponse(await send([event]), [event]); }
+          catch (singleError) {
+            if (isPermanentReceivingFailure(singleError)) recordRejection(event, singleError);
+            else { result.error = singleError; break; }
+          }
+        }
+      }
+    }
+    result.acknowledged = [...acknowledged];
+    return result;
+  }
+  const helpers = { parseCsv, prepareImport, fingerprint, csvCell, number, isPermanentReceivingFailure, transmitReceivingEvents };
   if (typeof module !== 'undefined' && module.exports) module.exports = helpers;
   if (typeof document === 'undefined') return;
   root.ReceivingImport = helpers;
@@ -138,7 +170,9 @@
   const isClosed = () => !!state.receipt && ['approved', 'test_approved', 'cancelled'].includes(state.receipt.status);
   const hasDirty = () => !!(state.dirty.size || state.headerDirty.size || state.deleted.size);
   const lineById = (id) => state.receipt?.lines?.find((line) => text(line.id) === text(id));
-  const pendingQueue = () => state.queue.filter((item) => item.receiptId === state.receipt?._id);
+  const queuedEntries = () => state.queue.filter((item) => !item.status || item.status === 'pending');
+  const pendingQueue = () => queuedEntries().filter((item) => item.receiptId === state.receipt?._id);
+  const rejectedQueue = () => state.queue.filter((item) => item.receiptId === state.receipt?._id && item.status === 'rejected');
   function notify(message, kind = 'success', persistent = false) {
     clearTimeout(state.noticeTimer); const node = $('receiving-notice');
     node.textContent = message; node.className = kind === 'success' ? '' : `is-${kind}`; node.hidden = false;
@@ -398,12 +432,13 @@
   }
   function updateSaveState() {
     if (!state.receipt) return;
-    const queue = pendingQueue();
+    const queue = pendingQueue(), rejected = rejectedQueue();
     $('save-status').textContent = isClosed() ? 'Recebimento concluído' : state.saving ? 'Salvando…' : state.conflicts.size ? 'Conflitos para conferir' : hasDirty() ? 'Alterações ainda não salvas' : 'Tudo salvo no servidor';
-    $('save-hint').textContent = queue.length ? `${queue.length} leitura(s) aguardando envio.` : state.receipt.testMode ? 'Modo de teste: a conclusão não movimenta estoque.' : 'Entrada real: o estoque será movimentado somente na conclusão.';
+    $('save-hint').textContent = rejected.length ? `${rejected.length} leitura(s) rejeitada(s). Resolva ou descarte a tentativa antes de concluir.` : queue.length ? `${queue.length} leitura(s) aguardando envio.` : state.receipt.testMode ? 'Modo de teste: a conclusão não movimenta estoque.' : 'Entrada real: o estoque será movimentado somente na conclusão.';
     $('save-receipt').disabled = isClosed() || state.saving || !hasDirty() || !!state.conflicts.size;
     $('review-receipt').disabled = isClosed() || state.saving || !!state.conflicts.size || !!queue.length;
-    $('scan-queue-status').textContent = queue.length ? `${queue.length} leitura(s) salvas neste navegador, aguardando envio` : 'Leituras enviadas';
+    $('scan-queue-status').textContent = `${queue.length ? `${queue.length} leitura(s) salvas neste navegador, aguardando envio` : 'Sem leituras aguardando envio'}${rejected.length ? ` · ${rejected.length} rejeitada(s) para revisão` : ''}`;
+    renderLocalReadHistory();
     $('receipt-sync-status').textContent = state.lastSync ? `Atualizado às ${state.lastSync.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' })}${hasDirty() ? ' · edições preservadas' : ''}` : 'Atualização automática durante a conferência';
     if ($('review-dialog').open && state.reviewVersion !== state.receipt.version) {
       $('approve-receipt').disabled = true;
@@ -478,31 +513,70 @@
     catch (_) { throw new Error('O navegador não conseguiu guardar esta leitura. Libere espaço antes de continuar.'); }
   }
   function enqueue(event) {
-    const entry = { receiptId: state.receipt._id, event };
+    const entry = { receiptId: state.receipt._id, event, status: 'pending' };
     state.queue.push(entry);
     try { persistQueue(); } catch (error) { state.queue.pop(); throw error; }
     updateSaveState(); flushQueue();
   }
   async function flushQueue() {
-    if (state.sending || !state.queue.length || !navigator.onLine) return;
+    const waiting = queuedEntries();
+    if (state.sending || !waiting.length || !navigator.onLine) return;
     state.sending = true;
     try {
-      const receiptId = state.queue[0].receiptId;
-      const batch = state.queue.filter((entry) => entry.receiptId === receiptId).slice(0, 100);
-      const result = await api(`/receipts/${encodeURIComponent(receiptId)}/events`, { method: 'POST', body: { events: batch.map((entry) => entry.event) } });
-      const acknowledged = new Set(result.acknowledged || []);
-      state.queue = state.queue.filter((entry) => entry.receiptId !== receiptId || !acknowledged.has(entry.event.eventId)); persistQueue();
-      if (state.receipt?._id === receiptId && result.receipt) {
-        mergeRemote(result.receipt); renderDetail();
-        const last = batch[batch.length - 1].event;
-        const line = state.receipt.lines.find((row) => row.barcode === last.barcode || row.id === last.lineId);
-        $('scan-feedback').textContent = line?.productName ? `Registrado: ${line.productName}` : 'Leitura registrada. Os códigos sem cadastro identificado ficam nas pendências.';
+      const receiptId = waiting[0].receiptId;
+      const batch = waiting.filter((entry) => entry.receiptId === receiptId).slice(0, 100);
+      const result = await transmitReceivingEvents(batch.map((entry) => entry.event), (events) => api(`/receipts/${encodeURIComponent(receiptId)}/events`, { method: 'POST', body: { events } }));
+      const acknowledged = new Set(result.acknowledged), rejected = new Map(result.rejected.map((entry) => [entry.eventId, entry]));
+      const now = new Date().toISOString();
+      state.queue = state.queue.filter((entry) => {
+        if (entry.receiptId !== receiptId) return true;
+        if (acknowledged.has(entry.event.eventId)) {
+          if (!entry.rejections?.length) return false;
+          entry.status = 'sent'; entry.acknowledgedAt = now; return true;
+        }
+        const rejection = rejected.get(entry.event.eventId);
+        if (rejection) {
+          entry.status = 'rejected'; entry.rejections = [...(entry.rejections || []), { ...rejection, rejectedAt: now }];
+        }
+        return true;
+      });
+      persistQueue();
+      if (state.receipt?._id === receiptId) {
+        for (const response of result.responses) if (response.receipt) mergeRemote(response.receipt);
+        renderDetail();
+        const last = batch.slice().reverse().find((entry) => acknowledged.has(entry.event.eventId))?.event;
+        const line = last && state.receipt.lines.find((row) => row.barcode === last.barcode || row.id === last.lineId);
+        $('scan-feedback').textContent = rejected.size ? `${rejected.size} leitura(s) precisam de revisão abaixo. As demais continuam sendo enviadas.` : last ? (line?.productName ? `Registrado: ${line.productName}` : 'Leitura registrada. Os códigos sem cadastro identificado ficam nas pendências.') : 'As leituras continuam guardadas, aguardando confirmação do servidor.';
       }
-      if (!acknowledged.size && batch.length) notify('O servidor não confirmou as leituras. Elas continuam guardadas neste navegador.', 'warning', true);
+      if (result.error) throw result.error;
+      if (!acknowledged.size && !rejected.size && batch.length) notify('O servidor não confirmou as leituras. Elas continuam guardadas neste navegador.', 'warning', true);
     } catch (error) {
       $('scan-feedback').textContent = `Leituras preservadas para reenvio: ${error.message}`;
       if (error.status && error.status !== 429 && error.status < 500) notify(error.message + ' As leituras continuam guardadas.', 'error', true);
     } finally { state.sending = false; updateSaveState(); }
+  }
+  function renderLocalReadHistory() {
+    const container = $('scan-local-history'); if (!container || !state.receipt) return;
+    const entries = state.queue.filter((entry) => entry.receiptId === state.receipt._id && entry.rejections?.length);
+    container.hidden = !entries.length;
+    $('scan-rejected-count').textContent = `${entries.filter((entry) => entry.status === 'rejected').length} leitura(s) para resolver`;
+    $('scan-local-history-list').innerHTML = entries.slice().reverse().map((entry) => {
+      const rejection = entry.rejections[entry.rejections.length - 1];
+      const status = ({ rejected: 'Rejeitada', pending: 'Aguardando nova tentativa', discarded: 'Tentativa descartada', sent: 'Enviada após revisão' })[entry.status] || 'Aguardando envio';
+      const line = state.receipt.lines.find((row) => row.id === entry.event.lineId);
+      return `<div class="rr-local-read" data-local-event="${escape(entry.event.eventId)}"><div><strong>${escape(entry.event.barcode || 'Desfazer leitura')} · ${escape(status)}</strong><p>${entry.event.mode === 'identify' ? 'Identificação' : 'Conferência'}${line ? ` · ${escape(line.description || line.productName)}` : ''} · ${date(entry.event.createdAt)}</p><p>${escape(rejection.message)}</p><p class="rr-muted">Registro preservado neste navegador. ${entry.status === 'sent' ? 'Envio confirmado pelo servidor.' : 'Essa tentativa não foi confirmada no recebimento.'}</p></div>${entry.status === 'rejected' ? `<div class="receiving-actions"><button class="rr-button rr-small" data-retry-local-event="${escape(entry.event.eventId)}"${isClosed() ? ' disabled' : ''}>Tentar novamente</button><button class="rr-button rr-small" data-discard-local-event="${escape(entry.event.eventId)}">Descartar tentativa</button></div>` : ''}</div>`;
+    }).join('');
+  }
+  function changeRejectedEntry(eventId, discard) {
+    const entry = state.queue.find((item) => item.receiptId === state.receipt?._id && item.event.eventId === eventId && item.status === 'rejected');
+    if (!entry) return;
+    if (discard && !confirm('Descartar esta tentativa rejeitada? Ela não será reenviada. O registro da leitura e o motivo da rejeição continuarão no histórico deste navegador.')) return;
+    const before = clone(entry);
+    entry.status = discard ? 'discarded' : 'pending';
+    if (discard) entry.discardedAt = new Date().toISOString(); else entry.retriedAt = new Date().toISOString();
+    try { persistQueue(); } catch (error) { Object.keys(entry).forEach((key) => delete entry[key]); Object.assign(entry, before); throw error; }
+    updateSaveState();
+    if (!discard) { $('scan-feedback').textContent = 'Tentando enviar a leitura novamente, com o mesmo identificador.'; flushQueue(); }
   }
   async function submitScan(event) {
     event.preventDefault(); if (!state.receipt || isClosed()) return;
@@ -631,7 +705,7 @@
   function exportReceipt(kind) {
     const receipt = state.receipt; if (!receipt) return;
     const file = (receipt.code || receipt._id).replace(/[^a-zA-Z0-9_-]/g, '_');
-    if (kind === 'json') return download(`${file}.json`, JSON.stringify({ exportedAt: new Date().toISOString(), hasUnsavedChanges: hasDirty(), receipt }, null, 2), 'application/json;charset=utf-8');
+    if (kind === 'json') return download(`${file}.json`, JSON.stringify({ exportedAt: new Date().toISOString(), hasUnsavedChanges: hasDirty(), receipt, localReadHistory: state.queue.filter((entry) => entry.receiptId === receipt._id) }, null, 2), 'application/json;charset=utf-8');
     const keys = ['description', 'supplierCode', 'barcode', 'productName', 'expectedQuantity', 'receivedQuantity', 'unit', 'stockFactor', 'unitCost', 'conversionConfirmed', 'reviewed'];
     const csv = [keys.map(csvCell).join(';'), ...receipt.lines.map((line) => keys.map((key) => csvCell(line[key])).join(';'))].join('\r\n');
     download(`${file}.csv`, '\uFEFF' + csv, 'text/csv;charset=utf-8');
@@ -643,6 +717,7 @@
     if (!lines.some((line) => Number(line.receivedQuantity) > 0)) issues.push('Informe pelo menos uma quantidade recebida maior que zero.');
     lines.forEach((line, index) => { const pending = lineIssues(line); if (pending.length) issues.push(`Linha ${index + 1}: ${pending.join(', ')}.`); });
     if (pendingQueue().length) issues.push('Aguarde o envio das leituras pendentes.');
+    if (rejectedQueue().length) issues.push('Resolva ou descarte as tentativas rejeitadas na área de leituras antes de concluir.');
     if (state.conflicts.size) issues.push('Resolva os conflitos de edição.');
     const undone = new Set((state.receipt.events || []).map((event) => event.undoOf).filter(Boolean));
     if ((state.receipt.events || []).some((event) => event.status === 'conflict' && !undone.has(event.eventId || event.id))) issues.push('Há leituras com conflito. Desfaça a leitura no histórico e registre-a na linha correta.');
@@ -720,6 +795,10 @@
       state.conflicts.delete(key); persistDraft(); renderDetail();
     });
     $('scan-form').addEventListener('submit', (event) => { event.preventDefault(); action(null, () => submitScan(event)); });
+    $('scan-local-history-list').addEventListener('click', (event) => {
+      const retry = event.target.closest('[data-retry-local-event]'), discard = event.target.closest('[data-discard-local-event]');
+      const button = retry || discard; if (button) action(button, async () => changeRejectedEntry(retry?.dataset.retryLocalEvent || discard.dataset.discardLocalEvent, !!discard));
+    });
     $('receipt-events').addEventListener('click', (event) => { const button = event.target.closest('[data-undo-event]'); if (!button || !confirm('Desfazer esta leitura? O histórico será preservado.')) return; action(button, async () => { enqueue({ eventId: uuid(), barcode: '', quantity: 1, mode: 'count', undoOf: button.dataset.undoEvent, createdAt: new Date().toISOString() }); }); });
     $('photo-upload').addEventListener('change', (event) => { const files = [...event.target.files]; action(null, () => uploadPhotos(files)).finally(() => { event.target.value = ''; }); });
     $('photo-thumbnails').addEventListener('click', (event) => { const button = event.target.closest('[data-view-photo]'); if (button) action(null, () => selectPhoto(button.dataset.viewPhoto)); });
@@ -739,7 +818,7 @@
     $('accept-differences').addEventListener('change', updateApproval); $('confirm-approval').addEventListener('change', updateApproval);
     $('approve-receipt').addEventListener('click', (event) => action(event.currentTarget, approveReceipt));
     window.addEventListener('online', () => { connection(true); flushQueue(); }); window.addEventListener('offline', () => connection(false));
-    window.addEventListener('beforeunload', (event) => { if (hasDirty() || state.queue.length) { persistDraft(); event.preventDefault(); event.returnValue = ''; } });
+    window.addEventListener('beforeunload', (event) => { if (hasDirty() || queuedEntries().length) { persistDraft(); event.preventDefault(); event.returnValue = ''; } });
   }
   async function init() {
     bind();
@@ -757,7 +836,7 @@
       if (document.hidden) return;
       if (state.receipt && !isClosed() && !state.saving) refreshReceipt().catch(() => { /* Connection indicator provides background state. */ });
       if (state.receipt && !isClosed() && Date.now() - state.lastPhotoSync > 30000) loadPhotos().catch(() => { /* Existing photos remain visible during connection errors. */ });
-      if (state.queue.length) flushQueue();
+      if (queuedEntries().length) flushQueue();
     }, 8000);
   }
   init().catch((error) => notify(error.message, 'error', true));

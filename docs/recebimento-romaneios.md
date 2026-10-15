@@ -62,6 +62,8 @@ No TC57, as leituras são guardadas no aparelho e reenviadas quando a conexão r
 
 No site, leituras digitadas ou recebidas pelo leitor de teclado também ficam em uma fila local do navegador até a confirmação do servidor. Não limpe os dados do aplicativo ou do navegador enquanto houver pendências. Reenviar o mesmo registro não soma novamente; dois bips distintos do mesmo produto somam duas leituras.
 
+Uma leitura rejeitada pelo servidor fica na área de leituras para tentar novamente após corrigir o vínculo ou descartar explicitamente a tentativa. As demais leituras continuam sendo enviadas. O histórico da rejeição permanece no navegador e na exportação JSON. Falhas temporárias de conexão continuam aguardando envio.
+
 ## Revisar e concluir
 
 Salve as alterações e clique em **Revisar e concluir**. Confira depósito, vínculos, quantidades e conversões. Aceite expressamente eventuais faltas ou sobras. A aprovação real exige uma conta com permissão administrativa e registra a entrada no estoque de forma transacional; tentativas repetidas de concluir não devem duplicar a entrada.
