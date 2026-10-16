@@ -3475,18 +3475,6 @@
     const transportUf = xmlGetText(transp, 'transporta UF');
     const modFrete = xmlGetText(transp, 'modFrete');
 
-    const DESCRIPTION_CHARS_PER_LINE = 34;
-    const estimateDescriptionLines = (description) => {
-      const normalized = String(description || '').replace(/\s+/g, ' ').trim();
-      if (!normalized) return 1;
-      return Math.max(1, Math.ceil(normalized.length / DESCRIPTION_CHARS_PER_LINE));
-    };
-    const estimateRowHeightMm = (description) => {
-      const lines = estimateDescriptionLines(description);
-      // Estimativa de altura da linha na tabela de itens (7.5pt + bordas/padding).
-      return 2.8 + lines * 3.1;
-    };
-
     const productRowsList = dets
       .map((det, index) => {
         const prod = det.querySelector('prod');
@@ -3521,7 +3509,6 @@
             <td class="num">${formatNumber(pIPI, 2)}</td>
           </tr>
         `,
-          heightMm: estimateRowHeightMm(description),
         };
       })
       ;
@@ -3635,27 +3622,24 @@
         </tr>
       </table>
     `;
-    // Blocos fixos de paginação (A4): 1a folha com rodapé, demais sem rodapé.
-    const FIRST_PAGE_PRODUCTS_AREA_MM = 124;
-    const NEXT_PAGE_PRODUCTS_AREA_MM = 244;
-
+    // A divisão em folhas é calculada após renderizar, pelo módulo compartilhado A4.
     const buildFullItemsTable = (rowsHtml) => `
       <table class="items">
         <colgroup>
+          <col style="width:3.5%">
+          <col style="width:6%">
+          <col style="width:25%">
+          <col style="width:6.5%">
           <col style="width:4%">
-          <col style="width:6%">
-          <col style="width:22%">
-          <col style="width:6%">
-          <col style="width:5%">
-          <col style="width:5%">
-          <col style="width:4%">
-          <col style="width:6%">
+          <col style="width:4.5%">
+          <col style="width:3%">
           <col style="width:7%">
           <col style="width:7%">
           <col style="width:7%">
           <col style="width:6%">
+          <col style="width:6%">
           <col style="width:5%">
-          <col style="width:5%">
+          <col style="width:4.5%">
           <col style="width:5%">
         </colgroup>
         <thead>
@@ -3683,44 +3667,15 @@
       </table>
     `;
 
-    const consumeRowsForPage = (rows, startIndex, capacityMm) => {
-      const pageRows = [];
-      let usedMm = 0;
-      let index = startIndex;
-      while (index < rows.length) {
-        const row = rows[index];
-        const rowHeightMm = Math.max(3.2, Number(row?.heightMm) || 3.2);
-        if (pageRows.length > 0 && usedMm + rowHeightMm > capacityMm) {
-          break;
-        }
-        pageRows.push(row);
-        usedMm += rowHeightMm;
-        index += 1;
-      }
-      return { pageRows, nextIndex: index };
-    };
-
-    const firstPageChunk = consumeRowsForPage(productRowsList, 0, FIRST_PAGE_PRODUCTS_AREA_MM);
-    const firstPageItemsHtml = buildFullItemsTable(firstPageChunk.pageRows.map((item) => item.html).join(''));
-
-    const continuationChunks = [];
-    let cursor = firstPageChunk.nextIndex;
-    while (cursor < productRowsList.length) {
-      const nextChunk = consumeRowsForPage(productRowsList, cursor, NEXT_PAGE_PRODUCTS_AREA_MM);
-      if (!nextChunk.pageRows.length) {
-        break;
-      }
-      continuationChunks.push(nextChunk.pageRows);
-      cursor = nextChunk.nextIndex;
-    }
-    const totalPages = 1 + continuationChunks.length;
+    const firstPageItemsHtml = buildFullItemsTable(productRowsList.map(item => item.html).join(''));
+    const totalPages = 1;
 
     const buildDanfeTopHeaderHtml = (pageNumber) => `
       <table class="block">
         <colgroup>
-          <col style="width:46%">
-          <col style="width:24%">
-          <col style="width:30%">
+          <col style="width:35%">
+          <col style="width:22%">
+          <col style="width:43%">
         </colgroup>
         <tr>
           <td>
@@ -3780,16 +3735,6 @@
     `;
     const danfeTopHeaderFirstPageHtml = buildDanfeTopHeaderHtml(1);
 
-    const continuationPagesHtml = continuationChunks.length
-      ? continuationChunks
-          .map((pageRows, pageIndex) => `
-            <div class="danfe danfe-page danfe-page-continuation">
-              ${buildDanfeTopHeaderHtml(pageIndex + 2)}
-              ${buildFullItemsTable(pageRows.map((item) => item.html).join(''))}
-            </div>
-          `)
-          .join('')
-      : '';
     if (modeKey === 'simple') {
       return `<!doctype html>
 <html lang="pt-BR">
@@ -4194,56 +4139,23 @@
     ${firstPageItemsHtml}
     ${additionalDataHtml}
   </div>
-  ${continuationPagesHtml}
 </body>
 </html>`;
   }
 
   function openPrintWindow(html, title, { withBarcode = false, chave = '' } = {}) {
     const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      throw new Error('Nao foi possivel abrir a janela de impressao.');
-    }
+    if (!printWindow) throw new Error('Nao foi possivel abrir a janela de impressao.');
     printWindow.document.open();
     printWindow.document.write(html);
     printWindow.document.close();
-    if (withBarcode && chave) {
-      const script = printWindow.document.createElement('script');
-      script.src = 'https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js';
-      script.onload = () => {
-        try {
-          const barcodes = Array.from(printWindow.document.querySelectorAll('[data-danfe-barcode]'));
-          if (barcodes.length && typeof printWindow.JsBarcode === 'function') {
-            barcodes.forEach((svg) => {
-              printWindow.JsBarcode(svg, chave, {
-                format: 'CODE128',
-                displayValue: false,
-                height: 48,
-                margin: 0,
-                width: 1.2,
-              });
-            });
-            const fallbacks = Array.from(printWindow.document.querySelectorAll('[data-barcode-fallback]'));
-            fallbacks.forEach((fallback) => {
-              fallback.style.display = 'none';
-            });
-          }
-        } catch (_) {
-          // ignore
-        } finally {
-          printWindow.focus();
-          setTimeout(() => printWindow.print(), 250);
-        }
-      };
-      script.onerror = () => {
-        printWindow.focus();
-        setTimeout(() => printWindow.print(), 250);
-      };
-      printWindow.document.head.appendChild(script);
-    } else {
-      printWindow.focus();
-      setTimeout(() => printWindow.print(), 250);
-    }
+    const script = printWindow.document.createElement('script');
+    script.src = new URL('/scripts/core/danfe-a4.js?v=20261016-1', window.location.href).href;
+    script.onload = () => { printWindow.EoBichoDanfeA4.print({ withBarcode, chave }).catch(console.error); };
+    script.onerror = () => {
+      printWindow.alert('Nao foi possivel carregar o layout A4. Feche esta janela e tente novamente.');
+    };
+    printWindow.document.head.appendChild(script);
   }
 
   function isEmprestimoEmissionSelected() {
