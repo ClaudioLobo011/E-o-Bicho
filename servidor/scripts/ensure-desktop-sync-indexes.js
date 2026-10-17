@@ -5,6 +5,7 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 const Product = require('../models/Product');
 const PdvStateSale = require('../models/PdvStateSale');
+const PdvState = require('../models/PdvState');
 const PdvStateDeliveryOrder = require('../models/PdvStateDeliveryOrder');
 const PdvDesktopHost = require('../models/PdvDesktopHost');
 const Pet = require('../models/Pet');
@@ -23,6 +24,9 @@ const indexDefinitions = [
   { model: Product, name: 'pdv_sync_updatedAt_id', key: { updatedAt: 1, _id: 1 } },
   { model: PdvStateSale, name: 'pdv_sync_pdv_id', key: { pdv: 1, _id: 1 } },
   { model: PdvStateSale, name: 'pdv_sync_pdv_updatedAt_id', key: { pdv: 1, updatedAt: 1, _id: 1 } },
+  { model: PdvStateSale, name: 'customer_history_sale_updatedAt_id', key: { updatedAt: 1, _id: 1 } },
+  { model: PdvState, name: 'customer_history_state_updatedAt_id', key: { updatedAt: 1, _id: 1 } },
+  ...['customerId','customer.id','customer._id','snapshotCustomer.id','snapshotCustomer._id','customerDocument','customer.document','snapshotCustomer.documento'].map((field,i)=>({model:PdvStateSale,name:`customer_history_identity_${i}`,key:{['payload.'+field]:1,createdAtFromEntity:-1}})),
   { model: PdvStateDeliveryOrder, name: 'pdv_sync_delivery_pdv_updatedAt_id', key: { pdv: 1, updatedAt: 1, _id: 1 } },
   { model: PdvDesktopHost, name: 'pdv_sync_host_token_status', key: { tokenHash: 1, status: 1 } },
   { model: User, name: 'pdv_sync_user_updatedAt_id', key: { updatedAt: 1, _id: 1 } },

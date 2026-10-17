@@ -227,4 +227,5 @@ pdvStateSchema.pre(['updateOne', 'updateMany', 'findOneAndUpdate'], function pre
   this.setUpdate(update);
 });
 
+pdvStateSchema.index({ updatedAt: 1, _id: 1 });
 module.exports = mongoose.model('PdvState', pdvStateSchema, 'pdvstates_normalized');

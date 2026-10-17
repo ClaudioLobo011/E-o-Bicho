@@ -20,5 +20,9 @@ pdvStateSaleSchema.index({ pdv: 1, createdAtFromEntity: -1 });
 pdvStateSaleSchema.index({ empresa: 1, createdAtFromEntity: -1 });
 pdvStateSaleSchema.index({ pdv: 1, _id: 1 });
 pdvStateSaleSchema.index({ pdv: 1, updatedAt: 1, _id: 1 });
+pdvStateSaleSchema.index({ updatedAt: 1, _id: 1 });
+for (const field of ['customerId','customer.id','customer._id','snapshotCustomer.id','snapshotCustomer._id','customerDocument','customer.document','snapshotCustomer.documento']) {
+  pdvStateSaleSchema.index({ ['payload.' + field]: 1, createdAtFromEntity: -1 });
+}
 
 module.exports = mongoose.model('PdvStateSale', pdvStateSaleSchema);

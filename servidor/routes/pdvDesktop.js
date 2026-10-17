@@ -115,7 +115,7 @@ const DESKTOP_STAFF_ROLES = new Set(['funcionario', 'franqueado', 'franqueador',
 
 const DESKTOP_SYNC_METRIC_PATHS = new Set([
   '/bootstrap', '/sales/history', '/catalog/products', '/directory/snapshot',
-  '/appointments', '/deliveries', '/transfers',
+  '/appointments', '/deliveries', '/transfers', '/customer-sales-history/snapshot',
 ]);
 
 function countSyncDocuments(payload) {
@@ -125,7 +125,7 @@ function countSyncDocuments(payload) {
 
 function desktopSyncMetrics(req, res, next) {
   const isSyncRoute = req.method === 'GET'
-    && (req.path.startsWith('/sync/v2/') || DESKTOP_SYNC_METRIC_PATHS.has(req.path));
+    && (req.path.startsWith('/sync/v2/') || DESKTOP_SYNC_METRIC_PATHS.has(req.path) || /^\/customers\/[^/]+\/sales-history$/.test(req.path));
   if (!isSyncRoute) return next();
   const startedAt = process.hrtime.bigint();
   const originalJson = res.json.bind(res);
@@ -139,8 +139,8 @@ function desktopSyncMetrics(req, res, next) {
       durationMs: Number(process.hrtime.bigint() - startedAt) / 1e6,
       pdv: String(req.desktopHost?.pdv || ''),
       host: String(req.desktopHost?._id || ''),
-      syncType: req.path.endsWith('/bootstrap') ? 'configuration' : (req.query?.cursor ? 'incremental' : 'initial'),
-      cursor: clean(req.query?.cursor),
+      syncType: req.path.endsWith('/bootstrap') ? 'configuration' : ((req.query?.cursor||req.query?.since) ? 'incremental' : req.query?.offset!==undefined ? 'page' : 'initial'),
+      cursor: clean(req.query?.cursor||req.query?.since),
     };
     console.info('[PDV_SYNC_METRIC]', JSON.stringify({ ...metric, durationMs: Number(metric.durationMs.toFixed(2)) }));
     res.set('X-PDV-Sync-Documents', String(metric.documents));
@@ -1892,33 +1892,7 @@ router.get('/directory/snapshot', authenticateHost, async (req, res) => {
   });
 });
 
-router.get('/customers/:customerId/sales-history', authenticateHost, async (req, res) => {
-  const customerId = clean(req.params.customerId);
-  if (!mongoose.Types.ObjectId.isValid(customerId)) {
-    return res.status(400).json({ message: 'Identificador de cliente inválido.' });
-  }
-  const customer = await User.findOne({ _id: customerId, $or: [{ role: 'cliente' }, { codigoCliente: { $exists: true, $ne: null } }] })
-    .select('_id nomeCompleto nomeContato razaoSocial cpf cnpj').lean();
-  if (!customer) return res.status(404).json({ message: 'Cliente não encontrado nesta empresa.' });
-
-  const [normalized, states] = await Promise.all([
-    PdvStateSale.find({
-      $or: [
-        { 'payload.customerId': customerId },
-        { 'payload.customer.id': customerId },
-        { 'payload.customer._id': customerId },
-        { 'payload.snapshotCustomer.id': customerId },
-        { 'payload.snapshotCustomer._id': customerId },
-      ],
-    }).sort({ createdAtFromEntity: -1, _id: -1 }).select('payload').lean(),
-    PdvState.find({}).select('completedSales').lean(),
-  ]);
-  const normalizedSales = normalized.map((entry) => entry.payload).filter((sale) => desktopSaleCustomerMatches(sale, customer));
-  const legacySales = states.flatMap((state) => Array.isArray(state.completedSales) ? state.completedSales : [])
-    .filter((sale) => desktopSaleCustomerMatches(sale, customer));
-  const sales = dedupeDesktopSales([...normalizedSales, ...legacySales]);
-  return res.json({ sales, total: sales.length, allPdvs: true, allPeriods: true, generatedAt: new Date().toISOString() });
-});
+require('../services/desktopCustomerSalesHistory').registerCustomerSalesHistory(router, authenticateHost);
 
 router.get('/address/cep', authenticateHost, async (req, res) => {
   const cep = clean(req.query.cep).replace(/\D/g, '');
