@@ -1,4 +1,4 @@
-﻿const express = require('express');
+const express = require('express');
 const mongoose = require('mongoose');
 const router = express.Router();
 router.use((req, res, next) => {
@@ -1523,6 +1523,8 @@ const normalizeHistoryEntryPayload = (entry) => {
     motivo,
     paymentLabel,
     paymentId,
+    receiptEventId: normalizeString(entry.receiptEventId),
+    receiptPayments: Array.isArray(entry.receiptPayments) ? entry.receiptPayments.map(normalizePaymentSnapshotPayload).filter(Boolean) : undefined,
     userId,
     userName,
     userLogin,
@@ -2514,6 +2516,7 @@ const resolveRecordMergeKey = (record, kind = 'generic') => {
     return `id:${id}:${createdAt}`;
   }
   if (kind === 'history') {
+    if (record.receiptEventId) return `receipt:${record.receiptEventId}`;
     const timestamp = normalizeString(record.timestamp);
     const label = normalizeString(record.label);
     const amount = safeNumber(record.amount ?? record.delta ?? 0, 0);
@@ -2700,7 +2703,7 @@ const reconcileCashStateFromSales = ({ existingState, updatePayload }) => {
     abertura,
     recebido: receivedTotal,
     recebimentosCliente,
-    saldo: fechamentoPrevisto + recebimentosCliente,
+    saldo: fechamentoPrevisto + Math.max(0, recebimentosCliente - receiptHistoryTotal(reconciliationState)),
   };
   updatePayload.caixaInfo = {
     ...updatePayload.caixaInfo,
@@ -5063,6 +5066,14 @@ const parseOpeningPaymentsFromHistory = (state = {}, paymentCatalog = new Map())
     .filter(Boolean);
 };
 
+const receiptHistoryPayments = (entry) => {
+  if (entry?.id !== 'recebimento-cliente') return [];
+  if (Array.isArray(entry.receiptPayments) && entry.receiptPayments.length) return entry.receiptPayments;
+  const label = String(entry.paymentLabel || '').split(' • ').pop();
+  const parsed = label.split(' | ').map(part => { const match=part.match(/^(.*): (\d+\.\d{2})$/);return match?{id:match[1],label:match[1],type:'avista',valor:Number(match[2])}:null; }).filter(Boolean);
+  return Math.abs(parsed.reduce((sum,p)=>sum+p.valor,0)-Number(entry.amount||0))<0.005?parsed:[];
+};
+const receiptHistoryTotal = (state) => (state.history || []).filter(entry => !state.caixaInfo?.aberturaData || new Date(entry.timestamp)>=new Date(state.caixaInfo.aberturaData)).reduce((sum,entry)=>sum+receiptHistoryPayments(entry).reduce((total,p)=>total+Number(p.valor||0),0),0);
 const buildExpectedClosePaymentsByMethod = (state = {}) => {
   const paymentCatalog = buildPaymentCatalogForClosing(state);
   const amountsByKey = new Map();
@@ -5118,6 +5129,14 @@ const buildExpectedClosePaymentsByMethod = (state = {}) => {
   history.forEach((entry) => {
     if (!entry || typeof entry !== 'object') return;
     const movementId = normalizeString(entry.id).toLowerCase();
+    if (movementId === 'recebimento-cliente') {
+      const receiptTime = safeDate(entry.timestamp);
+      if (!cycleStart || (receiptTime && receiptTime >= cycleStart)) receiptHistoryPayments(entry).forEach(payment => {
+        const match=Array.from(paymentCatalog.values()).find(p=>p.id===payment.id||p.label===payment.label);
+        applyAmount(match||payment, Number(payment.valor||0));
+      });
+      return;
+    }
     if (!['entrada', 'saida', 'envio'].includes(movementId)) return;
     const timestamp = safeDate(entry.timestamp || null);
     if (cycleStart && (!timestamp || timestamp.getTime() < cycleStart.getTime())) return;
@@ -5463,10 +5482,7 @@ const runPdvCommand = async ({
             lastMovement: nextHistory[0] || lastMovement || null,
             summary: {
               ...nextSummary,
-              saldo:
-                safeNumber(nextSummary.abertura, 0) +
-                safeNumber(nextSummary.recebido, 0) +
-                safeNumber(nextSummary.recebimentosCliente, 0),
+              saldo: fechamentoPrevisto,
             },
             caixaInfo: {
               aberturaData: existingState?.caixaInfo?.aberturaData || null,
@@ -5650,12 +5666,16 @@ const runPdvCommand = async ({
         resolveCommandTargetPayment(nextPagamentos, paymentEntry?.label);
       if (targetPayment) {
         targetPayment.valor = safeNumber(targetPayment.valor, 0) + amount;
+      } else {
+        nextPagamentos.push({ ...paymentEntry, valor: amount });
       }
       const targetPrevisto =
         resolveCommandTargetPayment(nextPrevisto, paymentEntry?.id) ||
         resolveCommandTargetPayment(nextPrevisto, paymentEntry?.label);
       if (targetPrevisto) {
         targetPrevisto.valor = safeNumber(targetPrevisto.valor, 0) + amount;
+      } else {
+        nextPrevisto.push({ ...paymentEntry, valor: amount });
       }
     });
 
@@ -5666,10 +5686,8 @@ const runPdvCommand = async ({
         safeNumber(existingState?.summary?.recebimentosCliente, 0) + Math.max(0, total),
       saldo: 0,
     };
-    nextSummary.saldo =
-      safeNumber(nextSummary.abertura, 0) +
-      safeNumber(nextSummary.recebido, 0) +
-      safeNumber(nextSummary.recebimentosCliente, 0);
+    // Sales revenue includes credit-book sales: only actual cash changes here.
+    nextSummary.saldo = safeNumber(existingState?.summary?.saldo, 0) + Math.max(0, total);
 
     const customerName = normalizeString(payload?.customerName || payload?.customer || '');
     const paymentLabel = payments
@@ -5679,6 +5697,8 @@ const runPdvCommand = async ({
     const userMeta = getCommandHistoryUserMeta(user || {});
     const historyEntry = normalizeHistoryEntryPayload({
       id: 'recebimento-cliente',
+      receiptEventId: idempotencyKey || '',
+      receiptPayments: payments,
       label: 'Recebimentos de Clientes',
       amount: Math.abs(safeNumber(total, 0)),
       delta: Math.abs(safeNumber(total, 0)),
@@ -8039,4 +8059,3 @@ router.enqueuePdvStateWrite = enqueuePdvStateWrite;
 router.emitSaleFiscalHandler = emitSaleFiscalHandler;
 router.syncPdvStateNormalizedMirror = syncPdvStateNormalizedMirror;
 module.exports = router;
-

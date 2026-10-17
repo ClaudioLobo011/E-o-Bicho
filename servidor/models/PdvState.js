@@ -21,6 +21,8 @@ const historyEntrySchema = new mongoose.Schema(
     motivo: { type: String, trim: true },
     paymentLabel: { type: String, trim: true },
     paymentId: { type: String, trim: true },
+    receiptEventId: { type: String, trim: true },
+    receiptPayments: { type: [paymentSnapshotSchema], default: undefined },
     userId: { type: String, trim: true },
     userName: { type: String, trim: true },
     userLogin: { type: String, trim: true },

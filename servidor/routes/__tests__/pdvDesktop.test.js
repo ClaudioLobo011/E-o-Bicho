@@ -604,7 +604,9 @@ test.describe('integração do PDV Desktop', () => {
     assert.ok(normalizedSale);
     assert.equal(Number(normalizedSale.payload.total), 20);
     assert.equal(await PdvStateSale.countDocuments({ pdv: base.pdv._id }), 1);
-    assert.equal(Number(state.summary.recebido || 0), 0);
+    // Revenue includes the credit sale; only the receipt enters cash.
+    assert.equal(Number(state.summary.recebido || 0), 20);
+    assert.equal(Number(state.summary.saldo || 0), 4);
     assert.equal(Number(state.summary.recebimentosCliente || 0), 4);
     assert.equal(state.history.find((entry) => entry.id === 'recebimento-cliente')?.label, 'Recebimentos de Clientes');
     const first = state.completedSales[0].receivables.find((entry) => entry.id === 'local-receivable-1');

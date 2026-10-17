@@ -401,14 +401,14 @@ async function syncDesktopSaleReceivables(source, pdv, host) {
   if (!entries.length) return;
   const bankAccount = pdv?.configuracoesFinanceiro?.contaCorrente?._id || pdv?.configuracoesFinanceiro?.contaCorrente;
   const accountingAccount = pdv?.configuracoesFinanceiro?.contaContabilReceber?._id || pdv?.configuracoesFinanceiro?.contaContabilReceber;
-  if (!mongoose.Types.ObjectId.isValid(bankAccount) || !mongoose.Types.ObjectId.isValid(accountingAccount)) return;
+  if (!mongoose.Types.ObjectId.isValid(bankAccount) || !mongoose.Types.ObjectId.isValid(accountingAccount)) throw new Error('Configure a conta corrente e a conta contábil de recebimento do PDV para sincronizar as parcelas do crediário.');
   for (const entry of entries) {
     const localId = clean(entry?.id);
     const customerId = clean(entry?.customerId || source.customerId);
     const paymentMethodId = clean(entry?.paymentMethodId);
     const dueDate = new Date(entry?.dueDate || source.createdAt || Date.now());
     const amount = Number(entry?.originalAmount || entry?.amount || 0);
-    if (!localId || !mongoose.Types.ObjectId.isValid(customerId) || !(amount > 0) || Number.isNaN(dueDate.getTime())) continue;
+    if (!localId || !mongoose.Types.ObjectId.isValid(customerId) || !(amount > 0) || Number.isNaN(dueDate.getTime())) throw new Error('Parcela do crediário inválida: confira cliente, valor e vencimento antes de sincronizar.');
     const originReference = desktopReceivableReference(pdv._id, localId);
     const issueDate = new Date(source.createdAt || Date.now());
     await AccountReceivable.updateOne(
@@ -447,44 +447,10 @@ async function syncDesktopSaleReceivables(source, pdv, host) {
 }
 
 async function syncDesktopReceivablePayment(source, pdv, eventId) {
-  const originReference = desktopReceivableReference(pdv._id, source?.receivableId);
-  const receivable = await AccountReceivable.findOne({ originReference });
-  if (!receivable) return;
-  const processed = Array.isArray(receivable.metadata?.desktopPaymentEventIds) ? receivable.metadata.desktopPaymentEventIds : [];
-  if (processed.includes(eventId)) return;
-  const amount = Number(source.amount || 0);
-  if (!(amount > 0)) return;
-  const installments = Array.isArray(receivable.installments) ? receivable.installments : [];
-  const target = [...installments].reverse().find((entry) => clean(entry?.status).toLowerCase() !== 'received');
-  if (!target) return;
-  const outstanding = Number(target.originalValue || target.value || 0);
-  if (amount - outstanding > 0.000001) throw new Error('Recebimento do PDV supera o saldo da parcela na nuvem.');
-  const paidAt = new Date(source.paidAt || Date.now());
-  const remaining = Math.max(0, Math.round((outstanding - amount) * 100) / 100);
-  target.value = amount;
-  target.paidValue = amount;
-  target.paidDate = paidAt;
-  target.paymentMethod = mongoose.Types.ObjectId.isValid(source.paymentMethodId) ? source.paymentMethodId : undefined;
-  target.paymentNotes = source.notes || '';
-  target.status = 'received';
-  if (remaining > 0.000001) {
-    const nextNumber = installments.reduce((max, entry) => Math.max(max, Number(entry.number || 0)), 0) + 1;
-    installments.push({
-      number: nextNumber, issueDate: paidAt, dueDate: target.dueDate, value: remaining, originalValue: remaining,
-      paidValue: 0, bankAccount: target.bankAccount || receivable.bankAccount,
-      accountingAccount: target.accountingAccount || receivable.accountingAccount,
-      paymentMethod: mongoose.Types.ObjectId.isValid(source.paymentMethodId) ? source.paymentMethodId : undefined,
-      originInstallmentNumber: Number(source.installmentNumber || 1), status: 'pending',
-    });
-  }
-  receivable.installmentsCount = installments.length;
-  receivable.totalValue = installments.reduce((sum, entry) => sum + Number(entry.value || 0), 0);
-  receivable.dueDate = installments.reduce((latest, entry) => {
-    const due = new Date(entry.dueDate); return !latest || due > latest ? due : latest;
-  }, null) || receivable.dueDate;
-  receivable.metadata = { ...(receivable.metadata || {}), desktopPaymentEventIds: [...processed, eventId].slice(-200) };
-  receivable.markModified('installments'); receivable.markModified('metadata');
-  await receivable.save();
+  return require('../services/desktopReceivableSettlement').settleDesktopReceivable({
+    AccountReceivable,originReference:desktopReceivableReference(pdv._id,source?.receivableId),source,eventId,
+    isValidId:value=>mongoose.Types.ObjectId.isValid(value),
+  });
 }
 
 function desktopExchangeItems(entries = []) {
@@ -1150,6 +1116,7 @@ async function materializeDesktopEvent(event, pdv, host) {
     const openingPayments = await hydratePayments(sourceOpeningPayments);
     payload = {
       payments: openingPayments,
+      openedAt: source.openedAt || event.occurredAt,
       createdAt: source.openedAt || event.occurredAt,
     };
   } else if (['cash.entry', 'cash.exit', 'cash.shipment'].includes(event.type)) {
@@ -1228,6 +1195,9 @@ async function materializeDesktopEvent(event, pdv, host) {
       cancellationAt: source.cancellationAt || event.occurredAt,
     };
   } else if (event.type === 'receivable.received') {
+    // Validate/materialize the financial ledger before adding the cash receipt.
+    // Its durable event ID makes retry after a cash-write failure safe.
+    await syncDesktopReceivablePayment(source, pdv, event.eventId);
     action = 'pdv.caixa.client_receipt';
     const payments = await hydratePayments([{
       paymentMethodId: source.paymentMethodId,
@@ -1440,31 +1410,39 @@ async function materializeDesktopEvent(event, pdv, host) {
     }
   }
   if (event.type === 'receivable.received' && source.saleId && source.receivableId) {
-    const state = await PdvState.findOne({ pdv: pdv._id }).lean();
-    const sale = (state?.completedSales || []).find((entry) => clean(entry?.id || entry?._id) === clean(source.saleId));
+    await pdvDomain.enqueuePdvStateWrite(String(pdv._id), async () => {
+    const state = await PdvState.findOne({ pdv: pdv._id }).select('completedSales').lean();
+    const legacySale = (state?.completedSales || []).find((entry) => clean(entry?.id || entry?._id) === clean(source.saleId));
+    const normalized = legacySale ? null : await PdvStateSale.findOne({pdv:pdv._id,saleId:clean(source.saleId)}).lean();
+    const sale=legacySale||normalized?.payload;
     if (sale) {
       const receivables = (Array.isArray(sale.receivables) ? sale.receivables : []).map((entry) => {
         if (clean(entry?.id) !== clean(source.receivableId)) return entry;
         const original = Number(entry.originalValue ?? entry.value ?? 0);
-        const remaining = Math.max(0, Number(source.remainingAmount || 0));
+        const remaining = Math.min(Math.max(0, Number(entry.value ?? original)), Math.max(0, Number(source.remainingAmount || 0)));
         return {
           ...entry,
           originalValue: original,
           value: remaining,
           paidValue: Math.max(0, original - remaining),
-          status: source.status === 'paid' ? 'finalized' : 'partial',
+          status: remaining === 0 ? 'finalized' : 'partial',
           paidDate: source.paidAt || event.occurredAt,
         };
       });
-      await pdvDomain.enqueuePdvStateWrite(String(pdv._id), () => pdvDomain.runPdvCommand({
+      if(!legacySale&&normalized){
+        const payload={...sale,receivables,updatedAt:new Date()};
+        await PdvStateSale.updateOne({_id:normalized._id},{$set:{payload,payloadHash:hash(JSON.stringify(payload)),sourceUpdatedAt:new Date()}});
+        return;
+      }
+      await pdvDomain.runPdvCommand({
         action: 'pdv.sale.sync_receivables',
         payload: { saleId: source.saleId, receivables },
         pdvId: String(pdv._id), pdvDoc: pdv,
         idempotencyKey: `${event.eventId}:receivable`, correlationId: event.eventId,
         user: desktopEventActor(source, host),
-      }), { action: 'pdv.sale.sync_receivables', requestId: event.eventId, idempotencyKey: `${event.eventId}:receivable` });
+      });
     }
-    await syncDesktopReceivablePayment(source, pdv, event.eventId);
+    }, { action: 'pdv.sale.sync_receivables', requestId: event.eventId, idempotencyKey: `${event.eventId}:receivable` });
   }
   if (['sale.completed', 'sale.cancelled', 'receivable.received', 'budget.saved', 'budget.finalized', 'delivery.registered', 'delivery.status.updated', 'delivery.courier.updated', 'delivery.finalized'].includes(event.type)) {
     const updatedState = await PdvState.findOne({ pdv: pdv._id });

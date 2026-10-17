@@ -526,8 +526,8 @@ test.describe('PDV commands endpoint', () => {
     assert.ok(dinheiro);
     assert.ok(pix);
     assert.equal(dinheiro.valor, 75);
-    assert.equal(pix.valor, 18);
-    assert.equal(close.body.state.caixaInfo.fechamentoPrevisto, 93);
+    assert.equal(pix.valor, 25);
+    assert.equal(close.body.state.caixaInfo.fechamentoPrevisto, 100);
   });
 
   test('finalizes complimentary services without payments, inventory or receivables and remains idempotent', async () => {
