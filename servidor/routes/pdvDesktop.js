@@ -1928,6 +1928,20 @@ router.get('/address/search', authenticateHost, async (req, res) => {
   return res.json({ addresses });
 });
 
+router.get('/appointments/:appointmentId/group', authenticateHost, async (req, res) => {
+  const id = clean(req.params.appointmentId);
+  if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Atendimento inválido.' });
+  const appointment = await Appointment.findOne({ _id: id, store: req.desktopHost.empresa })
+    .populate('cliente', 'nomeCompleto nomeContato razaoSocial email cpf cnpj celular telefone')
+    .populate('pet', 'nome codigoPet').populate('profissional', 'nomeCompleto nomeContato razaoSocial email')
+    .populate('itens.servico', 'nome valor duracaoMinutos').populate('itens.profissional', 'nomeCompleto nomeContato razaoSocial email')
+    .populate('clinicalProducts.product', 'nome cod codbarras venda').lean();
+  if (!appointment) return res.status(404).json({ message: 'Atendimento não encontrado nesta empresa.' });
+  // An editor needs the entire package, not just the operational calendar window.
+  const appointments = appointmentOccurrencesForDesktop(appointment, new Date(-8640000000000000), new Date(8640000000000000));
+  return res.json({ sourceAppointmentId: id, complete: true, appointments });
+});
+
 router.get('/appointments', authenticateHost, async (req, res) => {
   const start = new Date(req.query.start || Date.now() - 30 * 86400000);
   const end = new Date(req.query.end || Date.now() + 180 * 86400000);

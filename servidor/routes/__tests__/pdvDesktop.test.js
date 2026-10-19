@@ -158,6 +158,15 @@ test.describe('integração do PDV Desktop', () => {
     assert.equal(recurringPulled.status, 'agendado');
     assert.equal(recurringPulled.paid, true);
     assert.match(recurringPulled.id, /:occurrence:/);
+    const wholePackage = await request.get(`/desktop/appointments/${recurringAppointment._id}/group`).set(headers);
+    assert.equal(wholePackage.status, 200, wholePackage.text);
+    assert.equal(wholePackage.body.complete, true);
+    assert.equal(wholePackage.body.appointments.length, 2);
+    assert.deepEqual(wholePackage.body.appointments.map(a=>a.services[0].date).sort(), ['2026-08-01','2026-08-15']);
+    assert.equal(wholePackage.body.appointments.reduce((sum,a)=>sum+a.total,0),90);
+    const foreignPackage = await Appointment.create({store:otherCompany._id,cliente:customer._id,pet:pet._id,scheduledAt:new Date(),valor:10});
+    assert.equal((await request.get(`/desktop/appointments/${foreignPackage._id}/group`).set(headers)).status,404);
+    assert.equal((await request.get(`/desktop/appointments/${recurringAppointment._id}/group`)).status,401);
     await Pdv.updateOne({ _id: base.pdv._id }, { $set: { tipoUso: 'executavel', 'desktop.status': 'ativo' } });
     const statusRecurringAppointment = await Appointment.create({
       store: base.company._id,
