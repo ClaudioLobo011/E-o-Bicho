@@ -1,16 +1,16 @@
-version: 1.0.0
+version: 1.0.1
 desktopMigrationProtocol: 1
 files:
   - url: >-
-      https://github.com/ClaudioLobo011/E-o-Bicho/releases/download/installer-1.0.0/E-o-Bicho-1.0.0-Instalador.exe
+      https://github.com/ClaudioLobo011/E-o-Bicho/releases/download/installer-1.0.1/E-o-Bicho-1.0.1-Instalador.exe
     sha512: >-
-      XWcbUaN9nPtTSW5GBtgN7KmFwFSgNhQkXcwvx0CaT4/Taq3g4KZe+wOAdVrohqWkCnWlDYZKtvQukUfjAauIHA==
-    size: 397506381
+      2YCHcG0CqBsneGshtLTWZDBcauXzHaAfTFxTES7hpJDsRFBCsstjmAWEtIURGXQVtxogn6CPJTxckIEPVTETWg==
+    size: 397507562
 path: >-
-  https://github.com/ClaudioLobo011/E-o-Bicho/releases/download/installer-1.0.0/E-o-Bicho-1.0.0-Instalador.exe
+  https://github.com/ClaudioLobo011/E-o-Bicho/releases/download/installer-1.0.1/E-o-Bicho-1.0.1-Instalador.exe
 sha512: >-
-  XWcbUaN9nPtTSW5GBtgN7KmFwFSgNhQkXcwvx0CaT4/Taq3g4KZe+wOAdVrohqWkCnWlDYZKtvQukUfjAauIHA==
-releaseDate: '2026-10-20T18:51:13.726Z'
+  2YCHcG0CqBsneGshtLTWZDBcauXzHaAfTFxTES7hpJDsRFBCsstjmAWEtIURGXQVtxogn6CPJTxckIEPVTETWg==
+releaseDate: '2026-10-20T20:02:50.532Z'
 releaseNotes: >-
-  Migração automática para aplicativos independentes. Requer o PDV de transição
-  0.8.102.
+  Correção do instalador: migração em pastas com espaços e preservação do SQLite
+  existente. Aplicativos PDV, Agenda e Ficha Clínica permanecem na versão 1.0.0.
