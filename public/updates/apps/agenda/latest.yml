@@ -1,0 +1,12 @@
+version: 1.0.0
+files:
+  - url: >-
+      https://github.com/ClaudioLobo011/E-o-Bicho/releases/download/installer-1.0.0/E-o-Bicho-agenda-1.0.0-Atualizacao.exe
+    sha512: >-
+      D5MAVF5qPlyv0HJeonp5521jsT5Lv1VPWyu/opXP3oUhB7a2z0tu5HigkDqjyzaK9TIA6k+D+Cc0pKOO1nKhww==
+    size: 102397893
+path: >-
+  https://github.com/ClaudioLobo011/E-o-Bicho/releases/download/installer-1.0.0/E-o-Bicho-agenda-1.0.0-Atualizacao.exe
+sha512: >-
+  D5MAVF5qPlyv0HJeonp5521jsT5Lv1VPWyu/opXP3oUhB7a2z0tu5HigkDqjyzaK9TIA6k+D+Cc0pKOO1nKhww==
+releaseDate: '2026-10-20T18:45:04.738Z'
