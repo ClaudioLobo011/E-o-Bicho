@@ -35,3 +35,5 @@ servidor/tmp_*.js.bak
 tmp_node_exchange/
 
 servidor/.receiving-ocr-local/
+
+servidor/private-downloads/

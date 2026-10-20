@@ -1,4 +1,4 @@
-﻿// servidor/server.js
+// servidor/server.js
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -191,6 +191,7 @@ const routes = [
   { path: '/api/addresses', file: './routes/addresses' },
   { path: '/api/shipping', file: './routes/shipping' },
   { path: '/api/admin/users', file: './routes/adminUsers' },
+  { path: '/api/admin/downloads', file: './routes/adminDownloads' },
   { path: '/api/admin/funcionarios', file: './routes/adminFuncionarios' },
   { path: '/api/admin/grupos-usuarios', file: './routes/adminUserGroups' },
   { path: '/api/admin/comissoes-profissionais', file: './routes/adminProfessionalCommissions' },
