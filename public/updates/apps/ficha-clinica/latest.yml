@@ -1,12 +1,12 @@
-version: 1.0.0
+version: 1.0.1
 files:
   - url: >-
-      https://github.com/ClaudioLobo011/E-o-Bicho/releases/download/installer-1.0.0/E-o-Bicho-ficha-clinica-1.0.0-Atualizacao.exe
+      https://github.com/ClaudioLobo011/E-o-Bicho/releases/download/ficha-clinica-1.0.1/E-o-Bicho-ficha-clinica-1.0.1-Atualizacao.exe
     sha512: >-
-      clLmkCNiuBW6KqsNCLoyP6/EdpqgqV2eVvoSBNgNJTKz1DyapLmV/PTPxTZG1rr39MnOw3sVQgNnz1LQEvDFrg==
-    size: 101255581
+      VyeqE0FJPBxM9j6+hlFQQ44A4W/uaVWIm/SOlf/3y98kIOOFEuG9OO4JmH3x2CT8CpxDOPkAWX3lSCr2K1gufQ==
+    size: 101257230
 path: >-
-  https://github.com/ClaudioLobo011/E-o-Bicho/releases/download/installer-1.0.0/E-o-Bicho-ficha-clinica-1.0.0-Atualizacao.exe
+  https://github.com/ClaudioLobo011/E-o-Bicho/releases/download/ficha-clinica-1.0.1/E-o-Bicho-ficha-clinica-1.0.1-Atualizacao.exe
 sha512: >-
-  clLmkCNiuBW6KqsNCLoyP6/EdpqgqV2eVvoSBNgNJTKz1DyapLmV/PTPxTZG1rr39MnOw3sVQgNnz1LQEvDFrg==
-releaseDate: '2026-10-20T18:46:05.584Z'
+  VyeqE0FJPBxM9j6+hlFQQ44A4W/uaVWIm/SOlf/3y98kIOOFEuG9OO4JmH3x2CT8CpxDOPkAWX3lSCr2K1gufQ==
+releaseDate: '2026-10-21T16:38:34.651Z'
