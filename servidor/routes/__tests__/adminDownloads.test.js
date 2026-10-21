@@ -36,7 +36,7 @@ test('Aspia exige autenticação e administrador; envia bytes privados e trata p
         });
       assert.equal(result.status, 200);
       assert.equal(result.headers['cache-control'], 'private, no-store');
-      assert.match(result.headers['content-disposition'], /Aspia-EoBicho-Host-Setup-2026\.10\.21\.3\.zip/);
+      assert.match(result.headers['content-disposition'], /Aspia-EoBicho-Host-Setup-2026\.10\.21\.4\.zip/);
       assert.deepEqual(result.body, bytes);
     }
     process.env.ASPIA_HOST_PACKAGE_PATH = path.join(dir, 'missing.zip');
