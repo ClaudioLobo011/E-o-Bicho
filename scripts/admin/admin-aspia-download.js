@@ -22,7 +22,7 @@
       const url = URL.createObjectURL(await response.blob());
       const link = document.createElement('a');
       link.href = url;
-      link.download = 'Aspia-EoBicho-Host-Setup-2026.10.21.2.zip';
+      link.download = 'Aspia-EoBicho-Host-Setup-2026.10.21.3.zip';
       document.body.appendChild(link);
       link.click();
       link.remove();
