@@ -1,12 +1,12 @@
-version: 1.0.0
+version: 1.0.1
 files:
   - url: >-
-      https://github.com/ClaudioLobo011/E-o-Bicho/releases/download/installer-1.0.0/E-o-Bicho-pdv-1.0.0-Atualizacao.exe
+      https://github.com/ClaudioLobo011/E-o-Bicho/releases/download/pdv-1.0.1/E-o-Bicho-pdv-1.0.1-Atualizacao.exe
     sha512: >-
-      V9eb/qCSeCtOHl/q7k0P6CCDLSPoatD5p4lBRz4XyXMThiVef/aHJ20+dtfIQIAXOzJzxO0dLgW2Vo3E81d3Lg==
-    size: 102941665
+      bK9H3ewckVeLziN2QNUyxjjs+6xmfDSeaCd9RBa8ciW4U0+dX90bGR9xxpwSFCtEhAvDgy8Nxo5oO0tDldOkfQ==
+    size: 102950719
 path: >-
-  https://github.com/ClaudioLobo011/E-o-Bicho/releases/download/installer-1.0.0/E-o-Bicho-pdv-1.0.0-Atualizacao.exe
+  https://github.com/ClaudioLobo011/E-o-Bicho/releases/download/pdv-1.0.1/E-o-Bicho-pdv-1.0.1-Atualizacao.exe
 sha512: >-
-  V9eb/qCSeCtOHl/q7k0P6CCDLSPoatD5p4lBRz4XyXMThiVef/aHJ20+dtfIQIAXOzJzxO0dLgW2Vo3E81d3Lg==
-releaseDate: '2026-10-20T18:43:58.325Z'
+  bK9H3ewckVeLziN2QNUyxjjs+6xmfDSeaCd9RBa8ciW4U0+dX90bGR9xxpwSFCtEhAvDgy8Nxo5oO0tDldOkfQ==
+releaseDate: '2026-10-23T22:09:24.625Z'
