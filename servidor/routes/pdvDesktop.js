@@ -1871,6 +1871,7 @@ router.get('/directory/snapshot', authenticateHost, async (req, res) => {
 });
 
 require('../services/desktopCustomerSalesHistory').registerCustomerSalesHistory(router, authenticateHost);
+require('../services/desktopCustomerCredit').register(router, authenticateHost);
 
 router.get('/address/cep', authenticateHost, async (req, res) => {
   const cep = clean(req.query.cep).replace(/\D/g, '');

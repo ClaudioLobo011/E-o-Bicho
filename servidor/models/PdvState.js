@@ -122,6 +122,7 @@ const receivableSchema = new mongoose.Schema(
     inventoryProcessed: { type: Boolean, default: false },
     inventoryProcessedAt: { type: Date, default: null },
     cashContributions: { type: [cashContributionSchema], default: [] },
+    customerCredit: { type: mongoose.Schema.Types.Mixed, default: undefined },
     appointmentId: { type: String, trim: true, default: '' },
     appointmentIds: { type: [String], default: [] },
   },

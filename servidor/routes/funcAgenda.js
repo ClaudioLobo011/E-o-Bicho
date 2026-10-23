@@ -2496,11 +2496,12 @@ router.post('/clientes/:id/pendencias/ajuste', authMiddleware, requireStaff, asy
     const operation = operationRaw === 'debito' ? 'debito' : 'credito';
     const signal = operation === 'credito' ? 1 : -1;
 
-    const currentPending = parseNumber(cliente.valorPendente, 0);
-    const nextPending = currentPending + signal * value;
-
-    cliente.valorPendente = nextPending;
-    await cliente.save();
+    // Never overwrite a concurrent PDV credit debit using a stale document.
+    const updated = await User.findByIdAndUpdate(id, [
+      { $set: { valorPendente: { $round: [{ $add: [{ $ifNull: ['$valorPendente', 0] }, signal * value] }, 2] } } },
+    ], { new: true }).select('valorPendente');
+    if (!updated) return res.status(404).json({ message: 'Cliente nao encontrado.' });
+    const nextPending = parseNumber(updated.valorPendente, 0);
 
     const limiteCredito = parseNumber(cliente.limiteCredito, 0);
 

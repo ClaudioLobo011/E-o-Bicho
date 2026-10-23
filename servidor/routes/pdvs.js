@@ -1777,6 +1777,7 @@ const normalizeSaleRecordPayload = (record) => {
     customerName,
     customerDocument,
     nfseCustomerIdentification: record.nfseCustomerIdentification === 'not_informed' ? 'not_informed' : 'identified',
+    customerCredit: record.customerCredit && typeof record.customerCredit === 'object' ? { ...record.customerCredit } : undefined,
     nfseEnvironment: getNfseEnvironmentSnapshot(record),
     seller: sellerSource && typeof sellerSource === 'object' ? { ...sellerSource } : null,
     sellerName: sellerName || '',
@@ -4951,7 +4952,7 @@ const buildCaixaMovementHistoryEntry = ({
 const buildSaleContributionsFromPayments = (payments = []) =>
   (Array.isArray(payments) ? payments : [])
     .map((payment) => {
-      if (normalizeString(payment?.type).toLowerCase() === 'crediario') return null;
+      if (['crediario', 'customer_credit'].includes(normalizeString(payment?.type).toLowerCase()) || normalizeString(payment?.id).startsWith('customer-credit:')) return null;
       const amount = safeNumber(payment?.valor ?? 0, 0);
       if (!(amount > 0)) return null;
       return {
@@ -5227,7 +5228,7 @@ const createPdvPerfTracer = ({ scope = 'pdv', pdvId = '', action = '', requestId
   return { mark, flush };
 };
 
-const runPdvCommand = async ({
+const runPdvCommandInternal = async ({
   action,
   payload,
   pdvId,
@@ -5885,6 +5886,7 @@ const runPdvCommand = async ({
       .filter(Boolean);
 
     const incomingSale = normalizeSaleRecordPayload({
+      customerCredit: payload.customerCredit,
       id: providedSaleId || `sale-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
       type: normalizeString(payload?.type) || 'venda',
       typeLabel: normalizeString(payload?.typeLabel) || 'Venda',
@@ -6153,7 +6155,7 @@ const runPdvCommand = async ({
     }
     perf.mark('sale_finalize.state_persisted');
 
-    syncPdvCaixaSessionHistory({
+    const saleHistorySync = syncPdvCaixaSessionHistory({
       pdvDoc,
       existingState,
       updatedState,
@@ -6161,6 +6163,7 @@ const runPdvCommand = async ({
       console.error('Erro ao sincronizar histórico de caixas após venda finalizada:', historyError);
     });
     perf.mark('sale_finalize.session_sync_deferred');
+    if (payload.customerCredit) await saleHistorySync;
     perf.flush('ok', {
       branch: action,
       saleId: normalizeString(incomingSale?.id || ''),
@@ -6432,7 +6435,7 @@ const runPdvCommand = async ({
     }
 
     assertLease();
-    const updatedState = await PdvState.findOneAndUpdate(
+    const updatedState = await require('../services/customerCreditLedger').withReversal(saleRecord.customerCredit, session => PdvState.findOneAndUpdate(
       { pdv: pdvId },
       {
         $set: {
@@ -6459,8 +6462,8 @@ const runPdvCommand = async ({
           ),
         },
       },
-      { new: true, upsert: false }
-    );
+      { new: true, upsert: false, ...(session ? { session } : {}) }
+    ));
 
     await syncPdvCaixaSessionHistory({
       pdvDoc,
@@ -7307,6 +7310,7 @@ const runPdvCommand = async ({
       }
       nextSales[saleIndex] = normalizeSaleRecordPayload({
         ...existingSale,
+        customerCredit: payload.customerCredit,
         saleCode: normalizeString(payload?.saleCode || existingSale?.saleCode || targetOrder?.saleCode || ''),
         nfseCustomerIdentification: payload.nfseCustomerIdentification === undefined
           ? existingSale.nfseCustomerIdentification
@@ -7471,6 +7475,24 @@ const runPdvCommand = async ({
   throw error;
 };
 
+const runPdvCommand = async options => {
+  const ledger = require('../services/customerCreditLedger');
+  if (!options.desktopHost && options.payload?.payments?.some(ledger.isCredit) && options.payload.customerCreditProtocolVersion !== 1) {
+    throw Object.assign(new Error('Atualize a página do PDV antes de usar o crédito do cliente.'), { status: 409, statusCode: 409, code: 'CUSTOMER_CREDIT_UPDATE_REQUIRED' });
+  }
+  if (!['pdv.sale.finalize', 'pdv.delivery.finalize'].includes(options.action)) return runPdvCommandInternal(options);
+  const intent = ledger.intentFor(options);
+  const payload = { ...options.payload, customerCredit: intent || undefined };
+  if (!intent) return runPdvCommandInternal({ ...options, payload });
+  if (options.desktopHost) {
+    await ledger.verify(intent);
+    return runPdvCommandInternal({ ...options, payload });
+  }
+  // db.js enables Mongoose transaction AsyncLocalStorage: the balance, stock,
+  // sale, cash and journal are committed together for the web checkout.
+  return (await ledger.withUse(intent, () => runPdvCommandInternal({ ...options, payload }))).writeResult;
+};
+
 router.post('/:id/commands', requireAuth, async (req, res) => {
   const correlationId =
     normalizeString(req.get('x-correlation-id')) ||
@@ -7584,6 +7606,7 @@ router.post('/:id/commands', requireAuth, async (req, res) => {
 
         const transactionsEnabled =
           idempotencyEnabled
+          && !(payload?.payments || []).some(require('../services/customerCreditLedger').isCredit)
           && PDV_COMMAND_TRANSACTIONS_ENABLED
           && typeof mongoose.connection?.transaction === 'function';
         if (transactionsEnabled) {

@@ -1,4 +1,4 @@
-﻿(() => {
+(() => {
   const API_BASE =
     (typeof API_CONFIG !== 'undefined' && API_CONFIG && API_CONFIG.BASE_URL) || '/api';
   const SERVER_URL =
@@ -4289,7 +4289,7 @@
     if (!pdvId) {
       throw new Error('Selecione um PDV para executar comandos.');
     }
-    const bodyPayload = payload && typeof payload === 'object' ? payload : {};
+    const bodyPayload = { ...(payload && typeof payload === 'object' ? payload : {}), customerCreditProtocolVersion: 1 };
     const signature = JSON.stringify({ action: String(action || ''), payload: bodyPayload });
     const hash = (() => {
       let result = 0;
@@ -16750,11 +16750,11 @@
       token,
       errorMessage: 'Nao foi possivel verificar o credito do cliente.',
     });
-    customerPositiveCredit = Math.max(customerPositiveCredit, readCustomerPendingCredit(customerDetails));
+    customerPositiveCredit = readCustomerPendingCredit(customerDetails);
     console.log('[PDV][Credito] credito apos fetch detalhes:', customerPositiveCredit);
   } catch (_) {
-    // Fallback para o valor local
-    console.warn('[PDV][Credito] Falha ao buscar detalhes, usando credito local.');
+    customerPositiveCredit = 0;
+    notify('Não foi possível validar o crédito online. Nenhum crédito será utilizado sem consultar o servidor.', 'warning');
   }
 
   if (!(customerPositiveCredit > 0.009)) {
@@ -16816,6 +16816,7 @@
     valor: creditToUse,
     type: 'avista',
     customerCreditPayment: true,
+    fiscalCode: '21',
   });
   renderSalePaymentsPreview();
   state.finalizeCreditPromptResolved = true;
@@ -16823,43 +16824,9 @@
   
   return creditToUse;
 };
-const debitUsedCustomerCredit = async ({ customer, usedValue, warningMessage }) => {
-    if (!(usedValue > 0.009) || !customer) return;
-    let resolvedCustomer = customer && typeof customer === 'object' ? { ...customer } : null;
-    let customerId = normalizeId(resolvedCustomer?._id || resolvedCustomer?.id || '');
-    if (customerId && !isValidObjectId(customerId)) {
-      customerId = '';
-    }
-    if (!customerId) {
-      const customerCode = getCustomerCode(resolvedCustomer);
-      if (customerCode) {
-        const customerByCode = await fetchCustomerByCode(customerCode).catch(() => null);
-        if (customerByCode) {
-          resolvedCustomer = { ...resolvedCustomer, ...customerByCode };
-          customerId = normalizeId(resolvedCustomer?._id || resolvedCustomer?.id || '');
-        }
-      }
-    }
-    if (!customerId) return;
-    try {
-      const token = getToken();
-      await fetchWithOptionalAuth(
-        `${API_BASE}/func/clientes/${encodeURIComponent(customerId)}/pendencias/ajuste`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            valor: usedValue,
-            operation: 'debito',
-          }),
-          token,
-          errorMessage: warningMessage,
-        }
-      );
-    } catch (error) {
-      notify(error?.message || warningMessage, 'warning');
-    }
-  };
+// Credit is debited atomically by the sale command. Never issue a second,
+// independent balance adjustment after a successful checkout.
+const debitUsedCustomerCredit = async () => {};
 
   const finalizeSaleFlow = async ({ correlationId, perf } = {}) => {
     console.error('[PDV][FinalizeSale] Fluxo de finalizacao iniciado');
