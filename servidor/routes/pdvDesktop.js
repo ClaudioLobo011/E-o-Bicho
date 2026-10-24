@@ -16,6 +16,7 @@ const Pet = require('../models/Pet');
 const UserAddress = require('../models/UserAddress');
 const PdvDesktopHost = require('../models/PdvDesktopHost');
 const PdvDesktopEvent = require('../models/PdvDesktopEvent');
+const { processAppointmentEvent } = require('../services/desktopAppointmentTransaction');
 const PdvCodeRange = require('../models/PdvCodeRange');
 const PdvConversionBackup = require('../models/PdvConversionBackup');
 const AccountReceivable = require('../models/AccountReceivable');
@@ -737,17 +738,17 @@ function validatePaidDesktopAppointmentChanges(appointment, values, occurrenceKe
   }
 }
 
-async function materializeDesktopAppointmentEvent(event, host) {
+async function materializeDesktopAppointmentEvent(event, host, session = null) {
   const source = event.payload && typeof event.payload === 'object' ? event.payload : {};
   const mutationId = clean(source.clientMutationId || event.eventId);
   const appointmentId = clean(source.sourceAppointmentId || source.appointmentId);
-  let appointment = mongoose.Types.ObjectId.isValid(appointmentId) ? await Appointment.findById(appointmentId) : null;
-  if (!appointment && mutationId) appointment = await Appointment.findOne({ clientMutationId: mutationId, store: host.empresa });
+  let appointment = mongoose.Types.ObjectId.isValid(appointmentId) ? await Appointment.findById(appointmentId).session(session) : null;
+  if (!appointment && mutationId) appointment = await Appointment.findOne({ clientMutationId: mutationId, store: host.empresa }).session(session);
   if (event.type === 'appointment.created') {
     if (appointment) return appointment;
     const values = await desktopAppointmentPayload(source, host);
     const actorId = clean(source.operator?.id);
-    return Appointment.create({ ...values, createdBy: mongoose.Types.ObjectId.isValid(actorId) ? actorId : undefined, source: 'manual', clientMutationId: mutationId, version: 1 });
+    return new Appointment({ ...values, createdBy: mongoose.Types.ObjectId.isValid(actorId) ? actorId : undefined, source: 'manual', clientMutationId: mutationId, version: 1 }).save({ session });
   }
   if (!appointment && event.type === 'appointment.deleted') {
     // Excluir novamente um registro que já não existe produz o mesmo estado
@@ -782,12 +783,12 @@ async function materializeDesktopAppointmentEvent(event, host) {
         appointment.profissional = remaining.find((item) => item.profissional)?.profissional || null;
         appointment.valor = remaining.reduce((sum, item) => sum + Number(item.valor || 0), 0) + remainingProducts.reduce((sum, item) => sum + Number(item.total || 0), 0);
         appointment.version = expectedVersion + 1;
-        await appointment.save();
+        await appointment.save({ session });
         return appointment;
       }
     }
     appointment.deletedAt = new Date(); appointment.version = expectedVersion + 1;
-    await appointment.save();
+    await appointment.save({ session });
     return appointment;
   }
   const values = await desktopAppointmentPayload(source, host);
@@ -813,12 +814,12 @@ async function materializeDesktopAppointmentEvent(event, host) {
       appointment.observacoes = values.observacoes;
     }
     appointment.version = expectedVersion + 1;
-    await appointment.save();
+    await appointment.save({ session });
     return appointment;
   }
   validatePaidDesktopAppointmentChanges(appointment, values);
   Object.assign(appointment, values, { version: expectedVersion + 1 });
-  await appointment.save();
+  await appointment.save({ session });
   return appointment;
 }
 
@@ -1929,6 +1930,25 @@ router.get('/address/search', authenticateHost, async (req, res) => {
   return res.json({ addresses });
 });
 
+router.post('/appointments/recovery-plans', authenticateHost, async (req, res) => {
+  const eventIds = Array.isArray(req.body?.eventIds) ? req.body.eventIds.filter(v=>typeof v==='string').slice(0,200) : [];
+  if (!eventIds.length) return res.json({plans:[]});
+  const records = await mongoose.connection.db.collection('pdvdesktoprecoveryplans').find({host:req.desktopHost._id,pdv:req.desktopHost.pdv,empresa:req.desktopHost.empresa,eventIds:{$in:eventIds},approved:true}).limit(20).toArray();
+  const plans=[];
+  for(const record of records){
+    const appointment=await Appointment.findOne({_id:record.source,store:req.desktopHost.empresa}).setOptions({includeDeleted:true})
+      .populate('cliente','nomeCompleto nomeContato razaoSocial email cpf cnpj celular telefone')
+      .populate('pet','nome codigoPet').populate('profissional','nomeCompleto nomeContato razaoSocial email')
+      .populate('itens.servico','nome valor duracaoMinutos').populate('itens.profissional','nomeCompleto nomeContato razaoSocial email')
+      .populate('clinicalProducts.product','nome cod codbarras venda').lean();
+    // A reviewed plan is invalid as soon as someone changes the cloud record.
+    if(!appointment||Number(appointment.version)!==record.version||new Date(appointment.updatedAt).toISOString()!==record.cloudUpdatedAt)continue;
+    plans.push({id:String(record._id),source:String(record.source),version:record.version,eventsHash:record.eventsHash,cacheHash:record.cacheHash,complete:true,
+      appointments:appointment.deletedAt?[]:appointmentOccurrencesForDesktop(appointment,new Date(-8640000000000000),new Date(8640000000000000))});
+  }
+  return res.json({plans});
+});
+
 router.get('/appointments/:appointmentId/group', authenticateHost, async (req, res) => {
   const id = clean(req.params.appointmentId);
   if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Atendimento inválido.' });
@@ -2292,6 +2312,10 @@ router.post('/events/batch', authenticateHost, async (req, res) => {
       continue;
     }
     try {
+      if (['appointment.created', 'appointment.updated', 'appointment.deleted'].includes(type)) {
+        results.push(await processAppointmentEvent({ eventId, type, occurredAt, payload: event.payload }, host, materializeDesktopAppointmentEvent));
+        continue;
+      }
       let record;
       let replayed = false;
       try {
@@ -2325,7 +2349,7 @@ router.post('/events/batch', authenticateHost, async (req, res) => {
       }
       results.push({ eventId, accepted: true, replayed, status: record.status });
     } catch (error) {
-      await PdvDesktopEvent.updateOne({ pdv: host.pdv, eventId }, { $set: { status: 'failed', error: error?.message || 'Falha ao processar evento.' } }).catch(() => {});
+      await PdvDesktopEvent.updateOne({ pdv: host.pdv, eventId, status: { $ne: 'processed' } }, { $set: { status: 'failed', error: error?.message || 'Falha ao processar evento.' } }).catch(() => {});
       results.push({
         eventId,
         accepted: false,
