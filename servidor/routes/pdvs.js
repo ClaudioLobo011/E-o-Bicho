@@ -5146,8 +5146,15 @@ const buildExpectedClosePaymentsByMethod = (state = {}) => {
     const amount = Math.max(0, safeNumber(entry.amount ?? entry.delta, 0));
     if (!(amount > 0)) return;
     const signal = movementId === 'entrada' ? 1 : -1;
+    // History from desktop cash movements may only contain the label. Resolve
+    // it to the catalog ID used by sales/opening before applying the delta.
+    // Otherwise a separate negative 'Dinheiro' bucket is clamped to zero and
+    // withdrawals silently disappear from the reconciled balance.
+    const movementPayment = resolveCommandTargetPayment(
+      Array.from(paymentCatalog.values()), entry.paymentId || label
+    ) || resolveCommandTargetPayment(Array.from(paymentCatalog.values()), label);
     applyAmount(
-      {
+      movementPayment || {
         id: label,
         label,
         type: 'avista',
