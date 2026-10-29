@@ -1,12 +1,12 @@
-version: 1.0.15
+version: 1.0.16
 files:
   - url: >-
-      https://github.com/ClaudioLobo011/E-o-Bicho/releases/download/ficha-clinica-1.0.15/E-o-Bicho-ficha-clinica-1.0.15-Atualizacao.exe
+      https://github.com/ClaudioLobo011/E-o-Bicho/releases/download/ficha-clinica-1.0.16/E-o-Bicho-ficha-clinica-1.0.16-Atualizacao.exe
     sha512: >-
-      YrGygRCgPz9fF8LZBYAxzdW3TPWZhjeoYGHWdu2uhXFpQedgWa/AGFok3ygPiTA6KW+hT8ZlaEhF5yH9RaEh5Q==
-    size: 101268781
+      ZW7ow0oqUwaeDr2WT4HgqvWuqENXcVq7kncVZ2+5y1P1OitRafYf0Au+bhZ+rktseXYLNz30zerOLOJLEphImQ==
+    size: 101269592
 path: >-
-  https://github.com/ClaudioLobo011/E-o-Bicho/releases/download/ficha-clinica-1.0.15/E-o-Bicho-ficha-clinica-1.0.15-Atualizacao.exe
+  https://github.com/ClaudioLobo011/E-o-Bicho/releases/download/ficha-clinica-1.0.16/E-o-Bicho-ficha-clinica-1.0.16-Atualizacao.exe
 sha512: >-
-  YrGygRCgPz9fF8LZBYAxzdW3TPWZhjeoYGHWdu2uhXFpQedgWa/AGFok3ygPiTA6KW+hT8ZlaEhF5yH9RaEh5Q==
-releaseDate: '2026-10-29T19:18:00.077Z'
+  ZW7ow0oqUwaeDr2WT4HgqvWuqENXcVq7kncVZ2+5y1P1OitRafYf0Au+bhZ+rktseXYLNz30zerOLOJLEphImQ==
+releaseDate: '2026-10-29T21:32:19.577Z'
