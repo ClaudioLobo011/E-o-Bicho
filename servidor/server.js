@@ -158,6 +158,7 @@ app.use('/api/funcionarios', require('./routes/adminFuncionarios'));
 const routes = [
   { path: '/api/receiving', file: './routes/receivingModule' },
   { path: '/api/products', file: './routes/products' },
+  { path: '/api/product-experience', file: './routes/productExperience' },
   { path: '/api/categories', file: './routes/categories' },
   { path: '/api/auth', file: './routes/auth' },
   { path: '/api/users', file: './routes/users' },
@@ -495,6 +496,7 @@ async function startServer() {
     process.env.DISABLE_EXTERNAL_WORKERS || ''
   ).toLowerCase() === 'true';
   if (!externalWorkersDisabled) {
+    require('./services/productRestockWorker').startProductRestockWorker();
     startIfoodStatusPoller();
     startIfoodMenuScheduler();
     if (!whatsappAutomationWorker) {

@@ -2,6 +2,7 @@
   "name": "SiteEoBichoTW",
   "version": "1.0.1",
   "private": true,
+  "engines": { "node": "22.x" },
   "scripts": {
     "backend:local": "node servidor/scripts/start-local.js",
     "frontend:local": "node scripts/start-static-local.js",
@@ -18,7 +19,7 @@
     "bcrypt": "^5.1.1",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
-    "cpf-cnpj-validator": "^1.0.4",
+    "cpf-cnpj-validator": "^1.0.3",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "express-validator": "^7.2.1",
@@ -35,7 +36,7 @@
     "xpath": "0.0.33"
   },
   "devDependencies": {
-    "mongodb-memory-server": "^9.10.2",
+    "mongodb-memory-server": "^10.3.0",
     "supertest": "^6.3.4"
   }
 }

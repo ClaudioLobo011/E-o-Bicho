@@ -1,556 +1,1972 @@
-document.addEventListener('DOMContentLoaded', () => {
-    initializeProductPage();
-});
-
-// Carrega o SVG de especificações uma única vez e o injeta no DOM.
-let _specsSvgPromise = null;
-function loadSpecsSvg() {
-  if (_specsSvgPromise) return _specsSvgPromise;
-
-  _specsSvgPromise = (async () => {
-    const container = document.getElementById('product-specs-svg-container');
-    if (!container) return; // página sem o bloco
-
-    const tryFetch = async (url) => {
-      const resp = await fetch(url);
-      if (!resp.ok) throw new Error(`Falha ao buscar: ${url}`);
-      return resp.text();
-    };
-
-    let svgMarkup;
+/* Product page: public reads, explicit account actions, no catalog mutations. */
+(() => {
+  "use strict";
+  const U = ProductPageUtils;
+  const $ = (id) => document.getElementById(id);
+  const state = {
+    product: null,
+    imageIndex: 0,
+    images: [],
+    busy: false,
+    loaded: false,
+    favorite: false,
+    community: null,
+    quote: null,
+  };
+  const id = new URLSearchParams(location.search).get("id") || "";
+  const canonical = `https://www.peteobicho.com.br/pages/menu-departments-item/product.html?id=${encodeURIComponent(id)}`;
+  const readStorage = (key, fallback) => {
     try {
-      // 1ª opção: arquivo novo com os IDs (recomendado)
-      svgMarkup = await tryFetch('/public/icons/especificacoes-pet.svg');
+      return JSON.parse(localStorage.getItem(key)) ?? fallback;
     } catch {
-      // fallback: mantém compatibilidade se o arquivo antigo ainda existir
-      svgMarkup = await tryFetch('/public/icons/especificacoes.svg');
+      return fallback;
     }
-
-    container.innerHTML = svgMarkup; // injeta o <svg ...> no DOM
-  })();
-
-  return _specsSvgPromise;
-}
-
-let _descSvgPromise = null;
-function loadDescSvg() {
-  if (_descSvgPromise) return _descSvgPromise;
-
-  _descSvgPromise = (async () => {
-    const container = document.getElementById('product-desc-svg-container');
-    if (!container) return; // página sem o bloco
-
-    const resp = await fetch('/public/icons/descricao-pet.svg?v=2');
-    if (!resp.ok) throw new Error('Não foi possível carregar descricao-pet.svg');
-
-    const svgMarkup = await resp.text();
-    container.innerHTML = svgMarkup; // injeta o <svg id="svg-descricao"> no DOM
-  })();
-
-  return _descSvgPromise;
-}
-
-async function initializeProductPage() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const productId = urlParams.get('id');
-
-    if (!productId) {
-        document.getElementById('product-details-container').innerHTML = 
-            '<p class="text-center text-red-500 font-bold">Erro: ID do produto não encontrado na URL.</p>';
-        return;
-    }
-
-    fetchProductDetails(productId);
-
-    const favButton = document.getElementById('add-to-wishlist-btn');
-    if (!favButton) return;
-
-    const heartIconEmpty = `<svg class="h-7 w-7 text-gray-400 hover:text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 016.364 0L12 7.636l1.318-1.318a4.5 4.5 0 116.364 6.364L12 20.364l-7.682-7.682a4.5 4.5 0 010-6.364z" /></svg>`;
-    const heartIconFilled = `<svg class="h-7 w-7 text-red-500" fill="currentColor" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 016.364 0L12 7.636l1.318-1.318a4.5 4.5 0 116.364 6.364L12 20.364l-7.682-7.682a4.5 4.5 0 010-6.364z" /></svg>`;
-
-    // Função para atualizar o estado visual do botão
-    const updateButtonState = async () => {
-        const isFav = await FavoritesManager.isFavorite(productId);
-        favButton.innerHTML = isFav ? heartIconFilled : heartIconEmpty;
-        favButton.dataset.favorited = isFav;
-    };
-
-    favButton.addEventListener('click', async () => {
-        const isCurrentlyFavorited = favButton.dataset.favorited === 'true';
-        if (isCurrentlyFavorited) {
-            await FavoritesManager.removeFavorite(productId);
-        } else {
-            await FavoritesManager.addFavorite(productId);
-        }
-        await updateButtonState();
-    });
-
-    await updateButtonState(); // Define o estado inicial
-}
-
-async function fetchProductDetails(productId) {
+  };
+  const writeStorage = (key, value) => {
     try {
-        const response = await fetch(`${API_CONFIG.BASE_URL}/products/${productId}`);
-        if (!response.ok) {
-            throw new Error('Produto não encontrado.');
-        }
-        const product = await response.json();
-        
-        await renderProductDetails(product);
-        
-        // A chamada à função de breadcrumb agora usa o array 'categorias'
-        renderBreadcrumb(product.breadcrumbPath); 
-        renderPromotionsPanel(product);
-
-    } catch (error) {
-        console.error('Erro ao buscar detalhes do produto:', error);
-        document.getElementById('product-details-container').innerHTML =
-             `<p class="text-center text-red-500 font-bold">${error.message}</p>`;
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch {
+      /* browsing still works without storage */
     }
-}
-
-/**
- * Preenche a página com os detalhes do produto recebido da API.
- * (VERSÃO ATUALIZADA COM LÓGICA DE PREÇO PROMOCIONAL E PREÇO DO CLUBE)
- * @param {object} product - O objeto do produto.
- */
-async function renderProductDetails(product) {
-    document.title = `${product.nome} - E o Bicho`;
-
-    document.getElementById('product-title').textContent = product.nome;
-    document.getElementById('product-sku').textContent = `Cód. Item ${product.cod}`;
-    document.getElementById('product-brand').textContent = `Marca: ${product.marca || 'Não informada'}`;
-    
-    // --- INÍCIO DA LÓGICA DE PREÇO CORRIGIDA ---
-    const priceContainer = document.getElementById('product-price');
-    let priceHtml = '';
-
-    // 1. Verifica a Promoção Individual (desconto direto)
-    // Esta é a ÚNICA condição que mostra um preço cortado no painel principal.
-    if (product.promocao && product.promocao.ativa && product.promocao.porcentagem > 0) {
-        const discountedPrice = product.venda * (1 - product.promocao.porcentagem / 100);
-        priceHtml = `
-            <div class="flex items-end space-x-3">
-                <span class="text-4xl font-bold text-primary">R$ ${discountedPrice.toFixed(2).replace('.', ',')}</span>
-                <div class="bg-primary text-white font-bold text-sm px-2 py-1 rounded-md mb-1">
-                    -${product.promocao.porcentagem}% OFF
-                </div>
-            </div>
-            <div class="mt-1">
-                <span class="text-gray-500 text-lg line-through">R$ ${product.venda.toFixed(2).replace('.', ',')}</span>
-            </div>
-        `;
-    } 
-    // 2. Para TODOS os outros casos (com ou sem Preço Club), o preço principal é o de venda normal.
-    // A vantagem do Preço Club será mostrada apenas no painel de promoções.
-    else {
-        priceHtml = `<span class="text-4xl font-bold text-primary">R$ ${product.venda.toFixed(2).replace('.', ',')}</span>`;
+  };
+  const user = () => readStorage("loggedInUser", null);
+  function account() {
+    if (user()?.token && user()?.id) return true;
+    try {
+      sessionStorage.setItem(
+        "productReturnUrl",
+        location.pathname + location.search,
+      );
+    } catch {
+      /* the return URL is also in the login link */
     }
-    priceContainer.innerHTML = priceHtml;
-    // --- FIM DA LÓGICA DE PREÇO CORRIGIDA ---
-
-    await loadDescSvg();
-    renderProductDescription(product);
-    await loadSpecsSvg();
-    renderProductSpecifications(product);
-
-    const stockStatusEl = document.getElementById('stock-status');
-    if (product.stock > 0) {
-        stockStatusEl.className = 'flex items-center space-x-2 text-green-600 font-semibold text-sm';
-        stockStatusEl.innerHTML = `<div class="w-3 h-3 bg-green-500 rounded-full"></div><span>Em Estoque</span>`;
-    } else {
-        stockStatusEl.className = 'flex items-center space-x-2 text-red-500 font-semibold text-sm';
-        stockStatusEl.innerHTML = `<div class="w-3 h-3 bg-red-500 rounded-full"></div><span>Indisponível</span>`;
-    }
-
-    const mainImage = document.getElementById('main-product-image');
-    const thumbnailGallery = document.getElementById('thumbnail-gallery');
-
-    const placeholderOptions = ['/public/image/placeholder.svg', `${API_CONFIG.SERVER_URL}/image/placeholder.svg`, `${API_CONFIG.SERVER_URL}/image/placeholder.png`];
-    const productImages = Array.isArray(product.imagens) ? product.imagens : [];
-    const normalizeImageUrl = (url) => {
-        if (!url) return null;
-        return /^https?:\/\//i.test(url) ? url : `${API_CONFIG.SERVER_URL}${url}`;
+    location.href = `/pages/login.html?redirect=${encodeURIComponent(location.pathname + location.search)}`;
+    return false;
+  }
+  function element(tag, className, text) {
+    const el = document.createElement(tag);
+    if (className) el.className = className;
+    if (text !== undefined) el.textContent = text;
+    return el;
+  }
+  function track(event, extra = {}) {
+    // The existing analytics provider may consume these events. No personal data or new trackers.
+    const detail = {
+      event,
+      ecommerce: {
+        currency: "BRL",
+        items: [
+          {
+            item_id: id,
+            item_name: state.product?.nome || "",
+            price: U.price(state.product).unit,
+            quantity: U.quantity(
+              $("product-quantity").value,
+              state.product?.stock,
+            ),
+          },
+        ],
+      },
+      ...extra,
     };
-
-    const allImages = [product.imagemPrincipal, ...productImages.filter(img => img !== product.imagemPrincipal)]
-        .map(normalizeImageUrl)
-        .filter(Boolean);
-
-    const setMainImage = (src) => {
-        let fallbackIndex = 0;
-        mainImage.onerror = () => {
-            if (fallbackIndex < placeholderOptions.length) {
-                mainImage.src = placeholderOptions[fallbackIndex++];
-                return;
-            }
-            mainImage.onerror = null;
-        };
-
-        mainImage.src = src || placeholderOptions[0];
-    };
-
-    setMainImage(allImages.length ? allImages[0] : placeholderOptions[0]);
-    thumbnailGallery.innerHTML = '';
-
-    const addThumbnail = (imgSrc, isActive = false) => {
-        const thumb = document.createElement('img');
-        thumb.src = imgSrc;
-        thumb.className = 'w-full h-20 object-contain rounded-md cursor-pointer border-2 border-transparent hover:border-primary transition-all p-1';
-
-        let fallbackIndex = 0;
-        thumb.onerror = () => {
-            if (fallbackIndex < placeholderOptions.length) {
-                const nextSrc = placeholderOptions[fallbackIndex++];
-                thumb.src = nextSrc;
-
-                if (isActive) {
-                    setMainImage(nextSrc);
-                }
-                return;
-            }
-
-            thumb.onerror = null;
-        };
-
-        if (isActive) {
-            thumb.classList.add('border-primary');
-            thumb.classList.remove('border-transparent');
-        }
-
-        thumb.addEventListener('click', () => {
-            setMainImage(thumb.src);
-            thumbnailGallery.querySelectorAll('img').forEach(el => el.classList.remove('border-primary'));
-            thumb.classList.add('border-primary');
-        });
-        thumbnailGallery.appendChild(thumb);
-    };
-
-    if (allImages.length === 0) {
-        addThumbnail(placeholderOptions[0], true);
-        return;
+    if (Array.isArray(window.dataLayer)) window.dataLayer.push(detail);
+    window.dispatchEvent(new CustomEvent("eobicho:product-event", { detail }));
+    if (
+      /^[a-f0-9]{24}$/i.test(id) &&
+      navigator.doNotTrack !== "1" &&
+      !navigator.globalPrivacyControl
+    ) {
+      fetch(`${API_CONFIG.BASE_URL}/product-experience/${id}/events`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          event,
+          device: matchMedia("(max-width: 767px)").matches
+            ? "mobile"
+            : "desktop",
+        }),
+        keepalive: true,
+      }).catch(() => {});
     }
-
-    allImages.forEach((imgSrc, index) => {
-        addThumbnail(imgSrc, index === 0);
+  }
+  async function request(path, options = {}) {
+    const { timeout = 18000, ...rest } = options;
+    const headers = { Accept: "application/json", ...rest.headers };
+    if (rest.body) headers["Content-Type"] = "application/json";
+    let response;
+    try {
+      response = await fetch(`${API_CONFIG.BASE_URL}${path}`, {
+        ...rest,
+        headers,
+        signal: AbortSignal.timeout(timeout),
+      });
+    } catch (e) {
+      throw new Error(
+        e.name === "TimeoutError"
+          ? "A consulta demorou mais que o esperado. Tente novamente."
+          : "Não foi possível conectar. Verifique sua conexão e tente novamente.",
+      );
+    }
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const e = new Error(
+        data.message || "Não foi possível concluir. Tente novamente.",
+      );
+      e.status = response.status;
+      e.data = data;
+      throw e;
+    }
+    return data;
+  }
+  const authorized = (path, options = {}) =>
+    request(path, {
+      ...options,
+      headers: { Authorization: `Bearer ${user()?.token}`, ...options.headers },
     });
-}
-
-/**
- * Renderiza o caminho de navegação (breadcrumb) na página do produto.
- * (VERSÃO FINAL E CORRIGIDA)
- * @param {Array} breadcrumbPath - O array com o caminho das categorias vindo da API.
- */
-function renderBreadcrumb(breadcrumbPath) {
-    const container = document.getElementById('breadcrumb-container');
-    if (!container || !breadcrumbPath || breadcrumbPath.length === 0) {
-        // Se não houver caminho, esconde a navegação inteira para um visual mais limpo
-        if (container.parentElement) container.parentElement.style.display = 'none';
+  function imageUrl(value) {
+    return U.safeUrl(
+      value || "/public/image/placeholder.svg",
+      API_CONFIG.SERVER_URL,
+    );
+  }
+  function imageFallback(img) {
+    img.addEventListener("error", () => {
+      if (img.dataset.fallback !== "true") {
+        img.dataset.fallback = "true";
+        img.src = "/public/image/placeholder.svg";
+      }
+    });
+  }
+  function setImage(index) {
+    if (!state.images.length) return;
+    state.imageIndex = (index + state.images.length) % state.images.length;
+    const src = state.images[state.imageIndex];
+    for (const imageId of ["main-product-image", "zoomed-image"]) {
+      const img = $(imageId);
+      delete img.dataset.fallback;
+      img.src = src;
+      img.alt = `${state.product.nome} — foto ${state.imageIndex + 1}`;
+    }
+    $("image-counter").textContent =
+      state.images.length > 1
+        ? `${state.imageIndex + 1} de ${state.images.length} fotos`
+        : "";
+    $("zoom-counter").textContent =
+      `${state.imageIndex + 1} / ${state.images.length}`;
+    $("thumbnail-gallery")
+      .querySelectorAll("button")
+      .forEach((btn, i) =>
+        btn.setAttribute("aria-pressed", String(i === state.imageIndex)),
+      );
+  }
+  function renderGallery(p) {
+    state.images = [
+      ...new Set(
+        [p.imagemPrincipal, ...(Array.isArray(p.imagens) ? p.imagens : [])]
+          .filter(Boolean)
+          .map(imageUrl)
+          .filter(Boolean),
+      ),
+    ];
+    if (!state.images.length) state.images = ["/public/image/placeholder.svg"];
+    $("thumbnail-gallery").replaceChildren();
+    $("thumbnail-gallery").hidden = state.images.length < 2;
+    state.images.forEach((src, index) => {
+      const btn = element("button", "pd-thumbnail");
+      btn.type = "button";
+      btn.setAttribute("aria-label", `Ver foto ${index + 1} de ${p.nome}`);
+      btn.setAttribute("aria-pressed", String(index === 0));
+      const img = element("img");
+      img.src = src;
+      img.alt = "";
+      img.width = 68;
+      img.height = 72;
+      img.loading = "lazy";
+      img.decoding = "async";
+      imageFallback(img);
+      btn.append(img);
+      btn.addEventListener("click", () => setImage(index));
+      $("thumbnail-gallery").append(btn);
+    });
+    for (const name of [
+      "previous-image",
+      "next-image",
+      "zoom-prev",
+      "zoom-next",
+    ])
+      $(name).hidden = state.images.length < 2;
+    $("zoom-product").disabled = false;
+    setImage(0);
+  }
+  function description(p) {
+    const container = $("product-description");
+    container.replaceChildren();
+    const raw = String(p.descricao || "").trim();
+    if (!raw) {
+      container.append(
+        element(
+          "p",
+          null,
+          "Ainda não há uma descrição detalhada cadastrada. Consulte a ficha técnica ou fale com a nossa equipe.",
+        ),
+      );
+      return;
+    }
+    // Rebuild with a strict semantic allowlist. No source attributes, scripts, styles, images or iframes.
+    const parsed = new DOMParser().parseFromString(raw, "text/html");
+    const allowed = new Set([
+      "P",
+      "BR",
+      "UL",
+      "OL",
+      "LI",
+      "STRONG",
+      "EM",
+      "B",
+      "I",
+      "H2",
+      "H3",
+      "H4",
+      "TABLE",
+      "THEAD",
+      "TBODY",
+      "TR",
+      "TH",
+      "TD",
+      "A",
+    ]);
+    const blocked = new Set([
+      "SCRIPT",
+      "STYLE",
+      "IFRAME",
+      "OBJECT",
+      "EMBED",
+      "SVG",
+      "MATH",
+      "FORM",
+      "INPUT",
+      "BUTTON",
+      "TEMPLATE",
+      "NOSCRIPT",
+    ]);
+    function clean(node, target) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        target.append(document.createTextNode(node.textContent));
         return;
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE || blocked.has(node.tagName))
+        return;
+      if (!allowed.has(node.tagName)) {
+        for (const child of node.childNodes) clean(child, target);
+        return;
+      }
+      const tag = /^H[24]$/.test(node.tagName)
+        ? "h3"
+        : node.tagName.toLowerCase();
+      const el = document.createElement(tag);
+      if (tag === "a") {
+        const href = U.safeUrl(node.getAttribute("href"), canonical);
+        if (href) {
+          el.href = href;
+          el.target = "_blank";
+          el.rel = "noopener noreferrer";
+        }
+      }
+      for (const child of node.childNodes) clean(child, el);
+      target.append(el);
     }
-
-    // Limpa qualquer conteúdo anterior, exceto o link "Início"
-    while (container.children.length > 1) {
-        container.removeChild(container.lastChild);
-    }
-
-    breadcrumbPath.forEach((category, index) => {
-        // Adiciona o separador ">"
-        const separatorLi = document.createElement('li');
-        separatorLi.innerHTML = '<span class="text-gray-400">&gt;</span>';
-        container.appendChild(separatorLi);
-
-        const categoryLi = document.createElement('li');
-        const isLastItem = index === breadcrumbPath.length - 1;
-
-        if (isLastItem) {
-            // O último item é a categoria atual, então não é um link
-            categoryLi.className = 'font-semibold text-gray-800';
-            categoryLi.textContent = category.nome;
+    if (/<(?:p|ul|ol|li|table|h[234])\b/i.test(raw)) {
+      for (const node of parsed.body.childNodes) clean(node, container);
+    } else {
+      const fragment = document.createDocumentFragment();
+      for (const node of parsed.body.childNodes) clean(node, fragment);
+      // Preserve every line and every sentence; never truncate or split on punctuation.
+      const temp = element("div");
+      temp.append(fragment);
+      temp.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
+      let list = null;
+      for (const line of temp.textContent
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .filter(Boolean)) {
+        if (/^[-•–]\s*/.test(line)) {
+          if (!list) {
+            list = element("ul");
+            container.append(list);
+          }
+          list.append(element("li", null, line.replace(/^[-•–]\s*/, "")));
         } else {
-            // Os itens anteriores são links para as categorias pai
-            const link = document.createElement('a');
-            link.href = category.href; // Usa o href que o back-end já preparou
-            link.className = 'hover:text-primary hover:underline';
-            link.textContent = category.nome;
-            categoryLi.appendChild(link);
+          list = null;
+          container.append(element("p", null, line));
         }
-        container.appendChild(categoryLi);
+      }
+    }
+    if (!container.textContent.trim())
+      container.append(
+        element(
+          "p",
+          null,
+          "Consulte as informações na embalagem ou fale com a nossa equipe.",
+        ),
+      );
+  }
+  function renderSpecs(p) {
+    const specs = U.specifications(p);
+    $("product-specs-list").replaceChildren();
+    for (const [label, value] of specs) {
+      const row = element("div", "pd-spec-row");
+      row.append(element("dt", null, label), element("dd", null, value));
+      $("product-specs-list").append(row);
+    }
+    if (!specs.length)
+      $("product-specs-list").append(
+        element(
+          "p",
+          "pd-muted",
+          "Consulte a embalagem para informações técnicas.",
+        ),
+      );
+    const highlights = [];
+    const spec = p.especificacoes || {};
+    if (spec.pet?.length || spec.tipo?.length)
+      highlights.push(
+        `Indicado para ${(spec.pet?.length ? spec.pet : spec.tipo).join(" e ")}`,
+      );
+    if (spec.apresentacao)
+      highlights.push(`Apresentação: ${spec.apresentacao}`);
+    if (spec.idade?.length)
+      highlights.push(`Fase de vida: ${spec.idade.join(", ")}`);
+    $("product-highlights").replaceChildren(
+      ...highlights.map((text) => element("li", null, text)),
+    );
+    $("product-highlights").hidden = !highlights.length;
+    $("medicine-notice").hidden = !U.medicine(p);
+    $("related-notice").hidden = !U.medicine(p);
+    if (spec.apresentacao) {
+      const current = element("span", "pd-variant", spec.apresentacao);
+      current.setAttribute("aria-current", "true");
+      $("variant-options").replaceChildren(current);
+      $("product-variants").hidden = false;
+    }
+  }
+  function breadcrumb(p) {
+    const root = $("breadcrumb-container");
+    root.replaceChildren();
+    const home = element("li");
+    const a = element("a", null, "Início");
+    a.href = "/";
+    home.append(a);
+    root.append(home);
+    for (const category of p.breadcrumbPath || []) {
+      const li = element("li");
+      const link = element("a", null, category.nome);
+      const href = U.safeUrl(category.href, location.origin);
+      if (href && new URL(href).origin === location.origin) link.href = href;
+      li.append(link);
+      root.append(li);
+    }
+    const current = element("li", null, p.nome);
+    current.setAttribute("aria-current", "page");
+    root.append(current);
+  }
+  function promotions(p) {
+    const panel = $("product-promotions-panel");
+    panel.replaceChildren();
+    const club = U.number(p.precoClube);
+    const normal = U.price(p);
+    if (club > 0 && club < normal.unit) {
+      const line = element("p");
+      line.append(element("strong", null, `${U.money(club)} com Preço Clube`));
+      panel.append(
+        line,
+        element(
+          "p",
+          null,
+          "Disponível ao ativar a assinatura deste item na sacola.",
+        ),
+      );
+      const label = element("label");
+      const check = element("input");
+      check.type = "checkbox";
+      check.id = "product-subscription";
+      check.addEventListener("change", () => {
+        updatePurchase();
+        track("select_subscription", { subscribed: check.checked });
+      });
+      label.append(
+        check,
+        element(
+          "span",
+          null,
+          "Adicionar este item com assinatura e Preço Clube",
+        ),
+      );
+      panel.append(label);
+      const details = element("details");
+      const sum = element("summary", null, "Como esse preço é aplicado?");
+      details.append(
+        sum,
+        element(
+          "p",
+          null,
+          "Ao marcar esta opção, a assinatura deste item será ativada na sacola. O sistema aplica a condição mais vantajosa disponível; os descontos não são somados. Confira os detalhes antes de finalizar.",
+        ),
+      );
+      panel.append(details);
+    }
+    const c = p.promocaoCondicional;
+    if (U.active(c)) {
+      let text = "";
+      if (
+        c.tipo === "leve_pague" &&
+        c.leve > 0 &&
+        c.pague >= 0 &&
+        c.pague < c.leve
+      )
+        text = `Leve ${c.leve}, pague ${c.pague}.`;
+      if (
+        c.tipo === "acima_de" &&
+        c.quantidadeMinima > 0 &&
+        c.descontoPorcentagem > 0 &&
+        c.descontoPorcentagem <= 100
+      )
+        text = `${c.descontoPorcentagem}% de desconto a partir de ${c.quantidadeMinima} unidades.`;
+      if (text) {
+        const line = element("p");
+        line.append(element("strong", null, text));
+        panel.append(
+          line,
+          element(
+            "p",
+            null,
+            c.produtosDiferentes
+              ? "Válido para produtos participantes do mesmo grupo. O desconto é calculado na sacola."
+              : "O desconto é calculado na sacola para a quantidade participante.",
+          ),
+        );
+      }
+    }
+    panel.hidden = !panel.children.length;
+    $("discount-answer").textContent = panel.children.length
+      ? `${panel.textContent} Os descontos não são cumulativos; a sacola calcula a melhor condição disponível.`
+      : "O preço exibido é o preço de compra avulsa. Se houver promoção ativa, ela aparece junto ao valor. Confira o total na sacola antes de finalizar.";
+  }
+  const subscribed = () => Boolean($("product-subscription")?.checked);
+  function updatePurchase() {
+    const p = state.product;
+    if (!p) return;
+    const qty = U.quantity($("product-quantity").value, p.stock);
+    $("product-quantity").value = qty;
+    const stock = Math.max(0, Math.floor(U.number(p.stock)));
+    const valid =
+      Number.isFinite(Number(p.venda)) &&
+      Number(p.venda) > 0 &&
+      !p.inativo &&
+      !p.naoMostrarNoSite;
+    const available = stock > 0 && valid;
+    const pricing = U.price(p, qty, subscribed());
+    $("stock-status").textContent = available
+      ? "Disponível em estoque"
+      : !valid
+        ? "Compra indisponível"
+        : "Indisponível no momento";
+    $("stock-status").classList.toggle("unavailable", !available);
+    $("purchase-controls").hidden = !available;
+    $("restock-panel").hidden = stock > 0 || !valid;
+    $("quantity-help").textContent = available
+      ? stock === 1
+        ? "1 unidade disponível."
+        : `Até ${stock} unidades disponíveis.`
+      : "";
+    $("product-quantity").disabled = !available || state.busy;
+    $("product-quantity").max = stock;
+    $("decrease-quantity").disabled = !available || state.busy || qty <= 1;
+    $("increase-quantity").disabled = !available || state.busy || qty >= stock;
+    $("quantity-total").hidden = qty < 2;
+    $("quantity-total").textContent =
+      `${qty} unidades · subtotal estimado ${U.money(pricing.total)}${pricing.label ? ` · ${pricing.label}` : ""}`;
+    for (const buttonId of ["add-to-cart", "mobile-add-to-cart"])
+      $(buttonId).disabled = !available || state.busy;
+    $("add-to-cart").querySelector("span").textContent = state.busy
+      ? "Adicionando…"
+      : "Adicionar à sacola";
+    $("mobile-add-to-cart").textContent = state.busy
+      ? "Adicionando…"
+      : available
+        ? "Adicionar à sacola"
+        : stock === 0 && valid
+          ? $("notify-restock").dataset.subscribed === "true"
+            ? "Cancelar aviso"
+            : "Avise-me"
+          : "Indisponível";
+    if (!available && valid && stock === 0)
+      $("mobile-add-to-cart").disabled = state.busy;
+    $("mobile-product-name").textContent = p.nome;
+    $("mobile-price").textContent = valid
+      ? U.money(pricing.unit)
+      : "Consulte a loja";
+    $("mobile-purchase-bar").hidden = !state.loaded;
+    const price = $("product-price");
+    price.replaceChildren();
+    if (valid) {
+      if (pricing.unit < pricing.base)
+        price.append(element("del", null, U.money(pricing.base)));
+      price.append(element("strong", null, U.money(pricing.unit)));
+      if (pricing.saving > 0)
+        price.append(
+          element(
+            "span",
+            "pd-discount",
+            `Economize ${U.money(pricing.saving)}`,
+          ),
+        );
+    } else price.append(element("strong", null, "Consulte a loja"));
+    const perUnit = valid ? U.unitPrice(p, pricing.unit) : "";
+    $("unit-price").textContent = perUnit;
+    $("unit-price").hidden = !perUnit;
+    $("photo-badge").hidden = !pricing.label;
+    $("photo-badge").textContent = pricing.label;
+  }
+  async function loadProduct() {
+    if (!/^[a-f0-9]{24}$/i.test(id)) {
+      showError(
+        "Produto não encontrado",
+        "O endereço não contém um produto válido.",
+        false,
+      );
+      return;
+    }
+    $("product-error").hidden = true;
+    $("product-details-container").hidden = false;
+    $("product-details-container").setAttribute("aria-busy", "true");
+    try {
+      const p = await request(`/products/${id}`);
+      if (!p._id || p.inativo || p.naoMostrarNoSite) {
+        showError(
+          "Produto indisponível",
+          "Este produto não está disponível na loja virtual.",
+          false,
+        );
+        return;
+      }
+      state.product = p;
+      state.loaded = true;
+      $("product-title").textContent = p.nome;
+      $("product-sku").textContent = p.cod ? `Código ${p.cod}` : "";
+      if (p.marca) {
+        $("product-brand").textContent = p.marca;
+        $("product-brand").href =
+          `/pages/menu-departments-item/search.html?search=${encodeURIComponent(p.marca)}`;
+        $("product-brand").hidden = false;
+      }
+      renderGallery(p);
+      description(p);
+      renderSpecs(p);
+      breadcrumb(p);
+      promotions(p);
+      updatePurchase();
+      metadata(p);
+      restoreSelection();
+      $("share-product").disabled = false;
+      $("add-to-wishlist-btn").disabled = false;
+      $("product-details-container").setAttribute("aria-busy", "false");
+      track("view_item");
+      void loadFavorites();
+      void loadCommunity();
+      void loadStores();
+      void recentProducts();
+      void loadRestock();
+      void loadContent();
+      if (location.hash) {
+        const target = document.getElementById(location.hash.slice(1));
+        if (target) requestAnimationFrame(() => target.scrollIntoView());
+      }
+    } catch (error) {
+      showError(
+        error.status === 404
+          ? "Produto não encontrado"
+          : "Não foi possível carregar este produto",
+        error.status === 404
+          ? "Este produto não está disponível. Explore outras opções na loja."
+          : error.message,
+        error.status !== 404,
+      );
+    }
+  }
+  function showError(title, message, retry = true) {
+    state.loaded = false;
+    $("product-details-container").hidden = true;
+    $("product-details-container").setAttribute("aria-busy", "false");
+    $("product-error").hidden = false;
+    $("error-title").textContent = title;
+    $("error-message").textContent = message;
+    $("retry-product").hidden = !retry;
+    $("mobile-purchase-bar").hidden = true;
+    document.title = `${title} - E o Bicho`;
+    track("product_error", { reason: title });
+  }
+  function saveSelection() {
+    if (!state.product) return;
+    try {
+      sessionStorage.setItem(
+        `productSelection:${id}`,
+        JSON.stringify({
+          qty: $("product-quantity").value,
+          subscribed: subscribed(),
+        }),
+      );
+    } catch {}
+  }
+  function restoreSelection() {
+    try {
+      const value = JSON.parse(
+        sessionStorage.getItem(`productSelection:${id}`) || "null",
+      );
+      if (value) {
+        $("product-quantity").value = U.quantity(
+          value.qty,
+          state.product.stock,
+        );
+        if ($("product-subscription"))
+          $("product-subscription").checked = Boolean(value.subscribed);
+        updatePurchase();
+      }
+    } catch {}
+  }
+  async function addToCart() {
+    if (state.busy || !state.product) return;
+    if (U.number(state.product.stock) < 1) {
+      await notifyRestock();
+      return;
+    }
+    if (!account()) return;
+    state.busy = true;
+    $("purchase-status").textContent = "";
+    saveSelection();
+    updatePurchase();
+    try {
+      // Revalidate current catalog/stock before asking the cart service; the server also validates it.
+      const fresh = await request(`/products/${id}`);
+      state.product = fresh;
+      const qty = Number($("product-quantity").value);
+      if (
+        fresh.inativo ||
+        fresh.naoMostrarNoSite ||
+        !(Number(fresh.venda) > 0) ||
+        qty > Math.floor(U.number(fresh.stock))
+      )
+        throw new Error(
+          "A disponibilidade mudou. Confira a quantidade e tente novamente.",
+        );
+      const result = await authorized(
+        `/cart/${encodeURIComponent(user().id)}`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            productId: id,
+            quantity: qty,
+            isSubscribed: subscribed(),
+          }),
+        },
+      );
+      if (!Array.isArray(result))
+        throw new Error(
+          "Não foi possível confirmar a inclusão. Confira sua sacola antes de tentar novamente.",
+        );
+      const item = result.find(
+        (x) => String(x.product?._id || x.product) === id,
+      );
+      if (!item)
+        throw new Error(
+          "Não foi possível confirmar a inclusão. Confira sua sacola antes de tentar novamente.",
+        );
+      $("added-subscription-status").hidden = true;
+      // Older servers ignore isSubscribed on POST. Explicitly confirm the existing subscription route.
+      if (subscribed() && !item.isSubscribed) {
+        try {
+          await authorized(`/cart/${user().id}/${id}/subscribe`, {
+            method: "PUT",
+            body: JSON.stringify({ isSubscribed: true }),
+          });
+        } catch {
+          $("added-subscription-status").textContent =
+            "O produto foi adicionado. Ative o Preço Clube na sacola antes de finalizar.";
+          $("added-subscription-status").hidden = false;
+        }
+      }
+      const pricing = U.price(fresh, qty, subscribed());
+      $("added-name").textContent = fresh.nome;
+      $("added-image").src = imageUrl(fresh.imagemPrincipal);
+      $("added-image").alt = fresh.nome;
+      $("added-detail").textContent =
+        `${qty} ${qty === 1 ? "unidade" : "unidades"} adicionada${qty === 1 ? "" : "s"} · ${U.money(pricing.total)} estimados. Confira o total na sacola.`;
+      if (typeof CartManager !== "undefined")
+        void CartManager.updateCartCount();
+      $("added-dialog").showModal();
+      track("add_to_cart");
+    } catch (error) {
+      $("purchase-status").textContent = error.message;
+      track("cart_error", { reason: error.status || "connection" });
+    } finally {
+      state.busy = false;
+      updatePurchase();
+    }
+  }
+  async function loadFavorites() {
+    if (!user()?.token) return;
+    try {
+      const values = await authorized(`/favorites/${user().id}`);
+      state.favorite = Array.isArray(values) && values.includes(id);
+      renderFavorite();
+    } catch {
+      /* account action will provide actionable feedback */
+    }
+  }
+  function renderFavorite() {
+    const btn = $("add-to-wishlist-btn");
+    btn.setAttribute("aria-pressed", String(state.favorite));
+    btn.setAttribute(
+      "aria-label",
+      state.favorite ? "Remover dos favoritos" : "Adicionar aos favoritos",
+    );
+    btn.querySelector("i").className = state.favorite
+      ? "fa-solid fa-heart"
+      : "fa-regular fa-heart";
+  }
+  async function toggleFavorite() {
+    if (!account()) return;
+    const btn = $("add-to-wishlist-btn");
+    btn.disabled = true;
+    try {
+      await authorized(
+        `/favorites/${user().id}${state.favorite ? `/${id}` : ""}`,
+        {
+          method: state.favorite ? "DELETE" : "POST",
+          ...(state.favorite
+            ? {}
+            : { body: JSON.stringify({ productId: id }) }),
+        },
+      );
+      state.favorite = !state.favorite;
+      renderFavorite();
+      $("purchase-status").textContent = state.favorite
+        ? "Produto salvo nos seus favoritos."
+        : "Produto removido dos favoritos.";
+      track("add_to_wishlist", { saved: state.favorite });
+    } catch (e) {
+      $("purchase-status").textContent = e.message;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+  async function shipping(event) {
+    event.preventDefault();
+    const digits = $("cep").value.replace(/\D/g, "");
+    const output = $("shipping-result");
+    output.replaceChildren();
+    output.classList.remove("error");
+    if (digits.length !== 8) {
+      output.textContent = "Informe um CEP com 8 dígitos.";
+      output.classList.add("error");
+      $("cep").setAttribute("aria-invalid", "true");
+      $("cep").focus();
+      return;
+    }
+    $("cep").removeAttribute("aria-invalid");
+    const button = $("calculate-shipping");
+    button.disabled = true;
+    button.textContent = "Consultando…";
+    output.textContent = "Consultando as opções de entrega…";
+    writeStorage("productDeliveryCep", digits);
+    try {
+      const data = await request(
+        `/shipping/quote?cep=${encodeURIComponent(digits)}`,
+        { timeout: 45000 },
+      );
+      state.quote = data;
+      output.replaceChildren();
+      if (!data.methods || !Object.keys(data.methods).length)
+        throw new Error(
+          "Nenhuma opção disponível para este CEP. Fale com a loja.",
+        );
+      if (data.store?.nome)
+        output.append(
+          element("p", "pd-muted", `Loja de referência: ${data.store.nome}`),
+        );
+      for (const [key, method] of Object.entries(data.methods)) {
+        if (!Number.isFinite(Number(method.price)) || Number(method.price) < 0)
+          continue;
+        const row = element("div", "pd-shipping-method");
+        row.append(
+          element("span", null, method.label || key),
+          element(
+            "strong",
+            null,
+            Number(method.price) === 0 ? "Grátis" : U.money(method.price),
+          ),
+        );
+        output.append(row);
+      }
+      output.append(
+        element(
+          "p",
+          "pd-muted",
+          "Estimativa de frete. Prazo, disponibilidade e valor final são confirmados na finalização do pedido.",
+        ),
+      );
+      track("shipping_quote", { available: true });
+    } catch (error) {
+      output.textContent = error.message;
+      output.classList.add("error");
+      track("shipping_quote", { available: false });
+    } finally {
+      button.disabled = false;
+      button.textContent = "Calcular";
+    }
+  }
+  async function loadStores() {
+    try {
+      const [data, availability] = await Promise.all([
+        request("/product-experience/stores"),
+        request(`/product-experience/${id}/availability`).catch(() => ({
+          stores: [],
+        })),
+      ]);
+      const stores = Array.isArray(data) ? data : [];
+      $("pickup-stores").replaceChildren();
+      $("product-contacts").replaceChildren();
+      for (const store of stores) {
+        const item = element("div", "pd-store");
+        item.append(element("strong", null, store.nome));
+        if (store.endereco) item.append(element("p", null, store.endereco));
+        const stock = availability.stores?.find(
+          (entry) => entry.store === store._id,
+        );
+        item.append(
+          element(
+            "p",
+            null,
+            stock
+              ? stock.available
+                ? "Produto disponível nesta unidade. Confirme a retirada no pedido."
+                : "Sem estoque informado nesta unidade. Consulte a equipe."
+              : "Consulte a equipe para confirmar o estoque desta unidade.",
+          ),
+        );
+        const days = [
+          ["segunda", "Seg"],
+          ["terca", "Ter"],
+          ["quarta", "Qua"],
+          ["quinta", "Qui"],
+          ["sexta", "Sex"],
+          ["sabado", "Sáb"],
+          ["domingo", "Dom"],
+        ];
+        const hours = days
+          .map(([key, label]) => {
+            const day = store.horario?.[key];
+            return day?.fechada
+              ? `${label}: fechada`
+              : day?.abre && day?.fecha
+                ? `${label}: ${day.abre}–${day.fecha}`
+                : "";
+          })
+          .filter(Boolean);
+        if (hours.length) item.append(element("p", null, hours.join(" · ")));
+        const phone = String(store.whatsapp || "").replace(/\D/g, "");
+        if (phone.length >= 10 && phone.length <= 13) {
+          const link = element("a", null, `WhatsApp · ${store.nome}`);
+          const message = `Olá! Gostaria de tirar uma dúvida sobre ${state.product.nome}. ${canonical}`;
+          link.href = `https://wa.me/${phone.startsWith("55") && phone.length >= 12 ? phone : `55${phone}`}?text=${encodeURIComponent(message)}`;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          $("product-contacts").append(link);
+        } else if (store.telefone) {
+          const link = element("a", null, `Ligar para ${store.nome}`);
+          link.href = `tel:${String(store.telefone).replace(/[^\d+]/g, "")}`;
+          $("product-contacts").append(link);
+        }
+        $("pickup-stores").append(item);
+      }
+      if (!$("product-contacts").children.length) {
+        const link = element("a", null, "Ver contatos das lojas");
+        link.href = "/pages/nossas-lojas.html";
+        $("product-contacts").append(link);
+      }
+    } catch {
+      $("pickup-stores").textContent =
+        "Consulte os endereços e horários na página das lojas.";
+    }
+  }
+  async function loadContent() {
+    try {
+      const content = await request(`/product-experience/${id}/content`);
+      state.content = content;
+      document
+        .querySelectorAll("[data-product-extra]")
+        .forEach((el) => el.remove());
+      for (const [label, value] of [
+        ["Fabricante", content.manufacturer],
+        ["Material", content.material],
+        ["Dimensões", content.dimensions],
+      ])
+        if (value) {
+          const row = element("div", "pd-spec-row");
+          row.dataset.productExtra = "true";
+          row.append(element("dt", null, label), element("dd", null, value));
+          $("product-specs-list").append(row);
+        }
+      for (const [label, value] of [
+        ["Composição", content.composition],
+        ["Modo de uso", content.usage],
+        ["Cuidados e conservação", content.care],
+      ])
+        if (value) {
+          const section = element("div", "pd-extra-section");
+          section.dataset.productExtra = "true";
+          section.append(element("h3", null, label), element("p", null, value));
+          $("product-description").append(section);
+        }
+      const docs = $("product-documents");
+      docs.replaceChildren();
+      if (content.documents?.length) {
+        docs.append(element("h3", null, "Bula, rótulo e documentos"));
+        for (const doc of content.documents) {
+          const href = U.safeUrl(doc.url, canonical);
+          if (!href) continue;
+          const link = element("a", "pd-document-link", `${doc.title} ↗`);
+          link.href = href;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          docs.append(link);
+        }
+      }
+      docs.hidden = !docs.children.length;
+      if (content.videoUrl) {
+        const section = element("div", "pd-extra-section");
+        section.dataset.productExtra = "true";
+        section.append(element("h3", null, "Conheça melhor o produto"));
+        const url = U.safeUrl(content.videoUrl, canonical);
+        if (url) {
+          if (/\.(mp4|webm)$/i.test(new URL(url).pathname)) {
+            const video = element("video");
+            video.controls = true;
+            video.preload = "none";
+            video.src = url;
+            video.setAttribute("aria-label", `Vídeo de ${state.product.nome}`);
+            section.append(video);
+          } else {
+            const link = element(
+              "a",
+              "pd-document-link",
+              "Assistir ao vídeo do produto ↗",
+            );
+            link.href = url;
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+            section.append(link);
+          }
+        }
+        $("product-description").append(section);
+      }
+      if (content.variants?.length) {
+        for (const p of content.variants) {
+          if (p._id === id) continue;
+          const link = element(
+            "a",
+            "pd-variant",
+            p.especificacoes?.apresentacao || p.nome,
+          );
+          link.dataset.productExtra = "true";
+          link.href = `/pages/menu-departments-item/product.html?id=${p._id}`;
+          $("variant-options").append(link);
+        }
+        const compare = element(
+          "button",
+          "pd-text-button",
+          "Comparar apresentações",
+        );
+        compare.type = "button";
+        compare.dataset.productExtra = "true";
+        compare.addEventListener("click", () =>
+          comparePresentations([state.product, ...content.variants]),
+        );
+        $("variant-options").append(compare);
+        $("product-variants").hidden = false;
+      }
+      if (content.related?.length) {
+        $("related-products").replaceChildren(
+          ...content.related.slice(0, 4).map(card),
+        );
+        $("related-title").textContent = "Selecionados para você";
+        $("related-see-all").hidden = true;
+        $("related-section").hidden = false;
+      } else {
+        $("related-see-all").hidden = false;
+        void loadRecommendations();
+      }
+      if (content.kits?.length) {
+        const section = element("section", "pd-recommendations");
+        section.dataset.productExtra = "true";
+        section.append(element("h2", null, "Kits e opções selecionadas"));
+        const grid = element("div", "pd-product-grid");
+        grid.append(...content.kits.slice(0, 4).map(card));
+        section.append(grid);
+        $("related-section").after(section);
+      }
+      if (
+        ["admin", "admin_master"].includes(user()?.role) &&
+        !$("edit-product-content")
+      ) {
+        const button = element(
+          "button",
+          "pd-text-button",
+          "Editar conteúdo desta página",
+        );
+        button.type = "button";
+        button.id = "edit-product-content";
+        button.addEventListener("click", openContentEditor);
+        $("product-specs-section").append(button);
+        const metrics = element(
+          "button",
+          "pd-text-button",
+          "Ver indicadores desta página",
+        );
+        metrics.type = "button";
+        metrics.addEventListener("click", openMetrics);
+        $("product-specs-section").append(metrics);
+      }
+      metadata(state.product);
+    } catch {
+      void loadRecommendations();
+    }
+  }
+  async function openMetrics() {
+    const dialog = element("dialog", "pd-content-editor");
+    dialog.setAttribute("aria-label", "Indicadores da página");
+    const head = element("div", "pd-dialog-top");
+    head.append(element("h2", null, "Indicadores dos últimos 30 dias"));
+    const close = element("button", "pd-icon-button", "✕");
+    close.type = "button";
+    close.setAttribute("aria-label", "Fechar indicadores");
+    close.addEventListener("click", () => dialog.close());
+    head.append(close);
+    dialog.append(head);
+    const body = element("div");
+    body.append(element("p", "pd-muted", "Consultando…"));
+    dialog.append(body);
+    document.body.append(dialog);
+    dialog.addEventListener("close", () => dialog.remove());
+    dialog.showModal();
+    try {
+      const data = await authorized(`/product-experience/${id}/events`);
+      body.replaceChildren(
+        element(
+          "p",
+          "pd-muted",
+          "Contagens agregadas por dispositivo. Não representam visitantes únicos nem pedidos concluídos.",
+        ),
+      );
+      const names = {
+        view_item: "Visualizações",
+        add_to_cart: "Inclusões na sacola",
+        add_to_wishlist: "Ações de favoritos",
+        shipping_quote: "Consultas de frete",
+        cart_error: "Falhas na sacola",
+        product_error: "Falhas no produto",
+        view_product_image: "Ampliações da foto",
+        share: "Compartilhamentos",
+        restock_request: "Ações de reposição",
+        select_subscription: "Seleções de assinatura",
+        submit_review: "Avaliações enviadas",
+        compare_products: "Comparações",
+      };
+      const table = element("table");
+      table.className = "pd-metrics-table";
+      const header = element("tr");
+      for (const label of ["Ação", "Celular", "Computador"]) {
+        const th = element("th", null, label);
+        th.scope = "col";
+        header.append(th);
+      }
+      const thead = element("thead");
+      thead.append(header);
+      table.append(thead);
+      const tbody = element("tbody");
+      for (const [event, label] of Object.entries(names)) {
+        const row = element("tr");
+        const th = element("th", null, label);
+        th.scope = "row";
+        row.append(th);
+        for (const device of ["mobile", "desktop"])
+          row.append(
+            element(
+              "td",
+              null,
+              String(
+                (data.rows || [])
+                  .filter((r) => r.event === event && r.device === device)
+                  .reduce((sum, r) => sum + r.count, 0),
+              ),
+            ),
+          );
+        tbody.append(row);
+      }
+      table.append(tbody);
+      body.append(table);
+    } catch (e) {
+      body.replaceChildren(element("p", "pd-muted", e.message));
+    }
+  }
+  function comparePresentations(products) {
+    const distinct = [...new Map(products.map((p) => [p._id, p])).values()];
+    const dialog = element("dialog", "pd-compare-dialog");
+    dialog.setAttribute("aria-label", "Comparar apresentações");
+    const head = element("div", "pd-dialog-top");
+    head.append(element("h2", null, "Compare as apresentações"));
+    const close = element("button", "pd-icon-button", "✕");
+    close.type = "button";
+    close.setAttribute("aria-label", "Fechar comparação");
+    close.addEventListener("click", () => dialog.close());
+    head.append(close);
+    dialog.append(head);
+    const region = element("div", "pd-compare-scroll");
+    region.tabIndex = 0;
+    const table = element("table");
+    const tbody = element("tbody");
+    for (const [label, read] of [
+      ["Produto", (p) => p.nome],
+      [
+        "Apresentação",
+        (p) => p.especificacoes?.apresentacao || "Não informada",
+      ],
+      ["Preço avulso", (p) => U.money(U.price(p).unit)],
+      ["Preço por medida", (p) => U.unitPrice(p, U.price(p).unit) || "—"],
+      ["Marca", (p) => p.marca || "—"],
+      ["Disponibilidade", (p) => (p.stock > 0 ? "Em estoque" : "Indisponível")],
+    ]) {
+      const row = element("tr");
+      const th = element("th", null, label);
+      th.scope = "row";
+      row.append(th);
+      for (const p of distinct) row.append(element("td", null, read(p)));
+      tbody.append(row);
+    }
+    const row = element("tr");
+    row.append(element("th", null, "Escolher"));
+    for (const p of distinct) {
+      const td = element("td");
+      const link = element(
+        "a",
+        "pd-button pd-button-outline",
+        p._id === id ? "Você está aqui" : "Ver produto",
+      );
+      link.href = `/pages/menu-departments-item/product.html?id=${p._id}`;
+      td.append(link);
+      row.append(td);
+    }
+    tbody.append(row);
+    table.append(tbody);
+    region.append(table);
+    dialog.append(region);
+    document.body.append(dialog);
+    dialog.addEventListener("close", () => dialog.remove());
+    dialog.showModal();
+    track("compare_products");
+  }
+  function openContentEditor() {
+    const content = state.content || {};
+    const dialog = element("dialog", "pd-content-editor");
+    dialog.setAttribute("aria-label", "Conteúdo da página do produto");
+    const head = element("div", "pd-dialog-top");
+    head.append(element("h2", null, "Conteúdo da página do produto"));
+    const close = element("button", "pd-icon-button", "✕");
+    close.type = "button";
+    close.setAttribute("aria-label", "Fechar editor");
+    close.addEventListener("click", () => dialog.close());
+    head.append(close);
+    dialog.append(head);
+    const form = element("form", "pd-inline-form");
+    form.append(
+      element(
+        "p",
+        "pd-muted",
+        "Use informações conferidas do fabricante. Esta edição não altera preço, estoque nem cadastro fiscal. Campos vazios ficam ocultos na loja.",
+      ),
+    );
+    const fields = [
+      ["manufacturer", "Fabricante", false],
+      ["composition", "Composição", true],
+      ["usage", "Modo de uso (conforme o fabricante)", true],
+      ["care", "Cuidados e conservação", true],
+      ["material", "Material", true],
+      ["dimensions", "Dimensões", true],
+      ["videoUrl", "Link HTTPS do vídeo", false],
+      [
+        "documents",
+        "Documentos: uma linha por documento, no formato Nome | link HTTPS",
+        true,
+      ],
+      [
+        "variants",
+        "Outras apresentações: códigos de produto separados por vírgula",
+        false,
+      ],
+      [
+        "related",
+        "Produtos relacionados: códigos separados por vírgula",
+        false,
+      ],
+      [
+        "kits",
+        "Kits: códigos de kits já cadastrados, separados por vírgula",
+        false,
+      ],
+    ];
+    for (const [field, label, multiline] of fields) {
+      const caption = element("label", null, label);
+      caption.htmlFor = `content-${field}`;
+      const input = element(multiline ? "textarea" : "input");
+      input.id = `content-${field}`;
+      input.name = field;
+      if (multiline) input.rows = 3;
+      else input.type = field === "videoUrl" ? "url" : "text";
+      input.maxLength =
+        field === "manufacturer"
+          ? 150
+          : ["composition", "usage", "care"].includes(field)
+            ? 10000
+            : 5000;
+      input.value =
+        field === "documents"
+          ? (content.documents || [])
+              .map((d) => `${d.title} | ${d.url}`)
+              .join("\n")
+          : ["variants", "related", "kits"].includes(field)
+            ? (content[field] || []).map((p) => p.cod).join(", ")
+            : content[field] || "";
+      form.append(caption, input);
+    }
+    const button = element("button", "pd-button", "Salvar conteúdo");
+    button.type = "submit";
+    const status = element("p");
+    status.setAttribute("role", "status");
+    form.append(button, status);
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      button.disabled = true;
+      status.textContent = "Salvando…";
+      const data = { expectedUpdatedAt: content.updatedAt || null };
+      for (const [field] of fields) {
+        const value = form.elements[field].value.trim();
+        data[field] =
+          field === "documents"
+            ? value
+                .split(/\r?\n/)
+                .filter(Boolean)
+                .map((line) => {
+                  const separator = line.indexOf("|");
+                  return {
+                    title: separator < 0 ? "" : line.slice(0, separator).trim(),
+                    url: separator < 0 ? "" : line.slice(separator + 1).trim(),
+                  };
+                })
+            : ["variants", "related", "kits"].includes(field)
+              ? value
+                  .split(",")
+                  .map((x) => x.trim())
+                  .filter(Boolean)
+              : value;
+      }
+      try {
+        await authorized(`/product-experience/${id}/content`, {
+          method: "PUT",
+          body: JSON.stringify(data),
+        });
+        await loadContent();
+        dialog.close();
+      } catch (e) {
+        status.textContent = e.message;
+      } finally {
+        button.disabled = false;
+      }
     });
-}
-
-/**
- * Analisa as promoções de um produto e renderiza o painel de vantagens.
- * @param {object} product - O objeto completo do produto vindo da API.
- */
-function renderPromotionsPanel(product) {
-    const panel = document.getElementById('product-promotions-panel');
-    if (!panel) return;
-
-    panel.innerHTML = ''; // Limpa o painel
-
-    let hasAnyBenefit = false;
-    let subscriberPrice = null;
-
-    // 1. Verifica o preço da Promoção Individual
-    if (product.promocao && product.promocao.ativa && product.promocao.porcentagem > 0) {
-        subscriberPrice = product.venda * (1 - product.promocao.porcentagem / 100);
-    }
-
-    // 2. Compara com o Preço Club e pega no menor valor
-    if (product.precoClube && product.precoClube < product.venda) {
-        // Se já tínhamos um preço de promoção, pega no menor dos dois. Senão, usa o do clube.
-        subscriberPrice = subscriberPrice ? Math.min(subscriberPrice, product.precoClube) : product.precoClube;
-    }
-
-    // Se encontrámos um preço vantajoso para assinantes, cria o HTML
-    if (subscriberPrice) {
-        hasAnyBenefit = true;
-        const subscriberPriceHtml = `
-            <div class="flex items-start text-lg">
-                <i class="fa-solid fa-rotate text-primary w-5 text-center pt-1"></i>
-                <div class="ml-2">
-                    <p class="text-gray-800">
-                        <span class="font-bold">R$ ${subscriberPrice.toFixed(2).replace('.', ',')}</span>
-                        para assinantes
-                    </p>
-                </div>
-            </div>`;
-        panel.innerHTML += subscriberPriceHtml;
-    }
-
-    // 3. Verifica se há Promoção Condicional
-    if (product.promocaoCondicional && product.promocaoCondicional.ativa) {
-        hasAnyBenefit = true;
-        let promoTitle = 'Promoção Especial';
-        let promoDescription = 'Confira a vantagem na sacola.';
-
-        if (product.promocaoCondicional.tipo === 'leve_pague') {
-            promoTitle = `Leve ${product.promocaoCondicional.leve}, Pague ${product.promocaoCondicional.pague}`;
-            promoDescription = `Na compra de ${product.promocaoCondicional.leve} unidades, você paga apenas ${product.promocaoCondicional.pague}!`;
-        } else if (product.promocaoCondicional.tipo === 'acima_de') {
-             promoTitle = `Acima de ${product.promocaoCondicional.quantidadeMinima} unidades tem ${product.promocaoCondicional.descontoPorcentagem}% OFF`;
-             promoDescription = `Desconto aplicado na compra de ${product.promocaoCondicional.quantidadeMinima} ou mais unidades.`;
+    dialog.append(form);
+    document.body.append(dialog);
+    dialog.addEventListener("close", () => dialog.remove());
+    dialog.showModal();
+  }
+  function stars(rating) {
+    return "★".repeat(Math.round(rating)) + "☆".repeat(5 - Math.round(rating));
+  }
+  async function loadCommunity() {
+    try {
+      const data = await request(`/product-experience/${id}/reviews`);
+      state.community = data;
+      const root = $("reviews-content");
+      root.replaceChildren();
+      const count = U.number(data.total);
+      $("review-summary").textContent = count
+        ? `${Number(data.average).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} / 5 · ${count} ${count === 1 ? "avaliação" : "avaliações"}`
+        : "Seja o primeiro a avaliar";
+      if (!count) {
+        const empty = element("div", "pd-empty-state");
+        const icon = element("i", "fa-regular fa-star");
+        icon.setAttribute("aria-hidden", "true");
+        const text = element("div");
+        text.append(
+          element("strong", null, "Este produto ainda não tem avaliações."),
+          element(
+            "p",
+            null,
+            "Já comprou? Compartilhe sua experiência e ajude outros tutores.",
+          ),
+        );
+        empty.append(icon, text);
+        root.append(empty);
+      } else {
+        const overview = element("div", "pd-review-overview");
+        overview.append(
+          element(
+            "strong",
+            null,
+            Number(data.average).toLocaleString("pt-BR", {
+              maximumFractionDigits: 1,
+            }),
+          ),
+          element("span", null, `${count} avaliações de compras verificadas`),
+        );
+        root.append(overview);
+        for (const review of data.reviews || []) {
+          const article = element("article", "pd-review");
+          const head = element("div", "pd-review-header");
+          const rating = element("span", "pd-stars", stars(review.rating));
+          rating.setAttribute("aria-label", `${review.rating} de 5 estrelas`);
+          const time = element(
+            "time",
+            null,
+            new Date(review.createdAt).toLocaleDateString("pt-BR"),
+          );
+          time.dateTime = review.createdAt;
+          head.append(
+            rating,
+            element("strong", null, review.author || "Cliente"),
+            element("span", "pd-verified", "Compra verificada"),
+            time,
+          );
+          article.append(head, element("p", null, review.text));
+          root.append(article);
         }
-
-        const conditionalPromoHtml = `
-            <div class="flex items-start text-sm">
-                <i class="fas fa-tags text-primary w-5 text-center pt-1"></i>
-                <div class="ml-2">
-                    <p class="font-bold text-gray-800">${promoTitle}</p>
-                    <p class="text-xs text-gray-600">${promoDescription}</p>
-                </div>
-            </div>`;
-        panel.innerHTML += conditionalPromoHtml;
+        if (data.total > data.reviews.length) {
+          const more = element(
+            "button",
+            "pd-text-button",
+            "Carregar mais avaliações",
+          );
+          more.type = "button";
+          more.addEventListener("click", async () => {
+            more.disabled = true;
+            try {
+              const next = await request(
+                `/product-experience/${id}/reviews?offset=${root.querySelectorAll(".pd-review").length}`,
+              );
+              for (const review of next.reviews || []) {
+                const article = element("article", "pd-review");
+                article.append(
+                  element(
+                    "strong",
+                    null,
+                    `${review.author} · ${review.rating}/5 · Compra verificada`,
+                  ),
+                  element("p", null, review.text),
+                );
+                more.before(article);
+              }
+              more.hidden =
+                root.querySelectorAll(".pd-review").length >= data.total;
+            } catch {
+              more.textContent = "Tentar carregar mais";
+            } finally {
+              more.disabled = false;
+            }
+          });
+          root.append(more);
+        }
+      }
+      metadata(state.product);
+    } catch {
+      $("reviews-content").replaceChildren(
+        element(
+          "p",
+          "pd-muted",
+          "Não foi possível consultar as avaliações agora. Tente novamente mais tarde.",
+        ),
+      );
+      $("review-summary").textContent = "Ver avaliações";
     }
-
-    // 4. Se qualquer benefício foi encontrado, adiciona as vantagens estáticas e o fundo
-    if (hasAnyBenefit) {
-        const benefitsHtml = `
-            <div class="flex items-start text-sm">
-                <i class="fa-solid fa-check text-primary w-5 text-center pt-1"></i>
-                <div class="ml-2">
-                    <p class="text-gray-800">
-                        <span class="font-bold">10% OFF em todas as compras no site, app e lojas físicas</span>
-                    </p>
-                </div>
-            </div>
-            <div class="flex items-start text-sm">
-                <i class="fa-solid fa-check text-primary w-5 text-center pt-1"></i>
-                <div class="ml-2">
-                    <p class="text-gray-800">
-                        <span class="font-bold">Sem custos ou mensalidade, cancele ou pause quando quiser</span>
-                    </p>
-                </div>
-            </div>
-            <div class="flex items-start text-sm">
-                <i class="fa-solid fa-check text-primary w-5 text-center pt-1"></i>
-                <div class="ml-2">
-                    <p class="text-gray-800">
-                        <span class="font-bold">Assine os produtos na sacola e garanta os benefícios</span>
-                    </p>
-                </div>
-            </div>`;
-        panel.innerHTML += benefitsHtml;
-        panel.className = 'bg-green-50 my-6 space-y-4 p-4 rounded-lg'; // Adiciona o estilo ao painel
-    } else {
-        panel.style.display = 'none'; // Esconde o painel se não houver nenhuma vantagem
+  }
+  async function review(event) {
+    event.preventDefault();
+    if (!account()) return;
+    const button = $("review-form").querySelector("[type=submit]");
+    button.disabled = true;
+    $("review-status").textContent = "Enviando…";
+    try {
+      await authorized(`/product-experience/${id}/reviews`, {
+        method: "POST",
+        body: JSON.stringify({
+          rating: Number($("review-rating").value),
+          text: $("review-text").value,
+        }),
+      });
+      $("review-status").textContent =
+        "Avaliação publicada. Obrigado por compartilhar sua experiência!";
+      $("review-form").reset();
+      await loadCommunity();
+      track("submit_review");
+    } catch (e) {
+      $("review-status").textContent = e.message;
+    } finally {
+      button.disabled = false;
     }
-}
-
-/**
- * Renderiza a lista de Especificações do produto.
- * Mostra apenas os campos preenchidos/selecionados.
- * Campos: Idade[], Pet[], Porte[], Apresentação (texto), EAN (codbarras)
- */
-function renderProductSpecifications(product) {
-  const section = document.getElementById('product-specs-section');
-  const svg = document.getElementById('svg-especificacoes');
-  const listFallback = document.getElementById('product-specs-list'); // mantido para compatibilidade
-  if (!section || !svg) return;
-
-  const espec = product?.especificacoes || {};
-
-  // Normaliza valores, remove vazios e duplicados
-  const norm = (val) => {
-    if (Array.isArray(val)) return [...new Set(val.map(v => String(v || '').trim()).filter(Boolean))];
-    const s = String(val || '').trim();
-    return s ? [s] : [];
-  };
-
-  const linhas = [];
-  const add = (rotulo, valor) => {
-    const arr = norm(valor);
-    if (arr.length) linhas.push(`${rotulo}: ${arr.join(', ')}`);
-  };
-
-  add('Idade', espec.idade);
-  add('Pet', espec.pet);
-  add('Porte', espec.porte);
-  add('Apresentação', espec.apresentacao);
-  if (product?.codbarras) add('EAN', product.codbarras);
-
-  if (linhas.length === 0) {
-    // sem dados → some com o bloco
-    section.classList.add('hidden');
-    if (listFallback) listFallback.innerHTML = '';
-    return;
   }
-  section.classList.remove('hidden');
-
-  // IDs disponíveis no SVG (até 5 linhas)
-  const ids = ['svg-spec-idade', 'svg-spec-pet', 'svg-spec-porte', 'svg-spec-apresentacao', 'svg-spec-ean'];
-  const startY = 110;
-  const step = 40;
-
-  // Limpa tudo
-  ids.forEach((id) => {
-    const el = document.getElementById(id);
-    if (el) {
-      el.textContent = '';
-      el.setAttribute('display', 'none');
+  async function loadRestock() {
+    if (!user()?.token || state.product.stock > 0) return;
+    try {
+      const data = await authorized(`/product-experience/${id}/restock`);
+      $("notify-restock").dataset.subscribed = String(data.subscribed);
+      $("notify-restock").textContent = data.subscribed
+        ? "Cancelar aviso de reposição"
+        : "Avise-me quando chegar";
+      updatePurchase();
+    } catch {}
+  }
+  async function notifyRestock() {
+    if (!account()) return;
+    const button = $("notify-restock");
+    if (button.disabled) return;
+    const cancel = button.dataset.subscribed === "true";
+    button.disabled = true;
+    try {
+      await authorized(`/product-experience/${id}/restock`, {
+        method: cancel ? "DELETE" : "POST",
+        ...(cancel ? {} : { body: "{}" }),
+      });
+      $("purchase-status").textContent = cancel
+        ? "Aviso de reposição cancelado."
+        : "Aviso cadastrado! Você receberá um e-mail quando houver reposição.";
+      button.dataset.subscribed = String(!cancel);
+      button.textContent = cancel
+        ? "Avise-me quando chegar"
+        : "Cancelar aviso de reposição";
+      track("restock_request", { subscribed: !cancel });
+    } catch (e) {
+      $("purchase-status").textContent = e.message;
+    } finally {
+      button.disabled = false;
+      updatePurchase();
     }
-  });
-
-  // Preenche apenas o que existe e reposiciona sem deixar “buracos”
-  linhas.slice(0, ids.length).forEach((texto, i) => {
-    const el = document.getElementById(ids[i]);
-    if (!el) return;
-    el.textContent = texto;
-    el.setAttribute('y', String(startY + i * step));
-    el.removeAttribute('display');
-  });
-  layoutSvgGroup(ids, { groupId: 'svg-desc-content', align: 'center' });
-  document.getElementById('product-desc-heading')?.classList.add('hidden');
-}
-
-function layoutSvgGroup(
-  ids,
-  {
-    groupId,
-    align = 'center',        // 'left' | 'center' | 'right'
-    content = { x: 56, y: 112, w: 688, h: 340 },
-    stepByCount = (n) => (n <= 5 ? 38 : n <= 8 ? 34 : 28),
-    fontSizeByCount = (n) => (n <= 5 ? 20 : n <= 8 ? 18 : 16),
-  } = {}
-) {
-  const CONTENT_X = content.x, CONTENT_Y = content.y, CONTENT_W = content.w, CONTENT_H = content.h;
-  const PAD_L = 32, PAD_R = 32;
-
-  let anchor, anchorX;
-  if (align === 'right') { anchor = 'end';    anchorX = CONTENT_X + CONTENT_W - PAD_R; }
-  else if (align === 'center') { anchor = 'middle'; anchorX = CONTENT_X + CONTENT_W / 2; }
-  else { anchor = 'start'; anchorX = CONTENT_X + PAD_L; } // left
-
-  // pega só as linhas com conteúdo
-  const nodes = ids.map(id => document.getElementById(id))
-                   .filter(el => el && el.textContent.trim().length > 0);
-
-  const group = document.getElementById(groupId);
-  if (!nodes.length) { if (group) group.setAttribute('display', 'none'); return; }
-  if (group) {
-    group.removeAttribute('display');
-    // força o anchor também no grupo (propriedade herdável)
-    group.removeAttribute('text-anchor');
-    group.setAttribute('text-anchor', anchor);
   }
-
-  const n = nodes.length;
-  const STEP = stepByCount(n);
-  const FONT_SIZE = fontSizeByCount(n);
-  const FONT_WEIGHT = 600;
-  const BASELINE_TWEAK = 4;
-
-  const totalSpan = (n - 1) * STEP;
-  const firstY = CONTENT_Y + (CONTENT_H - totalSpan) / 2 + BASELINE_TWEAK;
-
-  nodes.forEach((el, i) => {
-    el.setAttribute('display', '');
-    // remove qualquer anchor antigo e seta o novo
-    el.removeAttribute('text-anchor');
-    el.setAttribute('text-anchor', anchor);
-    el.setAttribute('x', String(anchorX));
-    el.setAttribute('y', String(firstY + i * STEP));
-    el.style.fontSize = FONT_SIZE + 'px';
-    el.style.fontWeight = String(FONT_WEIGHT);
-    el.style.fontFamily = 'Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif';
-    el.style.fill = 'var(--color-dark)';
-  });
-}
-
-function renderProductDescription(product) {
-  const descContainer = document.getElementById('product-desc-svg-container');
-  const htmlFallback = document.getElementById('product-description'); // mantém compatibilidade
-  if (!descContainer) return;
-
-  // 1) Normaliza/limpa a descrição: remove HTML e quebra em linhas
-  const raw = String(product?.descricao || '').trim();
-  if (!raw) {
-    if (htmlFallback) htmlFallback.textContent = '';
-    document.getElementById('product-desc-heading')?.classList.remove('hidden');
-    return;
+  function card(p) {
+    const link = element("a", "pd-product-card");
+    link.href = `/pages/menu-departments-item/product.html?id=${encodeURIComponent(p._id)}`;
+    const img = element("img");
+    img.src = imageUrl(p.imagemPrincipal);
+    img.alt = p.nome;
+    img.width = 220;
+    img.height = 160;
+    img.loading = "lazy";
+    img.decoding = "async";
+    imageFallback(img);
+    link.append(
+      img,
+      element("small", null, p.marca || ""),
+      element("h3", null, p.nome),
+      element(
+        "strong",
+        null,
+        U.number(p.stock) > 0 ? U.money(U.price(p).unit) : "Indisponível",
+      ),
+      element("span", "pd-card-link", "Ver produto →"),
+    );
+    return link;
   }
-
-  // Converte HTML em texto (preserva quebras <br>)
-  const tmp = document.createElement('div');
-  tmp.innerHTML = raw.replace(/<br\s*\/?>/gi, '\n');
-  const plain = tmp.textContent || tmp.innerText || '';
-
-  // Heurística de bullet points:
-  // - quebra por linhas
-  // - remove prefixos como "-", "•", "–"
-  const lines = plain
-    .split(/\r?\n/)
-    .map(s => s.replace(/^\s*[-•–]\s*/, '').trim())
-    .filter(Boolean);
-
-  // Fallback: se vier tudo em um parágrafo, tenta dividir por " ; " ou ". "
-  let parts = lines;
-  if (parts.length <= 1) {
-    parts = plain.split(/(?:;|\.\s+|- )/).map(s => s.trim()).filter(Boolean);
+  async function loadRecommendations() {
+    try {
+      const data = await request(`/product-experience/${id}/related`);
+      const list = (data.products || []).filter(
+        (p) => p._id !== id && !p.inativo && !p.naoMostrarNoSite && p.venda > 0,
+      );
+      if (!list.length) return;
+      $("related-products").replaceChildren(...list.slice(0, 4).map(card));
+      $("related-section").hidden = false;
+      const path = state.product.breadcrumbPath || [];
+      const category = path.at(-1);
+      if (category) {
+        $("related-title").textContent = `Mais em ${category.nome}`;
+        $("related-see-all").href = category.href;
+      }
+      if (Array.isArray(data.variants) && data.variants.length) {
+        const options = $("variant-options");
+        for (const p of data.variants) {
+          if (p._id === id) continue;
+          const option = element(
+            "a",
+            "pd-variant",
+            p.especificacoes?.apresentacao || p.nome,
+          );
+          option.href = `/pages/menu-departments-item/product.html?id=${p._id}`;
+          options.append(option);
+        }
+        $("product-variants").hidden = false;
+      }
+    } catch {
+      /* secondary recommendations never block the product */
+    }
   }
-
-  // 2) Preenche nos <text id="svg-desc-#">
-  const ids = Array.from({ length: 12 }, (_, i) => `svg-desc-${i + 1}`);
-
-  // limpa
-  ids.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) { el.textContent = ''; el.setAttribute('display', 'none'); }
+  async function recentProducts() {
+    const previous = readStorage("recentProductIds", []);
+    const ids = Array.isArray(previous)
+      ? previous
+          .filter(
+            (x) =>
+              typeof x === "string" && /^[a-f0-9]{24}$/i.test(x) && x !== id,
+          )
+          .slice(0, 4)
+      : [];
+    writeStorage("recentProductIds", [id, ...ids]);
+    if (!ids.length) return;
+    const results = await Promise.allSettled(
+      ids.map((value) => request(`/products/${value}`)),
+    );
+    const products = results
+      .filter((x) => x.status === "fulfilled")
+      .map((x) => x.value)
+      .filter((p) => !p.inativo && !p.naoMostrarNoSite && p.venda > 0);
+    $("recent-products").replaceChildren(...products.map(card));
+    $("recent-section").hidden = !products.length;
+  }
+  function metadata(p) {
+    if (!p) return;
+    document.title = `${p.nome} - E o Bicho`;
+    const plain = $("product-description")
+      .textContent.replace(/\s+/g, " ")
+      .trim();
+    const desc = plain
+      ? plain.slice(0, 190)
+      : `${p.nome}. Consulte disponibilidade e entrega no E o Bicho.`;
+    document.querySelector("meta[name=description]").content = desc;
+    for (const [key, value] of Object.entries({
+      title: document.title,
+      description: desc,
+      image: imageUrl(p.imagemPrincipal),
+      url: canonical,
+    }))
+      document.querySelector(`meta[property="og:${key}"]`).content = value;
+    document.querySelector("link[rel=canonical]").href = canonical;
+    const data = {
+      "@context": "https://schema.org",
+      "@type": "Product",
+      name: p.nome,
+      description: plain,
+      image: state.images,
+      sku: String(p.cod || p._id),
+      url: canonical,
+    };
+    if (p.marca) data.brand = { "@type": "Brand", name: p.marca };
+    if (!p.semGtin && /^(\d{8}|\d{12}|\d{13}|\d{14})$/.test(p.codbarras || ""))
+      data.gtin = p.codbarras;
+    if (p.venda > 0)
+      data.offers = {
+        "@type": "Offer",
+        price: U.price(p).unit.toFixed(2),
+        priceCurrency: "BRL",
+        availability: `https://schema.org/${p.stock > 0 ? "InStock" : "OutOfStock"}`,
+        url: canonical,
+        seller: { "@type": "Organization", name: "E o Bicho" },
+      };
+    if (state.community?.total > 0)
+      data.aggregateRating = {
+        "@type": "AggregateRating",
+        ratingValue: state.community.average,
+        reviewCount: state.community.total,
+      };
+    let script = $("product-structured-data");
+    if (!script) {
+      script = element("script");
+      script.type = "application/ld+json";
+      script.id = "product-structured-data";
+      document.head.append(script);
+    }
+    script.textContent = JSON.stringify(data).replace(/</g, "\\u003c");
+    let crumb = $("breadcrumb-structured-data");
+    if (!crumb) {
+      crumb = element("script");
+      crumb.type = "application/ld+json";
+      crumb.id = "breadcrumb-structured-data";
+      document.head.append(crumb);
+    }
+    crumb.textContent = JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { nome: "Início", href: "/" },
+        ...(p.breadcrumbPath || []),
+        { nome: p.nome, href: canonical },
+      ].map((entry, index) => ({
+        "@type": "ListItem",
+        position: index + 1,
+        name: entry.nome,
+        item: U.safeUrl(entry.href, "https://www.peteobicho.com.br"),
+      })),
+    }).replace(/</g, "\\u003c");
+  }
+  function share() {
+    if (!state.product) return;
+    $("share-url").value = canonical;
+    $("share-whatsapp").href =
+      `https://wa.me/?text=${encodeURIComponent(`${state.product.nome} ${canonical}`)}`;
+    $("share-status").textContent = "";
+    $("share-dialog").showModal();
+    track("share");
+  }
+  function bind() {
+    function mobileMenu() {
+      let menu = $("product-mobile-menu-dialog");
+      if (!menu) {
+        menu = element("dialog", "pd-menu-dialog");
+        menu.id = "product-mobile-menu-dialog";
+        menu.setAttribute("aria-label", "Menu da loja");
+        const head = element("div", "pd-dialog-top");
+        head.append(element("h2", null, "Explore a loja"));
+        const close = element("button", "pd-icon-button", "✕");
+        close.type = "button";
+        close.setAttribute("aria-label", "Fechar menu");
+        close.addEventListener("click", () => menu.close());
+        head.append(close);
+        menu.append(head);
+        const nav = element("nav");
+        nav.setAttribute("aria-label", "Categorias e conta");
+        for (const source of document.querySelectorAll(
+          "#category-nav>ul>li>a[href]",
+        )) {
+          const href = source.getAttribute("href");
+          if (!href || href === "#") continue;
+          const link = element("a", null, source.textContent.trim());
+          link.href = href;
+          nav.append(link);
+        }
+        for (const [text, href] of [
+          [
+            "Todos os produtos",
+            "/pages/menu-departments-item/search.html?search=*",
+          ],
+          ["Meus favoritos", "/pages/favoritos.html"],
+          ["Meus pedidos", "/pages/meus-pedidos.html"],
+          ["Lojas e atendimento", "/pages/nossas-lojas.html"],
+          ["Minha conta", "/pages/login.html"],
+        ]) {
+          const link = element("a", null, text);
+          link.href = href;
+          nav.append(link);
+        }
+        menu.append(nav);
+        document.body.append(menu);
+      }
+      menu.showModal();
+    }
+    const labelHeader = () => {
+      for (const [selector, label] of [
+        ["#top-search", "Buscar produtos"],
+        ["#top-search-btn", "Buscar produtos"],
+        ["#phone-menu-trigger button", "Atendimento e contatos"],
+        ["#open-cart-btn", "Abrir minha sacola"],
+        ["#mobile-menu-button", "Abrir menu de categorias"],
+        ["#user-menu-trigger", "Abrir minha conta"],
+        ['#header-icons a[href="/pages/favoritos.html"]', "Meus favoritos"],
+        ["#close-cart-btn", "Fechar sacola"],
+      ]) {
+        const target = document.querySelector(selector);
+        if (target) target.setAttribute("aria-label", label);
+      }
+      const button = $("mobile-menu-button");
+      const icons = $("header-icons"),
+        wrapper = $("user-menu-wrapper");
+      if (icons && !$("pd-compact-login")) {
+        const link = element("a", "pd-compact-login");
+        link.id = "pd-compact-login";
+        link.href = "/pages/login.html";
+        link.setAttribute("aria-label", "Entrar na minha conta");
+        const icon = element("i", "fa-regular fa-user");
+        icon.setAttribute("aria-hidden", "true");
+        link.append(icon);
+        icons.append(link);
+      }
+      if ($("pd-compact-login"))
+        $("pd-compact-login").hidden = Boolean(user()?.token);
+      if (wrapper) wrapper.dataset.productGuest = String(!user()?.token);
+      if (button && !button.dataset.productMenu) {
+        button.dataset.productMenu = "true";
+        button.addEventListener("click", mobileMenu);
+      }
+      const phone = document.querySelector("#phone-menu-trigger button");
+      if (phone && !phone.dataset.productContact) {
+        phone.dataset.productContact = "true";
+        phone.setAttribute("aria-controls", "phone-menu-panel");
+        phone.addEventListener("click", () => {
+          const panel = $("phone-menu-panel");
+          const opening = panel.classList.contains("opacity-0");
+          panel.classList.toggle("opacity-0", !opening);
+          panel.classList.toggle("pointer-events-none", !opening);
+          panel.classList.toggle("scale-95", !opening);
+          phone.setAttribute("aria-expanded", String(opening));
+        });
+      }
+    };
+    const headerLabels = new MutationObserver(labelHeader);
+    headerLabels.observe($("header-placeholder"), {
+      childList: true,
+      subtree: true,
+    });
+    let cartWasOpen = false,
+      cartReturnFocus = null,
+      cartInertRoots = [];
+    const enhanceCart = () => {
+      labelHeader();
+      const panel = $("cart-panel"),
+        overlay = $("cart-overlay");
+      if (!panel || !overlay) return;
+      for (const [action, label] of [
+        ["remove-item", "Remover produto da sacola"],
+        ["increase-qty", "Aumentar quantidade na sacola"],
+        ["decrease-qty", "Diminuir quantidade na sacola"],
+      ])
+        panel
+          .querySelectorAll(`button[data-action="${action}"]`)
+          .forEach((button) => button.setAttribute("aria-label", label));
+      panel
+        .querySelectorAll('button[data-action="increase-qty"]')
+        .forEach((button) => {
+          if (button.dataset.productId === id && state.product) {
+            const quantity = Number(
+              button.parentElement.querySelector("span")?.textContent,
+            );
+            if (quantity >= Math.floor(U.number(state.product.stock)))
+              button.disabled = true;
+          }
+        });
+      const open = !overlay.classList.contains("hidden");
+      panel.inert = !open;
+      panel.setAttribute("aria-hidden", String(!open));
+      if (open && !cartWasOpen) {
+        cartReturnFocus = document.activeElement;
+        panel.setAttribute("role", "dialog");
+        panel.setAttribute("aria-modal", "true");
+        panel.setAttribute("aria-label", "Minha sacola");
+        cartInertRoots = [
+          document.querySelector("main"),
+          $("header-placeholder"),
+          document.querySelector(".pd-footer"),
+          $("mobile-purchase-bar"),
+        ].filter((root) => root && !root.inert);
+        cartInertRoots.forEach((root) => (root.inert = true));
+        $("close-cart-btn")?.focus();
+      }
+      if (!open && cartWasOpen) {
+        cartInertRoots.forEach((root) => (root.inert = false));
+        cartInertRoots = [];
+        cartReturnFocus?.focus();
+      }
+      cartWasOpen = open;
+    };
+    document.addEventListener("keydown", (event) => {
+      if (!cartWasOpen) return;
+      if (event.key === "Escape") {
+        $("close-cart-btn").click();
+        event.preventDefault();
+      }
+      if (event.key === "Tab") {
+        const controls = [
+          ...$("cart-panel").querySelectorAll(
+            "button:not(:disabled),a[href],input:not(:disabled)",
+          ),
+        ].filter((el) => el.getClientRects().length);
+        const first = controls[0],
+          last = controls.at(-1);
+        if (event.shiftKey && document.activeElement === first) {
+          last?.focus();
+          event.preventDefault();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          first?.focus();
+          event.preventDefault();
+        }
+      }
+    });
+    const cartLabels = new MutationObserver(enhanceCart);
+    cartLabels.observe($("cart-placeholder"), {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+    labelHeader();
+    $("retry-product").addEventListener("click", loadProduct);
+    $("decrease-quantity").addEventListener("click", () => {
+      $("product-quantity").value = Number($("product-quantity").value) - 1;
+      updatePurchase();
+      saveSelection();
+    });
+    $("increase-quantity").addEventListener("click", () => {
+      $("product-quantity").value = Number($("product-quantity").value) + 1;
+      updatePurchase();
+      saveSelection();
+    });
+    $("product-quantity").addEventListener("change", () => {
+      updatePurchase();
+      saveSelection();
+    });
+    $("add-to-cart").addEventListener("click", addToCart);
+    $("mobile-add-to-cart").addEventListener("click", addToCart);
+    $("notify-restock").addEventListener("click", notifyRestock);
+    $("add-to-wishlist-btn").addEventListener("click", toggleFavorite);
+    $("shipping-form").addEventListener("submit", shipping);
+    $("cep").value = String(readStorage("productDeliveryCep", "")).replace(
+      /^(\d{5})(\d{3})$/,
+      "$1-$2",
+    );
+    $("cep").addEventListener("input", () => {
+      $("cep").value = $("cep")
+        .value.replace(/\D/g, "")
+        .slice(0, 8)
+        .replace(/^(\d{5})(\d)/, "$1-$2");
+      $("shipping-result").replaceChildren();
+    });
+    $("share-product").addEventListener("click", share);
+    $("copy-product-link").addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(canonical);
+        $("share-status").textContent = "Link copiado!";
+      } catch {
+        $("share-url").focus();
+        $("share-url").select();
+        $("share-status").textContent = "Selecione e copie o link acima.";
+      }
+    });
+    for (const name of ["main-product-image", "zoomed-image", "added-image"])
+      imageFallback($(name));
+    $("zoom-product").addEventListener("click", () => {
+      $("image-dialog").showModal();
+      track("view_product_image");
+    });
+    for (const name of ["previous-image", "zoom-prev"])
+      $(name).addEventListener("click", () => setImage(state.imageIndex - 1));
+    for (const name of ["next-image", "zoom-next"])
+      $(name).addEventListener("click", () => setImage(state.imageIndex + 1));
+    $("toggle-zoom").addEventListener("click", () => {
+      const zoom = $("image-dialog").querySelector(".pd-dialog-image-scroll");
+      const enabled = zoom.classList.toggle("is-zoomed");
+      $("toggle-zoom").textContent = enabled
+        ? "Ver foto inteira"
+        : "Ampliar detalhes";
+    });
+    $("image-dialog").addEventListener("keydown", (event) => {
+      if (event.key === "ArrowRight") setImage(state.imageIndex + 1);
+      if (event.key === "ArrowLeft") setImage(state.imageIndex - 1);
+    });
+    let touch = null;
+    $("zoom-product").addEventListener(
+      "touchstart",
+      (event) => {
+        touch = event.changedTouches[0]?.clientX;
+      },
+      { passive: true },
+    );
+    $("zoom-product").addEventListener(
+      "touchend",
+      (event) => {
+        const delta = event.changedTouches[0]?.clientX - touch;
+        if (touch !== null && Math.abs(delta) > 45) {
+          setImage(state.imageIndex + (delta < 0 ? 1 : -1));
+        }
+        touch = null;
+      },
+      { passive: true },
+    );
+    document
+      .querySelectorAll("[data-close-dialog]")
+      .forEach((btn) =>
+        btn.addEventListener("click", () => btn.closest("dialog").close()),
+      );
+    document.querySelectorAll("dialog").forEach((dialog) => {
+      dialog.addEventListener("click", (event) => {
+        if (event.target === dialog) {
+          const r = dialog.getBoundingClientRect();
+          if (
+            event.clientX < r.left ||
+            event.clientX > r.right ||
+            event.clientY < r.top ||
+            event.clientY > r.bottom
+          )
+            dialog.close();
+        }
+      });
+      dialog.addEventListener("close", () => {
+        $("image-dialog")
+          .querySelector(".pd-dialog-image-scroll")
+          .classList.remove("is-zoomed");
+        $("toggle-zoom").textContent = "Ampliar detalhes";
+      });
+    });
+    $("write-review").addEventListener("click", () => {
+      if (!account()) return;
+      $("review-form").hidden = false;
+      $("review-rating").focus();
+    });
+    $("cancel-review").addEventListener("click", () => {
+      $("review-form").hidden = true;
+      $("write-review").focus();
+    });
+    $("review-form").addEventListener("submit", review);
+    $("clear-recent").addEventListener("click", () => {
+      writeStorage("recentProductIds", []);
+      $("recent-products").replaceChildren();
+      $("recent-section").hidden = true;
+    });
+    window.addEventListener("pagehide", saveSelection);
+    const syncHeader = () => {
+      const header = $("header-top"),
+        nav = $("category-nav");
+      const bottom = Math.max(
+        0,
+        header?.getBoundingClientRect().bottom || 0,
+        nav?.getBoundingClientRect().bottom || 0,
+      );
+      document.documentElement.style.setProperty(
+        "--pd-header-height",
+        `${Math.ceil(bottom + 18)}px`,
+      );
+    };
+    const observer = new MutationObserver(() => {
+      syncHeader();
+      if ($("header-top")) {
+        if (typeof ResizeObserver !== "undefined") {
+          const resize = new ResizeObserver(syncHeader);
+          resize.observe($("header-top"));
+          if ($("category-nav")) resize.observe($("category-nav"));
+        }
+        observer.disconnect();
+      }
+    });
+    observer.observe($("header-placeholder"), {
+      childList: true,
+      subtree: true,
+    });
+    window.addEventListener("resize", syncHeader);
+    window.addEventListener("scroll", syncHeader, { passive: true });
+    syncHeader();
+  }
+  document.addEventListener("DOMContentLoaded", () => {
+    bind();
+    void loadProduct();
   });
-
-  // Limita para caber; o layout ajusta fonte/step pelo total
-  parts.slice(0, ids.length).forEach((texto, i) => {
-    const el = document.getElementById(ids[i]);
-    if (!el) return;
-    el.textContent = texto;
-    el.removeAttribute('display');
-  });
-
-  // 3) Alinha (mesma lógica do quadro de especificações)
-  // Quer igual ao que você pediu lá (lado direito)? use align: 'right'
-  layoutSvgGroup(ids, { groupId: 'svg-desc-content', align: 'center' });
-
-  // 4) Esconde o fallback HTML (mantido por segurança)
-  if (htmlFallback) htmlFallback.classList.add('hidden');
-}
+})();

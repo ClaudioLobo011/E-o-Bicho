@@ -66,47 +66,10 @@ function resolveAddressSnapshot(address) {
 }
 
 function resolveBestPrice(product, quantity, isSubscribed, groupQuantities = null) {
-  const basePrice = Number(product?.venda || 0);
-  let bestPrice = basePrice;
-
-  if (product?.promocao?.ativa && product?.promocao?.porcentagem > 0) {
-    const promoPrice = basePrice * (1 - product.promocao.porcentagem / 100);
-    if (promoPrice < bestPrice) bestPrice = promoPrice;
-  }
-
-  if (product?.promocaoCondicional?.ativa && product?.promocaoCondicional?.tipo === 'acima_de') {
-    const promo = product.promocaoCondicional;
-    const isGrouped = Boolean(promo?.produtosDiferentes && String(promo?.codigoGrupo || '').trim());
-    const qtyForRule = isGrouped && groupQuantities
-      ? Number(groupQuantities.get(`acima_de|${String(promo?.codigoGrupo || '').trim()}`) || 0)
-      : quantity;
-    if (qtyForRule >= promo.quantidadeMinima) {
-      const conditionalPrice = basePrice * (1 - product.promocaoCondicional.descontoPorcentagem / 100);
-      if (conditionalPrice < bestPrice) bestPrice = conditionalPrice;
-    }
-  }
-
-  if (product?.promocaoCondicional?.ativa && product?.promocaoCondicional?.tipo === 'leve_pague') {
-    const { leve, pague } = product.promocaoCondicional;
-    const isGrouped = Boolean(product.promocaoCondicional?.produtosDiferentes && String(product.promocaoCondicional?.codigoGrupo || '').trim());
-    const qtyForRule = isGrouped && groupQuantities
-      ? Number(groupQuantities.get(`leve_pague|${String(product.promocaoCondicional?.codigoGrupo || '').trim()}`) || 0)
-      : quantity;
-    if (leve > 0 && qtyForRule >= leve) {
-      const promoPacks = Math.floor(qtyForRule / leve);
-      const paidItems = promoPacks * pague;
-      const remainingItems = qtyForRule % leve;
-      const totalPrice = (paidItems + remainingItems) * basePrice;
-      const effective = totalPrice / qtyForRule;
-      if (effective < bestPrice) bestPrice = effective;
-    }
-  }
-
-  if (isSubscribed && product?.precoClube && product.precoClube > 0) {
-    if (product.precoClube < bestPrice) bestPrice = product.precoClube;
-  }
-
-  return bestPrice;
+  const promo = product?.promocaoCondicional;
+  const grouped = promo?.produtosDiferentes && String(promo?.codigoGrupo || '').trim();
+  const groupQuantity = grouped && groupQuantities ? Number(groupQuantities.get(`${promo.tipo}|${String(promo.codigoGrupo).trim()}`) || 0) : null;
+  return require('../../scripts/product/product-utils').price(product, quantity, isSubscribed, groupQuantity).unit;
 }
 
 function buildCartSnapshot(cartItems) {
@@ -115,7 +78,7 @@ function buildCartSnapshot(cartItems) {
   rows.forEach((item) => {
     const product = item?.product;
     const promo = product?.promocaoCondicional;
-    if (!product || !promo?.ativa || !promo?.produtosDiferentes) return;
+    if (!product || !require('../../scripts/product/product-utils').active(promo) || !promo?.produtosDiferentes) return;
     const groupCode = String(promo?.codigoGrupo || '').trim();
     if (!groupCode) return;
     const qty = Math.max(0, Math.trunc(Number(item?.quantity || 0)));

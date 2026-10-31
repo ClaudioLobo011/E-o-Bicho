@@ -14,11 +14,18 @@
   ],
   "builds": [
     {
+      "src": "api/product-page.js",
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": "pages/menu-departments-item/product.html"
+      }
+    },
+    {
       "src": "index.html",
       "use": "@vercel/static"
     },
     {
-      "src": "pages/**",
+      "src": "pages/**/!(product).html",
       "use": "@vercel/static"
     },
     {
@@ -611,6 +618,12 @@
       "source": "/public/updates/pdv/E-o-Bicho-PDV-0.8.9-Instalador.exe",
       "destination": "https://raw.githubusercontent.com/ClaudioLobo011/E-o-Bicho/30e17207774590d6837b6a9a82f15ac210026e61/public/updates/pdv/E-o-Bicho-PDV-0.8.9-Instalador.exe",
       "permanent": false
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/pages/menu-departments-item/product.html",
+      "destination": "/api/product-page.js"
     }
   ]
 }

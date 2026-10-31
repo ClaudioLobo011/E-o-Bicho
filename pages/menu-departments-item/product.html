@@ -1,142 +1,668 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Encontre o produto certo para o seu pet. Consulte informações, disponibilidade e entrega no E o Bicho."
+    />
+    <meta name="theme-color" content="#5f7a41" />
+    <meta property="og:type" content="product" />
+    <meta property="og:title" content="Produto - E o Bicho" />
+    <meta
+      property="og:description"
+      content="Cuidado e carinho para o seu pet."
+    />
+    <meta
+      property="og:image"
+      content="https://www.peteobicho.com.br/public/image/logo.svg"
+    />
+    <meta property="og:url" content="https://www.peteobicho.com.br/" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="canonical" href="https://www.peteobicho.com.br/" />
     <title>Produto - E o Bicho</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-    <link rel="stylesheet" href="../../src/output.css">
-  <link rel="stylesheet" href="../../src/responsive-workspace.css?v=20261008-1">
-</head>
-<body class="bg-white responsive-site">
-
+    <link rel="preconnect" href="https://cdn.peteobicho.com.br" />
+    <link rel="preconnect" href="https://api.peteobicho.com.br" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+    />
+    <link rel="stylesheet" href="../../src/output.css" />
+    <link
+      rel="stylesheet"
+      href="../../src/responsive-workspace.css?v=20261008-1"
+    />
+    <link rel="stylesheet" href="../../src/product-page.css?v=20261031-1" />
+  </head>
+  <body class="responsive-site product-page">
+    <a class="pd-skip" href="#product-title">Ir para o produto</a>
     <div id="header-placeholder"></div>
-
-    <main class="container mx-auto px-4 pb-8" data-header-offset="site">
-
-        <nav class="mb-6 text-sm" aria-label="Breadcrumb">
-            <ol id="breadcrumb-container" class="list-none p-0 inline-flex items-center space-x-2 text-gray-600">
-                <li><a href="/" class="hover:text-primary hover:underline">Início</a></li>
-            </ol>
-        </nav>
-
-            <div class="flex flex-col md:flex-row md:items-center md:space-x-8">
-                <div class="md:w-1/2">
-                    <div class="flex items-start space-x-4">
-                        <div id="thumbnail-gallery" class="flex flex-col space-y-3 w-20"></div>
-                        <div class="flex-1">
-                            <div class="aspect-square w-3/4 mx-auto bg-white rounded-lg overflow-hidden">
-                                <img id="main-product-image" src="/public/image/placeholder.svg" alt="Imagem principal do produto" class="w-full h-full object-contain">
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="md:w-1/2">
-                    <div class="space-y-2">
-                        <h1 id="product-title" class="text-2xl font-bold text-gray-800">A carregar nome do produto...</h1>
-                        
-                        <div class="flex items-center space-x-1 text-xs text-gray-500">
-                            <span id="product-sku">A carregar código...</span>
-                            <span>|</span>
-                            <span id="product-brand"></span>
-                            <span>|</span>
-                            <a href="#product-description-section" class="text-primary hover:underline">Ver descrição completa</a>
-                        </div>
-
-                        <div class="flex justify-between items-center border-b border-gray-200 py-1">
-                            <div class="flex items-center space-x-1 text-yellow-400">
-                                <i class="fas fa-star"></i>
-                                <i class="fas fa-star"></i>
-                                <i class="fas fa-star"></i>
-                                <i class="fas fa-star"></i>
-                                <i class="far fa-star text-gray-300"></i>
-                                <span id="review-count" class="text-xs text-gray-500 ml-2">(15 Avaliações)</span>
-                            </div>
-                            <div id="stock-status"></div>
-                        </div>
-                    </div>
-                    
-                    <div class="my-6 flex justify-between items-center">
-
-                        <div id="product-price" class="text-4xl font-bold text-primary">
-                            R$ 0,00
-                        </div>
-
-                        <button id="add-to-wishlist-btn" class="p-2 rounded-full hover:bg-red-50 transition-colors duration-200" aria-label="Adicionar aos favoritos">
-                            <svg class="h-7 w-7 text-gray-400 group-hover:text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 016.364 0L12 7.636l1.318-1.318a4.5 4.5 0 116.364 6.364L12 20.364l-7.682-7.682a4.5 4.5 0 010-6.364z" />
-                            </svg>
-                        </button>
-
-                    </div>
-
-                    <div id="product-promotions-panel" class="my-6"></div>
-
-                    <div class="mt-4 flex items-center space-x-4">
-                        
-                        <div class="flex items-center border border-gray-300 rounded-lg">
-                            <button class="px-4 py-2 text-lg font-bold text-gray-600 hover:bg-gray-100 rounded-l-lg transition-colors">-</button>
-                            <input type="text" class="w-12 text-center font-bold border-l border-r border-gray-300 focus:outline-none" value="1" readonly>
-                            <button class="px-4 py-2 text-lg font-bold text-gray-600 hover:bg-gray-100 rounded-r-lg transition-colors">+</button>
-                        </div>
-
-                        <button class="flex-grow bg-green-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-green-700 transition-colors">Adicionar à Sacola</button>
-
-                    </div>
-
-                    <div class="mt-8 border-t pt-6">
-                        <label for="cep" class="font-semibold">Calcular frete e prazo</label>
-                        <div class="flex mt-2">
-                            <input type="text" id="cep" placeholder="Digite o seu CEP" class="w-full py-2 px-3 border border-gray-300 rounded-l-md focus:ring-primary focus:border-primary">
-                            <button class="bg-gray-700 text-white font-semibold py-2 px-4 rounded-r-md hover:bg-gray-800">Calcular</button>
-                        </div>
-                    </div>
-                </div>
+    <main class="pd-main" data-header-offset="site">
+      <nav class="pd-breadcrumb" aria-label="Você está em">
+        <ol id="breadcrumb-container">
+          <li><a href="/">Início</a></li>
+          <li>Produto</li>
+        </ol>
+      </nav>
+      <div id="product-error" class="pd-error" role="alert" hidden>
+        <i class="fa-solid fa-box-open" aria-hidden="true"></i>
+        <h1 id="error-title">Não foi possível carregar este produto</h1>
+        <p id="error-message">Verifique sua conexão e tente novamente.</p>
+        <button id="retry-product" class="pd-button" type="button">
+          Tentar novamente</button
+        ><a href="/">Voltar à loja</a>
+      </div>
+      <div id="product-details-container" aria-busy="true">
+        <section class="pd-hero" aria-label="Detalhes e compra do produto">
+          <div class="pd-gallery">
+            <div class="pd-image-stage">
+              <span class="pd-photo-badge" id="photo-badge" hidden></span>
+              <button
+                id="zoom-product"
+                class="pd-zoom-target"
+                type="button"
+                aria-label="Ampliar foto do produto"
+                disabled
+              >
+                <img
+                  id="main-product-image"
+                  src="/public/image/placeholder.svg"
+                  alt="Carregando foto do produto"
+                  width="640"
+                  height="640"
+                  fetchpriority="high"
+                  decoding="async"
+                />
+              </button>
+              <button
+                id="previous-image"
+                class="pd-image-arrow pd-image-prev"
+                type="button"
+                aria-label="Foto anterior"
+                hidden
+              >
+                ‹</button
+              ><button
+                id="next-image"
+                class="pd-image-arrow pd-image-next"
+                type="button"
+                aria-label="Próxima foto"
+                hidden
+              >
+                ›
+              </button>
+              <span class="pd-zoom-hint"
+                ><i
+                  class="fa-solid fa-magnifying-glass-plus"
+                  aria-hidden="true"
+                ></i>
+                Toque na foto para ampliar</span
+              >
             </div>
-
-            <div id="product-info-sections" class="mt-12 border-t border-gray-200 pt-8
-                                                grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-                <!-- Coluna Esquerda: Descrição -->
-                <section id="product-description-section" class="flex justify-center">
-                    <div class="w-full max-w-[700px]" style="aspect-ratio: 800 / 520;">
-                    <!-- Título só aparece no fallback; o JS oculta quando o SVG carrega -->
-                    <h2 id="product-desc-heading" class="text-2xl font-bold mb-2">Descrição</h2>
-
-                    <!-- SVG (injetado via JS) -->
-                    <div id="product-desc-svg-container" class="w-full"></div>
-
-                    <!-- Fallback em HTML (mantido e oculto quando o SVG existe) -->
-                    <div id="product-description" class="text-gray-600 leading-relaxed whitespace-pre-line hidden">
-                        <p>A carregar descrição...</p>
-                    </div>
-                    </div>
-                </section>
-                <!-- Coluna Direita: Especificações -->
-                <aside id="product-specs-section" class="flex justify-center">
-                    <div class="w-full max-w-[700px]" style="aspect-ratio: 800 / 520;">
-                    <!-- SVG (injetado via JS) -->
-                    <div id="product-specs-svg-container" class="w-full"></div>
-                    <!-- Fallback em lista (mantido para compatibilidade) -->
-                    <ul id="product-specs-list" class="hidden list-disc pl-5 text-gray-700 text-sm mt-4"></ul>
-                    </div>
-                </aside>
-
+            <div
+              id="thumbnail-gallery"
+              class="pd-thumbnails"
+              aria-label="Fotos do produto"
+            ></div>
+            <p id="image-counter" class="pd-caption" aria-live="polite"></p>
+            <div class="pd-gallery-note">
+              <i class="fa-regular fa-heart" aria-hidden="true"></i
+              ><span>Mais cuidado para quem faz parte da família.</span>
             </div>
+          </div>
+          <div class="pd-summary">
+            <div class="pd-heading-row">
+              <a id="product-brand" class="pd-eyebrow" href="/" hidden></a>
+              <div class="pd-actions">
+                <button
+                  id="add-to-wishlist-btn"
+                  class="pd-icon-button"
+                  type="button"
+                  aria-label="Adicionar aos favoritos"
+                  aria-pressed="false"
+                  disabled
+                >
+                  <i class="fa-regular fa-heart" aria-hidden="true"></i></button
+                ><button
+                  id="share-product"
+                  class="pd-icon-button"
+                  type="button"
+                  aria-label="Compartilhar produto"
+                  disabled
+                >
+                  <i
+                    class="fa-solid fa-arrow-up-from-bracket"
+                    aria-hidden="true"
+                  ></i>
+                </button>
+              </div>
+            </div>
+            <h1 id="product-title" tabindex="-1">Carregando produto…</h1>
+            <div class="pd-meta">
+              <span id="product-sku">Consultando informações</span
+              ><span aria-hidden="true">·</span
+              ><a href="#product-specs-section">Ver ficha técnica</a>
+            </div>
+            <div class="pd-rating-stock">
+              <a id="review-summary" href="#product-reviews-section"
+                >Avaliações de clientes</a
+              ><span id="stock-status" class="pd-stock"
+                >Consultando estoque…</span
+              >
+            </div>
+            <ul id="product-highlights" class="pd-highlights" hidden></ul>
+            <div id="product-variants" class="pd-variants" hidden>
+              <span class="pd-field-label">Apresentação</span>
+              <div id="variant-options"></div>
+            </div>
+            <div class="pd-price-box">
+              <div id="product-price" class="pd-price">
+                <span class="pd-loading-line"></span>
+              </div>
+              <p id="unit-price" class="pd-muted" hidden></p>
+              <p class="pd-payment-note">
+                Condições de pagamento disponíveis ao finalizar a compra.
+              </p>
+              <div
+                id="product-promotions-panel"
+                class="pd-promotions"
+                hidden
+              ></div>
+            </div>
+            <div id="purchase-controls">
+              <div class="pd-purchase-row">
+                <div>
+                  <label class="pd-field-label" for="product-quantity"
+                    >Quantidade</label
+                  >
+                  <div class="pd-quantity">
+                    <button
+                      id="decrease-quantity"
+                      type="button"
+                      aria-label="Diminuir quantidade"
+                      disabled
+                    >
+                      −</button
+                    ><input
+                      id="product-quantity"
+                      type="number"
+                      inputmode="numeric"
+                      min="1"
+                      step="1"
+                      value="1"
+                      aria-describedby="quantity-help"
+                      disabled
+                    /><button
+                      id="increase-quantity"
+                      type="button"
+                      aria-label="Aumentar quantidade"
+                      disabled
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+                <button
+                  id="add-to-cart"
+                  class="pd-button pd-buy"
+                  type="button"
+                  disabled
+                >
+                  <i class="fa-solid fa-bag-shopping" aria-hidden="true"></i
+                  ><span>Adicionar à sacola</span>
+                </button>
+              </div>
+              <p id="quantity-help" class="pd-muted"></p>
+              <p id="quantity-total" class="pd-quantity-total" hidden></p>
+            </div>
+            <div id="restock-panel" class="pd-restock" hidden>
+              <strong>Quer saber quando voltar?</strong>
+              <p>
+                Receba um aviso no e-mail da sua conta quando houver reposição.
+              </p>
+              <button
+                id="notify-restock"
+                class="pd-button pd-button-outline"
+                type="button"
+              >
+                Avise-me quando chegar
+              </button>
+            </div>
+            <p
+              id="purchase-status"
+              class="pd-status"
+              role="status"
+              aria-live="polite"
+            ></p>
+            <section class="pd-delivery" aria-labelledby="delivery-title">
+              <h2 id="delivery-title">
+                <i class="fa-solid fa-truck-fast" aria-hidden="true"></i>
+                Entrega e retirada
+              </h2>
+              <form id="shipping-form" novalidate>
+                <label for="cep">Consulte as opções para o seu CEP</label>
+                <div class="pd-cep-row">
+                  <input
+                    id="cep"
+                    name="cep"
+                    type="text"
+                    inputmode="numeric"
+                    autocomplete="postal-code"
+                    placeholder="00000-000"
+                    maxlength="9"
+                    aria-describedby="shipping-result"
+                    required
+                  /><button
+                    id="calculate-shipping"
+                    class="pd-button pd-button-dark"
+                    type="submit"
+                  >
+                    Calcular
+                  </button>
+                </div>
+              </form>
+              <div
+                id="shipping-result"
+                class="pd-shipping-result"
+                role="status"
+                aria-live="polite"
+              ></div>
+              <details id="pickup-details" class="pd-pickup">
+                <summary>
+                  <i class="fa-solid fa-store" aria-hidden="true"></i> Prefere
+                  retirar na loja?
+                </summary>
+                <p class="pd-muted">
+                  A retirada depende da disponibilidade na unidade e da
+                  confirmação do pedido.
+                </p>
+                <div id="pickup-stores"></div>
+                <a href="/pages/nossas-lojas.html"
+                  >Conheça nossas lojas e horários ↗</a
+                >
+              </details>
+            </section>
+            <a
+              id="product-help"
+              class="pd-help"
+              href="#product-questions-section"
+              ><i class="fa-regular fa-comments" aria-hidden="true"></i
+              ><span
+                ><strong>Precisa de uma mãozinha?</strong
+                ><small>Tire suas dúvidas com a nossa equipe.</small></span
+              ><span aria-hidden="true">↗</span></a
+            >
+          </div>
+        </section>
+        <div class="pd-trust-strip">
+          <div>
+            <i class="fa-solid fa-store" aria-hidden="true"></i
+            ><span
+              ><strong>Também pertinho de você</strong
+              ><a href="/pages/nossas-lojas.html">Conheça nossas lojas</a></span
+            >
+          </div>
+          <div>
+            <i class="fa-solid fa-box" aria-hidden="true"></i
+            ><span
+              ><strong>Entrega ou retirada</strong
+              ><a href="#delivery-title">Consulte pelo seu CEP</a></span
+            >
+          </div>
+          <div>
+            <i class="fa-regular fa-message" aria-hidden="true"></i
+            ><span
+              ><strong>Atendimento de verdade</strong
+              ><a href="#product-questions-section"
+                >Fale com a nossa equipe</a
+              ></span
+            >
+          </div>
         </div>
+        <nav class="pd-section-nav" aria-label="Informações do produto">
+          <a href="#product-description-section">Sobre o produto</a
+          ><a href="#product-specs-section">Ficha técnica</a
+          ><a href="#product-reviews-section">Avaliações</a
+          ><a href="#product-questions-section">Dúvidas</a>
+        </nav>
+        <div class="pd-info-grid" id="product-info-sections">
+          <section id="product-description-section" class="pd-info-card">
+            <details open>
+              <summary>
+                <span class="pd-section-icon"
+                  ><i class="fa-solid fa-paw" aria-hidden="true"></i
+                ></span>
+                <h2>Sobre o produto</h2>
+              </summary>
+              <div id="product-description" class="pd-description"></div>
+              <div id="product-documents" hidden></div>
+              <p id="medicine-notice" class="pd-notice" hidden>
+                <i class="fa-solid fa-circle-info" aria-hidden="true"></i
+                ><span
+                  >Uso veterinário. Siga a bula e a orientação do
+                  médico-veterinário. Em caso de dúvida sobre o uso, procure um
+                  profissional.</span
+                >
+              </p>
+            </details>
+          </section>
+          <section id="product-specs-section" class="pd-info-card">
+            <details open>
+              <summary>
+                <span class="pd-section-icon"
+                  ><i class="fa-solid fa-list-check" aria-hidden="true"></i
+                ></span>
+                <h2>Ficha técnica</h2>
+              </summary>
+              <dl id="product-specs-list" class="pd-specs"></dl>
+              <p class="pd-caption">
+                Consulte também as informações da embalagem do produto.
+              </p>
+            </details>
+          </section>
+        </div>
+        <section id="product-reviews-section" class="pd-community">
+          <div class="pd-section-heading">
+            <div>
+              <span class="pd-eyebrow">Quem já comprou conta</span>
+              <h2>Avaliações de clientes</h2>
+            </div>
+            <button
+              id="write-review"
+              class="pd-button pd-button-outline"
+              type="button"
+            >
+              Avaliar produto
+            </button>
+          </div>
+          <div id="reviews-content">
+            <p class="pd-muted">Carregando avaliações…</p>
+          </div>
+          <form id="review-form" class="pd-inline-form" hidden>
+            <h3>Conte como foi sua experiência</h3>
+            <p class="pd-muted">
+              Para clientes com compra confirmada deste produto. Seu primeiro
+              nome será exibido.
+            </p>
+            <label for="review-rating">Sua nota</label
+            ><select id="review-rating" required>
+              <option value="">Selecione uma nota</option>
+              <option value="5">5 — Excelente</option>
+              <option value="4">4 — Muito bom</option>
+              <option value="3">3 — Bom</option>
+              <option value="2">2 — Regular</option>
+              <option value="1">1 — Ruim</option></select
+            ><label for="review-text">Sua avaliação</label
+            ><textarea
+              id="review-text"
+              rows="4"
+              minlength="10"
+              maxlength="2000"
+              placeholder="O que você achou do produto?"
+              required
+            ></textarea>
+            <div class="pd-form-actions">
+              <button class="pd-button" type="submit">Enviar avaliação</button
+              ><button id="cancel-review" class="pd-text-button" type="button">
+                Cancelar
+              </button>
+            </div>
+            <p id="review-status" role="status"></p>
+          </form>
+        </section>
+        <section id="product-questions-section" class="pd-community">
+          <div class="pd-section-heading">
+            <div>
+              <span class="pd-eyebrow">Conte com a gente</span>
+              <h2>Dúvidas? Vamos ajudar.</h2>
+            </div>
+          </div>
+          <div class="pd-questions-grid">
+            <div>
+              <details class="pd-faq">
+                <summary>Como consulto entrega e retirada?</summary>
+                <p>
+                  Informe seu CEP nesta página. As opções disponíveis aparecem
+                  na consulta. A unidade e a disponibilidade para retirada são
+                  confirmadas no pedido.
+                </p>
+                <a href="#delivery-title">Consultar meu CEP</a>
+              </details>
+              <details class="pd-faq">
+                <summary>Como funcionam os descontos deste produto?</summary>
+                <p id="discount-answer">
+                  As ofertas disponíveis aparecem junto ao preço. Promoções por
+                  quantidade são calculadas na sacola, conforme as condições
+                  apresentadas.
+                </p>
+              </details>
+              <details class="pd-faq">
+                <summary>Preciso de ajuda com meu pedido ou uma troca.</summary>
+                <p>
+                  Tenha o número do pedido em mãos e entre em contato com a
+                  equipe da loja para consultar as condições e receber
+                  orientação.
+                </p>
+                <a href="/pages/meus-pedidos.html">Ver meus pedidos</a>
+              </details>
+            </div>
+            <div class="pd-contact-card">
+              <i class="fa-regular fa-comments" aria-hidden="true"></i>
+              <h3>Uma dúvida sobre este produto?</h3>
+              <p>
+                Escolha uma loja para falar com a equipe. O nome e o link do
+                produto acompanham sua mensagem.
+              </p>
+              <div id="product-contacts">
+                <a href="/pages/nossas-lojas.html">Ver contatos das lojas</a>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section id="related-section" class="pd-recommendations" hidden>
+          <div class="pd-section-heading">
+            <div>
+              <span class="pd-eyebrow">Continue explorando</span>
+              <h2 id="related-title">Mais da mesma categoria</h2>
+            </div>
+            <a id="related-see-all" href="/">Ver todos →</a>
+          </div>
+          <p id="related-notice" class="pd-muted" hidden>
+            Produtos da mesma categoria. Não representam indicação de
+            substituição ou de uso conjunto.
+          </p>
+          <div id="related-products" class="pd-product-grid"></div>
+        </section>
+        <section id="recent-section" class="pd-recommendations" hidden>
+          <div class="pd-section-heading">
+            <div>
+              <span class="pd-eyebrow">Seu caminho pela loja</span>
+              <h2>Vistos recentemente</h2>
+            </div>
+            <button id="clear-recent" class="pd-text-button" type="button">
+              Limpar histórico
+            </button>
+          </div>
+          <div id="recent-products" class="pd-product-grid"></div>
+        </section>
+      </div>
+      <noscript
+        ><div class="pd-error">
+          <h1>Ative o JavaScript para consultar o produto</h1>
+          <p>Os preços e o estoque são atualizados pelo nosso sistema.</p>
+          <a href="/pages/nossas-lojas.html">Consulte nossas lojas</a>
+        </div></noscript
+      >
     </main>
-
-    <div id="footer-placeholder"></div>
+    <footer class="pd-footer">
+      <div>
+        <a href="/"
+          ><img
+            src="/public/image/logo.svg"
+            width="124"
+            height="86"
+            alt="E o Bicho — início"
+            loading="lazy"
+        /></a>
+        <p>Tudo para o seu pet, com qualidade e carinho.</p>
+      </div>
+      <nav aria-label="Atendimento e informações">
+        <a href="/pages/nossas-lojas.html">Nossas lojas e atendimento</a
+        ><a href="/pages/meus-pedidos.html">Meus pedidos</a
+        ><a href="/pages/favoritos.html">Meus favoritos</a
+        ><a href="/pages/politica-de-privacidade.html"
+          >Política de privacidade</a
+        >
+      </nav>
+      <p class="pd-footer-legal">
+        Vila E o Bicho LTDA - ME · CNPJ 07.919.703/0001-67<br />Rua Duque de
+        Caxias, 68 · Vila Isabel · Rio de Janeiro/RJ
+      </p>
+    </footer>
     <div id="cart-placeholder"></div>
-
-    <script>var basePath = '../../';</script>
+    <div id="mobile-purchase-bar" class="pd-mobile-bar" hidden>
+      <div>
+        <small id="mobile-product-name"></small
+        ><strong id="mobile-price"></strong>
+      </div>
+      <button id="mobile-add-to-cart" class="pd-button" type="button" disabled>
+        Adicionar à sacola
+      </button>
+    </div>
+    <dialog
+      id="image-dialog"
+      class="pd-image-dialog"
+      aria-labelledby="image-dialog-title"
+    >
+      <div class="pd-dialog-top">
+        <h2 id="image-dialog-title">Fotos do produto</h2>
+        <button
+          class="pd-icon-button"
+          data-close-dialog
+          type="button"
+          aria-label="Fechar fotos"
+        >
+          ✕
+        </button>
+      </div>
+      <div class="pd-dialog-image-scroll">
+        <img
+          id="zoomed-image"
+          src="/public/image/placeholder.svg"
+          alt=""
+          width="1000"
+          height="1000"
+        />
+      </div>
+      <div class="pd-dialog-bottom">
+        <button
+          id="zoom-prev"
+          class="pd-icon-button"
+          type="button"
+          aria-label="Foto anterior"
+        >
+          ←</button
+        ><span id="zoom-counter"></span
+        ><button
+          id="zoom-next"
+          class="pd-icon-button"
+          type="button"
+          aria-label="Próxima foto"
+        >
+          →</button
+        ><button id="toggle-zoom" class="pd-text-button" type="button">
+          Ampliar detalhes
+        </button>
+      </div>
+    </dialog>
+    <dialog
+      id="added-dialog"
+      class="pd-added-dialog"
+      aria-labelledby="added-dialog-title"
+    >
+      <div class="pd-dialog-top">
+        <h2 id="added-dialog-title">
+          <i class="fa-solid fa-circle-check" aria-hidden="true"></i> Produto na
+          sacola!
+        </h2>
+        <button
+          class="pd-icon-button"
+          data-close-dialog
+          type="button"
+          aria-label="Fechar confirmação"
+        >
+          ✕
+        </button>
+      </div>
+      <div class="pd-added-item">
+        <img
+          id="added-image"
+          src="/public/image/placeholder.svg"
+          alt=""
+          width="88"
+          height="88"
+        />
+        <div>
+          <strong id="added-name"></strong>
+          <p id="added-detail"></p>
+        </div>
+      </div>
+      <p id="added-subscription-status" hidden></p>
+      <div class="pd-added-actions">
+        <a href="/pages/checkout.html" class="pd-button"
+          >Ver sacola e finalizar</a
+        ><button
+          class="pd-button pd-button-outline"
+          data-close-dialog
+          type="button"
+        >
+          Continuar comprando
+        </button>
+      </div>
+    </dialog>
+    <dialog
+      id="share-dialog"
+      class="pd-added-dialog"
+      aria-labelledby="share-dialog-title"
+    >
+      <div class="pd-dialog-top">
+        <h2 id="share-dialog-title">Compartilhar produto</h2>
+        <button
+          class="pd-icon-button"
+          data-close-dialog
+          type="button"
+          aria-label="Fechar compartilhamento"
+        >
+          ✕
+        </button>
+      </div>
+      <label for="share-url">Link do produto</label
+      ><input id="share-url" type="url" readonly />
+      <div class="pd-form-actions">
+        <button id="copy-product-link" class="pd-button" type="button">
+          Copiar link</button
+        ><a
+          id="share-whatsapp"
+          class="pd-button pd-button-outline"
+          href="https://wa.me/"
+          target="_blank"
+          rel="noopener noreferrer"
+          >WhatsApp</a
+        >
+      </div>
+      <p id="share-status" role="status"></p>
+    </dialog>
+    <script>
+      var basePath = "../../";
+    </script>
     <script src="../../scripts/core/config.js?v=20260812-2"></script>
     <script src="../../scripts/core/ui.js"></script>
     <script src="../../scripts/cartManager.js"></script>
     <script src="../../scripts/favoritesManager.js"></script>
     <script src="../../scripts/cart.js"></script>
     <script src="../../scripts/core/main.js"></script>
-    <script src="../../scripts/product/product.js"></script>
-</body>
+    <script src="../../scripts/product/product-utils.js?v=20261031-1"></script>
+    <script src="../../scripts/product/product.js?v=20261031-1"></script>
+  </body>
 </html>
-

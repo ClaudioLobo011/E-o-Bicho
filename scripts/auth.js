@@ -1,5 +1,16 @@
 // --- Remember Me helpers ---
 const REMEMBER_KEY = 'rememberLogin'; // { identifier: '...' }
+function productLoginDestination() {
+  try {
+    const candidate = new URLSearchParams(window.location.search).get('redirect') || sessionStorage.getItem('productReturnUrl') || '';
+    const target = new URL(candidate, window.location.origin);
+    if (target.origin === window.location.origin && target.pathname === '/pages/menu-departments-item/product.html' && /^[a-f0-9]{24}$/i.test(target.searchParams.get('id') || '')) {
+      sessionStorage.removeItem('productReturnUrl');
+      return target.pathname + target.search;
+    }
+  } catch { /* invalid return links fall back to the shop */ }
+  return '/index.html';
+}
 let accountCompletionToken = '';
 let accountCompletionPhone = '';
 
@@ -208,7 +219,7 @@ async function handleLoginSubmit(event) {
         timerSpan.textContent = `A redirecionar em ${countdown}...`;
         if (countdown <= 0) {
           clearInterval(interval);
-          window.location.href = '/index.html';
+          window.location.href = productLoginDestination();
         }
       }, 1000);
     }

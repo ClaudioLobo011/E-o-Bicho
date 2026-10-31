@@ -4,6 +4,8 @@ const User = require('../models/User');
 const mongoose = require('mongoose');
 const requireAuth = require('../middlewares/requireAuth');
 const { applyProductImageUrls } = require('../utils/productImageUrl');
+const { validateCartProduct } = require('../utils/cartAvailability');
+const productPrices = require('../../scripts/product/product-utils');
 
 // Função auxiliar para calcular o carrinho com a hierarquia de promoções
 async function getCalculatedCart(userId) {
@@ -14,7 +16,7 @@ async function getCalculatedCart(userId) {
     (user.cart || []).forEach((item) => {
         const product = item?.product;
         const promo = product?.promocaoCondicional;
-        if (!product || !promo?.ativa || !promo?.produtosDiferentes) return;
+        if (!product || !productPrices.active(promo) || !promo?.produtosDiferentes) return;
         const groupCode = String(promo?.codigoGrupo || '').trim();
         if (!groupCode) return;
         const qty = Math.max(0, Math.trunc(Number(item?.quantity) || 0));
@@ -28,60 +30,13 @@ async function getCalculatedCart(userId) {
         if (!product) return null;
         applyProductImageUrls(product);
 
-        let bestPrice = product.venda;
-        let appliedPromoText = null;
-
-        if (product.promocao && product.promocao.ativa && product.promocao.porcentagem > 0) {
-            const promoPrice = product.venda * (1 - product.promocao.porcentagem / 100);
-            if (promoPrice < bestPrice) {
-                bestPrice = promoPrice;
-                appliedPromoText = `${product.promocao.porcentagem}% OFF`;
-            }
-        }
-
-        if (product.promocaoCondicional && product.promocaoCondicional.ativa && product.promocaoCondicional.tipo === 'acima_de') {
-            const promo = product.promocaoCondicional;
-            const isGrouped = Boolean(promo?.produtosDiferentes && String(promo?.codigoGrupo || '').trim());
-            const qtyForRule = isGrouped
-                ? (conditionalGroupQuantities.get(`acima_de|${String(promo?.codigoGrupo || '').trim()}`) || 0)
-                : Number(item?.quantity || 0);
-            if (qtyForRule >= Number(promo.quantidadeMinima || 0)) {
-                const conditionalPrice = product.venda * (1 - product.promocaoCondicional.descontoPorcentagem / 100);
-                if (conditionalPrice < bestPrice) {
-                    bestPrice = conditionalPrice;
-                    appliedPromoText = `Acima de ${product.promocaoCondicional.quantidadeMinima} un.`;
-                }
-            }
-        }
-
-        if (product.promocaoCondicional && product.promocaoCondicional.ativa && product.promocaoCondicional.tipo === 'leve_pague') {
-            const { leve, pague } = product.promocaoCondicional;
-            const isGrouped = Boolean(product.promocaoCondicional?.produtosDiferentes && String(product.promocaoCondicional?.codigoGrupo || '').trim());
-            const qtyForRule = isGrouped
-                ? (conditionalGroupQuantities.get(`leve_pague|${String(product.promocaoCondicional?.codigoGrupo || '').trim()}`) || 0)
-                : Number(item?.quantity || 0);
-            if (Number(leve || 0) > 0 && qtyForRule >= Number(leve || 0)) {
-                const promoPacks = Math.floor(qtyForRule / leve);
-                const paidItems = promoPacks * pague;
-                const remainingItems = qtyForRule % leve;
-
-                const totalLevePaguePrice = (paidItems + remainingItems) * product.venda;
-                const effectiveLevePaguePrice = totalLevePaguePrice / qtyForRule;
-
-                if (effectiveLevePaguePrice < bestPrice) {
-                    bestPrice = effectiveLevePaguePrice;
-                    appliedPromoText = `Leve ${leve} Pague ${pague}`;
-                }
-            }
-        }
-
-        if (item.isSubscribed && product.precoClube && product.precoClube > 0) {
-            if (product.precoClube < bestPrice) {
-                bestPrice = product.precoClube;
-                appliedPromoText = 'Preço Club';
-            }
-        }
-
+        const conditional = product.promocaoCondicional;
+        const groupQuantity = conditional?.produtosDiferentes && String(conditional?.codigoGrupo || '').trim()
+            ? (conditionalGroupQuantities.get(`${conditional.tipo}|${String(conditional.codigoGrupo).trim()}`) || 0)
+            : null;
+        const calculated = productPrices.price(product, item.quantity, item.isSubscribed, groupQuantity);
+        const bestPrice = calculated.unit;
+        const appliedPromoText = calculated.label || null;
         return {
             _id: item._id,
             quantity: item.quantity,
@@ -117,10 +72,15 @@ router.get('/:userId', requireAuth, authorizeCartAccess, async (req, res) => {
 router.post('/:userId', requireAuth, authorizeCartAccess, async (req, res) => {
     const { productId, quantity } = req.body;
     try {
+        if (!Number.isSafeInteger(quantity) || quantity < 1) return res.status(400).json({ message: 'Informe uma quantidade inteira válida.' });
+        if (req.body.isSubscribed !== undefined && typeof req.body.isSubscribed !== 'boolean') return res.status(400).json({ message: 'Opção de assinatura inválida.' });
         const user = await User.findById(req.params.userId);
         if (!user) return res.status(404).json({ message: 'Utilizador não encontrado.' });
 
         const cartItemIndex = user.cart.findIndex(item => item.product.toString() === productId);
+        const targetQuantity = (cartItemIndex > -1 ? user.cart[cartItemIndex].quantity : 0) + quantity;
+        const unavailable = await validateCartProduct(productId, targetQuantity);
+        if (unavailable) return res.status(unavailable.status).json(unavailable);
 
         if (cartItemIndex > -1) {
             user.cart[cartItemIndex].quantity += quantity;
@@ -128,7 +88,13 @@ router.post('/:userId', requireAuth, authorizeCartAccess, async (req, res) => {
             user.cart.push({ product: productId, quantity: quantity });
         }
 
-        await user.save();
+        if (req.body.isSubscribed !== undefined) {
+            const item = user.cart.find(entry => entry.product.toString() === productId);
+            item.isSubscribed = req.body.isSubscribed;
+        }
+
+        const saved = await User.updateOne({ _id: user._id, __v: user.__v }, { $set: { cart: user.cart.toObject() }, $inc: { __v: 1 } });
+        if (saved.modifiedCount !== 1) return res.status(409).json({ message: 'A sacola foi atualizada em outra aba. Confira os itens e tente novamente.' });
         const populatedUser = await User.findById(req.params.userId).populate('cart.product');
         res.status(200).json(populatedUser.cart);
     } catch (error) {
@@ -141,6 +107,11 @@ router.post('/:userId', requireAuth, authorizeCartAccess, async (req, res) => {
 router.put('/:userId/:productId', requireAuth, authorizeCartAccess, async (req, res) => {
     const { quantity } = req.body;
     try {
+        if (!Number.isSafeInteger(quantity) || quantity < 0) return res.status(400).json({ message: 'Informe uma quantidade inteira válida.' });
+        if (quantity > 0) {
+            const unavailable = await validateCartProduct(req.params.productId, quantity);
+            if (unavailable) return res.status(unavailable.status).json(unavailable);
+        }
         const user = await User.findById(req.params.userId);
         if (!user) return res.status(404).json({ message: 'Utilizador não encontrado.' });
 
@@ -151,7 +122,8 @@ router.put('/:userId/:productId', requireAuth, authorizeCartAccess, async (req, 
 
         user.cart = user.cart.filter(item => item.quantity > 0);
 
-        await user.save();
+        const saved = await User.updateOne({ _id: user._id, __v: user.__v }, { $set: { cart: user.cart.toObject() }, $inc: { __v: 1 } });
+        if (saved.modifiedCount !== 1) return res.status(409).json({ message: 'A sacola foi atualizada em outra aba. Confira os itens e tente novamente.' });
         const populatedUser = await User.findById(req.params.userId).populate('cart.product');
         res.status(200).json(populatedUser.cart);
     } catch (error) {
@@ -164,6 +136,7 @@ router.put('/:userId/:productId', requireAuth, authorizeCartAccess, async (req, 
 router.put('/:userId/:productId/subscribe', requireAuth, authorizeCartAccess, async (req, res) => {
     const { isSubscribed } = req.body;
     try {
+        if (typeof isSubscribed !== 'boolean') return res.status(400).json({ message: 'Opção de assinatura inválida.' });
         const user = await User.findById(req.params.userId);
         if (!user) return res.status(404).json({ message: 'Utilizador não encontrado.' });
 
