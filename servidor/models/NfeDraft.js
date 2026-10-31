@@ -84,6 +84,7 @@ const XmlSnapshotSchema = new mongoose.Schema(
 const NfeDraftSchema = new mongoose.Schema(
   {
     code: { type: Number, required: true, unique: true, index: true },
+    sourceReceivingReceiptId: { type: mongoose.Schema.Types.ObjectId, ref: 'ReceivingReceipt', unique: true, sparse: true, immutable: true },
     status: { type: String, default: 'draft' },
     header: {
       code: { type: String, default: '' },

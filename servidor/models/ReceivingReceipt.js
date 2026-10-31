@@ -54,7 +54,9 @@ const eventSchema = new Schema({
 const schema = new Schema({
   code: { type: String, required: true, unique: true },
   version: { type: Number, required: true, default: 1 },
-  status: { type: String, enum: ['draft', 'approved', 'test_approved', 'cancelled'], default: 'draft' },
+  status: { type: String, enum: ['draft', 'forwarded', 'approved', 'test_approved', 'cancelled'], default: 'draft' },
+  purchaseDraftId: { type: Schema.Types.ObjectId, ref: 'NfeDraft', default: null },
+  purchaseDraftCode: { type: Number, default: null },
   testMode: { type: Boolean, default: true },
   companyId: { type: Schema.Types.ObjectId, ref: 'Store', required: true },
   depositId: { type: Schema.Types.ObjectId, ref: 'Deposit', required: true },

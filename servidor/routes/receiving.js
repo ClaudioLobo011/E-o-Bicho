@@ -85,7 +85,7 @@ router.get('/catalog', wrap(async (req, res) => {
 router.get('/receipts', wrap(async (req, res) => {
   const filter = service.companyFilter(req);
   if (req.query.status) {
-    if (!['draft', 'approved', 'test_approved', 'cancelled'].includes(req.query.status)) service.fail(400, 'Situação inválida.');
+    if (!['draft', 'forwarded', 'approved', 'test_approved', 'cancelled'].includes(req.query.status)) service.fail(400, 'Situação inválida.');
     filter.status = req.query.status;
   }
   const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 100));

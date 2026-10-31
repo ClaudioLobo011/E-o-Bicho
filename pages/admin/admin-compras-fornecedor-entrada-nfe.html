@@ -9271,6 +9271,7 @@
         setApproveButtonState(false);
 
         const resetDraftState = () => {
+          if (nfeTypeSelect) nfeTypeSelect.disabled = false;
           currentDraftId = '';
           currentDraftCode = '';
           applyDraftCodeToInput('');
@@ -9458,6 +9459,10 @@
             lastNfeData.draftCode = currentDraftCode;
           }
           setDraftStatus(draft.status);
+          if (draft.sourceReceivingReceiptId && nfeTypeSelect) {
+            nfeTypeSelect.value = 'RECIBO';
+            nfeTypeSelect.disabled = true;
+          }
         };
 
         const PAYMENT_METHOD_DESCRIPTIONS = {
@@ -21111,6 +21116,19 @@ ${'</ht' + 'ml>'}`;
         activateImportTab('pending');
         updateImportMode();
         refreshWorkspaceReadiness();
+        const linkedDraftId = new URLSearchParams(window.location.search).get('draftId');
+        if (linkedDraftId && /^[a-f0-9]{24}$/i.test(linkedDraftId)) {
+          (async () => {
+            try {
+              await Promise.all([loadCompaniesFromApi(), loadSuppliersFromApi()]);
+              const draft = await fetchDraftById(linkedDraftId);
+              await applyDraftDataToForm(draft);
+              notify('Recibo carregado. Confira os dados e aprove a entrada nesta tela.', 'success');
+            } catch (error) {
+              notify(error.message || 'Não foi possível abrir o Recibo. Busque-o na lista de entradas.', 'error');
+            }
+          })();
+        }
       }
     });
   </script>

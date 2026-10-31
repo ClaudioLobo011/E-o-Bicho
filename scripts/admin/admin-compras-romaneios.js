@@ -312,7 +312,7 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
   const money = (value) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   const date = (value) => value ? new Date(value).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' }) : '—';
   const nameOf = (entity) => entity?.nomeFantasia || entity?.nome || entity?.fantasyName || entity?.legalName || entity?.razaoSocial || entity?.name || 'Sem nome';
-  const isClosed = () => !!state.receipt && ['approved', 'test_approved', 'cancelled'].includes(state.receipt.status);
+  const isClosed = () => !!state.receipt && ['forwarded', 'approved', 'test_approved', 'cancelled'].includes(state.receipt.status);
   const hasDirty = () => !!(state.dirty.size || state.headerDirty.size || state.deleted.size);
   const lineById = (id) => state.receipt?.lines?.find((line) => text(line.id) === text(id));
   const queuedEntries = () => state.queue.filter((item) => !item.status || item.status === 'pending');
@@ -359,7 +359,7 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
   }
   function showDialog(id) { const dialog = $(id); if (!dialog.open) dialog.showModal(); }
   function statusBadge(receipt) {
-    const item = ({ draft: ['Em conferência', 'amber'], approved: ['Entrada concluída', 'green'], test_approved: ['Teste concluído', 'blue'], cancelled: ['Cancelado', 'red'] })[receipt.status] || [receipt.status || 'Rascunho', 'amber'];
+    const item = ({ draft: ['Em conferência', 'amber'], forwarded: ['Recibo gerado', 'blue'], approved: ['Entrada concluída', 'green'], test_approved: ['Teste concluído', 'blue'], cancelled: ['Cancelado', 'red'] })[receipt.status] || [receipt.status || 'Rascunho', 'amber'];
     return `<span class="rr-badge is-${item[1]}">${escape(item[0])}</span>`;
   }
   function setOptions(element, rows, empty, selected) {
@@ -525,7 +525,7 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
     const deposit = state.meta.deposits.find((row) => idOf(row) === idOf(receipt.depositId));
     $('receipt-title').textContent = receipt.supplierName || (supplier && nameOf(supplier)) || receipt.reference || 'Conferência de mercadoria';
     $('receipt-status').outerHTML = statusBadge(receipt).replace('<span ', '<span id="receipt-status" ');
-    $('receipt-mode').textContent = receipt.testMode ? 'Teste · sem movimentação' : 'Entrada real';
+    $('receipt-mode').textContent = receipt.testMode ? 'Teste · sem movimentação' : 'Recibo via Entrada de NF-e';
     $('receipt-mode').className = `rr-badge ${receipt.testMode ? 'is-blue' : 'is-amber'}`;
     $('receipt-metadata-summary').textContent = [company && nameOf(company), deposit && nameOf(deposit), receipt.reference].filter(Boolean).join(' · ');
     if (!document.activeElement?.matches('[data-header-field]')) {
@@ -597,10 +597,11 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
   function updateSaveState() {
     if (!state.receipt) return;
     const queue = pendingQueue(), rejected = rejectedQueue();
-    $('save-status').textContent = isClosed() ? 'Recebimento concluído' : state.saving ? 'Salvando…' : state.conflicts.size ? 'Conflitos para conferir' : hasDirty() ? 'Alterações ainda não salvas' : 'Tudo salvo no servidor';
-    $('save-hint').textContent = rejected.length ? `${rejected.length} leitura(s) rejeitada(s). Resolva ou descarte a tentativa antes de concluir.` : queue.length ? `${queue.length} leitura(s) aguardando envio.` : state.receipt.testMode ? 'Modo de teste: a conclusão não movimenta estoque.' : 'Entrada real: o estoque será movimentado somente na conclusão.';
+    $('save-status').textContent = state.receipt.status === 'forwarded' ? 'Recibo gerado na Entrada de NF-e' : isClosed() ? 'Recebimento concluído' : state.saving ? 'Salvando…' : state.conflicts.size ? 'Conflitos para conferir' : hasDirty() ? 'Alterações ainda não salvas' : 'Tudo salvo no servidor';
+    $('save-hint').textContent = rejected.length ? `${rejected.length} leitura(s) rejeitada(s). Resolva ou descarte a tentativa antes de concluir.` : queue.length ? `${queue.length} leitura(s) aguardando envio.` : state.receipt.testMode ? 'Modo de teste: a conclusão não movimenta estoque.' : 'O estoque só será movimentado ao aprovar o Recibo na Entrada de NF-e.';
     $('save-receipt').disabled = isClosed() || state.saving || !hasDirty() || !!state.conflicts.size;
-    $('review-receipt').disabled = isClosed() || state.saving || !!state.conflicts.size || !!queue.length;
+    $('review-receipt').textContent = state.receipt?.purchaseDraftId ? 'Abrir Recibo na Entrada de NF-e' : 'Revisar e gerar Recibo';
+    $('review-receipt').disabled = (isClosed() && !state.receipt?.purchaseDraftId) || state.saving || !!state.conflicts.size || !!queue.length;
     $('scan-queue-status').textContent = `${queue.length ? `${queue.length} leitura(s) salvas neste navegador, aguardando envio` : 'Sem leituras aguardando envio'}${rejected.length ? ` · ${rejected.length} rejeitada(s) para revisão` : ''}`;
     renderLocalReadHistory();
     $('receipt-sync-status').textContent = state.lastSync ? `Atualizado às ${state.lastSync.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' })}${hasDirty() ? ' · edições preservadas' : ''}` : 'Atualização automática durante a conferência';
@@ -632,7 +633,12 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
       if (isClosed()) throw new Error('Este recebimento já foi encerrado em outra sessão. Suas edições locais podem ser exportadas para conferência.');
       validateLines();
       const snapshot = clone(state.receipt), dirty = new Map([...state.dirty].map(([lineId, fields]) => [lineId, new Set(fields)])), headers = new Set(state.headerDirty), deleted = [...state.deleted];
-      const body = { version: state.receipt.version, lines: [...dirty.keys()].map((lineId) => clone(lineById(lineId))).filter(Boolean), deleteLineIds: deleted };
+      const body = { version: state.receipt.version, lines: [...dirty.keys()].map((lineId) => {
+        const line = clone(lineById(lineId));
+        // A default null is not an intentional unlink: let the server match the supplier code.
+        if (line && !dirty.get(lineId).has('productId')) delete line.productId;
+        return line;
+      }).filter(Boolean), deleteLineIds: deleted };
       for (const field of headers) body[field] = state.receipt[field];
       const result = await api(`/receipts/${encodeURIComponent(id)}`, { method: 'PATCH', body });
       if (state.receipt?._id !== id) return true;
@@ -1021,6 +1027,11 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
   }
   function reviewIssues() {
     const lines = state.receipt.lines, issues = [];
+    if (!state.receipt.testMode) {
+      if (!state.receipt.supplierId) issues.push('Selecione um fornecedor cadastrado.');
+      if (lines.some(isKit)) issues.push('Kits precisam de custos individuais das peças antes de gerar o Recibo.');
+      if (lines.some(line => line.receivedQuantity > 0 && line.unitCost == null)) issues.push('Informe o custo de todas as linhas recebidas.');
+    }
     if (!state.receipt.testMode && state.meta.canApproveStock !== true) issues.push('Sua conta pode conferir o recebimento; a entrada real precisa ser concluída por um administrador.');
     if (!lines.length) issues.push('Adicione pelo menos uma linha.');
     if (!lines.some((line) => Number(line.receivedQuantity) > 0)) issues.push('Informe pelo menos uma quantidade recebida maior que zero.');
@@ -1033,23 +1044,27 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
     return issues;
   }
   async function openReview() {
+    if (state.receipt?.purchaseDraftId) {
+      location.href = `admin-compras-fornecedor-entrada-nfe.html?draftId=${encodeURIComponent(state.receipt.purchaseDraftId)}`;
+      return;
+    }
     await saveReceipt(); await refreshReceipt();
     state.products = null; state.productIndex = null;
     await loadProducts(); renderDetail();
     const receipt = state.receipt, lines = receipt.lines, differences = lines.filter(hasDifference), issues = reviewIssues();
     state.reviewVersion = receipt.version;
-    $('review-title').textContent = receipt.testMode ? 'Concluir teste do recebimento' : 'Confirmar entrada no estoque';
+    $('review-title').textContent = receipt.testMode ? 'Concluir teste do recebimento' : 'Gerar Recibo na Entrada de NF-e';
     const deposit = state.meta.deposits.find((row) => idOf(row) === idOf(receipt.depositId));
     const total = lines.reduce((sum, line) => sum + Number(line.receivedQuantity || 0) * Number(line.unitCost || 0), 0);
-    $('review-summary').innerHTML = `<div class="rr-review-card"><strong>${escape(receipt.code || 'Recebimento')} · ${receipt.testMode ? 'MODO DE TESTE' : 'ENTRADA REAL'}</strong><p>Depósito: ${escape((deposit && nameOf(deposit)) || receipt.depositId)}</p><p>${lines.length} linha(s) · ${differences.length} diferença(s) de quantidade · Custo informado: ${money(total)}</p><p>${receipt.testMode ? 'A conclusão registra o teste e não movimenta o estoque.' : 'As quantidades recebidas, multiplicadas pelas conversões conferidas, serão adicionadas ao estoque do depósito selecionado.'}</p><p>O recebimento não altera o preço de venda nem cria contas a pagar.</p></div>`;
+    $('review-summary').innerHTML = `<div class="rr-review-card"><strong>${escape(receipt.code || 'Recebimento')} · ${receipt.testMode ? 'MODO DE TESTE' : 'RECIBO PENDENTE'}</strong><p>Depósito: ${escape((deposit && nameOf(deposit)) || receipt.depositId)}</p><p>${lines.length} linha(s) · ${differences.length} diferença(s) de quantidade · Custo informado: ${money(total)}</p><p>${receipt.testMode ? 'A conclusão registra o teste e não movimenta o estoque.' : 'Será gerado um Recibo na Entrada de NF-e com produtos, custos, quantidades e fatores. O estoque só será movimentado quando você aprovar nessa outra tela; depois poderá usar Alterar preços.'}</p><p>Gerar o Recibo não altera estoque, custo do cadastro, preço de venda nem contas a pagar.</p></div>`;
     const kits = lines.filter(isKit);
     if (kits.length) $('review-summary').insertAdjacentHTML('beforeend', `<div class="rr-review-card"><strong>Peças dos kits para o estoque</strong>${kits.map((line) => `<p><b>${escape(line.description)}</b> · ${fmt(line.receivedQuantity)} kit(s)<br>${stockProjection(line).map((part) => `${fmt(part.quantity)} × ${escape(part.productName)}`).join(' · ')}</p>`).join('')}<p>O kit não entra como produto separado. O custo permanece no documento, sem rateio nos cadastros.</p></div>`);
     $('review-issues').innerHTML = issues.length ? `<div class="rr-review-issues"><strong>Resolva estas pendências antes de concluir:</strong>${issues.slice(0, 30).map((issue) => `<p>${escape(issue)}</p>`).join('')}${issues.length > 30 ? `<p>E mais ${issues.length - 30} pendência(s).</p>` : ''}</div>` : differences.length ? `<div class="rr-review-issues">${differences.map((line) => `<p>${escape(line.description)}: esperado ${fmt(line.expectedQuantity)}, recebido ${fmt(line.receivedQuantity)}.</p>`).join('')}</div>` : '';
     $('accept-differences').checked = false; $('accept-differences').closest('label').hidden = differences.length === 0;
     $('learn-supplier-links').checked = false; $('learn-supplier-links').disabled = receipt.testMode || !receipt.supplierId;
     $('learn-barcodes').checked = false; $('learn-barcodes').disabled = receipt.testMode;
-    $('confirm-approval').checked = false; $('confirm-approval-label').textContent = receipt.testMode ? 'Conferi as linhas e quero concluir este teste sem alterar o estoque.' : 'Conferi produtos, quantidades e conversões, e autorizo esta entrada no depósito indicado.';
-    $('approve-receipt').textContent = receipt.testMode ? 'Concluir teste' : 'Confirmar entrada no estoque';
+    $('confirm-approval').checked = false; $('confirm-approval-label').textContent = receipt.testMode ? 'Conferi as linhas e quero concluir este teste sem alterar o estoque.' : 'Conferi os dados e autorizo gerar um Recibo pendente de aprovação, sem movimentar estoque agora.';
+    $('approve-receipt').textContent = receipt.testMode ? 'Concluir teste' : 'Gerar Recibo na Entrada de NF-e';
     updateApproval(); showDialog('review-dialog');
   }
   function updateApproval() { if (!state.receipt) return; $('approve-receipt').disabled = !($('confirm-approval').checked && state.reviewVersion === state.receipt.version && !reviewIssues().length && (!state.receipt.lines.some(hasDifference) || $('accept-differences').checked)); }
@@ -1057,7 +1072,8 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
     if (!$('confirm-approval').checked || state.reviewVersion !== state.receipt.version || reviewIssues().length) throw new Error('A revisão precisa ser conferida novamente antes de concluir.');
     const result = await api(`/receipts/${encodeURIComponent(state.receipt._id)}/approve`, { method: 'POST', body: { version: state.reviewVersion, acceptDifferences: $('accept-differences').checked, learnSupplierLinks: $('learn-supplier-links').checked && !state.receipt.testMode, learnBarcodes: $('learn-barcodes').checked && !state.receipt.testMode } });
     state.receipt = result.receipt; state.baseline = clone(result.receipt); state.dirty.clear(); state.headerDirty.clear(); state.deleted.clear(); persistDraft();
-    $('review-dialog').close(); renderDetail(); notify(state.receipt.testMode ? 'Teste concluído. O estoque não foi movimentado.' : 'Recebimento concluído e entrada registrada no estoque.', 'success', true);
+    $('review-dialog').close(); renderDetail(); notify(state.receipt.testMode ? 'Teste concluído. O estoque não foi movimentado.' : 'Recibo gerado. Aprove na Entrada de NF-e; o estoque ainda não foi movimentado.', 'success', true);
+    if (state.receipt.purchaseDraftId) await openReview();
   }
   function bind() {
     document.querySelectorAll('[data-close-dialog]').forEach((button) => button.addEventListener('click', () => button.closest('dialog').close()));
@@ -1075,8 +1091,9 @@ Preencha lines somente com produtos efetivamente legíveis nas fotos. Não use o
     document.querySelectorAll('[data-header-field]').forEach((node) => node.addEventListener('change', () => {
       const field = node.dataset.headerField; markHeader(field, node.type === 'checkbox' ? node.checked : node.value || null);
       if (field === 'companyId') { depositOptions('detail'); markHeader('depositId', null); }
-      if (field === 'testMode' && !node.checked) notify('Este recebimento passará a ser uma entrada real. O estoque só será alterado após a confirmação final.', 'warning', true);
+      if (field === 'testMode' && !node.checked) notify('Este romaneio gerará um Recibo. O estoque só será alterado ao aprovar na Entrada de NF-e.', 'warning', true);
       renderDetail();
+      if (field === 'supplierId') action(null, saveReceipt);
     }));
     $('line-search').addEventListener('input', renderLines); $('line-filter').addEventListener('change', renderLines);
     $('receipt-lines').addEventListener('input', (event) => {

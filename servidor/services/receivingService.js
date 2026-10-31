@@ -5,9 +5,9 @@ const Product = require('../models/Product');
 const Store = require('../models/Store');
 const Deposit = require('../models/Deposit');
 const Supplier = require('../models/Supplier');
-const InventoryMovementLog = require('../models/InventoryMovementLog');
+const NfeDraft = require('../models/NfeDraft');
 const BarcodeLink = require('../models/ReceivingBarcodeLink');
-const { adjustProductStockForDeposit, flushDeferredFractionalStockRefreshes } = require('../utils/inventoryStock');
+const { buildReceivingPurchaseDraft } = require('./receivingPurchaseDraft');
 
 const MAX_LINES = 1000;
 const MAX_EVENTS = 10000;
@@ -515,9 +515,9 @@ async function learnBarcodeLinks(req, receipt, session) {
 }
 async function approveReceipt(req, id, body = {}) {
   const initial = await findReceipt(req, id);
-  if (['approved', 'test_approved'].includes(initial.status)) return initial;
+  if (['forwarded', 'approved', 'test_approved'].includes(initial.status)) return initial;
   requireDraft(initial); requireVersion(initial, body.version);
-  if (!initial.testMode && !canApproveStock(req)) fail(403, 'A entrada de estoque precisa ser confirmada por um gestor no painel administrativo.', 'APPROVAL_REQUIRES_MANAGER');
+  if (!initial.testMode && !canApproveStock(req)) fail(403, 'O envio para Entrada de NF-e precisa ser confirmado por um gestor no painel administrativo.', 'APPROVAL_REQUIRES_MANAGER');
   if (initial.testMode) {
     await validateApproval(req, initial, body);
     const result = await Receipt.findOneAndUpdate({ _id: id, status: 'draft', version: body.version, testMode: true }, {
@@ -531,38 +531,37 @@ async function approveReceipt(req, id, body = {}) {
   try {
     await session.withTransaction(async () => {
       const receipt = await findReceipt(req, id, { session });
-      if (receipt.status === 'approved') { result = receipt; return; }
+      if (['forwarded', 'approved'].includes(receipt.status)) { result = receipt; return; }
       requireDraft(receipt); requireVersion(receipt, body.version);
       if (receipt.testMode) fail(409, 'O modo de teste mudou. Atualize antes de aprovar.', 'VERSION_CONFLICT');
-      const { supplier, quantities, kitQuantities } = await validateApproval(req, receipt, body, session);
+      const { supplier, products } = await validateApproval(req, receipt, body, session);
+      if (!supplier) fail(400, 'Selecione um fornecedor cadastrado antes de enviar para Entrada de NF-e.', 'SUPPLIER_REQUIRED');
+      if (receipt.lines.some(isKit)) fail(400, 'Este romaneio contém kits. Defina os custos individuais das peças antes de gerar o Recibo; o sistema não presume o rateio.', 'KIT_COST_ALLOCATION_REQUIRED');
+      if (receipt.lines.some(line => line.receivedQuantity > 0 && (line.unitCost == null || !Number.isFinite(line.unitCost)))) fail(400, 'Informe o custo de todas as linhas recebidas antes de gerar o Recibo.', 'COST_REQUIRED');
       if (body.learnBarcodes === true) await learnBarcodeLinks(req, receipt, session);
       if (body.learnSupplierLinks === true) await learnSupplierLinks(receipt, supplier, session);
-      const deferredFractionalRefresh = { productIds: new Set(), childProductIds: new Set() };
-      const appliedProducts = new Set();
-      const stockEntries = [...Array.from(quantities, ([productId, quantity]) => ({ productId, quantity, fromKit: false })),
-        ...Array.from(kitQuantities, ([productId, quantity]) => ({ productId, quantity, fromKit: true }))];
-      for (const { productId, quantity, fromKit } of stockEntries) {
-        if (quantity <= 0) continue;
-        const movement = await adjustProductStockForDeposit({ productId, depositId: receipt.depositId, quantity, session,
-          cascadeFractional: !fromKit, deferredFractionalRefresh, movementContext: {
-            companyId: receipt.companyId, operation: 'entrada', sourceModule: 'compras.fornecedor', sourceScreen: 'Recebimento de romaneio',
-            sourceAction: 'aprovar_romaneio', sourceType: 'receiving_romaneio_approved', referenceDocument: String(receipt._id),
-            userId: req.user.id, userEmail: req.user.email || '', metadata: { receiptId: String(receipt._id), code: receipt.code, documentType: 'romaneio', ...(fromKit ? { fromKit: true } : {}) },
-          } });
-        if (!movement?.updated) fail(500, 'Não foi possível concluir todas as movimentações. Nenhuma entrada foi confirmada.');
-        const audit = await InventoryMovementLog.exists({ product: productId, sourceType: 'receiving_romaneio_approved', referenceDocument: String(receipt._id) }).session(session);
-        if (!audit) fail(500, 'Não foi possível registrar o histórico. Nenhuma entrada foi confirmada.');
-        appliedProducts.add(productId);
+      // Lock the source before allocating a number or creating the destination.
+      // Concurrent/retried requests reuse the same draft, never post inventory here.
+      const locked = await Receipt.updateOne({ _id: id, version: receipt.version, status: 'draft' }, { $inc: { version: 1 } }, { session });
+      if (!locked.modifiedCount) fail(409, 'O recebimento mudou. Atualize antes de enviar.', 'VERSION_CONFLICT');
+      let draft = await NfeDraft.findOne({ sourceReceivingReceiptId: receipt._id }).session(session);
+      if (!draft) {
+        const last = await NfeDraft.findOne().sort({ code: -1 }).select('code').session(session).lean();
+        const code = (last?.code || 0) + 1;
+        [draft] = await NfeDraft.create([buildReceivingPurchaseDraft(receipt, supplier, products, code, req.user.id)], { session });
       }
-      await flushDeferredFractionalStockRefreshes(deferredFractionalRefresh, { session });
-      result = await Receipt.findOneAndUpdate({ _id: id, version: body.version, status: 'draft' }, {
-        $set: { status: 'approved', approvedAt: new Date(), approvedBy: req.user.id, updatedBy: req.user.id,
-          approval: { stockApplied: true, appliedProducts: appliedProducts.size, acceptDifferences: body.acceptDifferences === true, learnedSupplierLinks: body.learnSupplierLinks === true, learnedBarcodes: body.learnBarcodes === true } },
-        $inc: { version: 1 },
+      result = await Receipt.findOneAndUpdate({ _id: id, version: body.version + 1, status: 'draft' }, {
+        $set: { status: 'forwarded', purchaseDraftId: draft._id, purchaseDraftCode: draft.code, approvedAt: new Date(), approvedBy: req.user.id, updatedBy: req.user.id,
+          approval: { stockApplied: false, acceptDifferences: body.acceptDifferences === true, learnedSupplierLinks: body.learnSupplierLinks === true, learnedBarcodes: body.learnBarcodes === true } },
       }, { session, new: true }).lean();
       if (!result) fail(409, 'O recebimento mudou. Atualize antes de aprovar.', 'VERSION_CONFLICT');
     });
     return result;
+  } catch (error) {
+    if (error.code === 11000 && error.keyPattern?.code) {
+      fail(409, 'Outra entrada reservou esse número. Tente gerar o Recibo novamente; nenhum estoque foi movimentado.', 'DRAFT_NUMBER_CONFLICT');
+    }
+    throw error;
   } finally { await session.endSession(); }
 }
 

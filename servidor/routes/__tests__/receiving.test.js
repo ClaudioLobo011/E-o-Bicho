@@ -7,6 +7,7 @@ const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const { MongoMemoryReplSet } = require('mongodb-memory-server');
 const Receipt = require('../../models/ReceivingReceipt');
+const NfeDraft = require('../../models/NfeDraft');
 const Device = require('../../models/ReceivingDevice');
 const User = require('../../models/User');
 const Store = require('../../models/Store');
@@ -21,15 +22,16 @@ const receivingService = require('../../services/receivingService');
 
 let replica; let fixture;
 const app = express(); app.use(express.json()); app.use('/api/receiving', router);
+app.use('/api/purchase-test', (req, res, next) => { req.user = { id: String(fixture.admin._id), role: 'admin' }; next(); }, require('../purchaseNfeDrafts'));
 const api = (method, url, token = fixture.token) => request(app)[method](`/api/receiving${url}`).set('Authorization', `Bearer ${token}`);
 const event = (barcode = '000123', quantity = 1, rest = {}) => ({ eventId: crypto.randomUUID(), mode: 'count', barcode, quantity, createdAt: '2026-10-15T12:00:00.000Z', ...rest });
-const create = async (rest = {}, token) => (await api('post', '/receipts', token).send({ companyId: String(fixture.company._id), depositId: String(fixture.deposit._id), ...rest }).expect(201)).body.receipt;
+const create = async (rest = {}, token) => (await api('post', '/receipts', token).send({ companyId: String(fixture.company._id), depositId: String(fixture.deposit._id), ...(rest.testMode === false ? { supplierId: String(fixture.supplier._id) } : {}), ...rest }).expect(201)).body.receipt;
 async function readyReceipt({ testMode = true, quantity = 2, factor = 1, expectedQuantity = null, supplierCode = '' } = {}) {
   let receipt = await create({ testMode, supplierId: String(fixture.supplier._id) });
   receipt = (await api('post', `/receipts/${receipt._id}/events`).send({ events: [event('000123', quantity)] }).expect(200)).body.receipt;
   const line = receipt.lines[0];
   receipt = (await api('patch', `/receipts/${receipt._id}`).send({ version: receipt.version,
-    lines: [{ id: line.id, stockFactor: factor, expectedQuantity, supplierCode, reviewed: true, conversionConfirmed: true }] }).expect(200)).body.receipt;
+    lines: [{ id: line.id, unitCost: 9, stockFactor: factor, expectedQuantity, supplierCode, reviewed: true, conversionConfirmed: true }] }).expect(200)).body.receipt;
   return receipt;
 }
 const component = (label, quantityPerKit = 1, product = null, barcode = product?.codbarras || '') => ({
@@ -55,11 +57,11 @@ describe('receiving persisted integration', { concurrency: false }, () => {
     process.env.JWT_SECRET = 'receiving-test-secret-only';
     replica = await MongoMemoryReplSet.create({ replSet: { count: 1, storageEngine: 'wiredTiger' } });
     await mongoose.connect(replica.getUri(), { dbName: 'receiving-tests' });
-    await Promise.all([Receipt.init(), Device.init(), Product.init(), Store.init(), Deposit.init(), User.init(), Supplier.init(), Movement.init(), BarcodeLink.init()]);
+    await Promise.all([NfeDraft.init(), Receipt.init(), Device.init(), Product.init(), Store.init(), Deposit.init(), User.init(), Supplier.init(), Movement.init(), BarcodeLink.init()]);
   });
   after(async () => { await mongoose.disconnect(); if (replica) await replica.stop(); });
   beforeEach(async () => {
-    await Promise.all([Receipt, Device, Product, Store, Deposit, User, Supplier, Movement, BarcodeLink, AccountPayable].map(model => model.deleteMany({})));
+    await Promise.all([NfeDraft, Receipt, Device, Product, Store, Deposit, User, Supplier, Movement, BarcodeLink, AccountPayable].map(model => model.deleteMany({})));
     const company = await Store.create({ nome: 'Loja de teste' });
     const otherCompany = await Store.create({ nome: 'Outra loja' });
     const deposit = await Deposit.create({ codigo: 'D1', nome: 'Depósito teste', empresa: company._id });
@@ -240,25 +242,59 @@ describe('receiving persisted integration', { concurrency: false }, () => {
     assert.equal(await Movement.countDocuments(), 0);
   });
 
-  test('real approval applies conversion once, is retry-safe and preserves prices', async () => {
+  test('forwarding creates one Recibo with costs and factors, is retry-safe and never posts stock', async () => {
     const receipt = await readyReceipt({ testMode: false, quantity: 2, factor: 12, supplierCode: 'REF123' });
     const result = await api('post', `/receipts/${receipt._id}/approve`).send({ version: receipt.version, learnSupplierLinks: true }).expect(200);
-    assert.equal(result.body.receipt.status, 'approved');
+    assert.equal(result.body.receipt.status, 'forwarded');
     await api('post', `/receipts/${receipt._id}/approve`).send({ version: receipt.version, learnSupplierLinks: true }).expect(200);
     const product = await Product.findById(fixture.product._id).lean();
-    assert.equal(product.stock, 34); assert.equal(product.custo, 9); assert.equal(product.venda, 15);
+    assert.equal(product.stock, 10); assert.equal(product.custo, 9); assert.equal(product.venda, 15);
     assert.equal(product.fornecedores[0].codigoProduto, 'REF123');
     assert.equal(product.fornecedores[0].valorCalculo, 12);
-    assert.equal(await Movement.countDocuments({ referenceDocument: receipt._id }), 1);
+    assert.equal(await Movement.countDocuments({ referenceDocument: receipt._id }), 0);
+    assert.equal(await NfeDraft.countDocuments(), 1);
+    const draft = await NfeDraft.findById(result.body.receipt.purchaseDraftId).lean();
+    assert.equal(draft.status, 'draft'); assert.equal(draft.header.type, 'RECIBO');
+    assert.equal(draft.payload.header.entryType, 'revenda');
+    assert.equal(draft.payload.items[0].quantity, 2);
+    assert.equal(draft.payload.items[0].entryStockQuantity, 24);
+    assert.equal(draft.payload.items[0].conversion, 12);
+    assert.equal(draft.payload.items[0].unitCostWithTaxes, 0.75);
+    assert.equal(draft.payload.totals.totalValue, 18);
+    assert.equal(draft.companyId.toString(), fixture.company._id.toString());
+    assert.equal(draft.payload.selection.depositId, String(fixture.deposit._id));
   });
 
-  test('parallel real approval commits inventory only once', async () => {
+  test('parallel forwarding creates only one destination and no inventory', async () => {
     const receipt = await readyReceipt({ testMode: false, quantity: 3 });
     const responses = await Promise.all(Array.from({ length: 2 }, () => api('post', `/receipts/${receipt._id}/approve`).send({ version: receipt.version })));
     assert.ok(responses.every(response => [200, 409].includes(response.status)), JSON.stringify(responses.map(response => response.body)));
     assert.ok(responses.some(response => response.status === 200));
-    assert.equal((await Product.findById(fixture.product._id).lean()).stock, 13);
-    assert.equal(await Movement.countDocuments(), 1);
+    assert.equal((await Product.findById(fixture.product._id).lean()).stock, 10);
+    assert.equal(await Movement.countDocuments(), 0);
+    assert.equal(await NfeDraft.countDocuments(), 1);
+  });
+
+  test('generated Recibo can be edited then approved only in purchase entry, once', async () => {
+    const receipt = await readyReceipt({ testMode: false, quantity: 2, factor: 12 });
+    const forwarded = await api('post', `/receipts/${receipt._id}/approve`).send({ version: receipt.version }).expect(200);
+    const draftId = forwarded.body.receipt.purchaseDraftId;
+    const draft = await NfeDraft.findById(draftId).lean();
+    const edited = await request(app).put(`/api/purchase-test/${draftId}`).send({ ...draft.payload, header: { ...draft.payload.header, type: 'NF', model: '55' } }).expect(200);
+    assert.equal(edited.body.draft.header.type, 'RECIBO');
+    assert.equal(edited.body.draft.payload.header.type, 'RECIBO');
+    assert.equal((await Product.findById(fixture.product._id).lean()).stock, 10);
+    const approved = await request(app).post(`/api/purchase-test/${draftId}/approve`).send({ ...draft.payload, header: { ...draft.payload.header, type: 'NF' } }).expect(200);
+    assert.equal(approved.body.draft.status, 'approved');
+    assert.equal(approved.body.draft.header.type, 'RECIBO');
+    await request(app).put(`/api/purchase-test/${draftId}`).send(draft.payload).expect(409);
+    assert.equal((await Product.findById(fixture.product._id).lean()).stock, 34);
+    await request(app).post(`/api/purchase-test/${draftId}/approve`).send({}).expect(409);
+    assert.equal((await Product.findById(fixture.product._id).lean()).stock, 34);
+    assert.equal(await NfeDraft.countDocuments(), 1);
+    assert.equal(await AccountPayable.countDocuments(), 0);
+    await api('post', `/receipts/${receipt._id}/approve`).send({ version: receipt.version }).expect(200);
+    assert.equal((await Product.findById(fixture.product._id).lean()).stock, 34);
   });
 
   test('supplier reference collision rolls back the entire real approval', async () => {
@@ -267,6 +303,15 @@ describe('receiving persisted integration', { concurrency: false }, () => {
     await api('post', `/receipts/${receipt._id}/approve`).send({ version: receipt.version, learnSupplierLinks: true }).expect(409);
     assert.equal((await Product.findById(fixture.product._id).lean()).stock, 10);
     assert.equal((await Receipt.findById(receipt._id).lean()).status, 'draft');
+    assert.equal(await Movement.countDocuments(), 0);
+  });
+
+  test('legacy posted romaneios never generate a second inventory entry', async () => {
+    const receipt = await readyReceipt({ testMode: false });
+    await Receipt.updateOne({ _id: receipt._id }, { $set: { status: 'approved' } });
+    const result = await api('post', `/receipts/${receipt._id}/approve`).send({ version: receipt.version }).expect(200);
+    assert.equal(result.body.receipt.status, 'approved');
+    assert.equal(await NfeDraft.countDocuments(), 0);
     assert.equal(await Movement.countDocuments(), 0);
   });
 
@@ -297,6 +342,7 @@ describe('receiving persisted integration', { concurrency: false }, () => {
     assert.equal(line.stockFactor, 12); assert.equal(line.reviewed, false); assert.equal(line.conversionConfirmed, false);
   });
 
+
   test('supplier references include inactive draft products but never hide an ambiguous active match', async () => {
     const link = { fornecedor: 'Fornecedor', documentoFornecedor: fixture.supplier.cnpj, codigoProduto: 'REF50', unidadeEntrada: 'CX', tipoCalculo: 'Multiplicar', valorCalculo: 50 };
     await Product.updateOne({ _id: fixture.product._id }, { $set: { inativo: true }, $push: { fornecedores: link } });
@@ -319,7 +365,7 @@ describe('receiving persisted integration', { concurrency: false }, () => {
   test('remembering a barcode creates a receiving-only mapping and later catalog collisions block it', async () => {
     let receipt = await create({ testMode: false });
     receipt = (await api('post', `/receipts/${receipt._id}/events`).send({ events: [event('NEWCODE', 2)] }).expect(200)).body.receipt;
-    receipt = (await api('patch', `/receipts/${receipt._id}`).send({ version: receipt.version, lines: [{ id: receipt.lines[0].id, productId: String(fixture.product._id), reviewed: true, conversionConfirmed: true }] }).expect(200)).body.receipt;
+    receipt = (await api('patch', `/receipts/${receipt._id}`).send({ version: receipt.version, lines: [{ id: receipt.lines[0].id, unitCost: 9, productId: String(fixture.product._id), reviewed: true, conversionConfirmed: true }] }).expect(200)).body.receipt;
     await api('post', `/receipts/${receipt._id}/approve`).send({ version: receipt.version, learnBarcodes: true }).expect(200);
     assert.equal(await BarcodeLink.countDocuments({ barcode: 'NEWCODE', productId: fixture.product._id }), 1);
     const product = await Product.findById(fixture.product._id).lean();
@@ -340,13 +386,14 @@ describe('receiving persisted integration', { concurrency: false }, () => {
     for (const product of [fixture.product, fixture.otherProduct]) {
       let receipt = await create({ testMode: false });
       receipt = (await api('post', `/receipts/${receipt._id}/events`).send({ events: [event('SHARED')] }).expect(200)).body.receipt;
-      receipt = (await api('patch', `/receipts/${receipt._id}`).send({ version: receipt.version, lines: [{ id: receipt.lines[0].id, productId: String(product._id), reviewed: true, conversionConfirmed: true }] }).expect(200)).body.receipt;
+      receipt = (await api('patch', `/receipts/${receipt._id}`).send({ version: receipt.version, lines: [{ id: receipt.lines[0].id, unitCost: 9, productId: String(product._id), reviewed: true, conversionConfirmed: true }] }).expect(200)).body.receipt;
       receipts.push(receipt);
     }
     const responses = await Promise.all(receipts.map(receipt => api('post', `/receipts/${receipt._id}/approve`).send({ version: receipt.version, learnBarcodes: true })));
     assert.deepEqual(responses.map(response => response.status).sort(), [200, 409]);
     assert.equal(await BarcodeLink.countDocuments({ barcode: 'SHARED' }), 1);
-    assert.equal(await Movement.countDocuments(), 1);
+    assert.equal(await Movement.countDocuments(), 0);
+    assert.equal(await NfeDraft.countDocuments(), 1);
   });
 
   test('a barcode whose catalog identity changed never increments the formerly linked product', async () => {
@@ -374,11 +421,14 @@ describe('receiving persisted integration', { concurrency: false }, () => {
     receipt = (await api('patch', `/receipts/${receipt._id}`).send({ version: receipt.version, lines: [{ id: receipt.lines[0].id, unitCost: 87.65, reviewed: true }] }).expect(200)).body.receipt;
     await api('post', `/receipts/${receipt._id}/approve`).send({ version: receipt.version }).expect(200);
     const after = await Product.findById(fixture.product._id).lean();
-    assert.equal(after.stock, before.stock + 7);
+    assert.equal(after.stock, before.stock);
     for (const field of ['custo', 'venda', 'precoClube', 'promocao', 'promocaoCondicional', 'fiscal', 'fiscalPorEmpresa']) assert.deepEqual(after[field], before[field], field);
     assert.deepEqual(await AccountPayable.collection.find({}).toArray(), beforeFinance);
     const saved = await Receipt.findById(receipt._id).lean();
     assert.equal(saved.lines[0].unitCost, 87.65);
+    const draft = await NfeDraft.findById(saved.purchaseDraftId).lean();
+    assert.equal(draft.items[0].unitPrice, 87.65);
+    assert.equal(draft.totals.totalValue, 613.55);
   });
 
   test('legacy event hashes stay compatible while component identity participates in new hashes', () => {
@@ -486,40 +536,16 @@ describe('receiving persisted integration', { concurrency: false }, () => {
     await api('patch', `/receipts/${ordinary._id}`).send({ version: ordinary.version, lines: [{ id: ordinary.lines[0].id, kit: { components } }] }).expect(409);
   });
 
-  test('PMG kits expand once into individual SKUs, preserve prices and never create a parent or supplier aliases', async () => {
-    const large = await Product.create({ cod: '3', codbarras: 'LARGE', nome: 'Cama G', custo: 11, venda: 20, unidade: 'UN', estoques: [{ deposito: fixture.deposit._id, quantidade: 6 }] });
-    let receipt = await kitReceipt([component('P', 1, fixture.product, 'PIECE-P'), component('M', 1, fixture.otherProduct, 'PIECE-M'), component('G', 1, large, 'PIECE-G')], {
-      testMode: false, quantity: 2, expectedQuantity: 2, unitCost: 219.99, supplierCode: 'KITREF', barcode: 'KIT-PARENT',
-    });
+  test('kits cannot generate a Recibo with invented per-piece costs', async () => {
+    let receipt = await kitReceipt([component('P', 3, fixture.product), component('G', 4, fixture.otherProduct)], { testMode: false, quantity: 2, unitCost: 219.99 });
     receipt = await reviewKit(receipt);
-    const approvals = await Promise.all(Array.from({ length: 2 }, () => api('post', `/receipts/${receipt._id}/approve`).send({ version: receipt.version, learnBarcodes: true, learnSupplierLinks: true })));
-    assert.ok(approvals.every(response => [200, 409].includes(response.status)), JSON.stringify(approvals.map(response => response.body)));
-    await api('post', `/receipts/${receipt._id}/approve`).send({ version: receipt.version }).expect(200);
-    const products = await Product.find({}).sort({ cod: 1 }).lean();
-    assert.deepEqual(products.map(item => item.stock), [12, 6, 8]);
-    assert.deepEqual(products.map(item => [item.custo, item.venda]), [[9, 15], [5, 10], [11, 20]]);
-    assert.ok(products.every(item => item.fornecedores.length === 0));
-    assert.equal(await BarcodeLink.countDocuments(), 3); assert.equal(await BarcodeLink.countDocuments({ barcode: 'KIT-PARENT' }), 0);
-    assert.equal(await Movement.countDocuments(), 3); assert.equal(await Movement.countDocuments({ 'metadata.fromKit': true }), 3);
-    assert.equal(await AccountPayable.countDocuments(), 0); assert.equal(await Product.countDocuments(), 3);
-    const saved = await Receipt.findById(receipt._id).lean();
-    assert.equal(saved.lines[0].receivedQuantity, 2); assert.equal(saved.lines[0].productId, null); assert.equal(saved.approval.appliedProducts, 3);
-  });
-
-  test('3P, 4G and numbered aliases aggregate correctly alongside a regular line of the same SKU', async () => {
-    let receipt = await kitReceipt([component('P', 3, fixture.product)], { testMode: false, quantity: 2 });
-    receipt = (await api('patch', `/receipts/${receipt._id}`).send({ version: receipt.version, lines: [
-      { id: crypto.randomUUID(), unit: 'KT', receivedQuantity: 2, kit: { components: [component('G', 4, fixture.otherProduct)] } },
-      { id: crypto.randomUUID(), unit: 'KT', receivedQuantity: 1, kit: { components: [component('Tam 1', 1, fixture.product, '000123'), component('Tam 2', 2, fixture.product, '000456')] } },
-      { id: crypto.randomUUID(), productId: String(fixture.product._id), barcode: '000123', receivedQuantity: 1, stockFactor: 1 },
-    ] }).expect(200)).body.receipt;
-    receipt = await reviewKit(receipt);
-    const approved = await api('post', `/receipts/${receipt._id}/approve`).send({ version: receipt.version }).expect(200);
-    assert.equal(approved.body.receipt.approval.appliedProducts, 2);
-    assert.equal((await Product.findById(fixture.product._id).lean()).stock, 20);
-    assert.equal((await Product.findById(fixture.otherProduct._id).lean()).stock, 12);
-    assert.equal(await Movement.countDocuments(), 3);
-    assert.equal(await Movement.countDocuments({ 'metadata.fromKit': true }), 2);
+    const response = await api('post', `/receipts/${receipt._id}/approve`).send({ version: receipt.version, learnBarcodes: true }).expect(400);
+    assert.equal(response.body.code, 'KIT_COST_ALLOCATION_REQUIRED');
+    assert.equal(await NfeDraft.countDocuments(), 0);
+    assert.equal(await Movement.countDocuments(), 0);
+    assert.equal(await BarcodeLink.countDocuments(), 0);
+    assert.equal((await Product.findById(fixture.product._id).lean()).stock, 10);
+    assert.equal((await Receipt.findById(receipt._id).lean()).status, 'draft');
   });
 
   test('kit test approval checks differences but leaves inventory and barcode mappings untouched', async () => {
@@ -599,34 +625,38 @@ describe('receiving persisted integration', { concurrency: false }, () => {
     assert.equal(await AccountPayable.countDocuments(), 0);
   });
 
-  test('a failed second component stock write rolls back first stock, audit and learned barcode', async () => {
-    let receipt = await kitReceipt([component('P', 1, fixture.product, 'NEW-P'), component('M', 1, fixture.otherProduct, 'NEW-M')], { testMode: false, quantity: 1 });
-    receipt = await reviewKit(receipt);
-    const originalSave = Product.prototype.save; let sawFirstWrite = false;
-    Product.prototype.save = async function (options) {
-      if (options?.session && String(this._id) === String(fixture.otherProduct._id)) {
-        const prior = await Product.findById(fixture.product._id).session(options.session).lean();
-        sawFirstWrite = prior.stock === 11;
-        const error = new Error('Falha controlada para testar rollback.'); error.status = 500; error.code = 'TEST_ROLLBACK'; throw error;
-      }
-      return originalSave.call(this, options);
-    };
+  test('a failed draft creation rolls back the source lock and learned supplier links', async () => {
+    const receipt = await readyReceipt({ testMode: false, supplierCode: 'ROLLBACK' });
+    const originalCreate = NfeDraft.create;
+    NfeDraft.create = async () => { throw new Error('Controlled draft creation failure'); };
     try {
-      await api('post', `/receipts/${receipt._id}/approve`).send({ version: receipt.version, learnBarcodes: true }).expect(500);
-    } finally { Product.prototype.save = originalSave; }
-    assert.equal(sawFirstWrite, true);
-    assert.equal((await Product.findById(fixture.product._id).lean()).stock, 10);
-    assert.equal((await Product.findById(fixture.otherProduct._id).lean()).stock, 4);
-    assert.equal(await Movement.countDocuments(), 0); assert.equal(await BarcodeLink.countDocuments(), 0);
-    assert.equal((await Receipt.findById(receipt._id).lean()).status, 'draft');
+      await api('post', `/receipts/${receipt._id}/approve`).send({ version: receipt.version, learnSupplierLinks: true }).expect(500);
+    } finally { NfeDraft.create = originalCreate; }
+    assert.equal(await NfeDraft.countDocuments(), 0);
+    assert.equal(await Movement.countDocuments(), 0);
+    const product = await Product.findById(fixture.product._id).lean();
+    assert.equal(product.stock, 10); assert.equal(product.fornecedores.length, 0);
+    const source = await Receipt.findById(receipt._id).lean();
+    assert.equal(source.status, 'draft'); assert.equal(source.version, receipt.version);
   });
 
-  test('concurrent kit confirmations cannot assign a shared unknown barcode to different SKUs', async () => {
+  test('missing cost or supplier blocks forwarding without inventing values', async () => {
+    let receipt = await readyReceipt({ testMode: false });
+    receipt = (await api('patch', `/receipts/${receipt._id}`).send({ version: receipt.version, lines: [{ id: receipt.lines[0].id, unitCost: null, reviewed: true }] }).expect(200)).body.receipt;
+    const missing = await api('post', `/receipts/${receipt._id}/approve`).send({ version: receipt.version }).expect(400);
+    assert.equal(missing.body.code, 'COST_REQUIRED');
+    await Receipt.updateOne({ _id: receipt._id }, { $set: { supplierId: null } });
+    const supplier = await api('post', `/receipts/${receipt._id}/approve`).send({ version: receipt.version }).expect(400);
+    assert.equal(supplier.body.code, 'SUPPLIER_REQUIRED');
+    assert.equal(await NfeDraft.countDocuments(), 0);
+  });
+
+  test('concurrent kits without cost allocation create neither aliases nor drafts', async () => {
     const receipts = [];
     for (const product of [fixture.product, fixture.otherProduct]) receipts.push(await reviewKit(await kitReceipt([component('Tam 1', 3, product, 'SHARED-KIT')], { testMode: false, quantity: 1 })));
     const responses = await Promise.all(receipts.map(receipt => api('post', `/receipts/${receipt._id}/approve`).send({ version: receipt.version, learnBarcodes: true })));
-    assert.deepEqual(responses.map(response => response.status).sort(), [200, 409]);
-    assert.equal(await BarcodeLink.countDocuments({ barcode: 'SHARED-KIT' }), 1); assert.equal(await Movement.countDocuments(), 1);
-    assert.equal(await Receipt.countDocuments({ status: 'approved' }), 1); assert.equal(await Receipt.countDocuments({ status: 'draft' }), 1);
+    assert.deepEqual(responses.map(response => response.status).sort(), [400, 400]);
+    assert.equal(await BarcodeLink.countDocuments({ barcode: 'SHARED-KIT' }), 0); assert.equal(await Movement.countDocuments(), 0);
+    assert.equal(await NfeDraft.countDocuments(), 0); assert.equal(await Receipt.countDocuments({ status: 'draft' }), 2);
   });
 });

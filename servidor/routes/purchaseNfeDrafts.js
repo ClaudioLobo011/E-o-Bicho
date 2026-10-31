@@ -696,10 +696,17 @@ router.put('/:id', async (req, res) => {
     if (!existingDraft) {
       return res.status(404).json({ message: 'Rascunho de NF-e não encontrado.' });
     }
+    if (existingDraft.sourceReceivingReceiptId && isApprovedStatus(existingDraft.status)) {
+      return res.status(409).json({ message: 'Este Recibo já foi aprovado. Use Alterar preços para ajustar os preços; não é permitido reabrir sua entrada.' });
+    }
 
     const payload = req.body || {};
     const draftData = buildDraftDocumentFromPayload(payload);
     draftData.code = existingDraft.code;
+    if (existingDraft.sourceReceivingReceiptId) {
+      Object.assign(draftData.header, { type: 'RECIBO', model: '', serie: '' });
+      draftData.payload.header = { ...draftData.payload.header, type: 'RECIBO', model: '', serie: '' };
+    }
     if (!draftData.header.code) {
       draftData.header.code = existingDraft.header?.code || String(existingDraft.code).padStart(4, '0');
     }
@@ -745,6 +752,12 @@ router.post('/:id/approve', async (req, res) => {
           draftData.header.code = draft.header?.code || String(draft.code).padStart(4, '0');
         }
         draft.set(draftData);
+      }
+
+      if (draft.sourceReceivingReceiptId) {
+        Object.assign(draft.header, { type: 'RECIBO', model: '', serie: '' });
+        draft.payload.header = { ...draft.payload.header, type: 'RECIBO', model: '', serie: '' };
+        draft.markModified('payload');
       }
 
       const companyId = draft.companyId || draft.selection?.companyId || '';

@@ -91,13 +91,15 @@ No site, leituras digitadas ou recebidas pelo leitor de teclado também ficam em
 
 Uma leitura rejeitada pelo servidor fica na área de leituras para tentar novamente após corrigir o vínculo ou descartar explicitamente a tentativa. As demais leituras continuam sendo enviadas. O histórico da rejeição permanece no navegador e na exportação JSON. Falhas temporárias de conexão continuam aguardando envio.
 
-## Revisar e concluir
+## Revisar e gerar Recibo
 
-Salve as alterações e clique em **Revisar e concluir**. Confira depósito, vínculos, quantidades e conversões. Aceite expressamente eventuais faltas ou sobras. A aprovação real exige uma conta com permissão administrativa e registra a entrada no estoque de forma transacional; tentativas repetidas de concluir não devem duplicar a entrada.
+Salve as alterações e clique em **Revisar e gerar Recibo**. Confira fornecedor, depósito, vínculos, custos, quantidades e conversões. Aceite expressamente eventuais faltas ou sobras. Um administrador gera um único rascunho do tipo **Recibo** na **Entrada de NF-e**, sem movimentar estoque. Repetir a solicitação retorna o mesmo Recibo. O romaneio passa para `forwarded` e fica bloqueado para edição, com botão para reabrir o destino.
 
-A conclusão não altera preços de venda, custos do cadastro, promoções ou contas a pagar. O custo informado no romaneio fica documentado no recebimento e no histórico correspondente.
+A geração não altera preços, custos do cadastro, promoções ou contas a pagar. Custos, quantidades recebidas e fatores são preservados nos itens do Recibo. Na Entrada de NF-e, revise e aprove: somente essa aprovação movimenta estoque. Depois use **Alterar preços**, pelo fluxo existente. Recibos originados de romaneios permanecem do tipo Recibo ao salvar ou aprovar.
 
-Na aprovação real há duas opções, inicialmente desmarcadas:
+Sem fornecedor cadastrado ou custo de alguma linha recebida, o envio fica bloqueado. Kits ainda exigem custos individuais definidos para as peças; o sistema bloqueia o envio em vez de inventar um rateio. Modo de teste não gera Recibo nem estoque. Romaneios antigos já aprovados não são convertidos novamente.
+
+Na geração do Recibo há duas opções, inicialmente desmarcadas:
 
 - **Lembrar os vínculos de códigos deste fornecedor:** memoriza a relação do fornecedor com o produto e a conversão conferida para próximos documentos. Vínculos conflitantes não são sobrescritos automaticamente.
 - **Lembrar códigos bipados:** guarda uma associação própria dos recebimentos. Não troca o código principal nem modifica os códigos do catálogo ou do PDV.
