@@ -1,197 +1,355 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="facebook-domain-verification" content="aa7dw5o3hdbv9j7uucy54roz2isvue">
-    <title>E o Bicho - Produtos para Animais</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-    <link rel="stylesheet" href="src/output.css">
-  <link rel="stylesheet" href="./src/responsive-workspace.css?v=20261008-1">
-</head>
-<body class="bg-gray-50 text-gray-800 responsive-site">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      name="description"
+      content="Tudo para seu pet com cuidado e carinho. Explore produtos para cães, gatos e outros pets e conheça nossas lojas na Tijuca e em Vila Isabel, Rio de Janeiro."
+    />
+    <meta name="theme-color" content="#47562b" />
+    <link rel="canonical" href="https://www.peteobicho.com.br/" />
+    <meta property="og:title" content="E o Bicho · Tudo para seu pet" />
+    <meta
+      property="og:description"
+      content="Carinho de perto. Cuidado todos os dias. Produtos para seu pet e lojas na Tijuca e em Vila Isabel."
+    />
+    <meta property="og:url" content="https://www.peteobicho.com.br/" />
+    <meta property="og:type" content="website" />
+    <meta
+      property="og:image"
+      content="https://www.peteobicho.com.br/public/image/logo.png"
+    />
+    <meta
+      name="facebook-domain-verification"
+      content="aa7dw5o3hdbv9j7uucy54roz2isvue"
+    />
+    <title>E o Bicho · Tudo para seu pet</title>
+    <link rel="preconnect" href="https://cdn.peteobicho.com.br" />
+    <link rel="preconnect" href="https://api.peteobicho.com.br" />
+    <link rel="stylesheet" href="/src/home.css?v=20261104-1" />
+    <script src="/scripts/core/config.js?v=20260812-2" defer></script>
+    <script src="/scripts/product/product-utils.js?v=20261104-1" defer></script>
+    <script src="/scripts/home/home.js?v=20261104-1" defer></script>
+  </head>
+  <body>
+    <a class="skip" href="#conteudo">Pular para o conteúdo</a>
 
-    <div id="header-placeholder"></div>
-
-    <div id="mobile-menu" class="bg-white shadow-lg md:hidden absolute w-full z-40 hidden">
-        <div class="container mx-auto px-4 py-3">
-            <ul class="space-y-3">
-                <li><a href="#" class="block py-2 font-medium">Cachorro</a></li>
-                <li><a href="#" class="block py-2 font-medium">Gato</a></li>
-                <li><a href="#" class="block py-2 font-medium">Pássaros</a></li>
-                <li><a href="#" class="block py-2 font-medium">Peixes</a></li>
-                <li><a href="#" class="block py-2 font-medium">Roedores</a></li>
-                <li><a href="#" class="block py-2 font-medium">Ofertas</a></li>
-                <li><a href="#" class="block py-2 font-medium">Marcas</a></li>
-            </ul>
-        </div>
+    <div class="utility">
+      <div class="wrap">
+        <span>Carinho de perto. Cuidado todos os dias.</span
+        ><a href="#lojas">Nossas lojas no Rio de Janeiro ↗</a>
+      </div>
     </div>
-
-    <main data-header-offset="site">
-
-    <div class="bg-gray-200 text-black text-center py-3 text-sm">
-        <p>Frete grátis para compras acima de R$ 100,00</p>
-    </div>
-
-    <div class="py-8 bg-gray-100">
-        <div class="banner-viewport">
-            <div class="banner-viewport-inner">
-                <div id="carousel" class="relative w-full overflow-hidden rounded-2xl shadow-lg bg-white/60 backdrop-blur-sm">
-                    <div class="carousel-container flex items-center h-full"></div>
-
-                    <!-- BOTÃO ESQUERDA -->
-                    <button id="prev" class="carousel-nav carousel-nav-prev">
-                        <i class="fas fa-chevron-left"></i>
-                    </button>
-
-                    <!-- BOTÃO DIREITA -->
-                    <button id="next" class="carousel-nav carousel-nav-next">
-                        <i class="fas fa-chevron-right"></i>
-                    </button>
-                    <!-- Indicadores sobrepostos no rodapé do banner -->
-                    <div id="carousel-indicators" class="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center space-x-3">
-                        <div class="indicator">
-                            <span class="dot"></span>
-                            <span class="bar-bg"><span class="progress"></span></span>
-                        </div>
-                        <div class="indicator">
-                            <span class="dot"></span>
-                            <span class="bar-bg"><span class="progress"></span></span>
-                        </div>
-                        <div class="indicator">
-                            <span class="dot"></span>
-                            <span class="bar-bg"><span class="progress"></span></span>
-                        </div>
-                        <div class="indicator">
-                            <span class="dot"></span>
-                            <span class="bar-bg"><span class="progress"></span></span>
-                        </div>
-                        <div class="indicator">
-                            <span class="dot"></span>
-                            <span class="bar-bg"><span class="progress"></span></span>
-                        </div>
-                    </div>
-                </div>
-            </div>
+    <header>
+      <div class="wrap header-main">
+        <a href="/" aria-label="E o Bicho, início"
+          ><img
+            class="logo"
+            src="/public/image/logo.svg"
+            alt="E o Bicho"
+            width="130"
+            height="72"
+        /></a>
+        <form class="search" role="search">
+          <label class="sr" for="search">O que seu pet precisa?</label
+          ><input
+            id="search"
+            name="search"
+            type="search"
+            placeholder="O que seu pet precisa hoje?"
+            autocomplete="off"
+          /><button aria-label="Buscar produtos" type="submit">
+            <svg viewBox="0 0 24 24">
+              <circle cx="10" cy="10" r="6.5" />
+              <path d="m15 15 5 5" />
+            </svg>
+          </button>
+          <div id="suggestions" hidden></div>
+        </form>
+        <div class="actions">
+          <button id="account-button" aria-label="Minha conta">
+            <svg viewBox="0 0 24 24">
+              <circle cx="12" cy="7" r="4" />
+              <path d="M4 22v-3a8 8 0 0 1 16 0v3" /></svg
+            ><span>Olá, bem-vindo<b>Minha conta</b></span></button
+          ><button id="open-favorites" aria-label="Meus favoritos">
+            <svg viewBox="0 0 24 24">
+              <path
+                d="M20 4c-3-3-7-1-8 1-1-2-5-4-8-1-5 5 3 11 8 16 5-5 13-11 8-16Z"
+              /></svg
+            ><i id="favorite-count">0</i></button
+          ><button id="cart-button" aria-label="Minha sacola">
+            <i id="cart-count">0</i
+            ><svg viewBox="0 0 24 24">
+              <path d="M4 7h16l1 15H3L4 7Zm4 0V5a4 4 0 0 1 8 0v2" />
+            </svg></button
+          ><button
+            class="menu-toggle"
+            aria-controls="navigation"
+            aria-expanded="false"
+            aria-label="Abrir categorias"
+          >
+            ☰
+          </button>
         </div>
-
-        <section class="py-10 bg-light">
-            <div class="container mx-auto px-4">
-                <h2 class="text-2xl font-bold text-center mb-8">Categorias</h2>
-                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-                    <div class="bg-white rounded-lg shadow p-4 text-center category-card border border-gray-200 transition duration-300">
-                        <div class="bg-gray-200 border-2 border-dashed rounded-xl w-16 h-16 mx-auto mb-3"></div>
-                        <h3 class="font-medium">Ração</h3>
-                    </div>
-                    <div class="bg-white rounded-lg shadow p-4 text-center category-card border border-gray-200 transition duration-300">
-                        <div class="bg-gray-200 border-2 border-dashed rounded-xl w-16 h-16 mx-auto mb-3"></div>
-                        <h3 class="font-medium">Brinquedos</h3>
-                    </div>
-                    <div class="bg-white rounded-lg shadow p-4 text-center category-card border border-gray-200 transition duration-300">
-                        <div class="bg-gray-200 border-2 border-dashed rounded-xl w-16 h-16 mx-auto mb-3"></div>
-                        <h3 class="font-medium">Higiene</h3>
-                    </div>
-                    <div class="bg-white rounded-lg shadow p-4 text-center category-card border border-gray-200 transition duration-300">
-                        <div class="bg-gray-200 border-2 border-dashed rounded-xl w-16 h-16 mx-auto mb-3"></div>
-                        <h3 class="font-medium">Acessórios</h3>
-                    </div>
-                    <div class="bg-white rounded-lg shadow p-4 text-center category-card border border-gray-200 transition duration-300">
-                        <div class="bg-gray-200 border-2 border-dashed rounded-xl w-16 h-16 mx-auto mb-3"></div>
-                        <h3 class="font-medium">Camas</h3>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <section class="py-10">
-            <div class="container mx-auto px-4">
-                <div class="flex justify-between items-center mb-8">
-                    <h2 class="text-2xl font-bold">Produtos em Destaque</h2>
-                    <div class="flex items-center space-x-2">
-                        <button id="prev-featured-btn" class="w-8 h-8 rounded-full bg-gray-200 text-gray-700 hover:bg-primary hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                            <i class="fas fa-chevron-left"></i>
-                        </button>
-                        <button id="next-featured-btn" class="w-8 h-8 rounded-full bg-gray-200 text-gray-700 hover:bg-primary hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                            <i class="fas fa-chevron-right"></i>
-                        </button>
-                        <a href="#" class="ml-4 text-primary font-medium hover:underline">Ver todos</a>
-                    </div>
-                </div>
-
-                <div id="featured-slider-wrapper" class="overflow-hidden relative">
-                    <div id="featured-products-container" class="flex space-x-6 transition-transform duration-500 ease-in-out">
-                        </div>
-                </div>
-            </div>
-        </section>
-
-        <section class="py-10">
-            <div class="container mx-auto px-4">
-                <h2 class="text-2xl font-bold text-center mb-8">Nossas Marcas</h2>
-                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
-                    <div class="bg-white rounded-lg shadow p-4 flex items-center justify-center border border-gray-200">
-                        <div class="bg-gray-200 border-2 border-dashed rounded-xl w-24 h-12"></div>
-                    </div>
-                    <div class="bg-white rounded-lg shadow p-4 flex items-center justify-center border border-gray-200">
-                        <div class="bg-gray-200 border-2 border-dashed rounded-xl w-24 h-12"></div>
-                    </div>
-                    <div class="bg-white rounded-lg shadow p-4 flex items-center justify-center border border-gray-200">
-                        <div class="bg-gray-200 border-2 border-dashed rounded-xl w-24 h-12"></div>
-                    </div>
-                    <div class="bg-white rounded-lg shadow p-4 flex items-center justify-center border border-gray-200">
-                        <div class="bg-gray-200 border-2 border-dashed rounded-xl w-24 h-12"></div>
-                    </div>
-                    <div class="bg-white rounded-lg shadow p-4 flex items-center justify-center border border-gray-200">
-                        <div class="bg-gray-200 border-2 border-dashed rounded-xl w-24 h-12"></div>
-                    </div>
-                    <div class="bg-white rounded-lg shadow p-4 flex items-center justify-center border border-gray-200">
-                        <div class="bg-gray-200 border-2 border-dashed rounded-xl w-24 h-12"></div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <section class="py-10 bg-light">
-            <div class="container mx-auto px-4">
-                <h2 class="text-2xl font-bold text-center mb-8">Por que comprar conosco?</h2>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div class="bg-white rounded-lg shadow p-6 text-center benefit-card transition duration-300">
-                        <div class="text-primary text-4xl mb-4">
-                            <i class="fas fa-truck"></i>
-                        </div>
-                        <h3 class="font-bold text-lg mb-2">Entrega Rápida</h3>
-                        <p class="text-gray-600">Entregamos em até 24 horas para todo o Brasil</p>
-                    </div>
-                    <div class="bg-white rounded-lg shadow p-6 text-center benefit-card transition duration-300">
-                        <div class="text-primary text-4xl mb-4">
-                            <i class="fas fa-shield-alt"></i>
-                        </div>
-                        <h3 class="font-bold text-lg mb-2">Compra Segura</h3>
-                        <p class="text-gray-600">Ambiente seguro com criptografia SSL</p>
-                    </div>
-                    <div class="bg-white rounded-lg shadow p-6 text-center benefit-card transition duration-300">
-                        <div class="text-primary text-4xl mb-4">
-                            <i class="fas fa-sync-alt"></i>
-                        </div>
-                        <h3 class="font-bold text-lg mb-2">Devolução Grátis</h3>
-                        <p class="text-gray-600">Devoluções gratuitas em até 30 dias</p>
-                    </div>
-                </div>
-            </div>
-        </section>
-    </main> 
-
-    <div id="cart-placeholder"></div>
-    <div id="footer-placeholder"></div>
-    <div id="modal-placeholder"></div>
-    <div id="confirm-modal-placeholder"></div>
-
-    <script src="scripts/core/config.js?v=20260812-2"></script>
-    <script src="scripts/core/ui.js"></script>
-    <script src="scripts/cartManager.js"></script> 
-    <script src="scripts/cart.js"></script>
-    <script src="scripts/favoritesManager.js"></script>
-    <script src="scripts/core/main.js"></script>
-
-</body>
+      </div>
+      <nav id="navigation" class="wrap" aria-label="Categorias">
+        <a href="#categorias">☷ &nbsp; Todos os departamentos</a
+        ><a data-category="Cachorro" href="#produtos">Cachorros</a
+        ><a data-category="Gato" href="#produtos">Gatos</a
+        ><a data-category="Pássaros" href="#produtos">Pássaros</a
+        ><a data-category="Peixe" href="#produtos">Peixes</a
+        ><a data-category="Outros Pets" href="#produtos">Roedores</a
+        ><a href="#club">E o Bicho Club <span class="tiny">CONHEÇA</span></a
+        ><a href="#lojas">Nossas lojas</a>
+      </nav>
+    </header>
+    <main id="conteudo">
+      <section class="hero wrap" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <div class="eyebrow">PERTINHO DE VOCÊ. DO LADO DO SEU PET.</div>
+          <h1 id="hero-title">
+            A vida é melhor<br />com eles <em>por perto.</em>
+          </h1>
+          <p>
+            Da hora da ração à brincadeira favorita.<br />Tudo para cuidar de
+            quem faz parte da família.
+          </p>
+          <div class="hero-buttons">
+            <a class="button" href="#produtos"
+              >Encontre o que seu pet precisa <span>↗</span></a
+            ><a class="text-link" href="#lojas">Conheça nossas lojas →</a>
+          </div>
+          <div class="hero-note">
+            <span>♡</span> Cuidado e carinho, em cada escolha.
+          </div>
+        </div>
+        <div class="hero-picture">
+          <img
+            src="https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&w=1000&q=85"
+            alt="Golden retriever ao ar livre"
+            fetchpriority="high"
+            width="1000"
+            height="1100"
+          />
+          <div class="photo-tag">
+            <span>♡</span>
+            <div>Seu melhor amigo.<br /><b>Nosso maior cuidado.</b></div>
+          </div>
+        </div>
+      </section>
+      <div class="wrap benefits">
+        <div>
+          <span>⌖</span>
+          <p>
+            <b>Estamos no seu bairro</b
+            ><small>Lojas na Tijuca e em Vila Isabel</small>
+          </p>
+        </div>
+        <div>
+          <span>♧</span>
+          <p>
+            <b>Escolha com tranquilidade</b
+            ><small>Informações claras em cada produto</small>
+          </p>
+        </div>
+        <div>
+          <span>♡</span>
+          <p>
+            <b>Atendimento de verdade</b
+            ><small>Converse com a equipe da sua loja</small>
+          </p>
+        </div>
+      </div>
+      <section id="categorias" class="wrap section">
+        <div class="section-heading">
+          <div class="eyebrow">CADA PET TEM SEU JEITINHO</div>
+          <h2>Para quem é o carinho de hoje?</h2>
+          <p>Encontre o universo do seu melhor amigo.</p>
+        </div>
+        <div class="pets">
+          <a href="#produtos" data-category="Cachorro"
+            ><span class="pet-art peach">🐕</span><b>Cachorros</b
+            ><small>Para todas as fases →</small></a
+          ><a href="#produtos" data-category="Gato"
+            ><span class="pet-art sage">🐈</span><b>Gatos</b
+            ><small>Do jeitinho deles →</small></a
+          ><a href="#produtos" data-category="Pássaros"
+            ><span class="pet-art yellow">🦜</span><b>Pássaros</b
+            ><small>Mais cor e cuidado →</small></a
+          ><a href="#produtos" data-category="Peixe"
+            ><span class="pet-art blue">🐠</span><b>Peixes</b
+            ><small>Um mundo para explorar →</small></a
+          ><a href="#produtos" data-category="Outros Pets"
+            ><span class="pet-art lilac">🐇</span><b>Pequenos pets</b
+            ><small>Pequenos grandes amigos →</small></a
+          >
+        </div>
+      </section>
+      <section id="produtos" class="wrap section">
+        <div class="section-heading split">
+          <div>
+            <div class="eyebrow">ESCOLHAS PARA O DIA A DIA</div>
+            <h2>Um carinho a mais na rotina</h2>
+            <p>Produtos do nosso catálogo para você conhecer.</p>
+          </div>
+          <a
+            class="text-link"
+            href="/pages/menu-departments-item/search.html?search=*"
+            >Explorar o catálogo ↗</a
+          >
+        </div>
+        <div class="filters" aria-label="Filtrar vitrine">
+          <button aria-pressed="true" data-filter="all">Todos</button
+          ><button aria-pressed="false" data-filter="dogs">
+            Para cachorros</button
+          ><button aria-pressed="false" data-filter="cats">Para gatos</button>
+        </div>
+        <div class="shelf-controls">
+          <span>Deslize para explorar os produtos</span>
+          <div>
+            <button
+              type="button"
+              data-slide="-1"
+              aria-label="Produtos anteriores"
+              aria-controls="products"
+            >
+              ←</button
+            ><button
+              type="button"
+              data-slide="1"
+              aria-label="Próximos produtos"
+              aria-controls="products"
+            >
+              →
+            </button>
+          </div>
+        </div>
+        <div
+          id="products"
+          class="products"
+          aria-live="polite"
+          role="region"
+          aria-label="Vitrine de produtos"
+          tabindex="0"
+        >
+          <p>Carregando produtos…</p>
+        </div>
+        <p class="catalog-note">
+          Preços e disponibilidade sujeitos à confirmação. Confira as condições
+          de cada oferta na página do produto.
+        </p>
+      </section>
+      <section class="wrap needs section">
+        <div class="need-copy">
+          <div class="eyebrow">DO BÁSICO AO MIMO</div>
+          <h2>O que não pode<br />faltar por aí?</h2>
+          <p>Um atalho para cada momento<br />da rotina com seu pet.</p>
+        </div>
+        <div class="need-grid">
+          <a data-search="ração" href="#produtos"
+            ><span>◉</span><b>Alimentação</b
+            ><small>Rações, sachês e petiscos</small><i>↗</i></a
+          ><a data-search="brinquedo" href="#produtos"
+            ><span>♧</span><b>Hora de brincar</b
+            ><small>Diversão para gastar energia</small><i>↗</i></a
+          ><a data-search="higiene" href="#produtos"
+            ><span>✧</span><b>Higiene e cuidado</b
+            ><small>Bem-estar em cada detalhe</small><i>↗</i></a
+          ><a data-search="cama" href="#produtos"
+            ><span>☾</span><b>Cantinho de descanso</b
+            ><small>Conforto para recarregar</small><i>↗</i></a
+          >
+        </div>
+      </section>
+      <section id="club" class="wrap section">
+        <div class="club">
+          <div class="club-mark">E o Bicho<span>club ♡</span></div>
+          <div>
+            <div class="eyebrow">MAIS CUIDADO. MAIS VANTAGENS.</div>
+            <h2>Bom para o seu pet.<br />Melhor para sua rotina.</h2>
+            <p>
+              Conheça os preços Club nos produtos participantes.<br />Confira as
+              condições de adesão com nossa equipe.
+            </p>
+            <a href="#lojas" class="button light"
+              >Quero conhecer o Club <span>↗</span></a
+            >
+          </div>
+          <span class="club-decoration" aria-hidden="true">✳</span>
+        </div>
+      </section>
+      <section id="lojas" class="wrap section">
+        <div class="section-heading split">
+          <div>
+            <div class="eyebrow">PODE CHEGAR. A CASA É SUA.</div>
+            <h2>Seu pet shop, bem pertinho.</h2>
+            <p>Venha visitar ou fale com a gente. Vai ser um prazer ajudar.</p>
+          </div>
+          <span class="location-label">⌖ Rio de Janeiro · RJ</span>
+        </div>
+        <div id="stores" class="stores"></div>
+      </section>
+      <section class="wrap help">
+        <span>Vamos cuidar juntos?</span>
+        <p>Precisa de ajuda para encontrar um produto?</p>
+        <a href="#lojas">Fale com uma de nossas lojas ↗</a>
+      </section>
+    </main>
+    <footer>
+      <div class="wrap footer-grid">
+        <div>
+          <img
+            src="/public/image/logo.svg"
+            alt="E o Bicho"
+            width="130"
+            height="80"
+          />
+          <p>
+            Para eles, todo o nosso carinho.<br />Para você, toda a nossa
+            atenção.
+          </p>
+          <a
+            target="_blank"
+            rel="noopener"
+            href="https://www.instagram.com/petshopeobichovilaisabel/"
+            >Acompanhe no Instagram ↗</a
+          >
+        </div>
+        <div>
+          <h3>Encontre seu produto</h3>
+          <a href="#categorias">Por tipo de pet</a
+          ><a href="#produtos">Produtos em destaque</a
+          ><a href="#club">E o Bicho Club</a>
+        </div>
+        <div>
+          <h3>Estamos por aqui</h3>
+          <a href="#lojas">Lojas e horários</a
+          ><a href="#lojas">Fale com a equipe</a
+          ><a href="/pages/ajuda.html">Central de ajuda ↗</a>
+        </div>
+        <div>
+          <h3>Sobre sua compra</h3>
+          <a href="/pages/politica-de-privacidade.html">Privacidade ↗</a
+          ><a href="/pages/meus-pedidos.html">Acompanhar pedidos</a>
+          <p>
+            Entrega e retirada: consulte<br />as condições para seu endereço.
+          </p>
+        </div>
+      </div>
+      <div class="wrap legal">
+        Vila E o Bicho LTDA - ME · CNPJ 07.919.703/0001-67
+        <span>© 2026 E o Bicho · Todos os direitos reservados.</span>
+      </div>
+    </footer>
+    <dialog id="info" aria-labelledby="dialog-title">
+      <button class="close" aria-label="Fechar janela">✕</button>
+      <div class="eyebrow">E O BICHO</div>
+      <h2 id="dialog-title">Como podemos ajudar?</h2>
+      <div id="dialog-body"></div>
+      <button class="button close-action">Continuar explorando</button>
+    </dialog>
+    <div id="toast" role="status"></div>
+  </body>
 </html>
