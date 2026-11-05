@@ -395,19 +395,12 @@
   /* Category navigation and shelf interactions follow. */
   function buildCategoryNavigation(categories) {
     const nav = $("#navigation");
+    const byId = new Map(categories.map((c) => [String(c._id), c]));
     const children = (id) =>
       categories
-        .filter((c) => c.parent === id)
+        .filter((c) => (c.parent || "") === id)
         .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
-    const byId = new Map(categories.map((c) => [c._id, c]));
-    const roots = categories.filter((c) => !c.parent);
-    document.querySelectorAll("[data-category]").forEach((card) => {
-      const category = roots.find((c) => c.nome === card.dataset.category);
-      if (category)
-        card.href =
-          "/pages/menu-departments-item/search.html?" +
-          new URLSearchParams({ category: category.nome });
-    });
+    const roots = children("");
     const url = (c) => {
       const query = new URLSearchParams({ category: c.nome });
       const parent = byId.get(c.parent);
@@ -418,13 +411,10 @@
       }
       return "/pages/menu-departments-item/search.html?" + query;
     };
-    const link = (c) => `<a href="${esc(url(c))}">${esc(c.nome)}</a>`;
-    const branch = (c, depth = 0) => {
-      const nested = children(c._id);
-      return nested.length && depth < 5
-        ? `<details class="category-branch"><summary>${esc(c.nome)}</summary><div>${link(c).replace(">" + esc(c.nome) + "</a>", ">Ver tudo em " + esc(c.nome) + " ↗</a>")}${nested.map((x) => branch(x, depth + 1)).join("")}</div></details>`
-        : link(c);
-    };
+    document.querySelectorAll("[data-category]").forEach((card) => {
+      const c = roots.find((c) => c.nome === card.dataset.category);
+      if (c) card.href = url(c);
+    });
     const departments = [
       ["Cachorro", "Cachorros"],
       ["Gato", "Gatos"],
@@ -437,107 +427,214 @@
         label,
       }))
       .filter((x) => x.category);
-    const item = (id, label, content, viewAll = "") =>
-      `<div class="nav-department"><button class="department-trigger" type="button" id="trigger-${id}" aria-expanded="false" aria-controls="panel-${id}">${esc(label)} <span aria-hidden="true">⌄</span></button><div class="category-panel" id="panel-${id}" aria-labelledby="trigger-${id}" hidden><div class="category-panel-heading"><div><span class="eyebrow">ENCONTRE O QUE SEU PET PRECISA</span><h2>${esc(label)}</h2></div>${viewAll}<button type="button" class="category-close" aria-label="Fechar subcategorias">✕</button></div><div class="category-columns">${content}</div></div></div>`;
+    const trigger = (id, label) =>
+      `<button type="button" class="department-trigger" data-root="${esc(id)}" aria-expanded="false" aria-controls="category-cascade">${esc(label)} <span aria-hidden="true">⌄</span></button>`;
+    const row = (c) => {
+      const hasChildren = children(c._id).length > 0;
+      return `<div class="cascade-row" data-node="${esc(c._id)}"><a href="${esc(url(c))}" title="${esc(c.nome)}">${esc(c.nome)}</a>${hasChildren ? `<button type="button" class="cascade-expand" data-expand="${esc(c._id)}" aria-label="Abrir subcategorias de ${esc(c.nome)}" aria-expanded="false" aria-controls="level-${esc(c._id)}">›</button>` : ""}</div>`;
+    };
+    const level = (id, nodes) =>
+      `<div class="cascade-level" id="level-${esc(id)}" data-level="${esc(id)}" hidden>${id === "all" ? "" : `<a class="cascade-view-all" href="${esc(url(byId.get(id)))}">Ver tudo em ${esc(byId.get(id).nome)} →</a>`}<div class="cascade-list">${nodes.map(row).join("")}</div></div>`;
     nav.innerHTML =
-      item(
-        "all",
-        "☷ Todos os departamentos",
-        roots
-          .map(
-            (c) =>
-              `<div class="category-group"><h3>${link(c)}</h3>${children(c._id)
-                .map((x) => branch(x))
-                .join("")}</div>`,
-          )
-          .join(""),
-      ) +
+      trigger("all", "☷ Todos os departamentos") +
       departments
-        .map(({ category: c, label }) =>
-          item(
-            c._id,
-            label,
-            children(c._id)
-              .map(
-                (x) =>
-                  `<div class="category-group"><h3>${link(x)}</h3>${children(
-                    x._id,
-                  )
-                    .map((y) => branch(y))
-                    .join("")}</div>`,
-              )
-              .join(""),
-            `<a class="category-view-all" href="${esc(url(c))}">Ver todos os produtos ↗</a>`,
-          ),
-        )
+        .map(({ category: c, label }) => trigger(c._id, label))
         .join("") +
-      '<a href="#club">E o Bicho Club <span class="tiny">CONHEÇA</span></a><a href="#lojas">Nossas lojas</a>';
-    const items = [...nav.querySelectorAll(".nav-department")];
-    let timer;
-    const close = () => {
+      '<a href="#club">E o Bicho Club <span class="tiny">CONHEÇA</span></a><a href="#lojas">Nossas lojas</a>' +
+      `<div id="category-cascade" class="cascade-panel" aria-label="Subcategorias" hidden><div class="cascade-heading"><div class="cascade-trail" aria-label="Caminho de categorias"></div><button type="button" class="cascade-close" aria-label="Fechar subcategorias">✕</button></div><div class="cascade-columns">${level("all", roots)}${categories
+        .filter((c) => children(c._id).length)
+        .map((c) => level(c._id, children(c._id)))
+        .join("")}</div></div>`;
+    const panel = $("#category-cascade"),
+      levels = [...panel.querySelectorAll(".cascade-level")],
+      triggers = [...nav.querySelectorAll(".department-trigger")];
+    let activeRoot = null,
+      path = [],
+      timer;
+    const desktop = () => matchMedia("(min-width:681px)").matches;
+    function close() {
       clearTimeout(timer);
-      items.forEach((i) => {
-        i.querySelector(".department-trigger").setAttribute(
-          "aria-expanded",
-          "false",
-        );
-        i.querySelector(".category-panel").hidden = true;
-      });
-    };
-    const open = (item) => {
-      close();
-      item
-        .querySelector(".department-trigger")
-        .setAttribute("aria-expanded", "true");
-      item.querySelector(".category-panel").hidden = false;
-    };
-    items.forEach((item) => {
-      const trigger = item.querySelector(".department-trigger");
-      trigger.addEventListener("click", () =>
-        trigger.getAttribute("aria-expanded") === "true" ? close() : open(item),
+      panel.hidden = true;
+      activeRoot = null;
+      path = [];
+      triggers.forEach((t) => t.setAttribute("aria-expanded", "false"));
+      panel
+        .querySelectorAll("[aria-expanded=true]")
+        .forEach((t) => t.setAttribute("aria-expanded", "false"));
+    }
+    function layout() {
+      if (panel.hidden) return;
+      const ids = [activeRoot, ...path];
+      // A short viewport distributes the current list into columns rather than adding an inner scrollbar.
+      const available = Math.max(
+        120,
+        window.innerHeight - panel.getBoundingClientRect().top - 88,
       );
-      item.addEventListener("pointerenter", (e) => {
-        if (
-          e.pointerType === "mouse" &&
-          matchMedia("(min-width:681px)").matches
-        )
-          open(item);
-      });
-      item.addEventListener("pointerleave", (e) => {
-        if (e.pointerType === "mouse") timer = setTimeout(close, 160);
-      });
-      item.addEventListener("focusin", (e) => {
-        if (
-          e.target !== trigger &&
-          trigger.getAttribute("aria-expanded") !== "true"
-        )
-          open(item);
-      });
-      item.addEventListener("focusout", (e) => {
-        if (!item.contains(e.relatedTarget)) close();
-      });
-      trigger.addEventListener("keydown", (e) => {
-        if (e.key === "ArrowDown") {
-          e.preventDefault();
-          open(item);
-          item
-            .querySelector(".category-panel a, .category-panel summary")
-            ?.focus();
+      const rows = desktop()
+        ? Math.max(3, Math.min(16, Math.floor(available / 32)))
+        : 16;
+      const budget = Math.max(
+        1,
+        Math.floor(nav.getBoundingClientRect().width / 210),
+      );
+      let visible = ids.slice(),
+        units = (id) =>
+          Math.max(
+            1,
+            Math.ceil(children(id === "all" ? "" : id).length / rows),
+          );
+      while (
+        visible.length > 1 &&
+        visible.reduce((sum, id) => sum + units(id), 0) > budget
+      )
+        visible.shift();
+      if (!desktop()) visible = [ids.at(-1)];
+      if (desktop()) {
+        const navWidth = nav.getBoundingClientRect().width || 1240;
+        const width = Math.min(
+          navWidth,
+          visible.reduce((sum, id) => sum + units(id), 0) * 250 + 36,
+        );
+        const trigger = triggers.find((t) => t.dataset.root === activeRoot);
+        panel.style.width = width + "px";
+        panel.style.left =
+          Math.max(0, Math.min(trigger?.offsetLeft || 0, navWidth - width)) +
+          "px";
+        panel.style.right = "auto";
+      } else {
+        panel.style.width = "100%";
+        panel.style.left = "";
+        panel.style.right = "";
+      }
+
+      levels.forEach((level) => {
+        const index = visible.indexOf(level.dataset.level);
+        level.hidden = index < 0;
+        if (index >= 0) {
+          const count = children(
+            level.dataset.level === "all" ? "" : level.dataset.level,
+          ).length;
+          level.style.setProperty(
+            "--level-columns",
+            desktop() ? Math.max(1, Math.ceil(count / rows)) : 1,
+          );
+          level.style.setProperty(
+            "--level-rows",
+            String(
+              Math.ceil(
+                count / (desktop() ? Math.max(1, Math.ceil(count / rows)) : 1),
+              ),
+            ),
+          );
+          level.style.flex = desktop()
+            ? String(Math.max(1, Math.ceil(count / rows)))
+            : "1";
         }
       });
-      item.querySelector(".category-close").addEventListener("click", () => {
-        close();
-        trigger.focus();
+      panel.querySelectorAll(".cascade-row").forEach((row) => {
+        const selected = path.includes(row.dataset.node);
+        row.classList.toggle("is-selected", selected);
+        row.querySelector("button")?.setAttribute("aria-expanded", selected);
       });
+      const names = ids.map(
+        (id, index) =>
+          `<button type="button" data-crumb="${index}">${id === "all" ? "Todos os departamentos" : esc(byId.get(id)?.nome || "")}</button>`,
+      );
+      panel.querySelector(".cascade-trail").innerHTML = names.join(
+        '<span aria-hidden="true">›</span>',
+      );
+    }
+    function open(root) {
+      clearTimeout(timer);
+      if (activeRoot !== root) path = [];
+      activeRoot = root;
+      panel.hidden = false;
+      triggers.forEach((t) =>
+        t.setAttribute("aria-expanded", t.dataset.root === root),
+      );
+      layout();
+    }
+    function expand(row) {
+      clearTimeout(timer);
+      const parent = row.closest(".cascade-level").dataset.level;
+      const ids = [activeRoot, ...path],
+        index = ids.indexOf(parent);
+      if (index < 0) return;
+      const next = row.querySelector("[data-expand]")?.dataset.expand;
+      const nextPath = path.slice(0, index);
+      if (next) nextPath.push(next);
+      if (JSON.stringify(path) === JSON.stringify(nextPath)) return;
+      path = nextPath;
+      layout();
+    }
+    triggers.forEach((t) => {
+      t.addEventListener("pointerenter", (e) => {
+        if (e.pointerType === "mouse" && desktop()) open(t.dataset.root);
+      });
+      t.addEventListener("click", () =>
+        activeRoot === t.dataset.root && !panel.hidden
+          ? close()
+          : open(t.dataset.root),
+      );
+      t.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          open(t.dataset.root);
+          panel.querySelector(".cascade-level:not([hidden]) a")?.focus();
+        }
+      });
+    });
+    panel.querySelectorAll(".cascade-row").forEach((row) => {
+      row.addEventListener("pointerenter", (e) => {
+        if (e.pointerType === "mouse" && desktop()) expand(row);
+      });
+      row.querySelector("button")?.addEventListener("click", () => {
+        expand(row);
+        if (!desktop())
+          panel.querySelector(".cascade-level:not([hidden]) a")?.focus();
+      });
+      row.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowRight" && row.querySelector("button")) {
+          e.preventDefault();
+          expand(row);
+          panel.querySelector(`#level-${row.dataset.node} a`)?.focus();
+        }
+      });
+    });
+    panel.querySelector(".cascade-trail").addEventListener("click", (e) => {
+      const crumb = e.target.closest("[data-crumb]");
+      if (!crumb) return;
+      path = path.slice(0, Number(crumb.dataset.crumb));
+      layout();
+    });
+    nav.addEventListener("pointerleave", (e) => {
+      if (e.pointerType === "mouse" && desktop())
+        timer = setTimeout(close, 180);
+    });
+    nav.addEventListener("pointerenter", () => clearTimeout(timer));
+    nav.addEventListener("focusout", (e) => {
+      if (!nav.contains(e.relatedTarget)) close();
     });
     nav.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
-        const trigger = nav.querySelector(
-          '.department-trigger[aria-expanded="true"]',
-        );
+        const root = activeRoot;
         close();
-        trigger?.focus();
+        triggers.find((t) => t.dataset.root === root)?.focus();
+      } else if (e.key === "ArrowLeft" && path.length) {
+        e.preventDefault();
+        const previous = path.pop();
+        layout();
+        panel
+          .querySelector(
+            `.cascade-level:not([hidden]) [data-expand="${previous}"]`,
+          )
+          ?.focus();
       }
+    });
+    panel.querySelector(".cascade-close").addEventListener("click", () => {
+      const root = activeRoot;
+      close();
+      triggers.find((t) => t.dataset.root === root)?.focus();
     });
     document.addEventListener("click", (e) => {
       if (!nav.contains(e.target)) close();
@@ -545,6 +642,7 @@
     $(".menu-toggle").addEventListener("click", () => {
       if (!nav.classList.contains("open")) close();
     });
+    window.addEventListener("resize", layout);
   }
 
   document.querySelectorAll("[data-slide]").forEach((button) =>

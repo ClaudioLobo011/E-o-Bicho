@@ -1264,159 +1264,6 @@ dialog .close {
   margin-left: 4px;
   color: var(--muted);
 }
-.category-panel[hidden] {
-  display: none;
-}
-.category-panel {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 100%;
-  z-index: 30;
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 0 0 18px 18px;
-  box-shadow: 0 20px 40px #26351c24;
-  padding: 25px 30px;
-  max-height: min(65vh, 620px);
-  overflow-y: auto;
-}
-.category-panel-heading {
-  display: flex;
-  align-items: center;
-  gap: 25px;
-  border-bottom: 1px solid var(--line);
-  padding-bottom: 16px;
-  margin-bottom: 20px;
-}
-.category-panel-heading h2 {
-  font-size: 23px;
-  margin: 8px 0 0;
-}
-.category-view-all {
-  margin-left: auto;
-  font-size: 12px;
-  color: var(--green);
-  font-weight: 700;
-}
-.category-close {
-  margin-left: auto;
-  border: 1px solid var(--line);
-  background: #f7f8f3;
-  color: var(--green);
-  width: 32px;
-  height: 32px;
-  flex-shrink: 0;
-  border-radius: 50%;
-}
-.category-columns {
-  columns: 4;
-  column-gap: 30px;
-}
-.category-group {
-  break-inside: avoid;
-  margin-bottom: 22px;
-}
-.category-group h3 {
-  font-size: 13px;
-  margin: 0 0 8px;
-}
-.category-group a {
-  display: block;
-  padding: 7px 0;
-  line-height: 1.4;
-  font-size: 12px;
-}
-.category-group h3 a {
-  color: var(--green);
-  font-weight: 800;
-  font-size: 13px;
-}
-.category-branch {
-  font-size: 12px;
-  margin: 5px 0;
-}
-.category-branch summary {
-  cursor: pointer;
-  padding: 7px 0;
-  color: #566047;
-}
-.category-branch > div {
-  padding-left: 12px;
-  border-left: 1px solid var(--line);
-}
-@media (max-width: 1000px) {
-  .department-trigger {
-    font-size: 10px;
-  }
-  .category-columns {
-    columns: 3;
-  }
-}
-@media (max-width: 680px) {
-  #navigation.open {
-    display: block;
-    max-height: 75vh;
-    overflow-y: auto;
-  }
-  .nav-department {
-    width: 100%;
-    border-bottom: 1px solid var(--line);
-  }
-  .department-trigger {
-    width: 100%;
-    text-align: left;
-    font-size: 13px;
-    padding: 15px 12px;
-    display: flex;
-    justify-content: space-between;
-  }
-  .category-panel {
-    position: static;
-    box-shadow: none;
-    border-radius: 10px;
-    padding: 16px;
-    max-height: 55vh;
-    margin-bottom: 12px;
-  }
-  .category-columns {
-    columns: 1;
-  }
-  .category-panel-heading {
-    flex-wrap: wrap;
-    gap: 12px;
-  }
-  .category-panel-heading h2 {
-    font-size: 20px;
-  }
-  .category-panel-heading .category-view-all {
-    margin: 0;
-    font-size: 11px;
-  }
-  .category-panel-heading > div {
-    width: calc(100% - 50px);
-  }
-  .category-panel-heading .category-close {
-    position: absolute;
-    right: 25px;
-  }
-  .category-panel a {
-    background: none;
-    padding: 9px 0;
-    border-radius: 0;
-  }
-  .category-group h3 a {
-    font-size: 13px;
-  }
-  #navigation > a {
-    display: block;
-    margin-top: 8px;
-  }
-  .category-branch summary {
-    padding: 10px 0;
-  }
-}
-
 #suggestions a {
   display: block;
   padding: 12px;
@@ -1506,4 +1353,188 @@ dialog .close {
     right: -2px;
     top: -2px;
   }
+}
+
+/* Menus progressivos: somente o caminho escolhido fica aberto, sem rolagem interna. */
+.cascade-panel[hidden],
+.cascade-level[hidden] {
+  display: none;
+}
+.cascade-panel {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  border: 1px solid var(--line);
+  border-radius: 0 0 14px 14px;
+  background: white;
+  box-shadow: 0 16px 30px #26351c20;
+  padding: 14px 18px 18px;
+  overflow: visible;
+}
+.cascade-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+.cascade-trail {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  min-width: 0;
+}
+.cascade-trail button {
+  font-size: 12px;
+  font-weight: 600;
+  border: 0;
+  background: transparent;
+  color: var(--green);
+  padding: 5px 0;
+  text-align: left;
+}
+.cascade-trail button:hover {
+  text-decoration: underline;
+}
+.cascade-close {
+  margin-left: auto;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  background: var(--cream);
+  color: var(--green);
+}
+.cascade-columns {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+.cascade-level {
+  min-width: 0;
+  flex: 1;
+}
+.cascade-level + .cascade-level:not([hidden]) {
+  border-left: 1px solid var(--line);
+  padding-left: 14px;
+}
+.cascade-list {
+  display: grid;
+  grid-template-columns: repeat(var(--level-columns, 1), minmax(0, 1fr));
+  gap: 0 12px;
+}
+.cascade-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  min-height: 32px;
+  border-radius: 5px;
+  padding: 0 5px;
+}
+.cascade-row > a {
+  display: block;
+  min-width: 0;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 8px 3px;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 400 !important;
+}
+.cascade-row:hover,
+.cascade-row:focus-within,
+.cascade-row.is-selected {
+  background: #f0f3e8;
+  color: var(--green);
+}
+.cascade-row .cascade-expand {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  background: transparent;
+  color: var(--green);
+  font-size: 20px;
+  border-radius: 4px;
+}
+.cascade-view-all {
+  display: block;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  color: var(--green);
+  padding: 0 8px 10px;
+}
+@media (max-width: 1000px) {
+  .department-trigger {
+    font-size: 10px;
+  }
+}
+@media (max-width: 680px) {
+  #navigation.open {
+    display: flex;
+    flex-wrap: wrap;
+    max-height: none;
+    overflow: visible;
+  }
+  #navigation > .department-trigger {
+    padding: 10px 12px;
+    background: var(--cream);
+    border-radius: 7px;
+    font-size: 12px;
+  }
+  #navigation > .cascade-panel {
+    position: static;
+    order: 5;
+    width: 100%;
+    box-shadow: none;
+    border-radius: 12px;
+    margin-top: 8px;
+    padding: 14px;
+    max-height: none;
+    overflow: visible;
+  }
+  .cascade-columns {
+    display: block;
+  }
+  .cascade-level + .cascade-level:not([hidden]) {
+    padding-left: 0;
+    border-left: 0;
+  }
+  .cascade-row {
+    min-height: 40px;
+  }
+  .cascade-row > a {
+    white-space: normal;
+    padding: 10px 3px;
+    line-height: 20px;
+  }
+  .cascade-row .cascade-expand {
+    height: 36px;
+    width: 36px;
+  }
+  .cascade-trail {
+    font-size: 11px;
+  }
+  .cascade-trail button {
+    font-size: 11px;
+  }
+  .cascade-view-all {
+    padding-top: 4px;
+  }
+}
+
+.cascade-list {
+  grid-auto-flow: column;
+  grid-template-rows: repeat(var(--level-rows, 1), minmax(32px, auto));
+}
+.cascade-panel a {
+  background: transparent;
 }
