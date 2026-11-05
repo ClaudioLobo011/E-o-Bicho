@@ -473,9 +473,15 @@
       const rows = desktop()
         ? Math.max(3, Math.min(16, Math.floor(available / 32)))
         : 16;
+      const navWidth = nav.getBoundingClientRect().width || 1240;
+      const trigger = triggers.find((t) => t.dataset.root === activeRoot);
+      const anchorLeft = Math.max(
+        0,
+        Math.min(trigger?.offsetLeft || 0, navWidth - 800),
+      );
       const budget = Math.max(
         1,
-        Math.floor(nav.getBoundingClientRect().width / 210),
+        Math.floor((navWidth - anchorLeft - 36) / 254),
       );
       let visible = ids.slice(),
         units = (id) =>
@@ -490,16 +496,12 @@
         visible.shift();
       if (!desktop()) visible = [ids.at(-1)];
       if (desktop()) {
-        const navWidth = nav.getBoundingClientRect().width || 1240;
-        const width = Math.min(
-          navWidth,
-          visible.reduce((sum, id) => sum + units(id), 0) * 250 + 36,
-        );
-        const trigger = triggers.find((t) => t.dataset.root === activeRoot);
-        panel.style.width = width + "px";
-        panel.style.left =
-          Math.max(0, Math.min(trigger?.offsetLeft || 0, navWidth - width)) +
-          "px";
+        const width =
+          visible.reduce((sum, id) => sum + units(id) * 240, 0) +
+          Math.max(0, visible.length - 1) * 14 +
+          36;
+        panel.style.width = Math.min(navWidth - anchorLeft, width) + "px";
+        panel.style.left = anchorLeft + "px";
         panel.style.right = "auto";
       } else {
         panel.style.width = "100%";
@@ -510,6 +512,7 @@
       levels.forEach((level) => {
         const index = visible.indexOf(level.dataset.level);
         level.hidden = index < 0;
+        level.style.order = String(index);
         if (index >= 0) {
           const count = children(
             level.dataset.level === "all" ? "" : level.dataset.level,
@@ -527,7 +530,7 @@
             ),
           );
           level.style.flex = desktop()
-            ? String(Math.max(1, Math.ceil(count / rows)))
+            ? "0 0 " + Math.max(1, Math.ceil(count / rows)) * 240 + "px"
             : "1";
         }
       });
