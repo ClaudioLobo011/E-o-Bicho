@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Product = require('../models/Product');
+const { calculateKitDepositBalances } = require('./fractionalKitBalance');
 
 const recalculateFractionalStockForProduct = async (productId, { session } = {}) => {
     if (!productId) {
@@ -140,6 +141,12 @@ const recalculateFractionalStockForProduct = async (productId, { session } = {})
             }
         });
 
+        if (fractionalItems.length > 1) {
+            const kitBalances = calculateKitDepositBalances(fractionalItems, childMap, product.unidade || 'UN');
+            depositTotals.clear();
+            for (const [id, balance] of kitBalances) depositTotals.set(id, balance);
+        }
+
         const costPerFraction = Number.isFinite(parentCostValue) && parentCostValue > 0
             && Number.isFinite(totalFractionQuantity) && totalFractionQuantity > 0
             ? parentCostValue / totalFractionQuantity
@@ -175,9 +182,8 @@ const recalculateFractionalStockForProduct = async (productId, { session } = {})
             ? Math.round(totalRawStock * 1_000_000) / 1_000_000
             : 0;
 
-        const normalizedTotalStock = Number.isFinite(totalRawStock) && totalRawStock > 0
-            ? Math.floor(totalRawStock)
-            : 0;
+        // Fractions from separate deposits cannot form a sellable whole box/kit.
+        const normalizedTotalStock = depositEntries.reduce((sum, entry) => sum + entry.assignedQuantity, 0);
 
         const updateDocument = {
             'fracionado.custoCalculado': Number.isFinite(costPerFraction) ? costPerFraction : null,
