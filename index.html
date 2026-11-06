@@ -1,6 +1,7 @@
 <!doctype html>
-<html lang="pt-BR">
+<html data-storefront-shell lang="pt-BR">
   <head>
+<script src="/scripts/storefront/bootstrap.js?v=20261106-release1" defer></script>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta
@@ -27,84 +28,15 @@
     <title>E o Bicho · Tudo para seu pet</title>
     <link rel="preconnect" href="https://cdn.peteobicho.com.br" />
     <link rel="preconnect" href="https://api.peteobicho.com.br" />
-    <link rel="stylesheet" href="/src/home.css?v=20261105-2" />
-    <script src="/scripts/core/config.js?v=20260812-2" defer></script>
-    <script src="/scripts/product/product-utils.js?v=20261104-1" defer></script>
-    <script src="/scripts/home/home.js?v=20261105-2" defer></script>
+    <link rel="stylesheet" href="/src/home.css?v=20261106-release1" />
+    <script src="/scripts/core/config.js?v=20261106-release1" defer></script>
+    <script src="/scripts/product/product-utils.js?v=20261106-release1" defer></script>
+    <script src="/scripts/home/home.js?v=20261106-release1" defer></script>
   </head>
   <body>
     <a class="skip" href="#conteudo">Pular para o conteúdo</a>
 
-    <div class="utility">
-      <div class="wrap">
-        <span>Carinho de perto. Cuidado todos os dias.</span
-        ><a href="#lojas">Nossas lojas no Rio de Janeiro ↗</a>
-      </div>
-    </div>
-    <header>
-      <div class="wrap header-main">
-        <a href="/" aria-label="E o Bicho, início"
-          ><img
-            class="logo"
-            src="/public/image/logo.svg"
-            alt="E o Bicho"
-            width="130"
-            height="72"
-        /></a>
-        <form class="search" role="search">
-          <label class="sr" for="search">O que seu pet precisa?</label
-          ><input
-            id="search"
-            name="search"
-            type="search"
-            placeholder="O que seu pet precisa hoje?"
-            autocomplete="off"
-          /><button aria-label="Buscar produtos" type="submit">
-            <svg viewBox="0 0 24 24">
-              <circle cx="10" cy="10" r="6.5" />
-              <path d="m15 15 5 5" />
-            </svg>
-          </button>
-          <div id="suggestions" hidden></div>
-        </form>
-        <div class="actions">
-          <button id="account-button" aria-label="Minha conta">
-            <svg viewBox="0 0 24 24">
-              <circle cx="12" cy="7" r="4" />
-              <path d="M4 22v-3a8 8 0 0 1 16 0v3" /></svg
-            ><span>Olá, bem-vindo<b>Minha conta</b></span></button
-          ><button id="open-favorites" aria-label="Meus favoritos">
-            <svg viewBox="0 0 24 24">
-              <path
-                d="M20 4c-3-3-7-1-8 1-1-2-5-4-8-1-5 5 3 11 8 16 5-5 13-11 8-16Z"
-              /></svg
-            ><i id="favorite-count">0</i></button
-          ><button id="cart-button" aria-label="Minha sacola">
-            <i id="cart-count">0</i
-            ><svg viewBox="0 0 24 24">
-              <path d="M4 7h16l1 15H3L4 7Zm4 0V5a4 4 0 0 1 8 0v2" />
-            </svg></button
-          ><button
-            class="menu-toggle"
-            aria-controls="navigation"
-            aria-expanded="false"
-            aria-label="Abrir categorias"
-          >
-            ☰
-          </button>
-        </div>
-      </div>
-      <nav id="navigation" class="wrap" aria-label="Categorias">
-        <a href="#categorias">☷ &nbsp; Todos os departamentos</a
-        ><a data-category="Cachorro" href="#produtos">Cachorros</a
-        ><a data-category="Gato" href="#produtos">Gatos</a
-        ><a data-category="Pássaros" href="#produtos">Pássaros</a
-        ><a data-category="Peixe" href="#produtos">Peixes</a
-        ><a data-category="Outros Pets" href="#produtos">Roedores</a
-        ><a href="#club">E o Bicho Club <span class="tiny">CONHEÇA</span></a
-        ><a href="#lojas">Nossas lojas</a>
-      </nav>
-    </header>
+    <div id="header-placeholder"></div>
     <main id="conteudo">
       <section class="hero wrap" aria-labelledby="hero-title">
         <div class="hero-copy">
@@ -297,59 +229,8 @@
         <a href="#lojas">Fale com uma de nossas lojas ↗</a>
       </section>
     </main>
-    <footer>
-      <div class="wrap footer-grid">
-        <div>
-          <img
-            src="/public/image/logo.svg"
-            alt="E o Bicho"
-            width="130"
-            height="80"
-          />
-          <p>
-            Para eles, todo o nosso carinho.<br />Para você, toda a nossa
-            atenção.
-          </p>
-          <a
-            target="_blank"
-            rel="noopener"
-            href="https://www.instagram.com/petshopeobichovilaisabel/"
-            >Acompanhe no Instagram ↗</a
-          >
-        </div>
-        <div>
-          <h3>Encontre seu produto</h3>
-          <a href="#categorias">Por tipo de pet</a
-          ><a href="#produtos">Produtos em destaque</a
-          ><a href="#club">E o Bicho Club</a>
-        </div>
-        <div>
-          <h3>Estamos por aqui</h3>
-          <a href="#lojas">Lojas e horários</a
-          ><a href="#lojas">Fale com a equipe</a
-          ><a href="/pages/ajuda.html">Central de ajuda ↗</a>
-        </div>
-        <div>
-          <h3>Sobre sua compra</h3>
-          <a href="/pages/politica-de-privacidade.html">Privacidade ↗</a
-          ><a href="/pages/meus-pedidos.html">Acompanhar pedidos</a>
-          <p>
-            Entrega e retirada: consulte<br />as condições para seu endereço.
-          </p>
-        </div>
-      </div>
-      <div class="wrap legal">
-        Vila E o Bicho LTDA - ME · CNPJ 07.919.703/0001-67
-        <span>© 2026 E o Bicho · Todos os direitos reservados.</span>
-      </div>
-    </footer>
-    <dialog id="info" aria-labelledby="dialog-title">
-      <button class="close" aria-label="Fechar janela">✕</button>
-      <div class="eyebrow">E O BICHO</div>
-      <h2 id="dialog-title">Como podemos ajudar?</h2>
-      <div id="dialog-body"></div>
-      <button class="button close-action">Continuar explorando</button>
-    </dialog>
-    <div id="toast" role="status"></div>
+    <div id="footer-placeholder"></div>
+
+
   </body>
 </html>

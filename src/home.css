@@ -1538,3 +1538,43 @@ dialog .close {
 .cascade-panel a {
   background: transparent;
 }
+
+/* Nome navega; seta abre as subcategorias por toque. */
+.department-entry {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.department-entry > .department-trigger {
+  display: block;
+  padding-right: 0;
+}
+.department-toggle {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 10px 5px;
+  min-width: 24px;
+  min-height: 32px;
+  font-size: 12px;
+}
+.department-toggle[aria-expanded="true"] {
+  color: var(--green);
+}
+@media (max-width: 680px) {
+  #navigation > .department-entry {
+    background: var(--cream);
+    border-radius: 7px;
+  }
+  .department-entry > .department-trigger {
+    padding: 10px 4px 10px 12px;
+    background: transparent;
+    font-size: 12px;
+  }
+  .department-toggle {
+    padding: 10px 12px 10px 4px;
+    min-width: 34px;
+    min-height: 38px;
+  }
+}

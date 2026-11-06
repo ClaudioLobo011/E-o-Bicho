@@ -1,31 +1,21 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html data-storefront-header="compact" data-storefront-footer="compact" data-storefront-shell lang="pt-BR">
 <head>
+<script src="/scripts/storefront/bootstrap.js?v=20261106-release1" defer></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Login - E o Bicho</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <link rel="stylesheet" href="../src/output.css">
   <script src="https://unpkg.com/imask"></script>
-  <link rel="stylesheet" href="../src/responsive-workspace.css?v=20261008-1">
+  <link rel="stylesheet" href="../src/responsive-workspace.css?v=20261106-release1">
 </head>
 <body class="bg-gray-50 responsive-site">
 
-  <header class="bg-white shadow-sm">
-    <div class="container mx-auto px-4 py-4 flex justify-between items-center">
-      <a href="../index.html">
-        <img src="../public/image/logo.svg" alt="Logotipo E o Bicho" class="h-20 w-auto">
-      </a>
-      <div class="flex items-center text-gray-500">
-        <span class="border-r border-gray-300 h-6 mr-4"></span>
-        <i class="fas fa-lock mr-2"></i>
-        <span class="font-semibold text-sm">Ambiente Seguro</span>
-      </div>
-    </div>
-  </header>
+  <div id="header-placeholder"></div>
 
   <main class="flex items-center justify-center py-10 px-4">
-    <div class="container mx-auto max-w-screen-md flex shadow-lg rounded-lg overflow-hidden">
+    <div class="container mx-auto max-w-screen-md flex flex-col md:flex-row shadow-lg rounded-lg overflow-hidden">
 
       <div class="w-full md:w-1/2 bg-white p-8">
         <h2 class="text-2xl font-bold text-center text-gray-800 mb-6">Acesse sua Conta</h2>
@@ -67,33 +57,25 @@
       <div class="w-full md:w-1/2 bg-gray-100 p-8 flex flex-col justify-center items-center">
         <h3 class="text-xl font-bold text-primary mb-4 text-center">Criar uma conta é rápido,<br>fácil e gratuito!</h3>
         <p class="text-gray-700 text-center mb-4 text-sm">Com a sua conta da E o Bicho você tem acesso a Ofertas exclusivas, descontos, pode criar e gerenciar a sua Lista de Desejos e muito mais!</p>
-        <a href="cadastro.html">
-          <button class="bg-white hover:bg-gray-200 text-primary font-bold py-2 px-6 rounded-lg border border-primary transition duration-300">
+        <a href="cadastro.html" class="inline-block text-center bg-white hover:bg-gray-200 text-primary font-bold py-2 px-6 rounded-lg border border-primary transition duration-300">
             Criar minha conta
-          </button>
         </a>
       </div>
 
     </div>
   </main>
 
-  <footer class="container mx-auto max-w-screen-md py-6">
-    <div class="border-t border-gray-200 text-center text-gray-400 text-xs pt-6">
-      <p>
-        Copyright &copy; 2025 Vila E o Bicho LTDA - ME. Todos os direitos reservados.
-      </p>
-    </div>
-  </footer>
+  <div id="footer-placeholder"></div>
 
   <div id="modal-placeholder"></div>
   <div id="confirm-modal-placeholder"></div>
 
   <script>var basePath = '../';</script>
-  <script src="../scripts/core/config.js?v=20260812-2"></script>
+  <script src="../scripts/core/config.js?v=20261106-release1"></script>
   <script src="../scripts/core/ui.js"></script>
-  <script src="../scripts/core/main.js"></script>
+  <script src="../scripts/core/main.js?v=20261106-release1"></script>
   <script src="../scripts/core/masks.js"></script>
-  <script src="../scripts/auth.js"></script>
+  <script src="../scripts/auth.js?v=20261106-release1"></script>
 
   <script>
     document.addEventListener('DOMContentLoaded', () => {
@@ -403,20 +385,6 @@
       });
     });
   </script>
-
-  <div id="login-success-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 transition-opacity duration-300">
-    <div class="bg-white rounded-lg shadow-xl p-6 max-w-xs w-full text-center">
-      <div class="text-3xl text-primary mb-3">
-        <i class="fas fa-check-circle"></i>
-      </div>
-      <h2 class="text-xl font-bold text-gray-800 mb-2">Sucesso!</h2>
-      <p id="login-modal-message" class="text-gray-600 mb-4 text-sm">Login bem-sucedido!</p>
-      <div class="flex items-center justify-center text-gray-700">
-        <i class="fas fa-spinner fa-spin mr-2"></i>
-        <span id="login-redirect-timer">A redirecionar em 3...</span>
-      </div>
-    </div>
-  </div>
 
 </body>
 </html>

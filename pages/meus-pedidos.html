@@ -1,62 +1,139 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Meus Favoritos - E o Bicho</title>
-    
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-    <link rel="stylesheet" href="../src/output.css">
-  <link rel="stylesheet" href="../src/responsive-workspace.css?v=20261008-1">
-</head>
-<body class="bg-gray-100 responsive-site">
+<!doctype html>
+<html data-storefront-shell="" lang="pt-BR">
+  <head>
+    <script
+      src="/scripts/storefront/bootstrap.js?v=20261106-release1"
+      defer=""
+    ></script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Meus pedidos - E o Bicho</title>
 
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+    />
+    <link rel="stylesheet" href="../src/output.css" />
+    <link
+      rel="stylesheet"
+      href="../src/responsive-workspace.css?v=20261106-release1"
+    />
+    <link rel="stylesheet" href="/src/profile.css?v=20261106-release1" />
+    <link rel="stylesheet" href="/src/orders.css?v=20261106-release1" />
+  </head>
+  <body class="profile-page orders-page responsive-site">
     <div id="header-placeholder"></div>
-
-    <main class="container mx-auto px-4 pb-8" data-header-offset="site">
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
-
-            <aside class="md:col-span-1">
-                <div id="account-sidebar-placeholder"></div>
-            </aside>
-
-            <div class="md:col-span-3">
-                <div class="bg-white p-6 rounded-lg shadow">
-                    <h1 class="text-2xl font-bold text-gray-800">Meus Pedidos</h1>
-                    <p class="text-gray-600 mt-1">Confira os detalhes dos seus pedidos.</p>
-                    
-                    <div class="mt-8 space-y-4">
-                        <div id="my-orders-list" class="space-y-4"></div>
-                        <div id="my-orders-empty" class="mt-10 text-center text-gray-500 hidden">
-                            <p>Voce ainda nao fez nenhum pedido.</p>
-                        </div>
-                    </div>
-
-                </div>
+    <main class="profile-layout" id="orders-main">
+      <div class="profile-breadcrumb">
+        <a href="/">Início</a><span aria-hidden="true">›</span
+        ><span>Minha conta</span><span aria-hidden="true">›</span
+        ><span aria-current="page">Meus pedidos</span>
+      </div>
+      <div class="profile-columns">
+        <aside class="profile-sidebar">
+          <div id="account-sidebar-placeholder"></div>
+          <a class="profile-support" href="/pages/nossas-lojas.html"
+            ><span aria-hidden="true">♡</span>
+            <div>
+              <strong>Estamos por perto</strong
+              ><small>Fale com a equipe da sua loja →</small>
+            </div></a
+          >
+        </aside>
+        <div class="profile-content">
+          <section class="profile-hero">
+            <div>
+              <h1>Meus pedidos</h1>
+              <p>Suas compras e todos os detalhes, bem pertinho.</p>
             </div>
-
+            <svg
+              class="orders-hero-icon"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path
+                d="m3 7 9-4 9 4v10l-9 4-9-4V7Zm0 0 9 4 9-4M12 11v10M7 5l10 5v5"
+              ></path>
+            </svg>
+          </section>
+          <form
+            id="orders-filters"
+            class="orders-toolbar"
+            role="search"
+            aria-label="Filtrar meus pedidos"
+          >
+            <label class="orders-search"
+              >Buscar pedido ou produto<input
+                id="orders-search"
+                type="search"
+                placeholder="Número do pedido ou nome do produto"
+                autocomplete="off"
+                disabled="" /></label
+            ><label
+              >Status<select id="orders-status" disabled="">
+                <option value="">Todos os status</option>
+              </select></label
+            ><label
+              >Ordenar<select id="orders-sort" disabled="">
+                <option value="recent">Mais recentes</option>
+                <option value="oldest">Mais antigos</option>
+                <option value="total">Maior valor</option>
+              </select></label
+            ><button
+              id="orders-refresh"
+              type="button"
+              aria-label="Atualizar pedidos"
+              disabled=""
+            >
+              ↻ <span>Atualizar</span>
+            </button>
+          </form>
+          <div class="orders-list-meta">
+            <p id="orders-count" role="status" aria-live="polite">
+              Consultando seus pedidos…
+            </p>
+            <button id="orders-clear" type="button" hidden="">
+              Limpar filtros
+            </button>
+          </div>
+          <div
+            id="orders-feedback"
+            class="orders-feedback"
+            role="status"
+            hidden=""
+          ></div>
+          <div id="my-orders-list" class="orders-list" aria-busy="true"></div>
+          <div
+            id="my-orders-empty"
+            class="orders-empty"
+            role="status"
+            hidden=""
+          ></div>
+          <button id="orders-more" type="button" class="orders-more" hidden="">
+            Mostrar mais pedidos
+          </button>
+          <p class="orders-help-note">
+            Alguma dúvida sobre uma compra?
+            <a href="/pages/nossas-lojas.html"
+              >Fale com a equipe da sua loja ↗</a
+            >
+          </p>
         </div>
+      </div>
     </main>
-
     <div id="cart-placeholder"></div>
     <div id="modal-placeholder"></div>
     <div id="confirm-modal-placeholder"></div>
-
-    <footer class="container mx-auto py-6 px-4">
-        <div class="border-t border-gray-200 text-center text-gray-400 text-xs pt-6">
-            <p>
-                Copyright &copy; 2025 Vila E o Bicho LTDA - ME. Todos os direitos reservados.
-            </p>
-        </div>
-    </footer>
-
-    <script>var basePath = '../';</script>
-    <script src="../scripts/core/config.js?v=20260812-2"></script>
+    <div id="footer-placeholder"></div>
+    <script>
+      var basePath = "../";
+    </script>
+    <script src="../scripts/core/config.js?v=20261106-release1"></script>
     <script src="../scripts/core/ui.js"></script>
-    <script src="../scripts/cartManager.js"></script> 
-    <script src="../scripts/core/main.js"></script>
+    <script src="../scripts/cartManager.js"></script>
+    <script src="../scripts/core/main.js?v=20261106-release1"></script>
     <script src="../scripts/user/hydrate-user.js"></script>
     <script src="../scripts/cart.js"></script>
-    <script src="../scripts/user/meus-pedidos.js"></script>
-</body>
+    <script src="/scripts/user/meus-pedidos.js?v=20261106-release1"></script>
+  </body>
 </html>

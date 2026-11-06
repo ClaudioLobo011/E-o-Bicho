@@ -1,254 +1,680 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!doctype html>
+<html
+  data-storefront-header="compact"
+  data-storefront-footer="compact"
+  data-storefront-shell=""
+  lang="pt-BR"
+>
+  <head>
+    <script
+      src="/scripts/storefront/bootstrap.js?v=20261106-release1"
+      defer=""
+    ></script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Crie sua Conta - E o Bicho</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-    <link rel="stylesheet" href="../src/output.css">
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+    />
+    <link rel="stylesheet" href="../src/output.css" />
     <script src="https://unpkg.com/imask"></script>
-  <link rel="stylesheet" href="../src/responsive-workspace.css?v=20261008-1">
-</head>
-<body class="bg-gray-50 responsive-site">
-
-    <header class="bg-white shadow-sm">
-        <div class="container mx-auto px-4 py-4 flex justify-between items-center">
-            <a href="../index.html">
-                <img src="../public/image/logo.svg" alt="Logotipo E o Bicho" class="h-20 w-auto">
-            </a>
-            <div class="flex items-center text-gray-500">
-                <span class="border-r border-gray-300 h-6 mr-4"></span>
-                <i class="fas fa-lock mr-2"></i>
-                <span class="font-semibold text-sm">Ambiente Seguro</span>
-            </div>
+    <link
+      rel="stylesheet"
+      href="../src/responsive-workspace.css?v=20261106-release1"
+    />
+    <link rel="stylesheet" href="/src/signup.css?v=20261106-release1" />
+  </head>
+  <body class="signup-page responsive-site">
+    <div id="header-placeholder"></div>
+    <main class="signup-layout" id="signup-main">
+      <aside class="signup-aside">
+        <span class="signup-eyebrow">É O BICHO · PERTINHO DE VOCÊ</span>
+        <div class="signup-art">
+          <svg viewBox="0 0 200 160" fill="none" aria-hidden="true">
+            <circle cx="100" cy="80" r="73" fill="#e4ebd4"></circle>
+            <ellipse
+              cx="72"
+              cy="52"
+              rx="13"
+              ry="19"
+              transform="rotate(-18 72 52)"
+              fill="#8c9e69"
+            ></ellipse>
+            <ellipse
+              cx="126"
+              cy="52"
+              rx="13"
+              ry="19"
+              transform="rotate(18 126 52)"
+              fill="#8c9e69"
+            ></ellipse>
+            <ellipse
+              cx="47"
+              cy="86"
+              rx="10"
+              ry="15"
+              transform="rotate(-28 47 86)"
+              fill="#8c9e69"
+            ></ellipse>
+            <ellipse
+              cx="151"
+              cy="86"
+              rx="10"
+              ry="15"
+              transform="rotate(28 151 86)"
+              fill="#8c9e69"
+            ></ellipse>
+            <path
+              d="M66 124c-14-13 11-48 34-48s48 35 34 48c-10 10-20-2-34-2s-24 12-34 2Z"
+              fill="#47562b"
+            ></path>
+            <path
+              d="M93 100c-5-7-14 0-8 6l15 13 15-13c6-6-3-13-8-6l-7 7-7-7Z"
+              fill="#fff"
+            ></path>
+            <path
+              d="m159 25 3 7 8 1-6 5 2 8-7-4-7 4 2-8-6-5 8-1 3-7Z"
+              fill="#b79c64"
+            ></path>
+          </svg>
         </div>
-    </header>
-
-    <main class="flex items-center justify-center py-10 px-4">
-        <div class="container mx-auto max-w-screen-md flex flex-col md:flex-row shadow-lg rounded-lg overflow-hidden">
-            <div class="w-full md:w-1/2 bg-white p-8">
-                <h2 class="text-xl font-bold text-gray-800 mb-6">Crie sua conta</h2>
-                <div class="flex items-center space-x-6 mb-6">
-                    <label class="flex items-center cursor-pointer">
-                        <input type="radio" name="account_type" id="radio-pf" class="form-radio text-primary" checked>
-                        <span class="ml-2 text-sm font-medium text-gray-700">Pessoa Física</span>
-                    </label>
-                    <label class="flex items-center cursor-pointer">
-                        <input type="radio" name="account_type" id="radio-pj" class="form-radio text-primary">
-                        <span class="ml-2 text-sm font-medium text-gray-700">Pessoa Jurídica</span>
-                    </label>
+        <h1>Um só lugar para cuidar de quem você ama.</h1>
+        <p>Crie sua conta e tenha o cuidado com seu pet sempre por perto.</p>
+        <ul class="signup-benefits">
+          <li>
+            <span aria-hidden="true">✓</span>
+            <div>
+              <strong>Suas compras, de pertinho</strong
+              ><small>Acompanhe seus pedidos em um só lugar.</small>
+            </div>
+          </li>
+          <li>
+            <span aria-hidden="true">♡</span>
+            <div>
+              <strong>Seus favoritos sempre à mão</strong
+              ><small>Salve os produtos que fazem parte da rotina.</small>
+            </div>
+          </li>
+          <li>
+            <span aria-hidden="true">⌾</span>
+            <div>
+              <strong>Cada pet tem seu jeitinho</strong
+              ><small>Mantenha o cadastro dos seus companheiros.</small>
+            </div>
+          </li>
+        </ul>
+        <a class="signup-help" href="/pages/nossas-lojas.html"
+          >Precisa de uma mãozinha? Fale com a gente ↗</a
+        >
+      </aside>
+      <div class="signup-card">
+        <header class="signup-heading">
+          <span class="signup-eyebrow">BEM-VINDO À NOSSA TURMA</span>
+          <h2>Crie sua conta</h2>
+          <p>Preencha seus dados para começar. É gratuito.</p>
+          <p class="signup-login-top">
+            Já tem conta? <a href="login.html">Entrar →</a>
+          </p>
+        </header>
+        <div
+          class="signup-account-type"
+          role="group"
+          aria-label="Tipo de conta"
+        >
+          <label class="signup-type-option">
+            <input
+              type="radio"
+              name="account_type"
+              id="radio-pf"
+              class="form-radio text-primary"
+              checked=""
+            />
+            <span class=""
+              >Pessoa Física<small>Para você e seu pet</small></span
+            >
+          </label>
+          <label class="signup-type-option">
+            <input
+              type="radio"
+              name="account_type"
+              id="radio-pj"
+              class="form-radio text-primary"
+            />
+            <span class="">Pessoa Jurídica<small>Para sua empresa</small></span>
+          </label>
+        </div>
+        <p class="signup-preview-note" id="signup-preview-note" hidden="">
+          Prévia de teste: cadastros e envios de código não são realizados neste
+          ambiente.
+        </p>
+        <form id="signup-form" data-signup-layout="modern">
+          <div
+            id="signup-feedback"
+            class="signup-feedback"
+            role="status"
+            tabindex="-1"
+            hidden=""
+          ></div>
+          <div id="form-pf">
+            <section class="signup-section">
+              <div class="signup-section-heading">
+                <h3>Seus dados</h3>
+                <p>Vamos começar por quem cuida.</p>
+              </div>
+              <div class="signup-fields">
+                <div class="signup-field signup-field-full">
+                  <label
+                    for="name"
+                    class="block text-gray-700 text-sm font-bold mb-1"
+                    >Nome e sobrenome</label
+                  >
+                  <input
+                    type="text"
+                    id="name"
+                    name="nomeCompleto"
+                    placeholder="Digite seu nome e sobrenome"
+                    class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary"
+                    autocomplete="name"
+                  />
+                  <div class="error-message text-xs mt-1"></div>
                 </div>
-
-                <form id="signup-form" class="space-y-4">
-                    <div id="form-pf" class="space-y-4 overflow-hidden transition-all duration-500 ease-in-out">
-                        <div>
-                            <label for="name" class="block text-gray-700 text-sm font-bold mb-1">Nome e sobrenome</label>
-                            <input type="text" id="name" name="nomeCompleto" placeholder="Digite seu nome e sobrenome" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary">
-                            <div class="error-message text-xs mt-1"></div>
-                        </div>
-                        <div>
-                            <label for="email-pf" class="block text-gray-700 text-sm font-bold mb-1">E-mail</label>
-                            <input type="email" id="email-pf" name="email" placeholder="Digite seu e-mail" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary">
-                            <div class="error-message text-xs mt-1"></div>
-                        </div>
-                        <div>
-                            <label for="celular-pf" class="block text-gray-700 text-sm font-bold mb-1">Celular</label>
-                            <input type="tel" id="celular-pf" name="celular" placeholder="(00) 00000-0000" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary" data-mask="celular">
-                            <div class="error-message text-xs mt-1"></div>
-                        </div>
-                        <div>
-                            <label for="telefone-pf" class="block text-gray-700 text-sm font-bold mb-1">Telefone <span class="text-gray-500 font-normal">(opcional)</span></label>
-                            <input type="tel" id="telefone-pf" name="telefone" placeholder="(00) 0000-0000" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary" data-mask="telefone">
-                        </div>
-                        <div class="flex flex-col md:flex-row md:space-x-4">
-                            <div class="w-full md:w-1/2">
-                                <label for="genero" class="block text-gray-700 text-sm font-bold mb-1">Gênero</label>
-                                <select id="genero" name="genero" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary appearance-none bg-white">
-                                    <option value="">Escolha o gênero</option>
-                                    <option value="masculino">Masculino</option>
-                                    <option value="feminino">Feminino</option>
-                                </select>
-                            </div>
-                            <div class="w-full md:w-1/2 mt-4 md:mt-0">
-                                <label for="data_nascimento" class="block text-gray-700 text-sm font-bold mb-1">Data de nascimento</label>
-                                <input type="date" id="data_nascimento" name="dataNascimento" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary">
-                            </div>
-                        </div>
-                        <div>
-                            <label for="cpf" class="block text-gray-700 text-sm font-bold mb-1">CPF</label>
-                            <input type="text" id="cpf" name="cpf" placeholder="000.000.000-00" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary" data-mask="cpf">
-                            <div class="error-message text-xs mt-1"></div>
-                        </div>
+                <div class="signup-field">
+                  <label
+                    for="cpf"
+                    class="block text-gray-700 text-sm font-bold mb-1"
+                    >CPF</label
+                  >
+                  <input
+                    type="text"
+                    id="cpf"
+                    name="cpf"
+                    placeholder="000.000.000-00"
+                    class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary"
+                    data-mask="cpf"
+                    autocomplete="off"
+                    inputmode="numeric"
+                  />
+                  <div class="error-message text-xs mt-1"></div>
+                </div>
+                <div class="signup-field">
+                  <label
+                    for="data_nascimento"
+                    class="block text-gray-700 text-sm font-bold mb-1"
+                    >Data de nascimento</label
+                  >
+                  <input
+                    type="date"
+                    id="data_nascimento"
+                    name="dataNascimento"
+                    class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary"
+                    autocomplete="bday"
+                  />
+                </div>
+                <div class="signup-field">
+                  <label
+                    for="genero"
+                    class="block text-gray-700 text-sm font-bold mb-1"
+                    >Gênero</label
+                  >
+                  <select
+                    id="genero"
+                    name="genero"
+                    class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary appearance-none bg-white"
+                  >
+                    <option value="">Escolha o gênero</option>
+                    <option value="masculino">Masculino</option>
+                    <option value="feminino">Feminino</option>
+                  </select>
+                </div>
+              </div>
+            </section>
+            <section class="signup-section">
+              <div class="signup-section-heading">
+                <h3>Como falar com você</h3>
+                <p>Use um e-mail e um celular que você acessa.</p>
+              </div>
+              <div class="signup-fields">
+                <div class="signup-field signup-field-full">
+                  <label
+                    for="email-pf"
+                    class="block text-gray-700 text-sm font-bold mb-1"
+                    >E-mail</label
+                  >
+                  <input
+                    type="email"
+                    id="email-pf"
+                    name="email"
+                    placeholder="Digite seu e-mail"
+                    class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary"
+                    autocomplete="email"
+                  />
+                  <div class="error-message text-xs mt-1"></div>
+                </div>
+                <div class="signup-field">
+                  <label
+                    for="celular-pf"
+                    class="block text-gray-700 text-sm font-bold mb-1"
+                    >Celular</label
+                  >
+                  <input
+                    type="tel"
+                    id="celular-pf"
+                    name="celular"
+                    placeholder="(00) 00000-0000"
+                    class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary"
+                    data-mask="celular"
+                    autocomplete="tel"
+                  />
+                  <div class="error-message text-xs mt-1"></div>
+                </div>
+                <div class="signup-field">
+                  <label
+                    for="telefone-pf"
+                    class="block text-gray-700 text-sm font-bold mb-1"
+                    >Telefone
+                    <span class="text-gray-500 font-normal"
+                      >(opcional)</span
+                    ></label
+                  >
+                  <input
+                    type="tel"
+                    id="telefone-pf"
+                    name="telefone"
+                    placeholder="(00) 0000-0000"
+                    class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary"
+                    data-mask="telefone"
+                    autocomplete="tel-national"
+                  />
+                </div>
+              </div>
+            </section>
+          </div>
+          <div id="form-pj" hidden="">
+            <section class="signup-section">
+              <div class="signup-section-heading">
+                <h3>Dados da empresa</h3>
+                <p>As informações do seu cadastro empresarial.</p>
+              </div>
+              <div class="signup-fields">
+                <div class="signup-field signup-field-full">
+                  <label
+                    for="razao_social"
+                    class="block text-gray-700 text-sm font-bold mb-1"
+                    >Razão Social</label
+                  >
+                  <input
+                    type="text"
+                    id="razao_social"
+                    name="razaoSocial"
+                    placeholder="Digite a Razão Social"
+                    class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary"
+                    autocomplete="organization"
+                  />
+                  <div class="error-message text-xs mt-1"></div>
+                </div>
+                <div class="signup-field">
+                  <label
+                    for="cnpj"
+                    class="block text-gray-700 text-sm font-bold mb-1"
+                    >CNPJ</label
+                  >
+                  <input
+                    type="text"
+                    id="cnpj"
+                    name="cnpj"
+                    placeholder="00.000.000/0000-00"
+                    class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary"
+                    data-mask="cnpj"
+                    autocomplete="off"
+                    inputmode="numeric"
+                  />
+                  <div class="error-message text-xs mt-1"></div>
+                </div>
+                <div class="signup-field">
+                  <label
+                    for="nome_contato"
+                    class="block text-gray-700 text-sm font-bold mb-1"
+                    >Nome do Contato
+                    <span class="text-gray-500 font-normal"
+                      >(opcional)</span
+                    ></label
+                  >
+                  <input
+                    type="text"
+                    id="nome_contato"
+                    name="nomeContato"
+                    placeholder="Digite o nome do contato"
+                    class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary"
+                    autocomplete="name"
+                  />
+                </div>
+              </div>
+            </section>
+            <section class="signup-section">
+              <div class="signup-section-heading">
+                <h3>Informações fiscais</h3>
+                <p>Informe a inscrição estadual ou marque a isenção.</p>
+              </div>
+              <div class="signup-fields">
+                <div class="signup-field">
+                  <label
+                    for="ie"
+                    class="block text-gray-700 text-sm font-bold mb-1"
+                    >IE</label
+                  >
+                  <input
+                    type="text"
+                    id="ie"
+                    name="inscricaoEstadual"
+                    placeholder="Inscrição Estadual"
+                    class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                  <div class="error-message text-xs mt-1"></div>
+                </div>
+                <div class="signup-field">
+                  <label
+                    for="estado_ie"
+                    class="block text-gray-700 text-sm font-bold mb-1"
+                    >Estado da IE</label
+                  >
+                  <div class="relative">
+                    <select
+                      id="estado_ie"
+                      name="estadoIE"
+                      class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary bg-white appearance-none pr-8"
+                    >
+                      <option value="">Selecione o Estado</option>
+                      <option value="AC">Acre</option>
+                      <option value="AL">Alagoas</option>
+                      <option value="AP">Amapá</option>
+                      <option value="AM">Amazonas</option>
+                      <option value="BA">Bahia</option>
+                      <option value="CE">Ceará</option>
+                      <option value="DF">Distrito Federal</option>
+                      <option value="ES">Espírito Santo</option>
+                      <option value="GO">Goiás</option>
+                      <option value="MA">Maranhão</option>
+                      <option value="MT">Mato Grosso</option>
+                      <option value="MS">Mato Grosso do Sul</option>
+                      <option value="MG">Minas Gerais</option>
+                      <option value="PA">Pará</option>
+                      <option value="PB">Paraíba</option>
+                      <option value="PR">Paraná</option>
+                      <option value="PE">Pernambuco</option>
+                      <option value="PI">Piauí</option>
+                      <option value="RJ">Rio de Janeiro</option>
+                      <option value="RN">Rio Grande do Norte</option>
+                      <option value="RS">Rio Grande do Sul</option>
+                      <option value="RO">Rondônia</option>
+                      <option value="RR">Roraima</option>
+                      <option value="SC">Santa Catarina</option>
+                      <option value="SP">São Paulo</option>
+                      <option value="SE">Sergipe</option>
+                      <option value="TO">Tocantins</option>
+                    </select>
+                    <div
+                      class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700"
+                    >
+                      <svg
+                        class="fill-current h-4 w-4"
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"
+                        ></path>
+                      </svg>
                     </div>
-
-                    <div id="form-pj" class="space-y-4 overflow-hidden transition-all duration-500 ease-in-out">
-                        <div>
-                            <label for="razao_social" class="block text-gray-700 text-sm font-bold mb-1">Razão Social</label>
-                            <input type="text" id="razao_social" name="razaoSocial" placeholder="Digite a Razão Social" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary">
-                            <div class="error-message text-xs mt-1"></div>
-                        </div>
-                        <div>
-                            <label for="email-pj" class="block text-gray-700 text-sm font-bold mb-1">E-mail</label>
-                            <input type="email" id="email-pj" name="email" placeholder="Digite seu e-mail" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary">
-                            <div class="error-message text-xs mt-1"></div>
-                        </div>
-                        <div>
-                            <label for="celular-pj" class="block text-gray-700 text-sm font-bold mb-1">Celular</label>
-                            <input type="tel" id="celular-pj" name="celular" placeholder="(00) 00000-0000" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary" data-mask="celular">
-                            <div class="error-message text-xs mt-1"></div>
-                        </div>
-                        <div>
-                            <label for="telefone-pj" class="block text-gray-700 text-sm font-bold mb-1">Telefone <span class="text-gray-500 font-normal">(opcional)</span></label>
-                            <input type="tel" id="telefone-pj" name="telefone" placeholder="(00) 0000-0000" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary" data-mask="telefone">
-                        </div>
-                        <div>
-                            <label for="nome_contato" class="block text-gray-700 text-sm font-bold mb-1">Nome do Contato <span class="text-gray-500 font-normal">(opcional)</span></label>
-                            <input type="text" id="nome_contato" name="nomeContato" placeholder="Digite o nome do contato" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary">
-                        </div>
-                        <div>
-                            <label for="cnpj" class="block text-gray-700 text-sm font-bold mb-1">CNPJ</label>
-                            <input type="text" id="cnpj" name="cnpj" placeholder="00.000.000/0000-00" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary" data-mask="cnpj">
-                            <div class="error-message text-xs mt-1"></div>
-                        </div>
-                        <div class="flex items-center space-x-4">
-                            <div class="flex-shrink-0 flex items-center">
-                                <input type="checkbox" id="isento_ie" name="isentoIE" class="form-checkbox h-4 w-4 text-primary focus:ring-primary">
-                                <label for="isento_ie" class="ml-2 text-sm text-gray-700">Isento de IE?</label>
-                            </div>
-                            <div class="flex-grow">
-                                <label for="ie" class="block text-gray-700 text-sm font-bold mb-1">IE</label>
-                                <input type="text" id="ie" name="inscricaoEstadual" placeholder="Inscrição Estadual" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary">
-                                <div class="error-message text-xs mt-1"></div>
-                            </div>
-                        </div>
-                        <div>
-                            <label for="estado_ie" class="block text-gray-700 text-sm font-bold mb-1">Estado da IE</label>
-                            <div class="relative">
-                                <select id="estado_ie" name="estadoIE" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary bg-white appearance-none pr-8">
-                                    <option value="">Selecione o Estado</option>
-                                    <option value="AC">Acre</option>
-                                    <option value="AL">Alagoas</option>
-                                    <option value="AP">Amapá</option>
-                                    <option value="AM">Amazonas</option>
-                                    <option value="BA">Bahia</option>
-                                    <option value="CE">Ceará</option>
-                                    <option value="DF">Distrito Federal</option>
-                                    <option value="ES">Espírito Santo</option>
-                                    <option value="GO">Goiás</option>
-                                    <option value="MA">Maranhão</option>
-                                    <option value="MT">Mato Grosso</option>
-                                    <option value="MS">Mato Grosso do Sul</option>
-                                    <option value="MG">Minas Gerais</option>
-                                    <option value="PA">Pará</option>
-                                    <option value="PB">Paraíba</option>
-                                    <option value="PR">Paraná</option>
-                                    <option value="PE">Pernambuco</option>
-                                    <option value="PI">Piauí</option>
-                                    <option value="RJ">Rio de Janeiro</option>
-                                    <option value="RN">Rio Grande do Norte</option>
-                                    <option value="RS">Rio Grande do Sul</option>
-                                    <option value="RO">Rondônia</option>
-                                    <option value="RR">Roraima</option>
-                                    <option value="SC">Santa Catarina</option>
-                                    <option value="SP">São Paulo</option>
-                                    <option value="SE">Sergipe</option>
-                                    <option value="TO">Tocantins</option>
-                                </select>
-                                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-                                    <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="flex flex-col md:flex-row md:space-x-4 pt-4">
-                        <div class="w-full md:w-1/2 relative">
-                            <label for="password" class="block text-gray-700 text-sm font-bold mb-1">Senha</label>
-                            <input type="password" name="senha" id="password" placeholder="Digite sua senha" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary">
-                            <div class="error-message text-xs mt-1"></div>
-                        </div>
-                        <div class="w-full md:w-1/2 mt-4 md:mt-0 relative">
-                            <label for="confirm_password" class="block text-gray-700 text-sm font-bold mb-1">Confirmar a senha</label>
-                            <input type="password" id="confirm_password" name="confirm_password" placeholder="Confirme sua senha" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary">
-                            <div class="error-message text-xs mt-1"></div>
-                        </div>
-                    </div>
-                    <div class="text-xs text-gray-600">
-                        <p class="font-bold mb-1">Padrão de Senha</p>
-                        <ul class="list-disc list-inside space-y-1">
-                            <li>Mínimo 8 caracteres</li>
-                            <li>Letra Maiúscula</li>
-                            <li>Letra Minúscula</li>
-                            <li>Números</li>
-                        </ul>
-                    </div>
-                    <div class="pt-2">
-                        <div class="flex items-center">
-                            <input type="checkbox" id="terms" name="terms" value="on" class="form-checkbox h-4 w-4 text-primary focus:ring-primary">
-                            <label for="terms" class="ml-2 text-sm leading-5 text-gray-700">
-                                Concordo com os termos e condições de cadastro e declaro que li a
-                                <a href="/pages/politica-de-privacidade.html" target="_blank" rel="noopener noreferrer" class="font-semibold text-primary hover:underline">Política de Privacidade</a>.
-                            </label>
-                        </div>
-                        <div class="error-message text-xs mt-1"></div>
-                    </div>
-                    <div id="account-completion-panel" class="hidden rounded-lg border border-primary/30 bg-green-50 p-4 space-y-3">
-                        <p class="font-bold text-primary">Cadastro encontrado na loja</p>
-                        <p class="text-sm text-gray-700">Confirme o celular para carregar seus dados e terminar o cadastro do site.</p>
-                        <div class="flex flex-col gap-2 sm:flex-row">
-                            <button id="completion-send-code" type="button" class="rounded border border-primary px-4 py-2 font-semibold text-primary">Enviar código</button>
-                            <input id="completion-code" inputmode="numeric" maxlength="6" placeholder="Código de 6 dígitos" class="flex-1 rounded border border-gray-300 px-4 py-2">
-                            <button id="completion-verify-code" type="button" class="rounded bg-primary px-4 py-2 font-semibold text-white">Confirmar celular</button>
-                        </div>
-                        <p id="completion-message" class="text-sm text-gray-700"></p>
-                    </div>
-                    <button type="submit" class="w-full bg-primary hover:bg-secondary text-white font-bold py-3 px-4 rounded-lg transition duration-300 !mt-6 flex items-center justify-center disabled:opacity-75 disabled:cursor-not-allowed">Cadastrar</button>
-                </form>
+                  </div>
+                </div>
+                <div class="signup-field signup-field-full signup-ie-exempt">
+                  <input
+                    type="checkbox"
+                    id="isento_ie"
+                    name="isentoIE"
+                    class="form-checkbox h-4 w-4 text-primary focus:ring-primary"
+                  /><label for="isento_ie"
+                    >Empresa isenta de inscrição estadual</label
+                  >
+                </div>
+              </div>
+            </section>
+            <section class="signup-section">
+              <div class="signup-section-heading">
+                <h3>Contato da empresa</h3>
+                <p>Para acompanhar suas compras e falar com a equipe.</p>
+              </div>
+              <div class="signup-fields">
+                <div class="signup-field signup-field-full">
+                  <label
+                    for="email-pj"
+                    class="block text-gray-700 text-sm font-bold mb-1"
+                    >E-mail</label
+                  >
+                  <input
+                    type="email"
+                    id="email-pj"
+                    name="email"
+                    placeholder="Digite seu e-mail"
+                    class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary"
+                    autocomplete="email"
+                  />
+                  <div class="error-message text-xs mt-1"></div>
+                </div>
+                <div class="signup-field">
+                  <label
+                    for="celular-pj"
+                    class="block text-gray-700 text-sm font-bold mb-1"
+                    >Celular</label
+                  >
+                  <input
+                    type="tel"
+                    id="celular-pj"
+                    name="celular"
+                    placeholder="(00) 00000-0000"
+                    class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary"
+                    data-mask="celular"
+                    autocomplete="tel"
+                  />
+                  <div class="error-message text-xs mt-1"></div>
+                </div>
+                <div class="signup-field">
+                  <label
+                    for="telefone-pj"
+                    class="block text-gray-700 text-sm font-bold mb-1"
+                    >Telefone
+                    <span class="text-gray-500 font-normal"
+                      >(opcional)</span
+                    ></label
+                  >
+                  <input
+                    type="tel"
+                    id="telefone-pj"
+                    name="telefone"
+                    placeholder="(00) 0000-0000"
+                    class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary"
+                    data-mask="telefone"
+                    autocomplete="tel-national"
+                  />
+                </div>
+              </div>
+            </section>
+          </div>
+          <section class="signup-section">
+            <div class="signup-section-heading">
+              <h3>Seu acesso</h3>
+              <p>Escolha uma senha para proteger sua conta.</p>
             </div>
-
-            <div class="w-full md:w-1/2 bg-gray-100 p-8 flex-col justify-center items-center hidden md:flex">
-                <h3 class="text-xl font-bold text-primary mb-4 text-center">Criar uma conta é rápido,<br>fácil e gratuito!</h3>
-                <p class="text-gray-700 text-center mb-4 text-sm">Com a sua conta da E o Bicho você tem acesso a Ofertas exclusivas, descontos, pode criar e gerenciar a sua Lista de Desejos e muito mais!</p>
-                <a href="login.html">
-                    <button class="bg-white hover:bg-gray-200 text-primary font-bold py-2 px-6 rounded-lg border border-primary transition duration-300">
-                        Já tenho conta
-                    </button>
-                </a>
+            <div class="signup-fields">
+              <div class="signup-field">
+                <label
+                  for="password"
+                  class="block text-gray-700 text-sm font-bold mb-1"
+                  >Senha</label
+                >
+                <input
+                  type="password"
+                  name="senha"
+                  id="password"
+                  placeholder="Digite sua senha"
+                  class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary"
+                  autocomplete="new-password"
+                  aria-describedby="signup-password-rules"
+                />
+                <div class="error-message text-xs mt-1"></div>
+              </div>
+              <div class="signup-field">
+                <label
+                  for="confirm_password"
+                  class="block text-gray-700 text-sm font-bold mb-1"
+                  >Confirmar a senha</label
+                >
+                <input
+                  type="password"
+                  id="confirm_password"
+                  name="confirm_password"
+                  placeholder="Confirme sua senha"
+                  class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary"
+                  autocomplete="new-password"
+                />
+                <div class="error-message text-xs mt-1"></div>
+              </div>
             </div>
-        </div>
-    </main>
-
-    <footer class="container mx-auto max-w-screen-md py-6">
-        <div class="border-t border-gray-200 text-center text-gray-400 text-xs pt-6">
-            <p>
-                Copyright &copy; 2025 Vila E o Bicho LTDA - ME. Todos os direitos reservados.
+          </section>
+          <ul
+            class="signup-password-rules"
+            id="signup-password-rules"
+            aria-label="Requisitos da senha"
+          >
+            <li data-password-rule="length">
+              <span aria-hidden="true">○</span>Mínimo de 8 caracteres
+            </li>
+            <li data-password-rule="upper">
+              <span aria-hidden="true">○</span>Uma letra maiúscula
+            </li>
+            <li data-password-rule="lower">
+              <span aria-hidden="true">○</span>Uma letra minúscula
+            </li>
+            <li data-password-rule="number">
+              <span aria-hidden="true">○</span>Um número
+            </li>
+          </ul>
+          <div class="signup-terms">
+            <div class="signup-terms-row">
+              <input
+                type="checkbox"
+                id="terms"
+                name="terms"
+                value="on"
+                class="form-checkbox h-4 w-4 text-primary focus:ring-primary"
+              />
+              <label for="terms" class="ml-2 text-sm leading-5 text-gray-700">
+                Concordo com os termos e condições de cadastro e declaro que li
+                a
+                <a
+                  href="/pages/politica-de-privacidade.html"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="font-semibold text-primary hover:underline"
+                  >Política de Privacidade</a
+                >.
+              </label>
+            </div>
+            <div class="error-message text-xs mt-1"></div>
+          </div>
+          <div
+            id="account-completion-panel"
+            class="hidden rounded-lg border border-primary/30 bg-green-50 p-4 space-y-3 signup-completion"
+          >
+            <p class="font-bold text-primary">Cadastro encontrado na loja</p>
+            <p class="text-sm text-gray-700">
+              Confirme o celular para carregar seus dados e terminar o cadastro
+              do site.
             </p>
-        </div>
-    </footer>
-
+            <div class="flex flex-col gap-2 sm:flex-row">
+              <button
+                id="completion-send-code"
+                type="button"
+                class="rounded border border-primary px-4 py-2 font-semibold text-primary"
+              >
+                Enviar código
+              </button>
+              <input
+                id="completion-code"
+                inputmode="numeric"
+                maxlength="6"
+                placeholder="Código de 6 dígitos"
+                class="flex-1 rounded border border-gray-300 px-4 py-2"
+                aria-label="Código de confirmação do celular"
+                autocomplete="one-time-code"
+              />
+              <button
+                id="completion-verify-code"
+                type="button"
+                class="rounded bg-primary px-4 py-2 font-semibold text-white"
+              >
+                Confirmar celular
+              </button>
+            </div>
+            <p
+              id="completion-message"
+              class="text-sm text-gray-700"
+              role="status"
+            ></p>
+          </div>
+          <button type="submit" class="signup-submit">
+            Criar minha conta <span aria-hidden="true">→</span>
+          </button>
+          <p class="signup-submit-help">
+            Seus dados são tratados conforme nossa Política de Privacidade.
+          </p>
+          <p class="signup-login-bottom">
+            Já faz parte da turma?
+            <a href="login.html">Acessar minha conta →</a>
+          </p>
+        </form>
+      </div>
+    </main>
+    <div id="footer-placeholder"></div>
     <div id="modal-placeholder"></div>
     <div id="confirm-modal-placeholder"></div>
-
-    <script>var basePath = '../';</script>
-    <script src="../scripts/core/config.js?v=20260812-2"></script>
+    <script>
+      var basePath = "../";
+    </script>
+    <script src="../scripts/core/config.js?v=20261106-release1"></script>
     <script src="../scripts/core/ui.js"></script>
-    <script src="../scripts/core/main.js"></script>
+    <script src="../scripts/core/main.js?v=20261106-release1"></script>
     <script src="../scripts/core/masks.js"></script>
-    <script src="../scripts/auth.js"></script>
-
-    <div id="success-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 transition-opacity duration-300 ease-in-out">
-        <div class="bg-white rounded-lg shadow-xl p-6 max-w-xs w-full text-center transition-transform duration-300 ease-out">
-            <div class="text-3xl text-primary mb-3">
-                <i class="fas fa-check-circle"></i>
-            </div>
-            <h2 class="text-xl font-bold text-gray-800 mb-2">Sucesso!</h2>
-            <p id="modal-message" class="text-gray-600 mb-4 text-sm">Utilizador registado com sucesso!</p>
-            <div class="flex items-center justify-center text-gray-700">
-                <i class="fas fa-spinner fa-spin mr-2"></i>
-                <span id="redirect-timer">A redirecionar em 3...</span>
-            </div>
+    <script src="../scripts/auth.js?v=20261106-release1"></script>
+    <script src="/scripts/signup.js?v=20261106-release1"></script>
+    <div
+      id="success-modal"
+      class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 transition-opacity duration-300 ease-in-out signup-success"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="signup-success-title"
+    >
+      <div
+        class="bg-white rounded-lg shadow-xl p-6 max-w-xs w-full text-center transition-transform duration-300 ease-out"
+      >
+        <div class="text-3xl text-primary mb-3">
+          <i class="fas fa-check-circle"></i>
         </div>
+        <h2
+          class="text-xl font-bold text-gray-800 mb-2"
+          id="signup-success-title"
+        >
+          Sucesso!
+        </h2>
+        <p id="modal-message" class="text-gray-600 mb-4 text-sm">
+          Utilizador registado com sucesso!
+        </p>
+        <div class="flex items-center justify-center text-gray-700">
+          <i class="fas fa-spinner fa-spin mr-2"></i>
+          <span id="redirect-timer">A redirecionar em 3...</span>
+        </div>
+      </div>
     </div>
-
-</body>
+  </body>
 </html>

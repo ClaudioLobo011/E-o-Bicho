@@ -1,65 +1,106 @@
-document.addEventListener('DOMContentLoaded', () => {
+(() => {
+  function initializePets() {
     // --- ReferÃƒÂªncias aos elementos do DOM ---
-    const petsListContainer = document.getElementById('pets-list-container');
-    const addPetBtnContainer = document.getElementById('add-pet-button-container');
-    const petFormContainer = document.getElementById('pet-form-container');
-    const addPetBtn = document.getElementById('add-pet-btn');
-    const petForm = document.getElementById('new-pet-form');
-    const cancelPetBtn = document.getElementById('cancel-pet-btn');
-    const petTypeSelect = document.getElementById('pet-type');
-    const breedInput = document.getElementById('pet-raca');
-    const porteSelect = document.getElementById('pet-porte');
-    const hiddenPetIdInput = document.getElementById('pet-id');
+    const petsListContainer = document.getElementById("pets-list-container");
+    const addPetBtnContainer = document.getElementById(
+      "add-pet-button-container",
+    );
+    const petFormContainer = document.getElementById("pet-form-container");
+    const addPetBtn = document.getElementById("add-pet-btn");
+    const petForm = document.getElementById("new-pet-form");
+    const cancelPetBtn = document.getElementById("cancel-pet-btn");
+    const petTypeSelect = document.getElementById("pet-type");
+    const breedInput = document.getElementById("pet-raca");
+    const porteSelect = document.getElementById("pet-porte");
+    const hiddenPetIdInput = document.getElementById("pet-id");
+    if (!petForm || petForm.dataset.initialized) return;
+    petForm.dataset.initialized = "true";
     let awesompleteInstance;
-    let SPECIES_MAP = null;         // { cachorro:{portes:{mini:[],...}, all:[], map:{breed->porte}}, gato:[...], passaro:[...], peixe:[...], roedor:[...], lagarto:[...], tartaruga:[...] }
+    let SPECIES_MAP = null; // { cachorro:{portes:{mini:[],...}, all:[], map:{breed->porte}}, gato:[...], passaro:[...], peixe:[...], roedor:[...], lagarto:[...], tartaruga:[...] }
 
     // Helpers para normalizar strings (ignora acentos/maiÃƒÂºsculas)
-    const norm = (s) => String(s || '')
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-      .trim().toLowerCase();
+    const norm = (s) =>
+      String(s || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim()
+        .toLowerCase();
     const normSize = (s) => {
       const k = norm(s);
-      if (k.startsWith('mini')) return 'mini';
-      if (k.startsWith('peq')) return 'pequeno';
-      if (k.startsWith('med')) return 'medio';
-      if (k.startsWith('gra')) return 'grande';
-      if (k.startsWith('gig')) return 'gigante';
-      return 'medio';
+      if (k.startsWith("mini")) return "mini";
+      if (k.startsWith("peq")) return "pequeno";
+      if (k.startsWith("med")) return "medio";
+      if (k.startsWith("gra")) return "grande";
+      if (k.startsWith("gig")) return "gigante";
+      return "medio";
     };
 
     // Corrige sequÃªncias comuns de texto corrompidas por encoding (UTF-8 vs ISO-8859-1)
     function fixEncoding(s) {
       if (!s) return s;
       return String(s)
-        .replace(/ÃƒÂ¡/g,'Ã¡').replace(/ÃƒÂ¢/g,'Ã¢').replace(/ÃƒÂ£/g,'Ã£').replace(/ÃƒÂ¤/g,'Ã¤')
-        .replace(/ÃƒÂ/g,'Ã').replace(/Ãƒâ€š/g,'Ã‚').replace(/ÃƒÆ’/g,'Ãƒ')
-        .replace(/ÃƒÂ©/g,'Ã©').replace(/ÃƒÂª/g,'Ãª').replace(/ÃƒÂ¨/g,'Ã¨').replace(/Ãƒâ€°/g,'Ã‰').replace(/ÃƒÅ /g,'ÃŠ')
-        .replace(/ÃƒÂ­/g,'Ã­').replace(/ÃƒÂ¬/g,'Ã¬').replace(/ÃƒÂ/g,'Ã')
-        .replace(/ÃƒÂ³/g,'Ã³').replace(/ÃƒÂ´/g,'Ã´').replace(/ÃƒÂµ/g,'Ãµ').replace(/Ãƒâ€œ/g,'Ã“').replace(/Ãƒâ€/g,'Ã”')
-        .replace(/ÃƒÂº/g,'Ãº').replace(/ÃƒÂ¼/g,'Ã¼').replace(/ÃƒÅ¡/g,'Ãš')
-        .replace(/ÃƒÂ§/g,'Ã§').replace(/ÃƒÂ‡/g,'Ã‡')
-        .replace(/ÃƒÂ /g,'Ã ').replace(/ÃƒÂ¸/g,'Ã¸')
-        .replace(/Ã‚Âº/g,'Âº').replace(/Ã‚Âª/g,'Âª')
-        .replace(/ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“/g,'â€“').replace(/Ã¢â‚¬â€œ/g,'â€“').replace(/Ã¢â‚¬â€/g,'â€”')
-        .replace(/Ã¢â‚¬Ëœ/g,'â€˜').replace(/Ã¢â‚¬â„¢/g,'â€™').replace(/Ã¢â‚¬Å“/g,'â€œ').replace(/Ã¢â‚¬Â/g,'â€')
-        .replace(/Ã¢â‚¬Â¢/g,'â€¢').replace(/Ã¢â‚¬Â¦/g,'â€¦');
+        .replace(/ÃƒÂ¡/g, "Ã¡")
+        .replace(/ÃƒÂ¢/g, "Ã¢")
+        .replace(/ÃƒÂ£/g, "Ã£")
+        .replace(/ÃƒÂ¤/g, "Ã¤")
+        .replace(/ÃƒÂ/g, "Ã")
+        .replace(/Ãƒâ€š/g, "Ã‚")
+        .replace(/ÃƒÆ’/g, "Ãƒ")
+        .replace(/ÃƒÂ©/g, "Ã©")
+        .replace(/ÃƒÂª/g, "Ãª")
+        .replace(/ÃƒÂ¨/g, "Ã¨")
+        .replace(/Ãƒâ€°/g, "Ã‰")
+        .replace(/ÃƒÅ /g, "ÃŠ")
+        .replace(/ÃƒÂ­/g, "Ã­")
+        .replace(/ÃƒÂ¬/g, "Ã¬")
+        .replace(/ÃƒÂ/g, "Ã")
+        .replace(/ÃƒÂ³/g, "Ã³")
+        .replace(/ÃƒÂ´/g, "Ã´")
+        .replace(/ÃƒÂµ/g, "Ãµ")
+        .replace(/Ãƒâ€œ/g, "Ã“")
+        .replace(/Ãƒâ€/g, "Ã”")
+        .replace(/ÃƒÂº/g, "Ãº")
+        .replace(/ÃƒÂ¼/g, "Ã¼")
+        .replace(/ÃƒÅ¡/g, "Ãš")
+        .replace(/ÃƒÂ§/g, "Ã§")
+        .replace(/ÃƒÂ‡/g, "Ã‡")
+        .replace(/ÃƒÂ /g, "Ã ")
+        .replace(/ÃƒÂ¸/g, "Ã¸")
+        .replace(/Ã‚Âº/g, "Âº")
+        .replace(/Ã‚Âª/g, "Âª")
+        .replace(/ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“/g, "â€“")
+        .replace(/Ã¢â‚¬â€œ/g, "â€“")
+        .replace(/Ã¢â‚¬â€/g, "â€”")
+        .replace(/Ã¢â‚¬Ëœ/g, "â€˜")
+        .replace(/Ã¢â‚¬â„¢/g, "â€™")
+        .replace(/Ã¢â‚¬Å“/g, "â€œ")
+        .replace(/Ã¢â‚¬Â/g, "â€")
+        .replace(/Ã¢â‚¬Â¢/g, "â€¢")
+        .replace(/Ã¢â‚¬Â¦/g, "â€¦");
     }
 
     async function loadSpeciesMap() {
       if (SPECIES_MAP) return SPECIES_MAP;
-      const base = (window.basePath || '../');
-      const jsonUrl = base + 'data/racas.json';
-      const legacyUrl = base + 'data/Racas-leitura.js';
+      const base = window.basePath || "../";
+      const jsonUrl = window.CATALOG_PREVIEW
+        ? "/scripts/storefront/pet-racas.json"
+        : base + "data/racas.json";
+      const legacyUrl = base + "data/Racas-leitura.js";
 
-      const cleanList = (body) => body.split(/\n+/)
-        .map(x => x.trim())
-        .filter(x => x && !x.startsWith('//') && x !== '...')
-        .map(x => x.replace(/\*.*?\*/g, ''))
-        .map(x => x.replace(/\s*\(duplicata.*$/i, ''))
-        .map(x => x.replace(/\s*[—-].*$/,'').replace(/\s*-\s*registro.*$/i,''));
+      const cleanList = (body) =>
+        body
+          .split(/\n+/)
+          .map((x) => x.trim())
+          .filter((x) => x && !x.startsWith("//") && x !== "...")
+          .map((x) => x.replace(/\*.*?\*/g, ""))
+          .map((x) => x.replace(/\s*\(duplicata.*$/i, ""))
+          .map((x) =>
+            x.replace(/\s*[—-].*$/, "").replace(/\s*-\s*registro.*$/i, ""),
+          );
 
       const buildFromJson = (payload) => {
-        if (!payload || typeof payload !== 'object') throw new Error('payload inválido');
+        if (!payload || typeof payload !== "object")
+          throw new Error("payload inválido");
         const species = {};
         const dogPayload = payload.cachorro || {};
         const portes = dogPayload.portes || {};
@@ -70,24 +111,46 @@ document.addEventListener('DOMContentLoaded', () => {
           grande: Array.from(new Set(portes.grande || [])),
           gigante: Array.from(new Set(portes.gigante || [])),
         };
-        const dogAll = Array.from(new Set(dogPayload.all || [
-          ...dogMap.mini, ...dogMap.pequeno, ...dogMap.medio, ...dogMap.grande, ...dogMap.gigante
-        ]));
+        const dogAll = Array.from(
+          new Set(
+            dogPayload.all || [
+              ...dogMap.mini,
+              ...dogMap.pequeno,
+              ...dogMap.medio,
+              ...dogMap.grande,
+              ...dogMap.gigante,
+            ],
+          ),
+        );
         const dogLookup = {};
         const dogMapPayload = dogPayload.map || {};
-        dogAll.forEach(nome => {
+        dogAll.forEach((nome) => {
           const normalized = norm(nome);
-          const porte = dogMapPayload[normalized] || dogMapPayload[nome] ||
-            (dogMap.mini.includes(nome) ? 'mini' :
-              dogMap.pequeno.includes(nome) ? 'pequeno' :
-              dogMap.medio.includes(nome) ? 'medio' :
-              dogMap.grande.includes(nome) ? 'grande' : 'gigante');
+          const porte =
+            dogMapPayload[normalized] ||
+            dogMapPayload[nome] ||
+            (dogMap.mini.includes(nome)
+              ? "mini"
+              : dogMap.pequeno.includes(nome)
+                ? "pequeno"
+                : dogMap.medio.includes(nome)
+                  ? "medio"
+                  : dogMap.grande.includes(nome)
+                    ? "grande"
+                    : "gigante");
           dogLookup[normalized] = porte;
         });
         species.cachorro = { portes: dogMap, all: dogAll, map: dogLookup };
 
-        const simples = ['gato','passaro','peixe','roedor','lagarto','tartaruga'];
-        simples.forEach(tipo => {
+        const simples = [
+          "gato",
+          "passaro",
+          "peixe",
+          "roedor",
+          "lagarto",
+          "tartaruga",
+        ];
+        simples.forEach((tipo) => {
           const arr = Array.isArray(payload[tipo]) ? payload[tipo] : [];
           species[tipo] = Array.from(new Set(arr.filter(Boolean)));
         });
@@ -95,59 +158,96 @@ document.addEventListener('DOMContentLoaded', () => {
       };
 
       const buildFromLegacy = (txt) => {
-        if (!txt) throw new Error('conteúdo vazio');
+        if (!txt) throw new Error("conteúdo vazio");
         const species = {};
-        let dogMap = { mini:[], pequeno:[], medio:[], grande:[], gigante:[] };
-        const reDogGlobal = /porte[_\s-]?(mini|pequeno|medio|grande|gigante)\s*{([\s\S]*?)}\s*/gi;
+        let dogMap = {
+          mini: [],
+          pequeno: [],
+          medio: [],
+          grande: [],
+          gigante: [],
+        };
+        const reDogGlobal =
+          /porte[_\s-]?(mini|pequeno|medio|grande|gigante)\s*{([\s\S]*?)}\s*/gi;
         let m;
         while ((m = reDogGlobal.exec(txt))) {
           const key = m[1].toLowerCase();
           const list = cleanList(m[2]);
           dogMap[key] = Array.from(new Set(list));
         }
-        const dogAll = Array.from(new Set([
-          ...dogMap.mini, ...dogMap.pequeno, ...dogMap.medio, ...dogMap.grande, ...dogMap.gigante
-        ]));
+        const dogAll = Array.from(
+          new Set([
+            ...dogMap.mini,
+            ...dogMap.pequeno,
+            ...dogMap.medio,
+            ...dogMap.grande,
+            ...dogMap.gigante,
+          ]),
+        );
         const dogLookup = {};
-        dogAll.forEach(n => {
+        dogAll.forEach((n) => {
           const k = norm(n);
-          dogLookup[k] =
-            dogMap.mini.includes(n)    ? 'mini'    :
-            dogMap.pequeno.includes(n) ? 'pequeno' :
-            dogMap.medio.includes(n)   ? 'medio'   :
-            dogMap.grande.includes(n)  ? 'grande'  : 'gigante';
+          dogLookup[k] = dogMap.mini.includes(n)
+            ? "mini"
+            : dogMap.pequeno.includes(n)
+              ? "pequeno"
+              : dogMap.medio.includes(n)
+                ? "medio"
+                : dogMap.grande.includes(n)
+                  ? "grande"
+                  : "gigante";
         });
         species.cachorro = { portes: dogMap, all: dogAll, map: dogLookup };
 
-        const simpleSpecies = ['gatos','gato','passaros','passaro','peixes','peixe','roedores','roedor','lagartos','lagarto','tartarugas','tartaruga'];
+        const simpleSpecies = [
+          "gatos",
+          "gato",
+          "passaros",
+          "passaro",
+          "peixes",
+          "peixe",
+          "roedores",
+          "roedor",
+          "lagartos",
+          "lagarto",
+          "tartarugas",
+          "tartaruga",
+        ];
         for (const sp of simpleSpecies) {
-          const match = new RegExp(sp + "\\s*{([\\s\\S]*?)}","i").exec(txt);
+          const match = new RegExp(sp + "\\s*{([\\s\\S]*?)}", "i").exec(txt);
           if (!match) continue;
           const list = cleanList(match[1]);
-          const singular =
-            /roedores$/i.test(sp)   ? 'roedor'     :
-            /gatos$/i.test(sp)      ? 'gato'       :
-            /passaros$/i.test(sp)   ? 'passaro'    :
-            /peixes$/i.test(sp)     ? 'peixe'      :
-            /lagartos$/i.test(sp)   ? 'lagarto'    :
-            /tartarugas$/i.test(sp) ? 'tartaruga'  :
-            sp.replace(/s$/, '');
+          const singular = /roedores$/i.test(sp)
+            ? "roedor"
+            : /gatos$/i.test(sp)
+              ? "gato"
+              : /passaros$/i.test(sp)
+                ? "passaro"
+                : /peixes$/i.test(sp)
+                  ? "peixe"
+                  : /lagartos$/i.test(sp)
+                    ? "lagarto"
+                    : /tartarugas$/i.test(sp)
+                      ? "tartaruga"
+                      : sp.replace(/s$/, "");
           species[singular] = Array.from(new Set(list));
         }
         return species;
       };
 
       try {
-        const res = await fetch(jsonUrl, { headers: { 'Accept': 'application/json' } });
+        const res = await fetch(jsonUrl, {
+          headers: { Accept: "application/json" },
+        });
         if (res.ok) {
           SPECIES_MAP = buildFromJson(await res.json());
           return SPECIES_MAP;
         }
         if (res.status && res.status !== 404) {
-          console.warn('pets: falha ao obter racas.json', res.status);
+          console.warn("pets: falha ao obter racas.json", res.status);
         }
       } catch (err) {
-        console.warn('pets: erro ao ler racas.json', err);
+        console.warn("pets: erro ao ler racas.json", err);
       }
 
       try {
@@ -157,7 +257,7 @@ document.addEventListener('DOMContentLoaded', () => {
         SPECIES_MAP = buildFromLegacy(txt);
         return SPECIES_MAP;
       } catch (e) {
-        console.warn('Falha ao ler Racas-leitura.js', e);
+        console.warn("Falha ao ler Racas-leitura.js", e);
         SPECIES_MAP = null;
         return null;
       }
@@ -165,352 +265,614 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function setPorteFromBreedIfDog() {
       if (!porteSelect) return;
-      const isDog = petTypeSelect && norm(petTypeSelect.value) === 'cachorro';
+      const isDog = petTypeSelect && norm(petTypeSelect.value) === "cachorro";
       if (!isDog) return;
       const map = SPECIES_MAP?.cachorro?.map;
-      const b = norm(breedInput?.value || '');
+      const b = norm(breedInput?.value || "");
       const k = map ? map[b] : null;
-      const desired = k || 'medio';
+      const desired = k || "medio";
       // encontra a option pelo texto (normalizado)
       const opts = Array.from(porteSelect.options || []);
-      const match = opts.find(o => normSize(o.textContent) === desired);
+      const match = opts.find((o) => normSize(o.textContent) === desired);
       if (match) porteSelect.value = match.value || match.textContent;
     }
 
     function syncPorteDisabled() {
       if (!porteSelect) return;
-      const isDog = petTypeSelect && norm(petTypeSelect.value) === 'cachorro';
+      const isDog = petTypeSelect && norm(petTypeSelect.value) === "cachorro";
       // Nunca esconder; apenas bloquear com o valor apropriado
       porteSelect.disabled = true;
       if (isDog) {
         setPorteFromBreedIfDog();
       } else {
-        const none = Array.from(porteSelect.options).find(o => (o.textContent||'').toLowerCase().includes('sem porte'));
+        const none = Array.from(porteSelect.options).find((o) =>
+          (o.textContent || "").toLowerCase().includes("sem porte"),
+        );
         if (none) porteSelect.value = none.value || none.textContent;
       }
     }
 
     // --- Funções de Visibilidade do Formulário ---
 
+    let formReturnFocus = null,
+      formOverflow = null,
+      formFocusPending = false;
+    function restoreFormFocus() {
+      if (!formFocusPending || busy) return;
+      const target = formReturnFocus?.isConnected ? formReturnFocus : addPetBtn;
+      if (target.disabled) return;
+      target.focus({ preventScroll: true });
+      formFocusPending = false;
+    }
     const showForm = () => {
-        if (addPetBtnContainer && petFormContainer) {
-            addPetBtnContainer.classList.add('hidden');
-            petFormContainer.classList.remove('hidden');
-        }
+      addPetBtnContainer.classList.add("hidden");
+      petFormContainer.classList.remove("hidden");
+      document.getElementById("pet-form-title").textContent =
+        hiddenPetIdInput.value
+          ? "Editar " +
+            (document.getElementById("pet-name").value || "cadastro do pet")
+          : "Adicionar pet";
+      message("", true);
+      if (!petFormContainer.open) {
+        formFocusPending = false;
+        formOverflow = {
+          html: document.documentElement.style.overflow,
+          body: document.body.style.overflow,
+        };
+        document.documentElement.style.overflow = "hidden";
+        document.body.style.overflow = "hidden";
+        petFormContainer.showModal();
+        petFormContainer.querySelector(".pets-form-body").scrollTop = 0;
+      }
+      if (!busy)
+        document.getElementById("pet-name").focus({ preventScroll: true });
     };
-
+    const finishForm = () => {
+      editRevision++;
+      petFormContainer.classList.add("hidden");
+      addPetBtnContainer.classList.remove("hidden");
+      petForm.reset();
+      hiddenPetIdInput.value = "";
+      message("", true);
+      syncPorteDisabled();
+      if (formOverflow) {
+        document.documentElement.style.overflow = formOverflow.html;
+        document.body.style.overflow = formOverflow.body;
+        formOverflow = null;
+      }
+      formFocusPending = true;
+      restoreFormFocus();
+    };
     const hideForm = () => {
-        if (addPetBtnContainer && petFormContainer) {
-            petFormContainer.classList.add('hidden');
-            addPetBtnContainer.classList.remove('hidden');
-            petForm.reset();
-            hiddenPetIdInput.value = '';
-        }
+      if (petFormContainer.open) petFormContainer.close();
+      else finishForm();
     };
+    petFormContainer.addEventListener("close", finishForm);
+    petFormContainer.addEventListener("cancel", (event) => {
+      if (busy) event.preventDefault();
+    });
+    petFormContainer.addEventListener("click", (event) => {
+      if (busy || event.target !== petFormContainer) return;
+      const rect = petFormContainer.getBoundingClientRect();
+      if (
+        event.clientX < rect.left ||
+        event.clientX > rect.right ||
+        event.clientY < rect.top ||
+        event.clientY > rect.bottom
+      )
+        hideForm();
+    });
 
     function normalizeStaticLabels() {
-        try {
-            const sexoSel = document.getElementById('pet-sexo');
-            if (sexoSel) {
-                Array.from(sexoSel.options).forEach(o => {
-                    if (/Fêmea/i.test(o.textContent)) o.textContent = 'Fêmea';
-                });
-            }
-            if (porteSelect) {
-                let none = Array.from(porteSelect.options).find(o => (o.textContent||'').toLowerCase().includes('sem porte'));
-                if (!none) {
-                    none = document.createElement('option');
-                    none.textContent = 'Sem porte definido';
-                    none.value = 'Sem porte definido';
-                    porteSelect.insertBefore(none, porteSelect.firstChild);
-                }
-                Array.from(porteSelect.options).forEach(o => {
-                    if (/Médio/i.test(o.textContent)) o.textContent = 'Médio';
-                });
-            }
-        } catch(_) {}
+      try {
+        const sexoSel = document.getElementById("pet-sexo");
+        if (sexoSel) {
+          Array.from(sexoSel.options).forEach((o) => {
+            if (/Fêmea/i.test(o.textContent)) o.textContent = "Fêmea";
+          });
+        }
+        if (porteSelect) {
+          let none = Array.from(porteSelect.options).find((o) =>
+            (o.textContent || "").toLowerCase().includes("sem porte"),
+          );
+          if (!none) {
+            none = document.createElement("option");
+            none.textContent = "Sem porte definido";
+            none.value = "Sem porte definido";
+            porteSelect.insertBefore(none, porteSelect.firstChild);
+          }
+          Array.from(porteSelect.options).forEach((o) => {
+            if (/Médio/i.test(o.textContent)) o.textContent = "Médio";
+          });
+        }
+      } catch (_) {}
     }
 
     // Garante que o select de tipos tenha todas as opções desejadas
     function ensurePetTypeOptions() {
-        if (!petTypeSelect) return;
-        const want = [
-          ['cachorro','Cachorro'],
-          ['gato','Gato'],
-          ['passaro','Pássaro'],
-          ['peixe','Peixe'],
-          ['roedor','Roedor'],
-          ['lagarto','Lagarto'],
-          ['tartaruga','Tartaruga']
-        ];
-        const existing = new Set(Array.from(petTypeSelect.options).map(o => (o.value||'').toLowerCase()));
-        for (const [val,label] of want) {
-          if (!existing.has(val)) { const op=document.createElement('option'); op.value=val; op.textContent=label; petTypeSelect.appendChild(op); }
+      if (!petTypeSelect) return;
+      const want = [
+        ["cachorro", "Cachorro"],
+        ["gato", "Gato"],
+        ["passaro", "Pássaro"],
+        ["peixe", "Peixe"],
+        ["roedor", "Roedor"],
+        ["lagarto", "Lagarto"],
+        ["tartaruga", "Tartaruga"],
+      ];
+      const existing = new Set(
+        Array.from(petTypeSelect.options).map((o) =>
+          (o.value || "").toLowerCase(),
+        ),
+      );
+      for (const [val, label] of want) {
+        if (!existing.has(val)) {
+          const op = document.createElement("option");
+          op.value = val;
+          op.textContent = label;
+          petTypeSelect.appendChild(op);
         }
-        Array.from(petTypeSelect.options).forEach(o => { if ((o.value||'').toLowerCase()==='passaro') o.textContent='Pássaro'; });
+      }
+      Array.from(petTypeSelect.options).forEach((o) => {
+        if ((o.value || "").toLowerCase() === "passaro")
+          o.textContent = "Pássaro";
+      });
     }
 
-    // --- Função Principal para Exibir os Pets ---
-
+    const esc = (value) =>
+      String(value ?? "").replace(
+        /[&<>"']/g,
+        (char) =>
+          ({
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#39;",
+          })[char],
+      );
+    const $ = (id) => document.getElementById(id);
+    let pets = [],
+      loaded = false,
+      busy = false,
+      ownerId = "",
+      previewCounter = 0,
+      editRevision = 0,
+      pendingDelete = null,
+      previousFocus = null;
+    const preview = () => !!window.CATALOG_PREVIEW;
+    function session() {
+      try {
+        const user = JSON.parse(localStorage.getItem("loggedInUser"));
+        return user?.id && user?.token ? user : null;
+      } catch {
+        return null;
+      }
+    }
+    function message(text = "", form = false) {
+      const target = $(form ? "pets-form-feedback" : "pets-feedback");
+      target.textContent = text;
+      target.hidden = !text;
+    }
+    function setBusy(value) {
+      busy = value;
+      document
+        .querySelectorAll(
+          "#new-pet-form input,#new-pet-form select,#new-pet-form button,#pets-list-container button,#add-pet-btn,#pets-refresh,#pet-form-close,#pet-delete-dialog button",
+        )
+        .forEach(
+          (el) =>
+            (el.disabled =
+              value || (!loaded && ["add-pet-btn"].includes(el.id))),
+        );
+      if (!value) {
+        syncPorteDisabled();
+        restoreFormFocus();
+      }
+      petForm.querySelector('[type="submit"]').textContent = value
+        ? "Salvando…"
+        : hiddenPetIdInput.value
+          ? "Salvar alterações"
+          : "Adicionar pet";
+    }
+    async function request(path, options = {}) {
+      const current = session();
+      if (!current || (ownerId && current.id !== ownerId))
+        throw Error("Entre na sua conta e atualize a lista para continuar.");
+      if (preview() && options.method && options.method !== "GET")
+        throw Error("A prévia não altera cadastros reais.");
+      const response = await fetch(API_CONFIG.BASE_URL + path, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + current.token,
+          ...options.headers,
+        },
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok)
+        throw Error(
+          response.status === 401
+            ? "Entre novamente para consultar seus pets. Seu cadastro foi preservado."
+            : result.message || "Não foi possível concluir a solicitação.",
+        );
+      return result;
+    }
+    function date(value) {
+      if (!value) return "Não informada";
+      const d = new Date(value);
+      return Number.isNaN(d.getTime())
+        ? "Não informada"
+        : d.toLocaleDateString("pt-BR", { timeZone: "UTC" });
+    }
+    const speciesLabels = {
+      cachorro: "Cachorro",
+      gato: "Gato",
+      passaro: "Pássaro",
+      peixe: "Peixe",
+      roedor: "Roedor",
+      lagarto: "Lagarto",
+      tartaruga: "Tartaruga",
+    };
+    function render() {
+      $("pets-count").textContent = pets.length
+        ? `${pets.length} ${pets.length === 1 ? "companheiro cadastrado" : "companheiros cadastrados"}`
+        : "Vamos conhecer seu companheiro?";
+      petsListContainer.innerHTML = pets
+        .map(
+          (pet) =>
+            `<article class="pet-card"><div class="pet-card-heading"><span class="pet-avatar" aria-hidden="true">♡</span><div><h2>${esc(fixEncoding(pet.nome) || "Pet sem nome")}</h2><span>${esc(speciesLabels[norm(pet.tipo)] || pet.tipo || "Espécie não informada")}</span></div></div><p class="pet-breed">${esc(fixEncoding(pet.raca) || "Raça não informada")}</p><div class="pet-tags"><span>${esc(pet.sexo || "Sexo não informado")}</span><span>${esc(pet.porte || "Porte não informado")}</span></div><details class="pet-information"><summary>Ver informações <span aria-hidden="true">⌄</span></summary><dl><div><dt>Nascimento</dt><dd>${esc(date(pet.dataNascimento))}</dd></div><div><dt>Pelagem / cor</dt><dd>${esc(pet.pelagemCor || "Não informada")}</dd></div><div><dt>Peso</dt><dd>${esc(pet.peso ?? "Não informado") || "Não informado"}</dd></div><div><dt>Microchip</dt><dd>${esc(pet.microchip || "Não informado")}</dd></div><div><dt>RGA</dt><dd>${esc(pet.rga || "Não informado")}</dd></div></dl></details><div class="pet-card-actions"><button type="button" data-pet-edit="${esc(pet._id)}" aria-label="Editar ${esc(pet.nome)}">Editar cadastro →</button><button type="button" data-pet-delete="${esc(pet._id)}" aria-label="Excluir cadastro de ${esc(pet.nome)}">Excluir</button></div></article>`,
+        )
+        .join("");
+      $("pets-empty").hidden = pets.length > 0;
+      if (!pets.length)
+        $("pets-empty").innerHTML =
+          '<span aria-hidden="true">♡</span><h2>Tem um companheiro por aí?</h2><p>Adicione seu pet para manter as informações dele em um só lugar.</p>';
+    }
     async function fetchAndDisplayPets() {
-        const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
-        if (!loggedInUser?.id || !loggedInUser.token || !petsListContainer) return;
-
-        try {
-            const response = await fetch(`${API_CONFIG.BASE_URL}/pets/user/${loggedInUser.id}`, {
-                headers: {
-                    'Authorization': `Bearer ${loggedInUser.token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            if (!response.ok) throw new Error('Não foi possível buscar os pets.');
-            const pets = await response.json();
-
-            petsListContainer.innerHTML = '';
-
-            pets.forEach(pet => {
-                const petCard = `
-                <div class="bg-white px-4 py-3 border rounded-lg shadow-sm flex items-center w-full max-w-md">
-                    <div class="flex-grow pr-4">
-                    <h3 class="font-bold text-lg text-primary">${fixEncoding(pet.nome)}</h3>
-                    <p class="text-sm text-gray-600">${fixEncoding(pet.raca)} | ${fixEncoding(pet.tipo)}</p>
-                    </div>
-                    <div class="flex flex-col space-y-1">
-                    <button onclick="handleEditPet('${pet._id}')" class="text-blue-500 hover:text-blue-700 transition-colors w-10 h-10 flex items-center justify-center rounded-full hover:bg-blue-500/10">
-                        <div data-icon="edit" class="w-10 h-10"></div>
-                        <span class="sr-only">Editar</span>
-                    </button>
-                    <button onclick="handleDeletePet('${pet._id}', '${pet.nome}')" class="text-red-500 hover:text-red-700 transition-colors w-10 h-10 flex items-center justify-center rounded-full hover:bg-red-500/10">
-                        <div data-icon="trash-pet" class="w-10 h-10"></div>
-                        <span class="sr-only">Excluir</span>
-                    </button>
-                    </div>
-                </div>
-                `;
-                petsListContainer.innerHTML += petCard;
-            });
-            
-            await loadIcons();
-        } catch (error) {
-            console.error('Erro ao buscar pets:', error);
-            showModal({ title: 'Erro', message: error.message, confirmText: 'OK' });
-        }
+      const current = session();
+      if (!current) {
+        pets = [];
+        loaded = false;
+        petsListContainer.innerHTML = "";
+        $("pets-count").textContent = "Sua conta, seus companheiros";
+        $("pets-empty").hidden = false;
+        $("pets-empty").innerHTML =
+          '<h2>Entre para consultar seus pets</h2><p>Acesse sua conta para adicionar e cuidar dos cadastros.</p><a href="/pages/login.html">Entrar na conta →</a>';
+        addPetBtn.disabled = true;
+        petsListContainer.setAttribute("aria-busy", "false");
+        return false;
+      }
+      ownerId = current.id;
+      $("pets-refresh").disabled = true;
+      addPetBtn.disabled = true;
+      petsListContainer.setAttribute("aria-busy", "true");
+      message("Carregando seus companheiros…");
+      try {
+        const result = await request(
+          "/pets/user/" + encodeURIComponent(current.id),
+        );
+        if (!Array.isArray(result))
+          throw Error("A lista de pets não pôde ser consultada.");
+        pets = result;
+        loaded = true;
+        render();
+        message();
+        return true;
+      } catch (error) {
+        message(error.message + " Use Atualizar para tentar novamente.");
+        if (!loaded) $("pets-count").textContent = "Consulta indisponível";
+        return false;
+      } finally {
+        petsListContainer.setAttribute("aria-busy", "false");
+        $("pets-refresh").disabled = busy;
+        addPetBtn.disabled = busy || !loaded;
+      }
     }
-
-    // --- Funções de Edição, Exclusão e Submissão ---
-
+    function fillPet(pet) {
+      petForm.reset();
+      hiddenPetIdInput.value = pet._id;
+      const values = {
+        "pet-name": pet.nome,
+        "pet-type": pet.tipo,
+        "pet-raca": pet.raca,
+        "pet-porte": pet.porte,
+        "pet-sexo": pet.sexo,
+        "pet-microchip": pet.microchip,
+        "pet-pelagem": pet.pelagemCor,
+        "pet-rga": pet.rga,
+        "pet-peso": pet.peso,
+      };
+      for (const [id, value] of Object.entries(values)) {
+        if (value === null || value === undefined) continue;
+        const field = $(id);
+        if (
+          field.tagName === "SELECT" &&
+          ![...field.options].some((option) => option.value === String(value))
+        ) {
+          const option = document.createElement("option");
+          option.value = String(value);
+          option.textContent = String(value);
+          field.append(option);
+        }
+        field.value = value;
+      }
+      const birth = pet.dataNascimento ? new Date(pet.dataNascimento) : null;
+      $("pet-nascimento").value =
+        birth && !Number.isNaN(birth.getTime())
+          ? birth.toISOString().slice(0, 10)
+          : "";
+    }
     window.handleEditPet = async (petId) => {
-        try {
-        const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
-        if (!loggedInUser?.token) {
-            showModal({ title: 'Erro', message: 'Você precisa estar logado.', confirmText: 'OK' });
-            return;
-        }
-
-        const response = await fetch(`${API_CONFIG.BASE_URL}/pets/${petId}`, {
-            headers: {
-                'Authorization': `Bearer ${loggedInUser.token}`,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if (!response.ok) throw new Error('Pet não encontrado.');
-        const petData = await response.json();
-
-            hiddenPetIdInput.value = petData._id;
-            petForm.querySelector('#pet-name').value = petData.nome;
-            petForm.querySelector('#pet-type').value = petData.tipo;
-            petForm.querySelector('#pet-raca').value = petData.raca;
-            petForm.querySelector('#pet-porte').value = petData.porte;
-            petForm.querySelector('#pet-sexo').value = petData.sexo;
-            if (petData.dataNascimento) {
-                petForm.querySelector('#pet-nascimento').value = new Date(petData.dataNascimento).toISOString().split('T')[0];
-            }
-            petForm.querySelector('#pet-microchip').value = petData.microchip || '';
-            petForm.querySelector('#pet-pelagem').value = petData.pelagemCor || '';
-            petForm.querySelector('#pet-rga').value = petData.rga || '';
-            petForm.querySelector('#pet-peso').value = petData.peso || '';
-
-            updateBreedOptions();
-            showForm();
-            // aplica bloqueio/porte automático se cachorro
-            syncPorteDisabled();
-            setPorteFromBreedIfDog();
-        } catch (error) {
-            showModal({ title: 'Erro', message: error.message, confirmText: 'OK' });
-        }
+      if (busy || !loaded) return;
+      formReturnFocus = document.activeElement;
+      const ticket = ++editRevision;
+      setBusy(true);
+      message();
+      try {
+        const pet = preview()
+          ? pets.find((item) => item._id === petId)
+          : await request("/pets/" + encodeURIComponent(petId));
+        if (ticket !== editRevision) return;
+        if (!pet) throw Error("Pet não encontrado. Atualize a lista.");
+        fillPet(pet);
+        await updateBreedOptions();
+        if (ticket !== editRevision) return;
+        showForm();
+      } catch (error) {
+        message(error.message);
+      } finally {
+        setBusy(false);
+        if (!petFormContainer.classList.contains("hidden"))
+          $("pet-name").focus({ preventScroll: true });
+      }
     };
-
-    /**
-     * NOVA FUNÇÃO: Lida com a exclusão de um pet, pedindo confirmação.
-     * @param {string} petId O ID do pet a ser excluído.
-     * @param {string} petName O nome do pet para usar na mensagem de confirmação.
-     */
-    window.handleDeletePet = (petId, petName) => {
-        showModal({
-            title: 'Confirmar Exclusão',
-            message: `Tem a certeza que deseja excluir o pet "${petName}"? Esta ação não pode ser desfeita.`,
-            confirmText: 'Excluir',
-            cancelText: 'Cancelar',
-            onConfirm: async () => {
-                try {
-                    const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
-                    if (!loggedInUser?.token) {
-                        showModal({ title: 'Erro', message: 'Você precisa estar logado.', confirmText: 'OK' });
-                        return;
-                    }
-
-                    const response = await fetch(`${API_CONFIG.BASE_URL}/pets/${petId}`, {
-                        method: 'DELETE',
-                        headers: {
-                            'Authorization': `Bearer ${loggedInUser.token}`,
-                            'Content-Type': 'application/json'
-                        }
-                    });
-
-                    if (!response.ok) {
-                        const result = await response.json();
-                        throw new Error(result.message || 'Não foi possível excluir o pet.');
-                    }
-                    
-                    showModal({
-                        title: 'Sucesso!',
-                        message: `O pet "${petName}" foi excluído.`,
-                        confirmText: 'OK',
-                        onConfirm: () => window.location.reload()
-                    });
-
-                } catch (error) {
-                    showModal({ title: 'Erro', message: error.message, confirmText: 'OK' });
-                }
-            }
-        });
+    const deleteDialog = $("pet-delete-dialog");
+    window.handleDeletePet = (petId) => {
+      if (busy || !loaded) return;
+      const pet = pets.find((item) => item._id === petId);
+      if (!pet) return;
+      pendingDelete = pet;
+      previousFocus = document.activeElement;
+      $("pet-delete-message").textContent = preview()
+        ? `Remover “${pet.nome}” da cópia de teste? O cadastro real não será alterado.`
+        : `Deseja excluir o cadastro de “${pet.nome}”? Esta ação não pode ser desfeita.`;
+      $("pet-delete-error").hidden = true;
+      if (!deleteDialog.open) deleteDialog.showModal();
+      $("pet-delete-cancel").focus();
     };
-
-    if (petForm) {
-        petForm.addEventListener('submit', async (event) => {
-            event.preventDefault();
-
-            const submitButton = petForm.querySelector('button[type="submit"]');
-            const originalButtonHtml = submitButton.innerHTML;
-            submitButton.disabled = true;
-            submitButton.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i>A Salvar...`;
-
-            const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
-            if (!loggedInUser) {
-                alert('Utilizador não está logado!');
-                return;
-            }
-
-            const formData = new FormData(petForm);
-            const petData = Object.fromEntries(formData.entries());
-            if (porteSelect && porteSelect.disabled) {
-                petData['pet_porte'] = porteSelect.value;
-            }
-            
-            const petId = hiddenPetIdInput.value;
-            const isEditing = !!petId;
-
-            const method = isEditing ? 'PUT' : 'POST';
-            const url = isEditing ? `${API_CONFIG.BASE_URL}/pets/${petId}` : `${API_CONFIG.BASE_URL}/pets`;
-
-            if (!isEditing) {
-                petData.owner = loggedInUser.id;
-            }
-
-            try {
-                const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
-                if (!loggedInUser?.token) {
-                    showModal({ title: 'Erro', message: 'Token não fornecido.', confirmText: 'OK' });
-                    return;
-                }
-
-                const response = await fetch(url, {
-                    method: method,
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${loggedInUser.token}`
-                    },
-                    body: JSON.stringify(petData),
-                });
-
-                const result = await response.json();
-                if (!response.ok) throw new Error(result.message);
-                
-                showModal({
-                    title: 'Sucesso!',
-                    message: isEditing ? 'Os dados do seu pet foram atualizados.' : 'O seu novo pet foi adicionado.',
-                    confirmText: 'OK',
-                    onConfirm: () => window.location.reload()
-                });
-
-            } catch (error) {
-                showModal({ title: 'Erro', message: `Não foi possível salvar o pet: ${error.message}`, confirmText: 'Tentar novamente' });
-            } finally {
-                submitButton.disabled = false;
-                submitButton.innerHTML = originalButtonHtml;
-            }
-        });
-    }
+    $("pet-delete-confirm").addEventListener("click", async () => {
+      if (!pendingDelete || busy || !deleteDialog.open) return;
+      const pet = pendingDelete;
+      setBusy(true);
+      try {
+        if (preview()) {
+          pets = pets.filter((item) => item._id !== pet._id);
+          render();
+        } else
+          await request("/pets/" + encodeURIComponent(pet._id), {
+            method: "DELETE",
+          });
+        deleteDialog.close();
+        if (hiddenPetIdInput.value === pet._id) hideForm();
+        if (preview() || (await fetchAndDisplayPets()))
+          message(
+            preview()
+              ? "Cadastro removido apenas da cópia de teste."
+              : "Cadastro do pet excluído.",
+          );
+      } catch (error) {
+        $("pet-delete-error").textContent = error.message;
+        $("pet-delete-error").hidden = false;
+      } finally {
+        setBusy(false);
+      }
+    });
+    for (const id of ["pet-delete-cancel", "pet-delete-close"])
+      $(id).addEventListener("click", () => {
+        if (!busy) deleteDialog.close();
+      });
+    deleteDialog.addEventListener("cancel", (event) => {
+      if (busy) event.preventDefault();
+    });
+    deleteDialog.addEventListener("close", () => {
+      pendingDelete = null;
+      if (previousFocus?.isConnected) previousFocus.focus();
+      else addPetBtn.focus();
+    });
+    deleteDialog.addEventListener("click", (event) => {
+      if (busy || event.target !== deleteDialog) return;
+      const r = deleteDialog.getBoundingClientRect();
+      if (
+        event.clientX < r.left ||
+        event.clientX > r.right ||
+        event.clientY < r.top ||
+        event.clientY > r.bottom
+      )
+        deleteDialog.close();
+    });
+    petsListContainer.addEventListener("click", (event) => {
+      const edit = event.target.closest("[data-pet-edit]"),
+        remove = event.target.closest("[data-pet-delete]");
+      if (edit) window.handleEditPet(edit.dataset.petEdit);
+      if (remove) window.handleDeletePet(remove.dataset.petDelete);
+    });
+    petForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (busy || !loaded) return;
+      const current = session();
+      if (!current || current.id !== ownerId) {
+        message("Entre novamente e atualize a lista para continuar.", true);
+        return;
+      }
+      syncPorteDisabled();
+      const data = Object.fromEntries(new FormData(petForm).entries());
+      data.pet_porte = porteSelect.value;
+      if (
+        !data.pet_name.trim() ||
+        !data.pet_type ||
+        !data.pet_raca.trim() ||
+        !data.pet_sexo
+      ) {
+        message("Preencha nome, tipo, raça e sexo do pet.", true);
+        return;
+      }
+      const petId = hiddenPetIdInput.value,
+        editing = !!petId;
+      if (!editing) data.owner = current.id;
+      setBusy(true);
+      message("", true);
+      try {
+        if (preview()) {
+          const mapped = {
+            nome: data.pet_name,
+            tipo: data.pet_type,
+            raca: data.pet_raca,
+            porte: data.pet_porte,
+            sexo: data.pet_sexo,
+            dataNascimento: data.pet_nascimento,
+            microchip: data.pet_microchip,
+            pelagemCor: data.pet_pelagem,
+            rga: data.pet_rga,
+            peso: data.pet_peso,
+          };
+          if (editing)
+            pets = pets.map((pet) =>
+              pet._id === petId ? { ...pet, ...mapped } : pet,
+            );
+          else pets.push({ _id: "preview-" + ++previewCounter, ...mapped });
+          render();
+          hideForm();
+          message(
+            "Alteração aplicada apenas à cópia de teste. O cadastro real foi preservado.",
+          );
+        } else {
+          await request(
+            editing ? "/pets/" + encodeURIComponent(petId) : "/pets",
+            { method: editing ? "PUT" : "POST", body: JSON.stringify(data) },
+          );
+          hideForm();
+          if (await fetchAndDisplayPets())
+            message(
+              editing
+                ? "Cadastro do pet atualizado."
+                : "Seu pet foi adicionado.",
+            );
+          else
+            message("Dados salvos. Atualize a lista para conferir o cadastro.");
+        }
+      } catch (error) {
+        message(
+          "Não foi possível salvar: " +
+            error.message +
+            " Seus dados digitados foram mantidos.",
+          true,
+        );
+      } finally {
+        setBusy(false);
+      }
+    });
+    $("pets-refresh").addEventListener("click", () => {
+      if (!busy) {
+        hideForm();
+        fetchAndDisplayPets();
+      }
+    });
+    $("pet-form-close").addEventListener("click", () => {
+      if (!busy) hideForm();
+    });
+    $("pets-preview-note").hidden = !preview();
 
     // --- Lógica para Sugestão de Raças (Awesomplete) ---
 
     async function updateBreedOptions() {
-    if (!petTypeSelect || !breedInput) return;
-    const selectedType = petTypeSelect.value;
-    await loadSpeciesMap().catch(()=>{});
-    let breeds = [];
-    const typeKey = norm(selectedType);
+      if (!petTypeSelect || !breedInput) return;
+      const selectedType = petTypeSelect.value;
+      await loadSpeciesMap().catch(() => {});
+      let breeds = [];
+      const typeKey = norm(selectedType);
 
-    if (typeKey === 'cachorro') {
+      if (typeKey === "cachorro") {
         breeds = (SPECIES_MAP?.cachorro?.all || []).slice();
-    } else if (typeKey === 'gato') {
+      } else if (typeKey === "gato") {
         breeds = (SPECIES_MAP?.gato || SPECIES_MAP?.gatos || []).slice();
-    } else if (typeKey === 'passaro') {
+      } else if (typeKey === "passaro") {
         breeds = (SPECIES_MAP?.passaro || SPECIES_MAP?.passaros || []).slice();
-    } else if (['peixe','roedor','lagarto','tartaruga'].includes(typeKey)) {
+      } else if (
+        ["peixe", "roedor", "lagarto", "tartaruga"].includes(typeKey)
+      ) {
         breeds = (SPECIES_MAP?.[typeKey] || []).slice();
-    } else {
+      } else {
         breeds = [];
-    }
+      }
 
-    breeds = breeds.map(fixEncoding).sort((a,b)=> a.localeCompare(b));
+      if (typeKey !== norm(petTypeSelect.value)) return;
+      breeds = breeds.map(fixEncoding).sort((a, b) => a.localeCompare(b));
 
-    if (awesompleteInstance) {
+      if (typeof Awesomplete !== "function") {
+        let list = document.getElementById("pet-breed-suggestions");
+        if (!list) {
+          list = document.createElement("datalist");
+          list.id = "pet-breed-suggestions";
+          breedInput.after(list);
+          breedInput.setAttribute("list", list.id);
+        }
+        list.replaceChildren(
+          ...breeds.map((name) => {
+            const option = document.createElement("option");
+            option.value = name;
+            return option;
+          }),
+        );
+        return;
+      }
+      if (awesompleteInstance) {
         awesompleteInstance.list = breeds;
-    } else {
+      } else {
         awesompleteInstance = new Awesomplete(breedInput, {
-        minChars: 1,
-        list: breeds,
-        autoFirst: true
+          minChars: 1,
+          list: breeds,
+          autoFirst: true,
         });
-    }
+      }
     }
 
     // --- Event Listeners Iniciais ---
 
-    if (addPetBtn) addPetBtn.addEventListener('click', () => {
+    if (addPetBtn)
+      addPetBtn.addEventListener("click", async () => {
+        if (busy || !loaded) return;
+        formReturnFocus = addPetBtn;
         petForm.reset();
-        hiddenPetIdInput.value = '';
-        updateBreedOptions();
+        hiddenPetIdInput.value = "";
+        await updateBreedOptions();
         syncPorteDisabled();
         showForm();
         ensurePetTypeOptions();
         normalizeStaticLabels();
-    });
-    if (cancelPetBtn) cancelPetBtn.addEventListener('click', hideForm);
-    if (petTypeSelect) petTypeSelect.addEventListener('change', async () => {
-      await updateBreedOptions();
-      syncPorteDisabled();
-      setPorteFromBreedIfDog();
-    });
+      });
+    if (cancelPetBtn)
+      cancelPetBtn.addEventListener("click", () => {
+        if (!busy) hideForm();
+      });
+    if (petTypeSelect)
+      petTypeSelect.addEventListener("change", async () => {
+        await updateBreedOptions();
+        syncPorteDisabled();
+        setPorteFromBreedIfDog();
+      });
 
     // Atualiza porte ao escolher uma raÃƒÂ§a (para cachorro)
     if (breedInput) {
-      breedInput.addEventListener('change', () => setTimeout(setPorteFromBreedIfDog, 0));
-      breedInput.addEventListener('blur', () => setTimeout(setPorteFromBreedIfDog, 0));
-      breedInput.addEventListener('awesomplete-selectcomplete', () => setTimeout(setPorteFromBreedIfDog, 0));
+      breedInput.addEventListener("change", () =>
+        setTimeout(setPorteFromBreedIfDog, 0),
+      );
+      breedInput.addEventListener("blur", () =>
+        setTimeout(setPorteFromBreedIfDog, 0),
+      );
+      breedInput.addEventListener("awesomplete-selectcomplete", () =>
+        setTimeout(setPorteFromBreedIfDog, 0),
+      );
     }
 
     // --- ExecuÃƒÂ§ÃƒÂ£o Inicial ---
@@ -519,4 +881,10 @@ document.addEventListener('DOMContentLoaded', () => {
     normalizeStaticLabels();
     updateBreedOptions();
     syncPorteDisabled();
-});
+  }
+  if (document.readyState === "loading")
+    document.addEventListener("DOMContentLoaded", initializePets, {
+      once: true,
+    });
+  else initializePets();
+})();

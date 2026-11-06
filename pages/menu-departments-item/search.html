@@ -1,57 +1,162 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Busca de Produtos - E o Bicho</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-    <link rel="stylesheet" href="../../src/output.css">
-  <link rel="stylesheet" href="../../src/responsive-workspace.css?v=20261008-1">
-</head>
-<body class="bg-gray-100 responsive-site">
+<!doctype html>
+<html data-storefront-shell lang="pt-BR">
+  <head>
+<script src="/scripts/storefront/bootstrap.js?v=20261106-release1" defer></script>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      name="description"
+      content="Tudo para seu pet com cuidado e carinho. Explore produtos para cães, gatos e outros pets e conheça nossas lojas na Tijuca e em Vila Isabel, Rio de Janeiro."
+    />
+    <meta name="theme-color" content="#47562b" />
+    <link
+      rel="canonical"
+      href="https://www.peteobicho.com.br/pages/menu-departments-item/search.html"
+    />
+    <meta property="og:title" content="E o Bicho · Tudo para seu pet" />
+    <meta
+      property="og:description"
+      content="Carinho de perto. Cuidado todos os dias. Produtos para seu pet e lojas na Tijuca e em Vila Isabel."
+    />
+    <meta property="og:url" content="https://www.peteobicho.com.br/" />
+    <meta property="og:type" content="website" />
+    <meta
+      property="og:image"
+      content="https://www.peteobicho.com.br/public/image/logo.png"
+    />
+    <meta
+      name="facebook-domain-verification"
+      content="aa7dw5o3hdbv9j7uucy54roz2isvue"
+    />
+    <title>Catálogo · E o Bicho</title>
+    <link rel="preconnect" href="https://cdn.peteobicho.com.br" />
+    <link rel="preconnect" href="https://api.peteobicho.com.br" />
+    <link rel="stylesheet" href="/src/home.css?v=20261106-release1" />
+    <script src="/scripts/core/config.js?v=20261106-release1" defer></script>
+    <script src="/scripts/product/product-utils.js?v=20261106-release1" defer></script>
 
+    <link rel="stylesheet" href="/src/catalog.css?v=20261106-release1" />
+    <script src="/scripts/search/infinite-feed.js?v=20261106-release1" defer></script>
+    <script src="/scripts/search/catalog.js?v=20261106-release1" defer></script>
+  </head>
+  <body>
+    <a class="skip" href="#conteudo">Pular para o conteúdo</a>
     <div id="header-placeholder"></div>
-
-    <main class="container mx-auto px-4 pb-8" data-header-offset="site">
-        
-        <nav class="mb-4 text-sm" aria-label="Breadcrumb">
-            <ol id="breadcrumb-container" class="list-none p-0 inline-flex items-center space-x-2">
-                </ol>
-        </nav>
-
-        <h1 id="page-title" class="text-3xl font-bold text-gray-800 mb-8"></h1>
-
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
-            <aside class="md:col-span-1">
-                <div class="bg-white p-4 rounded-lg shadow">
-                    <h3 class="font-bold text-lg mb-4">Categorias</h3>
-                    <nav id="subcategory-list-container" class="space-y-2">
-                        <p class="text-xs text-gray-400">A carregar...</p>
-                    </nav>
-                </div>
-            </aside>
-            <div class="md:col-span-3">
-                <div id="product-list-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    <p id="loading-message" class="col-span-full text-center text-gray-500">A carregar produtos...</p>
-                </div>
-            </div>
+    <main id="conteudo" class="catalog wrap">
+      <ol
+        id="catalog-breadcrumb"
+        class="catalog-breadcrumb"
+        aria-label="Caminho da categoria"
+      >
+        <li><a href="/">Início</a></li>
+        <li>Catálogo</li>
+      </ol>
+      <section class="catalog-intro" aria-labelledby="catalog-title">
+        <div>
+          <div class="eyebrow">CUIDADO EM CADA ESCOLHA</div>
+          <h1 id="catalog-title">Tudo para seu cachorro</h1>
+          <p id="catalog-description">
+            Da alimentação à brincadeira, encontre o cuidado que faz parte da
+            rotina.
+          </p>
         </div>
+        <span class="catalog-paw" aria-hidden="true">♡</span>
+      </section>
+
+      <div class="catalog-layout">
+        <aside
+          id="filter-sidebar"
+          class="filter-sidebar"
+          aria-label="Filtros de produtos"
+        >
+          <div class="filter-title">
+            <h2>Filtrar produtos</h2>
+            <button type="button" data-clear>Limpar</button>
+          </div>
+          <div id="desktop-filters"></div>
+          <div class="filter-help">
+            <span>♡</span><b>Precisou? A gente ajuda.</b>
+            <p>Converse com a equipe e encontre o produto para seu pet.</p>
+            <a href="/pages/nossas-lojas.html">Falar com uma loja →</a>
+          </div>
+        </aside>
+        <section class="catalog-results" aria-label="Produtos da categoria">
+          <div class="catalog-toolbar">
+            <div>
+              <strong id="result-count" role="status"
+                >Carregando produtos…</strong
+              >
+              <p id="result-range"></p>
+            </div>
+            <div class="catalog-tools">
+              <button
+                id="open-filters"
+                class="filter-mobile-button"
+                type="button"
+              >
+                ☷ Filtrar <span id="filter-count"></span></button
+              ><label for="catalog-sort"
+                >Ordenar por<select id="catalog-sort">
+                  <option value="name">Nome de A a Z</option>
+                  <option value="price-asc">Menor preço</option>
+                  <option value="price-desc">Maior preço</option>
+                </select></label
+              >
+            </div>
+          </div>
+          <div
+            id="active-filters"
+            class="active-filters"
+            aria-label="Filtros aplicados"
+          ></div>
+          <div id="catalog-grid" class="catalog-grid" aria-busy="true"></div>
+          <div
+            id="catalog-loader"
+            class="catalog-loader"
+            aria-label="Carregamento de produtos"
+          ></div>
+          <div class="catalog-footnote">
+            <span>ⓘ</span>
+            <p>
+              Os filtros e a ordenação por preço usam o valor para compra avulsa
+              de uma unidade. Preços Club e ofertas por quantidade têm condições
+              próprias, informadas em cada produto. Estoque e entrega dependem
+              da loja e do endereço.
+            </p>
+          </div>
+        </section>
+      </div>
+      <section class="catalog-bottom">
+        <div>
+          <div class="eyebrow">PERTINHO DE VOCÊ E DO SEU PET</div>
+          <h2>Uma equipe pronta para ajudar.</h2>
+          <p>
+            Visite nossas lojas na Tijuca e em Vila Isabel ou fale com a gente.
+          </p>
+        </div>
+        <a class="button" href="/pages/nossas-lojas.html"
+          >Conhecer as lojas ↗</a
+        >
+      </section>
     </main>
-
-    <div id="cart-placeholder"></div>
+    <dialog id="filter-dialog" aria-labelledby="filter-dialog-title">
+      <form method="dialog" class="filter-dialog-header">
+        <div>
+          <span class="eyebrow">DO SEU JEITO</span>
+          <h2 id="filter-dialog-title">Filtrar produtos</h2>
+        </div>
+        <button aria-label="Fechar filtros" value="cancel">✕</button>
+      </form>
+      <div id="mobile-filters"></div>
+      <div class="filter-dialog-actions">
+        <button type="button" id="mobile-clear">Limpar filtros</button
+        ><button class="button" type="button" id="apply-filters">
+          Ver produtos →
+        </button>
+      </div>
+    </dialog>
     <div id="footer-placeholder"></div>
-    <div id="modal-placeholder"></div>
-    <div id="confirm-modal-placeholder"></div>
 
-    <script>var basePath = '../../';</script>
-    <script src="../../scripts/core/config.js?v=20260812-2"></script>
-    <script src="../../scripts/core/ui.js"></script>
-    <script src="../../scripts/cartManager.js"></script> 
-    <script src="../../scripts/core/main.js"></script>
-    <script src="../../scripts/user/hydrate-user.js"></script>
-    <script src="../../scripts/cart.js"></script>
-    <script src="../../scripts/favoritesManager.js"></script>
-    <script src="../../scripts/search/search.js"></script>
 
-</body>
+  </body>
 </html>

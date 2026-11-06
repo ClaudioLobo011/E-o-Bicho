@@ -1,152 +1,337 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Verificação de segurança - E o Bicho</title>
+<!doctype html>
+<html data-storefront-footer="compact" data-storefront-shell="" lang="pt-BR">
+  <head>
+    <script
+      src="/scripts/storefront/bootstrap.js?v=20261106-release1"
+      defer=""
+    ></script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Alterar senha - E o Bicho</title>
 
-  <!-- Bloqueia acesso se não estiver logado (antes de renderizar a página) -->
-  <script src="../scripts/protect-page.js"></script>
+    <!-- Bloqueia acesso se não estiver logado (antes de renderizar a página) -->
+    <script src="../scripts/protect-page.js"></script>
 
-  <!-- Estilos -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-  <link rel="stylesheet" href="../src/output.css">
-  <link rel="stylesheet" href="../src/responsive-workspace.css?v=20261008-1">
-</head>
-<body class="bg-gray-100 responsive-site">
-
-  <!-- Cabeçalho (injetado por main.js) -->
-  <div id="header-placeholder"></div>
-
-  <main class="container mx-auto px-4 pb-8" data-header-offset="site">
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
-
-      <!-- Sidebar -->
-      <aside class="md:col-span-1">
-        <div id="account-sidebar-placeholder"></div>
-      </aside>
-
-      <!-- Conteúdo -->
-      <section class="md:col-span-3">
-        <div class="bg-white rounded-lg shadow p-6 space-y-6">
-
-          <div>
-            <h1 class="text-2xl font-semibold text-gray-900">Verificação de segurança</h1>
-            <p class="text-gray-600 mt-1">
-              Vamos enviar um código/link de segurança para validar a alteração de senha. Escolha como deseja receber.
-            </p>
-          </div>
-
-          <div>
-            <h2 class="text-base font-medium text-gray-900 mb-3">Como quer receber o código?</h2>
-
-            <!-- Opções em cartões -->
-            <div id="method-group" class="space-y-3">
-
-              <!-- E-MAIL -->
-              <label class="block">
-                <input type="radio" name="method" value="email" id="method-email" class="sr-only" checked>
-                <div class="flex items-center justify-between rounded-lg border p-4 cursor-pointer hover:border-primary transition-colors" data-card="email">
-                  <div class="flex items-center gap-3">
-                    <span class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center">
-                      <i class="fa-regular fa-envelope"></i>
-                    </span>
-                    <div>
-                      <div class="font-medium text-gray-900">E-mail</div>
-                      <div id="email-masked" class="text-sm text-gray-600">—</div>
-                      <div class="mt-1">
-                        <span id="email-status-badge" class="inline-block text-xs px-2 py-1 rounded bg-gray-200 text-gray-700">—</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="shrink-0">
-                    <span class="radio-dot w-5 h-5 inline-flex items-center justify-center rounded-full border"></span>
-                  </div>
-                </div>
-              </label>
-
-              <!-- App Autenticador (TOTP) -->
-              <label class="block">
-                <input type="radio" name="method" value="totp" id="method-totp" class="sr-only">
-                <div class="flex items-center justify-between rounded-lg border p-4 cursor-pointer hover:border-primary transition-colors" data-card="totp">
-                  <div class="flex items-center gap-3">
-                    <span class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center">
-                      <i class="fa-regular fa-circle-user"></i>
-                    </span>
-                    <div>
-                      <div class="font-medium text-gray-900">App Autenticador</div>
-                      <div id="totp-status" class="text-sm text-gray-600">Use Google/Microsoft Authenticator</div>
-                    </div>
-                  </div>
-                  <div class="shrink-0">
-                    <span class="radio-dot w-5 h-5 inline-flex items-center justify-center rounded-full border"></span>
-                  </div>
-                </div>
-              </label>
+    <!-- Estilos -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+    />
+    <link rel="stylesheet" href="../src/output.css" />
+    <link
+      rel="stylesheet"
+      href="../src/responsive-workspace.css?v=20261106-release1"
+    />
+    <link rel="stylesheet" href="/src/profile.css?v=20261106-release1" />
+    <link rel="stylesheet" href="/src/security.css?v=20261106-release1" />
+  </head>
+  <body class="profile-page security-page responsive-site">
+    <div id="header-placeholder"></div>
+    <main class="profile-layout" id="security-main">
+      <div class="profile-breadcrumb">
+        <a href="/">Início</a><span aria-hidden="true">›</span
+        ><span>Minha conta</span><span aria-hidden="true">›</span
+        ><span aria-current="page">Alterar senha</span>
+      </div>
+      <div class="profile-columns">
+        <aside class="profile-sidebar">
+          <div id="account-sidebar-placeholder"></div>
+          <a class="profile-support" href="/pages/nossas-lojas.html"
+            ><span aria-hidden="true">♡</span>
+            <div>
+              <strong>Estamos por perto</strong
+              ><small>Fale com a equipe da sua loja →</small>
+            </div></a
+          >
+        </aside>
+        <div class="profile-content">
+          <section class="profile-hero">
+            <div>
+              <h1>Alterar senha</h1>
+              <p>Confirme que é você antes de escolher uma nova senha.</p>
             </div>
-
-            <!-- Painel de setup do TOTP -->
-            <div id="totp-setup" class="hidden mt-4 border rounded-lg p-4">
-              <div class="flex items-start gap-4">
-                <img id="totp-qr" alt="QR do autenticador" class="w-40 h-40 rounded border bg-white" src="" />
-                <div>
-                  <p id="totp-instr-1" class="text-sm text-gray-700">1) Abra o Google/Microsoft Authenticator e escaneie o QR.</p>
-                  <p id="totp-instr-2" class="text-sm text-gray-700">2) Digite abaixo o código de 6 dígitos para confirmar.</p>
-                  <div class="mt-3 flex items-center gap-2">
-                    <input id="totp-code" type="text" inputmode="numeric" maxlength="6" placeholder="000000" class="w-28 px-3 py-2 border rounded" />
-                    <button id="totp-verify-btn" class="bg-primary text-white px-4 py-2 rounded hover:bg-secondary">Confirmar</button>
-                  </div>
-                  <p id="totp-secret-text" class="text-[12px] text-gray-500 mt-2"></p>
-                </div>
+            <svg
+              class="security-hero-icon"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path d="m12 2 8 4v6c0 5-8 10-8 10S4 17 4 12V6l8-4Z"></path>
+              <path d="m8 12 3 3 5-6"></path>
+            </svg>
+          </section>
+          <p id="security-preview-note" class="security-preview-note" hidden="">
+            Prévia visual: nenhum e-mail é enviado, nenhum autenticador é
+            ativado e nenhuma senha é alterada.
+          </p>
+          <div
+            id="security-feedback"
+            class="security-feedback"
+            role="status"
+            aria-live="polite"
+          >
+            Consultando as opções de segurança da sua conta…
+          </div>
+          <div class="security-recovery">
+            <button id="security-retry" type="button" hidden="">
+              Tentar novamente →</button
+            ><a id="security-login" href="/pages/login.html" hidden=""
+              >Entrar na minha conta →</a
+            >
+          </div>
+          <section class="security-card" aria-labelledby="security-step-title">
+            <div class="security-step-heading">
+              <span aria-hidden="true">1</span>
+              <div>
+                <h2 id="security-step-title">Confirme sua identidade</h2>
+                <p>Escolha uma das opções disponíveis na sua conta.</p>
               </div>
             </div>
-
-            <button id="btn-receber" class="mt-4 bg-primary text-white px-6 py-2 rounded-lg hover:bg-secondary transition-colors">
-              Receber código
-            </button>
-
-          </div>
-
-          <div class="border-t pt-4">
-            <h3 class="text-sm font-semibold text-gray-900">Dicas de segurança</h3>
-            <ul class="mt-2 text-sm text-gray-600 list-disc pl-5 space-y-1">
-              <li>NÃO compartilhe códigos recebidos por e-mail.</li>
-              <li>Links de verificação e alteração expiram em até <strong>2 horas</strong> e são de <strong>uso único</strong>.</li>
-            </ul>
-          </div>
-
+            <fieldset id="method-group" class="security-methods">
+              <legend class="sr-only">
+                Como deseja confirmar sua identidade?
+              </legend>
+              <label class="security-method"
+                ><input
+                  type="radio"
+                  name="method"
+                  value="email"
+                  id="method-email"
+                  checked=""
+                  disabled="" /><span
+                  class="security-method-card"
+                  data-card="email"
+                  ><svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M3 5h18v14H3zM3 5l9 8 9-8"></path></svg
+                  ><span
+                    ><strong>E-mail</strong
+                    ><small id="email-masked">Consultando endereço…</small
+                    ><em id="email-status-badge">Consultando…</em></span
+                  ><span
+                    class="radio-dot"
+                    aria-hidden="true"
+                  ></span></span></label
+              ><label class="security-method"
+                ><input
+                  type="radio"
+                  name="method"
+                  value="totp"
+                  id="method-totp"
+                  disabled="" /><span
+                  class="security-method-card"
+                  data-card="totp"
+                  ><svg viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="6" y="2" width="12" height="20" rx="2"></rect>
+                    <path d="M10 18h4M9 6h6M9 10h6"></path></svg
+                  ><span
+                    ><strong>App autenticador</strong
+                    ><small id="totp-status"
+                      >Consultando configuração…</small
+                    ></span
+                  ><span class="radio-dot" aria-hidden="true"></span></span
+              ></label>
+            </fieldset>
+            <div id="security-email-panel">
+              <p id="security-email-help" class="security-hint">
+                O código será enviado ao e-mail verificado da sua conta.
+              </p>
+              <div class="security-email-actions">
+                <button
+                  id="btn-receber"
+                  class="security-primary"
+                  type="button"
+                  disabled=""
+                >
+                  Receber código por e-mail</button
+                ><button
+                  id="email-send-verification"
+                  class="security-secondary"
+                  type="button"
+                  hidden=""
+                >
+                  Verificar meu e-mail
+                </button>
+              </div>
+              <form
+                id="email-verify-form"
+                class="security-code-panel"
+                hidden=""
+              >
+                <div class="security-panel-heading">
+                  <h3>Digite o código recebido</h3>
+                  <button type="button" id="em-close">Cancelar</button>
+                </div>
+                <p id="em-msg" role="status"></p>
+                <div class="security-code-actions">
+                  <label for="em-code" class="sr-only"
+                    >Código de confirmação por e-mail</label
+                  ><input
+                    id="em-code"
+                    type="text"
+                    inputmode="numeric"
+                    autocomplete="one-time-code"
+                    maxlength="6"
+                    placeholder="000000"
+                    aria-describedby="em-msg"
+                  /><button id="em-ok" type="submit" class="security-primary">
+                    Confirmar código
+                  </button>
+                </div>
+              </form>
+            </div>
+            <div id="totp-setup" class="security-code-panel" hidden="">
+              <h3 id="totp-panel-title">Use seu app autenticador</h3>
+              <p id="totp-instr-1">Abra seu aplicativo autenticador.</p>
+              <button
+                id="totp-start"
+                type="button"
+                class="security-secondary"
+                hidden=""
+              >
+                Configurar autenticador
+              </button>
+              <div id="totp-qr-panel" class="security-qr-panel" hidden="">
+                <img
+                  id="totp-qr"
+                  alt="QR para configurar o autenticador"
+                  width="160"
+                  height="160"
+                />
+                <div>
+                  <p>
+                    Escaneie o QR com o Google Authenticator ou Microsoft
+                    Authenticator.
+                  </p>
+                  <details id="totp-manual">
+                    <summary>Preciso inserir a chave manualmente</summary>
+                    <code id="totp-secret-text"></code>
+                  </details>
+                </div>
+              </div>
+              <form id="totp-code-form" hidden="">
+                <p id="totp-instr-2">
+                  Digite o código de 6 dígitos mostrado no aplicativo.
+                </p>
+                <div class="security-code-actions">
+                  <label for="totp-code" class="sr-only"
+                    >Código do aplicativo autenticador</label
+                  ><input
+                    id="totp-code"
+                    type="text"
+                    inputmode="numeric"
+                    autocomplete="one-time-code"
+                    maxlength="6"
+                    placeholder="000000"
+                  /><button
+                    id="totp-verify-btn"
+                    type="submit"
+                    class="security-primary"
+                  >
+                    Confirmar código
+                  </button>
+                </div>
+              </form>
+            </div>
+            <div class="security-tips">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="5" y="10" width="14" height="11" rx="2"></rect>
+                <path d="M8 10V6a4 4 0 0 1 8 0v4"></path>
+              </svg>
+              <p>
+                <strong>Cuide do seu acesso.</strong> Não compartilhe códigos
+                nem a chave do autenticador. Os códigos de e-mail deste fluxo
+                são válidos por 10 minutos.
+              </p>
+            </div>
+          </section>
         </div>
-      </section>
-    </div>
-  </main>
-
-  <!-- Placeholders para componentes (carregados por main.js) -->
-  <div id="cart-placeholder"></div>
-  <div id="modal-placeholder"></div>
-  <div id="confirm-modal-placeholder"></div>
-
-  <!-- Rodapé simplificado -->
-  <footer class="container mx-auto py-6 px-4">
-    <div class="border-t border-gray-200 text-center text-gray-400 text-xs pt-6">
-      <p>Copyright &copy; 2025 Vila E o Bicho LTDA - ME. Todos os direitos reservados.</p>
-    </div>
-  </footer>
-
-  <!-- BasePath deve vir ANTES do main.js para injetar header/footer -->
-  <script>var basePath = '../';</script>
-
-  <!-- Scripts comuns do site -->
-  <script src="../scripts/core/config.js?v=20260812-2"></script>
-  <script src="../scripts/core/ui.js"></script>
-  <script src="../scripts/cartManager.js"></script>
-  <script src="../scripts/core/main.js"></script>
-  <script src="../scripts/user/hydrate-user.js"></script>
-  <script src="../scripts/favoritesManager.js"></script>
-  <script src="../scripts/cart.js"></script>
-
-  <!-- Scripts desta página -->
-  <script src="../scripts/alterar-senha.js"></script>
-
-</body>
+      </div>
+    </main>
+    <dialog
+      id="password-dialog"
+      class="security-dialog"
+      aria-labelledby="password-dialog-title"
+    >
+      <div class="security-dialog-heading">
+        <div>
+          <span class="security-eyebrow">ETAPA 2 · NOVO ACESSO</span>
+          <h2 id="password-dialog-title">Escolha sua nova senha</h2>
+        </div>
+        <button
+          id="pw-close"
+          type="button"
+          aria-label="Fechar alteração de senha"
+        >
+          ✕
+        </button>
+      </div>
+      <p id="password-preview-note" class="security-preview-note" hidden="">
+        Prévia visual: os campos e o envio da nova senha estão desativados.
+      </p>
+      <form id="password-form">
+        <div class="security-password-field">
+          <label for="pw1">Nova senha</label>
+          <div>
+            <input
+              id="pw1"
+              type="password"
+              autocomplete="new-password"
+              placeholder="Digite a nova senha"
+              aria-describedby="password-rules"
+            /><button
+              type="button"
+              data-password-toggle="pw1"
+              aria-label="Mostrar nova senha"
+              aria-pressed="false"
+            >
+              Mostrar
+            </button>
+          </div>
+        </div>
+        <div class="security-password-field">
+          <label for="pw2">Confirmar nova senha</label>
+          <div>
+            <input
+              id="pw2"
+              type="password"
+              autocomplete="new-password"
+              placeholder="Repita a nova senha"
+            /><button
+              type="button"
+              data-password-toggle="pw2"
+              aria-label="Mostrar confirmação de senha"
+              aria-pressed="false"
+            >
+              Mostrar
+            </button>
+          </div>
+        </div>
+        <ul id="password-rules" class="security-rules">
+          <li data-rule="length">Mínimo de 8 caracteres</li>
+          <li data-rule="upper">Uma letra maiúscula</li>
+          <li data-rule="lower">Uma letra minúscula</li>
+          <li data-rule="number">Um número</li>
+        </ul>
+        <p id="pw-err" role="status" hidden=""></p>
+        <button id="pw-save" type="submit" class="security-primary">
+          Salvar nova senha
+        </button>
+      </form>
+    </dialog>
+    <div id="cart-placeholder"></div>
+    <div id="modal-placeholder"></div>
+    <div id="confirm-modal-placeholder"></div>
+    <div id="footer-placeholder"></div>
+    <script>
+      var basePath = "../";
+    </script>
+    <script src="../scripts/core/config.js?v=20261106-release1"></script>
+    <script src="../scripts/core/ui.js"></script>
+    <script src="../scripts/cartManager.js"></script>
+    <script src="../scripts/core/main.js?v=20261106-release1"></script>
+    <script src="../scripts/user/hydrate-user.js"></script>
+    <script src="../scripts/favoritesManager.js"></script>
+    <script src="../scripts/cart.js"></script>
+    <script src="/scripts/vendor/qrcode.min.js?v=1.5.4"></script>
+    <script src="../scripts/alterar-senha.js?v=20261106-release1"></script>
+  </body>
 </html>
-

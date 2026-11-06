@@ -1,171 +1,358 @@
-document.addEventListener('DOMContentLoaded', () => {
-  const list = document.getElementById('my-orders-list');
-  const empty = document.getElementById('my-orders-empty');
-  if (!list) return;
-
-  const auth = JSON.parse(localStorage.getItem('loggedInUser') || 'null') || {};
-  if (!auth?.token) {
-    if (empty) empty.classList.remove('hidden');
-    return;
-  }
-
-  loadOrders(auth.token);
-
-  async function loadOrders(token) {
-    try {
-      const resp = await fetch(`${API_CONFIG.BASE_URL}/orders/my`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) throw new Error(data?.message || 'Falha ao carregar pedidos.');
-      const orders = Array.isArray(data?.orders) ? data.orders : Array.isArray(data) ? data : [];
-      if (!orders.length) {
-        if (empty) empty.classList.remove('hidden');
-        list.innerHTML = '';
-        return;
-      }
-      renderOrders(orders);
-    } catch (error) {
-      console.error('[meus-pedidos] load', error);
-      if (empty) {
-        empty.textContent = 'Nao foi possivel carregar seus pedidos.';
-        empty.classList.remove('hidden');
+(() => {
+  "use strict";
+  function initialize() {
+    const $ = (id) => document.getElementById(id),
+      list = $("my-orders-list"),
+      empty = $("my-orders-empty");
+    if (!list || list.dataset.initialized) return;
+    list.dataset.initialized = "true";
+    const search = $("orders-search"),
+      status = $("orders-status"),
+      sort = $("orders-sort");
+    let orders = [],
+      loaded = false,
+      limit = 20,
+      revision = 0,
+      controller;
+    const esc = (value) =>
+      String(value ?? "").replace(
+        /[&<>"']/g,
+        (char) =>
+          ({
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#39;",
+          })[char],
+      );
+    const normalize = (value) =>
+      String(value ?? "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase();
+    const numeric = (value) =>
+      value === null ||
+      value === undefined ||
+      typeof value === "boolean" ||
+      String(value).trim() === ""
+        ? NaN
+        : Number(value);
+    const money = (value) =>
+      Number.isFinite(numeric(value))
+        ? numeric(value).toLocaleString("pt-BR", {
+            style: "currency",
+            currency: "BRL",
+          })
+        : "Não informado";
+    const timestamp = (value) => (value ? new Date(value).getTime() : NaN);
+    const date = (value) =>
+      Number.isFinite(timestamp(value))
+        ? new Date(value).toLocaleString("pt-BR", {
+            timeZone: "America/Sao_Paulo",
+            dateStyle: "short",
+            timeStyle: "short",
+          })
+        : "Data não informada";
+    const statuses = {
+      RECEBIDO: "Recebido",
+      PAGO_RESERVADO: "Pago · estoque reservado",
+      EM_SEPARACAO: "Em separação",
+      PRONTO_PARA_ENVIO: "Pronto para envio",
+      ENVIADO: "Enviado",
+      CONCLUIDO: "Concluído",
+      CANCELADO: "Cancelado",
+      DEVOLVIDO: "Devolvido",
+    };
+    const payments = {
+      approved: "Aprovado",
+      pending: "Pendente",
+      in_process: "Em análise",
+      authorized: "Autorizado",
+      rejected: "Recusado",
+      cancelled: "Cancelado",
+      refunded: "Reembolsado",
+      charged_back: "Contestado",
+    };
+    const methods = {
+      pix: "Pix",
+      credit_card: "Cartão de crédito",
+      debit_card: "Cartão de débito",
+      ticket: "Boleto",
+      boleto: "Boleto",
+      account_money: "Saldo da conta",
+      cash: "Dinheiro",
+    };
+    const state = (order) => String(order.status || "");
+    const label = (order) =>
+      statuses[state(order)] || state(order) || "Status não informado";
+    const total = (order) => order.totals?.total ?? order.total;
+    const items = (order) =>
+      Array.isArray(order.items)
+        ? order.items.filter((item) => item && typeof item === "object")
+        : [];
+    const name = (item) => item.name || item.produto || "Produto não informado";
+    function imageUrl(raw) {
+      if (!raw || typeof raw !== "string")
+        return "/public/image/placeholder.svg";
+      try {
+        const url = new URL(raw, API_CONFIG.SERVER_URL || location.origin);
+        return ["http:", "https:"].includes(url.protocol)
+          ? url.href
+          : "/public/image/placeholder.svg";
+      } catch {
+        return "/public/image/placeholder.svg";
       }
     }
+    function feedback(text = "") {
+      $("orders-feedback").textContent = text;
+      $("orders-feedback").hidden = !text;
+    }
+    function busy(value) {
+      list.setAttribute("aria-busy", String(value));
+      [search, status, sort, $("orders-refresh")].forEach(
+        (control) => (control.disabled = value),
+      );
+    }
+    function blank(title, description, action) {
+      empty.hidden = false;
+      empty.innerHTML = `<span class="orders-empty-icon" aria-hidden="true">◇</span><h2>${esc(title)}</h2><p>${esc(description)}</p>${action}`;
+    }
+    function card(order) {
+      const rows = items(order),
+        customer = order.customer || {},
+        address = customer.address || {},
+        totals = order.totals || {};
+      const code = order.number ?? order.code ?? order._id ?? "Não informado";
+      const addressLines = [
+        [address.logradouro, address.numero].filter(Boolean).join(", "),
+        address.complemento,
+        [address.bairro, address.cidade, address.uf]
+          .filter(Boolean)
+          .join(" · "),
+        address.cep ? "CEP " + address.cep : "",
+      ].filter(Boolean);
+      const tone =
+        state(order) === "CANCELADO"
+          ? "cancelled"
+          : state(order) === "DEVOLVIDO"
+            ? "returned"
+            : state(order) === "CONCLUIDO"
+              ? "completed"
+              : "progress";
+      const payment = order.payment || {};
+      const delivery = {
+        pickup: "Retirada na loja",
+        retirada: "Retirada na loja",
+        padrao: "Entrega padrão",
+        express: "Entrega expressa",
+        agendada: "Entrega agendada",
+      };
+      const products = rows
+        .map(
+          (item) =>
+            `<li><div><strong>${esc(name(item))}</strong><small>${Number.isFinite(numeric(item.quantity ?? item.quantidade)) ? esc(item.quantity ?? item.quantidade) + " un." : "Quantidade não informada"} · ${esc(money(item.unitPrice ?? item.valorUnitario))} por unidade</small></div><b>${esc(money(item.total ?? item.valorTotal))}</b></li>`,
+        )
+        .join("");
+      return `<article class="order-card">
+        <div class="order-card-header"><div><h2>Pedido ${esc(code)}</h2><p>${esc(date(order.createdAt))}${order.store?.name ? " · " + esc(order.store.name) : ""}</p></div><span class="order-status ${tone}">${esc(label(order))}</span></div>
+        <div class="order-card-summary"><div class="order-products-preview"><div class="order-thumbnails">${rows
+          .slice(0, 2)
+          .map(
+            (item) =>
+              `<img src="${esc(imageUrl(item.imageUrl))}" alt="" width="44" height="48" loading="lazy" decoding="async">`,
+          )
+          .join(
+            "",
+          )}</div><div><p>${esc(rows.slice(0, 2).map(name).join(" · ") || "Nenhum item registrado.")}</p><small>${rows.length} ${rows.length === 1 ? "produto" : "produtos"}${rows.length > 2 ? " · veja todos nos detalhes" : ""}</small></div></div><div class="order-amount"><small>Total do pedido</small><strong>${esc(money(total(order)))}</strong><span>${esc(methods[payment.method] || payment.method || "Método não informado")}</span></div></div>
+        <details class="order-details"><summary><span>Ver detalhes do pedido</span><span class="order-details-chevron" aria-hidden="true">⌄</span></summary><div class="order-detail-content">
+          <div class="order-info-grid"><section><h3>Dados do pedido</h3><p>${esc(customer.name || "Nome não informado")}</p>${customer.email ? `<p>${esc(customer.email)}</p>` : ""}${customer.phone ? `<p>${esc(customer.phone)}</p>` : ""}</section><section><h3>${["pickup", "retirada"].includes(order.delivery?.type) ? "Retirada / endereço do pedido" : "Endereço do pedido"}</h3>${addressLines.length ? addressLines.map((line) => `<p>${esc(line)}</p>`).join("") : "<p>Endereço não informado.</p>"}${order.delivery?.type ? `<p class="order-secondary">Modalidade: ${esc(delivery[order.delivery.type] || order.delivery.type)}</p>` : ""}</section><section><h3>Pagamento</h3><p>${esc(methods[payment.method] || payment.method || "Método não informado")}</p><p>Situação: ${esc(payments[payment.status] || payment.status || "Não informada")}</p></section></div>
+          <h3 class="order-items-title">Todos os produtos</h3><ul class="order-items">${products || "<li>Nenhum item registrado.</li>"}</ul>
+          <dl class="order-values"><div><dt>Subtotal</dt><dd>${esc(money(totals.subtotal))}</dd></div><div><dt>Descontos</dt><dd>${esc(money(totals.discounts))}</dd></div><div><dt>Entrega</dt><dd>${esc(money(totals.deliveryCost))}</dd></div><div><dt>Total</dt><dd>${esc(money(total(order)))}</dd></div></dl><a class="order-help" href="/pages/nossas-lojas.html">Preciso de ajuda com este pedido ↗</a>
+        </div></details></article>`;
+    }
+    function render() {
+      if (!loaded) return;
+      const q = normalize(search.value.trim());
+      const filtered = orders.filter(
+        (order) =>
+          (!status.value || state(order) === status.value) &&
+          (!q ||
+            normalize(
+              [
+                order.number,
+                order.code,
+                order._id,
+                ...items(order).map(name),
+              ].join(" "),
+            ).includes(q)),
+      );
+      filtered.sort((a, b) => {
+        const av =
+            sort.value === "total" ? numeric(total(a)) : timestamp(a.createdAt),
+          bv =
+            sort.value === "total" ? numeric(total(b)) : timestamp(b.createdAt);
+        if (!Number.isFinite(av)) return Number.isFinite(bv) ? 1 : 0;
+        if (!Number.isFinite(bv)) return -1;
+        return sort.value === "oldest" ? av - bv : bv - av;
+      });
+      list.innerHTML = filtered.slice(0, limit).map(card).join("");
+      empty.hidden = true;
+      $("orders-more").hidden = filtered.length <= limit;
+      $("orders-clear").hidden =
+        !search.value && !status.value && sort.value === "recent";
+      $("orders-count").textContent = filtered.length
+        ? `Exibindo ${Math.min(limit, filtered.length)} de ${filtered.length} ${filtered.length === 1 ? "pedido" : "pedidos"}`
+        : orders.length
+          ? "Nenhum resultado para os filtros"
+          : "Seus pedidos aparecerão aqui";
+      if (!orders.length)
+        blank(
+          "Seu próximo carinho começa aqui",
+          "Você ainda não tem pedidos registrados nesta conta.",
+          '<a href="/pages/menu-departments-item/search.html?search=*">Explorar produtos →</a>',
+        );
+      else if (!filtered.length)
+        blank(
+          "Não encontramos esse pedido",
+          "Tente outro número, nome de produto ou status.",
+          '<button type="button" data-clear-orders>Limpar filtros →</button>',
+        );
+    }
+    async function load() {
+      const ticket = ++revision;
+      controller?.abort();
+      controller = new AbortController();
+      let auth;
+      try {
+        auth = JSON.parse(localStorage.getItem("loggedInUser"));
+      } catch {}
+      if (!auth?.token) {
+        orders = [];
+        loaded = false;
+        list.replaceChildren();
+        $("orders-more").hidden = true;
+        feedback();
+        busy(true);
+        list.setAttribute("aria-busy", "false");
+        $("orders-count").textContent = "Entre para consultar suas compras";
+        blank(
+          "Seus pedidos ficam na sua conta",
+          "Acesse sua conta para consultar os pedidos e seus detalhes.",
+          '<a href="/pages/login.html">Entrar na minha conta →</a>',
+        );
+        return;
+      }
+      busy(true);
+      feedback(
+        loaded ? "Atualizando seus pedidos…" : "Carregando seus pedidos…",
+      );
+      try {
+        const response = await fetch(`${API_CONFIG.BASE_URL}/orders/my`, {
+          headers: { Authorization: `Bearer ${auth.token}` },
+          signal: controller.signal,
+        });
+        const data = await response.json();
+        if (ticket !== revision) return;
+        if (!response.ok) {
+          const error = Error("Pedidos indisponíveis");
+          error.status = response.status;
+          throw error;
+        }
+        const result = Array.isArray(data?.orders)
+          ? data.orders
+          : Array.isArray(data)
+            ? data
+            : null;
+        if (!result) throw Error("Resposta de pedidos inválida");
+        orders = result.filter((order) => order && typeof order === "object");
+        loaded = true;
+        limit = 20;
+        const selected = status.value;
+        status.innerHTML =
+          '<option value="">Todos os status</option>' +
+          [...new Set(orders.map(state).filter(Boolean))]
+            .map(
+              (value) =>
+                `<option value="${esc(value)}">${esc(statuses[value] || value)}</option>`,
+            )
+            .join("");
+        status.value = [...status.options].some(
+          (option) => option.value === selected,
+        )
+          ? selected
+          : "";
+        feedback();
+        render();
+      } catch (error) {
+        if (ticket !== revision || error.name === "AbortError") return;
+        feedback(
+          loaded
+            ? "Não foi possível atualizar. Os pedidos já carregados continuam disponíveis."
+            : "Não foi possível consultar seus pedidos agora.",
+        );
+        if (!loaded) {
+          $("orders-count").textContent = "Consulta indisponível";
+          blank(
+            error.status === 401
+              ? "Vamos renovar seu acesso?"
+              : "Vamos tentar novamente?",
+            error.status === 401
+              ? "Entre novamente para consultar os pedidos. Seus dados foram preservados."
+              : "Confira sua conexão e tente carregar os pedidos outra vez.",
+            error.status === 401
+              ? '<a href="/pages/login.html">Entrar na conta →</a>'
+              : '<button type="button" data-retry-orders>Tentar novamente →</button>',
+          );
+        }
+      } finally {
+        if (ticket === revision) busy(false);
+      }
+    }
+    function clear() {
+      search.value = "";
+      status.value = "";
+      sort.value = "recent";
+      limit = 20;
+      render();
+    }
+    $("orders-filters").addEventListener("submit", (event) =>
+      event.preventDefault(),
+    );
+    search.addEventListener("input", () => {
+      limit = 20;
+      render();
+    });
+    [status, sort].forEach((control) =>
+      control.addEventListener("change", () => {
+        limit = 20;
+        render();
+      }),
+    );
+    $("orders-clear").addEventListener("click", clear);
+    $("orders-refresh").addEventListener("click", load);
+    $("orders-more").addEventListener("click", () => {
+      limit += 20;
+      render();
+    });
+    empty.addEventListener("click", (event) => {
+      if (event.target.closest("[data-retry-orders]")) load();
+      if (event.target.closest("[data-clear-orders]")) clear();
+    });
+    list.addEventListener(
+      "error",
+      (event) => {
+        if (
+          event.target.tagName === "IMG" &&
+          event.target.getAttribute("src") !== "/public/image/placeholder.svg"
+        )
+          event.target.src = "/public/image/placeholder.svg";
+      },
+      true,
+    );
+    load();
   }
-
-  function renderOrders(orders) {
-    list.innerHTML = orders.map((order) => buildOrderCard(order)).join('');
-    if (empty) empty.classList.add('hidden');
-  }
-
-  function buildOrderCard(order) {
-    const code = escapeHtml(order?.number || order?.code || order?._id || '-');
-    const createdAt = formatDateTime(order?.createdAt);
-    const status = escapeHtml(order?.status || 'RECEBIDO');
-    const paymentStatus = escapeHtml(order?.payment?.status || '');
-    const paymentMethod = escapeHtml(order?.payment?.method || '');
-    const customer = order?.customer || {};
-    const address = customer?.address || {};
-    const items = Array.isArray(order?.items) ? order.items : [];
-    const totals = order?.totals || {};
-    const totalValue = formatCurrency(totals.total || order?.total || 0);
-
-    const customerName = escapeHtml(customer?.name || '-');
-    const customerEmail = escapeHtml(customer?.email || '');
-    const customerPhone = escapeHtml(customer?.phone || '');
-
-    const addressLine1 = escapeHtml([address?.logradouro, address?.numero].filter(Boolean).join(', '));
-    const addressLine2 = escapeHtml([address?.bairro, address?.cidade, address?.uf].filter(Boolean).join(' - '));
-    const addressLine3 = address?.cep ? `CEP: ${escapeHtml(address.cep)}` : '';
-
-    const maxItems = 2;
-    const visibleItems = items.slice(0, maxItems);
-    const remainingItems = Math.max(items.length - visibleItems.length, 0);
-
-    const itemsHtml = visibleItems.length
-      ? visibleItems.map((item) => {
-          const name = escapeHtml(item?.name || item?.produto || '-');
-          const qty = Number(item?.quantity || item?.quantidade || 0);
-          const unitPrice = formatCurrency(item?.unitPrice || item?.valorUnitario || 0);
-          const total = formatCurrency(item?.total || item?.valorTotal || 0);
-          return `
-            <li class="flex items-start justify-between gap-3 py-1 text-xs">
-              <div>
-                <p class="font-semibold text-gray-800 truncate">${name}</p>
-                <p class="text-[11px] text-gray-500">Qtd: ${qty} | ${unitPrice} un.</p>
-              </div>
-              <div class="text-right font-semibold text-gray-800">${total}</div>
-            </li>
-          `;
-        }).join('')
-      : '<li class="py-1 text-xs text-gray-500">Nenhum item registrado.</li>';
-
-    const moreItemsHtml = remainingItems
-      ? `<li class="py-1 text-[11px] text-gray-500">+ ${remainingItems} item(s)</li>`
-      : '';
-
-    return `
-      <article class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm space-y-3">
-        <div class="flex flex-wrap items-start justify-between gap-3">
-          <div class="min-w-[180px]">
-            <p class="text-[11px] uppercase text-gray-500">Pedido</p>
-            <p class="text-base font-semibold text-gray-800">${code}</p>
-            <p class="text-[11px] text-gray-500">${createdAt}</p>
-          </div>
-          <div class="text-right space-y-1">
-            <span class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">${status}</span>
-            <p class="text-sm font-semibold text-gray-800">${totalValue}</p>
-            <p class="text-[11px] text-gray-500">Pagamento: ${paymentStatus || '-'}</p>
-            <p class="text-[11px] text-gray-500">Metodo: ${paymentMethod || '-'}</p>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-700">
-          <div class="space-y-0.5">
-            <p class="text-[11px] uppercase text-gray-500">Cliente</p>
-            <p class="truncate">${customerName}</p>
-            ${customerEmail ? `<p class="truncate">${customerEmail}</p>` : ''}
-            ${customerPhone ? `<p>${customerPhone}</p>` : ''}
-          </div>
-          <div class="space-y-0.5">
-            <p class="text-[11px] uppercase text-gray-500">Endereco</p>
-            ${addressLine1 ? `<p class="truncate">${addressLine1}</p>` : '<p>-</p>'}
-            ${addressLine2 ? `<p class="truncate">${addressLine2}</p>` : ''}
-            ${addressLine3 ? `<p class="text-[11px] text-gray-500">${addressLine3}</p>` : ''}
-          </div>
-        </div>
-
-        <div>
-          <div class="flex items-center justify-between">
-            <p class="text-[11px] uppercase text-gray-500">Produtos</p>
-            <p class="text-[11px] text-gray-500">${items.length} item(s)</p>
-          </div>
-          <ul class="divide-y divide-gray-100 mt-1">${itemsHtml}${moreItemsHtml}</ul>
-        </div>
-
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-gray-700 rounded-md bg-gray-50 p-2">
-          <div>
-            <p class="text-[11px] uppercase text-gray-500">Subtotal</p>
-            <p class="font-semibold">${formatCurrency(totals.subtotal || 0)}</p>
-          </div>
-          <div>
-            <p class="text-[11px] uppercase text-gray-500">Descontos</p>
-            <p class="font-semibold">${formatCurrency(totals.discounts || 0)}</p>
-          </div>
-          <div>
-            <p class="text-[11px] uppercase text-gray-500">Entrega</p>
-            <p class="font-semibold">${formatCurrency(totals.deliveryCost || 0)}</p>
-          </div>
-          <div>
-            <p class="text-[11px] uppercase text-gray-500">Total</p>
-            <p class="font-semibold">${totalValue}</p>
-          </div>
-        </div>
-      </article>
-    `;
-  }
-
-  function formatCurrency(value) {
-    const numberValue = Number(value || 0);
-    if (!Number.isFinite(numberValue)) return 'R$ 0,00';
-    return numberValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-  }
-
-  function formatDateTime(value) {
-    if (!value) return '-';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return String(value);
-    return date.toLocaleString('pt-BR');
-  }
-
-  function escapeHtml(value) {
-    const text = String(value || '');
-    return text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/\"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
-});
+  if (document.readyState === "loading")
+    document.addEventListener("DOMContentLoaded", initialize, { once: true });
+  else initialize();
+})();

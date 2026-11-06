@@ -1,65 +1,174 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!doctype html>
+<html data-storefront-shell="" lang="pt-BR">
+  <head>
+    <script
+      src="/scripts/storefront/bootstrap.js?v=20261106-release1"
+      defer=""
+    ></script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Meus Favoritos - E o Bicho</title>
     <script src="../scripts/protect-page.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-    <link rel="stylesheet" href="../src/output.css">
-  <link rel="stylesheet" href="../src/responsive-workspace.css?v=20261008-1">
-</head>
-<body class="bg-gray-100 responsive-site">
-
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+    />
+    <link rel="stylesheet" href="../src/output.css" />
+    <link
+      rel="stylesheet"
+      href="../src/responsive-workspace.css?v=20261106-release1"
+    />
+    <link rel="stylesheet" href="/src/profile.css?v=20261106-release1" />
+    <link rel="stylesheet" href="/src/favorites.css?v=20261106-release1" />
+  </head>
+  <body class="profile-page favorites-page responsive-site">
     <div id="header-placeholder"></div>
-
-    <main class="container mx-auto px-4 pb-8" data-header-offset="site">
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
-            <aside class="md:col-span-1">
-                <div id="account-sidebar-placeholder"></div>
-            </aside>
-
-            <div class="md:col-span-3">
-                <div class="bg-white p-6 rounded-lg shadow">
-                    <h1 class="text-2xl font-bold text-gray-800">Meus Favoritos</h1>
-                    <p class="text-gray-600 mt-1">Os seus produtos preferidos, guardados num só lugar.</p>
-                    
-                    <div id="favorites-list-container" class="hidden mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                        </div>
-
-                    <div id="favorites-empty-state" class="mt-10 text-center">
-                        <div class="text-8xl text-gray-300">
-                            <i class="far fa-heart"></i>
-                        </div>
-                        <h3 class="mt-4 font-semibold text-xl text-gray-800">Você ainda não adicionou nenhum produto como favorito</h3>
-                        <p class="mt-2 text-gray-500">Que tal adicionar um produto aos seus favoritos?<br>Basta clicar no coração do produto desejado.</p>
-                    </div>
-                    </div>
+    <main class="profile-layout" id="favorites-main">
+      <div class="profile-breadcrumb">
+        <a href="/">Início</a><span aria-hidden="true">›</span
+        ><span>Minha conta</span><span aria-hidden="true">›</span
+        ><span aria-current="page">Meus favoritos</span>
+      </div>
+      <div class="profile-columns">
+        <aside class="profile-sidebar">
+          <div id="account-sidebar-placeholder"></div>
+          <a class="profile-support" href="/pages/nossas-lojas.html"
+            ><span aria-hidden="true">♡</span>
+            <div>
+              <strong>Estamos por perto</strong
+              ><small>Fale com a equipe da sua loja →</small>
+            </div></a
+          >
+        </aside>
+        <div class="profile-content">
+          <section class="profile-hero">
+            <div>
+              <h1>Meus favoritos</h1>
+              <p>Os produtos que fazem parte do carinho, guardados por aqui.</p>
             </div>
-
+            <span class="favorites-hero-icon" aria-hidden="true">♡</span>
+          </section>
+          <form
+            id="favorites-filters"
+            class="favorites-toolbar"
+            role="search"
+            aria-label="Filtrar favoritos"
+          >
+            <label class="favorites-search"
+              >Buscar produto<input
+                id="favorites-search"
+                type="search"
+                placeholder="Nome, marca ou código"
+                autocomplete="off"
+                disabled="" /></label
+            ><label
+              >Disponibilidade<select id="favorites-availability" disabled="">
+                <option value="">Todos os produtos</option>
+                <option value="available">Disponíveis</option>
+                <option value="unavailable">Indisponíveis</option>
+              </select></label
+            ><label
+              >Ordenar<select id="favorites-sort" disabled="">
+                <option value="saved">Ordem da lista</option>
+                <option value="name">Nome: A a Z</option>
+                <option value="price-asc">Menor preço</option>
+                <option value="price-desc">Maior preço</option>
+              </select></label
+            ><button
+              id="favorites-refresh"
+              type="button"
+              aria-label="Atualizar favoritos"
+              disabled=""
+            >
+              ↻
+            </button>
+          </form>
+          <div class="favorites-list-meta">
+            <p id="favorites-count" role="status" aria-live="polite">
+              Carregando seus favoritos…
+            </p>
+            <button type="button" id="favorites-clear" hidden="">
+              Limpar filtros
+            </button>
+          </div>
+          <p
+            id="favorites-preview-note"
+            class="favorites-preview-note"
+            hidden=""
+          >
+            Prévia: remoções afetam apenas a cópia desta tela. A sacola de teste
+            é compartilhada com o checkout. Atualizar restaura os favoritos da
+            conta.
+          </p>
+          <div
+            id="favorites-feedback"
+            class="favorites-feedback"
+            role="status"
+            aria-live="polite"
+            hidden=""
+          ></div>
+          <div
+            id="favorites-list-container"
+            class="favorites-grid"
+            aria-busy="true"
+          ></div>
+          <div
+            id="favorites-empty-state"
+            class="favorites-empty"
+            hidden=""
+          ></div>
+          <button
+            type="button"
+            id="favorites-more"
+            class="favorites-more"
+            hidden=""
+          >
+            Mostrar mais favoritos
+          </button>
+          <p class="favorites-price-note">
+            Preços e disponibilidade podem mudar. Preço Clube e ofertas por
+            quantidade têm condições próprias; confira na página de cada
+            produto.
+          </p>
         </div>
+      </div>
     </main>
-
+    <dialog
+      id="favorite-remove-dialog"
+      class="favorite-remove-dialog"
+      aria-labelledby="favorite-remove-title"
+      aria-describedby="favorite-remove-message"
+    >
+      <button
+        type="button"
+        id="favorite-remove-close"
+        aria-label="Fechar confirmação"
+      >
+        ✕</button
+      ><span class="favorite-dialog-icon" aria-hidden="true">♡</span>
+      <h2 id="favorite-remove-title">Remover dos favoritos?</h2>
+      <p id="favorite-remove-message"></p>
+      <p id="favorite-remove-error" role="status" hidden=""></p>
+      <div class="favorite-dialog-actions">
+        <button type="button" id="favorite-remove-cancel">
+          Manter favorito</button
+        ><button type="button" id="favorite-remove-confirm">Remover</button>
+      </div>
+    </dialog>
     <div id="cart-placeholder"></div>
     <div id="modal-placeholder"></div>
     <div id="confirm-modal-placeholder"></div>
-
-    <footer class="container mx-auto py-6 px-4">
-        <div class="border-t border-gray-200 text-center text-gray-400 text-xs pt-6">
-            <p>
-                Copyright &copy; 2025 Vila E o Bicho LTDA - ME. Todos os direitos reservados.
-            </p>
-        </div>
-    </footer>
-
-    <script>var basePath = '../';</script>
-    <script src="../scripts/core/config.js?v=20260812-2"></script>
+    <div id="footer-placeholder"></div>
+    <script>
+      var basePath = "../";
+    </script>
+    <script src="../scripts/core/config.js?v=20261106-release1"></script>
     <script src="../scripts/core/ui.js"></script>
-    <script src="../scripts/cartManager.js"></script> 
-    <script src="../scripts/core/main.js"></script>
+    <script src="../scripts/cartManager.js"></script>
+    <script src="../scripts/core/main.js?v=20261106-release1"></script>
     <script src="../scripts/user/hydrate-user.js"></script>
     <script src="../scripts/cart.js"></script>
     <script src="../scripts/favoritesManager.js"></script>
-    <script src="../scripts/favoritos.js"></script>
-</body>
+    <script src="../scripts/favoritos.js?v=20261106-release1"></script>
+  </body>
 </html>

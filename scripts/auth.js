@@ -47,7 +47,10 @@ function fillCompletionForm(user = {}) {
   };
   Object.entries(values).forEach(([id, value]) => { const el = document.getElementById(id); if (el && value != null) el.value = value; });
   const isento = document.getElementById('isento_ie');
-  if (isento) isento.checked = !!user.isentoIE;
+  if (isento) {
+    isento.checked = !!user.isentoIE;
+    isento.dispatchEvent(new Event('change', { bubbles: true }));
+  }
   window.toggleForms?.();
 }
 
@@ -119,6 +122,14 @@ function initializeAuth() {
 
         window.toggleForms = () => {
             if (!radioPf || !formPf || !formPj) return;
+            if (signupForm.dataset.signupLayout === 'modern') {
+                for (const [form, active] of [[formPf, radioPf.checked], [formPj, !radioPf.checked]]) {
+                    form.hidden = !active;
+                    form.style.maxHeight = 'none';
+                    form.style.opacity = '';
+                }
+                return;
+            }
             if (radioPf.checked) {
                 formPf.style.maxHeight = formPf.scrollHeight + "px";
                 formPf.style.opacity = 1;
@@ -207,22 +218,7 @@ async function handleLoginSubmit(event) {
     saveRememberIdentifier(identifierNow, !!rememberEl?.checked);
     // <<<
 
-    // modal de sucesso + redirecionamento (seu comportamento atual)
-    const modal = document.getElementById('login-success-modal');
-    if (modal) {
-      modal.classList.remove('hidden');
-      let countdown = 3;
-      const timerSpan = document.getElementById('login-redirect-timer');
-      timerSpan.textContent = `A redirecionar em ${countdown}...`;
-      const interval = setInterval(() => {
-        countdown--;
-        timerSpan.textContent = `A redirecionar em ${countdown}...`;
-        if (countdown <= 0) {
-          clearInterval(interval);
-          window.location.href = productLoginDestination();
-        }
-      }, 1000);
-    }
+    window.location.href = productLoginDestination();
   } catch (error) {
     showModal({ title: 'Erro de Login', message: error.message, confirmText: 'Tentar Novamente' });
   } finally {

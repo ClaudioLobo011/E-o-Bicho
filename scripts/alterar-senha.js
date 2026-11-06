@@ -1,212 +1,514 @@
-// scripts/alterar-senha.js — fluxo de alteração de senha com e-mail ou TOTP
-document.addEventListener('DOMContentLoaded', () => {
-  const logged = JSON.parse(localStorage.getItem('loggedInUser') || 'null');
-  if (!logged?.id || !logged?.token) {
-    showModal({ title: 'Atenção', message: 'Faça login para continuar.', confirmText: 'Login', onConfirm: () => location.href = '/pages/login.html' });
-    return;
-  }
-
-  // elementos
-  const nameSpan = document.getElementById('sidebar-username') || document.querySelector('[data-user-name]');
-  const emailBadge = document.getElementById('email-status-badge');
-  const emailMaskedEl = document.getElementById('email-masked');
-  const btnReceber = document.getElementById('btn-receber');
-
-  const methodGroup = document.getElementById('method-group');
-  const cardEmail = methodGroup.querySelector('[data-card="email"]');
-  const cardTotp  = methodGroup.querySelector('[data-card="totp"]');
-  const radioEmail= document.getElementById('method-email');
-  const radioTotp = document.getElementById('method-totp');
-
-  // TOTP
-  const totpStatusEl = document.getElementById('totp-status');
-  const totpSetup = document.getElementById('totp-setup');
-  const totpQr = document.getElementById('totp-qr');
-  const totpCode = document.getElementById('totp-code');
-  const totpVerifyBtn = document.getElementById('totp-verify-btn');
-
-  // estado
-  let user = null;
-  const headersAuth = { 'Authorization': `Bearer ${logged.token}`, 'Content-Type': 'application/json' };
-
-  function maskEmail(email = '') {
-    const [l, d] = String(email).split('@');
-    if (!l || !d) return email || '';
-    const keep = Math.min(3, l.length);
-    return `${l.slice(0, keep)}${'*'.repeat(Math.max(0, l.length - keep))}@${d}`;
-  }
-
-  function setSelected(card) {
-    [cardEmail, cardTotp].filter(Boolean).forEach(c => c.classList.remove('selected'));
-    card?.classList.add('selected');
-  }
-
-  function setEmailBadge(verified) {
-    if (!emailBadge) return;
-    if (verified) {
-      emailBadge.textContent = 'Verificado';
-      emailBadge.className = 'inline-block text-xs px-2 py-1 rounded bg-emerald-100 text-emerald-700';
-      btnReceber.disabled = false; btnReceber.classList.remove('opacity-60','cursor-not-allowed');
-    } else {
-      emailBadge.textContent = 'Não verificado';
-      emailBadge.className = 'inline-block text-xs px-2 py-1 rounded bg-red-100 text-red-700';
-    }
-  }
-
-  // Remove o cartão SMS (não será utilizado) — caso exista por cache
-  try { methodGroup.querySelector('[data-card="sms"]')?.closest('label')?.remove(); } catch (_) {}
-
-  methodGroup.addEventListener('click', (e) => {
-    const wrapper = e.target.closest('[data-card]');
-    if (!wrapper) return;
-    if (wrapper.dataset.card === 'email') {
-      radioEmail.checked = true; setSelected(cardEmail); totpSetup?.classList.add('hidden');
-      btnReceber?.classList.remove('hidden');
-    } else if (wrapper.dataset.card === 'totp') {
-      radioTotp.checked = true; setSelected(cardTotp); setupTotp().catch(()=>{});
-      btnReceber?.classList.add('hidden');
-    }
-  });
-
-  async function loadUser() {
-    const r = await fetch(`${API_CONFIG.BASE_URL}/users/${logged.id}`, { headers: headersAuth });
-    if (!r.ok) throw new Error('Falha ao carregar usuário');
-    user = await r.json();
-    if (nameSpan) nameSpan.textContent = user?.name || logged?.name || '';
-    if (emailMaskedEl) emailMaskedEl.textContent = maskEmail(user.email);
-    if (totpStatusEl) totpStatusEl.textContent = user.totpEnabled ? 'Ativado neste dispositivo' : 'Proteja sua conta com Google/Microsoft Authenticator';
-    setEmailBadge(!!user.emailVerified);
-    radioEmail.checked = true; setSelected(cardEmail);
-  }
-
-  async function setupTotp() {
-    if (!totpSetup) return;
-    totpSetup.classList.remove('hidden');
-    // Se já estiver habilitado, não gere novo QR. Só campo de código
-    if (user?.totpEnabled) {
-      if (totpQr) { totpQr.src = ''; totpQr.classList.add('hidden'); }
-      const instr = document.getElementById('totp-instr-1');
-      if (instr) instr.classList.add('hidden');
-      const secretText = document.getElementById('totp-secret-text');
-      if (secretText) secretText.textContent = '';
-      return;
-    }
-    try {
-      const res = await fetch(`${API_CONFIG.BASE_URL}/auth/totp/setup`, { method: 'POST', headers: headersAuth });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(data.otpauth)}`;
-      if (totpQr) { totpQr.src = qrUrl; totpQr.classList.remove('hidden'); }
-      const instr = document.getElementById('totp-instr-1');
-      if (instr) instr.classList.remove('hidden');
-      const secretText = document.getElementById('totp-secret-text');
-      if (secretText) secretText.textContent = `Se precisar, código secreto: ${data.secret}`;
-    } catch {
-      showToast?.('Falha ao gerar QR do autenticador', 'error');
-    }
-  }
-
-  function openChangePasswordModal(authToken) {
-    const w = document.createElement('div');
-    w.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4';
-    w.innerHTML = `
-      <div class="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden">
-        <div class="flex items-center justify-between px-5 py-4 border-b">
-          <h3 class="text-lg font-semibold">Alterar senha</h3>
-          <button id="pw-close" class="text-gray-500 hover:text-gray-700"><i class="fa-solid fa-xmark text-xl"></i></button>
-        </div>
-        <div class="p-5 space-y-3">
-          <input id="pw1" type="password" class="w-full border rounded px-3 py-2" placeholder="Nova senha" />
-          <input id="pw2" type="password" class="w-full border rounded px-3 py-2" placeholder="Confirmar nova senha" />
-          <button id="pw-save" class="w-full rounded-lg bg-primary text-white py-2">Salvar</button>
-          <p id="pw-err" class="text-sm text-red-600"></p>
-        </div>
-      </div>`;
-    document.body.appendChild(w);
-    const close = ()=> w.remove();
-    w.addEventListener('click', (e)=>{ if (e.target===w) close(); });
-    w.querySelector('#pw-close').addEventListener('click', close);
-    w.querySelector('#pw-save').addEventListener('click', async ()=>{
-      const p1 = w.querySelector('#pw1').value;
-      const p2 = w.querySelector('#pw2').value;
-      const err = w.querySelector('#pw-err');
-      err.textContent = '';
-      if (p1 !== p2) { err.textContent = 'As senhas não coincidem.'; return; }
-      const strong = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
-      if (!strong.test(p1)) { err.textContent = 'A senha deve ter 8+ caracteres, com maiúscula, minúscula e número.'; return; }
+(() => {
+  "use strict";
+  function initializeSecurity() {
+    const $ = (id) => document.getElementById(id),
+      group = $("method-group");
+    if (!group || group.dataset.initialized) return;
+    group.dataset.initialized = "true";
+    const preview = () => !!window.CATALOG_PREVIEW;
+    const dialog = $("password-dialog");
+    let user = null,
+      ownerId = "",
+      busy = false,
+      setupData = null,
+      emailSent = false,
+      verifiedToken = null,
+      previousFocus = null,
+      overflow = null,
+      loadRevision = 0;
+    function session() {
       try {
-        const tokenToUse = authToken || (logged?.token || '');
-        const resp = await fetch(`${API_CONFIG.BASE_URL}/auth/password/change`, { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization': `Bearer ${tokenToUse}` }, body: JSON.stringify({ password: p1 }) });
-        const jr = await resp.json().catch(()=>({}));
-        if (!resp.ok || !jr.ok) throw new Error(jr.message || 'Falha ao alterar a senha');
-        showToast?.('Senha alterada com sucesso!', 'success');
-        close();
-      } catch(e) {
-        showToast?.(e.message || 'Falha ao alterar senha', 'error');
+        const value = JSON.parse(localStorage.getItem("loggedInUser"));
+        return value?.id && value?.token ? value : null;
+      } catch {
+        return null;
+      }
+    }
+    function message(text = "") {
+      $("security-feedback").textContent = text;
+      $("security-feedback").hidden = !text;
+    }
+    function maskEmail(email) {
+      const parts = String(email || "").split("@");
+      if (parts.length !== 2 || !parts[0] || !parts[1])
+        return "E-mail não informado";
+      const keep = Math.min(3, parts[0].length);
+      return (
+        parts[0].slice(0, keep) +
+        "*".repeat(Math.max(1, parts[0].length - keep)) +
+        "@" +
+        parts[1]
+      );
+    }
+    function controls() {
+      for (const id of [
+        "method-email",
+        "method-totp",
+        "btn-receber",
+        "email-send-verification",
+        "totp-start",
+        "totp-verify-btn",
+        "em-ok",
+        "em-close",
+        "pw-save",
+        "pw-close",
+      ])
+        $(id).disabled = busy || !user;
+      $("security-retry").disabled = busy;
+      $("btn-receber").disabled =
+        busy || !user || (!preview() && (!user.emailVerified || !user.email));
+      $("em-ok").disabled = busy || !emailSent;
+      $("totp-verify-btn").disabled =
+        busy || !user || (!user.totpEnabled && !setupData);
+      $("em-code").disabled = busy;
+      $("totp-code").disabled = busy;
+      for (const id of ["pw1", "pw2", "pw-save"])
+        $(id).disabled = busy || preview() || !verifiedToken;
+      for (const button of document.querySelectorAll("[data-password-toggle]"))
+        button.disabled = busy || preview() || !verifiedToken;
+    }
+    function setBusy(value) {
+      busy = value;
+      controls();
+    }
+    async function request(
+      path,
+      { method = "POST", body, publicEndpoint = false, authToken } = {},
+    ) {
+      const current = session();
+      if (!current || current.id !== ownerId)
+        throw Error(
+          "Entre novamente para continuar. Seu cadastro foi preservado.",
+        );
+      if (preview() && method !== "GET")
+        throw Error("As alterações de segurança estão bloqueadas na prévia.");
+      const headers = { "Content-Type": "application/json" };
+      if (!publicEndpoint)
+        headers.Authorization = "Bearer " + (authToken || current.token);
+      const response = await fetch(API_CONFIG.BASE_URL + path, {
+        method,
+        headers,
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok)
+        throw Error(
+          response.status === 401
+            ? "Entre novamente para continuar. Seu cadastro foi preservado."
+            : result.message ||
+                "Não foi possível concluir a solicitação. Tente novamente.",
+        );
+      return result;
+    }
+    function selectedMethod() {
+      return $("method-totp").checked ? "totp" : "email";
+    }
+    function showMethod() {
+      const totp = selectedMethod() === "totp";
+      $("security-email-panel").hidden = totp;
+      $("totp-setup").hidden = !totp;
+      for (const card of group.querySelectorAll("[data-card]"))
+        card.classList.toggle(
+          "selected",
+          card.dataset.card === selectedMethod(),
+        );
+      if (totp) {
+        $("totp-start").hidden = !!user?.totpEnabled || !!setupData;
+        $("totp-code-form").hidden = !user?.totpEnabled && !setupData;
+        $("totp-instr-1").textContent = user?.totpEnabled
+          ? "Abra o aplicativo autenticador vinculado à sua conta."
+          : setupData
+            ? "Escaneie o QR ou use a chave manual e confirme o primeiro código."
+            : "Configure o aplicativo para receber os códigos de segurança.";
+        if (user?.totpEnabled) {
+          $("totp-qr-panel").hidden = true;
+          $("totp-qr").removeAttribute("src");
+          $("totp-secret-text").textContent = "";
+        }
+      }
+      controls();
+    }
+    async function loadUser() {
+      const current = session(),
+        ticket = ++loadRevision;
+      if (!current) {
+        user = null;
+        controls();
+        message("Entre na sua conta para consultar as opções de segurança.");
+        $("security-login").hidden = false;
+        return;
+      }
+      ownerId = current.id;
+      setBusy(true);
+      message("Consultando as opções de segurança da sua conta…");
+      $("security-retry").hidden = true;
+      try {
+        const result = await request("/users/" + encodeURIComponent(ownerId), {
+          method: "GET",
+        });
+        if (ticket !== loadRevision) return;
+        if (!result || typeof result !== "object" || Array.isArray(result))
+          throw Error("Não foi possível confirmar as opções da conta.");
+        user = result;
+        setupData = null;
+        emailSent = false;
+        $("email-masked").textContent = maskEmail(user.email);
+        $("email-status-badge").textContent = user.emailVerified
+          ? "Verificado"
+          : "Não verificado";
+        $("email-status-badge").classList.toggle(
+          "is-verified",
+          !!user.emailVerified,
+        );
+        $("totp-status").textContent = user.totpEnabled
+          ? "Ativado na sua conta"
+          : "Configuração disponível";
+        $("security-email-help").textContent = user.emailVerified
+          ? "O código será enviado ao e-mail verificado da sua conta."
+          : "Confirme seu e-mail para usar esta opção. Você também pode escolher o app autenticador.";
+        $("email-send-verification").hidden = !!user.emailVerified;
+        $("btn-receber").textContent = preview()
+          ? "Ver prévia do código"
+          : "Receber código por e-mail";
+        $("method-email").checked = true;
+        $("method-totp").checked = false;
+        showMethod();
+        message();
+        $("security-login").hidden = true;
+      } catch (error) {
+        user = null;
+        message(error.message);
+        $("security-retry").hidden = false;
+      } finally {
+        if (ticket === loadRevision) setBusy(false);
+      }
+    }
+    group.addEventListener("change", () => {
+      if (busy || !user) return;
+      verifiedToken = null;
+      showMethod();
+      message();
+    });
+    $("security-retry").addEventListener("click", loadUser);
+    $("email-send-verification").addEventListener("click", async () => {
+      if (busy || !user) return;
+      if (preview()) {
+        message("Prévia: nenhum e-mail de verificação foi enviado.");
+        return;
+      }
+      setBusy(true);
+      try {
+        const result = await request("/auth/email/send-verification");
+        if (!result.ok)
+          throw Error(
+            result.message || "Não foi possível enviar a verificação.",
+          );
+        message(
+          "Enviamos a verificação. Confira seu e-mail e depois use Tentar novamente para atualizar o status.",
+        );
+        $("security-retry").hidden = false;
+      } catch (error) {
+        message(error.message);
+      } finally {
+        setBusy(false);
       }
     });
-  }
-
-  totpVerifyBtn?.addEventListener('click', async () => {
-    const token = (totpCode?.value || '').trim();
-    if (token.length < 6) { showToast?.('Digite o código de 6 dígitos', 'warning'); return; }
-    try {
-      const r = await fetch(`${API_CONFIG.BASE_URL}/auth/totp/verify`, { method: 'POST', headers: headersAuth, body: JSON.stringify({ token }) });
-      const j = await r.json().catch(()=>({}));
-      if (!r.ok || !j.ok) throw new Error(j.message || 'Código inválido');
-      showToast?.('Verificado com sucesso.', 'success');
-      if (totpStatusEl) totpStatusEl.textContent = 'Ativado neste dispositivo';
-      if (user) user.totpEnabled = true;
-      openChangePasswordModal();
-    } catch (e) {
-      showToast?.(e.message || 'Falha ao verificar TOTP', 'error');
+    $("btn-receber").addEventListener("click", async () => {
+      if (busy || !user || (!preview() && (!user.emailVerified || !user.email)))
+        return;
+      setBusy(true);
+      message();
+      try {
+        if (!preview()) {
+          const result = await request("/auth/quick/email/send", {
+            publicEndpoint: true,
+            body: { identifier: user.email },
+          });
+          if (!result.ok)
+            throw Error(result.message || "Não foi possível enviar o código.");
+        }
+        emailSent = true;
+        $("email-verify-form").hidden = false;
+        $("em-code").value = "";
+        $("em-msg").textContent = preview()
+          ? "Prévia: digite 6 dígitos para visualizar a etapa seguinte. Nenhum código foi enviado."
+          : "Código enviado. Confira o e-mail, inclusive a pasta de spam. Ele é válido por 10 minutos.";
+        $("btn-receber").textContent = preview()
+          ? "Reabrir prévia do código"
+          : "Reenviar código";
+      } catch (error) {
+        message(error.message);
+      } finally {
+        setBusy(false);
+        if (emailSent) $("em-code").focus({ preventScroll: true });
+      }
+    });
+    $("em-close").addEventListener("click", () => {
+      if (!busy) {
+        $("email-verify-form").hidden = true;
+        $("em-code").value = "";
+        emailSent = false;
+        controls();
+        $("btn-receber").focus({ preventScroll: true });
+      }
+    });
+    async function renderQr(payload) {
+      const demo = preview();
+      $("totp-qr-panel").hidden = false;
+      $("totp-manual").hidden = demo;
+      $("totp-secret-text").textContent = demo ? "" : payload.secret;
+      try {
+        if (!window.LocalQRCode) throw Error("QR indisponível");
+        const svg = await LocalQRCode.toString(
+          demo
+            ? "Prévia visual E o Bicho. Não configure este código no autenticador."
+            : payload.otpauth,
+          { type: "svg", width: 160, margin: 4, errorCorrectionLevel: "M" },
+        );
+        $("totp-qr").src =
+          "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+        $("totp-qr").hidden = false;
+      } catch {
+        $("totp-qr").hidden = true;
+        if (!demo) {
+          $("totp-manual").open = true;
+          message(
+            "O QR não carregou. Use a chave manual para configurar seu aplicativo.",
+          );
+        }
+      }
+      if (demo)
+        $("totp-instr-1").textContent =
+          "QR demonstrativo. Não configure seu app com ele; nenhum autenticador será ativado.";
     }
-  });
-
-  btnReceber?.addEventListener('click', async () => {
-    // Botão agora só serve para e-mail; TOTP esconde o botão
-    if (!user?.emailVerified) { showToast?.('Seu e-mail não está verificado.', 'warning'); return; }
-    btnReceber.disabled = true; btnReceber.classList.add('opacity-60','cursor-not-allowed');
-    try {
-      const w = document.createElement('div');
-      w.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4';
-      w.innerHTML = `
-        <div class="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden">
-          <div class="flex items-center justify-between px-5 py-4 border-b">
-            <h3 class="text-lg font-semibold">Verificar e-mail</h3>
-            <button id="em-close" class="text-gray-500 hover:text-gray-700"><i class="fa-solid fa-xmark text-xl"></i></button>
-          </div>
-          <div class="p-5">
-            <p id="em-msg" class="text-gray-600 text-sm mb-3">Enviando código...</p>
-            <input id="em-code" maxlength="6" inputmode="numeric" class="w-full border rounded px-3 py-2" placeholder="000000" />
-            <button id="em-ok" class="mt-3 w-full rounded-lg bg-primary text-white py-2">Validar</button>
-          </div>
-        </div>`;
-      document.body.appendChild(w);
-      const close = ()=> w.remove();
-      w.addEventListener('click', (e)=>{ if (e.target===w) close(); });
-      w.querySelector('#em-close').addEventListener('click', close);
-
-      // Envia código por e-mail (6 dígitos)
-      await fetch(`${API_CONFIG.BASE_URL}/auth/quick/email/send`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ identifier: user?.email }) });
-      const msg = w.querySelector('#em-msg'); if (msg) msg.textContent = '';
-
-      w.querySelector('#em-ok').addEventListener('click', async ()=>{
-        const code = w.querySelector('#em-code').value.trim();
-        if (code.length < 6) { showToast?.('Digite o código de 6 dígitos.', 'warning'); return; }
-        const resp = await fetch(`${API_CONFIG.BASE_URL}/auth/quick/email/verify`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ identifier: user?.email, code }) });
-        const jr = await resp.json().catch(()=>({}));
-        if (!resp.ok || !jr.ok) { showToast?.(jr.message || 'Código inválido.', 'error'); return; }
-        close();
-        openChangePasswordModal(jr.token);
+    $("totp-start").addEventListener("click", async () => {
+      if (busy || !user || user.totpEnabled) return;
+      setBusy(true);
+      message();
+      try {
+        const result = preview()
+          ? { demo: true }
+          : await request("/auth/totp/setup");
+        if (
+          !preview() &&
+          (!result.secret ||
+            typeof result.otpauth !== "string" ||
+            !result.otpauth.startsWith("otpauth://"))
+        )
+          throw Error(
+            "Não foi possível preparar o autenticador. Tente novamente.",
+          );
+        setupData = result;
+        showMethod();
+        await renderQr(result);
+      } catch (error) {
+        message(error.message);
+      } finally {
+        setBusy(false);
+      }
+    });
+    function validCode(value) {
+      return /^\d{6}$/.test(value);
+    }
+    function openPassword(token) {
+      verifiedToken = token;
+      previousFocus = document.activeElement;
+      $("password-form").reset();
+      $("pw-err").textContent = "";
+      $("pw-err").hidden = true;
+      $("password-preview-note").hidden = !preview();
+      overflow = {
+        html: document.documentElement.style.overflow,
+        body: document.body.style.overflow,
+      };
+      document.documentElement.style.overflow = "hidden";
+      document.body.style.overflow = "hidden";
+      controls();
+      updateRules();
+      if (!dialog.open) dialog.showModal();
+    }
+    $("email-verify-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (busy || !emailSent || !user) return;
+      const code = $("em-code").value.trim();
+      if (!validCode(code)) {
+        $("em-msg").textContent = "Digite os 6 dígitos numéricos do código.";
+        return;
+      }
+      setBusy(true);
+      try {
+        const result = preview()
+          ? { ok: true }
+          : await request("/auth/quick/email/verify", {
+              publicEndpoint: true,
+              body: { identifier: user.email, code },
+            });
+        if (
+          !result.ok ||
+          (!preview() && (!result.token || typeof result.token !== "string"))
+        )
+          throw Error(result.message || "Não foi possível confirmar o código.");
+        $("em-code").value = "";
+        openPassword(preview() ? null : result.token);
+      } catch (error) {
+        $("em-msg").textContent = error.message;
+      } finally {
+        setBusy(false);
+        if (dialog.open && !preview()) $("pw1").focus({ preventScroll: true });
+      }
+    });
+    $("totp-code-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (busy || !user || (!user.totpEnabled && !setupData)) return;
+      const token = $("totp-code").value.trim();
+      if (!validCode(token)) {
+        message("Digite os 6 dígitos numéricos do aplicativo autenticador.");
+        return;
+      }
+      setBusy(true);
+      message();
+      try {
+        const result = preview()
+          ? { ok: true }
+          : await request("/auth/totp/verify", { body: { token } });
+        if (!result.ok || result.enabled === false)
+          throw Error(result.message || "Código inválido. Tente novamente.");
+        if (!preview()) {
+          user.totpEnabled = true;
+          $("totp-status").textContent = "Ativado na sua conta";
+          setupData = null;
+          $("totp-secret-text").textContent = "";
+          $("totp-qr").removeAttribute("src");
+          $("totp-qr-panel").hidden = true;
+        }
+        $("totp-code").value = "";
+        openPassword(preview() ? null : session().token);
+      } catch (error) {
+        message(error.message);
+      } finally {
+        setBusy(false);
+        if (dialog.open && !preview()) $("pw1").focus({ preventScroll: true });
+      }
+    });
+    function updateRules() {
+      const value = $("pw1").value,
+        met = {
+          length: value.length >= 8,
+          upper: /[A-Z]/.test(value),
+          lower: /[a-z]/.test(value),
+          number: /\d/.test(value),
+        };
+      for (const [key, valid] of Object.entries(met))
+        document
+          .querySelector('[data-rule="' + key + '"]')
+          .classList.toggle("is-met", valid);
+    }
+    $("pw1").addEventListener("input", updateRules);
+    for (const button of document.querySelectorAll("[data-password-toggle]"))
+      button.addEventListener("click", () => {
+        const input = $(button.dataset.passwordToggle),
+          visible = input.type === "password";
+        input.type = visible ? "text" : "password";
+        button.textContent = visible ? "Ocultar" : "Mostrar";
+        button.setAttribute("aria-pressed", String(visible));
+        button.setAttribute(
+          "aria-label",
+          (visible ? "Ocultar " : "Mostrar ") +
+            (input.id === "pw1" ? "nova senha" : "confirmação de senha"),
+        );
       });
-    } catch (e) {
-      showToast?.(e.message || 'Erro ao processar sua solicitação.', 'error');
-    } finally {
-      btnReceber.disabled = false; btnReceber.classList.remove('opacity-60','cursor-not-allowed');
-    }
-  });
-
-  loadUser().catch(() => showModal({ title: 'Erro', message: 'Não foi possível carregar seus dados.' }));
-});
-
+    $("password-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (busy) return;
+      const error = $("pw-err");
+      error.hidden = false;
+      if (preview()) {
+        error.textContent = "A alteração de senha está desativada na prévia.";
+        return;
+      }
+      if (!verifiedToken) {
+        error.textContent =
+          "Confirme sua identidade novamente antes de continuar.";
+        return;
+      }
+      const password = $("pw1").value;
+      if (password !== $("pw2").value) {
+        error.textContent = "As senhas não coincidem.";
+        return;
+      }
+      if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(password)) {
+        error.textContent =
+          "Use ao menos 8 caracteres, com letra maiúscula, minúscula e número.";
+        return;
+      }
+      setBusy(true);
+      error.textContent = "";
+      try {
+        const result = await request("/auth/password/change", {
+          authToken: verifiedToken,
+          body: { password },
+        });
+        if (!result.ok)
+          throw Error(result.message || "Não foi possível alterar a senha.");
+        dialog.close();
+        message("Senha alterada com sucesso.");
+      } catch (failure) {
+        error.textContent = failure.message;
+      } finally {
+        setBusy(false);
+      }
+    });
+    $("pw-close").addEventListener("click", () => {
+      if (!busy) dialog.close();
+    });
+    dialog.addEventListener("cancel", (event) => {
+      if (busy) event.preventDefault();
+    });
+    dialog.addEventListener("close", () => {
+      verifiedToken = null;
+      $("password-form").reset();
+      for (const id of ["pw1", "pw2"]) $(id).type = "password";
+      for (const button of document.querySelectorAll(
+        "[data-password-toggle]",
+      )) {
+        button.textContent = "Mostrar";
+        button.setAttribute("aria-pressed", "false");
+        button.setAttribute(
+          "aria-label",
+          "Mostrar " +
+            (button.dataset.passwordToggle === "pw1"
+              ? "nova senha"
+              : "confirmação de senha"),
+        );
+      }
+      updateRules();
+      if (overflow) {
+        document.documentElement.style.overflow = overflow.html;
+        document.body.style.overflow = overflow.body;
+        overflow = null;
+      }
+      if (previousFocus?.isConnected && !previousFocus.disabled)
+        previousFocus.focus({ preventScroll: true });
+      controls();
+    });
+    dialog.addEventListener("click", (event) => {
+      if (busy || event.target !== dialog) return;
+      const r = dialog.getBoundingClientRect();
+      if (
+        event.clientX < r.left ||
+        event.clientX > r.right ||
+        event.clientY < r.top ||
+        event.clientY > r.bottom
+      )
+        dialog.close();
+    });
+    $("security-preview-note").hidden = !preview();
+    controls();
+    loadUser();
+  }
+  if (document.readyState === "loading")
+    document.addEventListener("DOMContentLoaded", initializeSecurity, {
+      once: true,
+    });
+  else initializeSecurity();
+})();

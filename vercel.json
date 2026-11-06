@@ -14,6 +14,13 @@
   ],
   "builds": [
     {
+      "src": "api/storefront-catalog.js",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 60
+      }
+    },
+    {
       "src": "api/product-page.js",
       "use": "@vercel/node",
       "config": {
@@ -621,6 +628,10 @@
     }
   ],
   "rewrites": [
+    {
+      "source": "/api/storefront-catalog",
+      "destination": "/api/storefront-catalog.js"
+    },
     {
       "source": "/pages/menu-departments-item/product.html",
       "destination": "/api/product-page.js"

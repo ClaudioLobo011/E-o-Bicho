@@ -1,9 +1,8 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
+<!DOCTYPE html><html data-storefront-header="compact" data-storefront-footer="compact" data-storefront-shell="" lang="pt-BR"><head>
+<script src="/scripts/storefront/bootstrap.js?v=20261106-release1" defer=""></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Meu Carrinho - E o Bicho</title>
+    <title>Finalize sua compra · E o Bicho</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     <link rel="stylesheet" href="../src/output.css">
     <style>
@@ -42,26 +41,15 @@
             }
         }
     </style>
-  <link rel="stylesheet" href="../src/responsive-workspace.css?v=20261008-1">
-</head>
-<body class="bg-gray-100 responsive-site">
+  <link rel="stylesheet" href="../src/responsive-workspace.css?v=20261106-release1">
+<link rel="stylesheet" href="/src/checkout.css?v=20261106-release1"></head>
+<body class="bg-gray-100 responsive-site checkout-live">
 
-    <header class="bg-white shadow-sm">
-        <div class="container mx-auto px-4 py-4 flex justify-between items-center">
-            <a href="../index.html">
-                <img src="../public/image/logo.svg" alt="Logotipo E o Bicho" class="h-20 w-auto">
-            </a>
-            <div class="flex items-center text-gray-500">
-                <span class="border-r border-gray-300 h-6 mr-4"></span>
-                <i class="fas fa-lock mr-2"></i>
-                <span class="font-semibold text-sm">Ambiente Seguro</span>
-            </div>
-        </div>
-    </header>
+    <div id="header-placeholder"></div>
 
     <main class="container mx-auto px-4 py-8">
-        <h1 class="text-3xl font-bold text-gray-800 mb-2">Meu Carrinho</h1>
-        <div class="flex items-center text-sm text-gray-600 mb-6">
+        <div class="checkout-live-heading"><div><span class="checkout-live-eyebrow">FALTA POUCO PARA ESSE CARINHO CHEGAR</span><h1>Finalize sua compra</h1><p>Confira sua sacola e escolha como receber o pedido.</p></div><a href="/">← Continuar na loja</a></div>
+        <div class="flex items-center text-sm text-gray-600 mb-6 checkout-live-steps">
             <span id="checkout-step-1" class="font-bold text-primary">1. Sacola</span>
             <i class="fas fa-chevron-right text-xs mx-2 text-gray-400"></i>
             <span id="checkout-step-2" class="text-gray-400">2. Forma de pagamento</span>
@@ -73,9 +61,9 @@
             <div id="checkout-step-track" class="flex transition-transform duration-500 ease-in-out" style="width: 300%;">
                 <section class="checkout-step shrink-0">
                     <div class="flex flex-col lg:flex-row gap-8 items-start">
-            
+
             <div class="checkout-col-primary w-full">
-                <div class="bg-white p-2 rounded-lg shadow">
+                <div class="bg-white p-2 rounded-lg shadow checkout-live-products">
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm">
                             <thead class="text-gray-600">
@@ -103,14 +91,70 @@
                     </div>
                 </div>
 
-                <div class="mt-12">
+                <section class="checkout-live-delivery" aria-label="Entrega e retirada"><h2>Entrega ou retirada</h2><div class="mb-4 pb-4 border-b">
+            <label class="block text-sm font-medium mb-2 text-gray-800" for="cep-input">Calcular frete e prazo</label>
+            <div class="flex">
+                <input id="cep-input" type="text" placeholder="Digite seu CEP" class="w-full border border-gray-300 rounded-l px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                <button id="cep-ok-btn" class="bg-primary text-white px-4 py-2 rounded-r text-sm font-bold hover:bg-secondary" type="button">Consultar</button>
+            </div>
+            <a href="https://buscacepinter.correios.com.br/app/localidade_logradouro/index.php" target="_blank" rel="noopener" class="text-xs text-primary hover:underline mt-1 inline-block">Não sei meu CEP</a>
+            </div><div id="delivery-options-container" class="mb-4 pb-4 border-b">
+                    <h3 class="text-sm font-medium text-gray-800 mb-2">Formas de entrega</h3>
+                    <div class="space-y-3">
+
+                        <button data-cost="0" data-type="Padrão" class="delivery-option-btn w-full flex items-center justify-between p-3 rounded-lg border-2 border-primary bg-primary/10" type="button" disabled="">
+                            <div class="flex items-center text-left">
+                                <i class="fas fa-truck text-gray-500 mr-3 w-5 text-center"></i>
+                                <div>
+                                    <p class="text-sm font-semibold text-gray-800">Padrão</p>
+                                    <p class="text-xs text-gray-500">Prazo confirmado pela loja.</p>
+                                </div>
+                            </div>
+                            <span class="delivery-price-span text-sm font-bold text-primary">A consultar</span>
+                        </button>
+
+                        <button data-cost="14.90" data-type="Express" class="delivery-option-btn w-full flex items-center justify-between p-3 rounded-lg border-2 border-gray-200 bg-transparent hover:border-gray-300" type="button" disabled="">
+                            <div class="flex items-center text-left">
+                                <i class="fas fa-clock text-gray-500 mr-3 w-5 text-center"></i>
+                                <div>
+                                    <p class="text-sm font-semibold text-gray-800">Express</p>
+                                    <p class="text-xs text-gray-500">Prazo confirmado pela loja.</p>
+                                </div>
+                            </div>
+                            <span class="delivery-price-span text-sm font-bold">A consultar</span>
+                        </button>
+
+                        <button data-cost="9.90" data-type="Agendada" class="delivery-option-btn w-full flex items-center justify-between p-3 rounded-lg border-2 border-gray-200 bg-transparent hover:border-gray-300" type="button" disabled="">
+                            <div class="flex items-center text-left">
+                                <i class="far fa-calendar-alt text-gray-500 mr-3 w-5 text-center"></i>
+                                <div>
+                                    <p class="text-sm font-semibold text-gray-800">Agendada</p>
+                                    <p class="text-xs text-gray-500">Prazo confirmado pela loja.</p>
+                                </div>
+                            </div>
+                            <span class="delivery-price-span text-sm font-bold">A consultar</span>
+                        </button>
+
+                        <button data-cost="0" data-type="Retire na Loja" class="delivery-option-btn w-full flex items-center justify-between p-3 rounded-lg border-2 border-gray-200 bg-transparent hover:border-gray-300" type="button" disabled="">
+                            <div class="flex items-center text-left">
+                                <i class="fas fa-store text-gray-500 mr-3 w-5 text-center"></i>
+                                <div>
+                                    <p class="text-sm font-semibold text-gray-800">Retire na Loja</p>
+                                    <p class="text-xs text-gray-500">Confirme a separação com a unidade.</p>
+                                </div>
+                            </div>
+                            <span class="delivery-price-span text-sm font-bold text-gray-500">A consultar</span>
+                        </button>
+
+                    </div>
+                </div></section><div class="mt-12">
                     <div class="flex justify-between items-center mb-4">
                         <h2 class="text-2xl font-bold text-gray-800">Quem viu, levou também</h2>
                         <div class="flex items-center space-x-2">
-                            <button id="prev-featured-btn" class="w-8 h-8 rounded-full shadow-md bg-white flex items-center justify-center text-gray-600 hover:bg-gray-100 transition-colors">
+                            <button id="prev-featured-btn" type="button" aria-label="Produtos anteriores" class="w-8 h-8 rounded-full shadow-md bg-white flex items-center justify-center text-gray-600 hover:bg-gray-100 transition-colors">
                                 <i class="fas fa-chevron-left"></i>
                             </button>
-                            <button id="next-featured-btn" class="w-8 h-8 rounded-full shadow-md bg-white flex items-center justify-center text-gray-600 hover:bg-gray-100 transition-colors">
+                            <button id="next-featured-btn" type="button" aria-label="Próximos produtos" class="w-8 h-8 rounded-full shadow-md bg-white flex items-center justify-center text-gray-600 hover:bg-gray-100 transition-colors">
                                 <i class="fas fa-chevron-right"></i>
                             </button>
                         </div>
@@ -123,83 +167,15 @@
             </div>
 
             <div class="checkout-col-summary w-full bg-white p-6 rounded-lg shadow sticky top-24">
-                
-            <div class="mb-4 pb-4 border-b">
-            <label class="block text-sm font-medium mb-2 text-gray-800">Calcular frete e prazo</label>
-            <div class="flex">
-                <input id="cep-input" type="text" placeholder="Digite seu CEP"
-                    class="w-full border border-gray-300 rounded-l px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
-                <button id="cep-ok-btn"
-                        class="bg-primary text-white px-4 py-2 rounded-r text-sm font-bold hover:bg-secondary">
-                OK
-                </button>
-            </div>
-            <a href="https://buscacepinter.correios.com.br/app/localidade_logradouro/index.php"
-                target="_blank" rel="noopener"
-                class="text-xs text-primary hover:underline mt-1 inline-block">Não sei meu CEP</a>
-            </div>
 
-                <div id="delivery-options-container" class="mb-4 pb-4 border-b">
-                    <h3 class="text-sm font-medium text-gray-800 mb-2">Formas de entrega</h3>
-                    <div class="space-y-3">
-                        
-                        <button data-cost="0" data-type="Padrão" class="delivery-option-btn w-full flex items-center justify-between p-3 rounded-lg border-2 border-primary bg-primary/10">
-                            <div class="flex items-center text-left">
-                                <i class="fas fa-truck text-gray-500 mr-3 w-5 text-center"></i>
-                                <div>
-                                    <p class="text-sm font-semibold text-gray-800">Padrão</p>
-                                    <p class="text-xs text-gray-500">Receba em até 5 dias úteis</p>
-                                </div>
-                            </div>
-                            <span class="delivery-price-span text-sm font-bold text-primary">Grátis</span>
-                        </button>
 
-                        <button data-cost="14.90" data-type="Express" class="delivery-option-btn w-full flex items-center justify-between p-3 rounded-lg border-2 border-gray-200 bg-transparent hover:border-gray-300">
-                            <div class="flex items-center text-left">
-                                <i class="fas fa-clock text-gray-500 mr-3 w-5 text-center"></i>
-                                <div>
-                                    <p class="text-sm font-semibold text-gray-800">Express</p>
-                                    <p class="text-xs text-gray-500">Receba no próximo dia útil</p>
-                                </div>
-                            </div>
-                            <span class="delivery-price-span text-sm font-bold">R$ 14,90</span>
-                        </button>
 
-                        <button data-cost="9.90" data-type="Agendada" class="delivery-option-btn w-full flex items-center justify-between p-3 rounded-lg border-2 border-gray-200 bg-transparent hover:border-gray-300">
-                            <div class="flex items-center text-left">
-                                <i class="far fa-calendar-alt text-gray-500 mr-3 w-5 text-center"></i>
-                                <div>
-                                    <p class="text-sm font-semibold text-gray-800">Agendada</p>
-                                    <p class="text-xs text-gray-500">Escolha o melhor dia e horário</p>
-                                </div>
-                            </div>
-                            <span class="delivery-price-span text-sm font-bold">R$ 9,90</span>
-                        </button>
-                        
-                        <button data-cost="0" data-type="Retire na Loja" class="delivery-option-btn w-full flex items-center justify-between p-3 rounded-lg border-2 border-gray-200 bg-transparent hover:border-gray-300">
-                            <div class="flex items-center text-left">
-                                <i class="fas fa-store text-gray-500 mr-3 w-5 text-center"></i>
-                                <div>
-                                    <p class="text-sm font-semibold text-gray-800">Retire na Loja</p>
-                                    <p class="text-xs text-gray-500">Disponível em 2 horas</p>
-                                </div>
-                            </div>
-                            <span class="delivery-price-span text-sm font-bold text-gray-500">Grátis</span>
-                        </button>
 
-                    </div>
-                </div>
-                <div class="mb-4">
-                    <label class="block text-sm font-medium mb-2 text-gray-800">Cupom de desconto</label>
-                    <div class="flex">
-                        <input type="text" placeholder="Digite seu cupom" class="flex-1 border rounded-l px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
-                        <button class="bg-gray-200 text-gray-700 px-4 py-2 rounded-r text-sm font-bold hover:bg-gray-300">Aplicar</button>
-                    </div>
-                </div>
+
 
                 <div class="border-t pt-4">
-                    <h2 class="text-xl font-semibold mb-4">Sumário do Pedido</h2>
-                        <div class="space-y-2 text-sm">                    
+                    <h2 class="text-xl font-semibold mb-4">Resumo do pedido</h2>
+                        <div class="space-y-2 text-sm">
                             <div class="flex justify-between">
                                 <span class="text-gray-600">Subtotal (<span id="summary-item-count">0</span> itens)</span>
                                 <span id="summary-subtotal" class="font-medium text-gray-800">R$ 0,00</span>
@@ -211,13 +187,13 @@
                             <div class="flex justify-between">
                                 <span class="text-gray-600">Entrega</span>
                                 <span id="summary-delivery" class="font-medium text-gray-800">A calcular</span>
-                            </div>                            
+                            </div>
                             <div class="flex justify-between font-bold text-lg pt-2 border-t mt-2">
                                 <span>TOTAL</span>
                                 <span id="summary-total" class="text-gray-800">R$ 0,00</span>
                             </div>
                         </div>
-                    <button id="checkout-go-payment" class="mt-6 w-full bg-primary text-white py-3 rounded-lg font-bold hover:bg-secondary transition-colors">
+                    <button id="checkout-go-payment" class="mt-6 w-full bg-primary text-white py-3 rounded-lg font-bold hover:bg-secondary transition-colors" type="button">
                         Ir para o pagamento
                     </button>
                     <a href="/index.html" class="block text-center mt-3 w-full border border-primary text-primary py-3 rounded-lg font-bold hover:bg-primary/10 transition-colors">
@@ -228,21 +204,18 @@
                 <div class="mt-6 pt-4 border-t">
                     <p class="text-sm font-medium text-gray-800 mb-3">Formas de pagamento</p>
                     <div class="flex flex-wrap justify-center sm:justify-between items-center gap-4">
-                        
+
                         <img src="../public/image/payment-methods/visa.svg" alt="Visa" class="h-8 object-contain">
                         <img src="../public/image/payment-methods/mastercard.svg" alt="Mastercard" class="h-8 object-contain">
                         <img src="../public/image/payment-methods/amex.svg" alt="American Express" class="h-8 object-contain">
                         <img src="../public/image/payment-methods/hipercard.svg" alt="Hipercard" class="h-8 object-contain">
                         <img src="../public/image/payment-methods/elo.svg" alt="Elo" class="h-8 object-contain">
                         <img src="../public/image/payment-methods/barcode.svg" alt="Barcode" class="h-8 object-contain">
-                        
+
                     </div>
                 </div>
-                
-                <div class="mt-6 pt-4 border-t text-center text-sm text-gray-600">
-                    <p>Tem alguma dúvida?</p>
-                    <p class="font-semibold mt-1 text-gray-800">(21) 99999-9999 | Atendimento</p>
-                </div>
+
+                <div class="mt-6 pt-4 border-t text-center text-sm text-gray-600"><p>Precisou de ajuda?</p><a href="/pages/nossas-lojas.html">Fale com a equipe da sua loja →</a></div>
 
             </div>
         </div>
@@ -284,7 +257,7 @@
                                                 </div>
                                             </div>
                                         </button>
-                                        <button type="button" data-payment-method="boleto" class="payment-method-option w-full rounded-lg border-2 border-gray-200 bg-white p-4 text-left transition hover:border-primary/70">
+                                        <button type="button" data-payment-method="boleto" class="payment-method-option w-full rounded-lg border-2 border-gray-200 bg-white p-4 text-left transition hover:border-primary/70" disabled="" aria-label="Boleto indisponível no momento">
                                             <div class="flex items-start gap-3">
                                                 <span class="mt-1 text-primary">
                                                     <i class="fas fa-barcode"></i>
@@ -354,25 +327,21 @@
                                         <div id="payment-card-fields" class="space-y-4">
                                             <div>
                                                 <label for="payment-card-number" class="block text-sm font-medium text-gray-700">Numero do Cartao</label>
-                                                <input id="payment-card-number" type="text" inputmode="numeric" placeholder="0000 0000 0000 0000"
-                                                    class="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                                                <input id="payment-card-number" type="text" inputmode="numeric" placeholder="0000 0000 0000 0000" class="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" autocomplete="off">
                                             </div>
                                             <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                                 <div>
                                                     <label for="payment-expiry" class="block text-sm font-medium text-gray-700">Data de Vencimento</label>
-                                                    <input id="payment-expiry" type="text" inputmode="numeric" placeholder="MM/AA"
-                                                        class="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                                                    <input id="payment-expiry" type="text" inputmode="numeric" placeholder="MM/AA" class="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" autocomplete="off">
                                                 </div>
                                                 <div>
                                                     <label for="payment-cvv" class="block text-sm font-medium text-gray-700">Codigo de seguranca</label>
-                                                    <input id="payment-cvv" type="text" inputmode="numeric" placeholder="123"
-                                                        class="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                                                    <input id="payment-cvv" type="text" inputmode="numeric" placeholder="123" class="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" autocomplete="off">
                                                 </div>
                                             </div>
                                             <div>
                                                 <label for="payment-holder-name" class="block text-sm font-medium text-gray-700">Nome do titular como aparece no cartao</label>
-                                                <input id="payment-holder-name" type="text" placeholder="Nome completo"
-                                                    class="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                                                <input id="payment-holder-name" type="text" placeholder="Nome completo" class="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" autocomplete="off">
                                             </div>
                                         </div>
                                         <div>
@@ -382,17 +351,15 @@
                                                     <option value="cpf">CPF</option>
                                                     <option value="cnpj">CNPJ</option>
                                                 </select>
-                                                <input id="payment-doc-number" type="text" inputmode="numeric" placeholder="Digite o documento"
-                                                    class="payment-doc-number w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                                                <input id="payment-doc-number" type="text" inputmode="numeric" placeholder="Digite o documento" class="payment-doc-number w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
                                             </div>
                                         </div>
                                         <div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
                                             <p class="text-sm font-semibold text-gray-700">Preencha seus dados</p>
                                             <label for="payment-email" class="mt-3 block text-sm font-medium text-gray-700">E-mail</label>
-                                            <input id="payment-email" type="email" placeholder="voce@email.com"
-                                                class="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                                            <input id="payment-email" type="email" placeholder="voce@email.com" class="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
                                         </div>
-                                        <button id="payment-submit" class="w-full rounded-lg bg-primary py-3 text-sm font-bold text-white hover:bg-secondary transition-colors">
+                                        <button id="payment-submit" class="w-full rounded-lg bg-primary py-3 text-sm font-bold text-white hover:bg-secondary transition-colors" type="button">
                                             Concluir Pagamento
                                         </button>
                                         <div id="payment-pix-result" class="hidden rounded-lg border border-gray-200 bg-gray-50 p-4">
@@ -405,16 +372,13 @@
                                                 <div class="w-full">
                                                     <label for="payment-pix-code" class="block text-xs font-semibold text-gray-700">Pix Copia e Cola</label>
                                                     <div class="mt-2 flex">
-                                                        <input id="payment-pix-code" type="text" readonly
-                                                            class="w-full rounded-l border border-gray-300 px-3 py-2 text-sm focus:outline-none">
-                                                        <button id="payment-pix-copy" type="button"
-                                                            class="rounded-r bg-gray-200 px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-300">
+                                                        <input id="payment-pix-code" type="text" readonly="" class="w-full rounded-l border border-gray-300 px-3 py-2 text-sm focus:outline-none">
+                                                        <button id="payment-pix-copy" type="button" class="rounded-r bg-gray-200 px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-300">
                                                             Copiar
                                                         </button>
                                                     </div>
                                                 </div>
-                                                <a id="payment-pix-ticket" href="#" target="_blank" rel="noopener"
-                                                    class="text-sm font-semibold text-primary hover:underline">
+                                                <a id="payment-pix-ticket" href="#" target="_blank" rel="noopener" class="text-sm font-semibold text-primary hover:underline">
                                                     Abrir link de pagamento
                                                 </a>
                                             </div>
@@ -487,23 +451,20 @@
         </div>
     </main>
 
-    <footer class="container mx-auto py-6 px-4">
-        <div class="border-t border-gray-200 text-center text-gray-400 text-xs pt-6">
-            <p>Copyright &copy; 2025 Vila E o Bicho LTDA - ME. Todos os direitos reservados.</p>
-        </div>
-    </footer>
-    
+    <div id="footer-placeholder"></div>
+
 <div id="modal-placeholder"></div>
 <div id="confirm-modal-placeholder"></div>
 
 <script>var basePath = '../';</script>
-<script src="../scripts/core/config.js?v=20260812-2"></script>
-<script src="../scripts/core/main.js"></script>     <!-- injeta header/footer/cart e os MODAIS -->
+<script src="../scripts/core/config.js?v=20261106-release1"></script>
+<script src="../scripts/core/main.js?v=20261106-release1"></script>     <!-- injeta header/footer/cart e os MODAIS -->
 <script src="../scripts/core/ui.js"></script>       <!-- ESTE arquivo -->
 <script src="../scripts/cartManager.js"></script>
 <script src="https://unpkg.com/imask"></script>
 <script src="https://sdk.mercadopago.com/js/v2"></script>
-<script src="../scripts/checkout.js"></script>
+<script src="../scripts/checkout.js?v=20261106-release1"></script>
 <script src="../scripts/addressSidebar.js"></script>
-    </body>
-</html>
+
+
+</body></html>

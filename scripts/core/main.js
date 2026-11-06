@@ -8,6 +8,7 @@ function normalizeProductImageUrl(rawUrl) {
 }
 
 async function loadComponents() {
+    if(document.documentElement.hasAttribute("data-storefront-shell") && window.storefrontReady) await window.storefrontReady;
     try {
         const placeholders = {
             'header-placeholder': `${basePath}components/shared/header.html`,
@@ -25,6 +26,7 @@ async function loadComponents() {
             'nossas-lojas-sidebar-placeholder': `${basePath}components/store/nossas-lojas-sidebar.html`
         };
         for (const id in placeholders) {
+            if(document.documentElement.hasAttribute("data-storefront-shell") && ["header-placeholder","footer-placeholder"].includes(id)) continue;
             const element = document.getElementById(id);
             if (element) {
                 const response = await fetch(placeholders[id]);

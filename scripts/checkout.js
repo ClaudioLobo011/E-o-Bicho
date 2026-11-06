@@ -31,7 +31,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const tableBody = document.getElementById('checkout-items-body');
+    const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     if (!tableBody) return;
+    tableBody.addEventListener('error', event => {
+        const img = event.target;
+        if (img.tagName === 'IMG' && !img.dataset.fallback) {
+            img.dataset.fallback = 'true';
+            img.src = '/public/image/placeholder.svg';
+        }
+    }, true);
     const stepTrack = document.getElementById('checkout-step-track');
     const stepLabel1 = document.getElementById('checkout-step-1');
     const stepLabel2 = document.getElementById('checkout-step-2');
@@ -88,6 +96,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let pixPollTimer = null;
     let orderCreationInFlight = false;
     let orderCreated = false;
+    let shippingQuoteReady = false;
+    let shippingQuoteRevision = 0;
     let selectedDelivery = {
         cost: 0,
         type: 'Padrão' 
@@ -247,12 +257,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 <tr class="border-b">
                     <td class="py-4 px-4 align-top">
                         <div class="flex items-start space-x-3">
-                            <img src="${resolveProductImageUrl(product.imagemPrincipal)}" alt="${product.nome}" class="w-16 h-16 object-contain border rounded-md">
+                            <img src="${escapeHTML(resolveProductImageUrl(product.imagemPrincipal))}" alt="${escapeHTML(product.nome)}" class="w-16 h-16 object-contain border rounded-md">
                             <div>
-                                <p class="font-semibold text-gray-800">${product.nome}</p>
+                                <p class="font-semibold text-gray-800">${escapeHTML(product.nome)}</p>
                                 
                                 <div class="mt-2">
-                                    <button data-action="toggle-subscription" data-product-id="${product._id}" class="${switchBg} relative inline-flex h-6 w-11 items-center rounded-full transition-colors">
+                                    <button type="button" role="switch" aria-checked="${!!isSubscribed}" aria-label="Assinatura de ${escapeHTML(product.nome)}" data-action="toggle-subscription" data-product-id="${product._id}" class="${switchBg} relative inline-flex h-6 w-11 items-center rounded-full transition-colors">
                                         <span class="${switchTranslate} inline-block h-4 w-4 transform rounded-full bg-white transition-transform"></span>
                                     </button>
                                     <span class="ml-2 text-sm font-medium ${isSubscribed ? 'text-primary' : 'text-gray-600'}">
@@ -280,14 +290,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     </td>
                     <td class="py-4 px-2 text-center">
                         <div class="flex items-center justify-center">
-                            <button data-action="decrease-qty" data-product-id="${product._id}" class="w-7 h-7 flex items-center justify-center border rounded-l hover:bg-gray-100">-</button>
+                            <button type="button" aria-label="Diminuir quantidade" data-action="decrease-qty" data-product-id="${product._id}" class="w-7 h-7 flex items-center justify-center border rounded-l hover:bg-gray-100">-</button>
                             <span class="w-8 h-7 flex items-center justify-center border-t border-b">${cartItem.quantity}</span>
-                            <button data-action="increase-qty" data-product-id="${product._id}" class="w-7 h-7 flex items-center justify-center border rounded-r hover:bg-gray-100">+</button>
+                            <button type="button" aria-label="Aumentar quantidade" data-action="increase-qty" data-product-id="${product._id}" class="w-7 h-7 flex items-center justify-center border rounded-r hover:bg-gray-100">+</button>
                         </div>
                     </td>
                     <td class="py-4 px-2 text-center font-bold">R$ ${itemTotal.toFixed(2).replace('.', ',')}</td>
                     <td class="py-4 px-2 text-center">
-                        <button data-action="remove-item" data-product-id="${product._id}" class="text-gray-400 hover:text-red-500"><i class="far fa-trash-alt"></i></button>
+                        <button type="button" aria-label="Remover ${escapeHTML(product.nome)}" data-action="remove-item" data-product-id="${product._id}" class="text-gray-400 hover:text-red-500"><i class="far fa-trash-alt"></i></button>
                     </td>
                 </tr>
             `;
@@ -298,6 +308,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateDeliveryOptionsUI(isFreeShipping) {
         const allButtons = document.querySelectorAll('.delivery-option-btn');
         allButtons.forEach(btn => {
+            if (btn.disabled) return;
             // Agora procuramos pela classe específica, tornando o código mais seguro
             const priceSpan = btn.querySelector('.delivery-price-span'); 
             if (!priceSpan) return;
@@ -324,6 +335,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function setCheckoutStep(step) {
         const normalizedStep = Number(step) || 1;
+        document.querySelectorAll('.checkout-step').forEach((section, index) => {
+            section.hidden = index !== normalizedStep - 1;
+        });
         if (stepTrack) {
             const offset = (normalizedStep - 1) * (100 / 3);
             stepTrack.style.transform = `translateX(-${offset}%)`;
@@ -338,6 +352,8 @@ document.addEventListener('DOMContentLoaded', () => {
             label.classList.toggle('text-primary', active);
             label.classList.toggle('font-bold', active);
             label.classList.toggle('text-gray-400', !active);
+            if (active) label.setAttribute('aria-current', 'step');
+            else label.removeAttribute('aria-current');
         });
     }
 
@@ -724,9 +740,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const total = cart.reduce((sum, item) => sum + (item.effectivePrice * item.quantity), 0);
         updateFreeShippingProgress(total);
+        if (goPaymentBtn) goPaymentBtn.disabled = !cart.length;
     }
 
+    document.addEventListener('storefront:cart-updated', loadAndRenderPage);
+
     // --- EVENT LISTENERS ---
+    let cartChangeInFlight = false;
     tableBody.addEventListener('click', async (event) => {
         const target = event.target.closest('button[data-action]');
         if (!target) return;
@@ -734,23 +754,37 @@ document.addEventListener('DOMContentLoaded', () => {
         const action = target.dataset.action;
         const productId = target.dataset.productId;
         if (!action || !productId) return;
-
+        if (cartChangeInFlight) return;
+        cartChangeInFlight = true;
+        tableBody.querySelectorAll('button').forEach(button => button.disabled = true);
+        try {
         const cart = await CartManager.getCart();
         const currentItem = cart.find(item => item.product._id === productId);
 
-        if (action === 'remove-item') {
-            await CartManager.removeItem(productId);
-        } else if (currentItem) {
-            if (action === 'increase-qty') {
-                await CartManager.updateQuantity(productId, currentItem.quantity + 1);
-            } else if (action === 'decrease-qty') {
-                await CartManager.updateQuantity(productId, currentItem.quantity - 1);
-            } else if (action === 'toggle-subscription') {
-                await CartManager.updateSubscription(productId, !currentItem.isSubscribed);
-            }
+        const user = JSON.parse(localStorage.getItem('loggedInUser') || 'null');
+        if (!user?.id || !user?.token) throw Error('Entre novamente na sua conta.');
+        const path = `${API_CONFIG.BASE_URL}/cart/${encodeURIComponent(user.id)}/${encodeURIComponent(productId)}`;
+        let method = 'PUT', body, suffix = '';
+        if (action === 'remove-item') method = 'DELETE';
+        else if (currentItem && ['increase-qty','decrease-qty'].includes(action)) {
+            const quantity = Math.max(1, currentItem.quantity + (action === 'increase-qty' ? 1 : -1));
+            if (quantity === currentItem.quantity) return;
+            body = {quantity};
+        } else if (currentItem && action === 'toggle-subscription') {
+            suffix = '/subscribe'; body = {isSubscribed: !currentItem.isSubscribed};
+        } else return;
+        await fetchJson(path + suffix, {
+            method, headers: {'Content-Type':'application/json', ...getAuthHeaders()},
+            ...(body ? {body:JSON.stringify(body)} : {}),
+        });
+        await loadAndRenderPage();
+        await CartManager.updateCartCount();
+        } catch(error) {
+            if (typeof showToast === 'function') showToast(error.message || 'Não foi possível atualizar a sacola.', 'error');
+        } finally {
+            cartChangeInFlight = false;
+            tableBody.querySelectorAll('button').forEach(button => button.disabled = false);
         }
-        
-        loadAndRenderPage(); // Recarrega e renderiza tudo para mostrar o novo preço
     });
 
     const deliveryContainer = document.getElementById('delivery-options-container');
@@ -912,6 +946,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!(type in map)) return;
 
         const price = Number(map[type]);
+        const available = map[type] !== undefined && map[type] !== null && Number.isFinite(price) && price >= 0;
+        btn.disabled = !available;
+        if (!available) {
+            const span = btn.querySelector('.delivery-price-span');
+            if (span) span.textContent = 'Indisponível';
+            return;
+        }
         // 1) grava valor no data-cost
         btn.dataset.cost = isFinite(price) ? price.toFixed(2) : '0.00';
 
@@ -931,18 +972,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Mantém a seleção atual; se nenhuma, escolhe “Padrão” (ou “Retire na loja” se quiser)
         const selectedBtn =
-        cont.querySelector('.delivery-option-btn.border-primary') ||
-        cont.querySelector('.delivery-option-btn[data-type="Padrão"]') ||
-        cont.querySelector('.delivery-option-btn[data-type="Retire na loja"]') ||
-        cont.querySelector('.delivery-option-btn');
+        cont.querySelector('.delivery-option-btn.border-primary:not(:disabled)') ||
+        cont.querySelector('.delivery-option-btn[data-type="Padrão"]:not(:disabled)') ||
+        cont.querySelector('.delivery-option-btn[data-type="Retire na loja"]:not(:disabled)') ||
+        cont.querySelector('.delivery-option-btn:not(:disabled)');
 
         if (selectedBtn) {
+        cont.querySelectorAll('.delivery-option-btn').forEach(btn => {
+            btn.classList.toggle('border-primary', btn === selectedBtn);
+            btn.classList.toggle('bg-primary/10', btn === selectedBtn);
+        });
         // Atualiza o objeto local usado pelo resumo de valores
         selectedDelivery = {
             cost: parseFloat(selectedBtn.dataset.cost || '0') || 0,
             type: selectedBtn.dataset.type
         };
-        }
+        } else shippingQuoteReady = false;
 
         // Se quiser exibir a loja base/distância em algum canto, você tem em quote.store e quote.distanceKm
         // console.debug('Loja base:', quote.store?.nome, 'Distância:', quote.distanceKm, 'km');
@@ -953,7 +998,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // >>> Esta é a função chamada quando muda o CEP/endereço <<<
     window.recalculateDelivery = async function(cep, opts = {}) {
+        const revision = ++shippingQuoteRevision;
+        shippingQuoteReady = false;
         try {
+        if (!/^\d{8}$/.test(String(cep).replace(/\D/g,''))) throw Error('Informe um CEP válido para consultar a entrega.');
         const url = new URL(`${API_BASE}/shipping/quote`, window.location.origin);
         url.searchParams.set('cep', cep);
         if (opts.bairro) url.searchParams.set('bairro', opts.bairro);
@@ -966,9 +1014,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         if (!resp.ok) throw new Error('Falha ao calcular o frete.');
         const quote = await resp.json();
-
+        if (revision !== shippingQuoteRevision) return;
+        if (!quote?.store || !quote?.methods) throw Error('Não foi possível confirmar a loja e o frete.');
+        shippingQuoteReady = true;
         applyQuoteToExistingPanel(quote);
         } catch (e) {
+        if (revision !== shippingQuoteRevision) return;
         console.error(e);
         if (typeof showModal === 'function') {
             showModal({ title: 'Frete', message: e.message || 'Não foi possível calcular o frete agora.', confirmText: 'OK' });
@@ -1389,6 +1440,7 @@ document.addEventListener('DOMContentLoaded', () => {
             paymentSubmitBtn.disabled = true;
             paymentSubmitBtn.textContent = selectedPaymentMethod === 'pix' ? 'Gerando Pix...' : 'Processando...';
             try {
+                if (!shippingQuoteReady || !lastSelectedAddress) throw Error('Confirme o endereço e o frete antes de pagar.');
                 const storeId = resolveSelectedStoreId();
                 const cart = await CartManager.getCart();
                 if (!cart || cart.length === 0) {
@@ -1416,12 +1468,6 @@ document.addEventListener('DOMContentLoaded', () => {
                             email
                         }
                     };
-
-                    console.log('[checkout][pix] criando order', {
-                        storeId,
-                        amount: payload.amount,
-                        email
-                    });
 
                     const pixData = await fetchJson(`${API_CONFIG.BASE_URL}/mercadopago/orders`, {
                         method: 'POST',
@@ -1562,6 +1608,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- CARGA INICIAL ---
     if (goPaymentBtn) {
         goPaymentBtn.addEventListener('click', () => {
+            if (!lastSelectedAddress || !shippingQuoteReady || !resolveSelectedStoreId()) {
+                if (typeof showModal === 'function') showModal({title:'Entrega ou retirada',message:'Selecione um endereço e consulte as opções de entrega antes de continuar.',confirmText:'Entendi'});
+                return;
+            }
             setCheckoutStep(2);
             window.scrollTo({ top: 0, behavior: 'smooth' });
         });

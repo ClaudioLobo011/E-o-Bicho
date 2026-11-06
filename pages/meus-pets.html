@@ -1,156 +1,338 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!doctype html>
+<html data-storefront-shell="" lang="pt-BR">
+  <head>
+    <script
+      src="/scripts/storefront/bootstrap.js?v=20261106-release1"
+      defer=""
+    ></script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Meus Pets - E o Bicho</title>
-    
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/awesomplete/1.1.5/awesomplete.min.css" />
-    <link rel="stylesheet" href="../src/output.css">
-  <link rel="stylesheet" href="../src/responsive-workspace.css?v=20261008-1">
-</head>
-<body class="bg-gray-100 responsive-site">
 
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/awesomplete/1.1.5/awesomplete.min.css"
+    />
+    <link rel="stylesheet" href="../src/output.css" />
+    <link
+      rel="stylesheet"
+      href="../src/responsive-workspace.css?v=20261106-release1"
+    />
+    <link rel="stylesheet" href="/src/profile.css?v=20261106-release1" />
+    <link rel="stylesheet" href="/src/pets.css?v=20261106-release1" />
+  </head>
+  <body class="profile-page pets-page responsive-site">
     <div id="header-placeholder"></div>
-
-    <main class="container mx-auto px-4 pb-8" data-header-offset="site">
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
-
-            <aside class="md:col-span-1">
-                <div id="account-sidebar-placeholder"></div>
-            </aside>
-
-            <div class="md:col-span-3">
-                <div class="bg-white p-6 rounded-lg shadow">
-                    <h1 class="text-2xl font-bold text-gray-800">Meus Pets</h1>
-                    <p class="text-gray-600 mt-1">Adicione ou altere as informações dos seus pets.</p>
-
-                    <div id="pets-list-container" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
-                        </div>
-                    
-                    <div id="add-pet-button-container" class="mt-8">
-                        <button id="add-pet-btn" class="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:bg-gray-50 hover:border-primary hover:text-primary transition-colors">
-                            <div class="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center mb-3">
-                                <i class="fas fa-plus text-xl"></i>
-                            </div>
-                            <span class="font-semibold">Adicionar novo PET</span>
-                        </button>
-                    </div>
-
-                    <div id="pet-form-container" class="hidden mt-8">
-                        <form id="new-pet-form">
-                            <input type="hidden" id="pet-id">
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                
-                                <div>
-                                    <label for="pet-name" class="block text-sm font-medium text-gray-700">Nome do PET *</label>
-                                    <input type="text" id="pet-name" name="pet_name" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
-                                </div>
-
-                                <div>
-                                    <label for="pet-porte" class="block text-sm font-medium text-gray-700">Porte</label>
-                                    <select id="pet-porte" name="pet_porte" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm bg-white focus:ring-primary focus:border-primary">
-                                        <option>Mini</option>
-                                        <option>Pequeno</option>
-                                        <option>Médio</option>
-                                        <option>Grande</option>
-                                        <option>Gigante</option>
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label for="pet-type" class="block text-sm font-medium text-gray-700">Tipo do PET *</label>
-                                    <select id="pet-type" name="pet_type" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm bg-white focus:ring-primary focus:border-primary">
-                                        <option value="cachorro">Cachorro</option>
-                                        <option value="gato">Gato</option>
-                                        <option value="passaro">Pássaro</option>
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label for="pet-microchip" class="block text-sm font-medium text-gray-700">Microchip</label>
-                                    <input type="text" id="pet-microchip" name="pet_microchip" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm bg-gray-100">
-                                </div>
-
-                                <div>
-                                    <label for="pet-raca" class="block text-sm font-medium text-gray-700">Raça *</label>
-                                    <input type="text" id="pet-raca" name="pet_raca" class="awesomplete mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" placeholder="Comece a digitar a raça...">
-                                </div>
-
-                                <div>
-                                    <label for="pet-sexo" class="block text-sm font-medium text-gray-700">Sexo *</label>
-                                    <select id="pet-sexo" name="pet_sexo" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm bg-white focus:ring-primary focus:border-primary">
-                                        <option>Fêmea</option>
-                                        <option>Macho</option>
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label for="pet-pelagem" class="block text-sm font-medium text-gray-700">Pelagem/Cor</label>
-                                    <input type="text" id="pet-pelagem" name="pet_pelagem" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
-                                </div>
-
-                                <div>
-                                    <label for="pet-nascimento" class="block text-sm font-medium text-gray-700">Data de Nascimento *</label>
-                                    <input type="date" id="pet-nascimento" name="pet_nascimento" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
-                                </div>
-
-                                <div>
-                                    <label for="pet-rga" class="block text-sm font-medium text-gray-700">RGA</label>
-                                    <input type="text" id="pet-rga" name="pet_rga" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
-                                </div>
-
-                                <div>
-                                    <label for="pet-peso" class="block text-sm font-medium text-gray-700">Peso</label>
-                                    <input type="text" id="pet-peso" name="pet_peso" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
-                                </div>
-                            </div>
-                            <div class="mt-6 flex justify-end items-center space-x-3">
-                                <button type="button" id="cancel-pet-btn" class="transition hover:opacity-80">
-                                    <div data-icon="cancel-btn" class="w-28 h-14"></div>
-                                    <span class="sr-only">Cancelar</span>
-                                </button>
-
-                                <button type="submit" class="transition hover:opacity-80">
-                                    <div data-icon="save-btn" class="w-28 h-14"></div>
-                                    <span class="sr-only">Salvar</span>
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
+    <main class="profile-layout" id="pets-main">
+      <div class="profile-breadcrumb">
+        <a href="/">Início</a><span aria-hidden="true">›</span
+        ><span>Minha conta</span><span aria-hidden="true">›</span
+        ><span aria-current="page">Meus pets</span>
+      </div>
+      <div class="profile-columns">
+        <aside class="profile-sidebar">
+          <div id="account-sidebar-placeholder"></div>
+          <a class="profile-support" href="/pages/nossas-lojas.html"
+            ><span aria-hidden="true">♡</span>
+            <div>
+              <strong>Estamos por perto</strong
+              ><small>Fale com a equipe da sua loja →</small>
+            </div></a
+          >
+        </aside>
+        <div class="profile-content">
+          <section class="profile-hero">
+            <div>
+              <h1>Meus pets</h1>
+              <p>
+                Cada companheiro tem seu jeitinho. Cuide dos detalhes por aqui.
+              </p>
             </div>
+            <span class="pets-hero-icon" aria-hidden="true">♡</span>
+          </section>
+          <div class="pets-toolbar">
+            <p id="pets-count" role="status">Carregando seus companheiros…</p>
+            <div>
+              <button id="pets-refresh" type="button" disabled="">
+                ↻ Atualizar
+              </button>
+              <div id="add-pet-button-container">
+                <button
+                  id="add-pet-btn"
+                  type="button"
+                  class="pets-primary"
+                  disabled=""
+                >
+                  + Adicionar pet
+                </button>
+              </div>
+            </div>
+          </div>
+          <p id="pets-preview-note" class="pets-preview-note" hidden="">
+            Prévia: inclusões, edições e exclusões ficam apenas nesta tela.
+            Atualizar restaura os pets da conta. Nenhum cadastro real será
+            alterado.
+          </p>
+          <div
+            id="pets-feedback"
+            role="status"
+            aria-live="polite"
+            class="pets-feedback"
+            hidden=""
+          ></div>
+          <div id="pets-empty" class="pets-empty" hidden=""></div>
+          <div
+            id="pets-list-container"
+            class="pets-grid"
+            aria-busy="true"
+          ></div>
 
+          <p class="pets-help-note">
+            Precisa de ajuda com um cadastro?
+            <a href="/pages/nossas-lojas.html">Fale com a sua loja ↗</a>
+          </p>
         </div>
+      </div>
     </main>
-    
+    <dialog
+      id="pet-delete-dialog"
+      aria-labelledby="pet-delete-title"
+      aria-describedby="pet-delete-message"
+      class="pets-delete-dialog"
+    >
+      <button
+        id="pet-delete-close"
+        type="button"
+        aria-label="Fechar confirmação"
+      >
+        ✕</button
+      ><span class="pets-delete-icon" aria-hidden="true">♡</span>
+      <h2 id="pet-delete-title">Excluir cadastro do pet?</h2>
+      <p id="pet-delete-message"></p>
+      <div id="pet-delete-error" role="status" hidden=""></div>
+      <div class="pets-delete-actions">
+        <button id="pet-delete-cancel" type="button">Manter cadastro</button
+        ><button id="pet-delete-confirm" type="button">Excluir cadastro</button>
+      </div>
+    </dialog>
     <div id="cart-placeholder"></div>
     <div id="modal-placeholder"></div>
     <div id="confirm-modal-placeholder"></div>
-
-    <footer class="container mx-auto py-6 px-4">
-        <div class="border-t border-gray-200 text-center text-gray-400 text-xs pt-6">
-            <p>
-                Copyright &copy; 2025 Vila E o Bicho LTDA - ME. Todos os direitos reservados.
-            </p>
-        </div>
-    </footer>
-
+    <div id="footer-placeholder"></div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/awesomplete/1.1.5/awesomplete.min.js"></script>
-    <script>var basePath = '../';</script>
-    <script src="../scripts/core/config.js?v=20260812-2"></script>
+    <script>
+      var basePath = "../";
+    </script>
+    <script src="../scripts/core/config.js?v=20261106-release1"></script>
     <script src="../scripts/core/ui.js"></script>
-    <script src="../scripts/cartManager.js"></script> 
-    <script src="../scripts/core/main.js"></script>
+    <script src="../scripts/cartManager.js"></script>
+    <script src="../scripts/core/main.js?v=20261106-release1"></script>
     <script src="../scripts/user/hydrate-user.js"></script>
     <script src="../scripts/cart.js"></script>
-    <script src="../scripts/pets.js"></script>
-    
-</body>
+    <script src="../scripts/pets.js?v=20261106-release1"></script>
+
+    <dialog
+      id="pet-form-container"
+      class="pets-form-panel hidden"
+      aria-labelledby="pet-form-title"
+    >
+      <div class="pets-form-heading">
+        <div>
+          <h2 id="pet-form-title">Adicionar pet</h2>
+          <p>
+            Preencha os dados do seu companheiro. Os campos com * são
+            obrigatórios.
+          </p>
+        </div>
+        <button
+          type="button"
+          id="pet-form-close"
+          aria-label="Fechar formulário"
+        >
+          ✕
+        </button>
+      </div>
+
+      <form id="new-pet-form" class="pets-form">
+        <div class="pets-form-body">
+          <div
+            id="pets-form-feedback"
+            role="status"
+            class="pets-form-feedback"
+            hidden=""
+          ></div>
+          <input type="hidden" id="pet-id" />
+          <div class="pets-fields">
+            <div class="pets-field">
+              <label
+                for="pet-name"
+                class="block text-sm font-medium text-gray-700"
+                >Nome do PET *</label
+              >
+              <input
+                type="text"
+                id="pet-name"
+                name="pet_name"
+                class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary"
+                autocomplete="off"
+              />
+            </div>
+
+            <div class="pets-field">
+              <label
+                for="pet-porte"
+                class="block text-sm font-medium text-gray-700"
+                >Porte</label
+              >
+              <select
+                id="pet-porte"
+                name="pet_porte"
+                class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm bg-white focus:ring-primary focus:border-primary"
+              >
+                <option>Mini</option>
+                <option>Pequeno</option>
+                <option>Médio</option>
+                <option>Grande</option>
+                <option>Gigante</option></select
+              ><small class="pets-field-help"
+                >Definido automaticamente pela espécie e raça.</small
+              >
+            </div>
+
+            <div class="pets-field">
+              <label
+                for="pet-type"
+                class="block text-sm font-medium text-gray-700"
+                >Tipo do PET *</label
+              >
+              <select
+                id="pet-type"
+                name="pet_type"
+                class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm bg-white focus:ring-primary focus:border-primary"
+              >
+                <option value="cachorro">Cachorro</option>
+                <option value="gato">Gato</option>
+                <option value="passaro">Pássaro</option>
+              </select>
+            </div>
+
+            <div class="pets-field">
+              <label
+                for="pet-microchip"
+                class="block text-sm font-medium text-gray-700"
+                >Microchip</label
+              >
+              <input
+                type="text"
+                id="pet-microchip"
+                name="pet_microchip"
+                class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm bg-gray-100"
+              />
+            </div>
+
+            <div class="pets-field">
+              <label
+                for="pet-raca"
+                class="block text-sm font-medium text-gray-700"
+                >Raça *</label
+              >
+              <input
+                type="text"
+                id="pet-raca"
+                name="pet_raca"
+                class="awesomplete mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary"
+                placeholder="Comece a digitar a raça..."
+              />
+            </div>
+
+            <div class="pets-field">
+              <label
+                for="pet-sexo"
+                class="block text-sm font-medium text-gray-700"
+                >Sexo *</label
+              >
+              <select
+                id="pet-sexo"
+                name="pet_sexo"
+                class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm bg-white focus:ring-primary focus:border-primary"
+              >
+                <option>Fêmea</option>
+                <option>Macho</option>
+              </select>
+            </div>
+
+            <div class="pets-field">
+              <label
+                for="pet-pelagem"
+                class="block text-sm font-medium text-gray-700"
+                >Pelagem/Cor</label
+              >
+              <input
+                type="text"
+                id="pet-pelagem"
+                name="pet_pelagem"
+                class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary"
+              />
+            </div>
+
+            <div class="pets-field">
+              <label
+                for="pet-nascimento"
+                class="block text-sm font-medium text-gray-700"
+                >Data de nascimento</label
+              >
+              <input
+                type="date"
+                id="pet-nascimento"
+                name="pet_nascimento"
+                class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary"
+              />
+            </div>
+
+            <div class="pets-field">
+              <label
+                for="pet-rga"
+                class="block text-sm font-medium text-gray-700"
+                >RGA</label
+              >
+              <input
+                type="text"
+                id="pet-rga"
+                name="pet_rga"
+                class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary"
+              />
+            </div>
+
+            <div class="pets-field">
+              <label
+                for="pet-peso"
+                class="block text-sm font-medium text-gray-700"
+                >Peso</label
+              >
+              <input
+                type="text"
+                id="pet-peso"
+                name="pet_peso"
+                class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary"
+                inputmode="decimal"
+                placeholder="Ex.: 4,5 kg"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div class="pets-form-actions">
+          <button type="button" id="cancel-pet-btn" class="pets-secondary">
+            Cancelar
+          </button>
+
+          <button type="submit" class="pets-primary">Salvar</button>
+        </div>
+      </form>
+    </dialog>
+  </body>
 </html>
-
-
-
-
-

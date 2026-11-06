@@ -1,0 +1,502 @@
+.security-page .security-hero-icon {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: #92a378;
+  stroke-width: 1.5;
+}
+.security-page .security-card {
+  margin-top: 17px;
+  padding: 22px;
+  border: 1px solid #e0e7d5;
+  border-radius: 12px;
+  background: white;
+}
+.security-page .security-step-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid #edf1e4;
+  margin-bottom: 19px;
+}
+.security-page .security-step-heading > span {
+  flex: 0 0 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  background: #eef4e3;
+  color: #718956;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+}
+.security-page .security-step-heading h2 {
+  font:
+    800 17px/1.5 Manrope,
+    sans-serif;
+  color: #576f40;
+  margin: 0 0 4px;
+}
+.security-page .security-step-heading p {
+  font-size: 11px;
+  color: #94a383;
+  margin: 0;
+  line-height: 1.7;
+}
+.security-page .security-methods {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  min-width: 0;
+}
+.security-page .security-method {
+  position: relative;
+  min-width: 0;
+}
+.security-page .security-method > input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+.security-page .security-method-card {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 14px;
+  border: 1px solid #e1e8d5;
+  border-radius: 9px;
+  min-height: 99px;
+  cursor: pointer;
+  background: white;
+}
+.security-page .security-method-card > svg {
+  flex: 0 0 25px;
+  width: 25px;
+  height: 25px;
+  fill: none;
+  stroke: #8da477;
+  stroke-width: 1.5;
+}
+.security-page .security-method-card > span:not(.radio-dot) {
+  flex: 1;
+  min-width: 0;
+}
+.security-page .security-method-card strong {
+  display: block;
+  font-size: 12px;
+  color: #657e4c;
+  font-weight: 600;
+}
+.security-page .security-method-card small {
+  display: block;
+  font-size: 10px;
+  color: #9eac8e;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+}
+.security-page #email-status-badge {
+  display: inline-block;
+  font-style: normal;
+  font-size: 8px;
+  padding: 2px 5px;
+  color: #aa9672;
+  background: #fbf5e7;
+  border-radius: 4px;
+  margin-top: 5px;
+}
+.security-page #email-status-badge.is-verified {
+  color: #859b65;
+  background: #edf4e1;
+}
+.security-page .security-method input:checked + .security-method-card {
+  border-color: #a8bb8b;
+  background: #f8fbf2;
+  box-shadow: inset 0 0 0 1px #b5c89e20;
+}
+.security-page .security-method input:disabled + .security-method-card {
+  opacity: 0.65;
+  cursor: default;
+}
+.security-page .radio-dot {
+  flex: 0 0 16px;
+  height: 16px;
+  border: 1px solid #cfdbbf;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+}
+.security-page input:checked + .security-method-card .radio-dot::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #93a874;
+}
+.security-page .security-hint {
+  margin: 15px 0;
+  font-size: 11px;
+  line-height: 1.8;
+  color: #9aa98a;
+}
+.security-page .security-email-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.security-page .security-primary,
+.security-page .security-secondary {
+  min-height: 44px;
+  padding: 11px 16px;
+  border-radius: 8px;
+  font:
+    600 12px "DM Sans",
+    sans-serif;
+  cursor: pointer;
+  line-height: 1.5;
+  text-align: center;
+}
+.security-page .security-primary {
+  color: white;
+  background: #47562b;
+  border: 1px solid #47562b;
+}
+.security-page .security-primary:hover:not(:disabled) {
+  background: #35441f;
+}
+.security-page .security-secondary {
+  color: #82996a;
+  background: white;
+  border: 1px solid #dce6ce;
+}
+.security-page button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.security-page .security-code-panel {
+  background: #fafcf6;
+  border: 1px solid #e2e9d7;
+  border-radius: 9px;
+  padding: 17px;
+  margin: 18px 0 0;
+}
+.security-page .security-code-panel h3 {
+  font:
+    700 14px/1.5 Manrope,
+    sans-serif;
+  color: #68834f;
+  margin: 0 0 9px;
+}
+.security-page .security-panel-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+.security-page #em-close {
+  padding: 4px 0;
+  font-size: 10px;
+  color: #a1ae92;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.security-page .security-code-panel p {
+  font-size: 11px;
+  line-height: 1.8;
+  margin: 0 0 14px;
+  color: #8e9f7a;
+}
+.security-page .security-code-actions {
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+.security-page .security-code-actions input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #d8e4ca;
+  border-radius: 7px;
+  font:
+    17px "DM Sans",
+    sans-serif;
+  letter-spacing: 4px;
+  background: white;
+  color: #718a57;
+  text-align: center;
+}
+.security-page #totp-start {
+  margin-bottom: 14px;
+}
+.security-page .security-qr-panel {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+  margin: 15px 0;
+}
+.security-page #totp-qr {
+  display: block;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e2e9d8;
+  max-width: 100%;
+}
+.security-page #totp-manual summary {
+  cursor: pointer;
+  font-size: 11px;
+  color: #7d9661;
+}
+.security-page #totp-secret-text {
+  display: block;
+  background: white;
+  font-size: 12px;
+  color: #778e5e;
+  padding: 10px;
+  margin-top: 10px;
+  overflow-wrap: anywhere;
+  border: 1px solid #e1e9d4;
+  border-radius: 7px;
+  user-select: all;
+}
+.security-page .security-tips {
+  margin-top: 22px;
+  padding-top: 17px;
+  border-top: 1px solid #ebefdf;
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+}
+.security-page .security-tips svg {
+  flex: 0 0 19px;
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: #a1b18b;
+  stroke-width: 1.5;
+}
+.security-page .security-tips p {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.8;
+  color: #a0ad91;
+}
+.security-page .security-tips strong {
+  font-weight: 600;
+  color: #869d6e;
+}
+.security-page .security-preview-note,
+.security-page .security-feedback {
+  margin: 15px 0 0;
+  padding: 11px 14px;
+  border: 1px solid #e3e8d4;
+  border-radius: 8px;
+  background: #f6f9ed;
+  color: #899e70;
+  font-size: 11px;
+  line-height: 1.8;
+}
+.security-page .security-preview-note {
+  background: #fcf8ed;
+  color: #aa925d;
+  border-color: #e9e0c7;
+}
+.security-page .security-recovery {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.security-page .security-recovery > :not([hidden]) {
+  display: inline-flex;
+  padding: 12px 0;
+  border: 0;
+  background: none;
+  font:
+    600 11px "DM Sans",
+    sans-serif;
+  color: #829a69;
+  cursor: pointer;
+}
+.security-page .security-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(450px, calc(100% - 28px));
+  max-height: calc(100dvh - 28px);
+  overflow-y: auto;
+  padding: 25px;
+  box-sizing: border-box;
+  background: white;
+  border: 1px solid #e0e7d4;
+  border-radius: 16px;
+  color: #728a58;
+  box-shadow: 0 20px 70px #26321c25;
+}
+.security-page .security-dialog * {
+  box-sizing: border-box;
+}
+.security-page .security-dialog::backdrop {
+  background: #27331d66;
+  backdrop-filter: blur(2px);
+}
+.security-page .security-dialog-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 15px;
+  border-bottom: 1px solid #edf1e4;
+  padding-bottom: 16px;
+  margin-bottom: 18px;
+}
+.security-page .security-eyebrow {
+  font-size: 8px;
+  letter-spacing: 1px;
+  color: #99ab84;
+  font-weight: 700;
+}
+.security-page .security-dialog-heading h2 {
+  font:
+    800 23px/1.3 Manrope,
+    sans-serif;
+  color: #617d46;
+  margin: 8px 0 0;
+}
+.security-page #pw-close {
+  flex: 0 0 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid #dfe7d3;
+  background: white;
+  color: #9aad87;
+  cursor: pointer;
+}
+.security-page .security-password-field {
+  margin-top: 16px;
+}
+.security-page .security-password-field label {
+  display: block;
+  color: #899e70;
+  font-size: 11px;
+  margin-bottom: 7px;
+}
+.security-page .security-password-field > div {
+  position: relative;
+}
+.security-page .security-password-field input {
+  display: block;
+  width: 100%;
+  height: 46px;
+  border: 1px solid #dce6ce;
+  border-radius: 8px;
+  background: white;
+  color: #718b56;
+  padding: 11px 80px 11px 12px;
+  font:
+    13px "DM Sans",
+    sans-serif;
+}
+.security-page .security-password-field button {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 7px;
+  color: #91a779;
+  background: transparent;
+  font:
+    600 10px "DM Sans",
+    sans-serif;
+  cursor: pointer;
+}
+.security-page .security-rules {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px 12px;
+  padding: 13px;
+  margin: 18px 0;
+  border: 1px solid #e5ebd9;
+  border-radius: 8px;
+  background: #f8faf3;
+}
+.security-page .security-rules li {
+  font-size: 10px;
+  color: #a7b297;
+  line-height: 1.7;
+}
+.security-page .security-rules li::before {
+  content: "○ ";
+}
+.security-page .security-rules li.is-met {
+  color: #728d55;
+}
+.security-page .security-rules li.is-met::before {
+  content: "✓ ";
+}
+.security-page #pw-err {
+  color: #b49571;
+  font-size: 11px;
+  line-height: 1.8;
+}
+.security-page #pw-save {
+  width: 100%;
+  margin-top: 3px;
+}
+.security-page .security-method input:focus-visible + .security-method-card,
+.security-page .security-code-actions input:focus-visible,
+.security-page .security-password-field input:focus-visible,
+.security-page .security-dialog button:focus-visible {
+  outline: 3px solid #acba92;
+  outline-offset: 3px;
+}
+@media (max-width: 1000px) {
+  .security-page .security-methods {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .security-page .security-method-card {
+    min-height: 85px;
+  }
+}
+@media (max-width: 480px) {
+  .security-page .security-card {
+    padding: 18px 15px;
+  }
+  .security-page .security-method-card {
+    padding: 13px;
+  }
+  .security-page .security-code-panel {
+    padding: 15px 12px;
+  }
+  .security-page .security-code-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .security-page .security-qr-panel {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+  .security-page .security-qr-panel img {
+    margin: 0 auto;
+  }
+  .security-page .security-dialog {
+    padding: 22px 18px;
+  }
+  .security-page .security-dialog-heading h2 {
+    font-size: 21px;
+  }
+  .security-page .security-password-field input {
+    font-size: 16px;
+  }
+}
