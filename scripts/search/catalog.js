@@ -1,16 +1,60 @@
-(async () => {
-  if (window.storefrontReady) await window.storefrontReady;
-  ("use strict");
-  const S = window.StorefrontShell,
-    $ = (s) => document.querySelector(s),
-    esc = S.esc;
+(() => {
+  "use strict";
+  try {
+  if (window.CatalogPage) return;
+  // Product browsing must not wait for the menu, account or bag scripts.
+  const U = window.ProductPageUtils;
+  if (!U || !window.CatalogInfiniteFeed) throw Error("Não foi possível iniciar o catálogo. Tente novamente.");
+  const $ = (s) => document.querySelector(s);
+  const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const S = {
+    esc, money: U.money,
+    isFavorite: id => window.StorefrontShell?.isFavorite(id) || false,
+    productUrl: id => '/pages/menu-departments-item/product.html?id=' + encodeURIComponent(id),
+    safeImage: raw => {
+      try { const url = new URL(raw, window.API_CONFIG?.SERVER_URL || 'https://api.peteobicho.com.br'); return ['https:','http:'].includes(url.protocol) ? url.href : '/public/image/placeholder.svg'; }
+      catch { return '/public/image/placeholder.svg'; }
+    },
+    offer: p => {
+      if (window.StorefrontShell) return window.StorefrontShell.offer(p);
+      const regular = U.price(p, 1, false), club = Number(p.precoClube), promo = p.promocaoCondicional;
+      let condition = '';
+      if (U.active(promo)) {
+        if (promo.tipo === 'acima_de' && Number(promo.quantidadeMinima) > 0 && Number(promo.descontoPorcentagem) > 0 && Number(promo.descontoPorcentagem) <= 100) condition = `${promo.descontoPorcentagem}% de desconto a partir de ${promo.quantidadeMinima} un.`;
+        if (promo.tipo === 'leve_pague' && Number(promo.leve) > Number(promo.pague) && Number(promo.pague) >= 0) condition = `Leve ${promo.leve}, pague ${promo.pague}`;
+      }
+      return `${regular.saving > 0 ? `<small class="old-price">De <s>${U.money(regular.base)}</s> · ${esc(regular.label)}</small>` : ''}<span class="price">${U.money(regular.unit)}</span>${club > 0 && club < regular.unit ? `<p class="club-price">${U.money(club)} com preço Club*</p>` : ''}${condition ? `<p class="conditional-offer">${esc(condition)}*</p>` : ''}<small>* Confira as condições na página do produto.</small>`;
+    },
+  };
   const multi = ["brand", "age", "size", "presentation"];
-  async function catalogue(params, options) {
-    if (window.CATALOG_PREVIEW) return S.request("/catalog?" + params, options);
-    const response = await fetch("/api/storefront-catalog?" + params, options);
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok) throw Error(body.message || "Não foi possível carregar o catálogo.");
-    return body;
+  async function catalogue(params, {signal} = {}) {
+    const url = window.CATALOG_PREVIEW ? (window.API_CONFIG?.BASE_URL || '/api') + '/catalog?' + params : '/api/storefront-catalog?' + params;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const request = new AbortController();
+      let timer, onAbort;
+      try {
+        return await Promise.race([
+          (async () => {
+            const response = await fetch(url, {signal: request.signal});
+            const body = await response.json();
+            if (!response.ok) { const error = Error(body.message || 'Não foi possível carregar o catálogo.'); error.retryable = [408,429,500,502,503,504].includes(response.status); throw error; }
+            if (!Array.isArray(body.products) || !body.facets || !Array.isArray(body.breadcrumb)) throw Error('A consulta não pôde ser concluída. Tente novamente.');
+            return body;
+          })(),
+          new Promise((_, reject) => {
+            onAbort = () => { request.abort(); const error = Error('Consulta cancelada.'); error.name = 'AbortError'; reject(error); };
+            if (signal?.aborted) return onAbort();
+            signal?.addEventListener('abort', onAbort, {once:true});
+            timer = setTimeout(() => { const error = Error('A consulta demorou mais que o esperado. Tente novamente.'); error.name = 'TimeoutError'; reject(error); request.abort(); }, 8000);
+          }),
+        ]);
+      } catch(error) {
+        if (signal?.aborted || error.name === 'AbortError' || attempt || !(error.retryable || ['TimeoutError','TypeError'].includes(error.name))) throw error;
+      } finally {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
+      }
+    }
   }
   let state = new URLSearchParams(location.search),
     draft = null,
@@ -31,10 +75,7 @@
       const params = new URLSearchParams(state);
       params.set("page", page);
       return catalogue(params, {
-        signal: AbortSignal.any([
-          controller.signal,
-          AbortSignal.timeout(20000),
-        ]),
+        signal: controller.signal,
       });
     },
     onProgress: (loaded, total) => {
@@ -97,6 +138,7 @@
     );
   }
   function error(message) {
+    window.CatalogStartup?.finish();
     $("#catalog-grid").innerHTML =
       `<div class="catalog-empty"><span>↻</span><h2>Vamos tentar de novo?</h2><p>${esc(message)}</p><button class="button" type="button" data-retry>Tentar novamente →</button></div>`;
     $("#catalog-grid").setAttribute("aria-busy", "false");
@@ -105,6 +147,7 @@
     $("#catalog-loader").replaceChildren();
   }
   async function load(scroll = false) {
+    window.CatalogStartup?.begin();
     const saved =
       history.state?.catalogKey === queryKey()
         ? history.state.catalogFeed
@@ -117,10 +160,7 @@
     $("#catalog-grid").innerHTML = skeleton();
     try {
       const result = await catalogue(state, {
-        signal: AbortSignal.any([
-          controller.signal,
-          AbortSignal.timeout(20000),
-        ]),
+        signal: controller.signal,
       });
       if (ticket !== sequence) return;
       data = result;
@@ -131,6 +171,7 @@
       }
       await render(saved);
       if (ticket !== sequence) return;
+      window.CatalogStartup?.finish();
       if (saved)
         window.scrollTo({
           top: history.state?.catalogScroll || 0,
@@ -144,7 +185,7 @@
             : "smooth",
         });
     } catch (e) {
-      if (ticket !== sequence || e.name === "AbortError") return;
+      if (ticket !== sequence || controller.signal.aborted) return;
       error(
         e.name === "TimeoutError"
           ? "A consulta demorou mais que o esperado. Tente novamente."
@@ -321,6 +362,13 @@
     return true;
   }
   document.addEventListener("click", (e) => {
+    if (e.target.closest('.favorite') && !window.StorefrontShell) {
+      const message = document.createElement('p');
+      message.setAttribute('role', 'status');
+      message.textContent = 'Os favoritos estão temporariamente indisponíveis. Você pode continuar consultando os produtos.';
+      $('#result-range').replaceChildren(message);
+      return;
+    }
     const button = e.target.closest("button");
     if (!button) return;
     if (button.hasAttribute("data-retry")) load();
@@ -434,8 +482,19 @@
       behavior: "instant",
     });
   });
-  window.addEventListener("pagehide", () =>
-    history.replaceState(saveFeed(), "", location.href),
-  );
+  window.addEventListener('pagehide', () => {
+    try { history.replaceState(saveFeed(), '', location.href); } catch {}
+    sequence++;
+    controller?.abort();
+    window.CatalogStartup?.finish();
+  });
+  window.addEventListener('pageshow', event => {
+    if (event.persisted) { state = new URLSearchParams(location.search); state.delete('page'); load(); }
+  });
+  window.CatalogPage = {reload: load, cancel: () => { sequence++; controller?.abort(); feed.clear(); }};
   load();
+  } catch(error) {
+    console.error('Catálogo:', error.message);
+    window.CatalogStartup?.fail('Não foi possível iniciar o catálogo. Tente novamente.');
+  }
 })();

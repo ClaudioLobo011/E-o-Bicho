@@ -1,7 +1,7 @@
 <!doctype html>
 <html data-storefront-shell lang="pt-BR">
   <head>
-<script src="/scripts/storefront/bootstrap.js?v=20261106-release1" defer></script>
+<script src="/scripts/storefront/bootstrap.js?v=20261107-loading1" defer></script>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta
@@ -36,8 +36,8 @@
     <script src="/scripts/product/product-utils.js?v=20261106-release1" defer></script>
 
     <link rel="stylesheet" href="/src/catalog.css?v=20261106-release1" />
-    <script src="/scripts/search/infinite-feed.js?v=20261106-release1" defer></script>
-    <script src="/scripts/search/catalog.js?v=20261106-release1" defer></script>
+    <script src="/scripts/search/infinite-feed.js?v=20261107-loading1" defer></script>
+    <script src="/scripts/search/catalog.js?v=20261107-loading1" defer></script>
   </head>
   <body>
     <a class="skip" href="#conteudo">Pular para o conteúdo</a>
@@ -158,5 +158,40 @@
     <div id="footer-placeholder"></div>
 
 
+  <script data-catalog-startup-guard>
+(() => {
+  if (window.CatalogStartup) return;
+  let timer;
+  const $ = id => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  const category = params.get('category');
+  const title = params.get('search') ? 'Resultados para “' + params.get('search') + '”' : category || 'Encontre o cuidado para seu pet';
+  if ($('catalog-title')) $('catalog-title').textContent = title;
+  if ($('catalog-description')) $('catalog-description').textContent = 'Explore os produtos e use os filtros para encontrar o que procura.';
+  function finish() { clearTimeout(timer); }
+  function fail(message) {
+    finish();
+    window.CatalogPage?.cancel();
+    const grid = $('catalog-grid');
+    if (!grid) return;
+    grid.setAttribute('aria-busy','false');
+    const box = document.createElement('div'); box.className = 'catalog-empty'; box.setAttribute('role','status');
+    const heading = document.createElement('h2'); heading.textContent = 'Vamos tentar de novo?';
+    const text = document.createElement('p'); text.textContent = message || 'Não foi possível concluir o carregamento. Tente novamente.';
+    const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'button'; retry.textContent = 'Tentar novamente →';
+    retry.addEventListener('click', () => window.CatalogPage ? window.CatalogPage.reload() : location.reload());
+    box.append(heading,text,retry); grid.replaceChildren(box);
+    if ($('result-count')) $('result-count').textContent = 'Não foi possível carregar os produtos';
+    if ($('result-range')) $('result-range').textContent = '';
+    $('catalog-loader')?.replaceChildren();
+  }
+  function begin(delay = 20000) { finish(); timer = setTimeout(() => fail('O carregamento demorou mais que o esperado. Confira sua conexão e tente novamente.'), delay); }
+  window.CatalogStartup = {begin,finish,fail};
+  window.addEventListener('pagehide', finish);
+  window.addEventListener('pageshow', event => { if (event.persisted && !window.CatalogPage) begin(12000); });
+  begin(12000);
+})();
+
+</script>
   </body>
 </html>

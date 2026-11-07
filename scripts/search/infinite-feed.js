@@ -198,7 +198,7 @@
         if (focus) batch.element.querySelector("a,button")?.focus();
         this.trim();
       } catch (error) {
-        if (revision !== this.revision || error.name === "AbortError") return;
+        if (revision !== this.revision) return;
         batch.element
           .querySelector("button")
           ?.replaceChildren(
@@ -243,7 +243,7 @@
         if (focusNew) batch.element.querySelector("a,button")?.focus();
       } catch (error) {
         if (revision !== this.revision) return;
-        if (error.name !== "AbortError") this.failed = true;
+        this.failed = true;
       } finally {
         if (revision === this.revision) {
           this.loading = false;
