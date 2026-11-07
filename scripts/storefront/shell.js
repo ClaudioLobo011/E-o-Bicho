@@ -1,5 +1,6 @@
 (() => {
   "use strict";
+  if (window.StorefrontShell) return;
   const $ = (s) => document.querySelector(s);
   const esc = (s) =>
     String(s ?? "").replace(
@@ -405,6 +406,46 @@
       $("#cart-count").textContent = "";
     }
   }
+  const categoryCacheKey = 'storefront-category-menu-v1';
+  let categoryTask = null, categoryBuilt = false;
+  const validCategories = value => Array.isArray(value) && value.length > 0 && value.length <= 5000 && value.every(c => c && typeof c._id === 'string' && typeof c.nome === 'string' && (!c.parent || typeof c.parent === 'string'));
+  function categoryNotice(failed = false) {
+    let status = document.getElementById('category-menu-status');
+    if (categoryBuilt) { status?.remove(); return; }
+    if (!status) { status=document.createElement('div');status.id='category-menu-status';status.setAttribute('role','status');status.style.cssText='padding:5px 16px;font-size:12px;text-align:center;color:#47562b';$('#navigation').after(status); }
+    status.replaceChildren(document.createTextNode(failed ? 'As subcategorias estão temporariamente indisponíveis. ' : 'Carregando subcategorias…'));
+    if(failed){const retry=document.createElement('button');retry.type='button';retry.textContent='Tentar novamente';retry.style.cssText='cursor:pointer;text-decoration:underline';retry.addEventListener('click',()=>refreshNavigation());status.append(retry);}
+  }
+  function refreshNavigation() {
+    if (categoryTask) return categoryTask;
+    categoryTask = (async () => {
+      if (!categoryBuilt) {
+        try {
+          const cached=JSON.parse(localStorage.getItem(categoryCacheKey));
+          if(cached?.expires>Date.now() && validCategories(cached.categories)){buildCategoryNavigation(cached.categories);categoryBuilt=true;}
+        } catch {}
+      }
+      categoryNotice();
+      for(let attempt=0;attempt<2;attempt++){
+        const controller=new AbortController();let timer;
+        try {
+          const categories=await Promise.race([
+            request('/categories',{signal:controller.signal}),
+            new Promise((_,reject)=>{timer=setTimeout(()=>{reject(Error('A consulta das categorias demorou.'));controller.abort();},4000);}),
+          ]);
+          if(!validCategories(categories))throw Error('Categorias indisponíveis.');
+          // Keep an open submenu stable. Updated taxonomy is available on the next page.
+          if(!categoryBuilt){buildCategoryNavigation(categories);categoryBuilt=true;}
+          try {localStorage.setItem(categoryCacheKey,JSON.stringify({expires:Date.now()+86400000,categories:categories.map(c=>({_id:c._id,nome:c.nome,parent:c.parent||null}))}));}catch{}
+          categoryNotice();return true;
+        }catch(error){if(attempt){categoryNotice(true);return false;}}
+        finally{clearTimeout(timer);}
+      }
+    })().finally(()=>{categoryTask=null;});
+    return categoryTask;
+  }
+  window.addEventListener('online',()=>{if(!categoryBuilt)refreshNavigation();});
+  window.addEventListener('pageshow',event=>{if(event.persisted&&!categoryBuilt)refreshNavigation();});
   async function init() {
     const current = user(),
       greeting = $("#account-button > span");
@@ -418,15 +459,7 @@
       greeting.firstChild.textContent =
         "Olá, " + displayName.trim().split(/\s+/)[0] + " ";
     await Promise.allSettled([
-      (async () => {
-        try {
-          buildCategoryNavigation(await request("/categories"));
-        } catch {
-          notify(
-            "As categorias não puderam ser carregadas. Tente atualizar a página.",
-          );
-        }
-      })(),
+      refreshNavigation(),
       (async () => {
         if (window.CATALOG_PREVIEW && !user()) {
           try {
@@ -780,6 +813,7 @@
   }
 
   window.StorefrontShell = {
+    refreshNavigation,
     offer,
     safeImage,
     money,
