@@ -1690,6 +1690,36 @@ router.get('/sales/history', authenticateHost, async (req, res) => {
   return res.json({ sales: page.map((entry) => entry.payload).filter(Boolean), nextCursor: hasMore ? String(page[page.length - 1]._id) : '' });
 });
 
+router.get('/catalog/product-photos', authenticateHost, async (req, res) => {
+  const { photoDescriptor } = require('../services/desktopProductPhotos');
+  const cursor = decodeCursor(req.query?.cursor);
+  if (req.query?.cursor && !cursor) return res.status(400).json({ message: 'Cursor de fotos inválido.' });
+  const query = cursor ? { $or: [{ updatedAt: { $gt: cursor.updatedAt } }, { updatedAt: cursor.updatedAt, _id: { $gt: cursor.id } }] } : {};
+  const page = await Product.find(query).select('_id imagemPrincipal inativo updatedAt')
+    .slice('imagens', 1).sort({ updatedAt: 1, _id: 1 }).limit(501).lean();
+  const hasMore = page.length > 500;
+  if (hasMore) page.pop();
+  const last = page.at(-1);
+  res.json({
+    photos: page.map(product => ({ id: String(product._id), revision: photoDescriptor(product)?.revision || '' })),
+    cursor: last ? encodeCursor({ id: String(last._id), updatedAt: last.updatedAt }) : (req.query?.cursor || ''),
+    hasMore,
+  });
+});
+
+router.get('/catalog/product-photos/:id/:revision', authenticateHost, async (req, res) => {
+  const { id, revision } = req.params;
+  if (!/^[a-f0-9]{24}$/.test(id) || !/^[a-f0-9]{64}$/.test(revision)) return res.sendStatus(404);
+  const { photoDescriptor, compactPhoto } = require('../services/desktopProductPhotos');
+  const product = await Product.findById(id).select('imagemPrincipal inativo').slice('imagens', 1).lean();
+  const photo = photoDescriptor(product);
+  if (photo?.revision !== revision) return res.sendStatus(404);
+  try {
+    const bytes = await compactPhoto(photo);
+    res.set('Cache-Control', 'private, max-age=86400').type('image/webp').send(bytes);
+  } catch (error) { res.sendStatus(error.status || 502); }
+});
+
 router.get('/catalog/products', authenticateHost, async (req, res) => {
   const host = req.desktopHost;
   const pdv = await Pdv.findById(host.pdv).select('empresa configuracoesEstoque desktop tipoUso').lean();
