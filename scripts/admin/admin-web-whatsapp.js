@@ -4173,8 +4173,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
+  const setWorkspaceView = (view) => {
+    const workspace = document.getElementById('whatsapp-workspace');
+    if (!workspace) return;
+    workspace.dataset.whatsappView = view;
+    workspace.querySelectorAll('[data-whatsapp-view-target]').forEach((button) => {
+      button.setAttribute('aria-pressed', String(button.dataset.whatsappViewTarget === view));
+    });
+  };
+
   const setBusinessProfileVisible = (visible) => {
     if (!elements.businessProfilePanel) return;
+    elements.businessProfilePanel.inert = !visible;
     elements.businessProfilePanel.classList.toggle('translate-x-full', !visible);
     elements.businessProfilePanel.classList.toggle('translate-x-0', visible);
   };
@@ -4191,6 +4201,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     closeProfilePanel();
+    setWorkspaceView('chat');
     setBusinessProfileVisible(true);
     await loadBusinessProfile();
   };
@@ -5649,12 +5660,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!elements.profilePanel || !state.selectedContactId) return;
     closeBusinessProfilePanel();
     renderProfilePanel();
+    elements.profilePanel.inert = false;
     elements.profilePanel.classList.remove('translate-x-full');
     elements.profilePanel.classList.add('translate-x-0');
   };
 
   const closeProfilePanel = () => {
     if (!elements.profilePanel) return;
+    elements.profilePanel.inert = true;
     elements.profilePanel.classList.add('translate-x-full');
     elements.profilePanel.classList.remove('translate-x-0');
   };
@@ -5953,6 +5966,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     const previousContactId = state.selectedContactId;
+    setWorkspaceView('chat');
     if (previousContactId === waId) return;
 
     stopAudioRecording(true);
@@ -7775,6 +7789,9 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const bindEvents = () => {
+    document.querySelectorAll('[data-whatsapp-view-target]').forEach((button) => {
+      button.addEventListener('click', () => setWorkspaceView(button.dataset.whatsappViewTarget));
+    });
     elements.companySelect?.addEventListener('change', async (event) => {
       state.selectedCompanyId = event.target.value;
       const nextUrl = new URL(window.location.href);
@@ -7852,7 +7869,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!target) return;
       const waId = target.dataset.waId;
       const previousContactId = state.selectedContactId;
-      if (!waId || waId === previousContactId) return;
+      if (!waId) return;
+      setWorkspaceView('chat');
+      if (waId === previousContactId) return;
       if (previousContactId) {
         cleanupEmptyConversation(previousContactId);
       }

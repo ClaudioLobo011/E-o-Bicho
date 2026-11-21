@@ -168,7 +168,7 @@
       try {
         const item = await fetchJSON(`${API}/${id}`);
         fillForm(item);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        form.scrollIntoView({ block: 'start', behavior: 'smooth' });
       } catch (err) {
         alert('Não foi possível carregar o grupo selecionado.');
       }

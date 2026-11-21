@@ -954,39 +954,28 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- Renderização da Tabela ---
-    const ensureStoresTableLayout = () => {
-        if (!storesTable) return;
-        storesTable.style.tableLayout = 'fixed';
-        storesTable.style.width = 'max-content';
-        storesTable.style.minWidth = '100%';
-    };
-
     const storeTableColumns = [
         {
             key: 'nome',
             label: 'Empresa',
-            minWidth: 180,
             getDisplay: (store) => (store?.nomeFantasia || store?.nome || store?.razaoSocial || '—').trim() || '—'
         },
         {
             key: 'endereco',
             label: 'Endereço',
-            minWidth: 220,
             getDisplay: (store) => (store?.endereco || '').trim() || '—'
         },
         {
             key: 'acoes',
             label: 'Ações',
-            minWidth: 140,
             disableFilter: true,
             disableSort: true,
-            disableResize: true,
             headerClass: 'text-center',
             cellClass: 'text-center whitespace-nowrap',
             renderCell: (store) => {
                 const id = store?._id || '';
                 return `
-                    <div class="inline-flex items-center gap-2 justify-center">
+                    <div class="store-row-actions">
                         <button data-action="edit" data-id="${id}" class="inline-flex items-center gap-1 rounded-full border border-gray-200 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-700 transition hover:bg-gray-50">
                             <i class="fa-solid fa-pen-to-square"></i>
                             Editar
@@ -1007,7 +996,6 @@ document.addEventListener('DOMContentLoaded', () => {
         valueFilters: {},
         filterSearch: {},
         sort: { key: null, direction: null },
-        columnWidths: {},
         openPopover: null
     };
 
@@ -1044,11 +1032,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (_error) {
             return null;
         }
-    };
-
-    const getStoreColumnMinWidth = (key) => {
-        const column = storeTableColumns.find((col) => col.key === key);
-        return column?.minWidth || 32;
     };
 
     const ensureStoresColGroup = () => {
@@ -1212,53 +1195,13 @@ document.addEventListener('DOMContentLoaded', () => {
         renderStoresTable();
     };
 
-    const applyStoreColumnWidths = (syncFromDom = false) => {
-        if (!storesTable) return;
-
-        ensureStoresTableLayout();
-        const colgroup = ensureStoresColGroup();
-        const colMap = colgroup
-            ? new Map(Array.from(colgroup.querySelectorAll('col')).map((col) => [col.dataset.columnKey, col]))
-            : null;
-
-        const headerCells = Array.from(storesTable.querySelectorAll('th[data-column-key]'));
-
-        headerCells.forEach((th) => {
-            const columnKey = th.dataset.columnKey;
-            const minWidth = getStoreColumnMinWidth(columnKey);
-
-            if (syncFromDom && !Number.isFinite(storeTableState.columnWidths[columnKey])) {
-                storeTableState.columnWidths[columnKey] = Math.max(minWidth, th.getBoundingClientRect().width);
-            }
-
-            const storedWidth = storeTableState.columnWidths[columnKey];
-            const width = Number.isFinite(storedWidth) ? Math.max(minWidth, storedWidth) : minWidth;
-
-            th.style.width = `${width}px`;
-            th.style.minWidth = `${minWidth}px`;
-
-            const colEl = colMap?.get(columnKey);
-            if (colEl) {
-                colEl.style.width = `${width}px`;
-                colEl.style.minWidth = `${minWidth}px`;
-            }
-
-            const cells = tableBody?.querySelectorAll(`td[data-column-key="${columnKey}"]`);
-            cells?.forEach((cell) => {
-                cell.style.width = `${width}px`;
-                cell.style.minWidth = `${minWidth}px`;
-            });
-        });
-    };
-
-    const startStoreColumnResize = (column, th, startEvent) => {
+    const startStoreColumnResize = (th, startEvent) => {
         if (!th) return;
         startEvent.preventDefault();
         closeStoreFilterPopover();
-
-        const minWidth = getStoreColumnMinWidth(column.key);
         const startX = startEvent.touches?.[0]?.clientX ?? startEvent.clientX;
         const startWidth = th.getBoundingClientRect().width;
+        const tableWidth = storesTable.getBoundingClientRect().width;
         const originalUserSelect = document.body.style.userSelect;
         const originalCursor = document.body.style.cursor;
 
@@ -1268,10 +1211,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const handleMove = (moveEvent) => {
             const currentX = moveEvent.touches?.[0]?.clientX ?? moveEvent.clientX;
             if (!Number.isFinite(currentX)) return;
-            const delta = currentX - startX;
-            const nextWidth = Math.max(minWidth, startWidth + delta);
-            storeTableState.columnWidths[column.key] = nextWidth;
-            applyStoreColumnWidths();
+            const percent = ((startWidth + currentX - startX) / tableWidth) * 100;
+            storesTable.style.setProperty('--store-company-width', percent + '%');
         };
 
         const handleEnd = () => {
@@ -1281,12 +1222,14 @@ document.addEventListener('DOMContentLoaded', () => {
             window.removeEventListener('mouseup', handleEnd);
             window.removeEventListener('touchmove', handleMove);
             window.removeEventListener('touchend', handleEnd);
+            window.removeEventListener('touchcancel', handleEnd);
         };
 
         window.addEventListener('mousemove', handleMove);
         window.addEventListener('mouseup', handleEnd);
         window.addEventListener('touchmove', handleMove, { passive: true });
         window.addEventListener('touchend', handleEnd);
+        window.addEventListener('touchcancel', handleEnd);
     };
 
     const closeStoreFilterPopover = () => {
@@ -1488,6 +1431,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const buildStoresTableHead = () => {
+        ensureStoresColGroup();
         if (!storesTable) return;
         const thead = storesTable.querySelector('thead');
         if (!thead) return;
@@ -1539,8 +1483,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (!column.disableFilter) {
                 const filter = document.createElement('input');
-                filter.type = 'text';
+                filter.type = 'search';
                 filter.placeholder = 'Filtrar';
+                filter.setAttribute('aria-label', 'Filtrar ' + column.label);
                 filter.value = storeTableState.filters[column.key] || '';
                 filter.className =
                     'flex-1 rounded border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20';
@@ -1570,14 +1515,15 @@ document.addEventListener('DOMContentLoaded', () => {
             wrapper.appendChild(filterRow);
             th.appendChild(wrapper);
 
-            if (!column.disableResize) {
+            if (column.key === 'nome') {
                 const resizeHandle = document.createElement('div');
                 resizeHandle.className =
                     'absolute inset-y-0 right-0 flex w-2 cursor-col-resize select-none items-center justify-center px-px';
-                resizeHandle.setAttribute('aria-label', `Redimensionar coluna ${column.label}`);
+                resizeHandle.dataset.storeResize = '';
+                resizeHandle.title = 'Ajustar divisão entre empresa e endereço';
                 resizeHandle.innerHTML = '<span class="pointer-events-none block h-8 w-px rounded-full bg-gray-200"></span>';
-                resizeHandle.addEventListener('mousedown', (event) => startStoreColumnResize(column, th, event));
-                resizeHandle.addEventListener('touchstart', (event) => startStoreColumnResize(column, th, event));
+                resizeHandle.addEventListener('mousedown', (event) => startStoreColumnResize(th, event));
+                resizeHandle.addEventListener('touchstart', (event) => startStoreColumnResize(th, event));
                 th.appendChild(resizeHandle);
             }
 
@@ -1586,11 +1532,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         thead.appendChild(row);
         updateStoreSortIndicators();
-        applyStoreColumnWidths(true);
     };
 
     function renderStoresTable(stores) {
-        ensureStoresTableLayout();
         if (Array.isArray(stores)) {
             storeTableState.data = stores;
             syncStoreValueFilters();
@@ -1611,7 +1555,6 @@ document.addEventListener('DOMContentLoaded', () => {
             emptyRow.appendChild(td);
             tableBody.appendChild(emptyRow);
             setStoresCounter('Nenhuma loja encontrada');
-            applyStoreColumnWidths();
             return;
         }
 
@@ -1640,7 +1583,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const plural = visible.length === 1 ? 'loja encontrada' : 'lojas encontradas';
         setStoresCounter(`${visible.length} ${plural}`);
-        applyStoreColumnWidths();
     }
 
     async function backfillStoreCodes() {
@@ -1658,7 +1600,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function fetchAndDisplayStores() {
-        ensureStoresTableLayout();
         setStoresCounter('A carregar lojas...');
         setStoresTableMessage('A carregar lojas...');
 

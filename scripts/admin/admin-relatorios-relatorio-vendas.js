@@ -126,14 +126,14 @@
     {
       key: 'saleCode',
       label: 'Pedido',
-      minWidth: 36,
+      minWidth: 100,
       headerClass: 'px-3 py-2',
       cellClass: 'px-3 py-2.5 text-[11px] font-semibold text-gray-800',
     },
     {
       key: 'createdAt',
       label: 'Data',
-      minWidth: 48,
+      minWidth: 120,
       headerClass: 'px-3 py-2',
       cellClass: 'px-3 py-2.5 text-[11px]',
       getComparable: (sale) => new Date(sale.createdAt || 0).getTime(),
@@ -142,7 +142,7 @@
     {
       key: 'sellerName',
       label: 'Vendedor',
-      minWidth: 64,
+      minWidth: 125,
       headerClass: 'px-3 py-2',
       cellClass: 'px-3 py-2.5 text-[11px]',
       getDisplay: formatSellerName,
@@ -150,7 +150,7 @@
     {
       key: 'store',
       label: 'Loja',
-      minWidth: 44,
+      minWidth: 115,
       headerClass: 'px-3 py-2',
       cellClass: 'px-3 py-2.5 text-[11px]',
       getDisplay: (sale) => sale.store?.name || '—',
@@ -158,7 +158,7 @@
     {
       key: 'channelLabel',
       label: 'Canal',
-      minWidth: 40,
+      minWidth: 86,
       headerClass: 'px-3 py-2',
       cellClass: 'px-3 py-2.5 text-[11px]',
       fallback: 'PDV',
@@ -166,7 +166,7 @@
     {
       key: 'fiscalType',
       label: 'Tipo',
-      minWidth: 40,
+      minWidth: 90,
       headerClass: 'px-3 py-2',
       cellClass: 'px-3 py-2.5 text-[11px]',
       getDisplay: (sale) => sale.fiscalTypeLabel || sale.fiscalType || 'Matricial',
@@ -174,7 +174,7 @@
     {
       key: 'totalValue',
       label: 'Total',
-      minWidth: 54,
+      minWidth: 84,
       headerClass: 'px-3 py-2 text-right',
       cellClass: 'px-3 py-2.5 text-right text-[11px] font-semibold text-gray-900',
       isNumeric: true,
@@ -184,7 +184,7 @@
     {
       key: 'costValue',
       label: 'Custo',
-      minWidth: 54,
+      minWidth: 84,
       headerClass: 'px-3 py-2 text-right',
       cellClass: 'px-3 py-2.5 text-right text-[11px] text-gray-900',
       isNumeric: true,
@@ -194,7 +194,7 @@
     {
       key: 'markup',
       label: 'Margem',
-      minWidth: 44,
+      minWidth: 84,
       headerClass: 'px-3 py-2 text-right',
       cellClass: 'px-3 py-2.5 text-right text-[11px] text-gray-600',
       isNumeric: true,
@@ -204,7 +204,7 @@
     {
       key: 'status',
       label: 'Status',
-      minWidth: 44,
+      minWidth: 95,
       headerClass: 'px-3 py-2 text-right',
       cellClass: 'px-3 py-2.5 text-right text-[11px]',
       getDisplay: (sale) => sale.status,
@@ -219,7 +219,6 @@
   const ensureTableLayout = () => {
     if (!elements.table) return;
     elements.table.style.tableLayout = 'fixed';
-    elements.table.style.width = 'max-content';
     elements.table.style.minWidth = '100%';
   };
 
@@ -760,7 +759,7 @@
     renderTable();
   };
 
-  const applyColumnWidths = (syncFromDom = false) => {
+  const applyColumnWidths = () => {
     if (!elements.tableHead) return;
 
     ensureTableLayout();
@@ -771,16 +770,14 @@
 
     const headerCells = Array.from(elements.tableHead.querySelectorAll('th[data-column-key]'));
 
+    let totalWidth = 0;
     headerCells.forEach((th) => {
       const columnKey = th.dataset.columnKey;
       const minWidth = getColumnMinWidth(columnKey);
 
-      if (syncFromDom && !Number.isFinite(state.table.columnWidths[columnKey])) {
-        state.table.columnWidths[columnKey] = Math.max(minWidth, th.getBoundingClientRect().width);
-      }
-
       const storedWidth = state.table.columnWidths[columnKey];
       const width = Number.isFinite(storedWidth) ? Math.max(minWidth, storedWidth) : minWidth;
+      totalWidth += width;
 
       th.style.width = `${width}px`;
       th.style.minWidth = `${minWidth}px`;
@@ -797,6 +794,7 @@
         cell.style.minWidth = `${minWidth}px`;
       });
     });
+    elements.table.style.width = `${totalWidth}px`;
   };
 
   const startColumnResize = (column, th, startEvent) => {
@@ -923,7 +921,7 @@
 
     elements.tableHead.appendChild(row);
     updateTableHeadSortIndicators();
-    applyColumnWidths(true);
+    applyColumnWidths();
   };
 
   const updatePagination = (visibleCount = Array.isArray(state.sales) ? state.sales.length : state.pagination.total) => {

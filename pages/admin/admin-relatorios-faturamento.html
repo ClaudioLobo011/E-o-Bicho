@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
   <title>Admin: Faturamento - E o Bicho</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <link rel="stylesheet" href="../../src/output.css">
@@ -30,8 +30,9 @@
     }
   </style>
   <link rel="stylesheet" href="../../src/responsive-workspace.css?v=20261008-1">
+  <link rel="stylesheet" href="../../src/admin-v2.css?v=20261121-2">
 </head>
-<body class="bg-gray-100 responsive-site responsive-workspace">
+<body class="bg-gray-100 responsive-site responsive-workspace admin-v2">
   <div id="admin-header-placeholder"></div>
 
   <main class="w-full max-w-none px-4 pt-1 pb-10 min-h-screen 2xl:px-6">
@@ -41,7 +42,7 @@
       </aside>
 
       <div class="space-y-6">
-        <header class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+        <header class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between" data-admin-v2-heading>
           <div class="space-y-2">
             <nav aria-label="Breadcrumb" class="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
               <span class="inline-flex items-center gap-2 text-primary"><i class="fas fa-warehouse"></i>Retaguarda</span>
@@ -51,7 +52,7 @@
               <span class="text-gray-600">Faturamento</span>
             </nav>
             <div>
-              <h1 class="text-2xl font-bold text-gray-800">Faturamento</h1>
+              <h1 class="text-2xl font-bold text-gray-800" data-admin-v2-title>Faturamento</h1>
               <p class="text-sm text-gray-600">
                 Visao detalhada do desempenho financeiro do mes com indicadores, clientes e vendas liquidas.
               </p>
@@ -189,11 +190,11 @@
 
         <section id="billing-insights-grid" class="grid grid-cols-1 gap-6">
           <article class="relative overflow-hidden rounded-xl border border-gray-100 bg-gradient-to-br from-emerald-50 via-white to-slate-50 p-6 shadow-sm">
-            <div class="absolute -right-10 -top-14 h-40 w-40 rounded-full bg-emerald-100/70 blur-3xl"></div>
+            <div class="pointer-events-none absolute inset-y-0 right-0 w-40 rounded-full bg-emerald-100/70 blur-3xl" aria-hidden="true"></div>
             <div class="relative space-y-4">
               <div class="flex items-center justify-between gap-4">
                 <div>
-                  <h2 class="text-lg font-semibold text-gray-800">Faturamento diario</h2>
+                  <h2 class="text-lg font-semibold text-gray-800" data-admin-v2-section="Faturamento diário">Faturamento diario</h2>
                   <p class="text-sm text-gray-600">Curva de receita ao longo do periodo.</p>
                 </div>
                 <span id="billing-daily-total" class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
@@ -219,7 +220,7 @@
           <article class="rounded-xl border border-gray-100 bg-gradient-to-br from-amber-50 via-white to-emerald-50 p-6 shadow-sm">
             <div class="space-y-4">
               <div>
-                <h2 class="text-lg font-semibold text-gray-800">Mix de canais</h2>
+                <h2 class="text-lg font-semibold text-gray-800" data-admin-v2-section>Mix de canais</h2>
                 <p class="text-sm text-gray-600">Distribuicao de receita por canal.</p>
               </div>
               <div class="flex flex-wrap items-center gap-6">
@@ -261,10 +262,10 @@
         </section>
 
         <section id="billing-overview-grid" class="grid grid-cols-1 gap-6">
-          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4" data-admin-v2-panel>
             <div class="flex items-center justify-between">
               <div>
-                <h2 class="text-lg font-semibold text-gray-800">Metas e projecao</h2>
+                <h2 class="text-lg font-semibold text-gray-800" data-admin-v2-section="Metas e projeção">Metas e projecao</h2>
                 <p class="text-sm text-gray-600">Acompanhe o progresso em relacao a meta mensal.</p>
               </div>
               <span id="billing-goal-badge" class="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
@@ -308,9 +309,9 @@
             <div id="billing-channel-list" class="space-y-3"></div>
           </article>
 
-          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4" data-admin-v2-panel>
             <div>
-              <h2 class="text-lg font-semibold text-gray-800">Saude do faturamento</h2>
+              <h2 class="text-lg font-semibold text-gray-800" data-admin-v2-section="Saúde do faturamento">Saude do faturamento</h2>
               <p class="text-sm text-gray-600">Indicadores operacionais e de retencao.</p>
             </div>
             <div id="billing-health-list" class="space-y-3"></div>
@@ -318,13 +319,13 @@
         </section>
 
         <section id="billing-ranking-grid" class="grid grid-cols-1 gap-6">
-          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4" data-admin-v2-panel>
             <div>
-              <h2 class="text-lg font-semibold text-gray-800">Clientes com mais vendas</h2>
+              <h2 class="text-lg font-semibold text-gray-800" data-admin-v2-section>Clientes com mais vendas</h2>
               <p class="text-sm text-gray-600">Ranking por faturamento total no mes.</p>
             </div>
             <div class="overflow-hidden rounded-xl border border-gray-100">
-              <div class="overflow-x-auto">
+              <div class="overflow-x-auto" data-admin-v2-table>
                 <table class="min-w-full divide-y divide-gray-100 text-left text-[11px] text-gray-700">
                   <thead class="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500">
                     <tr>
@@ -341,13 +342,13 @@
             </div>
           </article>
 
-          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4" data-admin-v2-panel>
             <div>
-              <h2 class="text-lg font-semibold text-gray-800">Pets recorrentes</h2>
+              <h2 class="text-lg font-semibold text-gray-800" data-admin-v2-section>Pets recorrentes</h2>
               <p class="text-sm text-gray-600">Pets com maior frequencia de retorno no periodo.</p>
             </div>
             <div class="overflow-hidden rounded-xl border border-gray-100">
-              <div class="overflow-x-auto">
+              <div class="overflow-x-auto" data-admin-v2-table>
                 <table class="min-w-full divide-y divide-gray-100 text-left text-[11px] text-gray-700">
                   <thead class="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500">
                     <tr>
@@ -366,13 +367,13 @@
         </section>
 
         <section class="grid grid-cols-1 gap-6">
-          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4" data-admin-v2-panel>
             <div>
-              <h2 class="text-lg font-semibold text-gray-800">Produtos mais vendidos</h2>
+              <h2 class="text-lg font-semibold text-gray-800" data-admin-v2-section>Produtos mais vendidos</h2>
               <p class="text-sm text-gray-600">Produtos com maior volume e receita.</p>
             </div>
             <div class="overflow-hidden rounded-xl border border-gray-100">
-              <div class="overflow-x-auto">
+              <div class="overflow-x-auto" data-admin-v2-table>
                 <table class="min-w-full divide-y divide-gray-100 text-left text-[11px] text-gray-700">
                   <thead class="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500">
                     <tr>
@@ -392,10 +393,10 @@
         </section>
 
         <section id="billing-payments-grid" class="grid grid-cols-1 gap-6">
-          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4" data-admin-v2-panel>
             <div class="flex items-center justify-between">
               <div>
-                <h2 class="text-lg font-semibold text-gray-800">Meios de pagamento e taxas</h2>
+                <h2 class="text-lg font-semibold text-gray-800" data-admin-v2-section>Meios de pagamento e taxas</h2>
                 <p class="text-sm text-gray-600">Resumo de taxas por meio de pagamento.</p>
               </div>
               <span class="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-600">
@@ -403,7 +404,7 @@
               </span>
             </div>
             <div class="overflow-hidden rounded-xl border border-gray-100">
-              <div class="overflow-x-auto">
+              <div class="overflow-x-auto" data-admin-v2-table>
                 <table class="min-w-full divide-y divide-gray-100 text-left text-[11px] text-gray-700">
                   <thead class="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500">
                     <tr>
@@ -421,9 +422,9 @@
             </div>
           </article>
 
-          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4" data-admin-v2-panel>
             <div>
-              <h2 class="text-lg font-semibold text-gray-800">Resumo fiscal e taxas</h2>
+              <h2 class="text-lg font-semibold text-gray-800" data-admin-v2-section>Resumo fiscal e taxas</h2>
               <p class="text-sm text-gray-600">Impostos, comissoes e provisoes do mes.</p>
             </div>
             <div id="billing-taxes-list" class="space-y-3 text-sm text-gray-700"></div>
@@ -434,10 +435,10 @@
           </article>
         </section>
 
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4" data-admin-v2-panel>
           <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
-              <h2 class="text-lg font-semibold text-gray-800">Detalhamento de vendas</h2>
+              <h2 class="text-lg font-semibold text-gray-800" data-admin-v2-section>Detalhamento de vendas</h2>
               <p class="text-sm text-gray-600">Tabela com valor da venda, descontos, taxa e valor liquido.</p>
             </div>
             <span id="billing-sales-count" class="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-600">
@@ -445,7 +446,7 @@
             </span>
           </div>
           <div class="overflow-hidden rounded-xl border border-gray-100">
-            <div class="overflow-auto" style="max-height: 760px;">
+            <div class="overflow-auto" style="max-height: 760px;" data-admin-v2-table>
               <table class="min-w-full table-fixed divide-y divide-gray-100 text-left text-[11px] text-gray-700">
                 <colgroup>
                   <col style="width: 120px;">
@@ -476,7 +477,7 @@
                 <tbody id="billing-sales-body" class="divide-y divide-gray-100 bg-white"></tbody>
               </table>
             </div>
-            <div class="overflow-x-auto border-t border-gray-100 bg-gray-50">
+            <div class="overflow-x-auto border-t border-gray-100 bg-gray-50" data-admin-v2-table>
               <table class="min-w-full table-fixed text-left text-[11px] font-semibold text-gray-700">
                 <colgroup>
                   <col style="width: 120px;">
@@ -506,9 +507,9 @@
         </section>
 
         <section id="billing-actions-grid" class="grid grid-cols-1 gap-6">
-          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-3">
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-3" data-admin-v2-panel>
             <div>
-              <h2 class="text-lg font-semibold text-gray-800">Alertas do mes</h2>
+              <h2 class="text-lg font-semibold text-gray-800" data-admin-v2-section="Alertas do mês">Alertas do mes</h2>
               <p class="text-sm text-gray-600">Itens que exigem atencao da equipe.</p>
             </div>
             <div id="billing-alerts-list" class="space-y-3"></div>
@@ -529,8 +530,8 @@
   <div id="admin-footer-placeholder"></div>
   <div id="modal-placeholder"></div>
   <div id="confirm-modal-placeholder"></div>
-  <div id="billing-company-modal" class="fixed inset-0 z-[70] hidden items-center justify-center bg-slate-950/45 px-4">
-    <div class="w-full max-w-2xl overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl">
+  <div id="billing-company-modal" class="fixed inset-0 z-[70] hidden items-center justify-center bg-slate-950/45 px-4" data-admin-v2-modal>
+    <div class="w-full max-w-2xl overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl" data-admin-v2-dialog-content data-admin-v2-dialog-scroll>
       <div class="flex items-center justify-between border-b border-gray-100 px-5 py-4">
         <div>
           <h2 class="text-base font-semibold text-gray-800">Buscar empresa</h2>
@@ -560,9 +561,9 @@
   <script>var basePath = '../../';</script>
   <script src="../../scripts/core/config.js?v=20260812-2"></script>
   <script src="../../scripts/core/ui.js"></script>
-  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/core/main.js?v=20261121-2"></script>
   <script src="../../scripts/admin/admin.js"></script>
   <script src="../../scripts/admin/admin-relatorios-faturamento.js"></script>
-  <script src="../../scripts/common/responsive-workspace.js?v=20261008-1"></script>
+  <script src="../../scripts/common/responsive-workspace.js?v=20261121-2"></script>
 </body>
 </html>

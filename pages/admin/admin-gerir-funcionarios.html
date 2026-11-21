@@ -2,13 +2,14 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content"/>
   <title>Gerir Funcionários - Admin</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"/>
   <link rel="stylesheet" href="../../src/output.css"/>
   <link rel="stylesheet" href="../../src/responsive-workspace.css?v=20261008-1">
+  <link rel="stylesheet" href="../../src/admin-v2.css?v=20261121-2">
 </head>
-<body class="bg-gray-100 responsive-site responsive-workspace">
+<body class="bg-gray-100 responsive-site responsive-workspace admin-v2">
   <div id="admin-header-placeholder"></div>
 
   <main class="container mx-auto px-4 pt-1 pb-8 min-h-screen">
@@ -18,9 +19,9 @@
       </aside>
 
       <section class="md:col-span-4">
-        <div class="bg-white rounded-lg shadow p-6">
+        <div class="bg-white rounded-lg shadow p-6" data-admin-v2-heading>
           <div class="flex justify-between items-center mb-4">
-            <h1 class="text-2xl font-bold">Gerir Funcionários</h1>
+            <h1 class="text-2xl font-bold" data-admin-v2-title>Gerir Funcionários</h1>
             <button id="btn-add-funcionario" class="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 py-2 rounded-lg">
               <i class="fa-solid fa-user-plus"></i>
               Adicionar Funcionário
@@ -45,11 +46,11 @@
   </main>
 
   <!-- MODAL: EDITAR/CRIAR -->
-  <div id="modal-edit-funcionario" class="fixed inset-0 z-[999] hidden">
+  <div id="modal-edit-funcionario" class="fixed inset-0 z-[999] hidden" data-admin-v2-modal>
     <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-modal></div>
-    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-start sm:py-10">
-      <div data-edit-modal-card class="relative flex w-full max-w-[1352px] transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl transition-all duration-200 ease-out opacity-0 scale-95 max-h-[90vh] min-h-0 text-[12px] leading-[1.35]">
-        <header class="flex flex-col gap-2.5 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-start sm:py-10" data-admin-v2-dialog-align>
+      <div data-edit-modal-card class="relative flex w-full max-w-[1352px] transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl transition-all duration-200 ease-out opacity-0 scale-95 max-h-[90vh] min-h-0 text-[12px] leading-[1.35]" data-admin-v2-dialog-content>
+        <header class="flex flex-col gap-2.5 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-start sm:justify-between" data-admin-v2-dialog-actions>
           <div class="space-y-1">
             <span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
               <i class="fa-solid fa-user-pen"></i>
@@ -562,8 +563,8 @@
   </div>
 
   <!-- MODAL: PESQUISAR USUÁRIOS -->
-  <div id="modal-search-user" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
-    <div class="bg-white w-full max-w-4xl rounded-lg shadow-lg text-sm mx-4">
+  <div id="modal-search-user" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50" data-admin-v2-modal>
+    <div class="bg-white w-full max-w-4xl rounded-lg shadow-lg text-sm mx-4" data-admin-v2-dialog-content data-admin-v2-dialog-scroll>
       <div class="flex justify-between items-center px-6 py-4 border-b">
         <h2 class="text-lg font-semibold">Selecionar usuário para transformar em Funcionário</h2>
         <button id="modal-search-close" class="text-gray-500 hover:text-gray-700">
@@ -592,10 +593,10 @@
   <script>var basePath='../../';</script>
     <script src="../../scripts/core/config.js?v=20260812-2"></script>
     <script src="../../scripts/core/ui.js"></script>
-    <script src="../../scripts/core/main.js"></script>
+    <script src="../../scripts/core/main.js?v=20261121-2"></script>
   <script src="../../scripts/admin/admin.js"></script>
-  <script src="../../scripts/admin/admin-funcionarios.js"></script>
+  <script src="../../scripts/admin/admin-funcionarios.js?v=20261121-2"></script>
   <script src="/scripts/common/modal-bridge.js"></script>
-  <script src="../../scripts/common/responsive-workspace.js?v=20261008-1"></script>
+  <script src="../../scripts/common/responsive-workspace.js?v=20261121-2"></script>
 </body>
 </html>

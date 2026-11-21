@@ -2,13 +2,14 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
   <title>Admin: Integrações Externas - E o Bicho</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <link rel="stylesheet" href="../../src/output.css">
   <link rel="stylesheet" href="../../src/responsive-workspace.css?v=20261008-1">
+  <link rel="stylesheet" href="../../src/admin-v2.css?v=20261121-2">
 </head>
-<body class="bg-gray-100 responsive-site responsive-workspace">
+<body class="bg-gray-100 responsive-site responsive-workspace admin-v2">
   <div id="admin-header-placeholder"></div>
 
   <main class="container mx-auto px-4 pt-1 pb-8 min-h-screen">
@@ -18,11 +19,11 @@
       </aside>
 
       <div class="md:col-span-4 space-y-6">
-        <div class="bg-white p-6 rounded-lg shadow">
+        <div class="bg-white p-6 rounded-lg shadow" data-admin-v2-heading>
           <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
             <div>
               <p class="text-xs font-semibold uppercase tracking-wide text-primary">Integrações</p>
-              <h1 class="text-2xl font-bold text-gray-800">Integrações Externas</h1>
+              <h1 class="text-2xl font-bold text-gray-800" data-admin-v2-title>Integrações Externas</h1>
               <p class="text-gray-600 mt-1">Centralize as credenciais e o monitoramento das integrações com 99Food, Uber Eats e iFood.</p>
             </div>
             <div class="flex flex-wrap items-center gap-3">
@@ -83,11 +84,11 @@
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div class="bg-white p-5 rounded-lg shadow lg:col-span-2">
+          <div class="bg-white p-5 rounded-lg shadow lg:col-span-2" data-admin-v2-panel>
             <div class="flex items-start justify-between gap-3">
               <div>
                 <p class="text-xs font-semibold uppercase tracking-wide text-primary">Fluxo</p>
-                <h2 class="text-xl font-bold text-gray-800">Orquestração e SLAs</h2>
+                <h2 class="text-xl font-bold text-gray-800" data-admin-v2-section>Orquestração e SLAs</h2>
                 <p class="text-gray-600 text-sm mt-1">Defina como os pedidos entram na operação e como o cardápio é sincronizado.</p>
               </div>
               <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
@@ -134,14 +135,14 @@
             </div>
           </div>
 
-          <div class="bg-white p-5 rounded-lg shadow">
+          <div class="bg-white p-5 rounded-lg shadow" data-admin-v2-panel>
             <div class="flex items-start gap-3">
               <div class="w-11 h-11 rounded-lg bg-primary/10 text-primary grid place-items-center">
                 <i class="fas fa-share-nodes text-lg"></i>
               </div>
               <div>
                 <p class="text-xs font-semibold uppercase tracking-wide text-primary">Webhooks & Segurança</p>
-                <h2 class="text-xl font-bold text-gray-800">Callbacks assinados</h2>
+                <h2 class="text-xl font-bold text-gray-800" data-admin-v2-section>Callbacks assinados</h2>
                 <p class="text-gray-600 text-sm mt-1">Use este endpoint para receber eventos de pedidos, status e cardápio.</p>
               </div>
             </div>
@@ -186,7 +187,7 @@
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-          <div class="bg-white p-5 rounded-lg shadow" data-integration-card data-provider="ifood">
+          <div class="bg-white p-5 rounded-lg shadow" data-integration-card data-provider="ifood" data-admin-v2-panel>
             <div class="flex items-start justify-between gap-3">
               <div class="flex items-start gap-3">
                 <div class="w-11 h-11 rounded-lg bg-red-50 text-red-600 grid place-items-center">
@@ -194,7 +195,7 @@
                 </div>
                 <div>
                   <p class="text-xs uppercase font-semibold text-gray-500">Pedidos & cardápio</p>
-                  <h3 class="text-xl font-bold text-gray-800">iFood</h3>
+                  <h3 class="text-xl font-bold text-gray-800" data-admin-v2-section>iFood</h3>
                   <p class="text-gray-600 text-sm">Receba pedidos, aceite automaticamente e mantenha o cardápio alinhado.</p>
                 </div>
               </div>
@@ -264,15 +265,15 @@
             </div>
           </div>
 
-          <div class="bg-white p-5 rounded-lg shadow" data-integration-card data-provider="ubereats">
+          <div class="bg-white p-5 rounded-lg shadow" data-integration-card data-provider="ubereats" data-admin-v2-panel>
             <div class="flex items-start justify-between gap-3">
               <div class="flex items-start gap-3">
-                <div class="w-11 h-11 rounded-lg bg-emerald-50 text-emerald-600 grid place-items-center">
+                <div class="w-11 h-11 shrink-0 rounded-lg bg-emerald-50 text-emerald-600 grid place-items-center">
                   <i class="fas fa-motorcycle text-lg"></i>
                 </div>
                 <div>
                   <p class="text-xs uppercase font-semibold text-gray-500">Entrega & logística</p>
-                  <h3 class="text-xl font-bold text-gray-800">Uber Eats</h3>
+                  <h3 class="text-xl font-bold text-gray-800" data-admin-v2-section>Uber Eats</h3>
                   <p class="text-gray-600 text-sm">Integre cardápio, receba pedidos e acompanhe o status de entrega.</p>
                 </div>
               </div>
@@ -341,7 +342,7 @@
             </div>
           </div>
 
-          <div class="bg-white p-5 rounded-lg shadow" data-integration-card data-provider="ninetyNineFood">
+          <div class="bg-white p-5 rounded-lg shadow" data-integration-card data-provider="ninetyNineFood" data-admin-v2-panel>
             <div class="flex items-start justify-between gap-3">
               <div class="flex items-start gap-3">
                 <div class="w-11 h-11 rounded-lg bg-amber-50 text-amber-600 grid place-items-center">
@@ -349,7 +350,7 @@
                 </div>
                 <div>
                   <p class="text-xs uppercase font-semibold text-gray-500">Marketplace</p>
-                  <h3 class="text-xl font-bold text-gray-800">99Food</h3>
+                  <h3 class="text-xl font-bold text-gray-800" data-admin-v2-section>99Food</h3>
                   <p class="text-gray-600 text-sm">Canais externos com sincronização rápida de catálogo e status.</p>
                 </div>
               </div>
@@ -425,10 +426,10 @@
   <script>var basePath = '../../';</script>
   <script src="../../scripts/core/config.js?v=20260812-2"></script>
   <script src="../../scripts/core/ui.js"></script>
-  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/core/main.js?v=20261121-2"></script>
   <script src="../../scripts/admin/admin.js"></script>
   <script src="../../scripts/admin/admin-integracoes-externos.js"></script>
   <script src="/scripts/common/modal-bridge.js"></script>
-  <script src="../../scripts/common/responsive-workspace.js?v=20261008-1"></script>
+  <script src="../../scripts/common/responsive-workspace.js?v=20261121-2"></script>
 </body>
 </html>

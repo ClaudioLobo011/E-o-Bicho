@@ -2,14 +2,15 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
     <title>Admin: Promoções - E o Bicho</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     <link rel="stylesheet" href="../../src/output.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
   <link rel="stylesheet" href="../../src/responsive-workspace.css?v=20261008-1">
+  <link rel="stylesheet" href="../../src/admin-v2.css?v=20261121-2">
 </head>
-<body class="bg-gray-100 responsive-site responsive-workspace">
+<body class="bg-gray-100 responsive-site responsive-workspace admin-v2">
 
     <div id="admin-header-placeholder"></div>
 
@@ -21,14 +22,14 @@
             </aside>
 
             <div class="md:col-span-4">
-                <div class="bg-white p-6 rounded-lg shadow">
+                <div class="bg-white p-6 rounded-lg shadow" data-admin-v2-heading>
                     <div class="mb-6">
-                        <h1 class="text-2xl font-bold text-gray-800">Gerir Promoções</h1>
+                        <h1 class="text-2xl font-bold text-gray-800" data-admin-v2-title>Gerir Promoções</h1>
                         <p class="text-gray-600 mt-1">Configure os descontos e promoções do ClubEeoBicho e dos produtos.</p>
                     </div>
 
                     <div class="border-b border-gray-200">
-                        <nav class="-mb-px flex space-x-6" aria-label="Tabs">
+                        <nav id="promotion-tabs" class="-mb-px flex flex-wrap gap-x-5 gap-y-2" aria-label="Tipos de promoção">
                             <a href="#" id="tab-clubeobicho" class="shrink-0 border-b-2 border-primary px-1 pb-4 text-sm font-medium text-primary" aria-current="page">
                                 ClubEeoBicho
                             </a>
@@ -46,13 +47,13 @@
 
                     <div class="mt-6">
                         <div id="tab-clubeobicho-content">
-                            <h2 class="text-lg font-semibold text-gray-700">Desconto Global do Clube</h2>
-                            <p class="mt-2 text-sm text-gray-600">Insira um valor de 0 a 100. Este desconto será aplicado sobre o preço de venda de **todos** os produtos do site. Para remover o desconto, insira 0.</p>
+                            <h2 class="text-lg font-semibold text-gray-700" data-admin-v2-section>Desconto Global do Clube</h2>
+                            <p class="mt-2 text-sm text-gray-600">Insira um valor de 0 a 100. Este desconto será aplicado sobre o preço de venda de <strong>todos</strong> os produtos do site. Para remover o desconto, insira 0.</p>
                             
                             <div class="mt-4 max-w-sm">
                                 <label for="desconto-clube-input" class="block text-sm font-medium text-gray-700">Percentagem de Desconto (%)</label>
-                                <div class="mt-1 flex items-center space-x-3">
-                                    <input type="number" id="desconto-clube-input" min="0" max="100" placeholder="Ex: 15" class="block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                <div class="mt-1 flex items-center gap-3">
+                                    <input type="number" id="desconto-clube-input" min="0" max="100" placeholder="Ex: 15" class="block min-w-0 flex-1 rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:ring-primary focus:border-primary">
                                     <button id="salvar-desconto-clube-btn" class="bg-primary text-white font-bold py-2 px-6 rounded-lg hover:bg-secondary transition-colors disabled:opacity-50 disabled:cursor-wait">
                                         Aplicar
                                     </button>
@@ -139,8 +140,8 @@
     <div id="modal-placeholder"></div>
     <div id="confirm-modal-placeholder"></div>
 
-    <div id="conditional-promo-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-lg shadow-xl max-w-lg w-full">
+    <div id="conditional-promo-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" data-admin-v2-modal>
+        <div class="bg-white rounded-lg shadow-xl max-w-lg w-full" data-admin-v2-dialog-content data-admin-v2-dialog-scroll>
             <div class="p-4 border-b">
                 <h3 class="text-lg font-semibold text-gray-800">Definir Promoção Condicional</h3>
                 <p id="conditional-modal-product-name" class="text-sm text-gray-600"></p>
@@ -201,10 +202,10 @@
     <script>var basePath = '../../';</script>
     <script src="../../scripts/core/config.js?v=20260812-2"></script>
     <script src="../../scripts/core/ui.js"></script>
-    <script src="../../scripts/core/main.js"></script>
+    <script src="../../scripts/core/main.js?v=20261121-2"></script>
     <script src="../../scripts/admin/admin.js"></script> 
     <script src="../../scripts/admin/admin-promocoes.js"></script> 
   <script src="/scripts/common/modal-bridge.js"></script>
-  <script src="../../scripts/common/responsive-workspace.js?v=20261008-1"></script>
+  <script src="../../scripts/common/responsive-workspace.js?v=20261121-2"></script>
 </body>
 </html>

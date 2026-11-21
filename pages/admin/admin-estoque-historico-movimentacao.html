@@ -2,13 +2,14 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
   <title>Admin: Histórico de Movimentação de Estoque - E o Bicho</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <link rel="stylesheet" href="../../src/output.css">
   <link rel="stylesheet" href="../../src/responsive-workspace.css?v=20261008-1">
+  <link rel="stylesheet" href="../../src/admin-v2.css?v=20261121-2">
 </head>
-<body class="bg-gray-100 text-[13px] leading-relaxed responsive-site responsive-workspace">
+<body class="bg-gray-100 text-[13px] leading-relaxed responsive-site responsive-workspace admin-v2">
   <div id="admin-header-placeholder"></div>
 
   <main class="container mx-auto px-4 pt-1 pb-8 min-h-screen">
@@ -18,7 +19,7 @@
       </aside>
 
       <div class="md:col-span-4 space-y-5">
-        <header class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <header class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between" data-admin-v2-heading>
           <div class="space-y-2">
             <nav aria-label="Breadcrumb" class="flex items-center gap-2 text-[11px] text-gray-500 uppercase tracking-wide font-semibold">
               <span class="inline-flex items-center gap-1 text-primary"><i class="fas fa-shopping-basket"></i> Compras</span>
@@ -28,7 +29,7 @@
               <span class="text-gray-800">Histórico de Movimentação</span>
             </nav>
             <div>
-              <h1 class="text-2xl font-bold text-gray-800">Histórico de Movimentação de Estoque</h1>
+              <h1 class="text-2xl font-bold text-gray-800" data-admin-v2-title>Histórico de Movimentação de Estoque</h1>
               <p class="text-sm text-gray-600">Acompanhe alterações de estoque por produto, tela de origem, usuário e origem/destino da movimentação.</p>
             </div>
           </div>
@@ -45,8 +46,8 @@
         </header>
 
         <section class="grid grid-cols-1 xl:grid-cols-2 gap-5">
-          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-            <form id="history-filters-form" class="grid grid-cols-1 gap-4 md:grid-cols-2" autocomplete="off">
+          <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-5" data-admin-v2-panel>
+            <form id="history-filters-form" class="grid grid-cols-1 gap-4 md:grid-cols-2" autocomplete="off" data-admin-v2-section="Filtros">
               <div>
                 <label for="filter-start-date" class="block text-xs font-semibold text-gray-700">Data inicial</label>
                 <input type="date" id="filter-start-date" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
@@ -131,16 +132,16 @@
           </article>
         </section>
 
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4">
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4" data-admin-v2-panel>
           <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h2 class="text-lg font-semibold text-gray-800">Lançamentos do histórico</h2>
+              <h2 class="text-lg font-semibold text-gray-800" data-admin-v2-section>Lançamentos do histórico</h2>
               <p class="text-sm text-gray-600">Estoque anterior, movimentação e estoque atual por operação registrada.</p>
             </div>
             <span id="history-pagination" class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">Mostrando 0 de 0</span>
           </div>
 
-          <div class="overflow-x-auto rounded-xl border border-gray-200">
+          <div class="overflow-x-auto rounded-xl border border-gray-200" data-admin-v2-table>
             <table class="min-w-full divide-y divide-gray-200 text-sm">
               <thead class="bg-gray-50 text-[11px] font-semibold uppercase tracking-wide text-gray-600">
                 <tr>
@@ -174,9 +175,9 @@
   <script>var basePath = '../../';</script>
   <script src="../../scripts/core/config.js?v=20260812-2"></script>
   <script src="../../scripts/core/ui.js"></script>
-  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/core/main.js?v=20261121-2"></script>
   <script src="../../scripts/admin/admin.js"></script>
   <script src="../../scripts/admin/admin-estoque-historico-movimentacao.js"></script>
-  <script src="../../scripts/common/responsive-workspace.js?v=20261008-1"></script>
+  <script src="../../scripts/common/responsive-workspace.js?v=20261121-2"></script>
 </body>
 </html>

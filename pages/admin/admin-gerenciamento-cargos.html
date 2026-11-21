@@ -2,13 +2,14 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
   <title>Admin: Gerenciamento de Cargos - E o Bicho</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
   <link rel="stylesheet" href="../../src/output.css" />
   <link rel="stylesheet" href="../../src/responsive-workspace.css?v=20261008-1">
+  <link rel="stylesheet" href="../../src/admin-v2.css?v=20261121-2">
 </head>
-<body class="bg-gray-100 responsive-site responsive-workspace">
+<body class="bg-gray-100 responsive-site responsive-workspace admin-v2">
   <div id="admin-header-placeholder"></div>
 
   <main class="container mx-auto px-4 pt-1 pb-8 min-h-screen">
@@ -18,14 +19,14 @@
       </aside>
 
       <section class="md:col-span-4">
-        <div class="bg-white rounded-lg shadow p-6 space-y-6">
+        <div class="bg-white rounded-lg shadow p-6 space-y-6" data-admin-v2-heading>
           <header class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div class="flex items-start gap-3">
               <div class="h-12 w-12 rounded-full bg-sky-50 flex items-center justify-center">
                 <i class="fas fa-user-gear text-sky-500 text-xl"></i>
               </div>
               <div>
-                <h1 class="text-2xl font-bold text-gray-800">Gerenciamento de Cargos</h1>
+                <h1 class="text-2xl font-bold text-gray-800" data-admin-v2-title>Gerenciamento de Cargos</h1>
                 <p class="text-gray-600 mt-1">Defina o cargo e as empresas permitidas para cada colaborador.</p>
               </div>
             </div>
@@ -48,11 +49,11 @@
     </div>
   </main>
 
-  <div id="cargo-modal" class="fixed inset-0 z-[999] hidden">
+  <div id="cargo-modal" class="fixed inset-0 z-[999] hidden" data-admin-v2-modal>
     <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-modal></div>
-    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-start sm:py-10">
-      <div data-cargo-modal-card class="relative w-full max-w-2xl transform-gpu rounded-2xl bg-white shadow-2xl transition-all duration-200 ease-out opacity-0 scale-95">
-        <header class="flex items-start justify-between border-b border-gray-100 px-5 py-4">
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-start sm:py-10" data-admin-v2-dialog-align>
+      <div data-cargo-modal-card class="relative w-full max-w-2xl transform-gpu rounded-2xl bg-white shadow-2xl transition-all duration-200 ease-out opacity-0 scale-95" data-admin-v2-dialog-content data-admin-v2-dialog-scroll>
+        <header class="flex items-start justify-between border-b border-gray-100 px-5 py-4" data-admin-v2-dialog-actions>
           <div>
             <h2 class="text-lg font-semibold text-gray-900">Editar cargo</h2>
             <p class="text-xs text-gray-500 mt-1">Atualize o cargo e as empresas permitidas.</p>
@@ -83,7 +84,7 @@
             <p id="cargo-companies-feedback" class="text-xs text-gray-500 mt-2">Selecione uma ou mais empresas.</p>
           </div>
         </div>
-        <footer class="flex items-center justify-end gap-3 border-t border-gray-100 px-5 py-4">
+        <footer class="flex items-center justify-end gap-3 border-t border-gray-100 px-5 py-4" data-admin-v2-dialog-actions>
           <button id="cargo-modal-cancel" type="button" class="inline-flex items-center justify-center rounded-lg border border-gray-200 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-700 transition hover:bg-gray-50">Cancelar</button>
           <button id="cargo-modal-save" type="button" class="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-emerald-700">Salvar</button>
         </footer>
@@ -91,11 +92,11 @@
     </div>
   </div>
 
-  <div id="cargo-remove-modal" class="fixed inset-0 z-[999] hidden">
+  <div id="cargo-remove-modal" class="fixed inset-0 z-[999] hidden" data-admin-v2-modal>
     <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-remove-close></div>
-    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-start sm:py-10">
-      <div data-remove-modal-card class="relative w-full max-w-md transform-gpu rounded-2xl bg-white shadow-2xl transition-all duration-200 ease-out opacity-0 scale-95">
-        <header class="flex items-start justify-between border-b border-gray-100 px-5 py-4">
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-start sm:py-10" data-admin-v2-dialog-align>
+      <div data-remove-modal-card class="relative w-full max-w-md transform-gpu rounded-2xl bg-white shadow-2xl transition-all duration-200 ease-out opacity-0 scale-95" data-admin-v2-dialog-content data-admin-v2-dialog-scroll>
+        <header class="flex items-start justify-between border-b border-gray-100 px-5 py-4" data-admin-v2-dialog-actions>
           <div class="flex items-start gap-3">
             <span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-600">
               <i class="fa-solid fa-triangle-exclamation"></i>
@@ -114,7 +115,7 @@
           <p id="cargo-remove-user" class="text-sm font-semibold text-gray-800">-</p>
           <p class="text-xs text-gray-500 mt-2">Funcionario: retorna ao cargo funcionario. Remover: volta a ser cliente.</p>
         </div>
-        <footer class="flex flex-wrap items-center justify-end gap-2 border-t border-gray-100 px-5 py-4">
+        <footer class="flex flex-wrap items-center justify-end gap-2 border-t border-gray-100 px-5 py-4" data-admin-v2-dialog-actions>
           <button id="cargo-remove-cancel" type="button" class="inline-flex items-center justify-center rounded-lg border border-gray-200 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-700 transition hover:bg-gray-50">
             Cancelar
           </button>
@@ -136,10 +137,10 @@
   <script>var basePath = '../../';</script>
   <script src="../../scripts/core/config.js?v=20260812-2"></script>
   <script src="../../scripts/core/ui.js"></script>
-  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/core/main.js?v=20261121-2"></script>
   <script src="../../scripts/admin/admin.js"></script>
   <script src="../../scripts/admin/admin-gerenciamento-cargos.js"></script>
   <script src="/scripts/common/modal-bridge.js"></script>
-  <script src="../../scripts/common/responsive-workspace.js?v=20261008-1"></script>
+  <script src="../../scripts/common/responsive-workspace.js?v=20261121-2"></script>
 </body>
 </html>

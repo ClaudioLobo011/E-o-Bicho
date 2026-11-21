@@ -2,14 +2,15 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
   <title>Admin: Entrada de NF-e - E o Bicho</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <link rel="stylesheet" href="../../src/output.css">
   <link rel="stylesheet" href="../../src/admin-compras-fornecedor-entrada-nfe.css?v=20260912-2">
   <link rel="stylesheet" href="../../src/responsive-workspace.css?v=20261008-1">
+  <link rel="stylesheet" href="../../src/admin-v2.css?v=20261121-2">
 </head>
-<body class="nfe-entry-page bg-gray-100 text-gray-800 antialiased responsive-site responsive-workspace">
+<body class="nfe-entry-page bg-gray-100 text-gray-800 antialiased responsive-site responsive-workspace admin-v2">
   <div id="admin-header-placeholder"></div>
 
   <main id="nfe-main-content" class="min-h-screen w-full max-w-none px-2 pb-8 pt-1 sm:px-4">
@@ -31,7 +32,7 @@
               <span class="font-semibold text-gray-800">Entrada de NF-e</span>
             </div>
             <div>
-              <h1 class="text-2xl font-bold text-gray-800">Entrada de NF-e</h1>
+              <h1 class="text-2xl font-bold text-gray-800" data-admin-v2-title>Entrada de NF-e</h1>
               <p class="text-sm text-gray-600">Importe, confira e aprove entradas de NF-e modelo 55 com validações claras antes da movimentação de estoque.</p>
             </div>
           </div>
@@ -66,10 +67,10 @@
 
         <div id="nfe-workspace">
           <div id="nfe-workspace-main" class="space-y-3">
-        <section class="nfe-quick-identification space-y-5 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-5">
+        <section class="nfe-quick-identification space-y-5 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-5" data-admin-v2-panel>
           <div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
             <div>
-              <h2 class="text-lg font-semibold text-gray-800">Identificação rápida</h2>
+              <h2 class="text-lg font-semibold text-gray-800" data-admin-v2-section>Identificação rápida</h2>
               <p class="text-sm text-gray-600">Os dados principais permanecem visíveis durante toda a conferência.</p>
             </div>
             <div class="rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-2 text-right">
@@ -122,7 +123,7 @@
           </div>
         </section>
 
-        <section class="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+        <section class="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm" data-admin-v2-panel>
           <nav class="nfe-steps border-b border-gray-100" role="tablist" aria-label="Etapas da entrada de NF-e">
             <button type="button" class="tab-button active" data-tab="dados" data-tab-panels="dados" role="tab" aria-selected="true"><span class="nfe-step-number">1</span><span>Origem e identificação</span></button>
             <button type="button" class="tab-button" data-tab="produtos" data-tab-panels="produtos" role="tab" aria-selected="false"><span class="nfe-step-number">2</span><span>Produtos</span></button>
@@ -201,7 +202,7 @@
               </div>
 
               <div class="mt-6 border-t border-gray-100 pt-6">
-                <h3 class="text-sm font-semibold text-gray-700 mb-4">Dados do Fornecedor</h3>
+                <h3 class="text-sm font-semibold text-gray-700 mb-4" data-admin-v2-section>Dados do Fornecedor</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div>
                     <label for="supplier-cnpj" class="block text-sm font-medium text-gray-700 mb-1">CNPJ / CPF</label>
@@ -382,7 +383,7 @@
                 </div>
               </div>
 
-              <div class="nfe-products-scroll mt-3 rounded-lg border border-gray-200">
+              <div class="nfe-products-scroll mt-3 rounded-lg border border-gray-200" data-admin-v2-table>
                 <table class="min-w-full divide-y divide-gray-200 text-sm" data-main-products-table data-products-column-view="essential">
                   <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-600">
                     <tr class="text-[11px] font-semibold uppercase tracking-wide text-gray-600">
@@ -1071,7 +1072,7 @@
                 </button>
               </div>
 
-              <div class="mt-4 overflow-x-auto rounded-lg border border-gray-200">
+              <div class="mt-4 overflow-x-auto rounded-lg border border-gray-200" data-admin-v2-table>
                 <table class="min-w-full divide-y divide-gray-200 text-sm">
                   <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-600">
                     <tr>
@@ -1104,7 +1105,7 @@
                 </div>
               </div>
 
-              <div class="mt-4 overflow-x-auto rounded-lg border border-gray-200">
+              <div class="mt-4 overflow-x-auto rounded-lg border border-gray-200" data-admin-v2-table>
                 <table class="min-w-full divide-y divide-gray-200 text-sm">
                   <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-600">
                     <tr>
@@ -1140,7 +1141,7 @@
                 <div class="flex items-start justify-between gap-3">
                   <div>
                     <p class="text-[10px] font-bold uppercase tracking-wide text-primary">Revisão da entrada</p>
-                    <h2 class="mt-1 text-base font-bold text-gray-900">Pendências para aprovar</h2>
+                    <h2 class="mt-1 text-base font-bold text-gray-900" data-admin-v2-section>Pendências para aprovar</h2>
                   </div>
                   <span class="inline-flex items-center rounded-full border px-2 py-1 text-[10px] font-bold uppercase tracking-wide" data-readiness-badge>Aguardando</span>
                 </div>
@@ -1176,7 +1177,7 @@
     </div>
   </main>
 
-  <div id="nfe-fixed-actions-bar" class="z-40 border-t border-gray-200 bg-white" style="position: fixed; left: 0; right: 0; bottom: 0;">
+  <div id="nfe-fixed-actions-bar" data-admin-v2-action-bar class="z-40 border-t border-gray-200 bg-white" style="position: fixed; left: 0; right: 0; bottom: 0;">
     <div class="w-full max-w-none px-3 py-2 sm:px-4">
       <div class="flex items-center justify-between gap-2">
         <div class="flex flex-wrap items-center gap-2" data-secondary-actions>
@@ -1222,11 +1223,11 @@
     </div>
   </div>
 
-  <div id="approval-review-modal" class="fixed inset-0 z-[1200] hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="approval-review-title" aria-describedby="approval-review-description">
+  <div id="approval-review-modal" class="fixed inset-0 z-[1200] hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="approval-review-title" aria-describedby="approval-review-description" data-admin-v2-modal>
     <div class="absolute inset-0 bg-gray-900/65" data-cancel-approval></div>
-    <div class="relative mx-auto flex min-h-full w-full items-center justify-center p-3">
-      <div data-approval-card class="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
-        <header class="flex items-start justify-between gap-3 border-b border-gray-100 px-5 py-4">
+    <div class="relative mx-auto flex min-h-full w-full items-center justify-center p-3" data-admin-v2-dialog-align>
+      <div data-approval-card class="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl" data-admin-v2-dialog-content data-admin-v2-dialog-scroll>
+        <header class="flex items-start justify-between gap-3 border-b border-gray-100 px-5 py-4" data-admin-v2-dialog-actions>
           <div>
             <span class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">
               <i class="fas fa-shield-halved" aria-hidden="true"></i>
@@ -1280,7 +1281,7 @@
             <span class="mt-1 block text-xs">Após a aprovação, os campos ficam bloqueados. Uma exclusão posterior exigirá estorno do estoque e remoção das contas a pagar.</span>
           </div>
         </div>
-        <footer class="flex flex-col-reverse gap-2 border-t border-gray-100 bg-gray-50 px-5 py-3 sm:flex-row sm:justify-end">
+        <footer class="flex flex-col-reverse gap-2 border-t border-gray-100 bg-gray-50 px-5 py-3 sm:flex-row sm:justify-end" data-admin-v2-dialog-actions>
           <button type="button" class="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-100" data-cancel-approval>Voltar e revisar</button>
           <button type="button" class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-primary/90" data-confirm-approval>
             <i class="fas fa-circle-check" aria-hidden="true"></i>
@@ -1291,8 +1292,8 @@
     </div>
   </div>
 
-  <div id="nfe-product-modal" class="fixed inset-0 z-50 hidden overflow-y-auto bg-black/40 p-3" aria-hidden="true">
-    <div class="mx-auto w-full max-w-5xl rounded-xl bg-white shadow-xl">
+  <div id="nfe-product-modal" class="fixed inset-0 z-50 hidden overflow-y-auto bg-black/40 p-3" aria-hidden="true" data-admin-v2-modal>
+    <div class="mx-auto w-full max-w-5xl rounded-xl bg-white shadow-xl" data-admin-v2-dialog-content data-admin-v2-dialog-scroll>
       <div class="flex items-center justify-between border-b border-gray-100 px-4 py-3">
         <h3 class="text-base font-semibold text-gray-800">Informar Produtos</h3>
         <button type="button" class="text-gray-400 hover:text-gray-600" data-nfe-modal-close>
@@ -1658,9 +1659,9 @@
     </div>
   </div>
 
-  <div id="manual-product-lookup-modal" class="fixed inset-0 z-[999] hidden bg-black/40 p-3" aria-hidden="true">
+  <div id="manual-product-lookup-modal" class="fixed inset-0 z-[999] hidden bg-black/40 p-3" aria-hidden="true" data-admin-v2-modal>
     <div class="absolute inset-0" data-close-manual-product-lookup></div>
-    <div class="relative mx-auto flex w-full max-w-5xl flex-col overflow-hidden rounded-xl bg-white shadow-xl" style="height:min(calc(100vh - 24px), 90vh);max-height:min(calc(100vh - 24px), 90vh);">
+    <div class="relative mx-auto flex w-full max-w-5xl flex-col overflow-hidden rounded-xl bg-white shadow-xl" style="height:min(calc(100vh - 24px), 90vh);max-height:min(calc(100vh - 24px), 90vh);" data-admin-v2-dialog-content>
       <div class="flex items-center justify-between border-b border-gray-100 px-4 py-3">
           <div>
             <h3 class="text-base font-semibold text-gray-900">Selecionar Produto</h3>
@@ -1717,14 +1718,14 @@
       </div>
   </div>
 
-  <div id="nfe-code-lookup-modal" class="fixed inset-0 z-[999] hidden">
+  <div id="nfe-code-lookup-modal" class="fixed inset-0 z-[999] hidden" data-admin-v2-modal>
     <div class="absolute inset-0 bg-gray-900/60" data-close-code-modal></div>
-    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center" data-admin-v2-dialog-align>
       <div
         data-code-modal-card
         class="relative flex w-full max-w-[1280px] transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl opacity-0 transition-all duration-200 ease-out scale-95 max-h-[90vh]"
-      >
-        <header class="flex flex-col gap-2.5 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+       data-admin-v2-dialog-content>
+        <header class="flex flex-col gap-2.5 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-start sm:justify-between" data-admin-v2-dialog-actions>
           <div class="space-y-1.5">
             <span class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
               <i class="fas fa-file-circle-check"></i>
@@ -2059,7 +2060,7 @@
           </div>
         </div>
 
-        <footer class="flex flex-col gap-2 border-t border-gray-100 px-4 py-3 text-[11px] text-gray-500 sm:flex-row sm:items-center sm:justify-between">
+        <footer class="flex flex-col gap-2 border-t border-gray-100 px-4 py-3 text-[11px] text-gray-500 sm:flex-row sm:items-center sm:justify-between" data-admin-v2-dialog-actions>
           <p>
             Clique em uma linha para carregar a nota. Notas em rascunho aparecem como <span class="font-semibold text-amber-600">Cadastrada</span> e notas aprovadas como <span class="font-semibold text-emerald-600">Aprovada</span>.
           </p>
@@ -2079,14 +2080,14 @@
     id="price-adjust-modal"
     class="fixed inset-0 z-[1000] hidden"
     aria-hidden="true"
-  >
+   data-admin-v2-modal>
     <div class="absolute inset-0 bg-gray-900/60" data-close-price-modal></div>
-    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center" data-admin-v2-dialog-align>
       <div
         data-price-modal-card
         class="relative flex w-full max-w-[1352px] transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl opacity-0 transition-all duration-200 ease-out scale-95 max-h-[90vh] min-h-0 text-[12px] leading-[1.35]"
-      >
-        <header class="flex flex-col gap-3 border-b border-gray-100 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
+       data-admin-v2-dialog-content>
+        <header class="flex flex-col gap-3 border-b border-gray-100 px-5 py-4 sm:flex-row sm:items-start sm:justify-between" data-admin-v2-dialog-actions>
           <div class="space-y-1.5">
             <span class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
               <i class="fas fa-tags"></i>
@@ -2363,7 +2364,7 @@
           </div>
         </div>
 
-        <footer class="flex flex-col gap-3 border-t border-gray-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <footer class="flex flex-col gap-3 border-t border-gray-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between" data-admin-v2-dialog-actions>
           <div class="flex items-center gap-3 text-[11px]">
             <button type="button" data-price-export-excel class="inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-3 py-1 font-semibold text-emerald-700 transition hover:bg-emerald-100">
               <i class="fas fa-file-excel"></i>
@@ -2398,11 +2399,11 @@
     </div>
   </div>
 
-  <div id="import-xml-modal" class="fixed inset-0 z-[999] hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="import-xml-title" aria-describedby="import-xml-description">
+  <div id="import-xml-modal" class="fixed inset-0 z-[999] hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="import-xml-title" aria-describedby="import-xml-description" data-admin-v2-modal>
     <div class="absolute inset-0 bg-gray-900/60" data-close-import-modal></div>
-    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
-      <div data-import-modal-card class="relative flex w-full max-w-[1352px] transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl opacity-0 transition-all duration-200 ease-out scale-95 min-h-0 text-[12px] leading-[1.35]" style="height:min(90vh,calc(100vh - 3rem));">
-        <header class="flex flex-col gap-2.5 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center" data-admin-v2-dialog-align>
+      <div data-import-modal-card class="relative flex w-full max-w-[1352px] transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl opacity-0 transition-all duration-200 ease-out scale-95 min-h-0 text-[12px] leading-[1.35]" style="height:min(90vh,calc(100vh - 3rem));" data-admin-v2-dialog-content>
+        <header class="flex flex-col gap-2.5 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-start sm:justify-between" data-admin-v2-dialog-actions>
           <div>
             <span class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
               <i class="fas fa-file-import"></i>
@@ -2425,7 +2426,7 @@
         <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
           <div data-import-tab-panel="pending" class="space-y-3.5">
             <section class="rounded-xl border border-gray-200 bg-white shadow-sm">
-              <header class="flex flex-col gap-1.5 border-b border-gray-100 bg-gray-50 px-4 py-3">
+              <header class="flex flex-col gap-1.5 border-b border-gray-100 bg-gray-50 px-4 py-3" data-admin-v2-dialog-actions>
                 <h3 class="text-[12px] font-semibold text-gray-900">Consultar notas autorizadas</h3>
                 <p class="text-[11px] text-gray-600">
                   Escolha a empresa e o período para gerar um DFe com as notas autorizadas na SEFAZ.
@@ -2482,7 +2483,7 @@
             </section>
 
             <section class="rounded-xl border border-gray-200 bg-white shadow-sm">
-              <header class="flex flex-col gap-1 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <header class="flex flex-col gap-1 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between" data-admin-v2-dialog-actions>
                 <div>
                   <h4 class="text-[12px] font-semibold text-gray-900">Notas pendentes de tratamento</h4>
                   <p class="text-[11px] text-gray-600">
@@ -2592,7 +2593,7 @@
 
           <div data-import-tab-panel="xml" class="hidden space-y-3.5">
             <section class="rounded-xl border border-gray-200">
-              <header class="flex flex-col gap-2.5 border-b border-gray-100 bg-gray-50 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+              <header class="flex flex-col gap-2.5 border-b border-gray-100 bg-gray-50 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between" data-admin-v2-dialog-actions>
                 <div class="space-y-0.5">
                   <h3 class="text-[12px] font-semibold text-gray-900">Importar arquivo XML</h3>
                   <p class="text-[11px] text-gray-600">Utilize uma chave de acesso autorizada, ou faça upload de um XML oficial baixado no Portal Nacional.</p>
@@ -2679,7 +2680,7 @@
             </section>
 
             <section class="rounded-xl border border-gray-200">
-              <header class="flex flex-col gap-2.5 border-b border-gray-100 bg-gray-50 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+              <header class="flex flex-col gap-2.5 border-b border-gray-100 bg-gray-50 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between" data-admin-v2-dialog-actions>
                 <div class="space-y-0.5">
                   <h3 class="text-[12px] font-semibold text-gray-900">Dados da nota fiscal</h3>
                   <p class="text-[11px] text-gray-600">Resumo dos campos lidos diretamente do XML processado.</p>
@@ -2772,7 +2773,7 @@
             </section>
 
             <section class="rounded-xl border border-gray-200">
-              <header class="flex flex-col gap-2.5 border-b border-gray-100 bg-gray-50 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+              <header class="flex flex-col gap-2.5 border-b border-gray-100 bg-gray-50 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between" data-admin-v2-dialog-actions>
                 <div class="space-y-0.5">
                   <h3 class="text-[12px] font-semibold text-gray-900">Produtos importados</h3>
                   <p class="text-[11px] text-gray-600">Itens conforme o XML, com tributos ICMS, ST, IPI, PIS e COFINS.</p>
@@ -2826,7 +2827,7 @@
             </section>
           </div>
         </div>
-          <footer class="z-30 shrink-0 flex flex-col gap-3 border-t border-gray-200 bg-white px-5 py-3 sm:flex-row sm:items-center sm:justify-end">
+          <footer class="z-30 shrink-0 flex flex-col gap-3 border-t border-gray-200 bg-white px-5 py-3 sm:flex-row sm:items-center sm:justify-end" data-admin-v2-dialog-actions>
             <div class="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row sm:items-center">
               <button type="button" data-close-import-modal class="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100">Cancelar</button>
               <button
@@ -2848,18 +2849,18 @@
     id="product-link-modal"
     class="fixed inset-0 z-[1050] hidden"
     aria-hidden="true"
-  >
+   data-admin-v2-modal>
     <div
       class="absolute inset-0 bg-gray-900/60"
       data-close-product-link-modal
       aria-label="Fechar seleção de produto"
     ></div>
-    <div class="relative mx-auto flex min-h-full w-full items-center justify-center px-3 py-6">
+    <div class="relative mx-auto flex min-h-full w-full items-center justify-center px-3 py-6" data-admin-v2-dialog-align>
       <div
         class="relative w-full max-w-xl transform-gpu overflow-hidden rounded-2xl bg-white shadow-xl transition-all duration-200 ease-out"
         data-product-link-card
-      >
-        <header class="flex items-start justify-between gap-3 border-b border-gray-100 px-5 py-4">
+       data-admin-v2-dialog-content data-admin-v2-dialog-scroll>
+        <header class="flex items-start justify-between gap-3 border-b border-gray-100 px-5 py-4" data-admin-v2-dialog-actions>
           <div class="space-y-1">
             <h3 class="text-lg font-semibold text-gray-900">Selecionar produto cadastrado</h3>
             <p class="text-[11px] text-gray-600">
@@ -2934,7 +2935,7 @@
             ></ul>
           </div>
         </div>
-        <footer class="flex justify-end gap-2 border-t border-gray-100 bg-gray-50 px-5 py-3">
+        <footer class="flex justify-end gap-2 border-t border-gray-100 bg-gray-50 px-5 py-3" data-admin-v2-dialog-actions>
           <button
             type="button"
             class="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100"
@@ -2951,18 +2952,18 @@
     id="product-registration-iframe-modal"
     class="fixed inset-0 z-[1000] hidden"
     aria-hidden="true"
-  >
+   data-admin-v2-modal>
     <div
       class="absolute inset-0 bg-gray-900/70"
       data-close-product-modal
       aria-label="Fechar cadastro de produto"
     ></div>
-    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center" data-admin-v2-dialog-align>
       <div
         class="relative flex w-full max-w-[1352px] transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl transition-all duration-200 ease-out max-h-[90vh] min-h-0 text-[12px] leading-[1.35]"
         data-product-frame-shell
-      >
-        <header class="flex flex-col gap-2 border-b border-gray-100 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
+       data-admin-v2-dialog-content data-admin-v2-dialog-scroll>
+        <header class="flex flex-col gap-2 border-b border-gray-100 px-5 py-4 sm:flex-row sm:items-start sm:justify-between" data-admin-v2-dialog-actions>
           <div class="space-y-1">
             <span
               data-product-modal-subtitle
@@ -3012,15 +3013,15 @@
     </div>
   </div>
 
-  <div id="bonus-dilution-modal" class="fixed inset-0 hidden" aria-hidden="true" style="z-index:1300;">
+  <div id="bonus-dilution-modal" class="fixed inset-0 hidden" aria-hidden="true" style="z-index:1300;" data-admin-v2-modal>
     <div class="absolute inset-0 bg-gray-900/60" data-close-bonus-dilution-modal></div>
-    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center" data-admin-v2-dialog-align>
       <div
         data-bonus-dilution-card
         class="relative flex w-full max-w-[1200px] transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl transition-all duration-200 ease-out"
         style="z-index:1301;height:min(86vh,calc(100vh - 4rem));"
-      >
-        <header class="flex items-start justify-between gap-3 border-b border-gray-100 px-5 py-4">
+       data-admin-v2-dialog-content>
+        <header class="flex items-start justify-between gap-3 border-b border-gray-100 px-5 py-4" data-admin-v2-dialog-actions>
           <div class="space-y-1">
             <h3 class="text-lg font-semibold text-gray-900">Diluir em mais de um produto</h3>
             <p class="text-[11px] text-gray-600">
@@ -3040,7 +3041,7 @@
         <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           <div class="grid gap-4" style="grid-template-columns:minmax(320px,34%) minmax(0,1fr);">
             <section class="min-w-0 rounded-xl border border-gray-200">
-              <header class="flex items-center justify-between gap-2 border-b border-gray-100 bg-gray-50 px-3 py-2">
+              <header class="flex items-center justify-between gap-2 border-b border-gray-100 bg-gray-50 px-3 py-2" data-admin-v2-dialog-actions>
                 <div class="flex items-center gap-2">
                   <h4 class="text-[12px] font-semibold text-gray-800">Produtos da nota de bonificação</h4>
                   <div class="flex flex-wrap items-center gap-1" data-bonus-dilution-groups></div>
@@ -3062,7 +3063,7 @@
             </section>
 
             <section class="min-w-0 rounded-xl border border-gray-200">
-              <header class="flex items-center justify-between gap-2 border-b border-gray-100 bg-gray-50 px-3 py-2">
+              <header class="flex items-center justify-between gap-2 border-b border-gray-100 bg-gray-50 px-3 py-2" data-admin-v2-dialog-actions>
                 <h4 class="text-[12px] font-semibold text-gray-800">Produtos da nota original</h4>
                 <span class="text-[10px] text-gray-600" data-bonus-dilution-original-count>0 selecionado(s)</span>
               </header>
@@ -3093,7 +3094,7 @@
           </div>
         </div>
 
-        <footer class="z-10 shrink-0 flex flex-col gap-2 border-t border-gray-100 bg-gray-50 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <footer class="z-10 shrink-0 flex flex-col gap-2 border-t border-gray-100 bg-gray-50 px-5 py-3 sm:flex-row sm:items-center sm:justify-between" data-admin-v2-dialog-actions>
           <p class="text-[11px] text-gray-600" data-bonus-dilution-summary>Nenhuma seleção feita.</p>
           <div class="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
             <button
@@ -3122,7 +3123,7 @@
   <script>var basePath = '../../';</script>
   <script src="../../scripts/core/config.js?v=20260812-2"></script>
   <script src="../../scripts/core/ui.js"></script>
-  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/core/main.js?v=20261121-2"></script>
   <script src="../../scripts/admin/admin.js"></script>
   <script src="/scripts/common/modal-bridge.js"></script>
   <script>
@@ -10285,7 +10286,6 @@
     .danfe-page-first { min-height: 0; }
     .danfe-page-continuation { min-height: calc(297mm - 12mm); }
   </style>
-  <link rel="stylesheet" href="../../src/responsive-workspace.css?v=20261008-1">
 </head>
 <body>
   <div class="danfe danfe-page danfe-page-first">
@@ -21132,7 +21132,7 @@ ${'</ht' + 'ml>'}`;
       }
     });
   </script>
-  <script src="../../scripts/common/responsive-workspace.js?v=20261008-1"></script>
+  <script src="../../scripts/common/responsive-workspace.js?v=20261121-2"></script>
 </body>
 </html>
 

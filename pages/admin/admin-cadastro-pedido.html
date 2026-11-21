@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
   <title>Admin: Cadastro de Pedido - E o Bicho</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <link rel="stylesheet" href="../../src/output.css">
@@ -20,8 +20,9 @@
     }
   </style>
   <link rel="stylesheet" href="../../src/responsive-workspace.css?v=20261008-1">
+  <link rel="stylesheet" href="../../src/admin-v2.css?v=20261121-2">
 </head>
-<body class="bg-gray-100 responsive-site responsive-workspace">
+<body class="bg-gray-100 responsive-site responsive-workspace admin-v2">
   <div id="admin-header-placeholder"></div>
 
   <main class="container mx-auto px-4 pt-1 pb-10 min-h-screen">
@@ -31,7 +32,7 @@
       </aside>
 
       <div class="md:col-span-4 space-y-6">
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4" data-admin-v2-heading>
           <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <nav aria-label="Breadcrumb" class="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
@@ -39,15 +40,15 @@
                 <i class="fas fa-angle-right text-gray-400"></i>
                 <span class="text-gray-600">Cadastro de Pedido</span>
               </nav>
-              <h1 class="text-2xl font-bold text-gray-800 mt-1">Cadastro de Pedido</h1>
+              <h1 class="text-2xl font-bold text-gray-800 mt-1" data-admin-v2-title>Cadastro de Pedido</h1>
               <p class="text-gray-600 mt-1">Monte e salve um rascunho de pedido antes de finalizar no fluxo oficial de venda.</p>
             </div>
           </div>
         </section>
 
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4" data-admin-v2-panel>
           <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <h2 class="text-lg font-semibold text-gray-800">Itens do pedido</h2>
+            <h2 class="text-lg font-semibold text-gray-800" data-admin-v2-section>Itens do pedido</h2>
             <div class="flex flex-wrap items-center gap-2">
               <button id="pedido-exportar-excel" type="button" class="inline-flex items-center gap-2 rounded-lg border border-emerald-200 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 transition">
                 <i class="fas fa-file-excel"></i>
@@ -60,7 +61,7 @@
             </div>
           </div>
 
-          <div class="overflow-x-auto rounded-lg border border-gray-100">
+          <div class="overflow-x-auto rounded-lg border border-gray-100" data-admin-v2-table>
             <table class="min-w-full text-sm">
               <thead class="bg-gray-50 text-left text-gray-500">
                 <tr>
@@ -99,7 +100,7 @@
     </div>
   </main>
 
-  <div id="cadastro-pedido-action-bar" class="border-t border-gray-200 bg-white/95 backdrop-blur-sm shadow-[0_-6px_16px_rgba(15,23,42,0.08)]">
+  <div id="cadastro-pedido-action-bar" data-admin-v2-action-bar class="border-t border-gray-200 bg-white/95 backdrop-blur-sm shadow-[0_-6px_16px_rgba(15,23,42,0.08)]">
     <div class="container mx-auto px-4 py-3">
       <div class="flex flex-wrap items-center justify-end gap-3">
         <button id="cadastro-pedido-importar" type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">
@@ -119,9 +120,9 @@
   </div>
 
 
-  <div id="pedido-importar-modal" class="fixed inset-0 z-[100000] hidden" aria-hidden="true">
+  <div id="pedido-importar-modal" class="fixed inset-0 z-[100000] hidden" aria-hidden="true" data-admin-v2-modal>
     <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-pedido-importar-dismiss="backdrop"></div>
-    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center"><div class="relative flex w-full max-w-[1352px] transform-gpu flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl min-h-0 text-[12px] leading-[1.35]" style="height:min(90vh,calc(100vh - 3rem));">
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center" data-admin-v2-dialog-align><div class="relative flex w-full max-w-[1352px] transform-gpu flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl min-h-0 text-[12px] leading-[1.35]" style="height:min(90vh,calc(100vh - 3rem));" data-admin-v2-dialog-content>
       <div class="flex items-center justify-between border-b border-gray-200 px-5 py-4">
         <div>
           <h3 class="text-base font-semibold text-gray-800">Importar produtos</h3>
@@ -183,11 +184,11 @@
   <script>var basePath = '../../';</script>
   <script src="../../scripts/core/config.js?v=20260812-2"></script>
   <script src="../../scripts/core/ui.js"></script>
-  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/core/main.js?v=20261121-2"></script>
   <script src="../../scripts/admin/admin.js"></script>
   <script src="../../scripts/admin/admin-cadastro-pedido.js?v=20260325-07"></script>
   <script src="/scripts/common/modal-bridge.js"></script>
-  <script src="../../scripts/common/responsive-workspace.js?v=20261008-1"></script>
+  <script src="../../scripts/common/responsive-workspace.js?v=20261121-2"></script>
 </body>
 </html>
 

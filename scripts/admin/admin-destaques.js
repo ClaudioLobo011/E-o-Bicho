@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Variáveis para guardar o estado dos produtos
     let allProducts = [];
     let featuredProducts = [];
+    let updatingFeatured = false;
 
     /**
      * Atualiza ambas as listas com base no estado atual e no filtro de busca.
@@ -55,19 +56,25 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        featuredProducts.forEach(product => {
+        featuredProducts.forEach((product, index) => {
             const li = document.createElement('li');
-            li.className = 'flex items-center justify-between p-2 border rounded-md bg-green-50 cursor-grab';
+            li.className = 'featured-product-row';
             li.dataset.id = product._id;
             li.innerHTML = `
-                <div class="flex items-center">
-                    <i class="fas fa-grip-vertical mr-2 text-gray-400"></i>
-                    <span class="text-sm font-semibold">${product.nome}</span>
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-grip-vertical cursor-grab text-gray-500" aria-hidden="true"></i>
+                    <span class="featured-product-name text-sm font-semibold"></span>
                 </div>
-                <button data-id="${product._id}" class="remove-btn text-red-500 hover:text-red-700">
-                    <i class="fas fa-times"></i>
-                </button>
+                <div class="featured-product-actions">
+                    <button type="button" data-move="-1" aria-label="Mover para cima"><i class="fas fa-chevron-up" aria-hidden="true"></i></button>
+                    <button type="button" data-move="1" aria-label="Mover para baixo"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
+                    <button type="button" class="remove-btn text-red-600" aria-label="Remover dos destaques"><i class="fas fa-times" aria-hidden="true"></i></button>
+                </div>
             `;
+            li.querySelector('.featured-product-name').textContent = product.nome;
+            li.querySelector('[data-move="-1"]').disabled = updatingFeatured || index === 0;
+            li.querySelector('[data-move="1"]').disabled = updatingFeatured || index === featuredProducts.length - 1;
+            li.querySelector('.remove-btn').disabled = updatingFeatured;
             featuredList.appendChild(li);
         });
     };
@@ -109,8 +116,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Adicionar um produto aos destaques
     availableList.addEventListener('click', async (e) => {
+        if (updatingFeatured) return;
         if (e.target.classList.contains('add-btn')) {
             const productId = e.target.dataset.id;
+            setUpdating(true);
             try {
                 const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
                 const token = loggedInUser?.token;
@@ -118,60 +127,96 @@ document.addEventListener('DOMContentLoaded', () => {
                 const addedProduct = allProducts.find(p => p._id === productId);
                 if (!response.ok) throw new Error('Falha ao adicionar destaque.');
 
-                // --- LÓGICA DE ATUALIZAÇÃO INTELIGENTE ---
-                featuredProducts.push(addedProduct); // Adiciona o produto à lista local de destaques
-                updateLists(); // Re-renderiza as listas mantendo o filtro
-                
+                featuredProducts.push(addedProduct);
             } catch (error) {
                  showModal({ title: 'Erro', message: error.message, confirmText: 'OK' });
+            } finally {
+                setUpdating(false);
+                updateLists();
             }
         }
     });
 
     // Remover um produto dos destaques
     featuredList.addEventListener('click', async (e) => {
+        if (updatingFeatured) return;
+        const moveButton = e.target.closest('[data-move]');
+        if (moveButton) {
+            const productId = moveButton.closest('[data-id]').dataset.id;
+            const index = featuredProducts.findIndex(product => product._id === productId);
+            const destination = index + Number(moveButton.dataset.move);
+            if (index < 0 || destination < 0 || destination >= featuredProducts.length) return;
+            const reordered = [...featuredProducts];
+            const [product] = reordered.splice(index, 1);
+            reordered.splice(destination, 0, product);
+            const saved = await saveOrder(reordered.map(item => item._id));
+            if (!saved) return;
+            const movedRow = [...featuredList.children].find(row => row.dataset.id === productId);
+            const sameDirection = movedRow?.querySelector(`[data-move="${moveButton.dataset.move}"]:enabled`);
+            (sameDirection || movedRow?.querySelector('[data-move]:enabled'))?.focus();
+            return;
+        }
         const removeButton = e.target.closest('.remove-btn');
         if (removeButton) {
-            const productId = removeButton.dataset.id;
+            const productId = removeButton.closest('[data-id]').dataset.id;
+            setUpdating(true);
             try {
                 const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
                 const token = loggedInUser?.token;
                 const response = await fetch(`${API_CONFIG.BASE_URL}/products/${productId}/destaque`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
                 if (!response.ok) throw new Error('Falha ao remover destaque.');
 
-                // --- LÓGICA DE ATUALIZAÇÃO INTELIGENTE ---
-                featuredProducts = featuredProducts.filter(p => p._id !== productId); // Remove o produto da lista local
-                updateLists(); // Re-renderiza as listas mantendo o filtro
-
+                featuredProducts = featuredProducts.filter(p => p._id !== productId);
             } catch (error) {
                  showModal({ title: 'Erro', message: error.message, confirmText: 'OK' });
+            } finally {
+                setUpdating(false);
+                updateLists();
             }
         }
     });
 
-    // Inicialização da funcionalidade de arrastar e soltar
-    new Sortable(featuredList, {
-        animation: 150,
+    function setUpdating(pending) {
+        updatingFeatured = pending;
+        sortable?.option('disabled', pending);
+        featuredList.setAttribute('aria-busy', String(pending));
+    }
+
+    async function saveOrder(orderedIds) {
+        if (updatingFeatured) return false;
+        const previous = featuredProducts;
+        const byId = new Map(previous.map(product => [product._id, product]));
+        featuredProducts = orderedIds.map(id => byId.get(id));
+        setUpdating(true);
+        renderFeaturedProducts();
+        try {
+            const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
+            const response = await fetch(`${API_CONFIG.BASE_URL}/products/destaques/order`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${loggedInUser?.token}` },
+                body: JSON.stringify({ orderedIds })
+            });
+            if (!response.ok) throw new Error('Falha ao salvar a nova ordem.');
+            return true;
+        } catch (error) {
+            featuredProducts = previous;
+            showModal({ title: 'Erro', message: error.message, confirmText: 'OK' });
+            return false;
+        } finally {
+            setUpdating(false);
+            renderFeaturedProducts();
+        }
+    }
+
+    const sortable = typeof Sortable === 'function' ? new Sortable(featuredList, {
+        animation: matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 150,
         ghostClass: 'bg-green-100',
         handle: '.fa-grip-vertical',
-        onEnd: async function (evt) {
-            const orderedIds = Array.from(evt.target.children).map(li => li.dataset.id);
-            // Atualiza a ordem da nossa lista local para consistência visual imediata
-            featuredProducts.sort((a, b) => orderedIds.indexOf(a._id) - orderedIds.indexOf(b._id));
-            try {
-                const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
-                const token = loggedInUser?.token;
-                const response = await fetch(`${API_CONFIG.BASE_URL}/products/destaques/order`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                    body: JSON.stringify({ orderedIds })
-                });
-                if (!response.ok) throw new Error('Falha ao salvar a nova ordem.');
-            } catch (error) {
-                 showModal({ title: 'Erro', message: error.message, confirmText: 'OK' });
-            }
+        onEnd: ({ oldIndex, newIndex }) => {
+            if (oldIndex === newIndex) return;
+            void saveOrder([...featuredList.children].map(row => row.dataset.id).filter(Boolean));
         }
-    });
+    }) : null;
 
     // --- Carga Inicial ---
     initializePage();

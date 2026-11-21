@@ -2,13 +2,14 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
   <title>Admin: Configuração do WhatsApp - E o Bicho</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <link rel="stylesheet" href="../../src/output.css">
   <link rel="stylesheet" href="../../src/responsive-workspace.css?v=20261008-1">
+  <link rel="stylesheet" href="../../src/admin-v2.css?v=20261121-2">
 </head>
-<body class="bg-gray-100 responsive-site responsive-workspace">
+<body class="bg-gray-100 responsive-site responsive-workspace admin-v2">
   <div id="admin-header-placeholder"></div>
 
   <main class="container mx-auto min-h-screen px-4 pb-8 pt-1">
@@ -18,7 +19,7 @@
       </aside>
 
       <div class="space-y-6 md:col-span-4">
-        <section class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <section class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm" data-admin-v2-heading>
           <div class="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             <div class="space-y-2">
               <nav aria-label="Breadcrumb" class="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
@@ -27,7 +28,7 @@
                 <span>WhatsApp</span>
               </nav>
               <div>
-                <h1 class="text-2xl font-bold text-gray-900">WhatsApp — coexistência por loja</h1>
+                <h1 class="text-2xl font-bold text-gray-900" data-admin-v2-title>WhatsApp — coexistência por loja</h1>
                 <p class="mt-1 max-w-3xl text-sm text-gray-600">
                   Conecte um número já ativo no WhatsApp Business ao sistema sem removê-lo do celular. Cada loja mantém números, credenciais, conversas e sincronização em ambiente independente.
                 </p>
@@ -54,7 +55,7 @@
           </div>
         </div>
 
-        <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4" data-admin-v2-metrics>
           <article class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
             <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Loja</p>
             <p id="whatsapp-store-name" class="mt-2 truncate text-lg font-bold text-gray-900">—</p>
@@ -87,11 +88,11 @@
           </div>
         </div>
 
-        <section class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <section class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm" data-admin-v2-panel>
           <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p class="text-xs font-semibold uppercase tracking-wide text-primary">Piloto controlado</p>
-              <h2 class="mt-1 text-xl font-bold text-gray-900">Prontidão por loja e número</h2>
+              <h2 class="mt-1 text-xl font-bold text-gray-900" data-admin-v2-section>Prontidão por loja e número</h2>
               <p class="mt-1 max-w-3xl text-sm text-gray-600">O sistema verifica conexão, coexistência, webhooks, expediente, serviços, profissionais e regras da automação antes de permitir a primeira ativação.</p>
             </div>
             <span id="whatsapp-pilot-summary-badge" class="inline-flex self-start rounded-full border border-gray-200 bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">Aguardando loja</span>
@@ -106,11 +107,11 @@
         </section>
 
         <section class="grid grid-cols-1 gap-6 xl:grid-cols-3">
-          <article class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm xl:col-span-2">
+          <article class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm xl:col-span-2" data-admin-v2-panel>
             <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <p class="text-xs font-semibold uppercase tracking-wide text-primary">Números autorizados</p>
-                <h2 class="mt-1 text-xl font-bold text-gray-900">Ambiente desta loja</h2>
+                <h2 class="mt-1 text-xl font-bold text-gray-900" data-admin-v2-section>Ambiente desta loja</h2>
                 <p class="mt-1 text-sm text-gray-600">A Central WhatsApp só acessa as salas dos números conectados à loja selecionada.</p>
               </div>
               <button id="whatsapp-refresh" type="button" class="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-primary hover:text-primary">
@@ -141,9 +142,9 @@
               </div>
             </article>
 
-            <article class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+            <article class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm" data-admin-v2-panel>
               <p class="text-xs font-semibold uppercase tracking-wide text-primary">Embedded Signup v4</p>
-              <h2 class="mt-1 font-bold text-gray-900">Conectar número existente</h2>
+              <h2 class="mt-1 font-bold text-gray-900" data-admin-v2-section>Conectar número existente</h2>
               <p class="mt-2 text-sm text-gray-600">A Meta abrirá uma janela segura para autorizar o número e confirmar a coexistência.</p>
               <button id="whatsapp-connect-coexistence" type="button" disabled class="mt-4 w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-500">
                 <i class="fa-brands fa-whatsapp mr-2"></i>
@@ -165,10 +166,10 @@
           </aside>
         </section>
 
-        <section id="whatsapp-technical-config" class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <section id="whatsapp-technical-config" class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm" data-admin-v2-panel>
           <div class="flex flex-col gap-2">
             <p class="text-xs font-semibold uppercase tracking-wide text-primary">Configuração técnica da Meta</p>
-            <h2 class="text-xl font-bold text-gray-900">Aplicativo e webhook desta loja</h2>
+            <h2 class="text-xl font-bold text-gray-900" data-admin-v2-section>Aplicativo e webhook desta loja</h2>
             <p class="max-w-3xl text-sm text-gray-600">Os segredos são gravados criptografados e nunca reaparecem na tela. Se já estiverem configurados no servidor, deixe os campos secretos vazios.</p>
           </div>
 
@@ -206,9 +207,9 @@
           </form>
         </section>
 
-        <section class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <section class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm" data-admin-v2-panel>
           <p class="text-xs font-semibold uppercase tracking-wide text-primary">Separação obrigatória</p>
-          <h2 class="mt-1 text-xl font-bold text-gray-900">Como o ambiente é protegido</h2>
+          <h2 class="mt-1 text-xl font-bold text-gray-900" data-admin-v2-section>Como o ambiente é protegido</h2>
           <div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
             <div class="rounded-xl bg-gray-50 p-4"><p class="text-xs font-semibold text-gray-500">1. Usuário</p><p class="mt-1 text-sm text-gray-700">Token e lojas permitidas.</p></div>
             <div class="rounded-xl bg-gray-50 p-4"><p class="text-xs font-semibold text-gray-500">2. Loja</p><p class="mt-1 text-sm text-gray-700">Sessão vinculada ao ambiente escolhido.</p></div>
@@ -227,10 +228,10 @@
   <script>var basePath = '../../';</script>
   <script src="../../scripts/core/config.js?v=20260812-2"></script>
   <script src="../../scripts/core/ui.js"></script>
-  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/core/main.js?v=20261121-2"></script>
   <script src="../../scripts/admin/admin.js"></script>
   <script src="../../scripts/admin/admin-integracoes-whatsapp.js?v=20260814-1"></script>
   <script src="/scripts/common/modal-bridge.js"></script>
-  <script src="../../scripts/common/responsive-workspace.js?v=20261008-1"></script>
+  <script src="../../scripts/common/responsive-workspace.js?v=20261121-2"></script>
 </body>
 </html>

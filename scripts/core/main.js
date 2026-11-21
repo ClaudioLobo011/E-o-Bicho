@@ -169,8 +169,9 @@ function initAdminSidebar() {
   const toggleButtons = document.querySelectorAll('[data-admin-sidebar-trigger]');
   const closeButtons = wrapper.querySelectorAll('[data-admin-sidebar-close]');
   let overlayHideTimeout;
+  let opener;
 
-  const openSidebar = () => {
+  const openSidebar = (button) => {
     if (overlayHideTimeout) {
       clearTimeout(overlayHideTimeout);
       overlayHideTimeout = null;
@@ -178,17 +179,25 @@ function initAdminSidebar() {
     panel.classList.add('translate-x-0');
     panel.classList.remove('-translate-x-full');
     panel.setAttribute('aria-hidden', 'false');
+    panel.inert = false;
+    opener = button;
+    toggleButtons.forEach((trigger) => trigger.setAttribute('aria-expanded', 'true'));
     if (overlay) {
       overlay.classList.remove('hidden', 'pointer-events-none', 'opacity-0');
       overlay.classList.add('opacity-100');
     }
     document.body.classList.add('overflow-hidden');
+    closeButtons[0]?.focus({ preventScroll: true });
   };
 
   const closeSidebar = () => {
+    if (panel.inert) return;
     panel.classList.remove('translate-x-0');
     panel.classList.add('-translate-x-full');
+    if (panel.contains(document.activeElement)) opener?.focus({ preventScroll: true });
+    panel.inert = true;
     panel.setAttribute('aria-hidden', 'true');
+    toggleButtons.forEach((trigger) => trigger.setAttribute('aria-expanded', 'false'));
     if (overlay) {
       overlay.classList.add('opacity-0', 'pointer-events-none');
       overlay.classList.remove('opacity-100');
@@ -201,7 +210,7 @@ function initAdminSidebar() {
     button.addEventListener('click', (event) => {
       event.preventDefault();
       if (panel.classList.contains('-translate-x-full')) {
-        openSidebar();
+        openSidebar(button);
       } else {
         closeSidebar();
       }

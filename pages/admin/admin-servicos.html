@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
   <title>Admin — Cadastro de Serviço</title>
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
@@ -22,8 +22,9 @@
     }
   </style>
   <link rel="stylesheet" href="../../src/responsive-workspace.css?v=20261008-1">
+  <link rel="stylesheet" href="../../src/admin-v2.css?v=20261121-2">
 </head>
-<body class="bg-gray-100 responsive-site responsive-workspace">
+<body class="bg-gray-100 responsive-site responsive-workspace admin-v2">
   <!-- Header Admin -->
   <div id="admin-header-placeholder"></div>
 
@@ -35,10 +36,10 @@
       </aside>
 
       <div class="md:col-span-4">
-        <div class="bg-white rounded-lg shadow p-6">
+        <div class="bg-white rounded-lg shadow p-6" data-admin-v2-heading>
           <header class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h1 class="text-2xl font-bold text-gray-900">Cadastro de serviços</h1>
+              <h1 class="text-2xl font-bold text-gray-900" data-admin-v2-title>Cadastro de serviços</h1>
               <p class="text-gray-600 mt-1">Gerencie os serviços oferecidos e ajuste valores ou preços diferenciados por raça.</p>
             </div>
             <div class="flex flex-wrap gap-2">
@@ -119,7 +120,7 @@
 
                 <section class="space-y-4 rounded-xl border border-emerald-200 bg-emerald-50/30 p-4 sm:p-5">
                   <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                    <div><h2 class="text-base font-semibold text-gray-900">Fiscal por empresa — NFS-e</h2><p class="mt-1 text-sm text-gray-600">Vincule o serviço à regra fiscal de cada empresa em que ele será emitido.</p></div>
+                    <div><h2 class="text-base font-semibold text-gray-900" data-admin-v2-section>Fiscal por empresa — NFS-e</h2><p class="mt-1 text-sm text-gray-600">Vincule o serviço à regra fiscal de cada empresa em que ele será emitido.</p></div>
                     <span id="serv-fiscal-summary" class="text-xs font-medium text-emerald-700">Nenhuma regra vinculada</span>
                   </div>
                   <div class="grid gap-4 md:grid-cols-2">
@@ -140,10 +141,10 @@
               <div class="space-y-4">
                 <div class="flex items-center gap-3">
                   <i class="fas fa-list text-gray-400"></i>
-                  <h2 class="text-lg font-semibold text-gray-900">Serviços cadastrados</h2>
+                  <h2 class="text-lg font-semibold text-gray-900" data-admin-v2-section>Serviços cadastrados</h2>
                 </div>
-                <div class="overflow-x-auto">
-                  <table class="min-w-full text-sm">
+                <div class="overflow-x-auto" data-admin-v2-table>
+                  <table class="min-w-full text-sm" data-admin-v2-pin-actions>
                     <thead>
                       <tr class="text-left text-gray-500">
                         <th class="px-3 py-2">Nome</th>
@@ -243,7 +244,7 @@
                     </button>
                   </div>
                 </div>
-                <div class="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+                <div class="overflow-x-auto rounded-xl border border-gray-200 bg-white" data-admin-v2-table>
                   <table class="min-w-full text-sm">
                     <thead>
                       <tr class="text-left text-gray-500">
@@ -310,7 +311,7 @@
                 </div>
               </div>
 
-              <div class="overflow-x-auto">
+              <div class="overflow-x-auto" data-admin-v2-table>
                 <table class="min-w-full text-sm">
                   <thead>
                     <tr class="text-left text-gray-500">
@@ -334,7 +335,7 @@
     </div>
   </main>
 
-  <div id="servicos-cadastro-action-bar" class="border-t border-gray-200 bg-white/95 backdrop-blur-sm shadow-[0_-6px_16px_rgba(15,23,42,0.08)]">
+  <div id="servicos-cadastro-action-bar" data-admin-v2-action-bar class="border-t border-gray-200 bg-white/95 backdrop-blur-sm shadow-[0_-6px_16px_rgba(15,23,42,0.08)]">
     <div class="container mx-auto px-4 py-3">
       <div class="flex flex-wrap items-center justify-end gap-3">
         <button type="button" id="serv-cancelar" class="hidden text-sm text-gray-600 underline decoration-gray-400 transition hover:text-gray-800">
@@ -348,7 +349,7 @@
     </div>
   </div>
 
-  <div id="servicos-clubinho-action-bar" class="hidden border-t border-gray-200 bg-white/95 backdrop-blur-sm shadow-[0_-6px_16px_rgba(15,23,42,0.08)]">
+  <div id="servicos-clubinho-action-bar" data-admin-v2-action-bar class="hidden border-t border-gray-200 bg-white/95 backdrop-blur-sm shadow-[0_-6px_16px_rgba(15,23,42,0.08)]">
     <div class="container mx-auto px-4 py-3">
       <div class="flex flex-wrap items-center justify-end gap-3">
         <button type="button" id="clubinho-delete-btn" class="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 font-medium text-red-700 transition hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-200">
@@ -376,7 +377,7 @@
   <!-- Core -->
   <script src="../../scripts/core/config.js?v=20260812-2"></script>
   <script src="../../scripts/core/ui.js"></script>
-  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/core/main.js?v=20261121-2"></script>
 
   <!-- Guarda Admin (se houver) -->
   <script src="../../scripts/admin/admin.js"></script>
@@ -387,6 +388,6 @@
   <!-- Página -->
   <script type="module" src="../../scripts/admin/cadastro-de-servicos/index.js"></script>
   <script src="/scripts/common/modal-bridge.js"></script>
-  <script src="../../scripts/common/responsive-workspace.js?v=20261008-1"></script>
+  <script src="../../scripts/common/responsive-workspace.js?v=20261121-2"></script>
 </body>
 </html>

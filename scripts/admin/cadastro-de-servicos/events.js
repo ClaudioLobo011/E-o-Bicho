@@ -38,7 +38,7 @@ export function attachEvents() {
       if (btn.hasAttribute('data-edit')) {
         const item = await api.get(id);
         fillForm(item);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        els.form.scrollIntoView({ block: 'start', behavior: 'smooth' });
       } else if (btn.hasAttribute('data-del')) {
         if (!confirm('Confirma remover este serviço?')) return;
         await api.remove(id);

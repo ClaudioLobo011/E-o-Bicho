@@ -1,7 +1,7 @@
-﻿  <header class="bg-white shadow-sm">
+﻿  <header class="bg-white shadow-sm" data-admin-header>
     <div class="container mx-auto px-4 py-3 flex flex-col gap-3 md:flex-row md:items-center md:gap-6">
       <div class="flex items-center gap-4 md:w-auto">
-        <button type="button" data-admin-sidebar-trigger class="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 shadow-sm transition hover:bg-gray-50 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
+        <button type="button" data-admin-sidebar-trigger aria-expanded="false" aria-controls="admin-navigation" class="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 shadow-sm transition hover:bg-gray-50 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
           <span class="sr-only">Abrir menu administrativo</span>
           <i class="fas fa-bars text-lg"></i>
         </button>
@@ -20,7 +20,7 @@
             id="admin-screen-search-input"
             type="search"
             autocomplete="off"
-            placeholder="Buscar telas do painel"
+            placeholder="Buscar telas"
             data-admin-screen-search-input
             class="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-11 pr-4 text-sm text-gray-700 shadow-sm placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
           >
@@ -32,10 +32,9 @@
         </div>
       </div>
 
-      <div class="flex items-center gap-3 text-gray-500 md:ml-auto">
+      <div class="flex items-center gap-3 text-gray-500 md:ml-auto" data-admin-header-account>
         <div data-admin-master-toggle-slot class="hidden"></div>
-        <span class="border-r border-gray-300 h-6 mr-4"></span>
-        <span class="font-semibold text-sm">Funcionários</span>
+        <span class="font-semibold text-sm" data-admin-header-label>Funcionários</span>
       </div>
     </div>
 

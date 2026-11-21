@@ -2,13 +2,14 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
   <title>Admin: Pedidos Web - E o Bicho</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <link rel="stylesheet" href="../../src/output.css">
   <link rel="stylesheet" href="../../src/responsive-workspace.css?v=20261008-1">
+  <link rel="stylesheet" href="../../src/admin-v2.css?v=20261121-2">
 </head>
-<body class="bg-gray-100 responsive-site responsive-workspace">
+<body class="bg-gray-100 responsive-site responsive-workspace admin-v2">
   <div id="admin-header-placeholder"></div>
 
   <main class="container mx-auto px-4 pt-1 pb-10 min-h-screen">
@@ -18,7 +19,7 @@
       </aside>
 
       <div class="md:col-span-4 space-y-6">
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4" data-admin-v2-heading>
           <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div class="space-y-2">
               <nav aria-label="Breadcrumb" class="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
@@ -27,7 +28,7 @@
                 <span class="text-gray-600">Pedidos Web</span>
               </nav>
               <div>
-                <h1 class="text-2xl font-bold text-gray-800">Pedidos Web</h1>
+                <h1 class="text-2xl font-bold text-gray-800" data-admin-v2-title>Pedidos Web</h1>
                 <p class="text-gray-600 mt-1">Acompanhe apenas os pedidos com origem ECOMMERCE e controle todo o fluxo.</p>
               </div>
             </div>
@@ -43,7 +44,7 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4" data-admin-v2-metrics>
             <article class="rounded-xl border border-gray-100 bg-gray-50 p-4">
               <p class="text-xs uppercase tracking-wide text-gray-500">Recebidos</p>
               <p class="mt-2 text-2xl font-bold text-gray-800" id="web-orders-count-received">0</p>
@@ -67,11 +68,11 @@
           </div>
         </section>
 
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-admin-v2-panel>
           <details class="group">
             <summary class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between cursor-pointer list-none">
               <div>
-                <h2 class="text-lg font-semibold text-gray-800">Filtros obrigatorios</h2>
+                <h2 class="text-lg font-semibold text-gray-800" data-admin-v2-section="Filtros obrigatórios">Filtros obrigatorios</h2>
                 <p class="text-sm text-gray-600">Utilize os filtros para localizar pedidos ecommerce.</p>
               </div>
               <div class="flex items-center gap-2">
@@ -171,10 +172,10 @@
           </details>
         </section>
 
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4" data-admin-v2-panel>
           <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <h2 class="text-lg font-semibold text-gray-800">Listagem de pedidos ecommerce</h2>
+              <h2 class="text-lg font-semibold text-gray-800" data-admin-v2-section>Listagem de pedidos ecommerce</h2>
               <p class="text-sm text-gray-600">Pedidos do site nao aparecem no PDV.</p>
             </div>
             <span id="web-orders-results-count" class="text-xs text-gray-500">0 pedidos</span>
@@ -197,9 +198,9 @@
   <script>var basePath = '../../';</script>
   <script src="../../scripts/core/config.js?v=20260812-2"></script>
   <script src="../../scripts/core/ui.js"></script>
-  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/core/main.js?v=20261121-2"></script>
   <script src="../../scripts/admin/admin.js"></script>
   <script src="../../scripts/admin/admin-pedidos-web.js"></script>
-  <script src="../../scripts/common/responsive-workspace.js?v=20261008-1"></script>
+  <script src="../../scripts/common/responsive-workspace.js?v=20261121-2"></script>
 </body>
 </html>

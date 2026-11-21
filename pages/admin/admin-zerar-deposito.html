@@ -2,13 +2,14 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
     <title>Admin: Zerar Depósito - E o Bicho</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     <link rel="stylesheet" href="../../src/output.css">
   <link rel="stylesheet" href="../../src/responsive-workspace.css?v=20261008-1">
+  <link rel="stylesheet" href="../../src/admin-v2.css?v=20261121-2">
 </head>
-<body class="bg-gray-100 responsive-site responsive-workspace">
+<body class="bg-gray-100 responsive-site responsive-workspace admin-v2">
     <div id="admin-header-placeholder"></div>
 
     <main class="container mx-auto px-4 pt-1 pb-8 min-h-screen">
@@ -18,9 +19,9 @@
             </aside>
 
             <div class="md:col-span-4">
-                <div class="bg-white p-6 rounded-lg shadow">
+                <div class="bg-white p-6 rounded-lg shadow" data-admin-v2-heading>
                     <div class="flex flex-col gap-2 mb-6">
-                        <h1 class="text-2xl font-bold text-gray-800">Zerar Depósito</h1>
+                        <h1 class="text-2xl font-bold text-gray-800" data-admin-v2-title>Zerar Depósito</h1>
                         <p class="text-gray-600">Selecione a empresa, o depósito e os produtos que deseja zerar. O ajuste será aplicado somente aos produtos marcados.</p>
                     </div>
 
@@ -66,14 +67,14 @@
 
                     <section class="mt-6">
                         <div class="flex items-center justify-between gap-4 mb-4">
-                            <h2 class="text-lg font-semibold text-gray-800">Produtos cadastrados</h2>
+                            <h2 class="text-lg font-semibold text-gray-800" data-admin-v2-section>Produtos cadastrados</h2>
                             <button id="zero-stock" type="button" class="inline-flex items-center gap-2 rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-red-400">
                                 <i class="fas fa-broom"></i>
                                 Zerar estoque
                             </button>
                         </div>
 
-                        <div class="overflow-x-auto rounded-lg border border-gray-200">
+                        <div class="overflow-x-auto rounded-lg border border-gray-200" data-admin-v2-table>
                             <table class="min-w-full divide-y divide-gray-200 text-sm">
                                 <thead class="bg-gray-50">
                                     <tr class="text-[11px] font-semibold uppercase tracking-wide text-gray-600">
@@ -151,10 +152,10 @@
     <script>var basePath = '../../';</script>
     <script src="../../scripts/core/config.js?v=20260812-2"></script>
     <script src="../../scripts/core/ui.js"></script>
-    <script src="../../scripts/core/main.js"></script>
+    <script src="../../scripts/core/main.js?v=20261121-2"></script>
     <script src="../../scripts/admin/admin.js"></script>
     <script src="../../scripts/admin/admin-zerar-deposito.js"></script>
   <script src="/scripts/common/modal-bridge.js"></script>
-  <script src="../../scripts/common/responsive-workspace.js?v=20261008-1"></script>
+  <script src="../../scripts/common/responsive-workspace.js?v=20261121-2"></script>
 </body>
 </html>

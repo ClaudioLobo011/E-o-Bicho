@@ -2,13 +2,14 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
   <title>Admin: Cadastro de Regra de Imposto</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <link rel="stylesheet" href="../../src/output.css">
   <link rel="stylesheet" href="../../src/responsive-workspace.css?v=20261008-1">
+  <link rel="stylesheet" href="../../src/admin-v2.css?v=20261121-2">
 </head>
-<body class="bg-gray-100 responsive-site responsive-workspace">
+<body class="bg-gray-100 responsive-site responsive-workspace admin-v2">
   <div id="admin-header-placeholder"></div>
 
   <main class="w-full max-w-none px-4 sm:px-6 lg:px-8 pt-1 pb-8 min-h-screen">
@@ -18,10 +19,10 @@
       </aside>
 
       <div class="md:col-span-4 space-y-6">
-        <section class="bg-white rounded-xl shadow p-6">
+        <section class="bg-white rounded-xl shadow p-6" data-admin-v2-heading>
           <header class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <h1 class="text-2xl font-bold text-gray-800">Cadastro de Regra de Imposto</h1>
+              <h1 class="text-2xl font-bold text-gray-800" data-admin-v2-title>Cadastro de Regra de Imposto</h1>
               <p class="text-gray-600">Cadastre a tributação de mercadorias e serviços por empresa para emissão no PDV.</p>
             </div>
             <div class="flex flex-wrap items-center gap-3">
@@ -52,7 +53,7 @@
         </section>
 
         <div class="grid grid-cols-1 gap-6">
-          <section class="bg-white rounded-xl shadow p-6">
+          <section class="bg-white rounded-xl shadow p-6" data-admin-v2-panel>
             <form id="fiscal-rule-form" class="space-y-6">
               <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
@@ -75,7 +76,7 @@
               </div>
               <div id="fiscal-rule-product-fields" class="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
                 <div class="rounded-lg border border-gray-200 p-4">
-                <h3 class="text-sm font-semibold text-gray-700">Base fiscal</h3>
+                <h3 class="text-sm font-semibold text-gray-700" data-admin-v2-section>Base fiscal</h3>
                 <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <label class="block text-xs font-semibold uppercase text-gray-500">Origem
                     <select data-field="origem" id="fiscal-rule-origem" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary"></select>
@@ -99,7 +100,7 @@
               </div>
 
                 <div class="rounded-lg border border-gray-200 p-4">
-                <h3 class="text-sm font-semibold text-gray-700">CFOP NF-e</h3>
+                <h3 class="text-sm font-semibold text-gray-700" data-admin-v2-section>CFOP NF-e</h3>
                 <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <label class="block text-xs font-semibold uppercase text-gray-500">Entrada
                     <input type="text" data-field="cfop.nfe.entrada" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="1102">
@@ -123,7 +124,7 @@
               </div>
 
                 <div class="rounded-lg border border-gray-200 p-4">
-                <h3 class="text-sm font-semibold text-gray-700">CFOP NFC-e</h3>
+                <h3 class="text-sm font-semibold text-gray-700" data-admin-v2-section>CFOP NFC-e</h3>
                 <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <label class="block text-xs font-semibold uppercase text-gray-500">Entrada
                     <input type="text" data-field="cfop.nfce.entrada" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="1102">
@@ -147,7 +148,7 @@
               </div>
 
                 <div class="rounded-lg border border-gray-200 p-4">
-                  <h3 class="text-sm font-semibold text-gray-700">PIS</h3>
+                  <h3 class="text-sm font-semibold text-gray-700" data-admin-v2-section>PIS</h3>
                   <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <label class="block text-xs font-semibold uppercase text-gray-500">Codigo
                       <input type="text" data-field="pis.codigo" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">
@@ -165,7 +166,7 @@
                 </div>
 
                 <div class="rounded-lg border border-gray-200 p-4">
-                  <h3 class="text-sm font-semibold text-gray-700">COFINS</h3>
+                  <h3 class="text-sm font-semibold text-gray-700" data-admin-v2-section>COFINS</h3>
                   <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <label class="block text-xs font-semibold uppercase text-gray-500">Codigo
                       <input type="text" data-field="cofins.codigo" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">
@@ -183,7 +184,7 @@
                 </div>
 
                 <div class="rounded-lg border border-gray-200 p-4">
-                  <h3 class="text-sm font-semibold text-gray-700">IPI</h3>
+                  <h3 class="text-sm font-semibold text-gray-700" data-admin-v2-section>IPI</h3>
                   <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <label class="block text-xs font-semibold uppercase text-gray-500">CST
                       <input type="text" data-field="ipi.cst" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">
@@ -201,7 +202,7 @@
                 </div>
 
                 <div class="rounded-lg border border-gray-200 p-4">
-                  <h3 class="text-sm font-semibold text-gray-700">IBS / CBS</h3>
+                  <h3 class="text-sm font-semibold text-gray-700" data-admin-v2-section>IBS / CBS</h3>
                   <p class="mt-1 text-xs text-gray-500">Classificacao conforme a tabela vigente do Portal Nacional da NF-e.</p>
                   <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <label class="block text-xs font-semibold uppercase text-gray-500">CST IBS/CBS
@@ -223,7 +224,7 @@
                 </div>
 
                 <div class="rounded-lg border border-gray-200 p-4">
-                  <h3 class="text-sm font-semibold text-gray-700">FCP</h3>
+                  <h3 class="text-sm font-semibold text-gray-700" data-admin-v2-section>FCP</h3>
                   <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <label class="block text-xs font-semibold uppercase text-gray-500">Indicador
                       <select data-field="fcp.indicador" id="fiscal-rule-fcp-indicador" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary"></select>
@@ -240,7 +241,7 @@
               </div>
 
 <section id="fiscal-rule-service-fields" class="hidden space-y-5 rounded-xl border border-emerald-200 bg-emerald-50/30 p-4 sm:p-5">
-                <div><h3 class="font-semibold text-gray-800">Tributação de serviços — NFS-e</h3>
+                <div><h3 class="font-semibold text-gray-800" data-admin-v2-section>Tributação de serviços — NFS-e</h3>
 <p class="mt-1 text-sm text-gray-600">Preencha os códigos e percentuais do enquadramento fiscal do serviço. Nenhuma alíquota é preenchida automaticamente.</p>
 </div>
 
@@ -288,8 +289,8 @@
 <div data-nfse-condition="percentual" class="hidden"><label class="block text-sm font-medium text-gray-700">Tributos municipais (%)<input data-field="nfse.pTotTribMun" type="number" min="0" max="100" step="0.01" class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus:border-primary focus:ring-primary"></label>
 </div>
 </div>
-<details class="mt-4 rounded-lg border border-emerald-200 bg-white p-3">
-<summary class="cursor-pointer text-sm font-semibold text-gray-800">Fonte dos tributos aproximados (opcional)</summary>
+<details class="mt-4 rounded-lg border border-emerald-200 bg-white p-3" data-admin-v2-panel>
+<summary class="cursor-pointer text-sm font-semibold text-gray-800" data-admin-v2-section>Fonte dos tributos aproximados (opcional)</summary>
 <p class="mt-2 text-xs text-gray-500">Registre a tabela consultada para permitir a conferência dos percentuais. Quando a vigência for informada, a emissão exige uma referência vigente.</p>
 <div class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
 <label class="block text-sm font-medium text-gray-700 sm:col-span-2">Fonte<input data-field="nfse.tributosFonte" maxlength="200" placeholder="Instituição ou tabela consultada" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-normal focus:border-primary focus:ring-primary"></label>
@@ -337,9 +338,9 @@
 
         </div>
 
-        <section class="bg-white rounded-xl shadow p-6">
+        <section class="bg-white rounded-xl shadow p-6" data-admin-v2-panel>
           <header class="flex items-center justify-between">
-            <h2 class="text-lg font-semibold text-gray-800">Regras cadastradas</h2>
+            <h2 class="text-lg font-semibold text-gray-800" data-admin-v2-section>Regras cadastradas</h2>
             <span id="fiscal-rule-count" class="text-sm text-gray-500">Nenhuma regra cadastrada</span>
           </header>
           <div id="fiscal-rule-list" class="mt-4 space-y-3"></div>
@@ -356,10 +357,10 @@
   <script>var basePath = '../../';</script>
   <script src="../../scripts/core/config.js?v=20260812-2"></script>
   <script src="../../scripts/core/ui.js"></script>
-  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/core/main.js?v=20261121-2"></script>
   <script src="../../scripts/admin/admin.js"></script>
   <script src="../../scripts/admin/admin-fiscal-regras.js"></script>
   <script src="/scripts/common/modal-bridge.js"></script>
-  <script src="../../scripts/common/responsive-workspace.js?v=20261008-1"></script>
+  <script src="../../scripts/common/responsive-workspace.js?v=20261121-2"></script>
 </body>
 </html>

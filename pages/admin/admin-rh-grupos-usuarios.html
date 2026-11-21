@@ -2,14 +2,15 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
   <title>Admin — Cadastro de Grupo de Usuário</title>
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <link rel="stylesheet" href="../../src/output.css">
   <link rel="stylesheet" href="../../src/responsive-workspace.css?v=20261008-1">
+  <link rel="stylesheet" href="../../src/admin-v2.css?v=20261121-2">
 </head>
-<body class="bg-gray-100 responsive-site responsive-workspace">
+<body class="bg-gray-100 responsive-site responsive-workspace admin-v2">
   <div id="admin-header-placeholder"></div>
 
   <main class="container mx-auto px-4 pt-1 pb-10 min-h-screen">
@@ -19,9 +20,9 @@
       </aside>
 
       <section class="md:col-span-4 space-y-6">
-        <header class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <header class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between" data-admin-v2-heading>
           <div class="space-y-1">
-            <h1 class="text-2xl font-bold text-gray-800">Cadastro de Grupo de Usuário</h1>
+            <h1 class="text-2xl font-bold text-gray-800" data-admin-v2-title>Cadastro de Grupo de Usuário</h1>
             <p class="text-sm text-gray-600">Cadastre grupos de usuários e defina as comissões.</p>
           </div>
           <span class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-sm font-semibold text-primary">
@@ -30,9 +31,9 @@
           </span>
         </header>
 
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6" data-admin-v2-panel>
           <div class="flex flex-col gap-1">
-            <h2 class="text-lg font-semibold text-gray-800">Dados do grupo</h2>
+            <h2 class="text-lg font-semibold text-gray-800" data-admin-v2-section>Dados do grupo</h2>
             <p class="text-sm text-gray-600">Preencha as informações do grupo.</p>
           </div>
 
@@ -78,10 +79,10 @@
           </form>
         </section>
 
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4" data-admin-v2-panel>
           <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <h2 class="text-lg font-semibold text-gray-800">Grupos cadastrados</h2>
+              <h2 class="text-lg font-semibold text-gray-800" data-admin-v2-section>Grupos cadastrados</h2>
               <p class="text-sm text-gray-600">Tabela no mesmo padrão de "Resultados" do Relatório de Vendas.</p>
             </div>
             <div class="flex flex-wrap items-center gap-2 text-sm text-gray-600">
@@ -90,8 +91,8 @@
           </div>
 
           <div class="overflow-hidden rounded-xl border border-gray-100">
-            <div class="overflow-x-auto">
-              <table id="groups-table" class="min-w-full divide-y divide-gray-100 text-left text-[11px] leading-[1.35] text-gray-700">
+            <div class="overflow-x-auto" data-admin-v2-table>
+              <table id="groups-table" class="min-w-full divide-y divide-gray-100 text-left text-[11px] leading-[1.35] text-gray-700" data-admin-v2-pin-actions>
                 <thead class="bg-gray-50 text-left text-[10px] uppercase tracking-wide text-gray-500">
                   <tr>
                     <th class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-600 cursor-pointer" data-sort-key="codigo">Código</th>
@@ -137,10 +138,10 @@
   <script>var basePath = '../../';</script>
   <script src="../../scripts/core/config.js?v=20260812-2"></script>
   <script src="../../scripts/core/ui.js"></script>
-  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/core/main.js?v=20261121-2"></script>
   <script src="../../scripts/admin/admin.js"></script>
   <script src="../../scripts/admin/admin-rh-grupos-usuarios.js"></script>
   <script src="/scripts/common/modal-bridge.js"></script>
-  <script src="../../scripts/common/responsive-workspace.js?v=20261008-1"></script>
+  <script src="../../scripts/common/responsive-workspace.js?v=20261121-2"></script>
 </body>
 </html>

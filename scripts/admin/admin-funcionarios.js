@@ -1756,7 +1756,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const ensureFuncTableLayout = () => {
     if (!funcTableElements.table) return;
     funcTableElements.table.style.tableLayout = 'fixed';
-    funcTableElements.table.style.minWidth = '0';
+    funcTableElements.table.style.minWidth = '100%';
   };
 
   const ensureFuncColGroup = () => {
@@ -1858,9 +1858,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const scroll = document.createElement('div');
     scroll.className = 'overflow-x-auto';
+    scroll.dataset.adminV2Table = '';
 
     const table = document.createElement('table');
     table.className = 'divide-y divide-gray-100 text-left text-[11px] leading-[1.35] text-gray-700';
+    table.dataset.funcDirectory = '';
 
     const thead = document.createElement('thead');
     thead.className = 'bg-gray-50 text-left text-[10px] uppercase tracking-wide text-gray-500';

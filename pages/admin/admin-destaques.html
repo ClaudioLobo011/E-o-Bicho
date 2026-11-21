@@ -2,14 +2,15 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
     <title>Admin: Produtos em Destaque - E o Bicho</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     <link rel="stylesheet" href="../../src/output.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
   <link rel="stylesheet" href="../../src/responsive-workspace.css?v=20261008-1">
+  <link rel="stylesheet" href="../../src/admin-v2.css?v=20261121-2">
 </head>
-<body class="bg-gray-100 responsive-site responsive-workspace">
+<body class="bg-gray-100 responsive-site responsive-workspace admin-v2">
 
     <div id="admin-header-placeholder"></div>
 
@@ -21,24 +22,24 @@
             </aside>
 
             <div class="md:col-span-4">
-                <div class="bg-white p-6 rounded-lg shadow">
-                    <h1 class="text-2xl font-bold text-gray-800">Gerir Produtos em Destaque</h1>
-                    <p class="text-gray-600 mt-1">Arraste e solte para ordenar. Adicione ou remova produtos da página inicial.</p>
+                <div class="bg-white p-6 rounded-lg shadow" data-admin-v2-heading>
+                    <h1 class="text-2xl font-bold text-gray-800" data-admin-v2-title>Gerir Produtos em Destaque</h1>
+                    <p class="text-gray-600 mt-1">Adicione, remova ou ordene os produtos exibidos na página inicial.</p>
                 </div>
 
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-                    <div class="bg-white p-4 rounded-lg shadow">
-                        <h2 class="font-bold text-lg mb-4">Produtos Disponíveis</h2>
-                        <input type="text" id="search-available" placeholder="Buscar produto..." class="w-full p-2 border rounded-md mb-4">
-                        <ul id="available-products-list" class="h-96 overflow-y-auto space-y-2 pr-2">
+                    <div class="bg-white p-4 rounded-lg shadow" data-admin-v2-panel>
+                        <h2 class="font-bold text-lg mb-4" data-admin-v2-section>Produtos Disponíveis</h2>
+                        <input type="search" id="search-available" aria-label="Buscar produto disponível" placeholder="Buscar produto..." class="w-full p-2 border rounded-md mb-4">
+                        <ul id="available-products-list" class="overflow-y-auto space-y-2 pr-2" data-admin-v2-scroll>
                             <li class="p-2 border rounded-md text-center text-gray-500">A carregar...</li>
                         </ul>
                     </div>
 
-                    <div class="bg-white p-4 rounded-lg shadow">
-                        <h2 class="font-bold text-lg mb-4">Produtos em Destaque</h2>
-                        <p class="text-xs text-gray-500 mb-4">Arraste os produtos para reordenar a exibição na página inicial.</p>
-                        <ul id="featured-products-list" class="h-96 overflow-y-auto space-y-2 pr-2">
+                    <div class="bg-white p-4 rounded-lg shadow" data-admin-v2-panel>
+                        <h2 class="font-bold text-lg mb-4" data-admin-v2-section>Produtos em Destaque</h2>
+                        <p class="text-xs text-gray-500 mb-4">Use as setas ou arraste pela alça para mudar a ordem.</p>
+                        <ul id="featured-products-list" class="overflow-y-auto space-y-2 pr-2" data-admin-v2-scroll>
                             <li class="p-2 border rounded-md text-center text-gray-500">Nenhum produto em destaque.</li>
                         </ul>
                     </div>
@@ -55,10 +56,10 @@
     <script>var basePath = '../../';</script>
     <script src="../../scripts/core/config.js?v=20260812-2"></script>
     <script src="../../scripts/core/ui.js"></script>
-    <script src="../../scripts/core/main.js"></script>
+    <script src="../../scripts/core/main.js?v=20261121-2"></script>
     <script src="../../scripts/admin/admin.js"></script> 
     <script src="../../scripts/admin/admin-destaques.js"></script> 
       <script src="/scripts/common/modal-bridge.js"></script>
-  <script src="../../scripts/common/responsive-workspace.js?v=20261008-1"></script>
+  <script src="../../scripts/common/responsive-workspace.js?v=20261121-2"></script>
 </body>
 </html>

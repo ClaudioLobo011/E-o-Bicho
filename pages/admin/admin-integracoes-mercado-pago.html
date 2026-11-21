@@ -2,13 +2,14 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
   <title>Admin: Mercado Pago - E o Bicho</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <link rel="stylesheet" href="../../src/output.css">
   <link rel="stylesheet" href="../../src/responsive-workspace.css?v=20261008-1">
+  <link rel="stylesheet" href="../../src/admin-v2.css?v=20261121-2">
 </head>
-<body class="bg-gray-100 responsive-site responsive-workspace">
+<body class="bg-gray-100 responsive-site responsive-workspace admin-v2">
   <div id="admin-header-placeholder"></div>
 
   <main class="container mx-auto px-4 pt-1 pb-8 min-h-screen">
@@ -18,7 +19,7 @@
       </aside>
 
       <div class="md:col-span-4 space-y-6">
-        <section class="bg-white p-6 rounded-lg shadow">
+        <section class="bg-white p-6 rounded-lg shadow" data-admin-v2-heading>
           <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div class="space-y-2">
               <nav aria-label="Breadcrumb" class="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
@@ -29,7 +30,7 @@
                 <span class="text-gray-600">Mercado Pago</span>
               </nav>
               <div>
-                <h1 class="text-2xl font-bold text-gray-800">Mercado Pago</h1>
+                <h1 class="text-2xl font-bold text-gray-800" data-admin-v2-title>Mercado Pago</h1>
                 <p class="text-gray-600 mt-1">Configure as credenciais e o webhook de pagamentos por empresa.</p>
               </div>
             </div>
@@ -58,14 +59,14 @@
         </section>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <section class="bg-white p-5 rounded-lg shadow lg:col-span-2">
-            <div class="flex items-start justify-between gap-3">
+          <section class="bg-white p-5 rounded-lg shadow lg:col-span-2" data-admin-v2-panel>
+            <div class="flex items-start justify-between gap-3" data-admin-v2-wrap>
               <div>
                 <p class="text-xs font-semibold uppercase tracking-wide text-primary">Credenciais</p>
-                <h2 class="text-xl font-bold text-gray-800">Chaves do Mercado Pago</h2>
+                <h2 class="text-xl font-bold text-gray-800" data-admin-v2-section>Chaves do Mercado Pago</h2>
                 <p class="text-sm text-gray-600 mt-1">Informe as chaves de producao para receber notificacoes e validar pagamentos.</p>
               </div>
-              <label class="inline-flex items-center gap-2 text-sm font-semibold text-gray-700">
+              <label class="inline-flex shrink-0 items-center gap-2 text-sm font-semibold text-gray-700">
                 <input id="mercadopago-enabled" type="checkbox" class="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary">
                 Ativar
               </label>
@@ -95,14 +96,14 @@
             </div>
           </section>
 
-          <section class="bg-white p-5 rounded-lg shadow">
+          <section class="bg-white p-5 rounded-lg shadow" data-admin-v2-panel>
             <div class="flex items-start gap-3">
               <div class="w-11 h-11 rounded-lg bg-primary/10 text-primary grid place-items-center">
                 <i class="fas fa-link text-lg"></i>
               </div>
               <div>
                 <p class="text-xs font-semibold uppercase tracking-wide text-primary">Webhook</p>
-                <h2 class="text-xl font-bold text-gray-800">URL de notificacao</h2>
+                <h2 class="text-xl font-bold text-gray-800" data-admin-v2-section="URL de notificação">URL de notificacao</h2>
                 <p class="text-sm text-gray-600 mt-1">Configure esta URL no painel do Mercado Pago para receber eventos.</p>
               </div>
             </div>
@@ -144,10 +145,10 @@
   <script>var basePath = '../../';</script>
   <script src="../../scripts/core/config.js?v=20260812-2"></script>
   <script src="../../scripts/core/ui.js"></script>
-  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/core/main.js?v=20261121-2"></script>
   <script src="../../scripts/admin/admin.js"></script>
   <script src="../../scripts/admin/admin-integracoes-mercado-pago.js"></script>
   <script src="/scripts/common/modal-bridge.js"></script>
-  <script src="../../scripts/common/responsive-workspace.js?v=20261008-1"></script>
+  <script src="../../scripts/common/responsive-workspace.js?v=20261121-2"></script>
 </body>
 </html>

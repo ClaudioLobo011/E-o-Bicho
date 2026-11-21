@@ -2,13 +2,14 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
   <title>Admin: Conferência de Caixa - E o Bicho</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <link rel="stylesheet" href="../../src/output.css">
   <link rel="stylesheet" href="../../src/responsive-workspace.css?v=20261008-1">
+  <link rel="stylesheet" href="../../src/admin-v2.css?v=20261121-2">
 </head>
-<body class="bg-gray-100 responsive-site responsive-workspace">
+<body class="bg-gray-100 responsive-site responsive-workspace admin-v2">
   <div id="admin-header-placeholder"></div>
 
   <main class="container mx-auto px-4 pt-1 pb-28 min-h-screen">
@@ -20,12 +21,12 @@
       <div class="md:col-span-4 space-y-6">
         <section class="space-y-6">
           <div class="space-y-6">
-            <section id="cashcheck-filters-card" class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4">
+            <section id="cashcheck-filters-card" class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4" data-admin-v2-heading data-admin-v2-section="Filtros">
               <div class="flex flex-col gap-4">
                 <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div>
                     <div class="flex flex-wrap items-center gap-2">
-                      <h1 class="text-2xl font-bold text-gray-800">Conferência de Caixa</h1>
+                      <h1 class="text-2xl font-bold text-gray-800" data-admin-v2-title>Conferência de Caixa</h1>
                     </div>
                   </div>
                   <span class="inline-flex items-center gap-2 rounded-full bg-primary/10 text-primary text-xs font-semibold px-3 py-1">
@@ -83,7 +84,7 @@
               </div>
             </section>
 
-            <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+            <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-5" data-admin-v2-panel>
               <div class="mb-4 border-b border-gray-100">
                 <div class="flex flex-wrap gap-2" role="tablist" aria-label="Abas da conferência de caixa">
                   <button type="button" class="cashcheck-tab inline-flex items-center gap-2 rounded-t-lg border-b-2 px-3 py-2 text-sm font-semibold border-primary text-primary" data-cashcheck-tab="conferencia" aria-selected="true">
@@ -133,7 +134,7 @@
                       <p id="cashcheck-status" class="mt-1 text-sm font-semibold text-gray-700">Aguardando conferência</p>
                     </div>
                   </div>
-                  <div class="overflow-hidden rounded-xl border border-gray-200">
+                  <div class="overflow-hidden rounded-xl border border-gray-200" data-admin-v2-table>
                     <table class="min-w-full divide-y divide-gray-200 text-sm">
                       <thead class="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                         <tr>
@@ -158,7 +159,7 @@
                 <div data-cashcheck-panel="movimentacoes" class="hidden space-y-4">
                   <div class="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <h3 class="text-base font-semibold text-gray-800">Movimentações de Caixa</h3>
+                      <h3 class="text-base font-semibold text-gray-800" data-admin-v2-section>Movimentações de Caixa</h3>
                       <p class="text-sm text-gray-600">Entradas, saídas, entradas de troco, envio à tesouraria e demais movimentações do período.</p>
                     </div>
                     <div class="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-medium text-gray-600">
@@ -186,7 +187,7 @@
                     </div>
                   </div>
 
-                  <div class="overflow-hidden rounded-xl border border-gray-200">
+                  <div class="overflow-hidden rounded-xl border border-gray-200" data-admin-v2-table>
                     <table class="min-w-full divide-y divide-gray-200 text-sm">
                       <thead class="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                         <tr>
@@ -212,7 +213,7 @@
                 <div data-cashcheck-panel="produtos" class="hidden space-y-4">
                   <div class="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <h3 class="text-base font-semibold text-gray-800">Produtos Vendidos</h3>
+                      <h3 class="text-base font-semibold text-gray-800" data-admin-v2-section>Produtos Vendidos</h3>
                       <p class="text-sm text-gray-600">Conferência detalhada dos produtos vendidos no caixa selecionado.</p>
                     </div>
                     <input id="cashcheck-products-search" type="search" class="w-full sm:w-72 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Filtrar por código, barras ou nome">
@@ -231,7 +232,7 @@
                       <p id="cashcheck-products-total" class="mt-1 text-xl font-semibold text-primary">R$ 0,00</p>
                     </div>
                   </div>
-                  <div class="overflow-hidden rounded-xl border border-gray-200">
+                  <div class="overflow-hidden rounded-xl border border-gray-200" data-admin-v2-table>
                     <table class="min-w-full divide-y divide-gray-200 text-sm">
                       <thead class="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                         <tr>
@@ -258,7 +259,7 @@
 
                 <div data-cashcheck-panel="banho-tosa" class="hidden space-y-4">
                   <div>
-                    <h3 class="text-base font-semibold text-gray-800">Serviços do Banho e Tosa</h3>
+                    <h3 class="text-base font-semibold text-gray-800" data-admin-v2-section>Serviços do Banho e Tosa</h3>
                     <p class="text-sm text-gray-600">Serviços vendidos no caixa selecionado para o setor de banho e tosa.</p>
                   </div>
                   <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -266,7 +267,7 @@
                     <div class="rounded-xl border border-gray-100 bg-gray-50 p-4"><p class="text-xs text-gray-500 uppercase">Quantidade</p><p id="cashcheck-services-banho-qty" class="mt-1 text-lg font-semibold text-gray-800">0</p></div>
                     <div class="rounded-xl border border-gray-100 bg-gray-50 p-4"><p class="text-xs text-gray-500 uppercase">Total</p><p id="cashcheck-services-banho-total" class="mt-1 text-lg font-semibold text-primary">R$ 0,00</p></div>
                   </div>
-                  <div class="overflow-hidden rounded-xl border border-gray-200">
+                  <div class="overflow-hidden rounded-xl border border-gray-200" data-admin-v2-table>
                     <table class="min-w-full divide-y divide-gray-200 text-sm">
                       <thead class="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                         <tr>
@@ -286,7 +287,7 @@
 
                 <div data-cashcheck-panel="veterinario" class="hidden space-y-4">
                   <div>
-                    <h3 class="text-base font-semibold text-gray-800">Serviços Veterinários</h3>
+                    <h3 class="text-base font-semibold text-gray-800" data-admin-v2-section>Serviços Veterinários</h3>
                     <p class="text-sm text-gray-600">Consultas e procedimentos vendidos no caixa selecionado.</p>
                   </div>
                   <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -294,7 +295,7 @@
                     <div class="rounded-xl border border-gray-100 bg-gray-50 p-4"><p class="text-xs text-gray-500 uppercase">Quantidade</p><p id="cashcheck-services-vet-qty" class="mt-1 text-lg font-semibold text-gray-800">0</p></div>
                     <div class="rounded-xl border border-gray-100 bg-gray-50 p-4"><p class="text-xs text-gray-500 uppercase">Total</p><p id="cashcheck-services-vet-total" class="mt-1 text-lg font-semibold text-primary">R$ 0,00</p></div>
                   </div>
-                  <div class="overflow-hidden rounded-xl border border-gray-200">
+                  <div class="overflow-hidden rounded-xl border border-gray-200" data-admin-v2-table>
                     <table class="min-w-full divide-y divide-gray-200 text-sm">
                       <thead class="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                         <tr>
@@ -316,7 +317,7 @@
 
                 <div data-cashcheck-panel="internacao" class="hidden space-y-4">
                   <div>
-                    <h3 class="text-base font-semibold text-gray-800">Serviços de Internação</h3>
+                    <h3 class="text-base font-semibold text-gray-800" data-admin-v2-section>Serviços de Internação</h3>
                     <p class="text-sm text-gray-600">Diárias, procedimentos e cobranças de internação vendidos no caixa selecionado.</p>
                   </div>
                   <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -324,7 +325,7 @@
                     <div class="rounded-xl border border-gray-100 bg-gray-50 p-4"><p class="text-xs text-gray-500 uppercase">Quantidade</p><p id="cashcheck-services-internacao-qty" class="mt-1 text-lg font-semibold text-gray-800">0</p></div>
                     <div class="rounded-xl border border-gray-100 bg-gray-50 p-4"><p class="text-xs text-gray-500 uppercase">Total</p><p id="cashcheck-services-internacao-total" class="mt-1 text-lg font-semibold text-primary">R$ 0,00</p></div>
                   </div>
-                  <div class="overflow-hidden rounded-xl border border-gray-200">
+                  <div class="overflow-hidden rounded-xl border border-gray-200" data-admin-v2-table>
                     <table class="min-w-full divide-y divide-gray-200 text-sm">
                       <thead class="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                         <tr>
@@ -352,7 +353,7 @@
 
   <div
     class="z-40 border-t border-gray-200 bg-white/95 backdrop-blur"
-    style="position: fixed; left: 0; right: 0; bottom: 0;"
+    data-admin-v2-action-bar
   >
     <div class="container mx-auto px-4 py-3">
       <div class="flex flex-wrap items-center justify-end gap-2">
@@ -383,10 +384,10 @@
   <script>var basePath = '../../';</script>
   <script src="../../scripts/core/config.js?v=20260812-2"></script>
   <script src="../../scripts/core/ui.js"></script>
-  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/core/main.js?v=20261121-2"></script>
   <script src="../../scripts/admin/admin.js"></script>
   <script src="../../scripts/admin/admin-financeiro-conferencia-caixa.js"></script>
   <script src="/scripts/common/modal-bridge.js"></script>
-  <script src="../../scripts/common/responsive-workspace.js?v=20261008-1"></script>
+  <script src="../../scripts/common/responsive-workspace.js?v=20261121-2"></script>
 </body>
 </html>

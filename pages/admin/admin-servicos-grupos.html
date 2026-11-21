@@ -2,14 +2,15 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content"/>
   <title>Admin — Cadastro de Grupo de Serviço</title>
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <link rel="stylesheet" href="../../src/output.css">
   <link rel="stylesheet" href="../../src/responsive-workspace.css?v=20261008-1">
+  <link rel="stylesheet" href="../../src/admin-v2.css?v=20261121-2">
 </head>
-<body class="bg-gray-100 responsive-site responsive-workspace">
+<body class="bg-gray-100 responsive-site responsive-workspace admin-v2">
   <!-- Header Admin -->
   <div id="admin-header-placeholder"></div>
 
@@ -22,12 +23,12 @@
 
       <!-- Conteúdo -->
       <section class="md:col-span-4">
-        <div class="bg-white rounded-lg shadow p-6">
+        <div class="bg-white rounded-lg shadow p-6" data-admin-v2-heading>
           <!-- Título -->
           <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
             <div class="flex items-center gap-3">
               <i class="fas fa-folder-tree text-gray-400 text-2xl"></i>
-              <h1 class="text-2xl font-bold text-gray-800">Cadastro de Grupo de Serviço</h1>
+              <h1 class="text-2xl font-bold text-gray-800" data-admin-v2-title>Cadastro de Grupo de Serviço</h1>
             </div>
             <a href="/pages/admin/admin-servicos-grupos.html" class="text-sm text-gray-500 hover:text-gray-700 underline">Atualizar</a>
           </div>
@@ -83,14 +84,14 @@
         </div>
 
         <!-- Lista -->
-        <div class="bg-white rounded-lg shadow p-6 mt-6">
+        <div class="bg-white rounded-lg shadow p-6 mt-6" data-admin-v2-panel>
           <div class="flex items-center gap-3 mb-4">
             <i class="fas fa-list text-gray-400"></i>
-            <h2 class="text-lg font-bold text-gray-800">Grupos cadastrados</h2>
+            <h2 class="text-lg font-bold text-gray-800" data-admin-v2-section>Grupos cadastrados</h2>
           </div>
 
-          <div class="overflow-x-auto">
-            <table class="min-w-full text-sm">
+          <div class="overflow-x-auto" data-admin-v2-table>
+            <table class="min-w-full text-sm" data-admin-v2-pin-actions>
               <thead>
                 <tr class="text-left text-gray-500">
                   <th class="px-3 py-2">Nome</th>
@@ -121,7 +122,7 @@
   <!-- Core -->
   <script src="../../scripts/core/config.js?v=20260812-2"></script>
   <script src="../../scripts/core/ui.js"></script>
-  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/core/main.js?v=20261121-2"></script>
 
   <!-- (Se houver) Guarda do Admin -->
   <script src="../../scripts/admin/admin.js"></script>
@@ -129,6 +130,6 @@
   <!-- Página -->
   <script src="../../scripts/admin/admin-servicos-grupos.js"></script>
   <script src="/scripts/common/modal-bridge.js"></script>
-  <script src="../../scripts/common/responsive-workspace.js?v=20261008-1"></script>
+  <script src="../../scripts/common/responsive-workspace.js?v=20261121-2"></script>
 </body>
 </html>

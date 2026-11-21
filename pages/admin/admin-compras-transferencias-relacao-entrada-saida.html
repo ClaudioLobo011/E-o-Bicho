@@ -2,13 +2,14 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
   <title>Admin: Relação Entrada/Saída de Estoque - E o Bicho</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <link rel="stylesheet" href="../../src/output.css">
   <link rel="stylesheet" href="../../src/responsive-workspace.css?v=20261008-1">
+  <link rel="stylesheet" href="../../src/admin-v2.css?v=20261121-2">
 </head>
-<body class="bg-gray-100 text-[13px] leading-relaxed responsive-site responsive-workspace">
+<body class="bg-gray-100 text-[13px] leading-relaxed responsive-site responsive-workspace admin-v2">
   <div id="admin-header-placeholder"></div>
 
   <main class="container mx-auto px-4 pt-1 pb-8 min-h-screen">
@@ -18,7 +19,7 @@
       </aside>
 
       <div class="md:col-span-4 space-y-5">
-          <header class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <header class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between" data-admin-v2-heading>
           <div class="space-y-2">
             <nav aria-label="Breadcrumb" class="flex items-center gap-2 text-[11px] text-gray-500 uppercase tracking-wide font-semibold">
               <span class="inline-flex items-center gap-1 text-primary"><i class="fas fa-shopping-basket"></i> Compras</span>
@@ -28,7 +29,7 @@
               <span class="text-gray-800">Relação Entrada/Saída</span>
             </nav>
             <div>
-              <h1 class="text-2xl font-bold text-gray-800">Relação de entrada/saída do estoque</h1>
+              <h1 class="text-2xl font-bold text-gray-800" data-admin-v2-title>Relação de entrada/saída do estoque</h1>
               <p class="text-sm text-gray-600">Audite movimentações manuais de estoque com filtros avançados por período, responsável, empresa e depósitos.</p>
             </div>
           </div>
@@ -45,9 +46,9 @@
         </header>
 
         <div class="grid gap-5 lg:grid-cols-2">
-          <section class="bg-white rounded-xl shadow-sm border border-gray-100">
+          <section class="bg-white rounded-xl shadow-sm border border-gray-100" data-admin-v2-panel>
             <details open class="group">
-              <summary class="flex cursor-pointer list-none items-center justify-between gap-3 rounded-t-xl border-b border-gray-100 px-4 py-3 text-sm font-semibold text-gray-700 transition group-open:rounded-b-none group-open:bg-gray-50">
+              <summary class="flex cursor-pointer list-none items-center justify-between gap-3 rounded-t-xl border-b border-gray-100 px-4 py-3 text-sm font-semibold text-gray-700 transition group-open:rounded-b-none group-open:bg-gray-50" data-admin-v2-section>
                 <span class="inline-flex items-center gap-2 text-gray-800">
                   <i class="fas fa-filter text-primary"></i>
                   Filtros da relação
@@ -116,9 +117,9 @@
             </details>
           </section>
 
-          <section class="bg-white rounded-xl shadow-sm border border-gray-100">
+          <section class="bg-white rounded-xl shadow-sm border border-gray-100" data-admin-v2-panel>
             <details open class="group">
-              <summary class="flex cursor-pointer list-none items-center justify-between gap-3 rounded-t-xl border-b border-gray-100 px-4 py-3 text-sm font-semibold text-gray-700 transition group-open:rounded-b-none group-open:bg-gray-50">
+              <summary class="flex cursor-pointer list-none items-center justify-between gap-3 rounded-t-xl border-b border-gray-100 px-4 py-3 text-sm font-semibold text-gray-700 transition group-open:rounded-b-none group-open:bg-gray-50" data-admin-v2-section>
                 <span class="inline-flex items-center gap-2 text-gray-800">
                   <i class="fas fa-chart-line text-primary"></i>
                   Indicadores gerais
@@ -178,10 +179,10 @@
           </section>
         </div>
 
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4">
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4" data-admin-v2-panel>
           <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h2 class="text-lg font-semibold text-gray-800">Movimentações filtradas</h2>
+              <h2 class="text-lg font-semibold text-gray-800" data-admin-v2-section>Movimentações filtradas</h2>
               <p class="text-sm text-gray-600">Resultados limitados às 200 movimentações mais recentes que atendem aos filtros informados.</p>
             </div>
             <div class="flex items-center gap-2 text-xs font-medium text-gray-500">
@@ -189,7 +190,7 @@
             </div>
           </div>
 
-          <div class="overflow-x-auto rounded-xl border border-gray-200" id="report-table-container">
+          <div class="overflow-x-auto rounded-xl border border-gray-200" id="report-table-container" data-admin-v2-table>
             <table class="min-w-full divide-y divide-gray-200 text-sm">
               <thead class="bg-gray-50 text-[11px] font-semibold uppercase tracking-wide text-gray-600">
                 <tr>
@@ -222,9 +223,9 @@
   <script>var basePath = '../../';</script>
   <script src="../../scripts/core/config.js?v=20260812-2"></script>
   <script src="../../scripts/core/ui.js"></script>
-  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/core/main.js?v=20261121-2"></script>
   <script src="../../scripts/admin/admin.js"></script>
   <script src="../../scripts/admin/admin-compras-transferencias-relacao-entrada-saida.js"></script>
-  <script src="../../scripts/common/responsive-workspace.js?v=20261008-1"></script>
+  <script src="../../scripts/common/responsive-workspace.js?v=20261121-2"></script>
 </body>
 </html>

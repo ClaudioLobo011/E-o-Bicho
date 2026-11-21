@@ -2,15 +2,16 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
     <title>Admin: Entregas - E o Bicho</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <link rel="stylesheet" href="../../src/output.css">
   <link rel="stylesheet" href="../../src/responsive-workspace.css?v=20261008-1">
+  <link rel="stylesheet" href="../../src/admin-v2.css?v=20261121-2">
 </head>
-<body class="bg-gray-100 responsive-site responsive-workspace">
+<body class="bg-gray-100 responsive-site responsive-workspace admin-v2">
 
     <div id="admin-header-placeholder"></div>
 
@@ -20,8 +21,8 @@
                 <div id="admin-sidebar-placeholder"></div>
             </aside>
             <div class="md:col-span-4">
-                <div class="bg-white p-6 rounded-lg shadow">
-                    <h1 class="text-2xl font-bold text-gray-800">Configurações de Entrega</h1>
+                <div class="bg-white p-6 rounded-lg shadow" data-admin-v2-heading>
+                    <h1 class="text-2xl font-bold text-gray-800" data-admin-v2-title>Configurações de Entrega</h1>
                     <p class="text-gray-600 mt-1">Defina os veículos e as zonas de entrega.</p>
                     
                     <div class="border-b border-gray-200 mt-6">
@@ -38,8 +39,8 @@
                                 <span>Adicionar Veículo</span>
                             </button>
                         </div>
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-sm text-left">
+                        <div class="overflow-x-auto" data-admin-v2-table>
+                            <table class="w-full text-sm text-left" data-admin-v2-pin-actions>
                                 <thead class="text-xs text-gray-700 uppercase bg-gray-50">
                                     <tr>
                                         <th class="px-6 py-3">Tipo</th>
@@ -115,8 +116,8 @@
     <div id="modal-placeholder"></div>
     <div id="confirm-modal-placeholder"></div>
 
-    <div id="vehicle-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-lg shadow-xl max-w-lg w-full">
+    <div id="vehicle-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" data-admin-v2-modal>
+        <div class="bg-white rounded-lg shadow-xl max-w-lg w-full" data-admin-v2-dialog-content data-admin-v2-dialog-scroll>
             <form id="vehicle-form">
                 <div class="p-4 border-b"><h3 id="vehicle-modal-title" class="text-lg font-semibold">Adicionar Veículo</h3></div>
                 <div class="p-6 space-y-4">
@@ -155,10 +156,10 @@
     <script>var basePath = '../../';</script>
     <script src="../../scripts/core/config.js?v=20260812-2"></script>
     <script src="../../scripts/core/ui.js"></script>
-    <script src="../../scripts/core/main.js"></script>
+    <script src="../../scripts/core/main.js?v=20261121-2"></script>
     <script src="../../scripts/admin/admin.js"></script>
     <script src="../../scripts/admin/admin-entregas.js"></script> 
   <script src="/scripts/common/modal-bridge.js"></script>
-  <script src="../../scripts/common/responsive-workspace.js?v=20261008-1"></script>
+  <script src="../../scripts/common/responsive-workspace.js?v=20261121-2"></script>
 </body>
 </html>

@@ -2,14 +2,15 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
     <title>Painel de Administração - E o Bicho</title>
     
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     <link rel="stylesheet" href="../src/output.css">
   <link rel="stylesheet" href="../src/responsive-workspace.css?v=20261008-1">
+  <link rel="stylesheet" href="../src/admin-v2.css?v=20261121-2">
 </head>
-<body class="bg-gray-100 responsive-site responsive-workspace">
+<body class="bg-gray-100 responsive-site responsive-workspace admin-v2">
 
     <div id="admin-header-placeholder"></div>
 
@@ -21,82 +22,45 @@
             </aside>
 
             <div class="md:col-span-4">
-                <section class="rounded-2xl bg-white p-6 shadow">
-                    <h1 class="mb-6 text-2xl font-bold text-gray-800">Painel Principal</h1>
+                <section class="admin-home">
+                    <h1 data-admin-v2-title>Painel Principal</h1>
 
-                    <div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+                    <section class="admin-home-section" aria-labelledby="admin-home-operations">
+                        <h2 id="admin-home-operations">Operação da loja</h2>
+                        <div class="admin-home-grid">
+                            <a href="admin/admin-produtos.html" class="admin-home-card">
+                                <i class="fas fa-box-open" aria-hidden="true"></i>
+                                <span><strong>Gerir Produtos</strong><small>Adicionar e editar produtos</small></span>
+                            </a>
+                            <a href="admin/admin-pedidos-web.html" class="admin-home-card">
+                                <i class="fas fa-receipt" aria-hidden="true"></i>
+                                <span><strong>Ver Pedidos</strong><small>Acompanhar pedidos da loja online</small></span>
+                            </a>
+                            <a href="admin/admin-crm.html" class="admin-home-card">
+                                <i class="fas fa-users" aria-hidden="true"></i>
+                                <span><strong>CRM</strong><small>Comunicação com clientes</small></span>
+                            </a>
+                        </div>
+                    </section>
 
-                        <a href="admin/admin-produtos.html" class="block rounded-lg border-2 border-transparent bg-gray-50 p-6 shadow-sm transition-all duration-300 hover:border-primary hover:shadow-lg">
-                            <div class="flex items-center space-x-4">
-                                <div class="rounded-full bg-primary/10 p-3">
-                                    <i class="fas fa-box-open text-2xl text-primary"></i>
-                                </div>
-                                <div>
-                                    <h3 class="text-lg font-bold text-gray-800">Gerir Produtos</h3>
-                                    <p class="text-sm text-gray-600">Adicionar e editar produtos</p>
-                                </div>
-                            </div>
-                        </a>
-                        <a href="#" class="block rounded-lg border-2 border-transparent bg-gray-50 p-6 shadow-sm transition-all duration-300 hover:border-primary hover:shadow-lg">
-                            <div class="flex items-center space-x-4">
-                                <div class="rounded-full bg-primary/10 p-3">
-                                    <i class="fas fa-receipt text-2xl text-primary"></i>
-                                </div>
-                                <div>
-                                    <h3 class="text-lg font-bold text-gray-800">Ver Pedidos</h3>
-                                    <p class="text-sm text-gray-600">Visualizar pedidos dos clientes</p>
-                                </div>
-                            </div>
-                        </a>
-
-                        <a href="#" class="block rounded-lg border-2 border-transparent bg-gray-50 p-6 shadow-sm transition-all duration-300 hover:border-primary hover:shadow-lg">
-                            <div class="flex items-center space-x-4">
-                                <div class="rounded-full bg-primary/10 p-3">
-                                    <i class="fas fa-users text-2xl text-primary"></i>
-                                </div>
-                                <div>
-                                    <h3 class="text-lg font-bold text-gray-800">Gerir Clientes</h3>
-                                    <p class="text-sm text-gray-600">Consultar lista de clientes</p>
-                                </div>
-                            </div>
-                        </a>
-
-                        <a href="/public/downloads/eobicho-funcionarios-v1.0.1.apk" download class="block rounded-lg border-2 border-transparent bg-gray-50 p-6 shadow-sm transition-all duration-300 hover:border-primary hover:shadow-lg">
-                            <div class="flex items-center space-x-4">
-                                <div class="rounded-full bg-primary/10 p-3">
-                                    <i class="fas fa-mobile-screen-button text-2xl text-primary"></i>
-                                </div>
-                                <div>
-                                    <h3 class="text-lg font-bold text-gray-800">Aplicativo Mobile</h3>
-                                    <p class="text-sm text-gray-600">Baixar APK</p>
-                                </div>
-                            </div>
-                        </a>
-
-                            <a href="https://github.com/ClaudioLobo011/E-o-Bicho/releases/download/installer-1.0.2/E-o-Bicho-1.0.2-Instalador.exe" class="block rounded-lg border-2 border-transparent bg-gray-50 p-6 shadow-sm transition-all duration-300 hover:border-primary hover:shadow-lg">
-                            <div class="flex items-center space-x-4">
-                                <div class="rounded-full bg-primary/10 p-3">
-                                    <i class="fas fa-desktop text-2xl text-primary"></i>
-                                </div>
-                                <div>
-                                    <h3 class="text-lg font-bold text-gray-800">PDV e Agenda Desktop</h3>
-                                    <p class="text-sm text-gray-600">Baixar instalador Windows v1.0.2 (.exe)</p>
-                                </div>
-                            </div>
-                        </a>
-
-                        <button type="button" id="download-aspia" class="block w-full rounded-lg border-2 border-transparent bg-gray-50 p-6 text-left shadow-sm transition-all duration-300 hover:border-primary hover:shadow-lg">
-                            <span class="flex items-center space-x-4">
-                                <span class="rounded-full bg-primary/10 p-3"><i class="fas fa-headset text-2xl text-primary" aria-hidden="true"></i></span>
-                                <span>
-                                    <span class="block text-lg font-bold text-gray-800">Aspia — Suporte E o Bicho</span>
-                                    <span class="block text-sm text-gray-600">Baixar Host configurado para Windows (.zip)</span>
-                                    <span class="block text-xs text-gray-600">Extraia e execute INSTALAR-ASPIA-EOBICHO.cmd</span>
-                                </span>
-                            </span>
-                        </button>
-                    </div>
-                    <p id="download-aspia-status" role="status" aria-live="polite" class="mt-4 text-sm text-gray-600"></p>
+                    <section class="admin-home-section" aria-labelledby="admin-home-downloads">
+                        <h2 id="admin-home-downloads">Aplicativos e suporte</h2>
+                        <div class="admin-home-grid">
+                            <a href="/public/downloads/eobicho-funcionarios-v1.0.1.apk" download class="admin-home-card">
+                                <i class="fas fa-mobile-screen-button" aria-hidden="true"></i>
+                                <span><strong>Aplicativo Mobile</strong><small>Baixar APK</small></span>
+                            </a>
+                            <a href="https://github.com/ClaudioLobo011/E-o-Bicho/releases/download/installer-1.0.2/E-o-Bicho-1.0.2-Instalador.exe" class="admin-home-card">
+                                <i class="fas fa-desktop" aria-hidden="true"></i>
+                                <span><strong>PDV e Agenda Desktop</strong><small>Instalador Windows v1.0.2 (.exe)</small></span>
+                            </a>
+                            <button type="button" id="download-aspia" class="admin-home-card">
+                                <i class="fas fa-headset" aria-hidden="true"></i>
+                                <span><strong>Aspia</strong><small>Host de suporte Windows (.zip). Extraia e execute INSTALAR-ASPIA-EOBICHO.cmd</small></span>
+                            </button>
+                        </div>
+                        <p id="download-aspia-status" role="status" aria-live="polite" class="mt-2 text-sm"></p>
+                    </section>
                 </section>
             </div>
 
@@ -111,9 +75,9 @@
     <script>var basePath = '../';</script>
     <script src="../scripts/core/config.js?v=20260812-2"></script>
     <script src="../scripts/core/ui.js"></script>
-    <script src="../scripts/core/main.js"></script>
+    <script src="../scripts/core/main.js?v=20261121-2"></script>
     <script src="../scripts/admin/admin.js"></script>
     <script src="../scripts/admin/admin-aspia-download.js?v=20261021-5"></script>
-  <script src="../scripts/common/responsive-workspace.js?v=20261008-1"></script>
+  <script src="../scripts/common/responsive-workspace.js?v=20261121-2"></script>
 </body>
 </html>

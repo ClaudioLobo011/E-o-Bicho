@@ -2,7 +2,7 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
     <title>Admin — Fechamento de Comissões</title>
     <link
       rel="stylesheet"
@@ -85,8 +85,9 @@
       }
     </style>
     <link rel="stylesheet" href="../../src/responsive-workspace.css?v=20261008-1">
+  <link rel="stylesheet" href="../../src/admin-v2.css?v=20261121-2">
 </head>
-  <body class="bg-gray-100 text-gray-800 antialiased responsive-site responsive-workspace">
+  <body class="bg-gray-100 text-gray-800 antialiased responsive-site responsive-workspace admin-v2">
     <div id="admin-header-placeholder"></div>
 
     <main
@@ -98,14 +99,14 @@
 
       <section
         class="mt-3 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/5"
-      >
+       data-admin-v2-heading>
         <header class="border-b border-gray-100 px-3 py-3 sm:px-5">
           <div
             class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between"
           >
             <div class="min-w-0">
               <div class="flex flex-wrap items-center gap-2">
-                <h1 class="text-xl font-bold text-gray-950 sm:text-2xl">
+                <h1 class="text-xl font-bold text-gray-950 sm:text-2xl" data-admin-v2-title>
                   Fechamento de Comissões
                 </h1>
                 <span
@@ -235,7 +236,7 @@
             class="rounded-xl border border-gray-200 bg-gray-50/60 p-3"
             aria-labelledby="filtros-title"
           >
-            <h2 id="filtros-title" class="sr-only">Filtros do relatório</h2>
+            <h2 id="filtros-title" class="sr-only" data-admin-v2-section>Filtros do relatório</h2>
             <div
               class="flex flex-wrap gap-1.5"
               role="group"
@@ -325,7 +326,7 @@
                   <option value="">Nenhuma</option>
                 </select></label
               >
-              <div class="col-span-2 flex items-end gap-1.5 md:col-span-1">
+              <div id="commission-closing-filter-actions" class="col-span-2 flex items-end gap-1.5 md:col-span-1">
                 <button
                   type="button"
                   id="btn-aplicar"
@@ -376,13 +377,13 @@
               id="commission-report"
               class="commission-report min-w-0 overflow-hidden rounded-xl border border-gray-200 bg-white"
               aria-labelledby="relatorio-title"
-            >
+             data-admin-v2-panel>
             <div
               class="flex flex-col gap-2 border-b border-gray-100 px-3 py-3 lg:flex-row lg:items-center lg:justify-between"
             >
               <div class="flex min-w-0 items-center gap-2">
                 <div>
-                  <h2 id="relatorio-title" class="font-bold text-gray-950">
+                  <h2 id="relatorio-title" class="font-bold text-gray-950" data-admin-v2-section>
                     Relatório estrito do período
                   </h2>
                   <p class="text-xs text-gray-500">
@@ -510,10 +511,10 @@
             <details
               id="history-section"
               class="overflow-hidden rounded-xl border border-gray-200 bg-white"
-            >
+             data-admin-v2-panel>
               <summary
                 class="cursor-pointer px-3 py-3 text-sm font-semibold text-gray-900"
-              >
+               data-admin-v2-section>
                 Histórico que toca o período
                 <span
                   id="history-count"
@@ -563,19 +564,19 @@
       aria-modal="true"
       aria-labelledby="config-title"
       data-modal
-    >
+     data-admin-v2-modal>
       <div
         class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm"
         data-modal-close="modal-configuracoes"
       ></div>
       <div
         class="relative mx-auto flex min-h-full items-start justify-center p-3 sm:items-center"
-      >
+       data-admin-v2-dialog-align>
         <div
           class="max-h-[94vh] w-full max-w-2xl overflow-y-auto overflow-x-hidden rounded-2xl bg-white shadow-2xl"
           data-modal-panel
           tabindex="-1"
-        >
+         data-admin-v2-dialog-content data-admin-v2-dialog-scroll>
           <div class="flex items-start justify-between border-b px-4 py-3">
             <div>
               <p class="text-xs font-bold uppercase text-primary">
@@ -703,19 +704,19 @@
       aria-modal="true"
       aria-labelledby="fechamento-title"
       data-modal
-    >
+     data-admin-v2-modal>
       <div
         class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm"
         data-modal-close="modal-fechamento"
       ></div>
       <div
         class="relative mx-auto flex min-h-full items-start justify-center p-3 sm:items-center"
-      >
+       data-admin-v2-dialog-align>
         <div
           class="max-h-[94vh] w-full max-w-3xl overflow-y-auto overflow-x-hidden rounded-2xl bg-white shadow-2xl"
           data-modal-panel
           tabindex="-1"
-        >
+         data-admin-v2-dialog-content data-admin-v2-dialog-scroll>
           <div class="flex items-start justify-between border-b px-4 py-3">
             <div>
               <p class="text-xs font-bold uppercase text-primary">
@@ -841,19 +842,19 @@
       aria-modal="true"
       aria-labelledby="pagamento-title"
       data-modal
-    >
+     data-admin-v2-modal>
       <div
         class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm"
         data-modal-close="modal-pagamento"
       ></div>
       <div
         class="relative mx-auto flex min-h-full items-start justify-center p-3 sm:items-center"
-      >
+       data-admin-v2-dialog-align>
         <div
           class="max-h-[94vh] w-full max-w-lg overflow-y-auto overflow-x-hidden rounded-2xl bg-white shadow-2xl"
           data-modal-panel
           tabindex="-1"
-        >
+         data-admin-v2-dialog-content data-admin-v2-dialog-scroll>
           <div class="flex items-start justify-between border-b px-4 py-3">
             <div>
               <p class="text-xs font-bold uppercase text-emerald-700">
@@ -963,19 +964,19 @@
       aria-modal="true"
       aria-labelledby="aprovacao-title"
       data-modal
-    >
+     data-admin-v2-modal>
       <div
         class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm"
         data-modal-close="modal-aprovacao"
       ></div>
       <div
         class="relative mx-auto flex min-h-full items-start justify-center p-3 sm:items-center"
-      >
+       data-admin-v2-dialog-align>
         <div
           class="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl"
           data-modal-panel
           tabindex="-1"
-        >
+         data-admin-v2-dialog-content data-admin-v2-dialog-scroll>
           <div class="flex items-start justify-between border-b px-4 py-3">
             <div>
               <p class="text-xs font-bold uppercase text-blue-700">
@@ -1034,19 +1035,19 @@
       aria-modal="true"
       aria-labelledby="cancelamento-title"
       data-modal
-    >
+     data-admin-v2-modal>
       <div
         class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm"
         data-modal-close="modal-cancelamento"
       ></div>
       <div
         class="relative mx-auto flex min-h-full items-start justify-center p-3 sm:items-center"
-      >
+       data-admin-v2-dialog-align>
         <div
           class="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl"
           data-modal-panel
           tabindex="-1"
-        >
+         data-admin-v2-dialog-content data-admin-v2-dialog-scroll>
           <div class="flex items-start justify-between border-b px-4 py-3">
             <div>
               <p class="text-xs font-bold uppercase text-red-700">
@@ -1116,19 +1117,19 @@
       aria-modal="true"
       aria-labelledby="detalhes-title"
       data-modal
-    >
+     data-admin-v2-modal>
       <div
         class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm"
         data-modal-close="modal-detalhes"
       ></div>
       <div
         class="relative mx-auto flex min-h-full items-start justify-center p-2"
-      >
+       data-admin-v2-dialog-align>
         <div
           class="max-h-[96vh] w-full max-w-6xl overflow-y-auto overflow-x-hidden rounded-2xl bg-white shadow-2xl"
           data-modal-panel
           tabindex="-1"
-        >
+         data-admin-v2-dialog-content data-admin-v2-dialog-scroll>
           <div
             class="sticky top-0 z-10 flex flex-wrap items-start justify-between gap-2 border-b bg-white px-3 py-3 sm:px-4"
           >
@@ -1241,19 +1242,19 @@
       aria-modal="true"
       aria-labelledby="reconcile-title"
       data-modal
-    >
+     data-admin-v2-modal>
       <div
         class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm"
         data-modal-close="modal-reconciliacao"
       ></div>
       <div
         class="relative mx-auto flex min-h-full items-start justify-center p-3 sm:items-center"
-      >
+       data-admin-v2-dialog-align>
         <div
           class="max-h-[94vh] w-full max-w-lg overflow-y-auto overflow-x-hidden rounded-2xl bg-white shadow-2xl"
           data-modal-panel
           tabindex="-1"
-        >
+         data-admin-v2-dialog-content data-admin-v2-dialog-scroll>
           <div class="flex items-start justify-between border-b px-4 py-3">
             <div>
               <p class="text-xs font-bold uppercase text-amber-700">
@@ -1319,19 +1320,19 @@
       aria-modal="true"
       aria-labelledby="analytics-title"
       data-modal
-    >
+     data-admin-v2-modal>
       <div
         class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm"
         data-modal-close="modal-analytics"
       ></div>
       <div
         class="relative mx-auto flex min-h-full items-start justify-center p-2"
-      >
+       data-admin-v2-dialog-align>
         <div
           class="max-h-[96vh] w-full max-w-5xl overflow-y-auto overflow-x-hidden rounded-2xl bg-white shadow-2xl"
           data-modal-panel
           tabindex="-1"
-        >
+         data-admin-v2-dialog-content data-admin-v2-dialog-scroll>
           <div
             class="sticky top-0 z-10 flex items-start justify-between border-b bg-white px-4 py-3"
           >
@@ -1373,6 +1374,6 @@
     <script src="../../scripts/admin/admin.js?v=20260909-7"></script>
     <script src="/scripts/common/modal-bridge.js?v=20260909-7"></script>
     <script src="../../scripts/admin/admin-comissoes-fechamento.js?v=20260909-7"></script>
-    <script src="../../scripts/common/responsive-workspace.js?v=20261008-1"></script>
+    <script src="../../scripts/common/responsive-workspace.js?v=20261121-2"></script>
 </body>
 </html>

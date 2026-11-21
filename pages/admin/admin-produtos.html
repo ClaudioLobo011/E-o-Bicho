@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
     <title>Admin: Produto - E o Bicho</title>
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
@@ -285,8 +285,9 @@
     </script>
     <link rel="stylesheet" href="../../src/admin-produto-workspace.css?v=20260918-1">
   <link rel="stylesheet" href="../../src/responsive-workspace.css?v=20261008-1">
+  <link rel="stylesheet" href="../../src/admin-v2.css?v=20261121-2">
 </head>
-<body class="product-workspace bg-gray-100 leading-relaxed responsive-site responsive-workspace">
+<body class="product-workspace bg-gray-100 leading-relaxed responsive-site responsive-workspace admin-v2">
 
     <div id="admin-header-placeholder"></div>
 
@@ -298,7 +299,7 @@
 
             <div class="md:col-span-4 space-y-5">
                 <form id="edit-product-form" class="space-y-5">
-                    <section class="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+                    <section class="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden" data-admin-v2-heading>
                         <div class="px-4 pb-3 pt-4">
                             <div class="flex flex-col gap-2.5 lg:flex-row lg:items-start lg:justify-between">
                                 <div class="space-y-2.5">
@@ -308,7 +309,7 @@
                                         <span class="text-gray-600">Cadastro</span>
                                     </nav>
                                     <div class="space-y-1">
-                                        <h1 id="product-page-title" class="text-xl font-semibold text-gray-800">Editar Produto</h1>
+                                        <h1 id="product-page-title" class="text-xl font-semibold text-gray-800" data-admin-v2-title>Editar Produto</h1>
                                         <p id="product-page-description" class="text-xs text-gray-600">Altere os dados do produto abaixo.</p>
                                     </div>
                                 </div>
@@ -322,7 +323,7 @@
                         <div class="border-t border-gray-100 px-4 py-3">
                             <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                 <div>
-                                    <h2 class="text-base font-semibold text-gray-800">Identificação e resumo</h2>
+                                    <h2 class="text-base font-semibold text-gray-800" data-admin-v2-section>Identificação e resumo</h2>
                                     <p class="text-[11px] text-gray-500">Comece preenchendo os campos principais que serão usados em todas as telas.</p>
                                 </div>
                                 <span class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-primary"><i class="fas fa-id-card"></i> Dados básicos</span>
@@ -378,7 +379,7 @@
                         <div class="border-t border-gray-100 px-4 pb-4 pt-3">
                             <div class="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
                                 <div>
-                                    <h2 class="text-base font-semibold text-gray-800">Detalhes do produto</h2>
+                                    <h2 class="text-base font-semibold text-gray-800" data-admin-v2-section>Detalhes do produto</h2>
                                     <p class="text-xs text-gray-500">Percorra as abas para completar preços, estoque, fiscal, fornecedores e outras informações.</p>
                                 </div>
                                 <div class="flex flex-wrap items-center gap-2 text-[10px] font-semibold text-gray-500">
@@ -434,8 +435,8 @@
                                     </div>
                                 </div>
 
-                                <div class="rounded-2xl border border-dashed border-gray-300 bg-white p-4">
-                                    <h3 class="text-[13px] font-semibold text-gray-800">Preço de clube e consulta da promoção</h3>
+                                <div class="rounded-2xl border border-dashed border-gray-300 bg-white p-4" data-admin-v2-panel>
+                                    <h3 class="text-[13px] font-semibold text-gray-800" data-admin-v2-section>Preço de clube e consulta da promoção</h3>
                                     <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
                                         <div>
                                             <label for="promo-preco" class="block text-xs font-semibold text-gray-700">Preço de clube (R$)</label>
@@ -468,8 +469,8 @@
                                             </button>
                                         </div>
                                     </div>
-                                    <div class="mt-3 overflow-x-auto rounded-lg border border-gray-200">
-                                        <table class="min-w-full text-left text-xs">
+                                    <div class="mt-3 overflow-x-auto rounded-lg border border-gray-200" data-admin-v2-table>
+                                        <table class="min-w-full text-left text-xs" data-admin-v2-pin-actions>
                                             <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
                                                 <tr>
                                                     <th scope="col" class="px-3 py-2 font-semibold">Códigos de barras do produto</th>
@@ -583,8 +584,8 @@
                                             </button>
                                         </div>
                                     </div>
-                                    <div class="overflow-x-auto">
-                                        <table class="min-w-full divide-y divide-gray-200 text-left">
+                                    <div class="overflow-x-auto" data-admin-v2-table>
+                                        <table class="min-w-full divide-y divide-gray-200 text-left" data-admin-v2-pin-actions>
                                             <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
                                                 <tr>
                                                     <th scope="col" class="px-3 py-2 font-semibold">Produto filho</th>
@@ -698,9 +699,9 @@
                             </div>
 
                             <div id="tab-fiscal" class="hidden space-y-5 px-4 pb-5 pt-4" role="tabpanel" aria-labelledby="tab-fiscal-trigger" aria-hidden="true">
-                                <div class="rounded-2xl border border-dashed border-gray-300 bg-white p-4 space-y-4">
+                                <div class="rounded-2xl border border-dashed border-gray-300 bg-white p-4 space-y-4" data-admin-v2-panel>
                                     <div>
-                                        <h3 class="text-[13px] font-semibold text-gray-800">Regras fiscais por empresa</h3>
+                                        <h3 class="text-[13px] font-semibold text-gray-800" data-admin-v2-section>Regras fiscais por empresa</h3>
                                         <p class="text-[11px] text-gray-500">Selecione a regra fiscal cadastrada para cada empresa.</p>
                                     </div>
                                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -710,7 +711,7 @@
                                         </div>
                                     </div>
                                     <div class="overflow-hidden rounded-xl border border-gray-200">
-                                        <div class="overflow-x-auto">
+                                        <div class="overflow-x-auto" data-admin-v2-table>
                                             <table class="min-w-full text-xs" id="fiscal-rules-table">
                                                 <thead id="fiscal-rules-head" class="text-gray-500 uppercase tracking-wide"></thead>
                                                 <tbody id="fiscal-rules-body" class="divide-y divide-gray-100 text-gray-700">
@@ -955,10 +956,10 @@
                             </div>
 
                             <div id="tab-stock" class="hidden space-y-5 px-4 pb-5 pt-4" role="tabpanel" aria-labelledby="tab-stock-trigger" aria-hidden="true">
-                                <div class="rounded-2xl border border-dashed border-gray-300 bg-white p-4 space-y-5">
+                                <div class="rounded-2xl border border-dashed border-gray-300 bg-white p-4 space-y-5" data-admin-v2-panel>
                                     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                         <div>
-                                            <h3 class="text-[13px] font-semibold text-gray-800">Saldo por depósito</h3>
+                                            <h3 class="text-[13px] font-semibold text-gray-800" data-admin-v2-section>Saldo por depósito</h3>
                                             <p class="text-[11px] text-gray-500">Controle os estoques em cada local para garantir a precisão das vendas.</p>
                                         </div>
                                         <div class="flex items-center gap-2 text-xs font-semibold text-gray-500">
@@ -966,7 +967,7 @@
                                             <span id="deposit-total-display" class="text-xs font-semibold text-primary">0</span>
                                         </div>
                                     </div>
-                                    <div id="deposit-table-wrapper" class="overflow-hidden rounded-xl border border-gray-200">
+                                    <div id="deposit-table-wrapper" class="overflow-hidden rounded-xl border border-gray-200" data-admin-v2-table>
                                         <table class="min-w-full divide-y divide-gray-200">
                                             <thead class="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
                                                 <tr>
@@ -983,10 +984,10 @@
                             </div>
 
                             <div id="tab-images" class="hidden space-y-5 px-4 pb-5 pt-4" role="tabpanel" aria-labelledby="tab-images-trigger" aria-hidden="true">
-                                <div class="rounded-2xl border border-dashed border-gray-300 bg-white p-4 space-y-4">
+                                <div class="rounded-2xl border border-dashed border-gray-300 bg-white p-4 space-y-4" data-admin-v2-panel>
                                     <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                         <div>
-                                            <h3 class="text-[13px] font-semibold text-gray-800">Galeria do Produto</h3>
+                                            <h3 class="text-[13px] font-semibold text-gray-800" data-admin-v2-section>Galeria do Produto</h3>
                                             <p class="text-[11px] text-gray-500">Arraste as imagens ou utilize as setas para definir a ordem exibida no site.</p>
                                         </div>
                                         <span id="image-order-status" class="hidden text-xs font-semibold text-primary"></span>
@@ -1036,7 +1037,7 @@
         </div>
     </main>
 
-    <div id="product-action-bar" class="border-t border-gray-200 bg-white/95 backdrop-blur">
+    <div id="product-action-bar" data-admin-v2-action-bar class="border-t border-gray-200 bg-white/95 backdrop-blur">
         <div class="w-full max-w-none px-4 py-4 sm:px-6 lg:px-8">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <button type="button" id="delete-product-button" class="hidden inline-flex w-full items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3.5 py-2 text-xs font-semibold text-red-700 transition hover:border-red-500 hover:bg-red-600 hover:text-white sm:w-auto">
@@ -1067,10 +1068,10 @@
         aria-hidden="true"
         aria-labelledby="product-search-modal-title"
         data-modal-open="false"
-    >
+     data-admin-v2-modal>
         <div class="absolute inset-0 z-0 bg-gray-900/60 backdrop-blur-sm" data-close-product-search-modal></div>
-        <div class="relative z-10 mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
-            <div class="product-search-modal-shell relative flex h-[520px] w-full max-w-5xl transform-gpu flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl text-[12px] leading-[1.35] max-h-[90vh] sm:h-[600px] sm:max-h-[85vh]">
+        <div class="relative z-10 mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center" data-admin-v2-dialog-align>
+            <div class="product-search-modal-shell relative flex h-[520px] w-full max-w-5xl transform-gpu flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl text-[12px] leading-[1.35] max-h-[90vh] sm:h-[600px] sm:max-h-[85vh]" data-admin-v2-dialog-content>
                 <div class="flex items-center justify-between border-b border-gray-100 px-5 py-4">
                     <h3 id="product-search-modal-title" class="text-base font-semibold text-gray-800">Buscar produtos</h3>
                     <button type="button" class="inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-gray-600" data-close-product-search-modal>&times;</button>
@@ -1197,10 +1198,10 @@
         aria-hidden="true"
         aria-labelledby="price-history-modal-title"
         data-modal-open="false"
-    >
+     data-admin-v2-modal>
         <div class="absolute inset-0 z-0 bg-gray-900/60 backdrop-blur-sm" data-close-price-history-modal></div>
-        <div class="relative z-10 mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
-            <div class="modal-shell price-history-modal-shell relative flex w-full max-w-[1352px] transform-gpu flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl text-[12px] leading-[1.35]">
+        <div class="relative z-10 mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center" data-admin-v2-dialog-align>
+            <div class="modal-shell price-history-modal-shell relative flex w-full max-w-[1352px] transform-gpu flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl text-[12px] leading-[1.35]" data-admin-v2-dialog-content>
                 <div class="flex items-center justify-between border-b border-gray-100 px-5 py-4">
                     <h3 id="price-history-modal-title" class="text-base font-semibold text-gray-800">Histórico de Preços</h3>
                     <button type="button" data-close-price-history-modal class="inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-gray-600">&times;</button>
@@ -1391,8 +1392,8 @@
         </div>
     </div>
 
-    <div id="category-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-        <div class="flex w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
+    <div id="category-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" data-admin-v2-modal>
+        <div class="flex w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl" data-admin-v2-dialog-content>
             <div class="flex items-center justify-between border-b border-gray-100 px-4 py-3">
                 <h3 class="text-base font-semibold text-gray-800">Selecionar Categorias</h3>
                 <button type="button" id="close-category-modal-btn" class="inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-gray-600">&times;</button>
@@ -1415,11 +1416,11 @@
     <script>var basePath = '../../';</script>
     <script src="../../scripts/core/config.js?v=20260812-2"></script>
     <script src="../../scripts/core/ui.js"></script>
-    <script src="../../scripts/core/main.js"></script>
+    <script src="../../scripts/core/main.js?v=20261121-2"></script>
     <script src="../../scripts/admin/admin.js"></script>
     <script src="../../scripts/admin/admin-produto-form.js?v=20260918-1"></script>
     <script src="/scripts/common/modal-bridge.js"></script>
-  <script src="../../scripts/common/responsive-workspace.js?v=20261008-1"></script>
+  <script src="../../scripts/common/responsive-workspace.js?v=20261121-2"></script>
 </body>
 </html>
 

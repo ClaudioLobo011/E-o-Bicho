@@ -2,13 +2,14 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
   <title>Admin: Configurar CFOP</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <link rel="stylesheet" href="../../src/output.css">
   <link rel="stylesheet" href="../../src/responsive-workspace.css?v=20261008-1">
+  <link rel="stylesheet" href="../../src/admin-v2.css?v=20261121-2">
 </head>
-<body class="bg-gray-100 text-sm responsive-site responsive-workspace">
+<body class="bg-gray-100 text-sm responsive-site responsive-workspace admin-v2">
   <div id="admin-header-placeholder"></div>
 
   <main class="w-full max-w-none px-4 sm:px-6 lg:px-8 pt-1 pb-8 min-h-screen">
@@ -18,9 +19,9 @@
       </aside>
 
       <div class="md:col-span-4 space-y-6">
-        <section class="bg-white rounded-xl shadow p-6">
+        <section class="bg-white rounded-xl shadow p-6" data-admin-v2-heading>
           <header class="mb-6">
-            <h1 class="text-2xl font-bold text-gray-800">Configurar CFOP</h1>
+            <h1 class="text-2xl font-bold text-gray-800" data-admin-v2-title>Configurar CFOP</h1>
             <p class="text-gray-600">Defina os CFOPs por tipo e ajuste parametros fiscais.</p>
           </header>
 
@@ -36,7 +37,7 @@
 
           <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 class="text-sm font-semibold text-gray-800">Importar planilha de CFOP</h2>
+              <h2 class="text-sm font-semibold text-gray-800" data-admin-v2-section>Importar planilha de CFOP</h2>
               <p id="cfop-import-status" class="text-xs text-gray-500">
                 Colunas obrigatorias: CFOP, GRUPO CFOP, DESCRIÇÃO_CFOP, Início Vigência.
               </p>
@@ -55,9 +56,9 @@
           </div>
         </section>
 
-        <section class="bg-white rounded-xl shadow p-6">
+        <section class="bg-white rounded-xl shadow p-6" data-admin-v2-panel>
           <header class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <h2 class="text-lg font-semibold text-gray-800">CFOPs cadastrados</h2>
+            <h2 class="text-lg font-semibold text-gray-800" data-admin-v2-section>CFOPs cadastrados</h2>
             <div class="flex flex-wrap items-center gap-2 text-sm text-gray-600">
               <span id="cfop-results-counter" class="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1">
                 <i class="fas fa-magnifying-glass"></i>Nenhum CFOP encontrado
@@ -66,7 +67,7 @@
             </div>
           </header>
 
-          <div class="mt-4 overflow-x-auto">
+          <div class="mt-4 overflow-x-auto" data-admin-v2-table>
             <table class="min-w-full divide-y divide-gray-200 text-xs">
               <thead class="bg-gray-50">
                 <tr>
@@ -258,10 +259,10 @@
   <script>var basePath = '../../';</script>
   <script src="../../scripts/core/config.js?v=20260812-2"></script>
   <script src="../../scripts/core/ui.js"></script>
-  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/core/main.js?v=20261121-2"></script>
   <script src="../../scripts/admin/admin.js"></script>
   <script src="../../scripts/admin/admin-fiscal-cfop.js"></script>
   <script src="/scripts/common/modal-bridge.js"></script>
-  <script src="../../scripts/common/responsive-workspace.js?v=20261008-1"></script>
+  <script src="../../scripts/common/responsive-workspace.js?v=20261121-2"></script>
 </body>
 </html>

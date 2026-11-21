@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
     <title>Admin: PDV - E o Bicho</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     <link rel="stylesheet" href="../../src/output.css">
@@ -164,8 +164,9 @@
         }
     </style>
   <link rel="stylesheet" href="../../src/responsive-workspace.css?v=20261008-1">
+  <link rel="stylesheet" href="../../src/admin-v2.css?v=20261121-2">
 </head>
-<body class="bg-gray-100 responsive-site responsive-workspace">
+<body class="bg-gray-100 responsive-site responsive-workspace admin-v2">
     <div id="admin-header-placeholder"></div>
 
     <main class="pdv-page-shell px-3 pt-1 pb-4 min-h-screen sm:px-4 lg:px-5 xl:px-6 2xl:px-8 lg:pb-6">
@@ -175,10 +176,10 @@
             </aside>
 
             <div class="md:col-span-4 space-y-4">
-                <section id="pdv-selection-section" class="bg-white border border-gray-100 rounded-xl shadow-sm p-4 space-y-3">
+                <section id="pdv-selection-section" class="bg-white border border-gray-100 rounded-xl shadow-sm p-4 space-y-3" data-admin-v2-heading>
                     <div class="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
                         <div class="flex flex-col gap-1">
-                            <h1 class="text-xl font-semibold text-gray-800">PDV</h1>
+                            <h1 class="text-xl font-semibold text-gray-800" data-admin-v2-title>PDV</h1>
                             <p class="text-xs text-gray-600">Selecione a empresa e o ponto de venda para operar o caixa.</p>
                         </div>
                         <div class="flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-[11px] text-gray-500">
@@ -573,7 +574,7 @@
                                                     <p><span class="font-semibold text-gray-700">Situação:</span> <span id="pdv-budget-status">?</span></p>
                                                     <p><span class="font-semibold text-gray-700">Total:</span> <span id="pdv-budget-total">R$ 0,00</span></p>
                                                 </div>
-                                                <div class="overflow-x-auto">
+                                                <div class="overflow-x-auto" data-admin-v2-table>
                                                     <table class="min-w-full divide-y divide-gray-200 text-sm">
                                                         <thead class="bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-500">
                                                             <tr>
@@ -728,7 +729,7 @@
                                             <span>Receber selecionadas</span>
                                         </button>
                                     </div>
-                                    <div id="pdv-receivables-table" class="hidden overflow-x-auto">
+                                    <div id="pdv-receivables-table" class="hidden overflow-x-auto" data-admin-v2-table>
                                         <table class="min-w-full divide-y divide-gray-200 text-sm">
                                             <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
                                                 <tr>
@@ -758,10 +759,10 @@
     <div id="modal-placeholder"></div>
     <div id="confirm-modal-placeholder"></div>
 
-    <div id="pdv-seller-modal" class="fixed inset-0 z-[90] hidden" aria-hidden="true">
+    <div id="pdv-seller-modal" class="fixed inset-0 z-[90] hidden" aria-hidden="true" data-admin-v2-modal>
         <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" data-seller-dismiss="backdrop"></div>
-        <div class="relative mx-auto mt-14 w-full max-w-xl px-4">
-            <div class="overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5">
+        <div class="relative mx-auto mt-14 w-full max-w-xl px-4" data-admin-v2-dialog-align>
+            <div class="overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5" data-admin-v2-dialog-content data-admin-v2-dialog-scroll>
                 <div class="flex items-center justify-between border-b border-gray-200 px-5 py-4">
                     <div>
                         <h2 class="text-lg font-semibold text-gray-800">Buscar vendedor</h2>
@@ -790,10 +791,10 @@
         </div>
     </div>
 
-    <div id="pdv-customer-modal" class="fixed inset-0 z-[90] hidden">
+    <div id="pdv-customer-modal" class="fixed inset-0 z-[90] hidden" data-admin-v2-modal>
         <div class="absolute inset-0 bg-slate-900/60" data-pdv-customer-dismiss="backdrop"></div>
-        <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
-        <div class="relative flex w-full max-w-[1352px] min-h-0 flex-col overflow-hidden rounded-2xl bg-white text-[12px] leading-[1.35] shadow-2xl" style="height:90vh; min-height:90vh; max-height:90vh;">
+        <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center" data-admin-v2-dialog-align>
+        <div class="relative flex w-full max-w-[1352px] min-h-0 flex-col overflow-hidden rounded-2xl bg-white text-[12px] leading-[1.35] shadow-2xl" style="height:90vh; min-height:90vh; max-height:90vh;" data-admin-v2-dialog-content>
             <div class="flex items-center justify-between border-b border-gray-200 px-4 py-3">
                 <h2 class="text-[16px] font-semibold text-gray-800">Informar Cliente na Venda</h2>
                 <button type="button" id="pdv-customer-close" class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600" aria-label="Fechar modal de clientes">
@@ -1064,10 +1065,10 @@
         </div>
     </div>
 
-    <div id="pdv-customer-search-modal" class="fixed inset-0 z-[99999] hidden" aria-hidden="true" style="z-index: 100010;">
+    <div id="pdv-customer-search-modal" class="fixed inset-0 z-[99999] hidden" aria-hidden="true" style="z-index: 100010;" data-admin-v2-modal>
         <div class="absolute inset-0 bg-slate-900/60" data-customer-search-dismiss="backdrop"></div>
-        <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
-        <div class="relative z-[100000] flex w-full max-w-[1352px] min-h-0 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white text-[12px] leading-[1.35] shadow-2xl" style="z-index: 100011; height:90vh; min-height:90vh; max-height:90vh;">
+        <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center" data-admin-v2-dialog-align>
+        <div class="relative z-[100000] flex w-full max-w-[1352px] min-h-0 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white text-[12px] leading-[1.35] shadow-2xl" style="z-index: 100011; height:90vh; min-height:90vh; max-height:90vh;" data-admin-v2-dialog-content>
             <div class="flex items-center justify-between rounded-t-2xl bg-gray-600 px-4 py-3 text-white">
                 <h3 class="text-sm font-semibold">Procurar cliente</h3>
                 <button type="button" id="pdv-customer-search-modal-close" class="rounded-full p-1 text-gray-800 transition hover:bg-black/5 hover:text-gray-900" aria-label="Fechar busca de cliente">
@@ -1107,11 +1108,11 @@
         </div>
     </div>
 
-    <div id="pdv-customer-register-modal" class="fixed inset-0 z-[120] hidden" aria-hidden="true">
+    <div id="pdv-customer-register-modal" class="fixed inset-0 z-[120] hidden" aria-hidden="true" data-admin-v2-modal>
         <div class="absolute inset-0 bg-slate-900/60" data-customer-register-dismiss="backdrop"></div>
-        <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
-            <div class="relative flex w-full max-w-5xl transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl transition-all duration-200 ease-out max-h-[90vh]" data-customer-frame-shell>
-                <header class="flex flex-col gap-2 border-b border-gray-100 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
+        <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center" data-admin-v2-dialog-align>
+            <div class="relative flex w-full max-w-5xl transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl transition-all duration-200 ease-out max-h-[90vh]" data-customer-frame-shell data-admin-v2-dialog-content data-admin-v2-dialog-scroll>
+                <header class="flex flex-col gap-2 border-b border-gray-100 px-5 py-4 sm:flex-row sm:items-start sm:justify-between" data-admin-v2-dialog-actions>
                     <div class="space-y-1">
                         <span class="text-[11px] font-semibold uppercase tracking-wide text-primary">Cadastro de cliente</span>
                         <h3 class="text-lg font-semibold text-gray-900">Adicionar novo cliente</h3>
@@ -1135,9 +1136,9 @@
         </div>
     </div>
 
-    <div id="pdv-finalize-modal" class="fixed inset-0 z-50 hidden">
+    <div id="pdv-finalize-modal" class="fixed inset-0 z-50 hidden" data-admin-v2-modal>
         <div class="absolute inset-0 bg-slate-900/60" data-pdv-finalize-dismiss="backdrop"></div>
-        <div class="relative mx-auto mt-10 h-[85vh] w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div class="relative mx-auto mt-10 h-[85vh] w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl" data-admin-v2-dialog-content data-admin-v2-dialog-scroll>
             <div class="flex items-center justify-between border-b border-gray-200 px-6 py-4">
                 <div>
                     <h2 class="text-lg font-semibold text-gray-800">Finalizar venda</h2>
@@ -1218,9 +1219,9 @@
         </div>
     </div>
 
-    <div id="pdv-sale-adjust-modal" class="fixed inset-0 z-[70] hidden">
+    <div id="pdv-sale-adjust-modal" class="fixed inset-0 z-[70] hidden" data-admin-v2-modal>
         <div class="absolute inset-0 bg-slate-900/50" data-pdv-sale-adjust-dismiss="backdrop"></div>
-        <div class="relative mx-auto mt-24 w-full max-w-md rounded-2xl bg-white shadow-2xl">
+        <div class="relative mx-auto mt-24 w-full max-w-md rounded-2xl bg-white shadow-2xl" data-admin-v2-dialog-content data-admin-v2-dialog-scroll>
             <div class="flex items-start justify-between border-b border-gray-200 px-5 py-4">
                 <div>
                     <h3 id="pdv-sale-adjust-modal-title" class="text-base font-semibold text-gray-800">Acréscimo/Desconto</h3>
@@ -1275,9 +1276,9 @@
         </div>
     </div>
 
-    <div id="pdv-sale-item-adjust-modal" class="fixed inset-0 z-[65] hidden">
+    <div id="pdv-sale-item-adjust-modal" class="fixed inset-0 z-[65] hidden" data-admin-v2-modal>
         <div class="absolute inset-0 bg-slate-900/50" data-pdv-sale-item-adjust-dismiss="backdrop"></div>
-        <div class="relative mx-auto mt-24 w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
+        <div class="relative mx-auto mt-24 w-full max-w-2xl rounded-2xl bg-white shadow-2xl" data-admin-v2-dialog-content data-admin-v2-dialog-scroll>
             <div class="flex items-start justify-between border-b border-gray-200 px-5 py-4">
                 <div>
                     <h3 class="text-base font-semibold text-gray-800">Acréscimo/Desconto Item</h3>
@@ -1301,9 +1302,9 @@
         </div>
     </div>
 
-    <div id="pdv-crediario-modal" class="fixed inset-0 z-[60] hidden">
+    <div id="pdv-crediario-modal" class="fixed inset-0 z-[60] hidden" data-admin-v2-modal>
         <div class="absolute inset-0 bg-slate-900/60" data-crediario-dismiss="backdrop"></div>
-        <div class="relative mx-auto mt-10 flex h-[85vh] w-full max-w-[calc(64rem+120px)] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div class="relative mx-auto mt-10 flex h-[85vh] w-full max-w-[calc(64rem+120px)] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl" data-admin-v2-dialog-content>
             <div class="flex items-center justify-between border-b border-gray-200 px-6 py-4">
                 <div>
                     <h2 class="text-lg font-semibold text-gray-800">Crediário</h2>
@@ -1402,9 +1403,9 @@
         </div>
     </div>
 
-    <div id="pdv-appointment-modal" class="fixed inset-0 z-[55] hidden">
+    <div id="pdv-appointment-modal" class="fixed inset-0 z-[55] hidden" data-admin-v2-modal>
         <div class="absolute inset-0 bg-slate-900/60" data-appointment-dismiss="backdrop"></div>
-        <div id="pdv-appointment-modal-shell" class="relative mx-auto mt-10 flex w-full max-w-[1352px] min-h-0 transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl transition-all duration-200 ease-out" style="height:90vh; min-height:90vh; max-height:90vh;">
+        <div id="pdv-appointment-modal-shell" class="relative mx-auto mt-10 flex w-full max-w-[1352px] min-h-0 transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl transition-all duration-200 ease-out" style="height:90vh; min-height:90vh; max-height:90vh;" data-admin-v2-dialog-content>
             <div class="flex items-center justify-between border-b border-gray-200 px-6 py-4">
                 <div>
                     <h2 class="text-lg font-semibold text-gray-800">Importar atendimento</h2>
@@ -1454,7 +1455,7 @@
                                     <button type="button" class="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary" data-appointment-status="concluido" aria-pressed="false">Concluído</button>
                                 </div>
                             </div>
-                            <div class="flex items-center gap-2">
+                            <div class="flex flex-wrap items-center gap-2">
                                 <span id="pdv-appointment-selected-count" class="text-xs font-semibold text-gray-500">Nenhum atendimento selecionado.</span>
                                 <button type="button" id="pdv-appointment-import-selected" class="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60" disabled>
                                     <i class="fas fa-file-import"></i>
@@ -1479,9 +1480,9 @@
         </div>
     </div>
 
-    <div id="pdv-budget-modal" class="fixed inset-0 z-[60] hidden">
+    <div id="pdv-budget-modal" class="fixed inset-0 z-[60] hidden" data-admin-v2-modal>
         <div class="absolute inset-0 bg-slate-900/60" data-budget-dismiss="backdrop"></div>
-        <div class="relative mx-auto mt-32 w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div class="relative mx-auto mt-32 w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl" data-admin-v2-dialog-content data-admin-v2-dialog-scroll>
             <div class="flex items-center justify-between border-b border-gray-200 px-6 py-4">
                 <div>
                     <h2 class="text-lg font-semibold text-gray-800">Salvar orçamento</h2>
@@ -1503,9 +1504,9 @@
         </div>
     </div>
 
-    <div id="pdv-fiscal-status-modal" class="fixed inset-0 z-[70] hidden">
+    <div id="pdv-fiscal-status-modal" class="fixed inset-0 z-[70] hidden" data-admin-v2-modal>
         <div class="absolute inset-0 bg-slate-900/60"></div>
-        <div class="relative mx-auto mt-32 w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+        <div class="relative mx-auto mt-32 w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" data-admin-v2-dialog-content data-admin-v2-dialog-scroll>
             <div class="flex justify-center">
                 <div class="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
                     <i class="fas fa-circle-notch animate-spin text-xl"></i>
@@ -1552,10 +1553,10 @@
         </div>
     </div>
 
-    <div id="pdv-transfer-modal" class="fixed inset-0 z-[65] hidden">
+    <div id="pdv-transfer-modal" class="fixed inset-0 z-[65] hidden" data-admin-v2-modal>
         <div id="pdv-transfer-modal-backdrop" class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-transfer-dismiss="backdrop"></div>
-        <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
-            <div class="relative flex w-full max-w-[1352px] transform-gpu flex-col overflow-hidden rounded-2xl bg-white text-[12px] leading-[1.35] shadow-2xl transition-all duration-200 ease-out max-h-[90vh] min-h-0">
+        <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center" data-admin-v2-dialog-align>
+            <div class="relative flex w-full max-w-[1352px] transform-gpu flex-col overflow-hidden rounded-2xl bg-white text-[12px] leading-[1.35] shadow-2xl transition-all duration-200 ease-out max-h-[90vh] min-h-0" data-admin-v2-dialog-content>
                 <div class="flex flex-col gap-2.5 border-b border-gray-100 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                         <span class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
@@ -1656,7 +1657,7 @@
                                 </div>
                                 <div id="pdv-transfer-items-empty" class="rounded-lg border border-dashed border-gray-300 bg-white px-4 py-6 text-center text-[11px] text-gray-500">Nenhum produto adicionado até o momento.</div>
                                 <div class="overflow-x-auto">
-                                    <table class="min-w-full divide-y divide-gray-200 text-left text-[12px]">
+                                    <table class="min-w-full divide-y divide-gray-200 text-left text-[12px]" data-admin-v2-pin-actions>
                                         <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
                                             <tr>
                                                 <th scope="col" class="px-4 py-3 font-semibold">Produto</th>
@@ -1687,10 +1688,10 @@
         </div>
     </div>
 
-    <div id="pdv-exchange-modal" class="fixed inset-0 z-[65] hidden">
+    <div id="pdv-exchange-modal" class="fixed inset-0 z-[65] hidden" data-admin-v2-modal>
         <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-exchange-dismiss="backdrop"></div>
-        <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
-            <div class="relative flex w-full pdv-exchange-shell pdv-exchange-surface transform-gpu flex-col overflow-hidden rounded-2xl text-[12px] leading-[1.35] shadow-2xl transition-all duration-200 ease-out max-h-[90vh] min-h-0">
+        <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center" data-admin-v2-dialog-align>
+            <div class="relative flex w-full pdv-exchange-shell pdv-exchange-surface transform-gpu flex-col overflow-hidden rounded-2xl text-[12px] leading-[1.35] shadow-2xl transition-all duration-200 ease-out max-h-[90vh] min-h-0" data-admin-v2-dialog-content>
                 <div class="flex items-center justify-between bg-gray-600 px-4 py-2 text-white pdv-exchange-header">
                     <span class="text-[11px] font-semibold uppercase tracking-wide">Troca de Mercadoria</span>
                     <button type="button" data-exchange-dismiss="close" class="inline-flex items-center justify-center rounded-full border border-white/30 p-1.5 text-white transition hover:bg-white/10" aria-label="Fechar modal de troca">
@@ -1897,10 +1898,10 @@
         </div>
     </div>
 
-    <div id="pdv-exchange-history-modal" class="fixed inset-0 z-[70] hidden" aria-hidden="true">
+    <div id="pdv-exchange-history-modal" class="fixed inset-0 z-[70] hidden" aria-hidden="true" data-admin-v2-modal>
         <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" data-exchange-history-dismiss="backdrop"></div>
-        <div class="relative mx-auto mt-12 w-full max-w-5xl px-4">
-            <div class="overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5">
+        <div class="relative mx-auto mt-12 w-full max-w-5xl px-4" data-admin-v2-dialog-align>
+            <div class="overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5" data-admin-v2-dialog-content data-admin-v2-dialog-scroll>
                 <div class="flex items-center justify-between border-b border-gray-200 px-5 py-4">
                     <div>
                         <h2 class="text-lg font-semibold text-gray-800">Historico de vendas</h2>
@@ -1962,10 +1963,10 @@
         </div>
     </div>
 
-    <div id="pdv-exchange-sale-modal" class="fixed inset-0 z-[70] hidden" aria-hidden="true">
+    <div id="pdv-exchange-sale-modal" class="fixed inset-0 z-[70] hidden" aria-hidden="true" data-admin-v2-modal>
         <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" data-exchange-sale-dismiss="backdrop"></div>
-        <div class="relative mx-auto mt-12 w-full max-w-5xl px-4">
-            <div class="overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5">
+        <div class="relative mx-auto mt-12 w-full max-w-5xl px-4" data-admin-v2-dialog-align>
+            <div class="overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5" data-admin-v2-dialog-content data-admin-v2-dialog-scroll>
                 <div class="flex items-center justify-between border-b border-gray-200 px-5 py-4">
                     <div>
                         <h2 class="text-lg font-semibold text-gray-800">Buscar venda</h2>
@@ -2017,9 +2018,9 @@
         </div>
     </div>
 
-    <div id="pdv-sale-cancel-modal" class="fixed inset-0 z-[60] hidden">
+    <div id="pdv-sale-cancel-modal" class="fixed inset-0 z-[60] hidden" data-admin-v2-modal>
         <div class="absolute inset-0 bg-slate-900/60" data-sale-cancel-dismiss="backdrop"></div>
-        <div class="relative mx-auto mt-20 w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div class="relative mx-auto mt-20 w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl" data-admin-v2-dialog-content data-admin-v2-dialog-scroll>
             <div class="flex items-center justify-between border-b border-gray-200 px-6 py-4">
                 <div>
                     <h2 class="text-lg font-semibold text-gray-800">Cancelar venda</h2>
@@ -2043,10 +2044,10 @@
         </div>
     </div>
 
-    <div id="pdv-delivery-address-modal" class="fixed inset-0 z-[55] hidden">
+    <div id="pdv-delivery-address-modal" class="fixed inset-0 z-[55] hidden" data-admin-v2-modal>
     <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-delivery-address-dismiss="backdrop"></div>
-    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
-        <div id="pdv-delivery-modal-shell" class="relative flex w-full max-w-[1352px] min-h-0 transform-gpu flex-col overflow-hidden rounded-2xl bg-white text-[12px] leading-[1.35] shadow-2xl transition-all duration-200 ease-out" style="height:90vh; min-height:90vh; max-height:90vh;">
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center" data-admin-v2-dialog-align>
+        <div id="pdv-delivery-modal-shell" class="relative flex w-full max-w-[1352px] min-h-0 transform-gpu flex-col overflow-hidden rounded-2xl bg-white text-[12px] leading-[1.35] shadow-2xl transition-all duration-200 ease-out" style="height:90vh; min-height:90vh; max-height:90vh;" data-admin-v2-dialog-content>
             <div class="flex items-center justify-between bg-primary px-4 py-2">
                 <h2 class="text-[11px] font-semibold uppercase tracking-wide text-white">MEU DELIVERY</h2>
                 <button type="button" class="inline-flex h-8 w-8 items-center justify-center rounded text-white transition hover:bg-white/20" data-delivery-address-dismiss="close" aria-label="Fechar modal de enderecos">
@@ -2310,9 +2311,9 @@
     </div>
 </div>
 
-<div id="pdv-product-search-modal" class="fixed inset-0 z-[99998] hidden" aria-hidden="true">
+<div id="pdv-product-search-modal" class="fixed inset-0 z-[99998] hidden" aria-hidden="true" data-admin-v2-modal>
     <div class="absolute inset-0 bg-slate-900/60" data-pdv-product-search-dismiss="backdrop"></div>
-    <div id="pdv-product-search-modal-shell" class="relative mx-auto mt-6 flex w-full max-w-[1352px] min-h-0 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl" style="height:90vh; min-height:90vh; max-height:90vh;">
+    <div id="pdv-product-search-modal-shell" class="relative mx-auto mt-6 flex w-full max-w-[1352px] min-h-0 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl" style="height:90vh; min-height:90vh; max-height:90vh;" data-admin-v2-dialog-content>
         <div class="flex items-center justify-between rounded-t-2xl bg-gray-600 px-4 py-3 text-white">
             <h3 class="text-sm font-semibold">Pesquisar produtos</h3>
             <button type="button" id="pdv-product-search-close" class="rounded-full p-1 text-white transition hover:bg-white/10" aria-label="Fechar busca de produto">
@@ -2357,9 +2358,9 @@
     </div>
 </div>
 
-<div id="pdv-exchange-product-modal" class="fixed inset-0 z-[99999] hidden" aria-hidden="true" style="z-index: 99999;">
+<div id="pdv-exchange-product-modal" class="fixed inset-0 z-[99999] hidden" aria-hidden="true" style="z-index: 99999;" data-admin-v2-modal>
     <div class="absolute inset-0 bg-slate-900/60" data-exchange-product-dismiss="backdrop"></div>
-    <div class="relative z-[100000] mx-auto mt-10 flex min-h-0 w-[95vw] max-w-5xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl" style="z-index: 100000; height: 78vh; min-height: 78vh; max-height: 78vh;">
+    <div class="relative z-[100000] mx-auto mt-10 flex min-h-0 w-[95vw] max-w-5xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl" style="z-index: 100000; height: 78vh; min-height: 78vh; max-height: 78vh;" data-admin-v2-dialog-content>
         <div class="flex items-center justify-between rounded-t-2xl bg-gray-600 px-4 py-3 text-white">
             <h3 class="text-sm font-semibold">Procurar produto</h3>
             <button type="button" id="pdv-exchange-product-close" class="rounded-full p-1 text-gray-800 transition hover:bg-black/5 hover:text-gray-900" aria-label="Fechar busca de produto">
@@ -2403,9 +2404,9 @@
     </div>
 </div>
 
-<div id="pdv-payment-value-modal" class="fixed inset-0 z-[60] hidden">
+<div id="pdv-payment-value-modal" class="fixed inset-0 z-[60] hidden" data-admin-v2-modal>
         <div class="absolute inset-0 bg-slate-900/60" data-pdv-payment-dismiss="backdrop"></div>
-        <div class="relative mx-auto mt-24 w-full max-w-md rounded-2xl bg-white shadow-2xl">
+        <div class="relative mx-auto mt-24 w-full max-w-md rounded-2xl bg-white shadow-2xl" data-admin-v2-dialog-content data-admin-v2-dialog-scroll>
             <div class="border-b border-gray-200 px-5 py-4">
                 <h3 id="pdv-payment-value-title" class="text-base font-semibold text-gray-800">Informar pagamento</h3>
                 <p id="pdv-payment-value-subtitle" class="mt-1 text-xs text-gray-500"></p>
@@ -2429,9 +2430,9 @@
     <script src="https://unpkg.com/imask"></script>
     <script src="../../scripts/core/config.js?v=20260812-2"></script>
     <script src="../../scripts/core/ui.js"></script>
-    <script src="../../scripts/core/main.js"></script>
-    <div id="ifood-orders-modal" class="hidden fixed inset-0 z-[999] bg-black/50 flex items-center justify-center p-4">
-        <div class="bg-white w-full max-w-5xl rounded-2xl shadow-xl overflow-hidden">
+    <script src="../../scripts/core/main.js?v=20261121-2"></script>
+    <div id="ifood-orders-modal" class="hidden fixed inset-0 z-[999] bg-black/50 flex items-center justify-center p-4" data-admin-v2-modal>
+        <div class="bg-white w-full max-w-5xl rounded-2xl shadow-xl overflow-hidden" data-admin-v2-dialog-content data-admin-v2-dialog-scroll>
             <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200">
                 <div>
                     <p class="text-xs font-semibold text-primary uppercase tracking-wide">iFood</p>
@@ -2463,7 +2464,7 @@
     <script src="../../scripts/admin/pdv-nfse.js?v=20260923"></script>
     <script src="../../scripts/admin/admin-pdv.js?v=20260923-nfse"></script>
     <script src="/scripts/common/modal-bridge.js"></script>
-  <script src="../../scripts/common/responsive-workspace.js?v=20261008-1"></script>
+  <script src="../../scripts/common/responsive-workspace.js?v=20261121-2"></script>
 </body>
 </html>
 
