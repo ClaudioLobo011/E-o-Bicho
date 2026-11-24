@@ -1,4 +1,5 @@
 const U = require("./product-utils");
+const { getCompany } = require("../core/config");
 const escape = (value) =>
   String(value || "").replace(
     /[&<>"']/g,
@@ -12,19 +13,19 @@ const plain = (value) =>
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-function renderProductMetadata(template, product) {
+function renderProductMetadata(template, product, company = getCompany()) {
   if (!product || product.inativo || product.naoMostrarNoSite) return template;
-  const canonical = `https://www.peteobicho.com.br/pages/menu-departments-item/product.html?id=${product._id}`;
+  const canonical = `${company.siteUrl}/pages/menu-departments-item/product.html?id=${product._id}`;
   const description =
     plain(product.descricao) ||
-    `${product.nome}. Consulte disponibilidade e entrega no E o Bicho.`;
+    `${product.nome}. Consulte disponibilidade e entrega na loja.`;
   const image = U.safeUrl(
     product.imagemPrincipal || "/public/image/placeholder.svg",
-    "https://api.peteobicho.com.br",
+    company.apiUrl,
   );
   let html = template.replace(
     /<title>[\s\S]*?<\/title>/,
-    () => `<title>${escape(product.nome)} - E o Bicho</title>`,
+    () => `<title>${escape(product.nome)} - ${escape(company.name)}</title>`,
   );
   html = html.replace(
     /<meta\b(?=[^>]*\bname="description")[^>]*>/,
@@ -32,7 +33,7 @@ function renderProductMetadata(template, product) {
       `<meta name="description" content="${escape(description.slice(0, 190))}">`,
   );
   for (const [property, value] of Object.entries({
-    title: `${product.nome} - E o Bicho`,
+    title: `${product.nome} - ${company.name}`,
     description: description.slice(0, 190),
     image,
     url: canonical,

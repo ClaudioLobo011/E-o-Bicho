@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
   const STORAGE_KEY = 'eobicho_external_integrations_state';
-  const WEBHOOK_URL = 'https://callback.peteobicho.com.br/webhooks/marketplaces';
+  const WEBHOOK_URL = API_CONFIG.COMPANY.callbackUrl ? API_CONFIG.COMPANY.callbackUrl + '/webhooks/marketplaces' : '';
   const API_BASE = API_CONFIG.BASE_URL;
   const PROVIDERS = ['ifood', 'ubereats', 'ninetyNineFood'];
   const IFOOD_MENU_SYNC_INTERVAL_MS = 30 * 60 * 1000;
@@ -155,10 +155,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const copyBtn = document.querySelector('[data-copy-webhook]');
     const rotateBtn = document.querySelector('[data-rotate-secret]');
 
-    if (urlEl) urlEl.textContent = WEBHOOK_URL;
+    if (urlEl) urlEl.textContent = WEBHOOK_URL || 'Endereço de webhook em configuração';
     renderWebhookSecret();
 
     if (copyBtn) {
+      copyBtn.disabled = !WEBHOOK_URL;
       copyBtn.addEventListener('click', async () => {
         try {
           await navigator.clipboard.writeText(WEBHOOK_URL);

@@ -4,6 +4,7 @@ const Banner = require('../models/Banner');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { publicRoot } = require('../config/companyStorage');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 const {
@@ -40,7 +41,7 @@ const storage = useMemoryStorage
     ? multer.memoryStorage()
     : multer.diskStorage({
         destination: (req, file, cb) => {
-            const dir = 'public/uploads/banners';
+            const dir = path.join(publicRoot || 'public', 'uploads', 'banners');
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
             cb(null, dir);
         },

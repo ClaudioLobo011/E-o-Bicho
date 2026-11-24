@@ -14,6 +14,13 @@
   ],
   "builds": [
     {
+      "src": "api/product-related.js",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 30
+      }
+    },
+    {
       "src": "api/storefront-catalog.js",
       "use": "@vercel/node",
       "config": {
@@ -628,6 +635,10 @@
     }
   ],
   "rewrites": [
+    {
+      "source": "/api/product-related",
+      "destination": "/api/product-related.js"
+    },
     {
       "source": "/api/storefront-catalog",
       "destination": "/api/storefront-catalog.js"

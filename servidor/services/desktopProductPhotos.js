@@ -1,6 +1,7 @@
 const { createHash } = require('node:crypto');
 const { normalizeProductImageUrl } = require('../utils/productImageUrl');
 const sharp = require('sharp');
+const { getCompany } = require('../../scripts/core/config');
 
 const maxSource = 8 * 1024 * 1024;
 function photoDescriptor(product) {
@@ -9,7 +10,9 @@ function photoDescriptor(product) {
   if (typeof raw !== 'string' || !raw) return null;
   let url;
   try { url = new URL(normalizeProductImageUrl(raw)); } catch { return null; }
-  const origin = new URL(process.env.R2_PUBLIC_BASE_URL || 'https://cdn.peteobicho.com.br').origin;
+  const cdn = process.env.R2_PUBLIC_BASE_URL || getCompany(process.env.SITE_EMPRESA || undefined).cdnUrl;
+  if (!cdn) return null;
+  const origin = new URL(cdn).origin;
   if (url.origin !== origin || url.protocol !== 'https:' || url.username || url.password || /placeholder/i.test(url.pathname)) return null;
   url.hash = '';
   return { url: url.href, revision: createHash('sha256').update('pdv-webp-v1:' + url.href).digest('hex') };

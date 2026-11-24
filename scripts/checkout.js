@@ -1536,7 +1536,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     throw new Error('Nao foi possivel gerar o token do cartao.');
                 }
 
-                const description = `Compra E o Bicho (${totals.itemCount} itens)`;
+                const description = `Compra ${API_CONFIG.COMPANY.name} (${totals.itemCount} itens)`;
                 const payload = {
                     storeId,
                     amount: Number(finalTotal.toFixed(2)),

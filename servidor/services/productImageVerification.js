@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const mime = require('mime-types');
+const { publicRoot } = require('../config/companyStorage');
 const Product = require('../models/Product');
 const {
   buildProductImageFileName,
@@ -15,7 +16,7 @@ const {
 } = require('../utils/cloudflareR2');
 
 const PLACEHOLDER_IMAGE = '/image/placeholder.svg';
-const PUBLIC_DIR = path.resolve(path.join(__dirname, '..', 'public'));
+const PUBLIC_DIR = publicRoot || path.resolve(path.join(__dirname, '..', 'public'));
 const CONSOLE_LOG_LIMIT = 500;
 const MAX_UPLOAD_FILES = 200;
 

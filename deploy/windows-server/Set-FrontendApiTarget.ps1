@@ -16,7 +16,7 @@ $desiredOrigin = if ($Target -eq 'Windows') { $windowsOrigin } else { $renderOri
 $knownOrigins = @($renderOrigin, $windowsOrigin)
 $content = Get-Content -Raw -LiteralPath $configPath
 
-$matches = @($knownOrigins | Where-Object { $content.Contains("const DEFAULT_RENDER_SERVER_URL = '$_';") })
+$matches = @($knownOrigins | Where-Object { $content.Contains("    apiUrl: '$_',") })
 if ($matches.Count -ne 1) {
     throw 'A origem padrao nao corresponde exatamente a um estado conhecido. Revise config.js manualmente.'
 }
@@ -34,8 +34,8 @@ if (-not $Apply) {
     exit 0
 }
 
-$oldLine = "const DEFAULT_RENDER_SERVER_URL = '$currentOrigin';"
-$newLine = "const DEFAULT_RENDER_SERVER_URL = '$desiredOrigin';"
+$oldLine = "    apiUrl: '$currentOrigin',"
+$newLine = "    apiUrl: '$desiredOrigin',"
 if ($PSCmdlet.ShouldProcess($configPath, "Trocar API para $desiredOrigin")) {
     $updated = $content.Replace($oldLine, $newLine)
     [System.IO.File]::WriteAllText($configPath, $updated, [System.Text.UTF8Encoding]::new($false))

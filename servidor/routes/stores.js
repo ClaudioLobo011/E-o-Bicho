@@ -6,6 +6,7 @@ const { recordDesktopSyncDeletion } = require('../services/desktopSyncTombstones
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { publicRoot } = require('../config/companyStorage');
 const crypto = require('crypto');
 const os = require('os');
 const { execFile } = require('child_process');
@@ -20,7 +21,7 @@ const { hasAdminMasterGlobalAccess } = require('../utils/adminMasterMode');
 // ConfiguraÃ§Ã£o do Multer para upload de imagens das lojas
 const storeImageStorage = multer.diskStorage({
     destination: function (req, file, cb) {
-        const dir = 'public/uploads/stores';
+        const dir = path.join(publicRoot || 'public', 'uploads', 'stores');
         if (!fs.existsSync(dir)){
             fs.mkdirSync(dir, { recursive: true });
         }

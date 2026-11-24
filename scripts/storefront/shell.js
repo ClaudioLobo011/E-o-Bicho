@@ -81,7 +81,8 @@
     if (window.CATALOG_PREVIEW) {
       show(
         "Prévia do catálogo",
-        '<p>Você está na versão de teste. A conta e as compras reais continuam no site oficial.</p><a href="https://www.peteobicho.com.br/pages/login.html">Entrar no site oficial →</a>',
+        '<p>Você está na versão de teste.</p>' +
+          (API_CONFIG.COMPANY.siteUrl ? `<a href="${esc(API_CONFIG.COMPANY.siteUrl)}/pages/login.html">Entrar no site oficial →</a>` : ''),
       );
       return;
     }
@@ -542,7 +543,7 @@
       departments
         .map(({ category: c, label }) => trigger(c._id, label))
         .join("") +
-      '<a href="/#club">E o Bicho Club <span class="tiny">CONHEÇA</span></a><a href="/pages/nossas-lojas.html">Nossas lojas</a>' +
+      `<a href="/#club">${esc(API_CONFIG.COMPANY.name)} Club <span class="tiny">CONHEÇA</span></a><a href="/pages/nossas-lojas.html">Nossas lojas</a>` +
       `<div id="category-cascade" class="cascade-panel" aria-label="Subcategorias" hidden><div class="cascade-heading"><div class="cascade-trail" aria-label="Caminho de categorias"></div><button type="button" class="cascade-close" aria-label="Fechar subcategorias">✕</button></div><div class="cascade-columns">${level("all", roots)}${categories
         .filter((c) => children(c._id).length)
         .map((c) => level(c._id, children(c._id)))

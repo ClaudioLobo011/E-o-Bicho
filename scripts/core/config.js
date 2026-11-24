@@ -1,7 +1,58 @@
+const COMPANY_PROFILES = Object.freeze({
+  e_o_bicho: Object.freeze({
+    name: 'E o Bicho',
+    siteUrl: 'https://www.peteobicho.com.br',
+    apiUrl: 'https://api.peteobicho.com.br',
+    callbackUrl: 'https://callback.peteobicho.com.br',
+    cdnUrl: 'https://cdn.peteobicho.com.br',
+    facebookDomainVerification: 'aa7dw5o3hdbv9j7uucy54roz2isvue',
+    locationLabel: 'Rio de Janeiro · RJ',
+    localApiUrl: 'http://localhost:3100',
+    apiPort: 3000,
+    database: 'test',
+    logo: '/public/image/logo.svg',
+    socialImage: '/public/image/logo.png',
+    instagramUrl: 'https://www.instagram.com/petshopeobichovilaisabel/',
+    legalName: 'Vila E o Bicho LTDA - ME',
+    taxId: '07.919.703/0001-67',
+    adminEmail: 'claudio.lobo@lobosti.com.br',
+    pageOverrides: Object.freeze({}),
+  }),
+  palace_do_pet: Object.freeze({
+    name: 'Palace do Pet',
+    siteUrl: '',
+    apiUrl: '',
+    callbackUrl: '',
+    cdnUrl: '',
+    facebookDomainVerification: '',
+    locationLabel: '',
+    localApiUrl: 'http://127.0.0.1:3200',
+    apiPort: 3200,
+    database: 'palace_do_pet',
+    logo: '',
+    socialImage: '',
+    instagramUrl: '',
+    legalName: '',
+    taxId: '',
+    adminEmail: '',
+    pageOverrides: Object.freeze({}),
+  }),
+});
+
+const DEFAULT_COMPANY = 'e_o_bicho';
+const PUBLISHED_COMPANY = null;
+const getCompany = (id = DEFAULT_COMPANY) => {
+  if (!Object.hasOwn(COMPANY_PROFILES, id)) throw new Error('Empresa desconhecida: ' + id);
+  return Object.freeze({ id, ...COMPANY_PROFILES[id] });
+};
+
+const browserCompany = typeof window === 'undefined' ? null : window.LOBOSTI_COMPANY;
+const activeCompany = getCompany(browserCompany?.id || PUBLISHED_COMPANY || DEFAULT_COMPANY);
+
 const API_CONFIG = (() => {
-  const DEFAULT_PRODUCTION_SERVER_URL = 'https://api.peteobicho.com.br';
+  const DEFAULT_PRODUCTION_SERVER_URL = activeCompany.apiUrl;
   const LEGACY_RENDER_SERVER_URL = 'https://e-o-bicho.onrender.com';
-  const LOCAL_SERVER_URL = 'http://localhost:3100';
+  const LOCAL_SERVER_URL = browserCompany?.localApiUrl || activeCompany.localApiUrl;
   const STATIC_DEV_PORTS = new Set(['5500', '5501']);
 
   const normalizeUrl = (url) => {
@@ -61,6 +112,11 @@ const API_CONFIG = (() => {
 
     const hostname = window.location.hostname;
     const isLocalhost = isLocalHost(hostname);
+    if (activeCompany.id !== DEFAULT_COMPANY) {
+      const server = isLocalhost ? LOCAL_SERVER_URL : DEFAULT_PRODUCTION_SERVER_URL;
+      if (!server) throw new Error('Configure a URL pública da API para ' + activeCompany.name);
+      return server;
+    }
 
     // Fora do ambiente local, o dominio publico e a unica fonte valida. Isso
     // impede que navegadores antigos continuem presos a Render por cache ou
@@ -105,10 +161,15 @@ const API_CONFIG = (() => {
   return {
     SERVER_URL: serverUrl,
     BASE_URL: `${serverUrl}/api`,
-    ADMIN_EMAIL: 'claudio.lobo@lobosti.com.br',
+    ADMIN_EMAIL: activeCompany.adminEmail,
+    COMPANY: activeCompany,
   };
 })();
 
-if (typeof globalThis !== 'undefined') {
+if (typeof window !== 'undefined') {
   globalThis.API_CONFIG = API_CONFIG;
+}
+
+if (typeof module === 'object' && module.exports) {
+  module.exports = { DEFAULT_COMPANY, PUBLISHED_COMPANY, getCompany };
 }

@@ -3,12 +3,16 @@ const Product = require("../models/Product");
 const User = require("../models/User");
 const { availableStock } = require("../utils/cartAvailability");
 const { sendMail } = require("../utils/mailer");
+const { getCompany } = require("../../scripts/core/config");
 let timer = null;
 let running = false;
 async function processRestockNotices({
   mail = sendMail,
   now = new Date(),
 } = {}) {
+  const company = getCompany(process.env.SITE_EMPRESA || undefined);
+  const siteUrl = company.siteUrl;
+  if (!siteUrl) return;
   if (running) return;
   running = true;
   try {
@@ -56,11 +60,11 @@ async function processRestockNotices({
       ).lean();
       if (!claim) continue;
       try {
-        const url = `https://www.peteobicho.com.br/pages/menu-departments-item/product.html?id=${product._id}`;
+        const url = `${siteUrl}/pages/menu-departments-item/product.html?id=${product._id}`;
         const result = await mail({
           to: user.email,
-          subject: "O produto que você esperava voltou — E o Bicho",
-          text: `Olá!\n\n${product.nome} está disponível novamente no E o Bicho.\n\nConfira o preço e a disponibilidade atual: ${url}\n\nEste aviso foi solicitado por você e não reserva o produto. O estoque pode mudar.\n\nEquipe E o Bicho`,
+          subject: `O produto que você esperava voltou — ${company.name}`,
+          text: `Olá!\n\n${product.nome} está disponível novamente em nossa loja.\n\nConfira o preço e a disponibilidade atual: ${url}\n\nEste aviso foi solicitado por você e não reserva o produto. O estoque pode mudar.\n\nEquipe ${company.name}`,
         });
         if (result?.accepted && !result.accepted.length)
           throw new Error("Email not accepted");

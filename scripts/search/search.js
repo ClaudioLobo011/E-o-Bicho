@@ -27,7 +27,7 @@ function initializeSearchPage() {
 
   const pageTitleEl = document.getElementById('page-title');
   if (pageTitleEl) pageTitleEl.textContent = categoryName || '';
-  if (categoryName) document.title = `${categoryName} - E o Bicho`;
+  if (categoryName) document.title = `${categoryName} - ${API_CONFIG.COMPANY.name}`;
 
   if (!categoryName) { return; }
 
@@ -44,7 +44,7 @@ async function renderSearchResults(term) {
   if (aside) aside.style.display = 'none';
   if (breadcrumb) breadcrumb.innerHTML = '';
   if (title) { title.textContent = `Resultados para "${term}"`; }
-  document.title = `${term} - Busca - E o Bicho`;
+  document.title = `${term} - Busca - ${API_CONFIG.COMPANY.name}`;
 
   try {
     list.innerHTML = '<p class="col-span-full text-center text-gray-500">Carregando.</p>';

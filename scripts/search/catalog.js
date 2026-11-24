@@ -12,7 +12,7 @@
     isFavorite: id => window.StorefrontShell?.isFavorite(id) || false,
     productUrl: id => '/pages/menu-departments-item/product.html?id=' + encodeURIComponent(id),
     safeImage: raw => {
-      try { const url = new URL(raw, window.API_CONFIG?.SERVER_URL || 'https://api.peteobicho.com.br'); return ['https:','http:'].includes(url.protocol) ? url.href : '/public/image/placeholder.svg'; }
+      try { const url = new URL(raw, window.API_CONFIG?.SERVER_URL || location.origin); return ['https:','http:'].includes(url.protocol) ? url.href : '/public/image/placeholder.svg'; }
       catch { return '/public/image/placeholder.svg'; }
     },
     offer: p => {
@@ -206,7 +206,7 @@
       ? `Resultados para “${state.get("search")}”`
       : titles[name] || name || "Categoria não encontrada";
     $("#catalog-title").textContent = title;
-    document.title = title + " · E o Bicho";
+    document.title = title + " · " + API_CONFIG.COMPANY.name;
     $("#catalog-description").textContent = state.has("search")
       ? "Explore os resultados e use os filtros para encontrar o que procura."
       : name === "Cachorro"
@@ -325,7 +325,7 @@
     return products
       .map((p) => {
         const pricing = ProductPageUtils.price(p);
-        return `<article class="product"><div class="product-topline"><span class="product-brand">${esc(p.marca || "E o Bicho")}</span>${pricing.saving > 0 ? `<span class="offer-badge">${esc(pricing.label)}</span>` : Number(p.precoClube) > 0 && p.precoClube < pricing.unit ? '<span class="offer-badge">PREÇO CLUB</span>' : ""}</div><button type="button" class="favorite" data-id="${esc(p._id)}" aria-label="Favoritar ${esc(p.nome)}" aria-pressed="${S.isFavorite(p._id)}">${S.isFavorite(p._id) ? "♥" : "♡"}</button><a href="${S.productUrl(p._id)}"><img src="${esc(S.safeImage(p.imagemPrincipal))}" alt="${esc(p.nome)}" loading="lazy" width="300" height="180"><h3>${esc(p.nome)}</h3></a>${S.offer(p)}<p class="stock-note">${p.stock > 0 ? "Com estoque · confirme a loja e a entrega" : "Reposição: consulte nossas lojas"}</p><a class="product-link" href="${S.productUrl(p._id)}">${p.stock > 0 ? "Escolher produto →" : "Ver disponibilidade →"}</a>${window.CATALOG_PREVIEW ? `<button type="button" class="preview-quick-add" data-preview-add="${esc(p._id)}" aria-label="Adicionar ${esc(p.nome)} à sacola de teste">Adicionar à sacola de teste +</button>` : ""}</article>`;
+        return `<article class="product"><div class="product-topline"><span class="product-brand">${esc(p.marca || API_CONFIG.COMPANY.name)}</span>${pricing.saving > 0 ? `<span class="offer-badge">${esc(pricing.label)}</span>` : Number(p.precoClube) > 0 && p.precoClube < pricing.unit ? '<span class="offer-badge">PREÇO CLUB</span>' : ""}</div><button type="button" class="favorite" data-id="${esc(p._id)}" aria-label="Favoritar ${esc(p.nome)}" aria-pressed="${S.isFavorite(p._id)}">${S.isFavorite(p._id) ? "♥" : "♡"}</button><a href="${S.productUrl(p._id)}"><img src="${esc(S.safeImage(p.imagemPrincipal))}" alt="${esc(p.nome)}" loading="lazy" width="300" height="180"><h3>${esc(p.nome)}</h3></a>${S.offer(p)}<p class="stock-note">${p.stock > 0 ? "Com estoque · confirme a loja e a entrega" : "Reposição: consulte nossas lojas"}</p><a class="product-link" href="${S.productUrl(p._id)}">${p.stock > 0 ? "Escolher produto →" : "Ver disponibilidade →"}</a>${window.CATALOG_PREVIEW ? `<button type="button" class="preview-quick-add" data-preview-add="${esc(p._id)}" aria-label="Adicionar ${esc(p.nome)} à sacola de teste">Adicionar à sacola de teste +</button>` : ""}</article>`;
       })
       .join("");
   }

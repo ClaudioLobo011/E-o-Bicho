@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
   const STORAGE_KEY = 'eobicho_mercadopago_integrations_state';
-  const WEBHOOK_URL = 'https://callback.peteobicho.com.br/webhooks/mercadopago';
+  const WEBHOOK_URL = API_CONFIG.COMPANY.callbackUrl ? API_CONFIG.COMPANY.callbackUrl + '/webhooks/mercadopago' : '';
   const API_BASE = API_CONFIG.BASE_URL;
 
   const storeSelect = document.getElementById('mercadopago-store-select');
@@ -79,8 +79,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function bindWebhookCard() {
-    if (webhookUrlEl) webhookUrlEl.textContent = WEBHOOK_URL;
+    if (webhookUrlEl) webhookUrlEl.textContent = WEBHOOK_URL || 'Endereço de webhook em configuração';
     if (copyWebhookBtn) {
+      copyWebhookBtn.disabled = !WEBHOOK_URL;
       copyWebhookBtn.addEventListener('click', async () => {
         try {
           await navigator.clipboard.writeText(WEBHOOK_URL);

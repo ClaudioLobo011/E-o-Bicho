@@ -1,12 +1,12 @@
 // Public read-only catalogue adapter. Account credentials never reach this function.
 const { catalogue } = require('./storefront-catalog-model.cjs');
-const API = 'https://api.peteobicho.com.br/api';
+const { resolveSiteCompany } = require('../scripts/core/site-company.cjs');
 const cache = new Map();
 const TTL = 60000;
 const fields = ['_id','nome','venda','precoClube','stock','marca','imagemPrincipal','categorias','especificacoes','inativo','naoMostrarNoSite','promocao','promocaoCondicional','peso'];
 const sanitize = p => Object.fromEntries(fields.filter(k => p[k] !== undefined).map(k => [k,p[k]]));
-async function json(path) {
-  const response = await fetch(API + path, { signal: AbortSignal.timeout(20000) });
+async function json(api, path) {
+  const response = await fetch(api + path, { signal: AbortSignal.timeout(20000) });
   if (!response.ok) throw Error('Não foi possível consultar os produtos. Tente novamente.');
   return response.json();
 }
@@ -21,16 +21,16 @@ async function cached(key, load) {
   try { return await value; }
   catch (error) { if (cache.get(key) === entry) cache.delete(key); throw error; }
 }
-async function source(query) {
+async function source(api, query) {
   const params = new URLSearchParams();
   for (const key of ['category','parent','grandparent','search']) if (query[key]) params.set(key, query[key]);
   if (!params.has('category') && !params.has('search')) params.set('category','Cachorro');
-  return cached('products:' + params, async () => {
+  return cached(api + ':products:' + params, async () => {
     if (params.has('search') && !params.has('category')) {
       const products = [];
       let page = 1, pages = 1;
       do {
-        const data = await json('/products?' + new URLSearchParams({search:params.get('search'),limit:'60',page:String(page)}));
+        const data = await json(api, '/products?' + new URLSearchParams({search:params.get('search'),limit:'60',page:String(page)}));
         if (!Array.isArray(data.products)) throw Error('Resposta de produtos inválida.');
         products.push(...data.products.map(sanitize));
         pages = Number(data.pages) || 1;
@@ -41,7 +41,7 @@ async function source(query) {
     }
     params.set('name', params.get('category'));
     params.delete('category');
-    const data = await json('/products/by-category?' + params);
+    const data = await json(api, '/products/by-category?' + params);
     if (!Array.isArray(data.products)) throw Error('Resposta da categoria inválida.');
     return data.products.map(sanitize);
   });
@@ -55,7 +55,9 @@ module.exports = async function storefrontCatalog(req,res) {
     return res.end(JSON.stringify({message:'Método não permitido.'}));
   }
   try {
-    const params = new URL(req.url,'https://www.peteobicho.com.br').searchParams;
+    const company = req.siteCompany || resolveSiteCompany({ published: true });
+    const api = company.apiUrl + '/api';
+    const params = new URL(req.url, api).searchParams;
     const query = {};
     for (const key of new Set(params.keys())) {
       const values = params.getAll(key);
@@ -67,7 +69,7 @@ module.exports = async function storefrontCatalog(req,res) {
     }
     for (const key of ['category','parent','grandparent','search']) if (Array.isArray(query[key])) throw Error('Confira a categoria da busca.');
     const [products, categories] = await Promise.all([
-      source(query), cached('categories', () => json('/categories')),
+      source(api, query), cached(api + ':categories', () => json(api, '/categories')),
     ]);
     if (!Array.isArray(categories)) throw Error('Resposta de categorias inválida.');
     const result = catalogue(products, categories, query);

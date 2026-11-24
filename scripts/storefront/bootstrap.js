@@ -95,7 +95,7 @@
     console.error("Cabeçalho e rodapé:", error.message);
     const header = document.getElementById("header-placeholder");
     if (header && !header.children.length) {
-      header.innerHTML = '<div style="padding:20px;font:14px system-ui"><a href="/">E o Bicho · Início</a> · <a href="/pages/nossas-lojas.html">Lojas e contatos</a><p>Não foi possível carregar o menu. </p></div>';
+      header.innerHTML = '<div style="padding:20px;font:14px system-ui"><a href="/">Início</a> · <a href="/pages/nossas-lojas.html">Lojas e contatos</a><p>Não foi possível carregar o menu. </p></div>';
       const retry = document.createElement('button'); retry.type = 'button'; retry.textContent = 'Tentar novamente'; retry.addEventListener('click', () => location.reload()); header.firstElementChild.append(retry);
     } else if (header) {
       const message = document.createElement('div'); message.className='storefront-shell'; message.setAttribute('role','status'); message.style.cssText='padding:8px 20px;font:12px system-ui;text-align:center;background:#f3f5eb';

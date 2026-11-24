@@ -261,7 +261,7 @@
         if (!window.LocalQRCode) throw Error("QR indisponível");
         const svg = await LocalQRCode.toString(
           demo
-            ? "Prévia visual E o Bicho. Não configure este código no autenticador."
+            ? "Prévia visual. Não configure este código no autenticador."
             : payload.otpauth,
           { type: "svg", width: 160, margin: 4, errorCorrectionLevel: "M" },
         );

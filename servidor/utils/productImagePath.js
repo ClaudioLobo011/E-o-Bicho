@@ -1,12 +1,14 @@
 const fs = require('fs');
 const path = require('path');
+const { publicRoot } = require('../config/companyStorage');
 
-const DEFAULT_IMAGE_ROOT = path.join(__dirname, '..', 'public', 'uploads', 'Imagens');
+const imagePublicRoot = publicRoot || path.join(__dirname, '..', 'public');
+const DEFAULT_IMAGE_ROOT = path.join(imagePublicRoot, 'uploads', 'Imagens');
 const DEFAULT_DRIVE_PATH = '/Compras/C_Produto/Imagens';
 const DEFAULT_URL_PREFIX = '/product-images';
 const DEFAULT_R2_BASE_PATH = 'C_produto/fotos';
 const LEGACY_URL_PREFIX = '/uploads/products';
-const LEGACY_UPLOADS_DIR = path.join(__dirname, '..', 'public', 'uploads', 'products');
+const LEGACY_UPLOADS_DIR = path.join(imagePublicRoot, 'uploads', 'products');
 const FALLBACK_BARCODE_SEGMENT = 'sem-codbarras';
 const FALLBACK_EXTENSION = '.png';
 

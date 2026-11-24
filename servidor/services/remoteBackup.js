@@ -6,7 +6,8 @@ const crypto = require('node:crypto');
 const express = require('express');
 const Job = require('../models/PdvRemoteBackup');
 const Host = require('../models/PdvDesktopHost');
-const configPath = process.env.PDV_REMOTE_BACKUP_CONFIG || path.join(process.env.LOCALAPPDATA || os.homedir(), 'EoBichoServer', 'remote-backup.json');
+const { dataRoot } = require('../config/companyStorage');
+const configPath = process.env.PDV_REMOTE_BACKUP_CONFIG || path.join(dataRoot || path.join(process.env.LOCALAPPDATA || os.homedir(), 'EoBichoServer'), 'remote-backup.json');
 const root = process.env.PDV_REMOTE_BACKUP_DIR || path.join(path.dirname(configPath), 'encrypted-backups');
 const locks = new Set();
 function allowedIds() { try { const c = JSON.parse(fs.readFileSync(configPath,'utf8')); return c.enabled === true && Array.isArray(c.adminIds) ? c.adminIds : []; } catch { return []; } }

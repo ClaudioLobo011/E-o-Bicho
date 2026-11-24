@@ -9,12 +9,26 @@ const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const crypto = require('crypto');
 const serverPackage = require('./package.json');
+const { DEFAULT_COMPANY, getCompany } = require('../scripts/core/config');
 
 // Carrega variÃ¡veis de ambiente antes de importar mÃ³dulos que dependem delas
-dotenv.config();
+const companyId = process.env.SITE_EMPRESA || DEFAULT_COMPANY;
+const company = getCompany(companyId);
+if (companyId === DEFAULT_COMPANY) {
+  dotenv.config();
+} else {
+  if (!process.env.SITE_ENV_FILE) throw new Error('Informe SITE_ENV_FILE da empresa ' + company.name);
+  const environment = dotenv.config({ path: process.env.SITE_ENV_FILE, override: true });
+  if (environment.error || !environment.parsed?.MONGO_URI || !environment.parsed?.JWT_SECRET) {
+    throw new Error('O ambiente da empresa deve fornecer MONGO_URI e JWT_SECRET próprios.');
+  }
+  if (!process.env.FRONTEND_URL && company.siteUrl) process.env.FRONTEND_URL = company.siteUrl;
+}
+process.env.SITE_EMPRESA = companyId;
 
 const { verifyMailer } = require('./utils/mailer');
 const connectDB = require('./config/db');
+const { publicRoot } = require('./config/companyStorage');
 const { startIfoodStatusPoller } = require('./services/ifoodStatusPoller');
 const { startIfoodMenuScheduler } = require('./services/ifoodMenuScheduler');
 const {
@@ -42,7 +56,8 @@ const buildPdvRoomKey = (pdvId) => {
 const BODY_PARSER_LIMIT = '10mb';
 const WHATSAPP_WEBHOOK_BODY_LIMIT = '25mb';
 const DEFAULT_CORS_ALLOWED_ORIGINS = [
-  'https://www.peteobicho.com.br',
+  getCompany().apiUrl,
+  getCompany().siteUrl,
   'https://peteobicho.com.br',
   'https://e-o-bicho-site.vercel.app',
   'https://e-o-bicho.com.br',
@@ -57,13 +72,15 @@ function buildAllowedOrigins() {
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean);
-  const merged = [...DEFAULT_CORS_ALLOWED_ORIGINS, ...fromEnv];
+  const profileOrigins = companyId === DEFAULT_COMPANY ? DEFAULT_CORS_ALLOWED_ORIGINS : [company.siteUrl].filter(Boolean);
+  const merged = [...profileOrigins, ...fromEnv];
   return Array.from(new Set(merged));
 }
 
 function isOriginAllowed(origin, allowedOrigins = []) {
   if (!origin) return true; // requests sem Origin (server-to-server / desktop) passam
   if (allowedOrigins.includes(origin)) return true;
+  if (companyId !== DEFAULT_COMPANY && process.env.NODE_ENV === 'production') return false;
   return /^http:\/\/localhost:\d+$/.test(origin) || /^http:\/\/127\.0\.0\.1:\d+$/.test(origin);
 }
 
@@ -129,7 +146,7 @@ app.options(/.*/, cors(corsOptions));
 // As respostas incrementais podem conter muitos registros no primeiro cursor.
 // Comprime JSON acima de 1 KiB sem alterar webhooks nem contratos legados.
 app.use(compression({ threshold: 1024 }));
-app.use(express.static('public'));
+app.use(express.static(publicRoot || 'public'));
 
 // Endpoints operacionais sem dados de negocio ou segredos. O tunnel e o
 // supervisor do Windows usam estas rotas para distinguir processo ativo de
@@ -483,7 +500,7 @@ async function startServer() {
   if (String(process.env.SKIP_MAIL_VERIFY || '').toLowerCase() !== 'true') {
     void verifyMailer();
   }
-  const port = Number(process.env.PORT || 3000);
+  const port = Number(process.env.PORT || company.apiPort);
   await new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(port, () => {

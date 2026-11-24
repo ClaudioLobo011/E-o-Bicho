@@ -22,7 +22,9 @@
       const url = URL.createObjectURL(await response.blob());
       const link = document.createElement('a');
       link.href = url;
-      link.download = 'Aspia-EoBicho-Host-Setup-2026.11.24.5.zip';
+      const disposition = response.headers.get('Content-Disposition') || '';
+      const name = disposition.match(/filename="([^"]+)"/i)?.[1];
+      link.download = name || 'Aspia-Host-Setup.zip';
       document.body.appendChild(link);
       link.click();
       link.remove();

@@ -14,7 +14,10 @@
     quote: null,
   };
   const id = new URLSearchParams(location.search).get("id") || "";
-  const canonical = `https://www.peteobicho.com.br/pages/menu-departments-item/product.html?id=${encodeURIComponent(id)}`;
+  let recommendationSequence = 0;
+  const company = API_CONFIG.COMPANY;
+  const siteUrl = company.siteUrl || location.origin;
+  const canonical = `${siteUrl}/pages/menu-departments-item/product.html?id=${encodeURIComponent(id)}`;
   const readStorage = (key, fallback) => {
     try {
       return JSON.parse(localStorage.getItem(key)) ?? fallback;
@@ -602,7 +605,7 @@
     $("error-message").textContent = message;
     $("retry-product").hidden = !retry;
     $("mobile-purchase-bar").hidden = true;
-    document.title = `${title} - E o Bicho`;
+    document.title = `${title} - ${company.name}`;
     track("product_error", { reason: title });
   }
   function saveSelection() {
@@ -995,6 +998,7 @@
         $("product-variants").hidden = false;
       }
       if (content.related?.length) {
+        recommendationSequence++;
         $("related-products").replaceChildren(
           ...content.related.slice(0, 4).map(card),
         );
@@ -1492,16 +1496,21 @@
     return link;
   }
   async function loadRecommendations() {
+    const ticket = ++recommendationSequence;
     try {
-      const data = await request(`/product-experience/${id}/related`);
+      const response = await fetch(`/api/product-related?id=${encodeURIComponent(id)}`, {
+        headers: {Accept:'application/json'}, signal: AbortSignal.timeout(14000),
+      });
+      if (!response.ok) throw Error('Produtos semelhantes indisponíveis.');
+      const data = await response.json();
+      if (ticket !== recommendationSequence) return;
       const list = (data.products || []).filter(
         (p) => p._id !== id && !p.inativo && !p.naoMostrarNoSite && p.venda > 0,
       );
-      if (!list.length) return;
+      if (!list.length || !data.category?.nome) { $('related-section').hidden = true; return; }
       $("related-products").replaceChildren(...list.slice(0, 4).map(card));
       $("related-section").hidden = false;
-      const path = state.product.breadcrumbPath || [];
-      const category = path.at(-1);
+      const category = data.category;
       if (category) {
         $("related-title").textContent = `Mais em ${category.nome}`;
         $("related-see-all").href = category.href;
@@ -1521,6 +1530,7 @@
         $("product-variants").hidden = false;
       }
     } catch {
+      if (ticket === recommendationSequence) $('related-section').hidden = true;
       /* secondary recommendations never block the product */
     }
   }
@@ -1548,13 +1558,13 @@
   }
   function metadata(p) {
     if (!p) return;
-    document.title = `${p.nome} - E o Bicho`;
+    document.title = `${p.nome} - ${company.name}`;
     const plain = $("product-description")
       .textContent.replace(/\s+/g, " ")
       .trim();
     const desc = plain
       ? plain.slice(0, 190)
-      : `${p.nome}. Consulte disponibilidade e entrega no E o Bicho.`;
+      : `${p.nome}. Consulte disponibilidade e entrega na loja.`;
     document.querySelector("meta[name=description]").content = desc;
     for (const [key, value] of Object.entries({
       title: document.title,
@@ -1583,7 +1593,7 @@
         priceCurrency: "BRL",
         availability: `https://schema.org/${p.stock > 0 ? "InStock" : "OutOfStock"}`,
         url: canonical,
-        seller: { "@type": "Organization", name: "E o Bicho" },
+        seller: { "@type": "Organization", name: company.name },
       };
     if (state.community?.total > 0)
       data.aggregateRating = {
@@ -1617,7 +1627,7 @@
         "@type": "ListItem",
         position: index + 1,
         name: entry.nome,
-        item: U.safeUrl(entry.href, "https://www.peteobicho.com.br"),
+        item: U.safeUrl(entry.href, siteUrl),
       })),
     }).replace(/</g, "\\u003c");
   }
