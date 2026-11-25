@@ -1,12 +1,10 @@
-version: 1.0.22
+version: 1.0.23
 files:
   - url: >-
-      https://github.com/ClaudioLobo011/E-o-Bicho/releases/download/ficha-clinica-1.0.22/E-o-Bicho-ficha-clinica-1.0.22-Atualizacao.exe
-    sha512: >-
-      ZVrAp0ff07ETMlI5pAdk63WTyRbs+i1xp+La1ej01dxZI67BCTR7CorYgmYhn4PdKQ0SwJgCLddxsaUdajvRjQ==
-    size: 101273125
+      https://github.com/ClaudioLobo011/E-o-Bicho/releases/download/ficha-clinica-1.0.23/E-o-Bicho-ficha-clinica-1.0.23-Atualizacao.exe
+    sha512: nII4Fh84XJKIUu7WwaflRrl1XcjL7QDaU1MS7MHykmUdRs2sEAIlqjOScCOsxYkxQAd9AesBhLcz85ibkIspdg==
+    size: 101273737
 path: >-
-  https://github.com/ClaudioLobo011/E-o-Bicho/releases/download/ficha-clinica-1.0.22/E-o-Bicho-ficha-clinica-1.0.22-Atualizacao.exe
-sha512: >-
-  ZVrAp0ff07ETMlI5pAdk63WTyRbs+i1xp+La1ej01dxZI67BCTR7CorYgmYhn4PdKQ0SwJgCLddxsaUdajvRjQ==
-releaseDate: '2026-11-10T16:00:13.027Z'
+  https://github.com/ClaudioLobo011/E-o-Bicho/releases/download/ficha-clinica-1.0.23/E-o-Bicho-ficha-clinica-1.0.23-Atualizacao.exe
+sha512: nII4Fh84XJKIUu7WwaflRrl1XcjL7QDaU1MS7MHykmUdRs2sEAIlqjOScCOsxYkxQAd9AesBhLcz85ibkIspdg==
+releaseDate: '2026-11-25T19:33:39.447Z'
