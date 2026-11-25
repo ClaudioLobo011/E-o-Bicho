@@ -233,6 +233,7 @@ export const els = {
   customerPetRacaSuggest: document.getElementById('agenda-customer-pet-raca-suggest'),
   customerPetBirth: document.getElementById('agenda-customer-pet-birth'),
   customerPetCor: document.getElementById('agenda-customer-pet-cor'),
+  customerPetPelagem: document.getElementById('agenda-customer-pet-pelagem'),
   customerPetCodAnt: document.getElementById('agenda-customer-pet-cod-ant'),
   customerPetMicrochip: document.getElementById('agenda-customer-pet-microchip'),
   customerPetRga: document.getElementById('agenda-customer-pet-rga'),

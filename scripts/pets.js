@@ -521,7 +521,7 @@
       petsListContainer.innerHTML = pets
         .map(
           (pet) =>
-            `<article class="pet-card"><div class="pet-card-heading"><span class="pet-avatar" aria-hidden="true">♡</span><div><h2>${esc(fixEncoding(pet.nome) || "Pet sem nome")}</h2><span>${esc(speciesLabels[norm(pet.tipo)] || pet.tipo || "Espécie não informada")}</span></div></div><p class="pet-breed">${esc(fixEncoding(pet.raca) || "Raça não informada")}</p><div class="pet-tags"><span>${esc(pet.sexo || "Sexo não informado")}</span><span>${esc(pet.porte || "Porte não informado")}</span></div><details class="pet-information"><summary>Ver informações <span aria-hidden="true">⌄</span></summary><dl><div><dt>Nascimento</dt><dd>${esc(date(pet.dataNascimento))}</dd></div><div><dt>Pelagem / cor</dt><dd>${esc(pet.pelagemCor || "Não informada")}</dd></div><div><dt>Peso</dt><dd>${esc(pet.peso ?? "Não informado") || "Não informado"}</dd></div><div><dt>Microchip</dt><dd>${esc(pet.microchip || "Não informado")}</dd></div><div><dt>RGA</dt><dd>${esc(pet.rga || "Não informado")}</dd></div></dl></details><div class="pet-card-actions"><button type="button" data-pet-edit="${esc(pet._id)}" aria-label="Editar ${esc(pet.nome)}">Editar cadastro →</button><button type="button" data-pet-delete="${esc(pet._id)}" aria-label="Excluir cadastro de ${esc(pet.nome)}">Excluir</button></div></article>`,
+            `<article class="pet-card"><div class="pet-card-heading"><span class="pet-avatar" aria-hidden="true">♡</span><div><h2>${esc(fixEncoding(pet.nome) || "Pet sem nome")}</h2><span>${esc(speciesLabels[norm(pet.tipo)] || pet.tipo || "Espécie não informada")}</span></div></div><p class="pet-breed">${esc(fixEncoding(pet.raca) || "Raça não informada")}</p><div class="pet-tags"><span>${esc(pet.sexo || "Sexo não informado")}</span><span>${esc(pet.porte || "Porte não informado")}</span></div><details class="pet-information"><summary>Ver informações <span aria-hidden="true">⌄</span></summary><dl><div><dt>Nascimento</dt><dd>${esc(date(pet.dataNascimento))}</dd></div><div><dt>Cor</dt><dd>${esc((pet.cor ?? pet.pelagemCor) || "Não informada")}</dd></div><div><dt>Pelagem</dt><dd>${esc(pet.pelagem || "Não informada")}</dd></div><div><dt>Peso</dt><dd>${esc(pet.peso ?? "Não informado") || "Não informado"}</dd></div><div><dt>Microchip</dt><dd>${esc(pet.microchip || "Não informado")}</dd></div><div><dt>RGA</dt><dd>${esc(pet.rga || "Não informado")}</dd></div></dl></details><div class="pet-card-actions"><button type="button" data-pet-edit="${esc(pet._id)}" aria-label="Editar ${esc(pet.nome)}">Editar cadastro →</button><button type="button" data-pet-delete="${esc(pet._id)}" aria-label="Excluir cadastro de ${esc(pet.nome)}">Excluir</button></div></article>`,
         )
         .join("");
       $("pets-empty").hidden = pets.length > 0;
@@ -579,7 +579,8 @@
         "pet-porte": pet.porte,
         "pet-sexo": pet.sexo,
         "pet-microchip": pet.microchip,
-        "pet-pelagem": pet.pelagemCor,
+        "pet-cor": pet.cor ?? pet.pelagemCor,
+        "pet-pelagem": pet.pelagem,
         "pet-rga": pet.rga,
         "pet-peso": pet.peso,
       };
@@ -732,7 +733,8 @@
             sexo: data.pet_sexo,
             dataNascimento: data.pet_nascimento,
             microchip: data.pet_microchip,
-            pelagemCor: data.pet_pelagem,
+            cor: data.pet_cor,
+            pelagem: data.pet_pelagem,
             rga: data.pet_rga,
             peso: data.pet_peso,
           };

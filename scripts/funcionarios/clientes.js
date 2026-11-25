@@ -262,6 +262,7 @@
         tipo: document.getElementById('pet-tipo'),
         porte: document.getElementById('pet-porte'),
         raca: document.getElementById('pet-raca'),
+        cor: document.getElementById('pet-cor'),
         pelagem: document.getElementById('pet-pelagem'),
         nascimento: document.getElementById('pet-nascimento'),
         peso: document.getElementById('pet-peso'),
@@ -1074,7 +1075,8 @@
         const tipo = fixEncoding(pet.tipo || '');
         const raca = fixEncoding(pet.raca || '');
         const porte = fixEncoding(pet.porte || '');
-        const pelagem = fixEncoding(pet.pelagemCor || pet.pelagem || '');
+        const cor = fixEncoding(pet.cor ?? pet.pelagemCor ?? '');
+        const pelagem = pet.pelagem || '';
         const sexo = fixEncoding(pet.sexo || '');
         const peso = fixEncoding(pet.peso || '');
         const rga = fixEncoding(pet.rga || '');
@@ -1094,6 +1096,7 @@
           tipo ? `Tipo: ${tipo}` : '',
           raca ? `Raça: ${raca}` : '',
           porte ? `Porte: ${porte}` : '',
+          cor ? 'Cor: ' + cor : '',
           pelagem ? `Pelagem: ${pelagem}` : '',
           nascimento ? `Nascimento: ${nascimento.split('-').reverse().join('/')}` : '',
           peso ? `Peso: ${peso}` : '',
@@ -1103,14 +1106,20 @@
         ].filter(Boolean);
         card.innerHTML = `
           <div class="flex flex-col gap-1 text-sm text-gray-700">
-            <div class="text-base font-semibold text-gray-800 flex flex-wrap items-center gap-2">${nome || 'Sem nome'}${headerBadges ? ` ${headerBadges}` : ''}</div>
-            ${detalhes.map((linha) => `<div>${linha}</div>`).join('')}
+            <div class="text-base font-semibold text-gray-800 flex flex-wrap items-center gap-2" data-pet-heading><span data-pet-name></span>${headerBadges ? ` ${headerBadges}` : ''}</div>
           </div>
           <div class="mt-3 flex items-center gap-2">
             <button data-id="${pet._id}" data-action="editar-pet" class="px-3 py-1.5 rounded border border-indigo-200 text-indigo-600 text-xs font-medium hover:bg-indigo-50">Editar</button>
             <button data-id="${pet._id}" data-action="remover-pet" class="px-3 py-1.5 rounded border border-red-200 text-red-600 text-xs font-medium hover:bg-red-50">Remover</button>
           </div>
         `;
+        card.querySelector('[data-pet-name]').textContent = nome || 'Sem nome';
+        const rows = detalhes.map((linha) => {
+          const row = document.createElement('div');
+          row.textContent = linha;
+          return row;
+        });
+        card.querySelector('[data-pet-heading]').after(...rows);
         lista.appendChild(card);
       });
     }
@@ -1760,7 +1769,8 @@
         tipo: elements.pets.tipo.value,
         porte: elements.pets.porte.value,
         raca: elements.pets.raca.value.trim(),
-        pelagem: elements.pets.pelagem.value.trim(),
+        cor: elements.pets.cor.value.trim(),
+        pelagem: elements.pets.pelagem.value,
         nascimento: elements.pets.nascimento.value,
         peso: elements.pets.peso.value.trim(),
         sexo: elements.pets.sexo.value,
@@ -2053,7 +2063,8 @@
         await updateBreedOptions();
         elements.pets.raca.value = fixEncoding(pet.raca || '');
         setSelectValue(elements.pets.porte, pet.porte || '');
-        elements.pets.pelagem.value = fixEncoding(pet.pelagemCor || pet.pelagem || '');
+        elements.pets.cor.value = fixEncoding(pet.cor ?? pet.pelagemCor ?? '');
+        elements.pets.pelagem.value = pet.pelagem || '';
         elements.pets.nascimento.value = toISODateInput(pet.dataNascimento);
         elements.pets.peso.value = fixEncoding(pet.peso || '');
         setSelectValue(elements.pets.sexo, pet.sexo || '');

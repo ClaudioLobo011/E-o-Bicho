@@ -267,16 +267,31 @@
 
             <div class="pets-field">
               <label
-                for="pet-pelagem"
+                for="pet-cor"
                 class="block text-sm font-medium text-gray-700"
-                >Pelagem/Cor</label
+                >Cor</label
               >
               <input
                 type="text"
-                id="pet-pelagem"
-                name="pet_pelagem"
+                id="pet-cor"
+                name="pet_cor"
                 class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary"
               />
+            </div>
+
+            <div class="pets-field">
+              <label
+                for="pet-pelagem"
+                class="block text-sm font-medium text-gray-700"
+                >Pelagem</label
+              >
+              <select
+                id="pet-pelagem"
+                name="pet_pelagem"
+                class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm bg-white focus:ring-primary focus:border-primary"
+              >
+                <option value="">Selecione</option><option value="Curto">Curto</option><option value="Médio">Médio</option><option value="Longo">Longo</option>
+              </select>
             </div>
 
             <div class="pets-field">

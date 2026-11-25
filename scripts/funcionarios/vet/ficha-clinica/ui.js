@@ -70,7 +70,7 @@ function updatePetInfo(pet = getSelectedPet()) {
     els.petMainDetails.classList.toggle('hidden', !hasMainDetails);
   }
 
-  const cor = pickFirst(pet.pelagemCor, pet.cor, pet.corPelagem, pet.corPelo);
+  const cor = pet.cor ?? pickFirst(pet.pelagemCor, pet.corPelagem, pet.corPelo);
   const sexo = formatPetSex(pet.sexo);
   const rga = formatPetRga(pickFirst(pet.rga, pet.rg));
   const microchip = formatPetMicrochip(pickFirst(pet.microchip, pet.microChip, pet.chip));

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Pet = require('../models/Pet');
+const { storefrontPetAppearance } = require('../utils/petAppearance');
 const requireAuth = require('../middlewares/requireAuth');
 const { recordDesktopSyncDeletion } = require('../services/desktopSyncTombstones');
 
@@ -25,7 +26,7 @@ router.post('/', requireAuth, async (req, res) => {
       sexo: req.body.pet_sexo,
       dataNascimento: req.body.pet_nascimento,
       microchip: req.body.pet_microchip,
-      pelagemCor: req.body.pet_pelagem,
+      ...storefrontPetAppearance(req.body),
       rga: req.body.pet_rga,
       peso: req.body.pet_peso,
     });
@@ -33,6 +34,7 @@ router.post('/', requireAuth, async (req, res) => {
     const savedPet = await newPet.save();
     res.status(201).json({ message: 'Pet adicionado com sucesso!', pet: savedPet });
   } catch (error) {
+    if (error.code === 'INVALID_PET_COAT_LENGTH') return res.status(400).json({ message: error.message });
     res.status(500).json({ message: 'Erro no servidor ao salvar o pet.' });
   }
 });
@@ -86,7 +88,7 @@ router.put('/:petId', requireAuth, async (req, res) => {
       sexo: req.body.pet_sexo,
       dataNascimento: req.body.pet_nascimento,
       microchip: req.body.pet_microchip,
-      pelagemCor: req.body.pet_pelagem,
+      ...storefrontPetAppearance(req.body),
       rga: req.body.pet_rga,
       peso: req.body.pet_peso,
     };
@@ -94,6 +96,7 @@ router.put('/:petId', requireAuth, async (req, res) => {
     const updatedPet = await Pet.findByIdAndUpdate(req.params.petId, updateData, { new: true, runValidators: true });
     res.json({ message: 'Pet atualizado com sucesso!', pet: updatedPet });
   } catch (error) {
+    if (error.code === 'INVALID_PET_COAT_LENGTH') return res.status(400).json({ message: error.message });
     res.status(500).json({ message: 'Erro ao atualizar pet.' });
   }
 });

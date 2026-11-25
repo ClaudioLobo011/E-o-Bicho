@@ -13,6 +13,7 @@ const paymentMetadata = require('../utils/pdvPaymentMetadata');
 const Product = require('../models/Product');
 const User = require('../models/User');
 const Pet = require('../models/Pet');
+const { desktopPetAppearance } = require('../utils/petAppearance');
 const UserAddress = require('../models/UserAddress');
 const PdvDesktopHost = require('../models/PdvDesktopHost');
 const PdvDesktopEvent = require('../models/PdvDesktopEvent');
@@ -926,7 +927,7 @@ async function materializeDesktopEvent(event, pdv, host) {
       sexo: clean(source.sex || source.sexo).toUpperCase(),
       dataNascimento: source.birthDate || source.dataNascimento || undefined,
       microchip: clean(source.microchip),
-      pelagemCor: clean(source.coatColor || source.pelagemCor),
+      ...desktopPetAppearance(source),
       rga: clean(source.rga),
       peso: clean(source.weight || source.peso),
       obito: Boolean(source.deceased ?? source.obito),
@@ -990,7 +991,7 @@ async function materializeDesktopEvent(event, pdv, host) {
       pet.dataNascimento = source.birthDate || source.dataNascimento || undefined;
     }
     pet.microchip = clean(source.microchip);
-    pet.pelagemCor = clean(source.coatColor || source.pelagemCor);
+    pet.set(desktopPetAppearance(source));
     pet.rga = clean(source.rga);
     pet.peso = clean(source.weight || source.peso);
     pet.codAntigoPet = clean(source.oldCode || source.codAntigoPet);
@@ -1769,7 +1770,7 @@ router.get('/directory/snapshot', authenticateHost, async (req, res) => {
   const customerIds = customersUsers.map((user) => user._id);
   const [pets, addresses, stores, deposits, services] = await Promise.all([
     Pet.find({ owner: { $in: customerIds }, obito: { $ne: true } })
-      .select('_id owner codigoPet codAntigoPet nome tipo raca porte sexo dataNascimento microchip pelagemCor rga peso castrado updatedAt')
+      .select('_id owner codigoPet codAntigoPet nome tipo raca porte sexo dataNascimento microchip cor pelagem pelagemCor rga peso castrado updatedAt')
       .lean(),
     UserAddress.find({ user: { $in: customerIds } })
       .select('_id user apelido cep logradouro numero complemento bairro cidade uf isDefault updatedAt')
@@ -1880,7 +1881,7 @@ router.get('/directory/snapshot', authenticateHost, async (req, res) => {
       id: String(pet._id), ownerId: String(pet.owner), code: pet.codigoPet ? String(pet.codigoPet) : '',
       oldCode: pet.codAntigoPet || '', legacyCode: pet.codAntigoPet || '',
       name: pet.nome || '', type: pet.tipo || '', species: pet.tipo || '', breed: pet.raca || '', size: pet.porte || '', sex: pet.sexo || '', birthDate: pet.dataNascimento || null,
-      microchip: pet.microchip || '', coatColor: pet.pelagemCor || '', color: pet.pelagemCor || '', rga: pet.rga || '', weight: pet.peso || '',
+      microchip: pet.microchip || '', coatColor: pet.cor ?? pet.pelagemCor ?? '', color: pet.cor ?? pet.pelagemCor ?? '', pelagem: pet.pelagem ?? '', rga: pet.rga || '', weight: pet.peso || '',
       neutered: Boolean(pet.castrado), deceased: Boolean(pet.obito),
     })),
     sellers,

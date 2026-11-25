@@ -903,7 +903,8 @@ function agendaCustomerFillPet(pet) {
   agendaCustomerSetValue(els.customerPetPorte, pet?.porte || '');
   agendaCustomerSetValue(els.customerPetRaca, pet?.raca || '');
   agendaCustomerSetValue(els.customerPetBirth, pet?.dataNascimento ? toDateInputValueFromISO(pet.dataNascimento) : (pet?.nascimento || ''));
-  agendaCustomerSetValue(els.customerPetCor, pet?.pelagemCor || pet?.pelagem || pet?.cor || '');
+  agendaCustomerSetValue(els.customerPetCor, pet?.cor ?? pet?.pelagemCor ?? '');
+  agendaCustomerSetValue(els.customerPetPelagem, pet?.pelagem || '');
   agendaCustomerSetValue(els.customerPetCodAnt, pet?.codAntigoPet || pet?.codigoAntigoPet || '');
   agendaCustomerSetValue(els.customerPetMicrochip, pet?.microchip || '');
   agendaCustomerSetValue(els.customerPetRga, pet?.rga || '');
@@ -926,6 +927,7 @@ function agendaCustomerClearPet() {
   agendaCustomerSetValue(els.customerPetRaca, '');
   agendaCustomerSetValue(els.customerPetBirth, '');
   agendaCustomerSetValue(els.customerPetCor, '');
+  agendaCustomerSetValue(els.customerPetPelagem, '');
   agendaCustomerSetValue(els.customerPetCodAnt, '');
   agendaCustomerSetValue(els.customerPetMicrochip, '');
   agendaCustomerSetValue(els.customerPetRga, '');
@@ -1680,6 +1682,7 @@ function agendaCustomerBuildPetPayload() {
     nascimento: String(els.customerPetBirth?.value || '').trim(),
     peso: String(els.customerPetPeso?.value || '').trim(),
     cor: String(els.customerPetCor?.value || '').trim(),
+    pelagem: els.customerPetPelagem?.value || '',
     codAntigoPet: String(els.customerPetCodAnt?.value || '').trim(),
     microchip: String(els.customerPetMicrochip?.value || '').trim(),
     rga: String(els.customerPetRga?.value || '').trim(),
@@ -1702,6 +1705,7 @@ function agendaCustomerApplyPetDraft(petDraft) {
   agendaCustomerSetValue(els.customerPetBirth, petDraft.nascimento || '');
   agendaCustomerSetValue(els.customerPetPeso, petDraft.peso || '');
   agendaCustomerSetValue(els.customerPetCor, petDraft.cor || '');
+  agendaCustomerSetValue(els.customerPetPelagem, petDraft.pelagem || '');
   agendaCustomerSetValue(els.customerPetCodAnt, petDraft.codAntigoPet || '');
   agendaCustomerSetValue(els.customerPetMicrochip, petDraft.microchip || '');
   agendaCustomerSetValue(els.customerPetRga, petDraft.rga || '');

@@ -133,7 +133,7 @@ function petForDesktop(pet) {
     oldCode: pet.codAntigoPet || '', legacyCode: pet.codAntigoPet || '', name: pet.nome || '',
     type: pet.tipo || '', species: pet.tipo || '', breed: pet.raca || '', size: pet.porte || '',
     sex: pet.sexo || '', birthDate: pet.dataNascimento || null, microchip: pet.microchip || '',
-    coatColor: pet.pelagemCor || '', color: pet.pelagemCor || '', rga: pet.rga || '', weight: pet.peso || '',
+    coatColor: pet.cor ?? pet.pelagemCor ?? '', color: pet.cor ?? pet.pelagemCor ?? '', pelagem: pet.pelagem ?? '', rga: pet.rga || '', weight: pet.peso || '',
     neutered: Boolean(pet.castrado), deceased: Boolean(pet.obito), updatedAt: pet.updatedAt || null,
   };
 }
@@ -291,7 +291,7 @@ async function loadDirectoryUpserts(entity, host, cursor, limit) {
   }
   if (entity === 'pets') {
     query = { ...cursorQuery(cursor) };
-    documents = await Pet.find(query).select('_id owner codigoPet codAntigoPet nome tipo raca porte sexo dataNascimento microchip pelagemCor rga peso castrado obito updatedAt')
+    documents = await Pet.find(query).select('_id owner codigoPet codAntigoPet nome tipo raca porte sexo dataNascimento microchip cor pelagem pelagemCor rga peso castrado obito updatedAt')
       .sort({ updatedAt: 1, _id: 1 }).limit(limit + 1).lean();
     return { documents, map: (page) => page.map(petForDesktop) };
   }

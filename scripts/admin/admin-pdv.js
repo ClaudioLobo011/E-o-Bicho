@@ -5286,6 +5286,7 @@
     elements.customerPetRacaSuggest = document.getElementById('pdv-customer-pet-raca-suggest');
     elements.customerPetNasc = document.getElementById('pdv-customer-pet-nasc');
     elements.customerPetCor = document.getElementById('pdv-customer-pet-cor');
+    elements.customerPetPelagem = document.getElementById('pdv-customer-pet-pelagem');
     elements.customerPetCodAnt = document.getElementById('pdv-customer-pet-cod-ant');
     elements.customerPetMicrochip = document.getElementById('pdv-customer-pet-microchip');
     elements.customerPetRga = document.getElementById('pdv-customer-pet-rga');
@@ -6732,6 +6733,7 @@
     if (elements.customerPetRaca) elements.customerPetRaca.value = '';
     if (elements.customerPetNasc) elements.customerPetNasc.value = '';
     if (elements.customerPetCor) elements.customerPetCor.value = '';
+    if (elements.customerPetPelagem) elements.customerPetPelagem.value = '';
     if (elements.customerPetCodAnt) elements.customerPetCodAnt.value = '';
     if (elements.customerPetMicrochip) elements.customerPetMicrochip.value = '';
     if (elements.customerPetRga) elements.customerPetRga.value = '';
@@ -6757,7 +6759,8 @@
       elements.customerPetNasc.value =
         dt && Number.isFinite(dt.getTime()) ? dt.toISOString().slice(0, 10) : '';
     }
-    if (elements.customerPetCor) elements.customerPetCor.value = pet.pelagemCor || pet.cor || '';
+    if (elements.customerPetCor) elements.customerPetCor.value = pet.cor ?? pet.pelagemCor ?? '';
+    if (elements.customerPetPelagem) elements.customerPetPelagem.value = pet.pelagem || '';
     if (elements.customerPetCodAnt) elements.customerPetCodAnt.value = pet.codAntigoPet || '';
     if (elements.customerPetMicrochip) elements.customerPetMicrochip.value = pet.microchip || '';
     if (elements.customerPetRga) elements.customerPetRga.value = pet.rga || '';
@@ -11764,7 +11767,8 @@
     const peso = String(elements.customerPetPeso?.value || '').trim();
     const raca = String(elements.customerPetRaca?.value || '').trim();
     const nascimento = String(elements.customerPetNasc?.value || '').trim();
-    const pelagemCor = String(elements.customerPetCor?.value || '').trim();
+    const cor = String(elements.customerPetCor?.value || '').trim();
+    const pelagem = elements.customerPetPelagem?.value || '';
     const codAntigoPet = String(elements.customerPetCodAnt?.value || '').trim();
     const microchip = String(elements.customerPetMicrochip?.value || '').trim();
     const rga = String(elements.customerPetRga?.value || '').trim();
@@ -11779,7 +11783,8 @@
         peso ||
         raca ||
         nascimento ||
-        pelagemCor ||
+        cor ||
+        pelagem ||
         codAntigoPet ||
         microchip ||
         rga ||
@@ -11797,7 +11802,8 @@
       peso,
       raca,
       nascimento,
-      pelagemCor,
+      cor,
+      pelagem,
       codAntigoPet,
       microchip,
       rga,

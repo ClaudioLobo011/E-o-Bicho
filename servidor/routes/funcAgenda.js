@@ -7,6 +7,7 @@ const authorizeRoles = require('../middlewares/authorizeRoles');
 
 const User = require('../models/User');
 const Pet = require('../models/Pet');
+const { staffPetAppearance } = require('../utils/petAppearance');
 const Service = require('../models/Service');
 const Appointment = require('../models/Appointment');
 const WhatsappAppointmentSlotLock = require('../models/WhatsappAppointmentSlotLock');
@@ -359,6 +360,8 @@ function mapPetDoc(doc) {
     sexo: plain?.sexo,
     dataNascimento: plain?.dataNascimento,
     microchip: plain?.microchip,
+    cor: plain?.cor ?? plain?.pelagemCor,
+    pelagem: plain?.pelagem,
     pelagemCor: plain?.pelagemCor,
     rga: plain?.rga,
     peso: plain?.peso,
@@ -2691,7 +2694,7 @@ router.post('/clientes/:id/pets', authMiddleware, requireStaff, async (req, res)
       sexo,
       dataNascimento: parseDate(req.body.nascimento || req.body.dataNascimento) || new Date(),
       microchip: sanitizeString(req.body.microchip),
-      pelagemCor: sanitizeString(req.body.pelagem || req.body.pelagemCor || req.body.cor),
+      ...staffPetAppearance(req.body),
       rga: sanitizeString(req.body.rga),
       peso: sanitizeString(req.body.peso),
       obito: parseBooleanFlag(req.body.obito),
@@ -2748,7 +2751,7 @@ router.put('/clientes/:id/pets/:petId', authMiddleware, requireStaff, async (req
       sexo: sanitizeString(req.body.sexo) || pet.sexo,
       dataNascimento: parseDate(req.body.nascimento || req.body.dataNascimento) || pet.dataNascimento,
       microchip: sanitizeString(req.body.microchip),
-      pelagemCor: sanitizeString(req.body.pelagem || req.body.pelagemCor || req.body.cor),
+      ...staffPetAppearance(req.body),
       rga: sanitizeString(req.body.rga),
       peso: sanitizeString(req.body.peso),
     };
@@ -3025,7 +3028,7 @@ router.get('/clientes/:id/pets', authMiddleware, requireStaff, async (req, res) 
       filter.obito = { $ne: true };
     }
     const pets = await Pet.find(filter)
-      .select('_id nome tipo raca porte sexo dataNascimento peso microchip pelagemCor rga obito castrado codAntigoPet codigoPet owner')
+      .select('_id nome tipo raca porte sexo dataNascimento peso microchip cor pelagem pelagemCor rga obito castrado codAntigoPet codigoPet owner')
       .sort({ nome: 1 })
       .lean();
     res.json(pets.map(mapPetDoc));
