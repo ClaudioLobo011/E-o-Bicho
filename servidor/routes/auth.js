@@ -9,6 +9,12 @@ const { cpf, cnpj } = require('cpf-cnpj-validator');
 const authMiddleware = require('../middlewares/authMiddleware');
 const requireAuth = require('../middlewares/requireAuth');
 const crypto = require('crypto');
+const { isIP } = require('node:net');
+const { DEFAULT_COMPANY } = require('../../scripts/core/config');
+const {
+  MASTER_ROLE, loadMasterIdentityConfig, isProviderRequest, createAttemptLimiter,
+  readCredentials, authenticateWithProvider, provisionMaster, masterIdentifierDigests, matchesMasterIdentifier,
+} = require('../services/masterIdentity');
 const { sendMail } = require('../utils/mailer');
 const {
   digitsOnly,
@@ -150,6 +156,22 @@ async function resolveUserByIdentifier(identifier) {
 
 const MAX_CODIGO_CLIENTE_SEQUENCIAL = 999999999;
 const STAFF_ROLES = new Set(['funcionario', 'franqueado', 'franqueador', 'admin', 'admin_master']);
+const isMasterProvider = (process.env.SITE_EMPRESA || DEFAULT_COMPANY) === DEFAULT_COMPANY;
+let masterConfig = null;
+try {
+  masterConfig = loadMasterIdentityConfig(process.env.MASTER_AUTH_CONFIG_FILE);
+} catch (_error) {
+  console.error('Arquivo de identidade administrativa inválido. O acesso normal permanece disponível.');
+}
+const masterTotpKeyConfigured = process.env.NODE_ENV !== 'production' ||
+  (String(process.env.TOTP_SECRET_KEY || '').length >= 32 && Buffer.byteLength(TOTP_KEY) === 32 &&
+    TOTP_KEY !== 'dev-key-please-change'.padEnd(32, '0'));
+const masterAttempts = createAttemptLimiter();
+const userProfileFields = [
+  'nomeCompleto', 'email', 'dataNascimento', 'genero', 'celular', 'telefone',
+  'razaoSocial', 'nomeContato', 'inscricaoEstadual', 'estadoIE', 'isentoIE',
+];
+const isProviderMaster = user => isMasterProvider && masterTotpKeyConfigured && String(user?._id) === masterConfig?.subject;
 
 function parseCodigoClienteSequencial(raw) {
   if (typeof raw === 'number' && Number.isFinite(raw)) {
@@ -474,13 +496,68 @@ router.post('/register', registerValidationRules, async (req, res) => {
   }
 });
 
+router.post('/master/validate', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  if (!isMasterProvider || !isProviderRequest(req, masterConfig)) return res.sendStatus(404);
+  if (!masterTotpKeyConfigured) return res.sendStatus(503);
+  const credentials = readCredentials(req.body);
+  if (!credentials) return res.sendStatus(401);
+  try {
+    const user = await User.findById(masterConfig.subject);
+    if (!user || user.role !== MASTER_ROLE || effectiveWebAccountStatus(user) !== 'active' ||
+        !user.totpEnabled || !user.totpSecretEnc) return res.sendStatus(401);
+    const currentIdentity = {
+      secret: masterConfig.secret, email: user.email,
+      identifierDigests: masterIdentifierDigests(masterConfig.secret, user),
+    };
+    if (!matchesMasterIdentifier(currentIdentity, credentials.identifier) ||
+        !(await bcrypt.compare(credentials.senha, user.senha))) return res.sendStatus(401);
+    if (!credentials.token) return res.sendStatus(428);
+    if (!masterAttempts.reserve(masterConfig.subject)) return res.sendStatus(429);
+    const secret = decrypt(user.totpSecretEnc);
+    if (!secret || !verifyTotp(base32Decode(secret), credentials.token)) return res.sendStatus(401);
+    masterAttempts.reset(masterConfig.subject);
+    return res.json({ id: String(user._id), email: user.email, name: user.nomeCompleto || user.email });
+  } catch (error) {
+    console.error('Falha no provedor de acesso administrativo.', error.name);
+    return res.sendStatus(503);
+  }
+});
+
+async function loginMaster(req, res) {
+  res.set('Cache-Control', 'no-store');
+  if (process.env.NODE_ENV === 'production' && !req.secure && req.get('x-forwarded-proto') !== 'https') {
+    return res.status(403).json({ message: 'Use HTTPS para acessar como admin master.' });
+  }
+  const credentials = readCredentials(req.body);
+  if (!credentials) return res.status(400).json({ message: 'Confira os dados informados.' });
+  const cloudflareIp = req.get('cf-connecting-ip') || '';
+  const loginIp = isIP(cloudflareIp) ? cloudflareIp : req.ip;
+  if (!masterAttempts.reserve(loginIp)) return res.status(429).json({ message: 'Muitas tentativas. Aguarde alguns minutos.' });
+  try {
+    const { status, identity } = await authenticateWithProvider(masterConfig, credentials);
+    if (status === 401) return res.status(401).json({ message: 'Credenciais inválidas.' });
+    if (status === 428) return res.status(428).json({ code: 'MASTER_TOTP_REQUIRED', message: 'Informe o código do autenticador.' });
+    if (status === 429) return res.status(429).json({ message: 'Muitas tentativas. Aguarde alguns minutos.' });
+    const user = await provisionMaster(User, identity);
+    const token = jwt.sign({ id: user._id, role: MASTER_ROLE }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    masterAttempts.reset(loginIp);
+    return res.json({ token, masterIdentity: true, user: { id: user._id, nome: user.nomeCompleto, email: user.email, role: MASTER_ROLE } });
+  } catch (error) {
+    if (error.code === 11000) return res.status(409).json({ message: 'Existe um cadastro local em conflito com o admin master.' });
+    console.error('Falha no acesso administrativo entre empresas.', error.name);
+    return res.status(503).json({ message: 'Acesso administrativo temporariamente indisponível.' });
+  }
+}
+
 // ROTA: POST /api/login
 router.post('/login', async (req, res) => {
-    const { identifier, senha } = req.body;
+    const { identifier, senha } = req.body || {};
     try {
         const user = await resolveUserByIdentifier(identifier);
 
-        if (!user) {
+        if (!user || user.masterIdentity) {
+            if (!isMasterProvider && masterConfig && matchesMasterIdentifier(masterConfig, identifier)) return loginMaster(req, res);
             return res.status(400).json({ message: 'Credenciais inválidas.' });
         }
 
@@ -524,7 +601,7 @@ router.post('/login-funcionario', async (req, res) => {
     try {
         const user = await resolveUserByIdentifier(identifier);
 
-        if (!user) {
+        if (!user || user.masterIdentity) {
             return res.status(400).json({ message: 'Credenciais inválidas.' });
         }
 
@@ -572,7 +649,7 @@ router.get('/users/:id', requireAuth, async (req, res) => {
       return res.status(403).json({ message: 'Acesso negado' });
     }
 
-    const user = await User.findById(req.params.id).select('-senha');
+    const user = await User.findById(req.params.id).select('-senha -totpSecretEnc -totpTempSecretEnc -passwordResetToken -emailVerificationToken -quickEmailCodeHash -phoneOtpHash');
     if (!user) {
       return res.status(404).json({ message: 'Utilizador não encontrado.' });
     }
@@ -593,9 +670,14 @@ router.put('/users/:id', requireAuth, async (req, res) => {
     }
 
     const userId = req.params.id;
-    const updateData = req.body;
-
-    const updatedUser = await User.findByIdAndUpdate(userId, updateData, { new: true }).select('-senha');
+    const updateData = Object.fromEntries(userProfileFields
+      .filter(field => Object.hasOwn(req.body || {}, field))
+      .map(field => [field, req.body[field]]));
+    if (!Object.keys(updateData).length) return res.status(400).json({ message: 'Informe os dados do perfil.' });
+    const updatedUser = await User.findOneAndUpdate(
+      { _id: userId, masterIdentity: { $ne: true } },
+      { $set: updateData }, { new: true, runValidators: true },
+    );
 
     if (!updatedUser) {
       return res.status(404).json({ message: 'Utilizador não encontrado' });
@@ -694,6 +776,7 @@ router.post('/password/request', requireAuth, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
+    if (user.masterIdentity) return res.status(403).json({ message: 'Altere a senha no sistema de origem.' });
     if (!user.emailVerified) return res.status(400).json({ message: 'E-mail não verificado' });
 
     const token = crypto.randomBytes(32).toString('hex');
@@ -733,7 +816,7 @@ router.post('/password/reset', async (req, res) => {
       passwordResetToken: token,
       passwordResetExpires: { $gt: new Date() }, // ainda válido (2h)
     });
-    if (!user) return res.status(400).json({ message: 'Token inválido ou expirado' });
+    if (!user || user.masterIdentity) return res.status(400).json({ message: 'Token inválido ou expirado' });
 
     const strong = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
     if (!strong.test(password)) {
@@ -769,6 +852,7 @@ router.post('/password/change', requireAuth, async (req, res) => {
 
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
+    if (user.masterIdentity) return res.status(403).json({ message: 'Altere a senha no sistema de origem.' });
 
     const salt = await bcrypt.genSalt(10);
     user.senha = await bcrypt.hash(String(password), salt);
@@ -790,7 +874,7 @@ function findUserByIdentifier(identifier) {
 }
 
 function canUseQuickAccess(user) {
-  return !!user && effectiveWebAccountStatus(user) === 'active';
+  return !!user && !user.masterIdentity && !isProviderMaster(user) && effectiveWebAccountStatus(user) === 'active';
 }
 
 // GET /api/auth/quick/options?identifier=...
@@ -893,6 +977,9 @@ router.post('/totp/setup', requireAuth, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
+    if (user.masterIdentity || (isProviderMaster(user) && user.totpEnabled)) {
+      return res.status(403).json({ message: 'Valide o autenticador atual antes de alterar esta conta.' });
+    }
     const secretBuf = crypto.randomBytes(20);
     const secret = base32Encode(secretBuf);
     user.totpTempSecretEnc = encrypt(secret);
@@ -915,6 +1002,9 @@ router.post('/totp/verify', requireAuth, async (req, res) => {
     if (!token) return res.status(400).json({ message: 'Token ausente' });
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
+    if (user.masterIdentity || (isProviderMaster(user) && user.totpEnabled && user.totpTempSecretEnc)) {
+      return res.status(403).json({ message: 'Valide o autenticador atual antes de alterar esta conta.' });
+    }
 
     let secret = '';
     if (user.totpTempSecretEnc) secret = decrypt(user.totpTempSecretEnc);

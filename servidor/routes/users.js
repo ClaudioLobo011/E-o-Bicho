@@ -14,7 +14,7 @@ router.get('/:id', requireAuth, async (req, res) => {
             return res.status(403).json({ message: 'Acesso negado.' });
         }
 
-        const user = await User.findById(req.params.id).select('-senha -totpSecretEnc -totpTempSecretEnc');
+        const user = await User.findById(req.params.id).select('-senha -totpSecretEnc -totpTempSecretEnc -passwordResetToken -emailVerificationToken -quickEmailCodeHash -phoneOtpHash');
         if (!user) {
             return res.status(404).json({ message: 'Utilizador não encontrado.' });
         }
@@ -45,8 +45,12 @@ router.put('/:id', requireAuth, async (req, res) => {
         
         Object.keys(updateFields).forEach(key => updateFields[key] === undefined && delete updateFields[key]);
 
-        const updatedUser = await User.findByIdAndUpdate(
-            req.params.id,
+        const identityFilter = { _id: req.params.id, masterIdentity: { $ne: true } };
+        if (req.user.id !== req.params.id && req.user.role !== 'admin_master') {
+            identityFilter.role = { $ne: 'admin_master' };
+        }
+        const updatedUser = await User.findOneAndUpdate(
+            identityFilter,
             { $set: updateFields },
             { new: true, runValidators: true }
         ).select('-senha');

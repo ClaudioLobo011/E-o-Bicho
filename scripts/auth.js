@@ -110,6 +110,7 @@ function initializeAuth() {
         });
 
         loginForm.addEventListener('submit', handleLoginSubmit);
+        loginForm.querySelector('#identifier')?.addEventListener('input', () => toggleAuthenticatorCode(loginForm, false));
     }
 
     if (signupForm) {
@@ -180,6 +181,17 @@ function initializeAuth() {
 }
 
 
+function toggleAuthenticatorCode(form, visible) {
+  const field = form.querySelector('#master-code-field');
+  const code = form.querySelector('#master-auth-code');
+  if (!field || !code) return;
+  field.hidden = !visible;
+  code.disabled = !visible;
+  code.required = visible;
+  code.value = '';
+  if (visible) code.focus();
+}
+
 async function handleLoginSubmit(event) {
   event.preventDefault();
   const submitButton = event.target.querySelector('button[type="submit"]');
@@ -198,6 +210,10 @@ async function handleLoginSubmit(event) {
     });
     const result = await response.json();
     if (!response.ok) {
+      if (result.code === 'MASTER_TOTP_REQUIRED') {
+        toggleAuthenticatorCode(event.target, true);
+        return;
+      }
       if (result.code === 'ACCOUNT_COMPLETION_REQUIRED') {
         window.location.href = `/pages/cadastro.html?completePhone=${encodeURIComponent(data.identifier || '')}`;
         return;
@@ -218,7 +234,7 @@ async function handleLoginSubmit(event) {
     saveRememberIdentifier(identifierNow, !!rememberEl?.checked);
     // <<<
 
-    window.location.href = productLoginDestination();
+    window.location.href = result.masterIdentity ? '/pages/admin.html' : productLoginDestination();
   } catch (error) {
     showModal({ title: 'Erro de Login', message: error.message, confirmText: 'Tentar Novamente' });
   } finally {

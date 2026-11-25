@@ -220,6 +220,7 @@ const userSchema = new Schema({
     enum: ['admin_master', 'admin', 'franqueador', 'franqueado', 'funcionario', 'cliente'],
     default: 'cliente'
   },
+  masterIdentity: { type: Boolean, immutable: true },
 
   grupos: {
     type: [String],

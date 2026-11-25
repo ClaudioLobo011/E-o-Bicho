@@ -842,16 +842,20 @@ function redirectToAdmin(message) {
   window.location.replace(ADMIN_HOME);
 }
 
-async function verifyCredentials(identifier, senha) {
+async function verifyCredentials(identifier, senha, token) {
   try {
     const resp = await fetch(`${API_CONFIG.BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ identifier, senha }),
+      body: JSON.stringify({ identifier, senha, token }),
     });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) {
-      return { ok: false, message: data?.message || 'Credenciais invalidas.' };
+      return {
+        ok: false,
+        requiresAuthenticator: data?.code === 'MASTER_TOTP_REQUIRED',
+        message: data?.message || 'Credenciais inválidas.',
+      };
     }
 
     const currentId = getUserId();
@@ -882,7 +886,12 @@ async function requestPassword() {
       if (!identifier) return resolveOnce(false);
       const senha = window.prompt('Senha');
       if (!senha) return resolveOnce(false);
-      verifyCredentials(identifier, senha).then((result) => resolveOnce(result.ok));
+      verifyCredentials(identifier, senha).then(async (result) => {
+        if (!result.requiresAuthenticator) return resolveOnce(result.ok);
+        const token = window.prompt('Código do autenticador')?.trim();
+        if (!token) return resolveOnce(false);
+        resolveOnce((await verifyCredentials(identifier, senha, token)).ok);
+      });
       return;
     }
 
@@ -911,10 +920,26 @@ async function requestPassword() {
     passInput.className =
       'mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20';
 
+    const codeLabel = document.createElement('label');
+    codeLabel.className = 'text-sm font-semibold text-gray-700';
+    codeLabel.hidden = true;
+    codeLabel.textContent = 'Código do autenticador';
+    const codeInput = document.createElement('input');
+    codeInput.inputMode = 'numeric';
+    codeInput.autocomplete = 'one-time-code';
+    codeInput.maxLength = 6;
+    codeInput.className = passInput.className;
+    codeLabel.appendChild(codeInput);
+    userInput.addEventListener('input', () => {
+      codeLabel.hidden = true;
+      codeInput.value = '';
+    });
+
     wrapper.appendChild(userLabel);
     wrapper.appendChild(userInput);
     wrapper.appendChild(passLabel);
     wrapper.appendChild(passInput);
+    wrapper.appendChild(codeLabel);
     wrapper.appendChild(error);
 
     const showError = (message) => {
@@ -954,7 +979,18 @@ async function requestPassword() {
           return false;
         }
 
-        const result = await verifyCredentials(identifier, senha);
+        const token = codeLabel.hidden ? undefined : codeInput.value.trim();
+        if (!codeLabel.hidden && !/^\d{6}$/.test(token)) {
+          showError('Informe o código de seis dígitos do autenticador.');
+          return false;
+        }
+        const result = await verifyCredentials(identifier, senha, token);
+        if (result.requiresAuthenticator) {
+          error.classList.add('hidden');
+          codeLabel.hidden = false;
+          codeInput.focus();
+          return false;
+        }
         if (!result.ok) {
           showError(result.message || 'Credenciais invalidas.');
           return false;
